@@ -23,12 +23,11 @@ import java.nio.file.Path;
  * détecté — un shaderpack installé sans loader ne fait rien, et son
  * installation silencieuse sans feedback visuel serait trompeuse.
  *
- * @Inject sur "F()V" (initWidgets), pas "bg_()V" (init) : depuis le passage de
+ * @Inject sur "initWidgets()V", pas "init()V" : depuis le passage de
  * GameMenuScreen à un layout GridWidget, c'est Screen.init() (inchangé, pas
  * surchargé par GameMenuScreen) qui appelle this.initWidgets() — la vraie
- * méthode où le contenu spécifique à cet écran est construit. Voir
- * LauncherMixinService.REFMAP_ENTRIES pour la traduction official→intermediary
- * de "F()V" sous Fabric.
+ * méthode où le contenu spécifique à cet écran est construit. Le refmap
+ * (LauncherMixinService) traduit "initWidgets()V" → intermediary sous Fabric.
  */
 @Mixin(targets = "net.minecraft.client.gui.screen.GameMenuScreen")
 public abstract class GameMenuScreenMixin {
@@ -37,7 +36,7 @@ public abstract class GameMenuScreenMixin {
     private static final int BUTTON_HEIGHT = 20;
     private static final int MARGIN = 6;
 
-    @Inject(method = "F()V", at = @At("TAIL"))
+    @Inject(method = "initWidgets()V", at = @At("TAIL"))
     private void la$onInitWidgets(CallbackInfo ci) {
         try {
             FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());

@@ -111,58 +111,72 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
 
     /**
      * Une entrée = un @Inject(method="...") à traduire dans le refmap.
-     * {@code fallbackOfficialOwner} : classe "official" courte vers laquelle
-     * replier la recherche quand la méthode est héritée/surchargée sans entrée
-     * Yarn propre à la sous-classe (ex: "bg_"/init() n'est documenté que sur
-     * Screen lui-même, "gsb") — {@code null} si la méthode est déclarée
-     * directement sur la classe cible (pas de repli pertinent).
+     *
+     * Tous les noms sont en Yarn NAMED (humain, stables entre versions) :
+     *   namedMethod / namedDesc → lookup Yarn → official → intermediary (Fabric).
+     * Plus aucun nom obfusqué hardcodé ici — si l'official change entre 1.21.x
+     * et 1.22, rien à toucher tant que le nom Yarn named reste "init" / "initWidgets".
+     *
+     * {@code fallbackNamedOwner} : classe Yarn named vers laquelle replier la
+     * recherche quand la méthode est héritée sans entrée propre à la sous-classe
+     * (ex: "init" est déclaré sur Screen, pas sur TitleScreen dans le Yarn).
+     * {@code null} si la méthode est directement sur la classe cible.
+     *
+     * Pour les constructeurs ("<init>"), namedDesc utilise les noms Yarn named
+     * des types (ex: "Lnet/minecraft/client/gui/screen/Screen;") — traduits en
+     * official puis intermediary par runtimeDesc() au moment de la génération.
      */
     private record RefmapEntry(String mixinInternalName, String yarnTargetClass,
-                                String officialMethod, String officialDesc, String fallbackOfficialOwner) {}
+                                String namedMethod, String namedDesc, String fallbackNamedOwner) {}
 
     private static final RefmapEntry[] REFMAP_ENTRIES = {
+        // init() héritée de Screen — repli sur Screen pour la lookup Yarn.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/TitleScreenMixin",
-            "net/minecraft/client/gui/screen/TitleScreen", "bg_", "()V", "gsb"),
+            "net/minecraft/client/gui/screen/TitleScreen",
+            "init", "()V", "net/minecraft/client/gui/screen/Screen"),
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/PackScreenMixin",
-            "net/minecraft/client/gui/screen/pack/PackScreen", "bg_", "()V", "gsb"),
-        // GameMenuScreen (menu pause) n'override pas bg_()/init() directement —
-        // depuis le passage à GridWidget, Screen.init() appelle initWidgets()
-        // (official "F", déclaré directement sur GameMenuScreen) ; pas de repli
-        // Screen pertinent ici puisque la méthode n'y existe pas.
+            "net/minecraft/client/gui/screen/pack/PackScreen",
+            "init", "()V", "net/minecraft/client/gui/screen/Screen"),
+        // initWidgets() déclaré directement sur GameMenuScreen — pas de repli.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GameMenuScreenMixin",
-            "net/minecraft/client/gui/screen/GameMenuScreen", "F", "()V", null),
-        // "<init>" n'est jamais renommé (aucune entrée de nom à traduire), mais
-        // son descripteur référence Screen/GameOptions ("Lgsb;Lgfo;") — ces
-        // TYPES doivent être traduits sous Fabric (voir MappingsRegistry.runtimeDesc).
+            "net/minecraft/client/gui/screen/GameMenuScreen",
+            "initWidgets", "()V", null),
+        // "<init>" n'a jamais de nom à traduire, mais le descripteur contient des
+        // types Yarn named (Screen, GameOptions) → traduits en official+intermediary
+        // par runtimeDesc() via la lookup Yarn.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/KeybindsScreenMixin",
-            "net/minecraft/client/gui/screen/option/KeybindsScreen", "<init>", "(Lgsb;Lgfo;)V", null),
+            "net/minecraft/client/gui/screen/option/KeybindsScreen",
+            "<init>",
+            "(Lnet/minecraft/client/gui/screen/Screen;Lnet/minecraft/client/option/GameOptions;)V",
+            null),
     };
 
     /**
      * Construit le JSON du refmap Mixin (official→intermediary) pour nos
      * @Inject(method="...", ...). Écrit dans un VRAI fichier par l'appelant
-     * (IsolatedBootstrap) — l'interception de {@link #getResourceAsStream}
-     * pour ce nom précis ne fonctionnait pas : Mixin 0.8.7 charge visiblement
-     * son refmap par un autre chemin que IMixinService.getResourceAsStream()
-     * (probablement directement via un classloader), donc le seul moyen fiable
-     * est de rendre le fichier réellement résolvable par CE classloader.
+     * (IsolatedBootstrap).
      *
      * En vanilla (scheme OFFICIAL), l'appelant n'écrit aucun fichier du tout —
-     * Mixin retombe alors sur la chaîne littérale official inchangée (warning
-     * "No refMap loaded", non fatal) — comportement déjà validé, aucune
-     * régression.
+     * Mixin retombe sur la chaîne littérale Yarn named inchangée (warning
+     * "No refMap loaded", non fatal) — comportement validé, aucune régression.
      */
     public static String buildRefmapJson() {
-        // Groupé par mixin : un même mixin peut avoir PLUSIEURS @Inject à
-        // traduire — il faut une seule clé JSON par mixin, avec toutes ses
-        // entrées de méthode fusionnées dans le même objet interne, sinon la
-        // seconde écraserait la première dans le JSON final.
         java.util.Map<String, java.util.Map<String, String>> byMixin = new java.util.LinkedHashMap<>();
         for (RefmapEntry e : REFMAP_ENTRIES) {
-            String replacement = refmapMethodReplacement(
-                e.yarnTargetClass(), e.officialMethod(), e.officialDesc(), e.fallbackOfficialOwner());
+            // La CLÉ JSON = ce qui est écrit dans @Inject(method = "...") = nom named + desc named.
+            // Mixin cherche cette clé dans le refmap pour obtenir le nom intermediary (Fabric).
+            // Sur vanilla, le remapper (MappingsRegistry) traduit le nom named → official directement,
+            // sans passer par le refmap — les deux chemins sont indépendants.
+            String refmapKey = e.namedMethod() + e.namedDesc();
+
+            // La VALEUR = nom intermediary + desc intermediary, pour que Fabric trouve la méthode.
+            String officialMethod = resolveOfficialMethodName(e.yarnTargetClass(), e.namedMethod(),
+                                                              e.namedDesc(), e.fallbackNamedOwner());
+            String officialDesc   = resolveOfficialDesc(e.namedDesc());
+            String replacement    = refmapMethodReplacement(e.yarnTargetClass(), officialMethod,
+                                                            officialDesc, e.fallbackNamedOwner());
             byMixin.computeIfAbsent(e.mixinInternalName(), k -> new java.util.LinkedHashMap<>())
-                   .put(e.officialMethod() + e.officialDesc(), replacement);
+                   .put(refmapKey, replacement);
         }
 
         StringBuilder sb = new StringBuilder("{\"mappings\":{");
@@ -175,7 +189,8 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             for (var methodEntry : mixinEntry.getValue().entrySet()) {
                 if (!firstMethod) sb.append(',');
                 firstMethod = false;
-                sb.append('"').append(methodEntry.getKey()).append("\":\"").append(methodEntry.getValue()).append('"');
+                sb.append('"').append(methodEntry.getKey()).append("\":\"")
+                  .append(methodEntry.getValue()).append('"');
             }
             sb.append('}');
         }
@@ -184,27 +199,66 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
     }
 
     /**
-     * "<intermediary ou fallback official>()desc" pour une entrée de refmap.
-     * Cherche d'abord dans la classe cible elle-même (ex: TitleScreen), puis
-     * dans {@code fallbackOfficialOwner} si non-null — certaines méthodes
-     * (ex: "bg_"/init()) ne sont documentées par Yarn que sur la classe qui les
-     * déclare à l'origine (Screen), pas sur chaque sous-classe qui se contente
-     * de surcharger sans changer la signature.
+     * Yarn named → official pour un nom de méthode.
+     * Cherche d'abord dans la classe cible, puis dans fallbackNamedOwner.
+     * Retourne namedMethod tel quel si introuvable (constructeur ou méthode non obfusquée).
      */
-    private static String refmapMethodReplacement(String yarnClass, String officialMethod, String officialDesc,
-                                                     String fallbackOfficialOwner) {
+    private static String resolveOfficialMethodName(String yarnClass, String namedMethod,
+                                                     String namedDesc, String fallbackNamedOwner) {
+        if ("<init>".equals(namedMethod)) return "<init>";
+        YarnMappings.MethodEntry me = YarnMappings.getOfficialMethod(yarnClass, namedMethod);
+        if (me == null && fallbackNamedOwner != null)
+            me = YarnMappings.getOfficialMethod(fallbackNamedOwner, namedMethod);
+        if (me != null) {
+            LauncherLog.asm(1, "[LauncherAgent] refmap named→official: " + namedMethod + " → " + me.officialName);
+            return me.officialName;
+        }
+        LauncherLog.warn("[LauncherAgent] refmap: aucune entrée Yarn pour " + yarnClass + "#" + namedMethod
+            + " — utilisation du nom named tel quel");
+        return namedMethod;
+    }
+
+    /**
+     * Traduit un descripteur Yarn named → official (pour les types dans la signature).
+     * Ex: "Lnet/minecraft/client/gui/screen/Screen;" → "Lgsb;"
+     * Les primitives et "()", "V" passent tels quels.
+     */
+    private static String resolveOfficialDesc(String namedDesc) {
+        StringBuilder sb = new StringBuilder(namedDesc.length());
+        int i = 0;
+        while (i < namedDesc.length()) {
+            char c = namedDesc.charAt(i++);
+            if (c == 'L') {
+                int semi = namedDesc.indexOf(';', i);
+                if (semi < 0) { sb.append('L').append(namedDesc.substring(i)); break; }
+                String namedCls = namedDesc.substring(i, semi);
+                String officialCls = YarnMappings.getOfficialClass(namedCls);
+                sb.append('L').append(officialCls != null ? officialCls : namedCls).append(';');
+                i = semi + 1;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * official → intermediary pour la valeur du refmap JSON.
+     * Cherche d'abord dans la classe cible, puis dans fallbackNamedOwner (converti en official).
+     */
+    private static String refmapMethodReplacement(String yarnClass, String officialMethod,
+                                                   String officialDesc, String fallbackNamedOwner) {
         String officialClass = YarnMappings.getOfficialClass(yarnClass);
         String inter = officialClass != null
             ? YarnMappings.getIntermediaryMethod(officialClass, officialMethod, officialDesc)
             : null;
-        if (inter == null && fallbackOfficialOwner != null) {
-            inter = YarnMappings.getIntermediaryMethod(fallbackOfficialOwner, officialMethod, officialDesc);
+        if (inter == null && fallbackNamedOwner != null) {
+            String fallbackOfficial = YarnMappings.getOfficialClass(fallbackNamedOwner);
+            if (fallbackOfficial != null)
+                inter = YarnMappings.getIntermediaryMethod(fallbackOfficial, officialMethod, officialDesc);
         }
-        LauncherLog.asm(1, "[LauncherAgent] refmap: " + yarnClass + " " + officialMethod + officialDesc
+        LauncherLog.asm(1, "[LauncherAgent] refmap official→inter: " + officialMethod + officialDesc
             + " → " + inter);
-        // runtimeDesc() : no-op pour les descripteurs sans type objet (ex:
-        // "()V" des écrans existants), traduit "Lgsb;Lgfo;" → intermediary
-        // pour les nouvelles entrées qui en ont besoin (ex: constructeurs).
         return (inter != null ? inter : officialMethod) + MappingsRegistry.runtimeDesc(officialDesc);
     }
 
