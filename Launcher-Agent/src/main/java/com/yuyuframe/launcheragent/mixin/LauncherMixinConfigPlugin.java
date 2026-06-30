@@ -1,6 +1,8 @@
 package com.yuyuframe.launcheragent.mixin;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
@@ -46,6 +48,15 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         String simpleName = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         if ("true".equalsIgnoreCase(cfg.getProperty("disable_mixin." + simpleName))) {
             LauncherLog.asm(3, "[MixinPlugin] désactivé par config : " + simpleName);
+            return false;
+        }
+        // Les Mixins 1.8.9 dépendent des Yarn Legacy Fabric pour résoudre les
+        // noms obfusqués. Sans mappings, @Shadow et les cibles de classe échoueraient
+        // au runtime avec un ClassTransformException difficile à diagnostiquer.
+        if (mixinClassName.contains(".v1_8.") && !MappingsRegistry.isLoaded()) {
+            String mcVer = System.getProperty("launcheragent.mcVersion", "unknown");
+            LauncherLog.warn("[MixinPlugin] " + simpleName + " ignoré — Yarn 1.8.9 non chargé "
+                + "(fournissez yarn=<legacy-yarn-" + mcVer + "-mergedv2.jar>)");
             return false;
         }
         return true;

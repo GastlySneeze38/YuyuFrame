@@ -3,7 +3,13 @@ package com.yuyuframe.launcheragent.agent;
 import java.util.UUID;
 
 /**
- * Configuration passée via : -javaagent:launcher-agent.jar=yarn=...
+ * Configuration passée via : -javaagent:launcher-agent.jar=yarn=...,version=...
+ *
+ * Paramètres supportés :
+ *   yarn=<chemin>     Yarn mappings tiny v2 (JAR mergedv2 ou .tiny direct).
+ *                     Pour 1.8.9 : fournir un JAR Legacy Fabric Yarn 1.8.9.
+ *   version=<ver>     Force la version MC (ex: "1.8.9"). Par défaut auto-détectée
+ *                     via -Dminecraft.version ou sonde de classes.
  */
 public class AgentConfig {
 
@@ -12,9 +18,16 @@ public class AgentConfig {
     /**
      * Chemin vers les mappings Yarn tiny v2.
      * Accepte un .tiny direct OU un JAR Yarn mergedv2 (ex: yarn-1.21.1+build.X-mergedv2.jar).
+     * Pour 1.8.9 : fournir legacy-yarn-1.8.9+build.X-mergedv2.jar (Legacy Fabric).
      * Null si non fourni — dans ce cas l'agent tente une auto-détection dans les caches locaux.
      */
     public String yarnPath;
+
+    /**
+     * Version MC forcée par l'arg "version=..." — null = auto-détection au runtime
+     * via MinecraftVersionDetector (recommandé, plus fiable).
+     */
+    public String forcedVersion;
 
     private static AgentConfig current;
 
@@ -25,8 +38,9 @@ public class AgentConfig {
             for (String pair : args.split(",")) {
                 String[] kv = pair.split("=", 2);
                 if (kv.length != 2) continue;
-                if ("yarn".equals(kv[0].trim())) {
-                    cfg.yarnPath = kv[1].trim();
+                switch (kv[0].trim()) {
+                    case "yarn":    cfg.yarnPath      = kv[1].trim(); break;
+                    case "version": cfg.forcedVersion = kv[1].trim(); break;
                 }
             }
         }

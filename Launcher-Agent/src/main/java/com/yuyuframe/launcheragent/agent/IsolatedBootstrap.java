@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.mixin.service.LauncherMixinService;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
+import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 import org.spongepowered.asm.launch.MixinBootstrap;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 import org.spongepowered.asm.mixin.Mixins;
@@ -43,48 +44,45 @@ public final class IsolatedBootstrap {
     private IsolatedBootstrap() {}
 
     /**
-     * @param fabric vrai si Fabric Loader est présent — déterminé par
-     *               LauncherAgent (pas redétectable ici : sous isolation, le
-     *               classloader de CETTE classe n'a justement pas accès aux
-     *               classes de Fabric, donc toute détection locale échouerait
-     *               systématiquement même quand Fabric est bien là).
+     * @param fabric    vrai si Fabric Loader est présent — déterminé par LauncherAgent
+     *                  (pas redétectable ici sous isolation classloader).
+     * @param mcVersion version Minecraft détectée par MinecraftVersionDetector.
      */
-    public static void start(Instrumentation inst, String yarnPath, boolean fabric) {
+    public static void start(Instrumentation inst, String yarnPath, boolean fabric, String mcVersion) {
         LauncherLog.agent(1, "[LauncherAgent] IsolatedBootstrap.start (classloader=" + IsolatedBootstrap.class.getClassLoader()
-            + ", fabric=" + fabric + ")");
+            + ", fabric=" + fabric + ", version=" + mcVersion + ")");
 
-        // Doit être fixé avant tout usage de MappingsRegistry ci-dessous : sous
-        // Fabric, les classes/méthodes/champs du jeu sont nommés "intermediary"
-        // à l'exécution, pas "official" (obfusqué brut Mojang) — voir
-        // MappingsRegistry.Scheme et docs/LauncherAgent/index.md.
+        boolean legacy189 = MinecraftVersionDetector.isLegacy189(mcVersion);
+
         MappingsRegistry.setScheme(fabric
             ? MappingsRegistry.Scheme.INTERMEDIARY
             : MappingsRegistry.Scheme.OFFICIAL);
 
-        // Doit être (re)fait ici, pas seulement dans LauncherAgent.premain() :
-        // sous Fabric, cette classe (et donc LauncherMixinService) est chargée
-        // par le classloader isolé — un objet DIFFÉRENT de celui que premain()
-        // a configuré côté classloader système. Sans ça, le champ statique
-        // Instrumentation de la copie isolée resterait null.
         LauncherMixinService.setInstrumentation(inst);
 
-        loadYarnMappings(yarnPath);
+        loadYarnMappings(yarnPath, legacy189);
 
+        // Log de sanité : vérifie que la classe principale de la version est bien mappée.
         if (MappingsRegistry.isLoaded()) {
-            String obfClass = MappingsRegistry.INSTANCE.map("net/minecraft/client/gui/screen/TitleScreen");
-            LauncherLog.agent(1, "[LauncherAgent] Yarn TitleScreen → \"" + obfClass + "\""
-                + (obfClass.equals("net/minecraft/client/gui/screen/TitleScreen") ? "  ← NON MAPPÉ" : "  ← OK"));
+            String probe = legacy189
+                ? "net/minecraft/client/gui/GuiMainMenu"
+                : "net/minecraft/client/gui/screen/TitleScreen";
+            String obfClass = MappingsRegistry.INSTANCE.map(probe);
+            LauncherLog.agent(1, "[LauncherAgent] Yarn probe → \"" + obfClass + "\""
+                + (obfClass.equals(probe) ? "  ← NON MAPPÉ" : "  ← OK"));
         }
 
-        // Doit s'exécuter AVANT bootstrapMixin() (donc avant Mixins.addConfiguration) :
-        // Mixin lit le refmap au moment où il prépare la config. Le dossier
-        // "generated" est déjà sur le classpath isolé (ajouté par
-        // LauncherAgent.startIsolated() avant la construction du classloader) —
-        // il suffit d'y écrire le fichier pour qu'il devienne résolvable.
-        if (fabric) writeRefmapFile();
+        // Le refmap n'est nécessaire que sous Fabric moderne (1.14+).
+        // Legacy Fabric 1.8.9 est rare et non géré pour l'instant.
+        if (fabric && !legacy189) writeRefmapFile();
 
-        Set<String> mixinTargets = discoverMixinTargets();
-        bootstrapMixin(inst, mixinTargets);
+        // Sélection du fichier de config Mixin selon la version MC.
+        String mixinConfig = legacy189
+            ? "mixins.launcheragent-1.8.json"
+            : "mixins.launcheragent.json";
+
+        Set<String> mixinTargets = discoverMixinTargets(mixinConfig);
+        bootstrapMixin(inst, mixinTargets, mixinConfig);
         scheduleDelayedRetransform(inst, mixinTargets);
     }
 
@@ -125,7 +123,7 @@ public final class IsolatedBootstrap {
     }
 
     /** @return true si le bootstrap a réussi. */
-    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets) {
+    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig) {
         try {
             MixinBootstrap.init();
 
@@ -144,8 +142,8 @@ public final class IsolatedBootstrap {
                 LauncherLog.warn("[LauncherAgent] gotoPhase(DEFAULT) erreur: " + ex);
             }
 
-            Mixins.addConfiguration("mixins.launcheragent.json", (IMixinConfigSource) null);
-            LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée");
+            Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
+            LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + mixinConfig);
 
             LauncherMixinService.installWrapper();
 
@@ -170,7 +168,7 @@ public final class IsolatedBootstrap {
         }
     }
 
-    private static void loadYarnMappings(String explicitPath) {
+    private static void loadYarnMappings(String explicitPath, boolean legacy189) {
         if (explicitPath != null && !explicitPath.isEmpty()) {
             try {
                 if (explicitPath.endsWith(".jar") || explicitPath.endsWith(".zip")) {
@@ -185,6 +183,8 @@ public final class IsolatedBootstrap {
             }
         }
 
+        // Pour 1.8.9, chercher d'abord les JARs Legacy Fabric Yarn (contiennent "1.8.9")
+        // puis les Yarn modernes. Pour 1.14+, l'inverse.
         String[] searchRoots = {
             System.getProperty("user.home") + "\\.gradle\\caches\\fabric-loom",
             System.getProperty("user.home") + "\\.gradle\\caches",
@@ -192,7 +192,7 @@ public final class IsolatedBootstrap {
         };
         for (String root : searchRoots) {
             if (root == null) continue;
-            java.io.File found = findYarnJar(new java.io.File(root), 0);
+            java.io.File found = findYarnJar(new java.io.File(root), legacy189, 0);
             if (found != null) {
                 try {
                     YarnMappings.loadFromJar(found.getAbsolutePath());
@@ -214,36 +214,50 @@ public final class IsolatedBootstrap {
             LauncherLog.agent(1, "[LauncherAgent] Yarn resource JAR non chargée : " + e.getMessage());
         }
 
-        LauncherLog.warn("[LauncherAgent] Yarn non disponible — " +
-            "passez yarn=<chemin vers yarn-X.X.X+build.Y-mergedv2.jar> en argument de l'agent");
+        if (legacy189) {
+            LauncherLog.warn("[LauncherAgent] Yarn 1.8.9 non disponible — "
+                + "passez yarn=<chemin vers legacy-yarn-1.8.9+build.X-mergedv2.jar> en argument de l'agent. "
+                + "Téléchargeable sur maven.legacyfabric.net");
+        } else {
+            LauncherLog.warn("[LauncherAgent] Yarn non disponible — "
+                + "passez yarn=<chemin vers yarn-X.X.X+build.Y-mergedv2.jar> en argument de l'agent");
+        }
     }
 
-    private static java.io.File findYarnJar(java.io.File dir, int depth) {
+    /**
+     * Cherche un JAR Yarn dans {@code dir}.
+     * En mode legacy189, priorité aux JARs contenant "1.8.9" dans le nom.
+     */
+    private static java.io.File findYarnJar(java.io.File dir, boolean legacy189, int depth) {
         if (depth > 6 || !dir.isDirectory()) return null;
         java.io.File[] children = dir.listFiles();
         if (children == null) return null;
         for (java.io.File f : children) {
-            if (f.isFile() && f.getName().contains("yarn") && f.getName().endsWith("-mergedv2.jar")) {
-                return f;
-            }
+            if (!f.isFile() || !f.getName().contains("yarn") || !f.getName().endsWith("-mergedv2.jar")) continue;
+            boolean is189Jar = f.getName().contains("1.8.9");
+            if (legacy189 == is189Jar) return f;
+        }
+        // Deuxième passe : accepter n'importe quel Yarn si rien de version-exact trouvé
+        for (java.io.File f : children) {
+            if (f.isFile() && f.getName().contains("yarn") && f.getName().endsWith("-mergedv2.jar")) return f;
         }
         for (java.io.File f : children) {
             if (f.isDirectory()) {
-                java.io.File r = findYarnJar(f, depth + 1);
+                java.io.File r = findYarnJar(f, legacy189, depth + 1);
                 if (r != null) return r;
             }
         }
         return null;
     }
 
-    private static Set<String> discoverMixinTargets() {
+    private static Set<String> discoverMixinTargets(String configName) {
         Set<String> targets = new LinkedHashSet<>();
         Map<String, String> unmapped = new LinkedHashMap<>();
         try {
             ClassLoader agentCL = IsolatedBootstrap.class.getClassLoader();
-            try (java.io.InputStream cfgIs = agentCL.getResourceAsStream("mixins.launcheragent.json")) {
+            try (java.io.InputStream cfgIs = agentCL.getResourceAsStream(configName)) {
                 if (cfgIs == null) {
-                    LauncherLog.err("[LauncherAgent] mixins.launcheragent.json introuvable");
+                    LauncherLog.err("[LauncherAgent] " + configName + " introuvable dans le JAR");
                     return targets;
                 }
                 String json = new String(cfgIs.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);

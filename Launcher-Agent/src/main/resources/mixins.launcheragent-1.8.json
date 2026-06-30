@@ -1,0 +1,16 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.yuyuframe.launcheragent.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "plugin": "com.yuyuframe.launcheragent.mixin.LauncherMixinConfigPlugin",
+  "verbose": false,
+  "mixins": [],
+  "client": [
+    "client.v1_8.GuiMainMenuMixin",
+    "client.v1_8.EntityCullingMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

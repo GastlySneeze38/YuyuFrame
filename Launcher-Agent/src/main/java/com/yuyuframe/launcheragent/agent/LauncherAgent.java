@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.agent;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 
 import java.lang.instrument.Instrumentation;
 import java.net.URL;
@@ -45,6 +46,14 @@ public class LauncherAgent {
         AgentConfig config = AgentConfig.parse(agentArgs);
         LauncherLog.agent(1, "[LauncherAgent] instanceId=" + config.instanceId);
 
+        // Version détectée ici (avant tout chargement Mixin) — system props déjà
+        // posées par le launcher vanilla, donc détection fiable à ce stade.
+        String mcVersion = config.forcedVersion != null
+            ? config.forcedVersion
+            : MinecraftVersionDetector.detect();
+        LauncherLog.agent(1, "[LauncherAgent] version MC détectée : " + mcVersion);
+        System.setProperty("launcheragent.mcVersion", mcVersion);
+
         boolean fabric = isFabricPresent();
 
         // Sous Fabric, le code tissé par Mixin dans les classes du jeu (la$onInit
@@ -73,9 +82,9 @@ public class LauncherAgent {
 
         if (fabric) {
             LauncherLog.agent(1, "[LauncherAgent] Fabric détecté — bootstrap Mixin via classloader isolé");
-            startIsolated(inst, config.yarnPath);
+            startIsolated(inst, config.yarnPath, mcVersion);
         } else {
-            IsolatedBootstrap.start(inst, config.yarnPath, false);
+            IsolatedBootstrap.start(inst, config.yarnPath, false, mcVersion);
         }
 
         LauncherLog.agent(3, "[LauncherAgent] Prêt — en attente du chargement Minecraft");
@@ -103,7 +112,7 @@ public class LauncherAgent {
      * chargées par Fabric (KnotClassLoader) — voir IsolatedBootstrap pour le
      * détail.
      */
-    private static void startIsolated(Instrumentation inst, String yarnPath) {
+    private static void startIsolated(Instrumentation inst, String yarnPath, String mcVersion) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
@@ -170,7 +179,7 @@ public class LauncherAgent {
             Class<?> bootstrapClass = Class.forName(
                 "com.yuyuframe.launcheragent.agent.IsolatedBootstrap", true, isolatedCl);
             java.lang.reflect.Method startMethod =
-                bootstrapClass.getMethod("start", Instrumentation.class, String.class, boolean.class);
+                bootstrapClass.getMethod("start", Instrumentation.class, String.class, boolean.class, String.class);
 
             // Mixin résout son IMixinService via ServiceLoader, qui se base par
             // défaut sur le classloader de CONTEXTE du thread courant — pas
@@ -183,7 +192,7 @@ public class LauncherAgent {
             ClassLoader previousContext = current.getContextClassLoader();
             current.setContextClassLoader(isolatedCl);
             try {
-                startMethod.invoke(null, inst, yarnPath, true);
+                startMethod.invoke(null, inst, yarnPath, true, mcVersion);
             } finally {
                 current.setContextClassLoader(previousContext);
             }
