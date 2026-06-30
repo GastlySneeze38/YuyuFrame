@@ -286,7 +286,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const mcVersion = instance.mc_version
   const loader = instance.loader
   const isPlugin = loader === 'vanilla'
-  const { avoidBetaDependencies } = useStore()
+  const { avoidBetaDependencies, optifinePreset } = useStore()
 
   const [tab, setTab] = useState<Tab>('installed')
   const [mods, setMods] = useState<Mod[]>([])
@@ -566,7 +566,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setImportingOptifine(true)
     setModsError('')
     try {
-      const newMod = await api.mods.importOptifine(instanceId)
+      const newMod = await api.mods.importOptifine(instanceId, optifinePreset ?? undefined)
       setMods((prev) =>
         [...prev.filter((m) => m.name !== newMod.name), newMod]
           .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))

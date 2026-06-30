@@ -128,4 +128,5 @@ export interface SystemMemoryInfo {
   total_mb: number
   available_mb: number
   suggested_mb: number
+  suggested_optifine_preset: 'performance' | 'normal' | 'quality'
 }

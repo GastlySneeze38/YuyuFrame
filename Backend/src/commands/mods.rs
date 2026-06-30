@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, LazyLock};
 
-use crate::commands::instances::instance_mods_dir;
+use sysinfo::System;
+
+use crate::commands::instances::{instance_dir, instance_mods_dir};
 use crate::minecraft::version_pred::{normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed};
 
 #[derive(Serialize, Clone)]
@@ -280,7 +282,7 @@ pub async fn mods_upload(
 /// déplacer le fichier qu'il vient de télécharger lui-même vers le bon
 /// dossier — aucun contenu OptiFine ne transite par nos serveurs.
 #[tauri::command]
-pub async fn mods_import_optifine(instance_id: String) -> Result<ModInfo, String> {
+pub async fn mods_import_optifine(instance_id: String, preset: Option<String>) -> Result<ModInfo, String> {
     let downloads = dirs::download_dir().ok_or("Dossier Téléchargements introuvable")?;
 
     let mut candidates: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
@@ -317,7 +319,103 @@ pub async fn mods_import_optifine(instance_id: String) -> Result<ModInfo, String
         .await
         .unwrap_or_default();
 
+    // Préréglages graphiques écrits uniquement si options.txt n'existe pas encore
+    // (ne jamais écraser une config que l'utilisateur a déjà réglée à la main).
+    write_optifine_presets(&instance_id, preset.as_deref());
+
     Ok(ModInfo { name: safe_name, size, enabled: true, sha1 })
+}
+
+fn write_optifine_presets(instance_id: &str, preset: Option<&str>) {
+    enum Tier { Performance, Normal, Quality }
+
+    let tier = match preset {
+        Some("performance") => Tier::Performance,
+        Some("quality")     => Tier::Quality,
+        Some("normal")      => Tier::Normal,
+        // Aucun preset fourni → détection auto selon RAM/CPU
+        _ => {
+            let mut sys = System::new();
+            sys.refresh_memory();
+            sys.refresh_cpu_all();
+            let ram_mb = sys.total_memory() / 1024 / 1024;
+            let cpu_cores = sys.cpus().len();
+            if ram_mb <= 4096 || cpu_cores <= 2 { Tier::Performance }
+            else if ram_mb <= 8192              { Tier::Normal }
+            else                                { Tier::Quality }
+        }
+    };
+
+    let game_dir = instance_dir(instance_id);
+
+    // ── options.txt (clés vanilla lues aussi par OptiFine) ────────────────────
+    let options_path = game_dir.join("options.txt");
+    if !options_path.exists() {
+        // Performance/Normal  : graphismes fast, mipmap 2
+        // Quality             : graphismes fancy, mipmap 4, toutes particules
+        let (render_dist, particles, fancy, ao, mip) = match tier {
+            Tier::Performance => (12u32, 2u32, "false", 0u32, 2u32),
+            Tier::Normal      => (12,    1,    "false", 1,    2),
+            Tier::Quality     => (18,    0,    "true",  2,    4),
+        };
+        let content = format!(
+            "renderDistance:{render_dist}\nparticles:{particles}\n\
+             fancyGraphics:{fancy}\nao:{ao}\nuseVbo:true\nmipmapLevels:{mip}\n",
+        );
+        let _ = std::fs::write(&options_path, content);
+    }
+
+    // ── optionsof.txt ─────────────────────────────────────────────────────────
+    // Clés vérifiées sur les écrans OptiFine (Performance Settings + Quality Settings).
+    // Les options de performance sont activées sur les TROIS paliers (gain CPU/GPU
+    // sans perte visuelle). Seule la section Quality varie selon le palier.
+    //
+    // ofBetterGrass / ofConnectedTextures : 3 = OFF, 1 = Fancy, 2 = Fast
+    // ofAfLevel : 1 = OFF, 2/4/8/16 = niveau AF
+    // ofAaLevel : 0 = OFF, 2/4/8 = niveau AA
+    // ofMipmapType : 0 = Nearest, 1 = Linear, 2 = Bilinear, 3 = Trilinear
+    let optionsof_path = game_dir.join("optionsof.txt");
+    if !optionsof_path.exists() {
+        // Bloc performance — identique pour tous les paliers
+        let perf = "ofSmoothFps:true\nofSmoothWorld:true\nofFastRender:true\nofFastMath:true\n\
+                    ofChunkUpdates:1\nofDynamicUpdates:false\nofRenderRegions:false\n\
+                    ofLazyChunkLoading:true\nofSmartAnimations:true\n";
+
+        // Bloc quality — varie selon le palier
+        let quality = match tier {
+            Tier::Performance =>
+                // Mipmap Nearest, pas d'AF/AA, fonctionnalités visuelles lourdes désactivées
+                "ofMipmapType:0\nofAfLevel:1\nofAaLevel:0\n\
+                 ofClearWater:false\nofRandomEntities:false\n\
+                 ofBetterGrass:3\nofBetterSnow:false\n\
+                 ofCustomFonts:true\nofCustomColors:false\n\
+                 ofConnectedTextures:3\nofNaturalTextures:false\n\
+                 ofCustomSky:false\nofCustomItems:true\n\
+                 ofCustomEntityModels:false\nofCustomGuis:true\n\
+                 ofEmissiveTextures:false\n",
+            Tier::Normal =>
+                // Même perf, qualité aux défauts OptiFine (screenshot Quality Settings)
+                "ofMipmapType:0\nofAfLevel:1\nofAaLevel:0\n\
+                 ofClearWater:false\nofRandomEntities:true\n\
+                 ofBetterGrass:3\nofBetterSnow:false\n\
+                 ofCustomFonts:true\nofCustomColors:true\n\
+                 ofConnectedTextures:3\nofNaturalTextures:false\n\
+                 ofCustomSky:true\nofCustomItems:true\n\
+                 ofCustomEntityModels:true\nofCustomGuis:true\n\
+                 ofEmissiveTextures:true\n",
+            Tier::Quality =>
+                // Mipmap Trilinear, AF 16, AA 8, tout à fond
+                "ofMipmapType:3\nofAfLevel:16\nofAaLevel:8\n\
+                 ofClearWater:true\nofRandomEntities:true\n\
+                 ofBetterGrass:1\nofBetterSnow:true\n\
+                 ofCustomFonts:true\nofCustomColors:true\n\
+                 ofConnectedTextures:1\nofNaturalTextures:true\n\
+                 ofCustomSky:true\nofCustomItems:true\n\
+                 ofCustomEntityModels:true\nofCustomGuis:true\n\
+                 ofEmissiveTextures:true\n",
+        };
+        let _ = std::fs::write(&optionsof_path, format!("{perf}{quality}"));
+    }
 }
 
 #[derive(Deserialize)]

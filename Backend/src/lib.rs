@@ -146,6 +146,8 @@ pub fn run() {
             commands::instances::instance_toggle_favorite,
             commands::instances::instance_duplicate,
             commands::instances::instance_startup_sync,
+            commands::instances::instance_export_settings,
+            commands::instances::instance_apply_settings,
             commands::sync::sync_list_instances,
             commands::sync::sync_list_saves,
             commands::sync::sync_push_instance,

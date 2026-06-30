@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 
 export default function Settings() {
@@ -6,7 +8,16 @@ export default function Settings() {
   const {
     brightness, setBrightness, defaultRam, setDefaultRam, closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
+    syncGameSettings, setSyncGameSettings,
+    optifinePreset, setOptifinePreset,
   } = useStore()
+
+  // Initialise le preset OptiFine selon le PC si pas encore défini
+  useEffect(() => {
+    if (optifinePreset === null) {
+      api.system.memoryInfo().then((info) => setOptifinePreset(info.suggested_optifine_preset)).catch(() => {})
+    }
+  }, [])
 
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
@@ -140,6 +151,67 @@ export default function Settings() {
                       width: 18, height: 18,
                       left: avoidBetaDependencies ? 22 : 2,
                     }}
+                  />
+                </button>
+              </div>
+
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+              {/* Préréglage OptiFine */}
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-sm font-medium text-white">Préréglage OptiFine</p>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                    Appliqué automatiquement à l'import d'OptiFine si l'instance n'a pas encore de config vidéo
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'performance', label: 'Performance', desc: 'FPS max, petite config' },
+                    { value: 'normal',      label: 'Normal',      desc: 'Équilibre FPS / rendu' },
+                    { value: 'quality',     label: 'Qualité',     desc: 'Beaux graphismes, bonne config' },
+                  ] as const).map(({ value, label, desc }) => {
+                    const active = (optifinePreset ?? 'normal') === value
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => setOptifinePreset(value)}
+                        className="flex flex-col gap-1 rounded-xl p-3 text-left transition-all duration-150"
+                        style={{
+                          background: active ? 'rgba(75,63,207,0.2)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${active ? 'rgba(75,63,207,0.55)' : 'rgba(255,255,255,0.07)'}`,
+                        }}
+                      >
+                        <span className="font-semibold text-white" style={{ fontSize: 12 }}>{label}</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', lineHeight: 1.4 }}>{desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+              {/* Sync paramètres Minecraft */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Synchroniser les paramètres Minecraft</p>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                    Applique automatiquement ton options.txt (touches, vidéo…) à chaque nouvelle instance — exporte-le depuis l'instance de ton choix via le bouton ··· dans la liste
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSyncGameSettings(!syncGameSettings)}
+                  className="relative flex-shrink-0 rounded-full transition-all duration-200"
+                  style={{
+                    width: 44, height: 24,
+                    background: syncGameSettings ? 'rgba(75,63,207,0.8)' : 'rgba(255,255,255,0.1)',
+                    border: `1px solid ${syncGameSettings ? 'rgba(75,63,207,1)' : 'rgba(255,255,255,0.15)'}`,
+                  }}
+                >
+                  <span
+                    className="absolute top-0.5 rounded-full bg-white transition-all duration-200"
+                    style={{ width: 18, height: 18, left: syncGameSettings ? 22 : 2 }}
                   />
                 </button>
               </div>
