@@ -1,4 +1,8 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
+
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 
 /**
  * Bouton minimal — rect arrondi, s'éclaircit au survol. Pas de texte pour

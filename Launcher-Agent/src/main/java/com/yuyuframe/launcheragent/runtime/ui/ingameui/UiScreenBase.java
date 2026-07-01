@@ -1,11 +1,10 @@
-package com.yuyuframe.launcheragent.screen;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
-import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
-import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.UiTheme;
-import com.yuyuframe.launcheragent.runtime.ui.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import net.minecraft.client.gui.screens.Screen;
 
 import java.util.ArrayList;

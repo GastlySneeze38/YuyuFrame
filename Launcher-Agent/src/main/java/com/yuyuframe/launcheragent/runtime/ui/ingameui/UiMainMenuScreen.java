@@ -1,11 +1,9 @@
-package com.yuyuframe.launcheragent.screen;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
-import com.yuyuframe.launcheragent.runtime.ui.UiColor;
-import com.yuyuframe.launcheragent.runtime.ui.UiFont;
-import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.UiTheme;
-import com.yuyuframe.launcheragent.runtime.ui.UiToggle;
-import com.yuyuframe.launcheragent.runtime.ui.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +17,7 @@ import java.util.Locale;
  * toggle gagne le test de collision face au clic "ouvrir la config").
  *
  * Données factices ({@link #MOCK_MODS}) en attendant l'enregistrement réel
- * des mods (YuyuPvP, etc.) — voir docs/LauncherAgent/index.md.
+ * des mods (YuyuPvP, etc. — voir runtime.ui.modules) — voir docs/LauncherAgent/index.md.
  */
 public class UiMainMenuScreen extends UiScreenBase {
 

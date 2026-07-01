@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 

@@ -1,4 +1,7 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
+
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
 /**
  * Section visuelle statique (fond arrondi + titre) — pas un UiWidget

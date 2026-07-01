@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 /** Couleur RGBA simple, indépendante de toute lib externe (pas de OneColor/NanoVG). */
 public final class UiColor {

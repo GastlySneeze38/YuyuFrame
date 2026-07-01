@@ -2,11 +2,11 @@ package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.screen.UiMainMenuScreen;
-import com.yuyuframe.launcheragent.screen.UiScreenBase;
-import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
-import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
-import com.yuyuframe.launcheragent.runtime.ui.UiInputPollerLegacy;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerLegacy;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

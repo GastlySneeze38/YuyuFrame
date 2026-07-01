@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 /**
  * Widget dessiné/cliqué à la main — jamais un vrai ButtonWidget/ClickableWidget

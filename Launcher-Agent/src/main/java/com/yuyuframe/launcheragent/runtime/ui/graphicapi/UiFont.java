@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 import java.awt.Color;
 import java.awt.Font;

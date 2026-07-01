@@ -1,10 +1,10 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 /**
- * Marqueur implémenté par nos écrans custom (UiScreenBase) — jamais réécrit
- * par ScreenStubPatcher (interface 100% à nous, pas net.minecraft.*), donc
- * l'instanceof fonctionne normalement dans GlobalUiRenderMixin sans passer
- * par MappingsRegistry.
+ * Marqueur implémenté par nos écrans custom (UiScreenBase, runtime.ui.ingameui)
+ * — jamais réécrit par ScreenStubPatcher (interface 100% à nous, pas
+ * net.minecraft.*), donc l'instanceof fonctionne normalement dans
+ * GlobalUiRenderMixin sans passer par MappingsRegistry.
  *
  * L'écran lui-même n'a besoin de surcharger AUCUNE méthode Screen à risque
  * (render/mouseClicked/keyPressed — types record sans stub compilable en

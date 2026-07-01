@@ -1,4 +1,6 @@
-package com.yuyuframe.launcheragent.runtime.ui;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
+
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 
 /** Palette centralisée style OneConfig (fond sombre, accent violet) — cohérence visuelle entre tous les widgets/écrans custom. */
 public final class UiTheme {

@@ -1,17 +1,10 @@
-package com.yuyuframe.launcheragent.screen;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
-import com.yuyuframe.launcheragent.runtime.ui.UiColor;
-import com.yuyuframe.launcheragent.runtime.ui.UiColorPicker;
-import com.yuyuframe.launcheragent.runtime.ui.UiFont;
-import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
-import com.yuyuframe.launcheragent.runtime.ui.UiKeybindButton;
-import com.yuyuframe.launcheragent.runtime.ui.UiLabel;
-import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.UiScrollContainer;
-import com.yuyuframe.launcheragent.runtime.ui.UiSlider;
-import com.yuyuframe.launcheragent.runtime.ui.UiTheme;
-import com.yuyuframe.launcheragent.runtime.ui.UiToggle;
-import com.yuyuframe.launcheragent.runtime.ui.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 
 import java.util.Locale;
 import java.util.function.Consumer;
@@ -21,8 +14,9 @@ import java.util.function.Consumer;
  * scrollable en dessous (UiScrollContainer) avec sections de réglages
  * factices (voir buildLayout). Les données affichées ne sont PAS encore
  * reliées à un vrai mod (aucun mod n'est enregistré côté agent pour
- * l'instant) — juste de quoi valider le rendu/interactions des 4 widgets de
- * config (toggle/slider/color/keybind) avant de brancher YuyuPvP etc.
+ * l'instant, voir runtime.ui.modules) — juste de quoi valider le rendu/
+ * interactions des 4 widgets de config (toggle/slider/color/keybind) avant
+ * de brancher YuyuPvP etc.
  *
  * Layout construit UNE SEULE FOIS (voir {@code built}) : les widgets portent
  * un état interne (slider en cours de glissement, color picker déplié,
