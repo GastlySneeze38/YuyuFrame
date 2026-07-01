@@ -5,6 +5,13 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiColorPicker;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiLabel;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiSlider;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
 import java.util.Locale;
 import java.util.function.Consumer;

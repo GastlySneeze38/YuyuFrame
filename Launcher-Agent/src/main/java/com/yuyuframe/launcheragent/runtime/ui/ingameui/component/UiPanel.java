@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.ingameui;
+package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;

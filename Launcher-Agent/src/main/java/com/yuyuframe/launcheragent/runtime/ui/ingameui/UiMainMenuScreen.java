@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
 import java.util.ArrayList;
 import java.util.List;

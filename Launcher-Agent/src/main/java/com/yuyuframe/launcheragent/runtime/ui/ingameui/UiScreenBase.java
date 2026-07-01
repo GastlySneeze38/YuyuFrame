@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import net.minecraft.client.gui.screens.Screen;
 
 import java.util.ArrayList;
