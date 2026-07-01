@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.mixin.client;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.screen.UiMainMenuScreen;
+import com.yuyuframe.launcheragent.screen.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPollerModern;
@@ -65,6 +66,19 @@ public abstract class GlobalUiRenderMixin {
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
+
+            // Navigation demandée par l'écran lui-même (UiScreenBase.closeTo,
+            // ex: clic sur une carte de mod ou bouton retour) — appliquée ICI,
+            // seul endroit qui connaît déjà mc + setScreen correctement résolus
+            // pour cette version (voir UiScreenBase.closeTo pour le pourquoi).
+            if (currentScreen instanceof UiScreenBase) {
+                UiScreenBase uiScreen = (UiScreenBase) currentScreen;
+                if (uiScreen.hasPendingNavigation()) {
+                    Object target = uiScreen.consumePendingNavigation();
+                    if (target != null) setScreen(mc, target);
+                    else closeScreen(mc, currentScreen.getClass());
+                }
+            }
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin: " + t);
         }
@@ -81,6 +95,25 @@ public abstract class GlobalUiRenderMixin {
             }
         }
         LauncherLog.warn("[LauncherAgent] GlobalUiRenderMixin: setScreen introuvable");
+    }
+
+    /**
+     * Ferme l'écran (setScreen(null)) — méthode séparée de setScreen() car
+     * Method.getParameterTypes()[0].isInstance(null) vaut TOUJOURS false (donc
+     * inutilisable pour retrouver le bon overload quand screen==null) : on
+     * matche ici par assignabilité depuis la classe de l'écran qu'on ferme.
+     */
+    private static void closeScreen(Object mc, Class<?> closingScreenType) throws Exception {
+        java.util.Set<String> names = MappingsRegistry.runtimeMethodNames(CLS_MC, "a");
+        for (java.lang.reflect.Method m : mc.getClass().getMethods()) {
+            if (names.contains(m.getName()) && m.getParameterCount() == 1
+                    && !m.getParameterTypes()[0].isPrimitive()
+                    && m.getParameterTypes()[0].isAssignableFrom(closingScreenType)) {
+                m.invoke(mc, (Object) null);
+                return;
+            }
+        }
+        LauncherLog.warn("[LauncherAgent] GlobalUiRenderMixin: closeScreen: setScreen introuvable");
     }
 
     private static long getWindowHandle(Object mc) throws Exception {

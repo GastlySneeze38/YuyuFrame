@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.screen;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.screen.ScreenHelper;
 import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
@@ -28,6 +27,9 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     protected final List<UiWidget> widgets = new ArrayList<>();
     protected int screenWidth, screenHeight; // pixels framebuffer, mis à jour chaque frame — voir uiPollInput()
+
+    private boolean navigationRequested;
+    private Object navigationTarget;
 
     /**
      * Constructeur no-arg de Screen (PAS Screen(Component title)) — ce dernier
@@ -83,8 +85,33 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         }
     }
 
-    /** Ferme cet écran — renvoie à lastScreen si fourni par la sous-classe (voir UiMainMenuScreen). */
+    /**
+     * Ferme cet écran — renvoie à lastScreen si fourni par la sous-classe
+     * (voir UiMainMenuScreen), ou ferme vers le jeu si null. N'appelle PAS
+     * mc.setScreen() directement : ScreenHelper (runtime.screen) code en dur
+     * les noms obfusqués "official" de 1.21 (ex: MinecraftClient="gfj") — noms
+     * qui n'existent tout simplement pas sur 1.8.9 (obfuscation complètement
+     * différente, Mojang n'a jamais publié de mappings officiels pour cette
+     * version), d'où un ClassNotFoundException("gfj") silencieux observé en
+     * jeu : chaque clic "ouvrir/fermer" ne faisait rien sur 1.8.9.
+     *
+     * La navigation est donc juste ENREGISTRÉE ici ; c'est le Mixin global de
+     * CHAQUE version (GlobalUiRenderMixin en 1.21+, GlobalUiRenderMixin189 en
+     * 1.8.9 — seuls endroits qui résolvent déjà correctement mc + setScreen
+     * pour LEUR version, voir leurs champs CLS_MC respectifs) qui l'applique
+     * réellement, juste après avoir appelé uiDraw() cette frame.
+     */
     protected void closeTo(Object lastScreen) {
-        ScreenHelper.navigate(this, lastScreen);
+        navigationTarget = lastScreen;
+        navigationRequested = true;
+    }
+
+    /** Consommé par le Mixin global de chaque version — true si closeTo() a été appelé cette frame. */
+    public boolean hasPendingNavigation() { return navigationRequested; }
+
+    /** Cible demandée (peut être null = fermer vers le jeu) — remet le flag à false. */
+    public Object consumePendingNavigation() {
+        navigationRequested = false;
+        return navigationTarget;
     }
 }
