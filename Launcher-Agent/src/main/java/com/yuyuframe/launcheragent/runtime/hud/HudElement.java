@@ -154,10 +154,15 @@ public class HudElement {
         } catch (Throwable t) {
             lines = new String[]{ "--" };
         }
-        float naturalH = lines.length * HudPanelRenderer.LINE_H;
-        float naturalW = HudPanelRenderer.PADDING;
+        // Marge des DEUX côtés (gauche+droite, haut+bas) — avant ce correctif,
+        // une seule PADDING était comptée pour la largeur et AUCUNE pour la
+        // hauteur : le texte touchait pile le bord droit (et haut/bas) de la
+        // boîte par défaut, "ça fait bizarre, pas de marge" sur les panneaux
+        // à une seule ligne (FPS/Ping) où ça se voyait le plus.
+        float naturalH = lines.length * HudPanelRenderer.LINE_H + 2 * HudPanelRenderer.PADDING;
+        float naturalW = 2 * HudPanelRenderer.PADDING;
         for (String line : lines) {
-            naturalW = Math.max(naturalW, HudPanelRenderer.PADDING + com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
+            naturalW = Math.max(naturalW, 2 * HudPanelRenderer.PADDING + com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
         }
         return new float[]{ naturalW, naturalH };
     }

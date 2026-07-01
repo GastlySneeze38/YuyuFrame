@@ -53,8 +53,11 @@ public final class KeystrokesModule extends SingleHudModule {
     private static final class Renderer implements HudElement.CustomRenderer {
         private static final float BOX = 16f;
         private static final float GAP = 2f;
-        private static final float CPS_W = 38f;
-        private static final float CPS_H = 24f;
+        // Rapprochées de la taille des touches WASD (16x16) — 38x24
+        // (2.4x/1.5x plus grandes) faisait paraître les boîtes CPS
+        // disproportionnées à côté des touches.
+        private static final float CPS_W = 28f;
+        private static final float CPS_H = 20f;
         private static final float PADDING = 5f;
         private static final UiColor IDLE_BG = new UiColor(255, 255, 255, 30);
         private static final UiColor PRESSED_BG = new UiColor(255, 255, 255, 210);

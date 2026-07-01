@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -250,6 +251,93 @@ public final class UiRenderer {
             glEnd();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawQuad: " + t);
+        }
+    }
+
+    // ── Icône d'objet vanilla (ItemRenderer, immediate-mode/fixed-function) ──
+
+    /**
+     * Dessine l'icône RÉELLE d'un ItemStack (modèle vanilla, pas un rectangle
+     * de substitution) via {@code ItemRenderer.renderInGuiWithOverrides}, en
+     * pontant vers le pipeline fixed-function de vanilla depuis notre propre
+     * pipeline shader — PREMIÈRE utilisation de ce pont dans le projet, voir
+     * ArmorDurabilityModule pour le premier appelant.
+     *
+     * {@code x}/{@code y} en NOTRE convention (coin BAS-gauche de l'icône,
+     * origine bas-gauche écran, comme drawRoundedRect/drawText) — convertis en
+     * interne vers la convention vanilla (origine HAUT-gauche, Y vers le bas)
+     * car {@code renderInGuiWithOverrides} attend ses coordonnées ainsi.
+     *
+     * {@code size} — taille RÉELLE souhaitée en pixels physiques (mêmes
+     * unités que le reste de notre UI). {@code renderInGuiWithOverrides}
+     * dessine TOUJOURS un carré de 16 unités, point — sans notre propre mise à
+     * l'échelle ({@code glScalef}), l'icône ressortait à 16 pixels PHYSIQUES
+     * bruts, minuscule sur un écran moderne (vanilla ne paraît correct que
+     * multiplié par son "GUI Scale", que notre pipeline ignore volontairement
+     * partout ailleurs — d'où la nécessité de compenser ici spécifiquement).
+     *
+     * Ortho (0,vpW, vpH,0, 1000,3000) + translate(0,0,-2000) : convention de
+     * profondeur GUI vanilla historique (LWJGL2) — sans elle, le zLevel
+     * interne du rendu d'item (petit, proche de 0) tomberait hors de la plage
+     * de clipping et l'icône resterait invisible malgré un appel "réussi".
+     */
+    public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
+        if (itemStack == null) return;
+        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        try {
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+            Object itemRenderer = McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "getItemRenderer").invoke(mc);
+            if (itemRenderer == null) return;
+            Method render = McReflect.method(itemRenderer.getClass(), "net/minecraft/client/render/item/ItemRenderer",
+                "renderInGuiWithOverrides", itemStack.getClass(), int.class, int.class);
+            if (render == null) return;
+
+            pushAttrib(0x00004000 | 0x00000001 | 0x00040000 | 0x00100000 | 0x00080000); // GL_ENABLE_BIT|GL_CURRENT_BIT|GL_TEXTURE_BIT|GL_TRANSFORM_BIT|GL_LIGHTING_BIT
+            attribPushed = true;
+            glEnable(0x0DE1); // GL_TEXTURE_2D
+            glEnable(0x0B71); // GL_DEPTH_TEST — vanilla s'appuie dessus pour l'ordre icône/overlay
+            glDisable(0x0B44); // GL_CULL_FACE
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            // Convention GUI vanilla : origine HAUT-gauche, Y vers le bas (INVERSE de la nôtre) — voir javadoc.
+            glOrtho(0, vpWidth, vpHeight, 0, 1000, 3000);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+            glTranslatef(0f, 0f, -2000f);
+
+            float zoom = size / 16f;
+            glScalef(zoom, zoom, 1f);
+
+            // Position calculée en pixels PHYSIQUES (convention vanilla, coin
+            // haut-gauche), puis divisée par zoom car glScalef s'applique à
+            // TOUT ce qui suit — y compris les coordonnées passées à
+            // render.invoke ci-dessous, qui doivent donc être exprimées dans
+            // l'espace NON zoomé pour retomber au bon endroit une fois zoomées.
+            float vanillaXPhysical = x;
+            float vanillaYPhysical = vpHeight - y - size;
+            float vanillaX = vanillaXPhysical / zoom;
+            float vanillaY = vanillaYPhysical / zoom;
+            render.invoke(itemRenderer, itemStack, (int) vanillaX, (int) vanillaY);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawVanillaItemIcon: " + t);
+        } finally {
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (attribPushed) popAttrib();
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -516,6 +604,12 @@ public final class UiRenderer {
     private void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glOrtho", double.class, double.class, double.class, double.class, double.class, double.class)
             .invoke(null, left, right, bottom, top, near, far);
+    }
+    private void glTranslatef(float x, float y, float z) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glTranslatef", float.class, float.class, float.class).invoke(null, x, y, z);
+    }
+    private void glScalef(float x, float y, float z) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glScalef", float.class, float.class, float.class).invoke(null, x, y, z);
     }
     private void glTexCoord2f(float u, float v) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glTexCoord2f", float.class, float.class).invoke(null, u, v);

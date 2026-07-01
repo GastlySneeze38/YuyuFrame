@@ -137,14 +137,29 @@ public final class McReflect {
      * au moment de l'appel.
      */
     public static Method oneArgMethod(Class<?> owner, String yarnClass, String yarnMethod, Class<?> paramType) {
-        String key = owner.getName() + "#" + yarnMethod + "(" + paramType.getName() + ")";
+        return method(owner, yarnClass, yarnMethod, paramType);
+    }
+
+    /**
+     * Méthode à N paramètres (N ≥ 0), désambiguïsée par type exact —
+     * généralisation de {@link #oneArgMethod}/{@link #noArgMethod} pour les
+     * méthodes à plusieurs arguments (ex: ItemRenderer.renderInGuiWithOverrides,
+     * qui prend un ItemStack + 2 int).
+     */
+    public static Method method(Class<?> owner, String yarnClass, String yarnMethod, Class<?>... paramTypes) {
+        String key = owner.getName() + "#" + yarnMethod + "(" + java.util.Arrays.toString(paramTypes) + ")";
         return METHOD_CACHE.computeIfAbsent(key, k -> {
             String obfName = MappingsRegistry.getObfMethodName(yarnClass, yarnMethod);
             Class<?> c = owner;
             while (c != null) {
                 for (Method m : c.getDeclaredMethods()) {
-                    if (m.getName().equals(obfName) && m.getParameterCount() == 1
-                            && m.getParameterTypes()[0].isAssignableFrom(paramType)) {
+                    if (!m.getName().equals(obfName) || m.getParameterCount() != paramTypes.length) continue;
+                    Class<?>[] actual = m.getParameterTypes();
+                    boolean match = true;
+                    for (int i = 0; i < paramTypes.length; i++) {
+                        if (!actual[i].isAssignableFrom(paramTypes[i])) { match = false; break; }
+                    }
+                    if (match) {
                         m.setAccessible(true);
                         return m;
                     }
