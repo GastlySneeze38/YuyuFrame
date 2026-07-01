@@ -17,8 +17,13 @@ public abstract class UiWidget {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
-    /** Dessine ce widget — mouseX/mouseY en pixels framebuffer, pour l'état hover. */
-    public abstract void draw(UiRenderer renderer, double mouseX, double mouseY);
+    /**
+     * Dessine ce widget — mouseX/mouseY en pixels framebuffer, pour l'état hover.
+     * vpWidth/vpHeight : dimensions totales du viewport, requises par
+     * UiRenderer pour poser sa projection orthographique (voir
+     * UiRenderer.drawRoundedRect) — PAS les dimensions de ce widget.
+     */
+    public abstract void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight);
 
     /** Appelé quand ce widget est cliqué (leftClicked, curseur dans ses bounds). */
     public void onClick() {}

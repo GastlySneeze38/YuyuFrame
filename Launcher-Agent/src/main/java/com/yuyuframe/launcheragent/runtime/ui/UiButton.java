@@ -20,9 +20,9 @@ public class UiButton extends UiWidget {
     }
 
     @Override
-    public void draw(UiRenderer renderer, double mouseX, double mouseY) {
+    public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         boolean hovered = contains(mouseX, mouseY);
-        renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, hovered ? HOVER : BASE);
+        renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, hovered ? HOVER : BASE, vpWidth, vpHeight);
     }
 
     @Override

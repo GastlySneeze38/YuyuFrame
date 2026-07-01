@@ -26,7 +26,9 @@ import java.util.List;
  */
 public abstract class UiScreenBase extends Screen implements UiDrawable {
 
-    private static final UiColor BACKGROUND = new UiColor(0, 0, 0, 160);
+    // TEMPORAIRE (diagnostic) : magenta opaque impossible à manquer — remettre
+    // (0,0,0,160) une fois le rendu confirmé visible en jeu.
+    private static final UiColor BACKGROUND = new UiColor(255, 0, 255, 255);
 
     protected final List<UiWidget> widgets = new ArrayList<>();
     protected int screenWidth, screenHeight; // pixels framebuffer, mis à jour chaque frame — voir uiPollInput()
@@ -65,9 +67,9 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     public void uiDraw(double mouseX, double mouseY) {
         try {
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
-            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, BACKGROUND);
+            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, BACKGROUND, screenWidth, screenHeight);
             for (UiWidget w : widgets) {
-                w.draw(renderer, mouseX, mouseY);
+                w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             }
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiDraw: " + t);

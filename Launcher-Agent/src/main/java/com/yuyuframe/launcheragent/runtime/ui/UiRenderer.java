@@ -98,10 +98,23 @@ public final class UiRenderer {
      * Dessine un rect avec coins arrondis, en pixels physiques écran (x1,y1)-(x2,y2).
      * radius=0 → rect plein classique. Fallback silencieux vers un quad plein
      * (pas d'arrondi) si la compilation shader a échoué sur cette version/GPU.
+     *
+     * @param vpWidth  largeur totale du viewport (framebuffer), PAS la largeur
+     *                 de ce rect précis — nécessaire pour poser une projection
+     *                 orthographique correcte (voir plus bas), indépendamment
+     *                 de la taille du rect dessiné.
+     * @param vpHeight idem, hauteur totale du viewport.
      */
-    public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color) {
+    public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
+                                 int vpWidth, int vpHeight) {
         ensureInit();
-        boolean useShader = program != -1 && !initFailed;
+        // radius<=0 : bypass total du shader — bug dégénéré sinon. Dans
+        // "alpha = 1 - smoothstep(radius-1, radius, dist)", avec radius=0 tout
+        // pixel intérieur a dist=0, qui tombe EXACTEMENT sur le bord haut du
+        // smoothstep(-1, 0, 0) → 1.0, donc alpha=0 partout : rect totalement
+        // invisible malgré un dessin "réussi" (aucune exception). Observé en
+        // test 1.8.9 : le fond plein écran (radius=0) ne s'affichait jamais.
+        boolean useShader = program != -1 && !initFailed && radius > 0f;
 
         try {
             // État GL hérité de ce que le jeu a laissé à ce point précis du
@@ -112,8 +125,28 @@ public final class UiRenderer {
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
             glDisable(0x0DE1); // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE — sinon un quad mal orienté (winding) par rapport à ce que
+                                // le rendu 3D du monde a laissé actif peut être silencieusement éliminé,
+                                // sans erreur : dessin "réussi" en apparence, rien de visible en jeu.
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            // ftransform() (vertex shader) applique la matrice modelview/projection
+            // COURANTE — à ce point précis (TAIL de GameRenderer.render()), rien ne
+            // garantit qu'elle soit une projection 2D pixel-space : ça peut encore
+            // être la perspective 3D du monde, auquel cas nos coordonnées pixel
+            // (ex: 1920,1057) sortent totalement du frustum et sont clippées, d'où
+            // rien de visible malgré un dessin "réussi" côté code. On pose donc
+            // NOTRE PROPRE ortho, empilée puis restaurée, indépendante de l'état
+            // ambiant. Bas-gauche origine Y-up (glOrtho(0,w,0,h,...)) — cohérent
+            // avec gl_FragCoord et le reste du pipeline (mouse/UI), pas de flip.
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            loadIdentity();
 
             if (useShader) {
                 glUseProgram(program);
@@ -121,6 +154,11 @@ public final class UiRenderer {
                 glUniform1f(uRadius, radius);
             }
             drawQuad(x1, y1, x2, y2, color);
+
+            matrixMode(0x1700); // GL_MODELVIEW
+            popMatrix();
+            matrixMode(0x1701); // GL_PROJECTION
+            popMatrix();
             if (diagOnce) {
                 diagOnce = false;
                 DiagFile.log("drawRoundedRect OK — (" + x1 + "," + y1 + ")-(" + x2 + "," + y2
@@ -228,5 +266,21 @@ public final class UiRenderer {
     }
     private void popAttrib() throws Exception {
         gl("org.lwjgl.opengl.GL11", "glPopAttrib").invoke(null);
+    }
+    private void matrixMode(int mode) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glMatrixMode", int.class).invoke(null, mode);
+    }
+    private void pushMatrix() throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glPushMatrix").invoke(null);
+    }
+    private void popMatrix() throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glPopMatrix").invoke(null);
+    }
+    private void loadIdentity() throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glLoadIdentity").invoke(null);
+    }
+    private void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glOrtho", double.class, double.class, double.class, double.class, double.class, double.class)
+            .invoke(null, left, right, bottom, top, near, far);
     }
 }
