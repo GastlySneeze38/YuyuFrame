@@ -9,8 +9,17 @@ public abstract class UiWidget {
 
     public float x, y, w, h;
 
+    /** Texte affiché dans une bulle près du curseur au survol — null = pas de tooltip. Voir UiTooltip (ingameui.component). */
+    public String tooltip;
+
     public UiWidget(float x, float y, float w, float h) {
         this.x = x; this.y = y; this.w = w; this.h = h;
+    }
+
+    /** Setter fluent — ex: {@code scroll.add(new UiLabel(...).tooltip("explication du réglage"))}. */
+    public UiWidget tooltip(String text) {
+        this.tooltip = text;
+        return this;
     }
 
     public boolean contains(double mx, double my) {

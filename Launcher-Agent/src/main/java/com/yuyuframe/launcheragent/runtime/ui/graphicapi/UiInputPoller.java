@@ -71,4 +71,16 @@ public abstract class UiInputPoller {
      * (les codes numériques LWJGL2/GLFW ne coïncident pas d'une version à l'autre).
      */
     public abstract String pollAnyKeyJustPressed();
+
+    /**
+     * À appeler UNIQUEMENT quand un UiTextField a le focus — applique en une
+     * seule passe les frappes de cette frame à {@code buffer} (ajoute les
+     * caractères imprimables, gère Backspace). Une seule méthode plutôt que
+     * "caractères tapés" + "touches spéciales" séparées : sur LWJGL2, les deux
+     * liraient dans la MÊME file d'événements (Keyboard.next()), consommée une
+     * seule fois — les séparer romprait l'une des deux si les deux étaient
+     * appelées la même frame (ce qui arriverait si un champ texte capturait
+     * Backspace via pollAnyKeyJustPressed en plus de lire les caractères).
+     */
+    public abstract void pollTextEdit(StringBuilder buffer);
 }

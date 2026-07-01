@@ -282,8 +282,12 @@ public final class UiRenderer {
 
             int texId = glGenTextures();
             glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
-            glTexParameteri(0x0DE1, 0x2801, 0x2600); // GL_TEXTURE_MIN_FILTER, GL_NEAREST
-            glTexParameteri(0x0DE1, 0x2800, 0x2600); // GL_TEXTURE_MAG_FILTER, GL_NEAREST
+            // GL_LINEAR (pas GL_NEAREST) : l'atlas est rasterisé à BASE_PX=32
+            // puis réduit au dessin (scale ~0.3-0.55 pour du texte courant) —
+            // l'échantillonnage plus-proche-voisin donnait un rendu en blocs
+            // très visible une fois réduit. Bilinéaire lisse ça nettement.
+            glTexParameteri(0x0DE1, 0x2801, 0x2601); // GL_TEXTURE_MIN_FILTER, GL_LINEAR
+            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
             glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
             glBindTexture(0x0DE1, 0);
 

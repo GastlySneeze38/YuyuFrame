@@ -17,4 +17,15 @@ public final class UiColor {
     }
 
     public static final UiColor TRANSPARENT = new UiColor(0, 0, 0, 0);
+
+    /** Interpolation linéaire composante par composante — utilisé pour les transitions hover/toggle animées. */
+    public static UiColor lerp(UiColor from, UiColor to, float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        return new UiColor(
+            from.r + (to.r - from.r) * t,
+            from.g + (to.g - from.g) * t,
+            from.b + (to.b - from.b) * t,
+            from.a + (to.a - from.a) * t
+        );
+    }
 }

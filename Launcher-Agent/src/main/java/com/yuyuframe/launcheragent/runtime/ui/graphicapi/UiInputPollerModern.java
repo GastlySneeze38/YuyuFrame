@@ -41,10 +41,22 @@ public final class UiInputPollerModern extends UiInputPoller {
     private static final Object[][] CAPTURABLE_KEYS = buildCapturableKeys();
     private final Map<Integer, Boolean> prevKeyDown = new HashMap<>();
 
+    // Saisie de texte (UiTextField) — GLFW n'a pas non plus d'état "caractères
+    // tapés" pollable, uniquement un callback (comme la molette). Backspace,
+    // lui, n'a PAS besoin de callback : contrairement à LWJGL2 où tout passe
+    // par une seule file d'événements partagée (Keyboard.next()), GLFW expose
+    // key callback et char callback comme deux flux INDÉPENDANTS — un simple
+    // scan isKeyDown suffit donc pour Backspace, sans risquer de "voler" les
+    // événements caractère.
+    private final StringBuilder pendingChars = new StringBuilder();
+    private final Object[] previousCharCb = new Object[1];
+    private boolean prevBackspaceDown;
+
     public UiInputPollerModern(long windowHandle, ClassLoader gameClassLoader) {
         this.windowHandle = windowHandle;
         this.gameClassLoader = gameClassLoader;
         registerScrollCallback();
+        registerCharCallback();
     }
 
     private static Object[][] buildCapturableKeys() {
@@ -88,6 +100,31 @@ public final class UiInputPollerModern extends UiInputPoller {
             previousScrollCb[0] = setCb.invoke(null, windowHandle, proxy);
         } catch (Throwable t) {
             LauncherLog.err("[UiInputPollerModern] registerScrollCallback: " + t);
+        }
+    }
+
+    /** Même principe de chaînage que registerScrollCallback() — ne casse jamais la saisie de texte vanilla (chat, champs d'écrans). */
+    private void registerCharCallback() {
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWCharCallbackI", true, gameClassLoader);
+            Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                if (args != null && args.length == 2 && "invoke".equals(method.getName())) {
+                    int codepoint = (Integer) args[1];
+                    synchronized (pendingChars) {
+                        pendingChars.append(Character.toChars(codepoint));
+                    }
+                    Object prev = previousCharCb[0];
+                    if (prev != null) {
+                        try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                    }
+                }
+                return null;
+            });
+            Method setCb = glfwClass.getMethod("glfwSetCharCallback", long.class, cbIface);
+            previousCharCb[0] = setCb.invoke(null, windowHandle, proxy);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiInputPollerModern] registerCharCallback: " + t);
         }
     }
 
@@ -142,6 +179,23 @@ public final class UiInputPollerModern extends UiInputPoller {
             LauncherLog.err("[UiInputPollerModern] pollAnyKeyJustPressed: " + e);
         }
         return null;
+    }
+
+    @Override
+    public void pollTextEdit(StringBuilder buffer) {
+        synchronized (pendingChars) {
+            if (pendingChars.length() > 0) {
+                buffer.append(pendingChars);
+                pendingChars.setLength(0);
+            }
+        }
+        try {
+            boolean down = glfwGetKey(windowHandle, 259) == 1; // GLFW_KEY_BACKSPACE
+            if (down && !prevBackspaceDown && buffer.length() > 0) buffer.deleteCharAt(buffer.length() - 1);
+            prevBackspaceDown = down;
+        } catch (Exception e) {
+            LauncherLog.err("[UiInputPollerModern] pollTextEdit: " + e);
+        }
     }
 
     private int glfwGetKey(long handle, int key) throws Exception {

@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -23,6 +24,7 @@ public class UiKeybindButton extends UiWidget {
     private String keyName;
     private boolean listening;
     private final Consumer<String> onChange;
+    private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
     public UiKeybindButton(float x, float y, float w, float h, String initialKeyName, Consumer<String> onChange) {
         super(x, y, w, h);
@@ -34,8 +36,8 @@ public class UiKeybindButton extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        boolean hovered = contains(mouseX, mouseY);
-        UiColor bg = listening ? UiTheme.ACCENT_DIM : (hovered ? HOVER : BASE);
+        hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+        UiColor bg = listening ? UiTheme.ACCENT_DIM : UiColor.lerp(BASE, HOVER, hoverAnim.get());
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
 
         String label = listening ? "..." : keyName;

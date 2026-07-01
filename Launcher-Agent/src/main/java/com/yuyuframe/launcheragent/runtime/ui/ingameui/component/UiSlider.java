@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -11,11 +12,16 @@ import java.util.function.Consumer;
  * pollContinuous (appelé CHAQUE frame par UiScreenBase/UiScrollContainer, pas
  * seulement au clic), pour que le glissement continue même quand le curseur
  * sort des bounds du widget pendant le drag (UX standard d'un slider).
+ *
+ * La piste occupe {@code w - READOUT_W} : le reste est réservé à l'affichage
+ * de la valeur courante (entier si step>=1, sinon 1 décimale), pour ne pas
+ * avoir à deviner la position exacte du curseur visuellement.
  */
 public class UiSlider extends UiWidget {
 
     private static final float TRACK_H = 4f;
     private static final float KNOB_R = 6f;
+    private static final float READOUT_W = 34f;
 
     private final float min, max, step;
     private float value;
@@ -39,15 +45,26 @@ public class UiSlider extends UiWidget {
         return c;
     }
 
+    private float trackW() { return w - READOUT_W; }
+
     private float ratio() { return max > min ? (value - min) / (max - min) : 0f; }
+
+    private String formatValue() {
+        return step >= 1f ? String.valueOf(Math.round(value)) : String.format(Locale.ROOT, "%.1f", value);
+    }
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        float trackW = trackW();
         float cy = y + h / 2f;
-        renderer.drawRoundedRect(x, cy - TRACK_H / 2f, x + w, cy + TRACK_H / 2f, TRACK_H / 2f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
-        float knobX = x + ratio() * w;
+        renderer.drawRoundedRect(x, cy - TRACK_H / 2f, x + trackW, cy + TRACK_H / 2f, TRACK_H / 2f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
+        float knobX = x + ratio() * trackW;
         renderer.drawRoundedRect(x, cy - TRACK_H / 2f, knobX, cy + TRACK_H / 2f, TRACK_H / 2f, UiTheme.ACCENT, vpWidth, vpHeight);
         renderer.drawRoundedRect(knobX - KNOB_R, cy - KNOB_R, knobX + KNOB_R, cy + KNOB_R, KNOB_R, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
+
+        String text = formatValue();
+        float tw = renderer.textWidth(text, 0.36f);
+        renderer.drawText(text, x + w - tw, cy - 4f, UiTheme.TEXT_SECONDARY, 0.36f, vpWidth, vpHeight);
     }
 
     @Override
@@ -58,7 +75,8 @@ public class UiSlider extends UiWidget {
         }
         if (!input.leftDown) { dragging = false; return; }
 
-        float r = (float) ((input.mouseX - x) / w);
+        float trackW = trackW();
+        float r = (float) ((input.mouseX - x) / trackW);
         r = Math.max(0f, Math.min(1f, r));
         float newValue = clamp(min + r * (max - min));
         if (newValue != value) {

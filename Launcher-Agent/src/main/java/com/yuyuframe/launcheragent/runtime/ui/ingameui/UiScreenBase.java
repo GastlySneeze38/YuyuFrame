@@ -6,6 +6,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
 import net.minecraft.client.gui.screens.Screen;
 
 import java.util.ArrayList;
@@ -77,9 +78,12 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         try {
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
             renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, UiTheme.OVERLAY_BG, screenWidth, screenHeight);
+            String hoveredTooltip = null;
             for (UiWidget w : widgets) {
                 w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+                if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }
+            if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, screenWidth, screenHeight);
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiDraw: " + t);
         }

@@ -144,4 +144,39 @@ public final class UiInputPollerLegacy extends UiInputPoller {
         }
         return keyboardClass;
     }
+
+    private Integer keyBackCode;
+
+    /**
+     * Même file d'événements que pollAnyKeyJustPressed() (Keyboard.next()) —
+     * drainée ICI en une seule passe (caractère + Backspace) plutôt que dans
+     * deux méthodes séparées, précisément pour ne jamais entrer en conflit
+     * avec elle (voir javadoc UiInputPoller.pollTextEdit). getEventCharacter()
+     * tient compte du layout clavier (AZERTY/QWERTY, Shift) contrairement à
+     * getKeyName() — c'est la bonne source pour du texte tapé, pas pour un
+     * nom de touche de rebind.
+     */
+    @Override
+    public void pollTextEdit(StringBuilder buffer) {
+        try {
+            Class<?> kc = keyboardClass();
+            if (keyBackCode == null) keyBackCode = kc.getField("KEY_BACK").getInt(null);
+            Method next = kc.getMethod("next");
+            Method eventKey = kc.getMethod("getEventKey");
+            Method eventChar = kc.getMethod("getEventCharacter");
+            Method eventKeyState = kc.getMethod("getEventKeyState");
+            while ((boolean) next.invoke(null)) {
+                if (!(boolean) eventKeyState.invoke(null)) continue; // touche RELÂCHÉE — ignorée
+                int code = (int) eventKey.invoke(null);
+                if (code == keyBackCode) {
+                    if (buffer.length() > 0) buffer.deleteCharAt(buffer.length() - 1);
+                    continue;
+                }
+                char c = (char) eventChar.invoke(null);
+                if (c >= 32 && c != 127) buffer.append(c);
+            }
+        } catch (Exception e) {
+            LauncherLog.err("[UiInputPollerLegacy] pollTextEdit: " + e);
+        }
+    }
 }

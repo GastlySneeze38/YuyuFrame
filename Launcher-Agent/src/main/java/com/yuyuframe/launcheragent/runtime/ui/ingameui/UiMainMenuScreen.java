@@ -1,9 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
@@ -13,10 +15,17 @@ import java.util.Locale;
 
 /**
  * Écran d'accueil du moteur config custom — équivalent de OneConfigGui.create() :
- * sidebar de navigation à gauche, grille de cartes mods à droite. Chaque
- * carte a son propre UiToggle (activer/désactiver, enregistré AVANT le
- * widget "corps de carte" dans {@code widgets} pour que le clic sur le
- * toggle gagne le test de collision face au clic "ouvrir la config").
+ * sidebar de navigation à gauche, barre de recherche + grille de cartes mods
+ * à droite. Chaque carte a son propre UiToggle (activer/désactiver,
+ * enregistré AVANT le widget "corps de carte" dans {@code widgets} pour que
+ * le clic sur le toggle gagne le test de collision face au clic "ouvrir la
+ * config").
+ *
+ * Layout entièrement reconstruit (rebuildAll) au redimensionnement de fenêtre
+ * ET à chaque frappe dans la recherche — sans jamais perdre d'état, car :
+ * (a) l'état "activé/désactivé" d'un mod vit dans {@link ModEntry} (externe
+ * aux widgets, jamais recréé), (b) {@code searchField} est créé UNE FOIS puis
+ * seulement repositionné/ré-ajouté (même instance, donc même texte/focus).
  *
  * Données factices ({@link #MOCK_MODS}) en attendant l'enregistrement réel
  * des mods (YuyuPvP, etc. — voir runtime.ui.modules) — voir docs/LauncherAgent/index.md.
@@ -27,6 +36,7 @@ public class UiMainMenuScreen extends UiScreenBase {
     private static final float MARGIN = 24f;
     private static final float CARD_GAP = 16f;
     private static final float CARD_H = 76f;
+    private static final float SEARCH_H = 24f;
 
     private static final class ModEntry {
         final String name, desc;
@@ -42,7 +52,8 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     private final Object lastScreen;
-    private boolean built;
+    private UiTextField searchField;
+    private int lastLayoutWidth = -1, lastLayoutHeight = -1;
 
     public UiMainMenuScreen(Object lastScreen) {
         super("YuyuFrame");
@@ -51,9 +62,11 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     @Override
     public void uiDraw(double mouseX, double mouseY) {
-        if (!built && screenWidth > 0 && screenHeight > 0) {
-            buildLayout();
-            built = true;
+        if (screenWidth > 0 && screenHeight > 0
+                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight)) {
+            rebuildAll();
+            lastLayoutWidth = screenWidth;
+            lastLayoutHeight = screenHeight;
         }
         super.uiDraw(mouseX, mouseY);
         try {
@@ -68,21 +81,38 @@ public class UiMainMenuScreen extends UiScreenBase {
         renderer.drawText("Mods installes", SIDEBAR_W + MARGIN, screenHeight - 40, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
     }
 
-    private void buildLayout() {
+    private void rebuildAll() {
         widgets.clear();
 
         widgets.add(new SidebarItem(MARGIN, screenHeight - 84, SIDEBAR_W - MARGIN * 2, "Accueil", true));
         widgets.add(new SidebarItem(MARGIN, screenHeight - 114, SIDEBAR_W - MARGIN * 2, "Parametres", false));
-
         widgets.add(new CloseButton(screenWidth - 24f - 28f, screenHeight - 24f - 28f));
 
         float contentX = SIDEBAR_W + MARGIN;
         float contentW = screenWidth - contentX - MARGIN;
-        float cardW = (contentW - CARD_GAP) / 2f;
-        float top = screenHeight - 64f;
 
-        for (int i = 0; i < MOCK_MODS.size(); i++) {
-            ModEntry mod = MOCK_MODS.get(i);
+        if (searchField == null) {
+            // Recréé la grille (pas tout l'écran) à chaque frappe — même
+            // instance de champ conservée, voir javadoc de la classe.
+            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll());
+        }
+        searchField.x = contentX;
+        searchField.y = screenHeight - 64f - SEARCH_H;
+        searchField.w = Math.min(240f, contentW);
+        searchField.h = SEARCH_H;
+        widgets.add(searchField);
+
+        String filter = searchField.text().trim().toLowerCase(Locale.ROOT);
+        List<ModEntry> filtered = new ArrayList<>();
+        for (ModEntry m : MOCK_MODS) {
+            if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
+        }
+
+        float cardW = (contentW - CARD_GAP) / 2f;
+        float top = searchField.y - 24f;
+
+        for (int i = 0; i < filtered.size(); i++) {
+            ModEntry mod = filtered.get(i);
             int col = i % 2, row = i / 2;
             float cx = contentX + col * (cardW + CARD_GAP);
             float cy = top - row * (CARD_H + CARD_GAP) - CARD_H;
@@ -97,6 +127,7 @@ public class UiMainMenuScreen extends UiScreenBase {
     private final class SidebarItem extends UiWidget {
         private final String label;
         private final boolean active;
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
         SidebarItem(float x, float y, float w, String label, boolean active) {
             super(x, y, w, 26f);
@@ -106,12 +137,13 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            boolean hovered = contains(mouseX, mouseY);
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             if (active) {
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_ACTIVE, vpWidth, vpHeight);
                 renderer.drawRoundedRect(x, y + 3, x + 3, y + h - 3, 1.5f, UiTheme.ACCENT, vpWidth, vpHeight);
-            } else if (hovered) {
-                renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_HOVER, vpWidth, vpHeight);
+            } else {
+                UiColor bg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hoverAnim.get());
+                renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
             }
             UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
             renderer.drawText(label, x + 12, y + h / 2f - 4f, textColor, 0.4f, vpWidth, vpHeight);
@@ -120,6 +152,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private final class ModCard extends UiWidget {
         private final ModEntry mod;
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
         ModCard(float x, float y, float w, ModEntry mod) {
             super(x, y, w, CARD_H);
@@ -128,8 +161,9 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            boolean hovered = contains(mouseX, mouseY);
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, hovered ? UiTheme.CARD_HOVER : UiTheme.CARD_BG, vpWidth, vpHeight);
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
 
             // Pastille icone (initiale du mod) — pas d'image reelle en attendant les icones mods.
             float iconSize = 36f;
@@ -151,12 +185,15 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     private final class CloseButton extends UiWidget {
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+
         CloseButton(float x, float y) { super(x, y, 28f, 28f); }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            boolean hovered = contains(mouseX, mouseY);
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, hovered ? UiTheme.CARD_HOVER : UiTheme.CARD_BG, vpWidth, vpHeight);
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
             String label = "x";
             float tw = renderer.textWidth(label, 0.45f);
             renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 5f, UiTheme.TEXT_SECONDARY, 0.45f, vpWidth, vpHeight);
