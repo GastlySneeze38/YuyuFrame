@@ -157,14 +157,22 @@ public class UiMainMenuScreen extends UiScreenBase {
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float hover = hoverAnim.get();
             if (active) {
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_ACTIVE, vpWidth, vpHeight);
                 renderer.drawRoundedRect(x, y + 3, x + 3, y + h - 3, 1.5f, UiTheme.ACCENT, vpWidth, vpHeight);
             } else {
-                UiColor bg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hoverAnim.get());
+                // Fond ET liseré d'accent (plus discret que celui de l'item
+                // actif) réagissent tous les deux au survol — avant, seul un
+                // fond quasi invisible (alpha 16/255) bougeait, et le texte
+                // restait TEXT_MUTED même souris dessus : aucun retour visuel
+                // net, contrairement à l'item actif.
+                UiColor bg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hover);
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+                UiColor edge = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.ACCENT_DIM, hover);
+                renderer.drawRoundedRect(x, y + 3, x + 3, y + h - 3, 1.5f, edge, vpWidth, vpHeight);
             }
-            UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
+            UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);
             renderer.drawText(label, x + 12, y + h / 2f - 4f, textColor, 0.4f, vpWidth, vpHeight);
         }
 

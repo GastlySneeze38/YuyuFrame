@@ -21,13 +21,18 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
  */
 public final class GlobalUiSettings extends LauncherModule {
 
-    public static final GlobalUiSettings INSTANCE = new GlobalUiSettings();
-
     // Couleurs de base d'origine (UiTheme littéral) — indépendantes de l'état
     // COURANT (déjà muté) de UiTheme, pour ne jamais faire dériver la teinte
-    // à chaque rappel de onConfigChanged().
+    // à chaque rappel de onConfigChanged(). DOIT rester déclaré AVANT INSTANCE
+    // ci-dessous : les initialiseurs statiques s'exécutent dans l'ordre
+    // TEXTUEL, et le constructeur de INSTANCE appelle onConfigChanged() (qui
+    // lit ces champs) — les avoir après aurait laissé BASE_CARD_BG/HOVER à
+    // null au moment de cet appel (NullPointerException → ExceptionInInitializerError,
+    // observé en jeu : le clic sur "Parametres" ne faisait plus jamais rien).
     private static final UiColor BASE_CARD_BG = new UiColor(31, 31, 39, 255);
     private static final UiColor BASE_CARD_HOVER = new UiColor(40, 40, 50, 255);
+
+    public static final GlobalUiSettings INSTANCE = new GlobalUiSettings();
 
     @ConfigSlider(name = "Opacité des cartes", description = "Transparence des cartes de mods et panneaux de config.",
         category = "Apparence", min = 10f, max = 100f, step = 1f)

@@ -17,7 +17,7 @@ public final class UiTheme {
 
     public static final UiColor OVERLAY_BG     = new UiColor(8, 8, 12, 235);
     public static final UiColor SIDEBAR_BG     = new UiColor(17, 17, 22, 255);
-    public static final UiColor SIDEBAR_HOVER  = new UiColor(255, 255, 255, 16);
+    public static final UiColor SIDEBAR_HOVER  = new UiColor(255, 255, 255, 26);
     public static UiColor SIDEBAR_ACTIVE       = new UiColor(139, 124, 255, 34);
     public static final UiColor PANEL_BG       = new UiColor(27, 27, 34, 255);
     public static final UiColor PANEL_BG_ALT   = new UiColor(34, 34, 43, 255);
