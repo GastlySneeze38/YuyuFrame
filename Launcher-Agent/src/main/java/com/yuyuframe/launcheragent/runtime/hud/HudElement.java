@@ -19,7 +19,7 @@ public class HudElement {
 
     public final String id;
     public final String displayName;
-    public final float w, h;
+    public float w, h;
 
     public HudAnchor anchor;
     public float offsetX, offsetY;
@@ -82,5 +82,11 @@ public class HudElement {
             default:
                 offsetY = absY;
         }
+    }
+
+    /** Redimensionne (éditeur HUD, poignée coin) — w/h ne sont plus figées comme au constructeur. */
+    public void setSize(float w, float h) {
+        this.w = w;
+        this.h = h;
     }
 }

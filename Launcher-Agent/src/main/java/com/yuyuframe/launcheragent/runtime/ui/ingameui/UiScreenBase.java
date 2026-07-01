@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
@@ -77,7 +78,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     public void uiDraw(double mouseX, double mouseY) {
         try {
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
-            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, UiTheme.OVERLAY_BG, screenWidth, screenHeight);
+            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, overlayColor(), screenWidth, screenHeight);
             String hoveredTooltip = null;
             for (UiWidget w : widgets) {
                 w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -87,6 +88,18 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiDraw: " + t);
         }
+    }
+
+    /**
+     * Fond derrière les widgets — quasi-opaque par défaut (nos menus classiques,
+     * jeu figé visuellement même si le monde continue en fait de tourner
+     * derrière). UiHudEditorScreen surcharge avec un fond quasi-transparent :
+     * le jeu (monde + HUD vanilla) est DÉJÀ rendu en direct sous nos écrans
+     * (nos Screen custom ne sont pas le menu pause vanilla, qui seul stoppe la
+     * simulation en solo) — seul cet overlay presque opaque le masquait.
+     */
+    protected UiColor overlayColor() {
+        return UiTheme.OVERLAY_BG;
     }
 
     /**

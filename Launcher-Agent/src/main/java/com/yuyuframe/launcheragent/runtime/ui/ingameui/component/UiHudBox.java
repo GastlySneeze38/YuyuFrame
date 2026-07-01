@@ -7,41 +7,107 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 
+import java.util.List;
+
 /**
  * Représente un {@link HudElement} dans l'éditeur (UiHudEditorScreen) —
- * glissable librement, écrit sa position dans le modèle (ancre+décalage) à
- * chaque frame de drag, pas seulement au relâchement : le modèle reflète
- * toujours exactement ce qui est affiché, aucune étape de "commit" séparée.
+ * contour fin (pas un pavé plein, voir UiHudEditorScreen.overlayColor) pour
+ * laisser voir le jeu vivant derrière ; glissable librement, avec alignement
+ * automatique (centre écran + bords des autres boîtes, façon OneConfig).
  *
- * Le drag démarre/continue dans pollContinuous (pas onClick) — même pattern
- * que UiSlider — pour rester actif même si le curseur sort des bounds de la
- * boîte pendant le glissement.
+ * Écrit sa position dans le modèle (ancre+décalage) à CHAQUE frame de drag,
+ * pas seulement au relâchement : le modèle reflète toujours exactement ce qui
+ * est affiché, aucune étape de "commit" séparée.
  */
 public class UiHudBox extends UiWidget {
 
+    private static final float SNAP_THRESHOLD = 6f;
+    private static final float BORDER_W = 2f;
+    private static final float GRIP_SIZE = 10f;
+    private static final float MIN_SIZE = 20f;
+    private static final UiColor BORDER_IDLE = new UiColor(255, 255, 255, 110);
+    private static final UiColor FILL_IDLE = new UiColor(255, 255, 255, 18);
+
     private final HudElement element;
+    private final List<UiHudBox> siblings; // toutes les boîtes de l'éditeur (soi-même inclus) — pour l'alignement bord-à-bord
     private boolean dragging;
     private float grabDX, grabDY;
     private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+    private final UiAnimatedFloat gripHoverAnim = new UiAnimatedFloat(0f, 16f);
 
-    public UiHudBox(HudElement element, int vpWidth, int vpHeight) {
+    private Float snapGuideX; // position (espace écran) de la ligne de guide verticale affichée cette frame, null = aucune
+    private Float snapGuideY;
+
+    // Redimensionnement — poignée au coin visuellement bas-droite (loin de
+    // l'étiquette de nom, en haut), ancrée sur le coin OPPOSÉ (visuellement
+    // haut-gauche : x et le bord haut y+h restent fixes pendant tout le
+    // glissement, seuls w/h — et donc y, recalculé pour garder le haut fixe — bougent).
+    private boolean resizing;
+    private float resizeAnchorX, resizeAnchorTopY;
+
+    public UiHudBox(HudElement element, int vpWidth, int vpHeight, List<UiHudBox> siblings) {
         super(element.screenX(vpWidth), element.screenY(vpHeight), element.w, element.h);
         this.element = element;
+        this.siblings = siblings;
+    }
+
+    public Float snapGuideX() { return snapGuideX; }
+    public Float snapGuideY() { return snapGuideY; }
+
+    private boolean overGrip(double mx, double my) {
+        return mx >= x + w - GRIP_SIZE && mx <= x + w && my >= y && my <= y + GRIP_SIZE;
     }
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-        UiColor bg = dragging ? UiTheme.ACCENT_DIM : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
-        renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+        UiColor border = dragging ? UiTheme.ACCENT : UiColor.lerp(BORDER_IDLE, UiTheme.ACCENT, hoverAnim.get());
+        UiColor fill = dragging ? UiTheme.ACCENT_DIM : UiColor.lerp(FILL_IDLE, UiTheme.CARD_HOVER, hoverAnim.get());
 
-        float tw = renderer.textWidth(element.displayName, 0.4f);
-        renderer.drawText(element.displayName, x + (w - tw) / 2f, y + h / 2f - 4f, UiTheme.TEXT_PRIMARY, 0.4f, vpWidth, vpHeight);
+        renderer.drawRoundedRect(x, y, x + w, y + h, 0, fill, vpWidth, vpHeight);
+        renderer.drawRoundedRect(x, y + h - BORDER_W, x + w, y + h, 0, border, vpWidth, vpHeight); // haut
+        renderer.drawRoundedRect(x, y, x + w, y + BORDER_W, 0, border, vpWidth, vpHeight);         // bas
+        renderer.drawRoundedRect(x, y, x + BORDER_W, y + h, 0, border, vpWidth, vpHeight);         // gauche
+        renderer.drawRoundedRect(x + w - BORDER_W, y, x + w, y + h, 0, border, vpWidth, vpHeight); // droite
+
+        // Étiquette nom — fond solide DANS la boîte (pas au-dessus, pour ne
+        // jamais sortir de l'écran si l'élément est ancré tout en haut).
+        float scale = 0.36f;
+        float tagH = 16f;
+        float tw = renderer.textWidth(element.displayName, scale);
+        renderer.drawRoundedRect(x, y + h - tagH, x + tw + 12f, y + h, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+        renderer.drawText(element.displayName, x + 6f, y + h - tagH + 4f, UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
+
+        // Poignée de redimensionnement — coin visuellement bas-droite, loin de l'étiquette.
+        gripHoverAnim.setTarget(resizing || overGrip(mouseX, mouseY) ? 1f : 0f);
+        UiColor gripColor = UiColor.lerp(BORDER_IDLE, UiTheme.ACCENT, gripHoverAnim.get());
+        renderer.drawRoundedRect(x + w - GRIP_SIZE, y, x + w, y + GRIP_SIZE, 2f, gripColor, vpWidth, vpHeight);
     }
 
     @Override
     public void pollContinuous(UiInputPoller input) {
+        if (resizing) {
+            if (!input.leftDown) { resizing = false; return; }
+            // Bornée des deux côtés : MIN_SIZE en bas, et jamais au-delà du
+            // bord de l'écran en haut (resizeAnchorX/TopY sont fixes pendant
+            // tout le redimensionnement, voir leur déclaration).
+            float newW = Math.max(MIN_SIZE, Math.min((float) input.mouseX - resizeAnchorX, input.fbWidth - resizeAnchorX));
+            float newH = Math.max(MIN_SIZE, Math.min(resizeAnchorTopY - (float) input.mouseY, resizeAnchorTopY));
+            w = newW;
+            h = newH;
+            y = resizeAnchorTopY - h;
+            element.setSize(w, h);
+            element.setScreenPosition(x, y, input.fbWidth, input.fbHeight);
+            return;
+        }
+
         if (!dragging) {
+            if (input.leftClicked && overGrip(input.mouseX, input.mouseY)) {
+                resizing = true;
+                resizeAnchorX = x;
+                resizeAnchorTopY = y + h;
+                return;
+            }
             if (input.leftClicked && contains(input.mouseX, input.mouseY)) {
                 dragging = true;
                 grabDX = (float) input.mouseX - x;
@@ -49,10 +115,47 @@ public class UiHudBox extends UiWidget {
             }
             return;
         }
-        if (!input.leftDown) { dragging = false; return; }
+        if (!input.leftDown) {
+            dragging = false;
+            snapGuideX = null;
+            snapGuideY = null;
+            return;
+        }
 
-        x = (float) input.mouseX - grabDX;
-        y = (float) input.mouseY - grabDY;
+        float rawX = (float) input.mouseX - grabDX;
+        float rawY = (float) input.mouseY - grabDY;
+        snapGuideX = null;
+        snapGuideY = null;
+
+        // Centre de l'écran — priorité la plus haute (alignement le plus utile).
+        float centerX = input.fbWidth / 2f;
+        if (Math.abs((rawX + w / 2f) - centerX) < SNAP_THRESHOLD) {
+            rawX = centerX - w / 2f;
+            snapGuideX = centerX;
+        }
+        float centerY = input.fbHeight / 2f;
+        if (Math.abs((rawY + h / 2f) - centerY) < SNAP_THRESHOLD) {
+            rawY = centerY - h / 2f;
+            snapGuideY = centerY;
+        }
+
+        // Bords des autres boîtes (gauche-gauche, droite-droite, bas-bas, haut-haut).
+        for (UiHudBox other : siblings) {
+            if (other == this) continue;
+            if (snapGuideX == null) {
+                if (Math.abs(rawX - other.x) < SNAP_THRESHOLD) { rawX = other.x; snapGuideX = rawX; }
+                else if (Math.abs((rawX + w) - (other.x + other.w)) < SNAP_THRESHOLD) { rawX = other.x + other.w - w; snapGuideX = rawX + w; }
+            }
+            if (snapGuideY == null) {
+                if (Math.abs(rawY - other.y) < SNAP_THRESHOLD) { rawY = other.y; snapGuideY = rawY; }
+                else if (Math.abs((rawY + h) - (other.y + other.h)) < SNAP_THRESHOLD) { rawY = other.y + other.h - h; snapGuideY = rawY + h; }
+            }
+        }
+
+        // Jamais (même partiellement) hors écran — clampé APRÈS le snapping
+        // pour ne jamais le contredire près d'un bord valide.
+        x = Math.max(0f, Math.min(input.fbWidth - w, rawX));
+        y = Math.max(0f, Math.min(input.fbHeight - h, rawY));
         element.setScreenPosition(x, y, input.fbWidth, input.fbHeight);
     }
 }
