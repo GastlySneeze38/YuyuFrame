@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.screen.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPollerLegacy;
@@ -25,6 +26,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * MinecraftClient 1.8.9 n'a PAS de notion de "window handle" (LWJGL2, Display
  * global implicite) — UiInputPollerLegacy n'en a donc pas besoin, contrairement
  * à UiInputPollerModern (GLFW) côté 1.21+.
+ *
+ * Point d'entrée du menu : Right Shift, pollé même sans écran ouvert — voir
+ * GlobalUiRenderMixin (1.21+) pour le détail, logique identique ici.
  */
 @Mixin(targets = "net.minecraft.client.render.GameRenderer")
 public abstract class GlobalUiRenderMixin189 {
@@ -38,18 +42,39 @@ public abstract class GlobalUiRenderMixin189 {
         try {
             Object mc = getMcInstance();
             if (mc == null) return;
-            Object currentScreen = getCurrentScreen(mc);
-            if (!(currentScreen instanceof UiDrawable ui)) return;
 
             if (inputPoller == null) {
                 inputPoller = new UiInputPollerLegacy(GlobalUiRenderMixin189.class.getClassLoader());
             }
             inputPoller.poll();
+
+            Object currentScreen = getCurrentScreen(mc);
+            if (currentScreen == null) {
+                if (inputPoller.menuKeyPressed) {
+                    setScreen(mc, new UiMainMenuScreen(null));
+                }
+                return;
+            }
+
+            if (!(currentScreen instanceof UiDrawable ui)) return;
             ui.uiPollInput(inputPoller);
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: " + t);
         }
+    }
+
+    private static void setScreen(Object mc, Object screen) throws Exception {
+        java.util.Set<String> names = MappingsRegistry.runtimeMethodNames(CLS_MC, "a"); // setScreen(Screen)
+        for (java.lang.reflect.Method m : mc.getClass().getMethods()) {
+            if (names.contains(m.getName()) && m.getParameterCount() == 1
+                    && !m.getParameterTypes()[0].isPrimitive()
+                    && m.getParameterTypes()[0].isInstance(screen)) {
+                m.invoke(mc, screen);
+                return;
+            }
+        }
+        LauncherLog.warn("[LauncherAgent] GlobalUiRenderMixin189: setScreen introuvable");
     }
 
     private static Object mcInstanceCache;

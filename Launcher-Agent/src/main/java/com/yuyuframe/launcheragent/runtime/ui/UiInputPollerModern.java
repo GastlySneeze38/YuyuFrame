@@ -45,9 +45,20 @@ public final class UiInputPollerModern extends UiInputPoller {
 
         mouseX = cx[0] * scaleX;
         mouseY = fbH[0] - (cy[0] * scaleY); // flip après mise à l'échelle, sur la hauteur framebuffer
+        fbWidth = fbW[0];
+        fbHeight = fbH[0];
 
         leftDown = glfwGetMouseButton(windowHandle, 0) == 1;  // GLFW_MOUSE_BUTTON_LEFT
         rightDown = glfwGetMouseButton(windowHandle, 1) == 1; // GLFW_MOUSE_BUTTON_RIGHT
+    }
+
+    @Override
+    protected boolean readMenuKeyDown() throws Exception {
+        return glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_RIGHT_SHIFT, GLFW_PRESS
+    }
+
+    private int glfwGetKey(long handle, int key) throws Exception {
+        return (int) glfw("glfwGetKey", long.class, int.class).invoke(null, handle, key);
     }
 
     // ── GLFW via réflexion (org.lwjgl.glfw.GLFW — API publique, pas obfusquée) ──

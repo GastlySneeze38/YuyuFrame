@@ -21,6 +21,9 @@ public final class UiInputPollerLegacy extends UiInputPoller {
     private final ClassLoader gameClassLoader;
     private final Map<String, Method> mouseMethods = new HashMap<>();
     private Class<?> mouseClass;
+    private Class<?> displayClass;
+    private Class<?> keyboardClass;
+    private Integer keyRShiftCode;
 
     public UiInputPollerLegacy(ClassLoader gameClassLoader) {
         this.gameClassLoader = gameClassLoader;
@@ -30,6 +33,8 @@ public final class UiInputPollerLegacy extends UiInputPoller {
     protected void readState() throws Exception {
         mouseX = getX();
         mouseY = getY();
+        fbWidth = getDisplayWidth();
+        fbHeight = getDisplayHeight();
         leftDown = isButtonDown(0);
         rightDown = isButtonDown(1);
     }
@@ -62,5 +67,37 @@ public final class UiInputPollerLegacy extends UiInputPoller {
 
     private boolean isButtonDown(int button) throws Exception {
         return (boolean) mouse("isButtonDown", int.class).invoke(null, button);
+    }
+
+    // ── org.lwjgl.opengl.Display (API publique, pas obfusquée) ──
+
+    private Class<?> displayClass() throws Exception {
+        if (displayClass == null) {
+            displayClass = Class.forName("org.lwjgl.opengl.Display", true, gameClassLoader);
+        }
+        return displayClass;
+    }
+
+    private int getDisplayWidth() throws Exception {
+        return (int) displayClass().getMethod("getWidth").invoke(null);
+    }
+
+    private int getDisplayHeight() throws Exception {
+        return (int) displayClass().getMethod("getHeight").invoke(null);
+    }
+
+    // ── org.lwjgl.input.Keyboard (API publique, pas obfusquée) ──
+
+    @Override
+    protected boolean readMenuKeyDown() throws Exception {
+        if (keyboardClass == null) {
+            keyboardClass = Class.forName("org.lwjgl.input.Keyboard", true, gameClassLoader);
+        }
+        if (keyRShiftCode == null) {
+            // Lu par réflexion plutôt que codé en dur : évite de deviner la
+            // valeur numérique exacte de la constante KEY_RSHIFT.
+            keyRShiftCode = keyboardClass.getField("KEY_RSHIFT").getInt(null);
+        }
+        return (boolean) keyboardClass.getMethod("isKeyDown", int.class).invoke(null, keyRShiftCode);
     }
 }

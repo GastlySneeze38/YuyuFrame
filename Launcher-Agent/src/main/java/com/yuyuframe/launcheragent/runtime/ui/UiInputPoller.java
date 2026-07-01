@@ -23,23 +23,35 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 public abstract class UiInputPoller {
 
     public double mouseX, mouseY;
+    /** Taille framebuffer courante (mêmes unités que mouseX/Y et gl_FragCoord) — pour layout plein écran. */
+    public int fbWidth, fbHeight;
     public boolean leftDown, rightDown;
     protected boolean prevLeftDown, prevRightDown;
     public boolean leftClicked, rightClicked; // "juste pressé cette frame"
+
+    /** Touche d'ouverture du menu (Right Shift) — utilisable même sans écran ouvert, voir readMenuKeyDown(). */
+    public boolean menuKeyDown, menuKeyPressed;
+    private boolean prevMenuKeyDown;
 
     /** À appeler une fois par frame, avant de lire mouseX/mouseY/leftClicked/etc. */
     public final void poll() {
         try {
             prevLeftDown = leftDown;
             prevRightDown = rightDown;
+            prevMenuKeyDown = menuKeyDown;
             readState();
             leftClicked = leftDown && !prevLeftDown;
             rightClicked = rightDown && !prevRightDown;
+            menuKeyDown = readMenuKeyDown();
+            menuKeyPressed = menuKeyDown && !prevMenuKeyDown;
         } catch (Throwable t) {
             LauncherLog.err("[UiInputPoller] poll: " + t);
         }
     }
 
-    /** Doit renseigner mouseX/mouseY/leftDown/rightDown pour la frame courante. */
+    /** Doit renseigner mouseX/mouseY/fbWidth/fbHeight/leftDown/rightDown pour la frame courante. */
     protected abstract void readState() throws Exception;
+
+    /** État courant de la touche Right Shift — chaque implémentation utilise sa propre constante native. */
+    protected abstract boolean readMenuKeyDown() throws Exception;
 }

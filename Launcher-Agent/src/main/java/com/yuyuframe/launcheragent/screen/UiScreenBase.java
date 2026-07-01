@@ -1,0 +1,74 @@
+package com.yuyuframe.launcheragent.screen;
+
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.screen.ScreenHelper;
+import com.yuyuframe.launcheragent.runtime.ui.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
+import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.UiWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Base pour tout écran custom 100% dessiné à la main (voir UiDrawable pour le
+ * "pourquoi" — pas de Screen.render/mouseClicked/keyPressed surchargés, types
+ * record sans stub compilable en 1.21+).
+ *
+ * Compile contre le stub Screen/Component comme les autres écrans custom
+ * (ResourcePackSearchScreen etc.) — patché au chargement par ScreenStubPatcher
+ * (voir LauncherMixinTransformerWrapper.STUB_PATCHED_SCREENS, y ajouter cette
+ * classe). N'override AUCUNE méthode Screen à risque : sert uniquement de
+ * marqueur "un écran est ouvert" pour les effets de bord vanilla normaux
+ * (pause, curseur libéré) — tout le reste passe par GlobalUiRenderMixin.
+ */
+public abstract class UiScreenBase extends Screen implements UiDrawable {
+
+    private static final UiColor BACKGROUND = new UiColor(0, 0, 0, 160);
+
+    protected final List<UiWidget> widgets = new ArrayList<>();
+    protected int screenWidth, screenHeight; // pixels framebuffer, mis à jour chaque frame — voir uiPollInput()
+
+    protected UiScreenBase(String title) {
+        super((Component) ScreenHelper.literal(title));
+    }
+
+    @Override
+    public void uiPollInput(UiInputPoller input) {
+        screenWidth = input.fbWidth;
+        screenHeight = input.fbHeight;
+
+        if (!input.leftClicked) return;
+        for (UiWidget w : widgets) {
+            if (w.contains(input.mouseX, input.mouseY)) {
+                try {
+                    w.onClick();
+                } catch (Throwable t) {
+                    LauncherLog.err("[UiScreenBase] onClick: " + t);
+                }
+                return; // un seul widget cliqué par frame, le premier trouvé
+            }
+        }
+    }
+
+    @Override
+    public void uiDraw(double mouseX, double mouseY) {
+        try {
+            UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, BACKGROUND);
+            for (UiWidget w : widgets) {
+                w.draw(renderer, mouseX, mouseY);
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiScreenBase] uiDraw: " + t);
+        }
+    }
+
+    /** Ferme cet écran — renvoie à lastScreen si fourni par la sous-classe (voir UiMainMenuScreen). */
+    protected void closeTo(Object lastScreen) {
+        ScreenHelper.navigate(this, lastScreen);
+    }
+}

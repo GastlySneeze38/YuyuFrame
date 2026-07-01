@@ -22,7 +22,8 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         "com/yuyuframe/launcheragent/screen/ResourcePackDetailScreen",
         "com/yuyuframe/launcheragent/screen/ShaderPackSearchScreen",
         "com/yuyuframe/launcheragent/screen/ShaderPackDetailScreen",
-        "com/yuyuframe/launcheragent/screen/CustomKeybindsScreen"
+        "com/yuyuframe/launcheragent/screen/CustomKeybindsScreen",
+        "com/yuyuframe/launcheragent/screen/UiScreenBase"
     );
 
     private final IMixinTransformer transformer;

@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.mixin.client;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.screen.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPollerModern;
@@ -25,6 +26,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * UiRenderer — l'écran vanilla sous-jacent ne sert plus qu'à déclencher les
  * effets de bord normaux d'un écran ouvert (pause, curseur libéré, input jeu
  * bloqué), jamais à son propre rendu/clic.
+ *
+ * Point d'entrée du menu : Right Shift, pollé même quand AUCUN écran n'est
+ * ouvert (gameplay) — voir UiInputPoller.menuKeyPressed. N'ouvre le menu que
+ * si currentScreen == null, pour ne jamais voler le focus d'un autre écran
+ * déjà ouvert (inventaire, chat, etc.).
  */
 @Mixin(targets = "net.minecraft.client.render.GameRenderer")
 public abstract class GlobalUiRenderMixin {
@@ -39,8 +45,6 @@ public abstract class GlobalUiRenderMixin {
         try {
             Object mc = getMcInstance();
             if (mc == null) return;
-            Object currentScreen = getCurrentScreen(mc);
-            if (!(currentScreen instanceof UiDrawable ui)) return;
 
             if (inputPoller == null) {
                 long handle = getWindowHandle(mc);
@@ -48,11 +52,34 @@ public abstract class GlobalUiRenderMixin {
                 inputPoller = new UiInputPollerModern(handle, GlobalUiRenderMixin.class.getClassLoader());
             }
             inputPoller.poll();
+
+            Object currentScreen = getCurrentScreen(mc);
+            if (currentScreen == null) {
+                if (inputPoller.menuKeyPressed) {
+                    setScreen(mc, new UiMainMenuScreen(null));
+                }
+                return;
+            }
+
+            if (!(currentScreen instanceof UiDrawable ui)) return;
             ui.uiPollInput(inputPoller);
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin: " + t);
         }
+    }
+
+    private static void setScreen(Object mc, Object screen) throws Exception {
+        java.util.Set<String> names = MappingsRegistry.runtimeMethodNames(CLS_MC, "a"); // setScreen(Screen)
+        for (java.lang.reflect.Method m : mc.getClass().getMethods()) {
+            if (names.contains(m.getName()) && m.getParameterCount() == 1
+                    && !m.getParameterTypes()[0].isPrimitive()
+                    && m.getParameterTypes()[0].isInstance(screen)) {
+                m.invoke(mc, screen);
+                return;
+            }
+        }
+        LauncherLog.warn("[LauncherAgent] GlobalUiRenderMixin: setScreen introuvable");
     }
 
     private static long getWindowHandle(Object mc) throws Exception {
