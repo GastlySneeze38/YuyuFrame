@@ -1,6 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.hud;
-
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+package com.yuyuframe.launcheragent.runtime.mapping;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -8,17 +6,21 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Pont réflexion partagé par les ContentSource du HUD (FpsHudSource,
- * PingHudSource, CoordsHudSource...) — s'appuie sur l'API haut niveau de
- * MappingsRegistry (loadClass/getObfFieldName/getObfMethodName, qui prend
- * directement des noms Yarn lisibles) plutôt que le pattern bas niveau
- * runtimeClass/runtimeMethodNames utilisé par les Mixin globaux : pas besoin
- * ici de résoudre un refmap, juste d'appeler depuis du code non-tissé à
- * chaque frame — d'où le cache Method/Field statique.
+ * Pont réflexion partagé par les modules (voir runtime.modules.builtin :
+ * FpsModule/PingModule/CoordsModule/ArmorDurabilityModule/KeystrokesModule/
+ * PotionEffectsModule/FovModule/LowHealthTintModule) — s'appuie sur l'API
+ * haut niveau de {@link MappingsRegistry} (loadClass/getObfFieldName/
+ * getObfMethodName, qui prend directement des noms Yarn lisibles) plutôt que
+ * le pattern bas niveau runtimeClass/runtimeMethodNames utilisé par les
+ * Mixin globaux : pas besoin ici de résoudre un refmap, juste d'appeler
+ * depuis du code non-tissé à chaque frame — d'où le cache Method/Field
+ * statique.
  *
- * Public : aussi utilisé par des modules hors HUD (voir runtime.modules.builtin,
- * ex: FovModule/LowHealthTintModule) qui ont besoin de la même réflexion sans
- * pour autant être un élément HUD.
+ * Vit dans {@code runtime.mapping} (pas {@code runtime.hud}) : ce n'est PAS
+ * un composant du HUD, juste un utilitaire de réflexion générique vers le
+ * jeu — le placer dans le package HUD aurait mélangé "API du moteur HUD" et
+ * "outil de réflexion générique", contribuant au désordre qui a motivé cette
+ * réorganisation.
  */
 public final class McReflect {
     private McReflect() {}

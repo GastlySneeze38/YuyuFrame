@@ -83,8 +83,8 @@ public final class ConfigScreenBuilder {
             "Reste visible pendant le chat, l'inventaire ou tout autre écran (sauf nos propres menus).",
             element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); });
         cursor = sliderRow(rows, x, w, cursor, "Échelle",
-            "Taille du contenu affiché, indépendante de la boîte elle-même.",
-            0.5f, 2f, 0.05f, element.scale, v -> { element.scale = v; module.onConfigChanged(); });
+            "Taille de toute la boîte (largeur ET hauteur ensemble, jamais l'une sans l'autre).",
+            HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); });
         cursor = sliderRow(rows, x, w, cursor, "Marge horizontale",
             "Espace entre le bord de la boîte et le contenu (X).",
             0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); });

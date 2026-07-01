@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.modules.builtin;
 
-import com.yuyuframe.launcheragent.runtime.hud.McReflect;
+import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.modules.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.modules.config.ConfigSlider;

@@ -27,7 +27,17 @@ public class UiHudBox extends UiWidget {
     private static final float SNAP_THRESHOLD = 6f;
     private static final float BORDER_W = 2f;
     private static final float GRIP_SIZE = 10f;
-    private static final float MIN_SIZE = 20f;
+    /**
+     * Pas d'ÉCHELLE (pas de pixels) du redimensionnement — après inspection
+     * du fonctionnement réel d'OneConfig : une taille de base + un seul
+     * multiplicateur, redimensionné UNIQUEMENT en diagonale (jamais largeur
+     * OU hauteur indépendamment). Ça explique à la fois pourquoi leur texte
+     * reste toujours bien placé (jamais étiré sur un seul axe) ET pourquoi
+     * leurs propositions de taille sont plus fréquentes que les nôtres avant
+     * ce correctif (un cran tous les 0.1 de scale, sur toute la plage —
+     * beaucoup plus dense qu'un unique point d'accroche "taille naturelle").
+     */
+    private static final float SCALE_GRID = 0.1f;
 
     private final HudElement element;
     private final List<UiHudBox> siblings; // toutes les boîtes de l'éditeur (soi-même inclus) — pour l'alignement bord-à-bord
@@ -45,6 +55,7 @@ public class UiHudBox extends UiWidget {
     // glissement, seuls w/h — et donc y, recalculé pour garder le haut fixe — bougent).
     private boolean resizing;
     private float resizeAnchorX, resizeAnchorTopY;
+    private boolean snappedToNaturalSize;
 
     public UiHudBox(HudElement element, int vpWidth, int vpHeight, List<UiHudBox> siblings) {
         super(element.screenX(vpWidth), element.screenY(vpHeight), element.w, element.h);
@@ -83,7 +94,12 @@ public class UiHudBox extends UiWidget {
         // à saisir puisque pollContinuous() ignore aussi le glisser/redimensionner.
         if (element.locked) return;
         gripHoverAnim.setTarget(resizing || overGrip(mouseX, mouseY) ? 1f : 0f);
-        UiColor gripColor = UiColor.lerp(new UiColor(255, 255, 255, 100), UiTheme.ACCENT, gripHoverAnim.get());
+        // Vert quand aligné sur la taille NATURELLE du contenu (voir
+        // NATURAL_SIZE_SNAP) — confirmation visuelle explicite qu'on est sur
+        // "la taille proposée", pas juste un cran de grille quelconque.
+        UiColor gripColor = snappedToNaturalSize
+            ? new UiColor(120, 220, 140, 255)
+            : UiColor.lerp(new UiColor(255, 255, 255, 100), UiTheme.ACCENT, gripHoverAnim.get());
         renderer.drawRoundedRect(x + w - GRIP_SIZE, y, x + w, y + GRIP_SIZE, 2f, gripColor, vpWidth, vpHeight);
     }
 
@@ -91,16 +107,43 @@ public class UiHudBox extends UiWidget {
     public void pollContinuous(UiInputPoller input) {
         if (element.locked) return;
         if (resizing) {
-            if (!input.leftDown) { resizing = false; return; }
-            // Bornée des deux côtés : MIN_SIZE en bas, et jamais au-delà du
-            // bord de l'écran en haut (resizeAnchorX/TopY sont fixes pendant
-            // tout le redimensionnement, voir leur déclaration).
-            float newW = Math.max(MIN_SIZE, Math.min((float) input.mouseX - resizeAnchorX, input.fbWidth - resizeAnchorX));
-            float newH = Math.max(MIN_SIZE, Math.min(resizeAnchorTopY - (float) input.mouseY, resizeAnchorTopY));
-            w = newW;
-            h = newH;
+            if (!input.leftDown) { resizing = false; snappedToNaturalSize = false; return; }
+
+            // Redimensionnement DIAGONAL UNIQUEMENT : le déplacement souris
+            // est PROJETÉ sur la diagonale du rectangle "naturel" (largeur ET
+            // hauteur ensemble), jamais décomposé en largeur/hauteur libres —
+            // le rectangle garde donc TOUJOURS ses proportions naturelles,
+            // le texte ne se retrouve jamais étiré/écrasé sur un seul axe.
+            float[] natural = element.naturalSize();
+            float natW = natural[0], natH = natural[1];
+            float diagLen = (float) Math.sqrt(natW * natW + natH * natH);
+            float dirX = natW / diagLen, dirY = natH / diagLen;
+
+            float rawW = (float) input.mouseX - resizeAnchorX;
+            float rawH = resizeAnchorTopY - (float) input.mouseY;
+            float projected = rawW * dirX + rawH * dirY; // distance le long de la diagonale
+            float rawScale = projected / diagLen;
+
+            // Plafonné en plus par l'espace réellement disponible (jamais
+            // au-delà du bord de l'écran) — recalculé en scale plutôt qu'en
+            // pixels bruts pour ne jamais casser les proportions même en
+            // butant contre un bord.
+            float maxScaleForScreen = Math.min(
+                (input.fbWidth - resizeAnchorX) / natW,
+                resizeAnchorTopY / natH
+            );
+            float maxScale = Math.min(HudElement.MAX_SCALE, maxScaleForScreen);
+
+            float snappedScale = Math.round(rawScale / SCALE_GRID) * SCALE_GRID;
+            snappedScale = Math.max(HudElement.MIN_SCALE, Math.min(maxScale, snappedScale));
+            // Vert quand PILE sur la taille naturelle (scale=1) — le cran le
+            // plus significatif parmi tous ceux de la grille 0.1.
+            snappedToNaturalSize = Math.abs(snappedScale - 1f) < 0.001f;
+
+            element.setScale(snappedScale);
+            w = element.w;
+            h = element.h;
             y = resizeAnchorTopY - h;
-            element.setSize(w, h);
             element.setScreenPosition(x, y, input.fbWidth, input.fbHeight);
             return;
         }
