@@ -21,10 +21,17 @@ public class HudElement {
     public final String displayName;
     public float w, h;
 
+    /**
+     * Contenu affiché (une ligne par entrée) — factice pour l'instant (aucun
+     * module HUD réel n'existe, voir HudRegistry) ; un vrai module fournira
+     * ses propres lignes (FPS courant, coordonnées réelles...) à la place.
+     */
+    public final String[] mockLines;
+
     public HudAnchor anchor;
     public float offsetX, offsetY;
 
-    public HudElement(String id, String displayName, float w, float h, HudAnchor anchor, float offsetX, float offsetY) {
+    public HudElement(String id, String displayName, float w, float h, HudAnchor anchor, float offsetX, float offsetY, String... mockLines) {
         this.id = id;
         this.displayName = displayName;
         this.w = w;
@@ -32,6 +39,7 @@ public class HudElement {
         this.anchor = anchor;
         this.offsetX = offsetX;
         this.offsetY = offsetY;
+        this.mockLines = mockLines;
     }
 
     /** Coin bas-gauche de la boîte (espace pixels framebuffer, comme UiWidget) pour un viewport donné. */

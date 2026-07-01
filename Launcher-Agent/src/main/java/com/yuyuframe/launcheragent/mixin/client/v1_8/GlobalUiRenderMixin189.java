@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
+import com.yuyuframe.launcheragent.runtime.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
@@ -7,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerLegacy;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -52,6 +54,12 @@ public abstract class GlobalUiRenderMixin189 {
             Object currentScreen = getCurrentScreen(mc);
 
             if (currentScreen == null) {
+                // Overlay HUD permanent — même règle que le HUD vanilla
+                // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
+                // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
+                // les UiHudBox de cet écran qui dessinent, pas cet appel.
+                HudOverlayRenderer.render(UiRenderer.get(GlobalUiRenderMixin189.class.getClassLoader()),
+                    inputPoller.fbWidth, inputPoller.fbHeight);
                 if (inputPoller.menuKeyPressed) {
                     setScreen(mc, new UiMainMenuScreen(null));
                 }

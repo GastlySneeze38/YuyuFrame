@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.runtime.hud.HudElement;
+import com.yuyuframe.launcheragent.runtime.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -10,10 +11,12 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import java.util.List;
 
 /**
- * Représente un {@link HudElement} dans l'éditeur (UiHudEditorScreen) —
- * contour fin (pas un pavé plein, voir UiHudEditorScreen.overlayColor) pour
- * laisser voir le jeu vivant derrière ; glissable librement, avec alignement
- * automatique (centre écran + bords des autres boîtes, façon OneConfig).
+ * Représente un {@link HudElement} dans l'éditeur (UiHudEditorScreen) — MÊME
+ * rendu que le panneau réel affiché en jeu (voir HudPanelRenderer, partagé
+ * avec HudOverlayRenderer), pas un simple contour : l'éditeur doit montrer
+ * exactement ce que le joueur verra une fois sorti du mode édition. Glissable
+ * librement, avec alignement automatique (centre écran + bords des autres
+ * boîtes, façon OneConfig).
  *
  * Écrit sa position dans le modèle (ancre+décalage) à CHAQUE frame de drag,
  * pas seulement au relâchement : le modèle reflète toujours exactement ce qui
@@ -25,8 +28,6 @@ public class UiHudBox extends UiWidget {
     private static final float BORDER_W = 2f;
     private static final float GRIP_SIZE = 10f;
     private static final float MIN_SIZE = 20f;
-    private static final UiColor BORDER_IDLE = new UiColor(255, 255, 255, 110);
-    private static final UiColor FILL_IDLE = new UiColor(255, 255, 255, 18);
 
     private final HudElement element;
     private final List<UiHudBox> siblings; // toutes les boîtes de l'éditeur (soi-même inclus) — pour l'alignement bord-à-bord
@@ -61,26 +62,25 @@ public class UiHudBox extends UiWidget {
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-        UiColor border = dragging ? UiTheme.ACCENT : UiColor.lerp(BORDER_IDLE, UiTheme.ACCENT, hoverAnim.get());
-        UiColor fill = dragging ? UiTheme.ACCENT_DIM : UiColor.lerp(FILL_IDLE, UiTheme.CARD_HOVER, hoverAnim.get());
 
-        renderer.drawRoundedRect(x, y, x + w, y + h, 0, fill, vpWidth, vpHeight);
-        renderer.drawRoundedRect(x, y + h - BORDER_W, x + w, y + h, 0, border, vpWidth, vpHeight); // haut
-        renderer.drawRoundedRect(x, y, x + w, y + BORDER_W, 0, border, vpWidth, vpHeight);         // bas
-        renderer.drawRoundedRect(x, y, x + BORDER_W, y + h, 0, border, vpWidth, vpHeight);         // gauche
-        renderer.drawRoundedRect(x + w - BORDER_W, y, x + w, y + h, 0, border, vpWidth, vpHeight); // droite
+        // Panneau + contenu — dessin PARTAGÉ avec HudOverlayRenderer (rendu réel
+        // en jeu) : voir HudPanelRenderer pour le pourquoi.
+        HudPanelRenderer.draw(renderer, element, x, y, w, h, vpWidth, vpHeight);
 
-        // Étiquette nom — fond solide DANS la boîte (pas au-dessus, pour ne
-        // jamais sortir de l'écran si l'élément est ancré tout en haut).
-        float scale = 0.36f;
-        float tagH = 16f;
-        float tw = renderer.textWidth(element.displayName, scale);
-        renderer.drawRoundedRect(x, y + h - tagH, x + tw + 12f, y + h, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
-        renderer.drawText(element.displayName, x + 6f, y + h - tagH + 4f, UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
+        // Liseré d'accent — SEUL indice visuel qu'on est en train d'éditer
+        // (survol/glissement) : le panneau au repos est identique au rendu final.
+        float editT = dragging ? 1f : hoverAnim.get();
+        if (editT > 0.01f) {
+            UiColor edge = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.ACCENT, editT);
+            renderer.drawRoundedRect(x, y + h - BORDER_W, x + w, y + h, 0, edge, vpWidth, vpHeight); // haut
+            renderer.drawRoundedRect(x, y, x + w, y + BORDER_W, 0, edge, vpWidth, vpHeight);         // bas
+            renderer.drawRoundedRect(x, y, x + BORDER_W, y + h, 0, edge, vpWidth, vpHeight);         // gauche
+            renderer.drawRoundedRect(x + w - BORDER_W, y, x + w, y + h, 0, edge, vpWidth, vpHeight); // droite
+        }
 
-        // Poignée de redimensionnement — coin visuellement bas-droite, loin de l'étiquette.
+        // Poignée de redimensionnement — coin visuellement bas-droite.
         gripHoverAnim.setTarget(resizing || overGrip(mouseX, mouseY) ? 1f : 0f);
-        UiColor gripColor = UiColor.lerp(BORDER_IDLE, UiTheme.ACCENT, gripHoverAnim.get());
+        UiColor gripColor = UiColor.lerp(new UiColor(255, 255, 255, 100), UiTheme.ACCENT, gripHoverAnim.get());
         renderer.drawRoundedRect(x + w - GRIP_SIZE, y, x + w, y + GRIP_SIZE, 2f, gripColor, vpWidth, vpHeight);
     }
 
