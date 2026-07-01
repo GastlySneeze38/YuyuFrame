@@ -41,4 +41,20 @@ public abstract class LauncherModule {
 
     /** Appelé par {@link ConfigScreenBuilder} après CHAQUE changement d'un champ de config annoté — surchargeable pour réagir à un réglage précis. Ne fait rien par défaut. */
     public void onConfigChanged() {}
+
+    /**
+     * Appelé à CHAQUE frame (via {@link ModuleRegistry#tickAll()}), qu'un
+     * écran custom soit ouvert ou non, UNIQUEMENT si {@link #isEnabled()} —
+     * pour la logique globale qui doit continuer même en jeu (ex: FOV forcé,
+     * MumbleLink). Ne fait rien par défaut.
+     */
+    public void onTick() {}
+
+    /**
+     * Appelé à CHAQUE frame (via {@link ModuleRegistry#renderOverlayAll}),
+     * UNIQUEMENT quand aucun écran n'est ouvert (même règle que le HUD
+     * vanilla) et UNIQUEMENT si {@link #isEnabled()} — pour un rendu
+     * d'overlay plein écran (ex: teinte vie basse). Ne fait rien par défaut.
+     */
+    public void onRenderOverlay(com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer renderer, int vpWidth, int vpHeight) {}
 }

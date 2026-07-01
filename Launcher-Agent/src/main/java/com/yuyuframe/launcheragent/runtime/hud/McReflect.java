@@ -15,15 +15,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * runtimeClass/runtimeMethodNames utilisé par les Mixin globaux : pas besoin
  * ici de résoudre un refmap, juste d'appeler depuis du code non-tissé à
  * chaque frame — d'où le cache Method/Field statique.
+ *
+ * Public : aussi utilisé par des modules hors HUD (voir runtime.modules.builtin,
+ * ex: FovModule/LowHealthTintModule) qui ont besoin de la même réflexion sans
+ * pour autant être un élément HUD.
  */
-final class McReflect {
+public final class McReflect {
     private McReflect() {}
 
     private static final Map<String, Field> FIELD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, Method> METHOD_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Class<?>> RAW_CLASS_CACHE = new ConcurrentHashMap<>();
     private static volatile Object mcInstance;
 
-    static Object minecraftClient() {
+    public static Object minecraftClient() {
         if (mcInstance != null) return mcInstance;
         try {
             Class<?> mcClass = MappingsRegistry.loadClass("net/minecraft/client/MinecraftClient");
@@ -33,8 +38,52 @@ final class McReflect {
         return mcInstance;
     }
 
+    /** Charge une classe du jeu par son nom Yarn (ex: pour accéder à un champ STATIC sans passer par une instance) — {@code null} si non résolue. */
+    public static Class<?> yarnClass(String yarnClass) {
+        try {
+            return MappingsRegistry.loadClass(yarnClass);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Classe NON obfusquée (ex: {@code org.lwjgl.input.Keyboard}) — jamais
+     * traduite par Yarn, mais toujours chargée via le classloader du jeu
+     * (notre agent compile contre des stubs, pas le vrai jar LWJGL/Minecraft,
+     * voir UiInputPollerLegacy pour le même besoin côté input).
+     */
+    public static Class<?> rawClass(String binaryName) {
+        return RAW_CLASS_CACHE.computeIfAbsent(binaryName, k -> {
+            try {
+                ClassLoader ctx = Thread.currentThread().getContextClassLoader();
+                if (ctx != null) {
+                    try { return Class.forName(binaryName, false, ctx); } catch (ClassNotFoundException ignored) {}
+                }
+                return Class.forName(binaryName);
+            } catch (Throwable t) {
+                return null;
+            }
+        });
+    }
+
+    /** Méthode PUBLIQUE d'une classe non obfusquée (ex: LWJGL) — nom réel, aucune traduction Yarn. */
+    public static Method rawMethod(Class<?> owner, String methodName, Class<?>... paramTypes) {
+        if (owner == null) return null;
+        String key = owner.getName() + "#" + methodName + java.util.Arrays.toString(paramTypes);
+        return METHOD_CACHE.computeIfAbsent(key, k -> {
+            try {
+                Method m = owner.getMethod(methodName, paramTypes);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException e) {
+                return null;
+            }
+        });
+    }
+
     /** Champ (cherché dans toute la hiérarchie), résolu + mis en cache par (classe réelle, nom Yarn). */
-    static Field field(Class<?> owner, String yarnClass, String yarnField) {
+    public static Field field(Class<?> owner, String yarnClass, String yarnField) {
         String key = owner.getName() + "#" + yarnField;
         return FIELD_CACHE.computeIfAbsent(key, k -> {
             String obfName = MappingsRegistry.getObfFieldName(yarnClass, yarnField);
@@ -53,7 +102,7 @@ final class McReflect {
     }
 
     /** Méthode sans paramètre — cas le plus fréquent des getters portés depuis PvP-Mod. */
-    static Method noArgMethod(Class<?> owner, String yarnClass, String yarnMethod) {
+    public static Method noArgMethod(Class<?> owner, String yarnClass, String yarnMethod) {
         return resolveNoArg(owner, yarnClass, yarnMethod);
     }
 
@@ -85,7 +134,7 @@ final class McReflect {
      * par type reste nécessaire pour choisir le bon java.lang.reflect.Method
      * au moment de l'appel.
      */
-    static Method oneArgMethod(Class<?> owner, String yarnClass, String yarnMethod, Class<?> paramType) {
+    public static Method oneArgMethod(Class<?> owner, String yarnClass, String yarnMethod, Class<?> paramType) {
         String key = owner.getName() + "#" + yarnMethod + "(" + paramType.getName() + ")";
         return METHOD_CACHE.computeIfAbsent(key, k -> {
             String obfName = MappingsRegistry.getObfMethodName(yarnClass, yarnMethod);

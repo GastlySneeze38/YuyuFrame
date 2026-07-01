@@ -23,6 +23,13 @@ public final class HudPanelRenderer {
     public static void draw(UiRenderer renderer, HudElement element, float x, float y, float w, float h, int vpWidth, int vpHeight) {
         renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
 
+        if (element.customRenderer != null) {
+            try {
+                element.customRenderer.draw(renderer, x, y, w, h, vpWidth, vpHeight);
+            } catch (Throwable ignored) {}
+            return;
+        }
+
         // Empile les lignes depuis le HAUT du panneau (comme un vrai panneau
         // HUD à contenu variable) — pas centré verticalement, pour rester
         // cohérent quel que soit le nombre de lignes ou la hauteur choisie.

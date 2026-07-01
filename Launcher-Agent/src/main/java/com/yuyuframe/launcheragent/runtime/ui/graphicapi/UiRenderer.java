@@ -173,6 +173,13 @@ public final class UiRenderer {
         // test 1.8.9 : le fond plein écran (radius=0) ne s'affichait jamais.
         boolean useShader = rectProgram != -1 && !rectInitFailed && radius > 0f;
 
+        // Chaque pop n'est tenté QUE si son push correspondant a réellement
+        // réussi — sinon une exception entre pushAttrib/pushMatrix et son pop
+        // (ex: résolution réflexion GL en échec) laisserait un popAttrib/
+        // popMatrix orphelin dans le finally, qui dépile une pile déjà vide :
+        // GL_STACK_UNDERFLOW ("Stack underflow"), observé en jeu sans lien
+        // évident avec le dessin en cours.
+        boolean attribPushed = false, projPushed = false, modelPushed = false;
         try {
             // État GL hérité de ce que le jeu a laissé à ce point précis du
             // render loop (texture encore bindée, depth test actif, blend non
@@ -180,6 +187,7 @@ public final class UiRenderer {
             // (legacy OpenGL, dispo GL2.1+) isole notre dessin sans affecter
             // la frame suivante du jeu.
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
+            attribPushed = true;
             glDisable(0x0DE1); // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE — sinon un quad mal orienté (winding) par rapport à ce que
@@ -199,10 +207,12 @@ public final class UiRenderer {
             // avec gl_FragCoord et le reste du pipeline (mouse/UI), pas de flip.
             matrixMode(0x1701); // GL_PROJECTION
             pushMatrix();
+            projPushed = true;
             loadIdentity();
             glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
             matrixMode(0x1700); // GL_MODELVIEW
             pushMatrix();
+            modelPushed = true;
             loadIdentity();
 
             if (useShader) {
@@ -211,11 +221,6 @@ public final class UiRenderer {
                 glUniform1f(uRadius, radius);
             }
             drawQuad(x1, y1, x2, y2, color);
-
-            matrixMode(0x1700); // GL_MODELVIEW
-            popMatrix();
-            matrixMode(0x1701); // GL_PROJECTION
-            popMatrix();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawRoundedRect: " + t);
         } finally {
@@ -223,7 +228,13 @@ public final class UiRenderer {
                 if (useShader) glUseProgram(0);
             } catch (Throwable ignored) {}
             try {
-                popAttrib();
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (attribPushed) popAttrib();
             } catch (Throwable ignored) {}
         }
     }
@@ -269,8 +280,13 @@ public final class UiRenderer {
         ensureTextShaderInit();
         if (textInitFailed) return; // shader cassé : rien à faire de l'alpha-distance brute, mieux vaut ne rien dessiner
 
+        // Voir drawRoundedRect : chaque pop n'est tenté que si son push a
+        // réellement réussi, pour ne jamais dépiler une pile GL déjà vide
+        // (GL_STACK_UNDERFLOW) si une exception survient entre les deux.
+        boolean attribPushed = false, projPushed = false, modelPushed = false;
         try {
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
+            attribPushed = true;
             glEnable(0x0DE1);  // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
@@ -282,10 +298,12 @@ public final class UiRenderer {
 
             matrixMode(0x1701); // GL_PROJECTION
             pushMatrix();
+            projPushed = true;
             loadIdentity();
             glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
             matrixMode(0x1700); // GL_MODELVIEW
             pushMatrix();
+            modelPushed = true;
             loadIdentity();
 
             glColor4f(color.r, color.g, color.b, color.a);
@@ -318,17 +336,20 @@ public final class UiRenderer {
                 penX += Math.round(g.advance * cs);
             }
             glEnd();
-
-            matrixMode(0x1700);
-            popMatrix();
-            matrixMode(0x1701);
-            popMatrix();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawText: " + t);
         } finally {
             try { glUseProgram(0); } catch (Throwable ignored) {}
             try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
-            try { popAttrib(); } catch (Throwable ignored) {}
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (attribPushed) popAttrib();
+            } catch (Throwable ignored) {}
         }
     }
 

@@ -22,10 +22,25 @@ public class HudElement {
         String[] lines();
     }
 
+    /**
+     * Rendu personnalisé, pour un contenu qui ne tient pas dans un simple
+     * empilement de lignes de texte (grille de touches, pastilles colorées
+     * d'effets de potion...) — voir KeystrokesHudRenderer/PotionEffectsHudRenderer.
+     * {@link HudPanelRenderer} dessine TOUJOURS le panneau de fond (même
+     * style que les éléments texte, pour rester cohérent dans l'éditeur comme
+     * en jeu), puis délègue le CONTENU à ce renderer plutôt qu'à
+     * {@link ContentSource} quand celui-ci est fourni.
+     */
+    public interface CustomRenderer {
+        void draw(com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer renderer,
+                  float x, float y, float w, float h, int vpWidth, int vpHeight);
+    }
+
     public final String id;
     public final String displayName;
     public float w, h;
     public final ContentSource content;
+    public final CustomRenderer customRenderer;
 
     public HudAnchor anchor;
     public float offsetX, offsetY;
@@ -39,6 +54,20 @@ public class HudElement {
         this.offsetX = offsetX;
         this.offsetY = offsetY;
         this.content = content;
+        this.customRenderer = null;
+    }
+
+    /** Variante rendu personnalisé — voir {@link CustomRenderer}. */
+    public HudElement(String id, String displayName, float w, float h, HudAnchor anchor, float offsetX, float offsetY, CustomRenderer customRenderer) {
+        this.id = id;
+        this.displayName = displayName;
+        this.w = w;
+        this.h = h;
+        this.anchor = anchor;
+        this.offsetX = offsetX;
+        this.offsetY = offsetY;
+        this.content = null;
+        this.customRenderer = customRenderer;
     }
 
     /** Contenu STATIQUE (texte fixe, jamais recalculé) — pratique pour un placeholder rapide sans écrire une vraie ContentSource. */

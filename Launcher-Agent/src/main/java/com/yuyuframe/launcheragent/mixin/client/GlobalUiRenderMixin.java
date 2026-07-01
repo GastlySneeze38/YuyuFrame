@@ -55,20 +55,27 @@ public abstract class GlobalUiRenderMixin {
                 if (handle == 0L) return;
                 inputPoller = new UiInputPollerModern(handle, GlobalUiRenderMixin.class.getClassLoader());
                 // Force le chargement des modules intégrés (voir ModuleRegistry) dès
-                // la première frame — sinon leurs éléments HUD (voir VanillaHudModule)
+                // la première frame — sinon leurs éléments HUD (voir runtime.modules.builtin)
                 // ne s'enregistreraient qu'à la première ouverture du menu "YuyuFrame".
                 ModuleRegistry.all();
             }
             inputPoller.poll();
 
+            // Logique de module continue, qu'un écran custom soit ouvert ou
+            // non (ex: FOV forcé, voir FovModule) — équivalent de TickEvent
+            // côté Forge, mais ici juste "cette même méthode s'exécute à
+            // chaque frame" (suffisant, pas besoin d'un hook de tick séparé).
+            ModuleRegistry.tickAll();
+
             Object currentScreen = getCurrentScreen(mc);
             if (currentScreen == null) {
+                UiRenderer renderer = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
                 // Overlay HUD permanent — même règle que le HUD vanilla
                 // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
                 // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
                 // les UiHudBox de cet écran qui dessinent, pas cet appel.
-                HudOverlayRenderer.render(UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader()),
-                    inputPoller.fbWidth, inputPoller.fbHeight);
+                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
                 if (inputPoller.menuKeyPressed) {
                     setScreen(mc, new UiMainMenuScreen(null));
                 }
