@@ -4,6 +4,7 @@
   "package": "com.yuyuframe.launcheragent.mixin",
   "compatibilityLevel": "JAVA_8",
   "plugin": "com.yuyuframe.launcheragent.mixin.LauncherMixinConfigPlugin",
+  "refmap": "mixins.launcheragent.refmap.json",
   "verbose": false,
   "mixins": [],
   "client": [

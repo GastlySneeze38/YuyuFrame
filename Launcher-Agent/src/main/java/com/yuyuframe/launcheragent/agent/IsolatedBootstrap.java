@@ -63,18 +63,25 @@ public final class IsolatedBootstrap {
         loadYarnMappings(yarnPath, legacy189);
 
         // Log de sanité : vérifie que la classe principale de la version est bien mappée.
+        // Même nom Yarn named "TitleScreen" sur les deux branches — Legacy Fabric
+        // (1.8.9) reprend la nomenclature Yarn moderne, PAS les noms MCP
+        // historiques type "GuiMainMenu" (vérifié dans mappings-1.8.9.tiny).
         if (MappingsRegistry.isLoaded()) {
-            String probe = legacy189
-                ? "net/minecraft/client/gui/GuiMainMenu"
-                : "net/minecraft/client/gui/screen/TitleScreen";
+            String probe = "net/minecraft/client/gui/screen/TitleScreen";
             String obfClass = MappingsRegistry.INSTANCE.map(probe);
             LauncherLog.agent(1, "[LauncherAgent] Yarn probe → \"" + obfClass + "\""
                 + (obfClass.equals(probe) ? "  ← NON MAPPÉ" : "  ← OK"));
         }
 
-        // Le refmap n'est nécessaire que sous Fabric moderne (1.14+).
-        // Legacy Fabric 1.8.9 est rare et non géré pour l'instant.
-        if (fabric && !legacy189) writeRefmapFile();
+        // Refmap requis dans TOUS les cas (vanilla ET Fabric) : nos @Inject
+        // utilisent des noms Yarn NAMED ("init", pas "bg_"/"b" en dur) — sans
+        // refmap écrit, Mixin valide les cibles contre la chaîne named
+        // littérale, qui ne correspond à rien dans le jar obfusqué chargé →
+        // "could not find any targets matching" (observé en test 1.8.9
+        // vanilla). refmapMethodReplacement() est scheme-aware (voir
+        // LauncherMixinService) : nom officiel brut en vanilla, intermediary
+        // sous Fabric — un seul mécanisme couvre les deux cas.
+        writeRefmapFile(inst, fabric);
 
         // Sélection du fichier de config Mixin selon la version MC.
         String mixinConfig = legacy189
@@ -87,12 +94,24 @@ public final class IsolatedBootstrap {
     }
 
     /**
-     * Écrit mixins.launcheragent.refmap.json dans <agentDir>/generated/ —
-     * voir LauncherMixinService.buildRefmapJson() pour le contenu et
-     * LauncherAgent.startIsolated() pour pourquoi ce dossier précis (déjà sur
-     * le classpath du classloader isolé).
+     * Écrit mixins.launcheragent.refmap.json — voir LauncherMixinService.buildRefmapJson()
+     * pour le contenu.
+     *
+     * Deux mécanismes de résolution selon le mode de chargement :
+     *   - Fabric (isolé) : <agentDir>/generated/ est déjà sur le classpath du
+     *     classloader isolé dédié (ajouté par LauncherAgent.startIsolated()
+     *     AVANT sa construction) — écrire le fichier brut dans ce dossier
+     *     suffit, il devient résolvable immédiatement.
+     *   - Vanilla/Forge (non isolé) : IsolatedBootstrap tourne sur le
+     *     classloader SYSTÈME, que launcher.rs n'a jamais configuré pour
+     *     inclure <agentDir>/generated/ dans son -cp — écrire le fichier là
+     *     ne suffit pas, il resterait introuvable. java.lang.instrument
+     *     n'offre PAS d'équivalent "ajoute ce dossier au classpath système" à
+     *     chaud (seulement Instrumentation.appendToSystemClassLoaderSearch(),
+     *     qui n'accepte qu'un JarFile) — le refmap est donc empaqueté dans un
+     *     petit jar dédié, ajouté au classloader système via cette API.
      */
-    private static void writeRefmapFile() {
+    private static void writeRefmapFile(Instrumentation inst, boolean fabric) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
@@ -101,10 +120,24 @@ public final class IsolatedBootstrap {
             }
             java.io.File dir = new java.io.File(agentDir, "generated");
             dir.mkdirs();
-            java.io.File file = new java.io.File(dir, "mixins.launcheragent.refmap.json");
             String json = LauncherMixinService.buildRefmapJson();
-            java.nio.file.Files.write(file.toPath(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            LauncherLog.agent(1, "[LauncherAgent] refmap écrit : " + file + " = " + json);
+
+            if (fabric) {
+                java.io.File file = new java.io.File(dir, "mixins.launcheragent.refmap.json");
+                java.nio.file.Files.write(file.toPath(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                LauncherLog.agent(1, "[LauncherAgent] refmap écrit (fichier brut, classloader isolé) : " + file);
+            } else {
+                java.io.File jarFile = new java.io.File(dir, "refmap.jar");
+                try (java.util.jar.JarOutputStream jos =
+                        new java.util.jar.JarOutputStream(new java.io.FileOutputStream(jarFile))) {
+                    jos.putNextEntry(new java.util.zip.ZipEntry("mixins.launcheragent.refmap.json"));
+                    jos.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    jos.closeEntry();
+                }
+                inst.appendToSystemClassLoaderSearch(new java.util.jar.JarFile(jarFile));
+                LauncherLog.agent(1, "[LauncherAgent] refmap écrit (jar ajouté au classloader système) : " + jarFile);
+            }
+            LauncherLog.agent(1, "[LauncherAgent] refmap contenu : " + json);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] writeRefmapFile: " + t);
         }

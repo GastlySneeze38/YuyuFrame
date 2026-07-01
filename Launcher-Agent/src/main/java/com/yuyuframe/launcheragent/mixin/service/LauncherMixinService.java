@@ -163,6 +163,19 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiRenderMixin",
             "net/minecraft/client/render/GameRenderer",
             "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+
+        // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
+        // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/TitleScreenMixin189",
+            "net/minecraft/client/gui/screen/TitleScreen",
+            "init", "()V", "net/minecraft/client/gui/screen/Screen"),
+        // render(Entity,D,D,D,F,F)Z déclaré directement sur EntityRenderDispatcher — pas de repli.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/EntityCullingMixin",
+            "net/minecraft/client/render/entity/EntityRenderDispatcher",
+            "render", "(Lnet/minecraft/entity/Entity;DDDFF)Z", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/GlobalUiRenderMixin189",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(FJ)V", null),
     };
 
     /**
@@ -262,6 +275,16 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
      */
     private static String refmapMethodReplacement(String yarnClass, String officialMethod,
                                                    String officialDesc, String fallbackNamedOwner) {
+        // Vanilla (OFFICIAL) : le refmap doit pointer vers le nom OFFICIEL brut
+        // (celui réellement présent dans le jar chargé) — PAS l'intermediary,
+        // qui n'existe qu'en mémoire sous Fabric. Sans refmap écrit pour ce cas,
+        // Mixin valide les cibles @Inject contre la chaîne Yarn named littérale
+        // (ex: "init") — qui ne correspond à rien dans le jar obfusqué → échec
+        // "could not find any targets matching" (observé en test 1.8.9 vanilla).
+        if (MappingsRegistry.getScheme() == MappingsRegistry.Scheme.OFFICIAL) {
+            return officialMethod + MappingsRegistry.runtimeDesc(officialDesc);
+        }
+
         String officialClass = YarnMappings.getOfficialClass(yarnClass);
         String inter = officialClass != null
             ? YarnMappings.getIntermediaryMethod(officialClass, officialMethod, officialDesc)
