@@ -74,7 +74,10 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
     @Override
     public void postApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass,
                           String mixinClassName, IMixinInfo mixinInfo) {
-        LauncherLog.asm(1, "[MixinPlugin] appliqué : " + mixinClassName + " → " + targetClassName);
+        // Niveau 3 (toujours visible en console, pas seulement en verbeux) —
+        // confirmation explicite que CE Mixin s'est bien tissé dans sa cible
+        // réelle, pas juste "bootstrap réussi" au sens large.
+        LauncherLog.asm(3, "[MixinPlugin] Mixin initialisé avec succès : " + mixinClassName + " → " + targetClassName);
     }
 
     private void applyMixinDebugProperties() {

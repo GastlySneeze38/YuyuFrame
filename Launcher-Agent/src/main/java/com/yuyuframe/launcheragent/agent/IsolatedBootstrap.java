@@ -190,6 +190,8 @@ public final class IsolatedBootstrap {
             }
 
             retransformLoadedTargets(inst, mixinTargets);
+            LauncherLog.agent(3, "[LauncherAgent] Composant Mixin initialisé avec succès ("
+                + mixinConfig + ", " + mixinTargets.size() + " cible(s) : " + mixinTargets + ")");
             return true;
         } catch (Throwable e) {
             // Throwable, pas Exception : certains échecs Mixin (ex: MixinInitialisationError)
