@@ -12,14 +12,13 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
  *   - {@link UiInputPollerModern} : LWJGL3/GLFW (1.13+, dont 1.21)
  *   - {@link UiInputPollerLegacy} : LWJGL2 org.lwjgl.input.Mouse/Keyboard (1.8.9)
  *
- * ATTENTION coordonnées Y — PAS symétriques entre les deux :
- *   - LWJGL2 Mouse.getY() : origine bas-gauche (mêmes unités que gl_FragCoord
- *     en GLSL, donc directement utilisable par UiRenderer SANS flip).
- *   - LWJGL3 glfwGetCursorPos() : origine HAUT-gauche — nécessite un flip
- *     (viewportHeight - y) avant de le comparer à gl_FragCoord dans
- *     UiRenderer.drawRoundedRect(). PAS ENCORE FAIT dans UiInputPollerModern
- *     — à corriger avant tout test visuel sur la branche 1.21, sinon les
- *     rects sont dessinés à l'envers verticalement.
+ * Coordonnées Y — PAS symétriques entre les deux implémentations, mais
+ * chacune normalise déjà vers l'espace pixels FRAMEBUFFER origine bas-gauche
+ * (mêmes unités que gl_FragCoord en GLSL, voir UiRenderer) :
+ *   - LWJGL2 Mouse.getY() : déjà dans cet espace nativement, aucune conversion.
+ *   - LWJGL3 glfwGetCursorPos() : coordonnées "fenêtre" origine haut-gauche —
+ *     UiInputPollerModern applique la mise à l'échelle fenêtre→framebuffer
+ *     (écrans HiDPI) PUIS le flip Y, voir son readState().
  */
 public abstract class UiInputPoller {
 
