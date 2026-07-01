@@ -447,10 +447,18 @@ pub async fn download_and_launch(
 
                     // mixin.jar DOIT être listé AVANT launcher-agent.jar — même contrainte
                     // que pour le p2p-agent (MixinAgent.premain() capture l'Instrumentation).
+                    //
+                    // version=... explicite ici : -Dminecraft.version n'est posé QUE par
+                    // Fabric, jamais par un lancement vanilla (Mojang passe la version en
+                    // argument de jeu "--version", pas en system property) — sans ce
+                    // paramètre, MinecraftVersionDetector.detect() renvoie "unknown" sur
+                    // vanilla, et LauncherAgent charge par erreur la config Mixin 1.21+
+                    // contre un jeu 1.8.9 (mismatch fatal). Rust connaît déjà version_id
+                    // avec certitude, pas besoin de deviner côté agent.
                     let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
                     let agent_arg = format!(
-                        "-javaagent:{}=yarn={}",
-                        agent_jar.display(), yarn_path.display(),
+                        "-javaagent:{}=yarn={},version={}",
+                        agent_jar.display(), yarn_path.display(), version_id,
                     );
                     log_to_console(&app, &console_label, &format!("[LauncherAgent] Mixin : {}", mixin_arg), "out");
                     log_to_console(&app, &console_label, &format!("[LauncherAgent] Agent : {}", agent_arg), "out");

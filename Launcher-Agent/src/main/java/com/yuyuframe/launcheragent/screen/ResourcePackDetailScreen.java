@@ -112,7 +112,7 @@ public class ResourcePackDetailScreen extends Screen {
         if (needle.isEmpty()) return false;
         try {
             if (!java.nio.file.Files.isDirectory(resourcePacksDir)) return false;
-            try (var stream = java.nio.file.Files.list(resourcePacksDir)) {
+            try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(resourcePacksDir)) {
                 return stream.anyMatch(p -> normalize(p.getFileName().toString()).contains(needle));
             }
         } catch (Exception e) {

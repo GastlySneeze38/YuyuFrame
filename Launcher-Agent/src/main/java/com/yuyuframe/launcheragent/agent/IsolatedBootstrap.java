@@ -250,6 +250,15 @@ public final class IsolatedBootstrap {
         return null;
     }
 
+    /** InputStream.readAllBytes() n'existe qu'à partir de Java 9 — équivalent Java 8. */
+    private static byte[] readAllBytes(java.io.InputStream is) throws java.io.IOException {
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int n;
+        while ((n = is.read(chunk)) != -1) buf.write(chunk, 0, n);
+        return buf.toByteArray();
+    }
+
     private static Set<String> discoverMixinTargets(String configName) {
         Set<String> targets = new LinkedHashSet<>();
         Map<String, String> unmapped = new LinkedHashMap<>();
@@ -260,7 +269,7 @@ public final class IsolatedBootstrap {
                     LauncherLog.err("[LauncherAgent] " + configName + " introuvable dans le JAR");
                     return targets;
                 }
-                String json = new String(cfgIs.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                String json = new String(readAllBytes(cfgIs), java.nio.charset.StandardCharsets.UTF_8);
                 String pkg = jsonString(json, "package");
                 if (pkg == null) return targets;
 
@@ -283,7 +292,7 @@ public final class IsolatedBootstrap {
                                 unmapped.put(entry, ".class introuvable dans le JAR (" + classRes + ")");
                                 continue;
                             }
-                            targets.addAll(extractMixinTargets(cls.readAllBytes(), entry, unmapped));
+                            targets.addAll(extractMixinTargets(readAllBytes(cls), entry, unmapped));
                         } catch (Throwable e) {
                             LauncherLog.err("[LauncherAgent]   → ERREUR " + entry + ": " + e);
                             unmapped.put(entry, "exception au scan : " + e);

@@ -13,13 +13,17 @@ public final class LauncherLog {
     private LauncherLog() {}
 
     /** Modification d'UI Minecraft — ScreenHelper, mixins clients. */
-    public static volatile int UI    = 3;
+    public static volatile int UI    = 1;
     /** Patches ASM au démarrage. */
-    public static volatile int ASM   = 3;
+    public static volatile int ASM   = 1;
     /** Scan/retransform de l'agent Java au démarrage. */
-    public static volatile int AGENT = 3;
+    public static volatile int AGENT = 1;
     /** Recherche/téléchargement Modrinth. */
-    public static volatile int CONTENT = 3;
+    public static volatile int CONTENT = 1;
+    // TEMPORAIRE (diagnostic hang 1.8.9 vanilla, v71) : seuils abaissés à 1 pour
+    // voir TOUS les logs dès la première ligne, avant même que
+    // launcher-agent.properties (log.agent=1 etc.) ne soit lu par Mixin —
+    // remettre à 3 une fois le diagnostic terminé.
 
     public static volatile boolean SHOW_CATEGORY = true;
 

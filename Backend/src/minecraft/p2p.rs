@@ -337,24 +337,57 @@ fn yarn_version_candidates(version: &str) -> Vec<String> {
     candidates
 }
 
+/// Yarn moderne (meta.fabricmc.net) ne référence AUCUNE version < 1.14 —
+/// donc systématiquement en échec pour 1.8.9 et autres legacy (aucun crash,
+/// juste un Err silencieux remonté jusqu'à LauncherAgent qui désactive alors
+/// le javaagent sans le signaler dans la console du jeu — voir
+/// docs/LauncherAgent/index.md). D'où le repli automatique sur Legacy Fabric
+/// (meta.legacyfabric.net / maven.legacyfabric.net), même format de réponse
+/// JSON et même structure de jar (mappings/mappings.tiny, tiny v2) que Yarn
+/// moderne — un seul helper générique suffit.
 async fn download_yarn(
     mc_version: &str,
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
 ) -> Result<()> {
+    match download_yarn_from(
+        mc_version, dest, client, app,
+        "https://meta.fabricmc.net/v2/versions/yarn",
+        "https://maven.fabricmc.net/net/fabricmc/yarn",
+    ).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            tracing::warn!("[P2P] Yarn moderne indisponible pour {} ({}) — tentative Legacy Fabric", mc_version, e);
+            download_yarn_from(
+                mc_version, dest, client, app,
+                "https://meta.legacyfabric.net/v2/versions/yarn",
+                "https://maven.legacyfabric.net/net/legacyfabric/yarn",
+            ).await
+        }
+    }
+}
+
+async fn download_yarn_from(
+    mc_version: &str,
+    dest: &Path,
+    client: &reqwest::Client,
+    app: &tauri::AppHandle,
+    meta_base: &str,
+    maven_base: &str,
+) -> Result<()> {
     // Récupérer le dernier build Yarn pour cette version MC
-    let meta_url = format!("https://meta.fabricmc.net/v2/versions/yarn/{}", mc_version);
+    let meta_url = format!("{}/{}", meta_base, mc_version);
     let resp = client.get(&meta_url).send().await?;
     if !resp.status().is_success() {
-        return Err(anyhow!("Fabric Meta: HTTP {} pour MC {}", resp.status(), mc_version));
+        return Err(anyhow!("Fabric Meta ({}): HTTP {} pour MC {}", meta_base, resp.status(), mc_version));
     }
     let builds: serde_json::Value = resp.json().await?;
 
     let yarn_version = builds.as_array()
         .and_then(|a| a.first())
         .and_then(|b| b["version"].as_str())
-        .ok_or_else(|| anyhow!("Aucun build Yarn pour MC {}", mc_version))?
+        .ok_or_else(|| anyhow!("Aucun build Yarn pour MC {} sur {}", mc_version, meta_base))?
         .to_owned();
 
     tracing::info!("[P2P] Yarn MC {} → {}", mc_version, yarn_version);
@@ -364,8 +397,8 @@ async fn download_yarn(
     }));
 
     let jar_url = format!(
-        "https://maven.fabricmc.net/net/fabricmc/yarn/{}/yarn-{}-mergedv2.jar",
-        yarn_version, yarn_version
+        "{}/{}/yarn-{}-mergedv2.jar",
+        maven_base, yarn_version, yarn_version
     );
     tracing::info!("[P2P] Téléchargement Yarn : {}", jar_url);
 

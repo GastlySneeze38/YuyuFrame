@@ -141,7 +141,7 @@ public final class MappingsRegistry implements IRemapper {
             Set<String> names = YarnMappings.getIntermediaryMethodNames(officialClass, officialMethod);
             if (!names.isEmpty()) return names;
         }
-        return Set.of(officialMethod);
+        return java.util.Collections.singleton(officialMethod);
     }
 
     /**

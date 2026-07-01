@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-01-v67";
+    private static final String BUILD_VERSION = "2026-07-01-v72";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources
@@ -177,7 +177,7 @@ public class LauncherAgent {
             urls.add(0, generatedDir.toURI().toURL());
 
             ClassLoader isolatedCl = new URLClassLoader(
-                urls.toArray(new URL[0]), ClassLoader.getPlatformClassLoader());
+                urls.toArray(new URL[0]), platformClassLoaderOrNull());
 
             Class<?> bootstrapClass = Class.forName(
                 "com.yuyuframe.launcheragent.agent.IsolatedBootstrap", true, isolatedCl);
@@ -204,6 +204,22 @@ public class LauncherAgent {
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] Bootstrap isolé échoué : " + t);
             t.printStackTrace(System.err);
+        }
+    }
+
+    /**
+     * ClassLoader.getPlatformClassLoader() n'existe qu'à partir de Java 9 —
+     * l'agent compile en bytecode Java 8 (Forge 1.8.9/LaunchWrapper l'exige,
+     * incompatible Java 9+), mais Fabric (seul appelant de ce chemin) ne
+     * tourne que sur JVM moderne : appelé par réflexion pour profiter du vrai
+     * classloader plateforme quand il existe, {@code null} (bootstrap) sinon.
+     */
+    private static ClassLoader platformClassLoaderOrNull() {
+        try {
+            java.lang.reflect.Method m = ClassLoader.class.getMethod("getPlatformClassLoader");
+            return (ClassLoader) m.invoke(null);
+        } catch (Throwable t) {
+            return null;
         }
     }
 

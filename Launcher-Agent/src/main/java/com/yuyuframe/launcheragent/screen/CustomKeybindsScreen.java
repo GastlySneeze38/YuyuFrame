@@ -337,14 +337,14 @@ public class CustomKeybindsScreen extends Screen {
     }
 
     private Set<String> computeConflictKeys() {
-        if (!showConflictsOnly) return Set.of();
+        if (!showConflictsOnly) return java.util.Collections.emptySet();
         Map<String, Integer> counts = new HashMap<>();
         for (Group g : groups) for (Row r : g.rows) {
             String key = KeybindReflect.getBoundKeyTranslationKey(r.binding);
             if (key != null) counts.merge(key, 1, Integer::sum);
         }
         Set<String> conflicts = new HashSet<>();
-        for (var e : counts.entrySet()) if (e.getValue() > 1) conflicts.add(e.getKey());
+        for (Map.Entry<String, Integer> e : counts.entrySet()) if (e.getValue() > 1) conflicts.add(e.getKey());
         return conflicts;
     }
 

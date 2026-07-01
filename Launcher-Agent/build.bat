@@ -110,7 +110,7 @@ echo [Stubs] Compilation des stubs Minecraft...
 set "STUBLIST=%TEMP%\launcheragent_stubs.txt"
 powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%AGENT_DIR%src\stubs' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST%', $files)"
 
-"%JAVAC_CMD%" --release 17 -d "%OUT_STUBS%" "@%STUBLIST%"
+"%JAVAC_CMD%" --release 8 -d "%OUT_STUBS%" "@%STUBLIST%"
 del "%STUBLIST%" 2>nul
 if errorlevel 1 (
     echo [ERREUR] Compilation stubs echouee.
@@ -127,7 +127,7 @@ echo [Build] Compilation principale...
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
 powershell -NoProfile -Command "$q=[char]34; $dirs=@('%AGENT_DIR%src\main\java','%AGENT_DIR%src\stubs'); $files=$dirs | ForEach-Object { Get-ChildItem -Recurse -Filter '*.java' $_ } | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
-"%JAVAC_CMD%" --release 17 ^
+"%JAVAC_CMD%" --release 8 ^
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"

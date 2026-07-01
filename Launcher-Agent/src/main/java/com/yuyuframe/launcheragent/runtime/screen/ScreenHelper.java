@@ -681,7 +681,7 @@ public class ScreenHelper {
                 if (java.util.List.class.isAssignableFrom(f.getType())) {
                     f.setAccessible(true);
                     Object v = f.get(obj);
-                    if (v instanceof java.util.List<?> l) return l;
+                    if (v instanceof java.util.List) return (java.util.List<?>) v;
                 }
             } catch (NoSuchFieldException ignored) {}
             catch (IllegalAccessException ignored) {}

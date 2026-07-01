@@ -126,8 +126,17 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
      * des types (ex: "Lnet/minecraft/client/gui/screen/Screen;") — traduits en
      * official puis intermediary par runtimeDesc() au moment de la génération.
      */
-    private record RefmapEntry(String mixinInternalName, String yarnTargetClass,
-                                String namedMethod, String namedDesc, String fallbackNamedOwner) {}
+    private static final class RefmapEntry {
+        final String mixinInternalName, yarnTargetClass, namedMethod, namedDesc, fallbackNamedOwner;
+        RefmapEntry(String mixinInternalName, String yarnTargetClass,
+                    String namedMethod, String namedDesc, String fallbackNamedOwner) {
+            this.mixinInternalName = mixinInternalName;
+            this.yarnTargetClass = yarnTargetClass;
+            this.namedMethod = namedMethod;
+            this.namedDesc = namedDesc;
+            this.fallbackNamedOwner = fallbackNamedOwner;
+        }
+    }
 
     private static final RefmapEntry[] REFMAP_ENTRIES = {
         // init() héritée de Screen — repli sur Screen pour la lookup Yarn.
@@ -172,26 +181,26 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             // Mixin cherche cette clé dans le refmap pour obtenir le nom intermediary (Fabric).
             // Sur vanilla, le remapper (MappingsRegistry) traduit le nom named → official directement,
             // sans passer par le refmap — les deux chemins sont indépendants.
-            String refmapKey = e.namedMethod() + e.namedDesc();
+            String refmapKey = e.namedMethod + e.namedDesc;
 
             // La VALEUR = nom intermediary + desc intermediary, pour que Fabric trouve la méthode.
-            String officialMethod = resolveOfficialMethodName(e.yarnTargetClass(), e.namedMethod(),
-                                                              e.namedDesc(), e.fallbackNamedOwner());
-            String officialDesc   = resolveOfficialDesc(e.namedDesc());
-            String replacement    = refmapMethodReplacement(e.yarnTargetClass(), officialMethod,
-                                                            officialDesc, e.fallbackNamedOwner());
-            byMixin.computeIfAbsent(e.mixinInternalName(), k -> new java.util.LinkedHashMap<>())
+            String officialMethod = resolveOfficialMethodName(e.yarnTargetClass, e.namedMethod,
+                                                              e.namedDesc, e.fallbackNamedOwner);
+            String officialDesc   = resolveOfficialDesc(e.namedDesc);
+            String replacement    = refmapMethodReplacement(e.yarnTargetClass, officialMethod,
+                                                            officialDesc, e.fallbackNamedOwner);
+            byMixin.computeIfAbsent(e.mixinInternalName, k -> new java.util.LinkedHashMap<>())
                    .put(refmapKey, replacement);
         }
 
         StringBuilder sb = new StringBuilder("{\"mappings\":{");
         boolean firstMixin = true;
-        for (var mixinEntry : byMixin.entrySet()) {
+        for (java.util.Map.Entry<String, java.util.Map<String, String>> mixinEntry : byMixin.entrySet()) {
             if (!firstMixin) sb.append(',');
             firstMixin = false;
             sb.append('"').append(mixinEntry.getKey()).append("\":{");
             boolean firstMethod = true;
-            for (var methodEntry : mixinEntry.getValue().entrySet()) {
+            for (java.util.Map.Entry<String, String> methodEntry : mixinEntry.getValue().entrySet()) {
                 if (!firstMethod) sb.append(',');
                 firstMethod = false;
                 sb.append('"').append(methodEntry.getKey()).append("\":\"")

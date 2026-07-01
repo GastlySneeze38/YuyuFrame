@@ -56,7 +56,8 @@ public abstract class GlobalUiRenderMixin189 {
                 return;
             }
 
-            if (!(currentScreen instanceof UiDrawable ui)) return;
+            if (!(currentScreen instanceof UiDrawable)) return;
+            UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
         } catch (Throwable t) {

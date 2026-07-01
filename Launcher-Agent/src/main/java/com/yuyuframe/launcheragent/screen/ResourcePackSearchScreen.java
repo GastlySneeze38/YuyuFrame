@@ -365,7 +365,7 @@ public class ResourcePackSearchScreen extends Screen {
         Set<String> names = new HashSet<>();
         try {
             if (java.nio.file.Files.isDirectory(resourcePacksDir)) {
-                try (var stream = java.nio.file.Files.list(resourcePacksDir)) {
+                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(resourcePacksDir)) {
                     stream.forEach(p -> names.add(normalize(p.getFileName().toString())));
                 }
             }

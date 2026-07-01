@@ -33,8 +33,24 @@ public final class ScreenStubPatcher {
      * qu'attendu par MappingsRegistry.runtimeMethod().
      */
     private static final class OverrideMethods {
-        private record Key(String name, String desc) {}
-        private record Owner(String officialClass, String officialName, String officialDesc) {}
+        private static final class Key {
+            final String name, desc;
+            Key(String name, String desc) { this.name = name; this.desc = desc; }
+            @Override public boolean equals(Object o) {
+                if (!(o instanceof Key)) return false;
+                Key k = (Key) o;
+                return name.equals(k.name) && desc.equals(k.desc);
+            }
+            @Override public int hashCode() { return name.hashCode() * 31 + desc.hashCode(); }
+        }
+        private static final class Owner {
+            final String officialClass, officialName, officialDesc;
+            Owner(String officialClass, String officialName, String officialDesc) {
+                this.officialClass = officialClass;
+                this.officialName = officialName;
+                this.officialDesc = officialDesc;
+            }
+        }
         private final java.util.Map<Key, Owner> table = new java.util.HashMap<>();
 
         void register(String declaredName, String declaredDesc, String officialClass, String officialName, String officialDesc) {
@@ -44,7 +60,7 @@ public final class ScreenStubPatcher {
         String translate(String declaredName, String declaredDesc) {
             Owner o = table.get(new Key(declaredName, declaredDesc));
             if (o == null) return declaredName;
-            return MappingsRegistry.runtimeMethod(o.officialClass(), o.officialName(), o.officialDesc());
+            return MappingsRegistry.runtimeMethod(o.officialClass, o.officialName, o.officialDesc);
         }
     }
 
