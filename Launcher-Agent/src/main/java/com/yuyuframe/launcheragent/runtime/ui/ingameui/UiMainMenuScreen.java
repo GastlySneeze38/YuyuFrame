@@ -71,21 +71,28 @@ public class UiMainMenuScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            drawSidebarChrome(renderer);
+            // Titres par-dessus TOUT (widgets inclus) — le fond de la sidebar,
+            // lui, est un widget ordinaire ajouté EN PREMIER dans rebuildAll()
+            // (voir SidebarBackground) pour être dessiné AVANT les items de
+            // nav par super.uiDraw(), sinon il les recouvrirait entièrement
+            // (bug vécu : le bouton "Modifier le HUD" — et "Accueil"/
+            // "Parametres" avant lui, juste jamais remarqué — invisibles
+            // derrière ce fond dessiné après coup).
+            renderer.drawText(UiFont.BOLD, "YuyuFrame", MARGIN, screenHeight - 40, UiTheme.TEXT_PRIMARY, 0.55f, screenWidth, screenHeight);
+            renderer.drawText("Mods installes", SIDEBAR_W + MARGIN, screenHeight - 40, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
         } catch (Throwable ignored) {}
-    }
-
-    private void drawSidebarChrome(UiRenderer renderer) {
-        renderer.drawRoundedRect(0, 0, SIDEBAR_W, screenHeight, 0, UiTheme.SIDEBAR_BG, screenWidth, screenHeight);
-        renderer.drawText(UiFont.BOLD, "YuyuFrame", MARGIN, screenHeight - 40, UiTheme.TEXT_PRIMARY, 0.55f, screenWidth, screenHeight);
-        renderer.drawText("Mods installes", SIDEBAR_W + MARGIN, screenHeight - 40, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
     }
 
     private void rebuildAll() {
         widgets.clear();
 
-        widgets.add(new SidebarItem(MARGIN, screenHeight - 84, SIDEBAR_W - MARGIN * 2, "Accueil", true));
-        widgets.add(new SidebarItem(MARGIN, screenHeight - 114, SIDEBAR_W - MARGIN * 2, "Parametres", false));
+        widgets.add(new SidebarBackground());
+        widgets.add(new SidebarItem(MARGIN, screenHeight - 84, SIDEBAR_W - MARGIN * 2, "Accueil", true, null));
+        widgets.add(new SidebarItem(MARGIN, screenHeight - 114, SIDEBAR_W - MARGIN * 2, "Parametres", false, null));
+        // Épinglé en bas de la sidebar (pas empilé sous les items du haut) —
+        // même position quel que soit le nombre d'items ajoutés au-dessus.
+        widgets.add(new SidebarItem(MARGIN, MARGIN, SIDEBAR_W - MARGIN * 2, "Modifier le HUD", false,
+            () -> closeTo(new UiHudEditorScreen(UiMainMenuScreen.this))));
         widgets.add(new CloseButton(screenWidth - 24f - 28f, screenHeight - 24f - 28f));
 
         float contentX = SIDEBAR_W + MARGIN;
@@ -123,16 +130,36 @@ public class UiMainMenuScreen extends UiScreenBase {
         }
     }
 
-    /** Item de nav sidebar — purement visuel pour "Parametres" (pas encore de page derriere), actif pour "Accueil" (deja dessus). */
+    /** Bande de fond de la sidebar — widget ordinaire (pas un dessin manuel après coup) pour rester DERRIÈRE les items de nav ajoutés après elle. */
+    private final class SidebarBackground extends UiWidget {
+        SidebarBackground() { super(0, 0, SIDEBAR_W, screenHeight); }
+
+        // Jamais cliquable : sans ce override, son rectangle (toute la
+        // sidebar) gagnerait le test de collision AVANT les vrais boutons
+        // ajoutés après elle dans la liste (premier widget dont contains()
+        // matche = celui qui reçoit onClick, voir UiScreenBase) — "Accueil"/
+        // "Parametres"/"Modifier le HUD" ne recevaient donc jamais leur clic.
+        @Override
+        public boolean contains(double mx, double my) { return false; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            renderer.drawRoundedRect(0, 0, SIDEBAR_W, vpHeight, 0, UiTheme.SIDEBAR_BG, vpWidth, vpHeight);
+        }
+    }
+
+    /** Item de nav sidebar — "action" null = purement visuel (ex: "Parametres", pas encore de page derriere). */
     private final class SidebarItem extends UiWidget {
         private final String label;
         private final boolean active;
+        private final Runnable action;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        SidebarItem(float x, float y, float w, String label, boolean active) {
+        SidebarItem(float x, float y, float w, String label, boolean active, Runnable action) {
             super(x, y, w, 26f);
             this.label = label;
             this.active = active;
+            this.action = action;
         }
 
         @Override
@@ -147,6 +174,11 @@ public class UiMainMenuScreen extends UiScreenBase {
             }
             UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
             renderer.drawText(label, x + 12, y + h / 2f - 4f, textColor, 0.4f, vpWidth, vpHeight);
+        }
+
+        @Override
+        public void onClick() {
+            if (action != null) action.run();
         }
     }
 
