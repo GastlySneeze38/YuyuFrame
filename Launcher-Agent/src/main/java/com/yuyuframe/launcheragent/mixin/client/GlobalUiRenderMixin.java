@@ -104,6 +104,8 @@ public abstract class GlobalUiRenderMixin {
                 return f.get(obj);
             } catch (NoSuchFieldException e) {
                 c = c.getSuperclass();
+            } catch (IllegalAccessException e) {
+                return null;
             }
         }
         return null;

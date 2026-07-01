@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-06-23-v64";
+    private static final String BUILD_VERSION = "2026-07-01-v67";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources

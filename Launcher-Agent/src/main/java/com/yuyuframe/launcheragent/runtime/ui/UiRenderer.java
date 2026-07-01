@@ -103,8 +103,12 @@ public final class UiRenderer {
                 glUniform1f(uRadius, radius);
             }
             drawQuad(x1, y1, x2, y2, color);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawRoundedRect: " + t);
         } finally {
-            if (useShader) glUseProgram(0);
+            try {
+                if (useShader) glUseProgram(0);
+            } catch (Throwable ignored) {}
         }
     }
 
