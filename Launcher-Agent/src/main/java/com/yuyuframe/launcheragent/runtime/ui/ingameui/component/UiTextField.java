@@ -31,6 +31,12 @@ public class UiTextField extends UiWidget {
 
     public void setFocused(boolean focused) { this.focused = focused; }
 
+    /** Remplace le contenu SANS déclencher onChange (utilisé pour resynchroniser l'affichage depuis une autre source, ex: sliders du color picker — évite une boucle de rappel). */
+    public void setText(String value) {
+        text.setLength(0);
+        if (value != null) text.append(value);
+    }
+
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,

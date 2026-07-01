@@ -78,7 +78,15 @@ public abstract class GlobalUiRenderMixin189 {
                 return;
             }
 
-            if (!(currentScreen instanceof UiDrawable)) return;
+            if (!(currentScreen instanceof UiDrawable)) {
+                // Écran NON custom ouvert (chat, inventaire, tout autre GUI
+                // vanilla/mod) — seuls les éléments HUD marqués
+                // showWhenScreenOpen restent visibles (voir HudElement, réglage
+                // générique façon OneConfig).
+                HudOverlayRenderer.renderPersistent(UiRenderer.get(GlobalUiRenderMixin189.class.getClassLoader()),
+                    inputPoller.fbWidth, inputPoller.fbHeight);
+                return;
+            }
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);

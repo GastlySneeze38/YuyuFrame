@@ -116,9 +116,14 @@ public class UiMainMenuScreen extends UiScreenBase {
             float cx = contentX + col * (cardW + CARD_GAP);
             float cy = top - row * (CARD_H + CARD_GAP) - CARD_H;
 
-            UiToggle toggle = new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(), mod::setEnabled);
-            widgets.add(toggle); // AVANT la carte : gagne le hit-test sur sa propre zone
+            // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
+            // PAR-DESSUS, sinon le fond plein de la carte le recouvrait
+            // entièrement — visible nulle part bien que toujours cliquable
+            // en dessous). ModCard.contains() exclut explicitement la zone du
+            // toggle pour que le clic dessus continue de basculer le toggle
+            // plutôt que d'ouvrir la config du mod.
             widgets.add(new ModCard(cx, cy, cardW, mod));
+            widgets.add(new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(), mod::setEnabled));
         }
     }
 
@@ -189,6 +194,17 @@ public class UiMainMenuScreen extends UiScreenBase {
         ModCard(float x, float y, float w, LauncherModule mod) {
             super(x, y, w, CARD_H);
             this.mod = mod;
+        }
+
+        // Exclut la zone du toggle (mêmes coordonnées que celles utilisées
+        // pour le construire dans rebuildAll()) : sinon un clic dessus
+        // ouvrirait la config du mod au lieu de basculer le toggle, la carte
+        // étant vérifiée en PREMIER dans la boucle de dispatch des clics.
+        @Override
+        public boolean contains(double mx, double my) {
+            if (!super.contains(mx, my)) return false;
+            float togX = x + w - 34f - 12f, togY = y + CARD_H - 18f - 10f;
+            return !(mx >= togX && mx <= togX + 34f && my >= togY && my <= togY + 18f);
         }
 
         @Override

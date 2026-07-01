@@ -23,9 +23,17 @@ public final class HudPanelRenderer {
     public static void draw(UiRenderer renderer, HudElement element, float x, float y, float w, float h, int vpWidth, int vpHeight) {
         renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
 
+        // Marges génériques (voir HudElement.paddingX/Y, façon OneConfig) —
+        // rétrécit simplement la zone de contenu utile, panneau de fond
+        // inchangé (dessiné juste au-dessus, sur x/y/w/h d'origine).
+        float cx = x + element.paddingX;
+        float cy = y + element.paddingY;
+        float cw = Math.max(0f, w - element.paddingX * 2f);
+        float ch = Math.max(0f, h - element.paddingY * 2f);
+
         if (element.customRenderer != null) {
             try {
-                element.customRenderer.draw(renderer, x, y, w, h, vpWidth, vpHeight);
+                element.customRenderer.draw(renderer, cx, cy, cw, ch, element.scale, vpWidth, vpHeight);
             } catch (Throwable ignored) {}
             return;
         }
@@ -39,10 +47,12 @@ public final class HudPanelRenderer {
         } catch (Throwable t) {
             lines = new String[]{ "--" };
         }
-        float ty = y + h - PADDING - 4f;
+        float textScale = TEXT_SCALE * element.scale;
+        float lineH = LINE_H * element.scale;
+        float ty = cy + ch - PADDING - 4f;
         for (String line : lines) {
-            renderer.drawText(line, x + PADDING, ty, UiTheme.TEXT_PRIMARY, TEXT_SCALE, vpWidth, vpHeight);
-            ty -= LINE_H;
+            renderer.drawText(line, cx + PADDING, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+            ty -= lineH;
         }
     }
 }

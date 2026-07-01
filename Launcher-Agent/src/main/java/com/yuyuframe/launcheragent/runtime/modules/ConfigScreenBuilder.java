@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.modules;
 
+import com.yuyuframe.launcheragent.runtime.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.modules.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.modules.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.modules.config.ConfigKeybind;
@@ -7,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.modules.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.modules.config.ConfigToggle;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiColorPicker;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
@@ -47,6 +49,14 @@ public final class ConfigScreenBuilder {
         LinkedHashMap<String, List<UiWidget>> byCategory = new LinkedHashMap<>();
         LinkedHashMap<String, Float> cursors = new LinkedHashMap<>();
 
+        // Réglages génériques façon OneConfig (verrouillage, échelle, marges,
+        // reset position) — PAS des champs annotés du module, directement
+        // sur le HudElement lui-même : ajoutés EN PREMIER (catégorie "HUD"),
+        // avant les éventuels réglages propres au module (voir HudElementOwner).
+        if (module instanceof HudElementOwner) {
+            addHudElementRows(byCategory, cursors, ((HudElementOwner) module).hudElement(), module, x, w);
+        }
+
         for (Field field : module.getClass().getDeclaredFields()) {
             String category = categoryOf(field);
             if (category == null) continue;
@@ -58,6 +68,32 @@ public final class ConfigScreenBuilder {
             cursors.put(category, cursor);
         }
         return byCategory;
+    }
+
+    private static void addHudElementRows(LinkedHashMap<String, List<UiWidget>> byCategory, LinkedHashMap<String, Float> cursors,
+                                           HudElement element, LauncherModule module, float x, float w) {
+        String category = "HUD";
+        List<UiWidget> rows = byCategory.computeIfAbsent(category, k -> new ArrayList<>());
+        float cursor = 0f;
+
+        cursor = toggleRow(rows, x, w, cursor, "Verrouillé",
+            "Empêche de déplacer/redimensionner cet élément dans l'éditeur de HUD.",
+            element.locked, v -> { element.locked = v; module.onConfigChanged(); });
+        cursor = toggleRow(rows, x, w, cursor, "Afficher même avec un écran ouvert",
+            "Reste visible pendant le chat, l'inventaire ou tout autre écran (sauf nos propres menus).",
+            element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); });
+        cursor = sliderRow(rows, x, w, cursor, "Échelle",
+            "Taille du contenu affiché, indépendante de la boîte elle-même.",
+            0.5f, 2f, 0.05f, element.scale, v -> { element.scale = v; module.onConfigChanged(); });
+        cursor = sliderRow(rows, x, w, cursor, "Marge horizontale",
+            "Espace entre le bord de la boîte et le contenu (X).",
+            0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); });
+        cursor = sliderRow(rows, x, w, cursor, "Marge verticale",
+            "Espace entre le bord de la boîte et le contenu (Y).",
+            0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); });
+        cursor = buttonRow(rows, x, w, cursor, "Réinitialiser la position", element::resetPosition);
+
+        cursors.put(category, cursor);
     }
 
     private static String categoryOf(Field field) {
@@ -147,6 +183,14 @@ public final class ConfigScreenBuilder {
         rowLabel(rows, x, rowY, label, tooltip);
         float kw = 90f;
         rows.add(new UiKeybindButton(x + w - kw, rowY + (ROW_H - 20f) / 2f, kw, 20f, initialKey, onChange));
+        return rowY - ROW_GAP;
+    }
+
+    /** Ligne bouton seul (pas de label à gauche, ex: "Réinitialiser la position") — pas de valeur associée, juste une action. */
+    private static float buttonRow(List<UiWidget> rows, float x, float w, float cursor, String label, Runnable action) {
+        float rowY = cursor - ROW_H;
+        float bw = 160f;
+        rows.add(new UiButton(x + w - bw, rowY + (ROW_H - 22f) / 2f, bw, 22f, label, action));
         return rowY - ROW_GAP;
     }
 

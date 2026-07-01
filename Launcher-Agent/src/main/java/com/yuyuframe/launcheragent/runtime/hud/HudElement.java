@@ -14,6 +14,16 @@ package com.yuyuframe.launcheragent.runtime.hud;
  * Position gardée UNIQUEMENT en mémoire pour cette première passe — remise
  * aux valeurs par défaut à chaque relance de l'agent (pas encore de
  * sauvegarde disque, viendra avec le chantier persistance général).
+ *
+ * {@code locked}/{@code showWhenScreenOpen}/{@code paddingX}/{@code paddingY}/
+ * {@code scale} — réglages génériques façon OneConfig (voir capture d'écran
+ * fournie par l'utilisateur de la config FPS d'OneConfig), exposés
+ * automatiquement dans la page de config d'un module qui possède un élément
+ * HUD (voir ConfigScreenBuilder + runtime.modules.HudElementOwner) — PAS
+ * repris : couleur de fond/bordure/coins personnalisés par élément (jugés
+ * superflus, le panneau partagé HudPanelRenderer suffit) et le dropdown
+ * "Position Alignment" d'OneConfig (redondant avec notre système d'ancre
+ * HudAnchor déjà en place).
  */
 public class HudElement {
 
@@ -29,11 +39,13 @@ public class HudElement {
      * {@link HudPanelRenderer} dessine TOUJOURS le panneau de fond (même
      * style que les éléments texte, pour rester cohérent dans l'éditeur comme
      * en jeu), puis délègue le CONTENU à ce renderer plutôt qu'à
-     * {@link ContentSource} quand celui-ci est fourni.
+     * {@link ContentSource} quand celui-ci est fourni. {@code scale} est le
+     * multiplicateur générique de l'élément (voir {@link HudElement#scale}) —
+     * à appliquer par le renderer à ses propres constantes de taille.
      */
     public interface CustomRenderer {
         void draw(com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer renderer,
-                  float x, float y, float w, float h, int vpWidth, int vpHeight);
+                  float x, float y, float w, float h, float scale, int vpWidth, int vpHeight);
     }
 
     public final String id;
@@ -45,6 +57,18 @@ public class HudElement {
     public HudAnchor anchor;
     public float offsetX, offsetY;
 
+    // ── Réglages génériques façon OneConfig ─────────────────────────────────
+    /** Empêche le glisser/redimensionner dans l'éditeur (voir UiHudBox). */
+    public boolean locked = false;
+    /** Reste visible même quand un écran NON custom (chat, inventaire, tout autre GUI vanilla/mod) est ouvert — voir HudOverlayRenderer.renderPersistent. */
+    public boolean showWhenScreenOpen = false;
+    public float paddingX = 0f, paddingY = 0f;
+    /** Multiplicateur de taille du CONTENU affiché, indépendant de {@code w}/{@code h} (voir HudPanelRenderer). */
+    public float scale = 1f;
+
+    private final HudAnchor defaultAnchor;
+    private final float defaultOffsetX, defaultOffsetY;
+
     public HudElement(String id, String displayName, float w, float h, HudAnchor anchor, float offsetX, float offsetY, ContentSource content) {
         this.id = id;
         this.displayName = displayName;
@@ -55,6 +79,9 @@ public class HudElement {
         this.offsetY = offsetY;
         this.content = content;
         this.customRenderer = null;
+        this.defaultAnchor = anchor;
+        this.defaultOffsetX = offsetX;
+        this.defaultOffsetY = offsetY;
     }
 
     /** Variante rendu personnalisé — voir {@link CustomRenderer}. */
@@ -68,6 +95,9 @@ public class HudElement {
         this.offsetY = offsetY;
         this.content = null;
         this.customRenderer = customRenderer;
+        this.defaultAnchor = anchor;
+        this.defaultOffsetX = offsetX;
+        this.defaultOffsetY = offsetY;
     }
 
     /** Contenu STATIQUE (texte fixe, jamais recalculé) — pratique pour un placeholder rapide sans écrire une vraie ContentSource. */
@@ -129,5 +159,12 @@ public class HudElement {
     public void setSize(float w, float h) {
         this.w = w;
         this.h = h;
+    }
+
+    /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+décalage tels que déclarés à la construction, PAS la taille (w/h, volontairement laissée telle quelle). */
+    public void resetPosition() {
+        this.anchor = defaultAnchor;
+        this.offsetX = defaultOffsetX;
+        this.offsetY = defaultOffsetY;
     }
 }

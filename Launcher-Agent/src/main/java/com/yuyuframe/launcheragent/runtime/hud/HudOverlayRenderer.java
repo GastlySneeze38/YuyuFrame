@@ -23,4 +23,20 @@ public final class HudOverlayRenderer {
             HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);
         }
     }
+
+    /**
+     * Variante appelée quand un écran NON custom (chat, inventaire, tout
+     * autre GUI vanilla/mod) est ouvert — voir le Mixin global, branché juste
+     * avant son propre "return" pour ce cas. Ne dessine QUE les éléments
+     * ayant explicitement demandé à rester visibles (voir
+     * HudElement.showWhenScreenOpen, réglage générique façon OneConfig).
+     */
+    public static void renderPersistent(UiRenderer renderer, int vpWidth, int vpHeight) {
+        for (HudElement element : HudRegistry.elements()) {
+            if (!element.showWhenScreenOpen) continue;
+            float x = element.screenX(vpWidth);
+            float y = element.screenY(vpHeight);
+            HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);
+        }
+    }
 }

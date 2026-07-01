@@ -78,7 +78,10 @@ public class UiHudBox extends UiWidget {
             renderer.drawRoundedRect(x + w - BORDER_W, y, x + w, y + h, 0, edge, vpWidth, vpHeight); // droite
         }
 
-        // Poignée de redimensionnement — coin visuellement bas-droite.
+        // Poignée de redimensionnement — cachée si l'élément est verrouillé
+        // (voir HudElement.locked, réglage générique façon OneConfig) : rien
+        // à saisir puisque pollContinuous() ignore aussi le glisser/redimensionner.
+        if (element.locked) return;
         gripHoverAnim.setTarget(resizing || overGrip(mouseX, mouseY) ? 1f : 0f);
         UiColor gripColor = UiColor.lerp(new UiColor(255, 255, 255, 100), UiTheme.ACCENT, gripHoverAnim.get());
         renderer.drawRoundedRect(x + w - GRIP_SIZE, y, x + w, y + GRIP_SIZE, 2f, gripColor, vpWidth, vpHeight);
@@ -86,6 +89,7 @@ public class UiHudBox extends UiWidget {
 
     @Override
     public void pollContinuous(UiInputPoller input) {
+        if (element.locked) return;
         if (resizing) {
             if (!input.leftDown) { resizing = false; return; }
             // Bornée des deux côtés : MIN_SIZE en bas, et jamais au-delà du

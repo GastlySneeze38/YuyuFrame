@@ -26,7 +26,7 @@ public final class PotionEffectsHudRenderer implements HudElement.CustomRenderer
     private static final float PADDING = 8f;
 
     @Override
-    public void draw(UiRenderer renderer, float x, float y, float w, float h, int vpWidth, int vpHeight) {
+    public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
@@ -43,8 +43,10 @@ public final class PotionEffectsHudRenderer implements HudElement.CustomRenderer
                 ? (Object[]) McReflect.field(effectClass, "net/minecraft/entity/effect/StatusEffect", "STATUS_EFFECTS").get(null)
                 : null;
 
+            float icon = ICON * scale, padding = PADDING * scale, lineH = LINE_H * scale;
+
             Class<?> instanceClass = null;
-            float ty = y + h - PADDING - ICON;
+            float ty = y + h - padding - icon;
             for (Object instance : effects) {
                 if (instanceClass == null) instanceClass = instance.getClass();
 
@@ -59,11 +61,11 @@ public final class PotionEffectsHudRenderer implements HudElement.CustomRenderer
                 int seconds = duration / 20;
                 String time = (seconds >= 60 ? (seconds / 60) + "m " : "") + (seconds % 60) + "s";
 
-                renderer.drawRoundedRect(x + PADDING, ty, x + PADDING + ICON, ty + ICON, ICON / 2f, effectColor(effect), vpWidth, vpHeight);
-                renderer.drawText(name, x + PADDING + ICON + 6f, ty + 1f, UiTheme.TEXT_PRIMARY, 0.36f, vpWidth, vpHeight);
-                renderer.drawText(time, x + PADDING + ICON + 6f, ty - 9f, UiTheme.TEXT_SECONDARY, 0.32f, vpWidth, vpHeight);
+                renderer.drawRoundedRect(x + padding, ty, x + padding + icon, ty + icon, icon / 2f, effectColor(effect), vpWidth, vpHeight);
+                renderer.drawText(name, x + padding + icon + 6f * scale, ty + 1f * scale, UiTheme.TEXT_PRIMARY, 0.36f * scale, vpWidth, vpHeight);
+                renderer.drawText(time, x + padding + icon + 6f * scale, ty - 9f * scale, UiTheme.TEXT_SECONDARY, 0.32f * scale, vpWidth, vpHeight);
 
-                ty -= LINE_H;
+                ty -= lineH;
             }
         } catch (Throwable ignored) {}
     }

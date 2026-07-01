@@ -40,7 +40,7 @@ public final class KeystrokesHudRenderer implements HudElement.CustomRenderer {
     private boolean prevLeftDown, prevRightDown;
 
     @Override
-    public void draw(UiRenderer renderer, float x, float y, float w, float h, int vpWidth, int vpHeight) {
+    public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
@@ -55,24 +55,27 @@ public final class KeystrokesHudRenderer implements HudElement.CustomRenderer {
 
             trackClicks();
 
-            float x0 = x + PADDING;
-            float row1Y = y + h - PADDING - BOX;
-            float row2Y = row1Y - GAP - BOX;
+            float box = BOX * scale, gap = GAP * scale, padding = PADDING * scale;
+            float cpsW = CPS_W * scale, cpsH = CPS_H * scale;
 
-            drawKey(renderer, x0 + BOX + GAP, row1Y, BOX, BOX, keyLabel(forward), isDown(forward), vpWidth, vpHeight);
-            drawKey(renderer, x0, row2Y, BOX, BOX, keyLabel(left), isDown(left), vpWidth, vpHeight);
-            drawKey(renderer, x0 + BOX + GAP, row2Y, BOX, BOX, keyLabel(back), isDown(back), vpWidth, vpHeight);
-            drawKey(renderer, x0 + 2 * (BOX + GAP), row2Y, BOX, BOX, keyLabel(right), isDown(right), vpWidth, vpHeight);
+            float x0 = x + padding;
+            float row1Y = y + h - padding - box;
+            float row2Y = row1Y - gap - box;
 
-            float nextY = row2Y - GAP;
+            drawKey(renderer, x0 + box + gap, row1Y, box, box, keyLabel(forward), isDown(forward), scale, vpWidth, vpHeight);
+            drawKey(renderer, x0, row2Y, box, box, keyLabel(left), isDown(left), scale, vpWidth, vpHeight);
+            drawKey(renderer, x0 + box + gap, row2Y, box, box, keyLabel(back), isDown(back), scale, vpWidth, vpHeight);
+            drawKey(renderer, x0 + 2 * (box + gap), row2Y, box, box, keyLabel(right), isDown(right), scale, vpWidth, vpHeight);
+
+            float nextY = row2Y - gap;
             if (showSpaceKey) {
-                nextY -= BOX;
-                drawKey(renderer, x0, nextY, 3 * BOX + 2 * GAP, BOX, "ESPACE", isDown(jump), vpWidth, vpHeight);
-                nextY -= GAP;
+                nextY -= box;
+                drawKey(renderer, x0, nextY, 3 * box + 2 * gap, box, "ESPACE", isDown(jump), scale, vpWidth, vpHeight);
+                nextY -= gap;
             }
-            nextY -= CPS_H;
-            drawCpsBox(renderer, x0, nextY, CPS_W, CPS_H, "LMB", leftClicks.size(), vpWidth, vpHeight);
-            drawCpsBox(renderer, x0 + CPS_W + GAP, nextY, CPS_W, CPS_H, "RMB", rightClicks.size(), vpWidth, vpHeight);
+            nextY -= cpsH;
+            drawCpsBox(renderer, x0, nextY, cpsW, cpsH, "LMB", leftClicks.size(), scale, vpWidth, vpHeight);
+            drawCpsBox(renderer, x0 + cpsW + gap, nextY, cpsW, cpsH, "RMB", rightClicks.size(), scale, vpWidth, vpHeight);
         } catch (Throwable ignored) {}
     }
 
@@ -132,19 +135,19 @@ public final class KeystrokesHudRenderer implements HudElement.CustomRenderer {
         while (!store.isEmpty() && now - store.peekFirst() > 1000) store.pollFirst();
     }
 
-    private void drawKey(UiRenderer renderer, float x, float y, float w, float h, String label, boolean pressed, int vpWidth, int vpHeight) {
+    private void drawKey(UiRenderer renderer, float x, float y, float w, float h, String label, boolean pressed, float scale, int vpWidth, int vpHeight) {
         renderer.drawRoundedRect(x, y, x + w, y + h, 3f, pressed ? PRESSED_BG : IDLE_BG, vpWidth, vpHeight);
-        float scale = 0.3f;
-        float tw = renderer.textWidth(label, scale);
+        float textScale = 0.3f * scale;
+        float tw = renderer.textWidth(label, textScale);
         UiColor textColor = pressed ? new UiColor(10, 10, 10, 255) : UiTheme.TEXT_PRIMARY;
-        renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 3f, textColor, scale, vpWidth, vpHeight);
+        renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 3f * scale, textColor, textScale, vpWidth, vpHeight);
     }
 
-    private void drawCpsBox(UiRenderer renderer, float x, float y, float w, float h, String label, int cps, int vpWidth, int vpHeight) {
+    private void drawCpsBox(UiRenderer renderer, float x, float y, float w, float h, String label, int cps, float scale, int vpWidth, int vpHeight) {
         renderer.drawRoundedRect(x, y, x + w, y + h, 3f, IDLE_BG, vpWidth, vpHeight);
         String text = cps + " " + label;
-        float scale = 0.3f;
-        float tw = renderer.textWidth(text, scale);
-        renderer.drawText(text, x + (w - tw) / 2f, y + h / 2f - 3f, UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
+        float textScale = 0.3f * scale;
+        float tw = renderer.textWidth(text, textScale);
+        renderer.drawText(text, x + (w - tw) / 2f, y + h / 2f - 3f * scale, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
     }
 }
