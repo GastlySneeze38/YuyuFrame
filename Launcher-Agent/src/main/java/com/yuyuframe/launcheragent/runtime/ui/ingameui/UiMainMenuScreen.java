@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.modules.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
@@ -23,12 +25,13 @@ import java.util.Locale;
  *
  * Layout entièrement reconstruit (rebuildAll) au redimensionnement de fenêtre
  * ET à chaque frappe dans la recherche — sans jamais perdre d'état, car :
- * (a) l'état "activé/désactivé" d'un mod vit dans {@link ModEntry} (externe
- * aux widgets, jamais recréé), (b) {@code searchField} est créé UNE FOIS puis
- * seulement repositionné/ré-ajouté (même instance, donc même texte/focus).
+ * (a) l'état "activé/désactivé" d'un mod vit dans le {@link LauncherModule}
+ * lui-même (externe aux widgets, jamais recréé), (b) {@code searchField} est
+ * créé UNE FOIS puis seulement repositionné/ré-ajouté (même instance, donc
+ * même texte/focus).
  *
- * Données factices ({@link #MOCK_MODS}) en attendant l'enregistrement réel
- * des mods (YuyuPvP, etc. — voir runtime.ui.modules) — voir docs/LauncherAgent/index.md.
+ * La grille vient de {@link ModuleRegistry#all()} — cet écran ne connaît plus
+ * AUCUN mod en particulier, voir docs/LauncherAgent/index.md.
  */
 public class UiMainMenuScreen extends UiScreenBase {
 
@@ -37,19 +40,6 @@ public class UiMainMenuScreen extends UiScreenBase {
     private static final float CARD_GAP = 16f;
     private static final float CARD_H = 76f;
     private static final float SEARCH_H = 24f;
-
-    private static final class ModEntry {
-        final String name, desc;
-        boolean enabled;
-        ModEntry(String name, String desc, boolean enabled) { this.name = name; this.desc = desc; this.enabled = enabled; }
-    }
-
-    private static final List<ModEntry> MOCK_MODS = new ArrayList<>();
-    static {
-        MOCK_MODS.add(new ModEntry("YuyuPvP", "Ameliorations PvP competitif", true));
-        MOCK_MODS.add(new ModEntry("HUD Custom", "Overlay d'informations en jeu", false));
-        MOCK_MODS.add(new ModEntry("Anti Ghost Fix", "Corrections rendu ghost", true));
-    }
 
     private final Object lastScreen;
     private UiTextField searchField;
@@ -110,8 +100,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         widgets.add(searchField);
 
         String filter = searchField.text().trim().toLowerCase(Locale.ROOT);
-        List<ModEntry> filtered = new ArrayList<>();
-        for (ModEntry m : MOCK_MODS) {
+        List<LauncherModule> filtered = new ArrayList<>();
+        for (LauncherModule m : ModuleRegistry.all()) {
             if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
         }
 
@@ -119,12 +109,12 @@ public class UiMainMenuScreen extends UiScreenBase {
         float top = searchField.y - 24f;
 
         for (int i = 0; i < filtered.size(); i++) {
-            ModEntry mod = filtered.get(i);
+            LauncherModule mod = filtered.get(i);
             int col = i % 2, row = i / 2;
             float cx = contentX + col * (cardW + CARD_GAP);
             float cy = top - row * (CARD_H + CARD_GAP) - CARD_H;
 
-            UiToggle toggle = new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.enabled, v -> mod.enabled = v);
+            UiToggle toggle = new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(), mod::setEnabled);
             widgets.add(toggle); // AVANT la carte : gagne le hit-test sur sa propre zone
             widgets.add(new ModCard(cx, cy, cardW, mod));
         }
@@ -183,10 +173,10 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     private final class ModCard extends UiWidget {
-        private final ModEntry mod;
+        private final LauncherModule mod;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        ModCard(float x, float y, float w, ModEntry mod) {
+        ModCard(float x, float y, float w, LauncherModule mod) {
             super(x, y, w, CARD_H);
             this.mod = mod;
         }
@@ -207,12 +197,12 @@ public class UiMainMenuScreen extends UiScreenBase {
 
             float textX = x + 12 + iconSize + 12;
             renderer.drawText(mod.name, textX, y + h - 26, UiTheme.TEXT_PRIMARY, 0.42f, vpWidth, vpHeight);
-            renderer.drawText(mod.desc, textX, y + h - 46, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
+            renderer.drawText(mod.description, textX, y + h - 46, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
         }
 
         @Override
         public void onClick() {
-            closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod.name));
+            closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod));
         }
     }
 

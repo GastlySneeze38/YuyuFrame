@@ -4,24 +4,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Registre global des éléments HUD déplaçables — un mod appellera
- * {@link #register} pour que son propre élément apparaisse dans
- * UiHudEditorScreen. Entrées factices ci-dessous en attendant qu'un vrai mod
- * (YuyuPvP, HUD Custom...) existe côté gameplay pour s'enregistrer lui-même.
+ * Registre global des éléments HUD déplaçables — un module (voir
+ * runtime.modules.LauncherModule) appelle {@link #register}/{@link #unregister}
+ * pour que son propre élément apparaisse ou non dans UiHudEditorScreen et
+ * HudOverlayRenderer, typiquement en fonction de son propre état activé/
+ * désactivé (voir runtime.modules.builtin.VanillaHudModule pour l'exemple :
+ * fps/coords/ping, portés depuis PvP-Mod). Vide par défaut — aucune donnée
+ * factice ni entrée figée en dur ici, tout vient des modules.
  */
 public final class HudRegistry {
     private HudRegistry() {}
 
     private static final List<HudElement> ELEMENTS = new ArrayList<>();
-    static {
-        ELEMENTS.add(new HudElement("fps", "FPS", 70f, 24f, HudAnchor.TOP_LEFT, 8f, 8f, "999 FPS"));
-        ELEMENTS.add(new HudElement("coords", "Coordonnées", 130f, 80f, HudAnchor.TOP_LEFT, 8f, 40f,
-            "X: 100", "Y: 70", "Z: -100", "Biome: Plains"));
-        ELEMENTS.add(new HudElement("compass", "Boussole", 110f, 24f, HudAnchor.TOP_CENTER, 0f, 8f, "Nord"));
-        ELEMENTS.add(new HudElement("ping", "Ping", 70f, 24f, HudAnchor.TOP_RIGHT, 8f, 8f, "42 ms"));
-    }
 
     public static List<HudElement> elements() { return ELEMENTS; }
 
     public static void register(HudElement element) { ELEMENTS.add(element); }
+
+    public static void unregister(HudElement element) { ELEMENTS.remove(element); }
 }

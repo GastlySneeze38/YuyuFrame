@@ -26,8 +26,14 @@ public final class HudPanelRenderer {
         // Empile les lignes depuis le HAUT du panneau (comme un vrai panneau
         // HUD à contenu variable) — pas centré verticalement, pour rester
         // cohérent quel que soit le nombre de lignes ou la hauteur choisie.
+        String[] lines;
+        try {
+            lines = element.content.lines();
+        } catch (Throwable t) {
+            lines = new String[]{ "--" };
+        }
         float ty = y + h - PADDING - 4f;
-        for (String line : element.mockLines) {
+        for (String line : lines) {
             renderer.drawText(line, x + PADDING, ty, UiTheme.TEXT_PRIMARY, TEXT_SCALE, vpWidth, vpHeight);
             ty -= LINE_H;
         }

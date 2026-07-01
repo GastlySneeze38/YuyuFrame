@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.mixin.client;
 import com.yuyuframe.launcheragent.runtime.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.modules.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
@@ -53,6 +54,10 @@ public abstract class GlobalUiRenderMixin {
                 long handle = getWindowHandle(mc);
                 if (handle == 0L) return;
                 inputPoller = new UiInputPollerModern(handle, GlobalUiRenderMixin.class.getClassLoader());
+                // Force le chargement des modules intégrés (voir ModuleRegistry) dès
+                // la première frame — sinon leurs éléments HUD (voir VanillaHudModule)
+                // ne s'enregistreraient qu'à la première ouverture du menu "YuyuFrame".
+                ModuleRegistry.all();
             }
             inputPoller.poll();
 
