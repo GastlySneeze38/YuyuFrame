@@ -61,13 +61,21 @@ export default function Console() {
   const counterRef = useRef(0)
   // Ref pour accumulation entre renders — évite setState à chaque ligne
   const pendingRef = useRef<LogLine[]>([])
-  const rafRef = useRef<number | null>(null)
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function addLine(line: string, level: 'out' | 'err') {
     pendingRef.current.push({ id: counterRef.current++, line, level })
-    if (rafRef.current === null) {
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null
+    // setTimeout, PAS requestAnimationFrame : rAF est throttlé/carrément mis en
+    // pause par le moteur WebView quand cette fenêtre n'est pas au premier
+    // plan (typiquement dès que la fenêtre du jeu prend le focus, juste après
+    // le lancement) — les lignes s'accumulaient alors indéfiniment dans
+    // pendingRef SANS jamais atteindre l'état affiché tant que la console ne
+    // revenait pas au premier plan, donnant l'impression de lignes "perdues"
+    // alors qu'elles étaient bien reçues. setTimeout continue de se déclencher
+    // même fenêtre en arrière-plan.
+    if (flushTimerRef.current === null) {
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null
         const batch = pendingRef.current.splice(0)
         if (batch.length > 0) {
           setLogs((prev) => {
@@ -75,7 +83,7 @@ export default function Console() {
             return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next
           })
         }
-      })
+      }, 16)
     }
   }
 
@@ -115,7 +123,7 @@ export default function Console() {
     })
 
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      if (flushTimerRef.current !== null) clearTimeout(flushTimerRef.current)
       unsubPromises.forEach((p) => p.then((fn) => fn()))
     }
   }, [])

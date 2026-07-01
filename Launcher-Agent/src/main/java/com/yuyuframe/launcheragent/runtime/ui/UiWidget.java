@@ -27,4 +27,13 @@ public abstract class UiWidget {
 
     /** Appelé quand ce widget est cliqué (leftClicked, curseur dans ses bounds). */
     public void onClick() {}
+
+    /**
+     * Appelé CHAQUE frame, pour tout widget (contrairement à onClick, un seul
+     * "premier widget sous le curseur" par frame) — nécessaire au drag continu
+     * (UiSlider) : leftDown doit rester suivi même quand la souris sort des
+     * bounds pendant le glissement, ce qu'un simple contains()+onClick() ne
+     * permet pas. No-op par défaut (boutons/toggles n'en ont pas besoin).
+     */
+    public void pollContinuous(UiInputPoller input) {}
 }

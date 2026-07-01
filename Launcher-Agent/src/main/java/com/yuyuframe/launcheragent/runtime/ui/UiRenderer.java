@@ -52,6 +52,10 @@ public final class UiRenderer {
     private final Map<String, Method> glMethods = new HashMap<>();
     private ClassLoader gameClassLoader;
 
+    // Un textureId GL par UiFont (REGULAR/BOLD) — uploadé une seule fois au
+    // premier drawText(), jamais régénéré ensuite (l'atlas ne change pas).
+    private final Map<UiFont, Integer> fontTextures = new HashMap<>();
+
     private static UiRenderer instance;
 
     public static UiRenderer get(ClassLoader gameClassLoader) {
@@ -178,6 +182,136 @@ public final class UiRenderer {
         }
     }
 
+    // ── Texte (police bitmap UiFont) ──────────────────────────────────────────
+
+    public float textWidth(String text, float scale) { return UiFont.REGULAR.textWidth(text, scale); }
+
+    public float textWidth(UiFont font, String text, float scale) { return font.textWidth(text, scale); }
+
+    public void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
+        drawText(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight);
+    }
+
+    /**
+     * Dessine {@code text} avec la ligne de base à {@code y} (espace pixels
+     * framebuffer, origine bas-gauche — comme drawRoundedRect). Pas de shader
+     * dédié : la teinte vient de glColor4f combiné à la texture (alpha de
+     * l'atlas, RGB blanc uni) via GL_MODULATE, la technique standard de police
+     * bitmap en pipeline fixe — posé explicitement plutôt que supposé, au cas
+     * où le jeu aurait laissé GL_TEXTURE_ENV_MODE sur autre chose (GL_REPLACE
+     * ferait disparaître toute teinte, GL_DECAL casserait l'alpha).
+     */
+    public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
+                          int vpWidth, int vpHeight) {
+        if (text == null || text.isEmpty()) return;
+        int texId = ensureFontTexture(font);
+        if (texId < 0) return;
+
+        try {
+            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
+            glEnable(0x0DE1);  // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            glBindTexture(0x0DE1, texId);
+            glTexEnvi(0x2300, 0x2200, 0x2100); // GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            loadIdentity();
+
+            glColor4f(color.r, color.g, color.b, color.a);
+
+            float penX = x;
+            float yTop = y + font.ascent * scale;
+            float yBottom = y - font.descent * scale;
+            glBegin(7); // GL_QUADS
+            for (int i = 0; i < text.length(); i++) {
+                UiFont.Glyph g = font.glyph(text.charAt(i));
+                float gw = g.width * scale;
+                glTexCoord2f(g.u0, g.v0); glVertex2f(penX, yTop);
+                glTexCoord2f(g.u0, g.v1); glVertex2f(penX, yBottom);
+                glTexCoord2f(g.u1, g.v1); glVertex2f(penX + gw, yBottom);
+                glTexCoord2f(g.u1, g.v0); glVertex2f(penX + gw, yTop);
+                penX += g.advance * scale;
+            }
+            glEnd();
+
+            matrixMode(0x1700);
+            popMatrix();
+            matrixMode(0x1701);
+            popMatrix();
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawText: " + t);
+        } finally {
+            try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
+            try { popAttrib(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private int ensureFontTexture(UiFont font) {
+        Integer cached = fontTextures.get(font);
+        if (cached != null) return cached;
+        try {
+            java.awt.image.BufferedImage img = font.atlasImage();
+            int w = img.getWidth(), h = img.getHeight();
+
+            // BufferedImage.getRGB renvoie du ARGB par ligne (row 0 = haut) —
+            // reconverti en RGBA 1 octet/composante, ordre attendu par
+            // glTexImage2D(GL_RGBA, GL_UNSIGNED_BYTE, ...). Row 0 uploadée en
+            // premier = mappée à v=0 : cohérent avec la construction des UV
+            // dans UiFont (v0 = haut du glyphe), donc AUCUN flip nécessaire ici.
+            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
+            int[] row = new int[w];
+            for (int y = 0; y < h; y++) {
+                img.getRGB(0, y, w, 1, row, 0, w);
+                for (int x = 0; x < w; x++) {
+                    int argb = row[x];
+                    buf.put((byte) ((argb >> 16) & 0xFF)); // R
+                    buf.put((byte) ((argb >> 8) & 0xFF));  // G
+                    buf.put((byte) (argb & 0xFF));         // B
+                    buf.put((byte) ((argb >> 24) & 0xFF)); // A
+                }
+            }
+            buf.flip();
+
+            int texId = glGenTextures();
+            glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
+            glTexParameteri(0x0DE1, 0x2801, 0x2600); // GL_TEXTURE_MIN_FILTER, GL_NEAREST
+            glTexParameteri(0x0DE1, 0x2800, 0x2600); // GL_TEXTURE_MAG_FILTER, GL_NEAREST
+            glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+            glBindTexture(0x0DE1, 0);
+
+            fontTextures.put(font, texId);
+            LauncherLog.ui(1, "[UiRenderer] atlas police uploadé (" + w + "x" + h + "), texId=" + texId);
+            return texId;
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] ensureFontTexture: " + t);
+            fontTextures.put(font, -1);
+            return -1;
+        }
+    }
+
+    // ── Scissor (clipping rectangulaire — utilisé par UiScrollContainer) ─────
+
+    public void beginScissor(int x, int y, int w, int h) {
+        try {
+            glEnable(0x0C11); // GL_SCISSOR_TEST
+            glScissor(x, y, w, h);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] beginScissor: " + t);
+        }
+    }
+
+    public void endScissor() {
+        try { glDisable(0x0C11); } catch (Throwable ignored) {}
+    }
+
     // ── GL calls via réflexion (org.lwjgl.opengl.GL20/GL11 — noms publics,
     // pas obfusqués, identiques LWJGL2/LWJGL3, donc pas besoin de MappingsRegistry) ──
 
@@ -266,5 +400,29 @@ public final class UiRenderer {
     private void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glOrtho", double.class, double.class, double.class, double.class, double.class, double.class)
             .invoke(null, left, right, bottom, top, near, far);
+    }
+    private void glTexCoord2f(float u, float v) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glTexCoord2f", float.class, float.class).invoke(null, u, v);
+    }
+    private int glGenTextures() throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL11", "glGenTextures").invoke(null);
+    }
+    private void glBindTexture(int target, int texture) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glBindTexture", int.class, int.class).invoke(null, target, texture);
+    }
+    private void glTexParameteri(int target, int pname, int param) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glTexParameteri", int.class, int.class, int.class).invoke(null, target, pname, param);
+    }
+    private void glTexImage2D(int target, int level, int internalFormat, int width, int height, int border,
+                               int format, int type, java.nio.ByteBuffer pixels) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glTexImage2D", int.class, int.class, int.class, int.class, int.class,
+            int.class, int.class, int.class, java.nio.ByteBuffer.class)
+            .invoke(null, target, level, internalFormat, width, height, border, format, type, pixels);
+    }
+    private void glTexEnvi(int target, int pname, int param) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glTexEnvi", int.class, int.class, int.class).invoke(null, target, pname, param);
+    }
+    private void glScissor(int x, int y, int w, int h) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glScissor", int.class, int.class, int.class, int.class).invoke(null, x, y, w, h);
     }
 }

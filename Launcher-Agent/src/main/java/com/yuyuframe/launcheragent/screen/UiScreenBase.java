@@ -2,10 +2,10 @@ package com.yuyuframe.launcheragent.screen;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.screen.ScreenHelper;
-import com.yuyuframe.launcheragent.runtime.ui.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.UiWidget;
 import net.minecraft.client.gui.screens.Screen;
 
@@ -25,8 +25,6 @@ import java.util.List;
  * (pause, curseur libéré) — tout le reste passe par GlobalUiRenderMixin.
  */
 public abstract class UiScreenBase extends Screen implements UiDrawable {
-
-    private static final UiColor BACKGROUND = new UiColor(0, 0, 0, 160);
 
     protected final List<UiWidget> widgets = new ArrayList<>();
     protected int screenWidth, screenHeight; // pixels framebuffer, mis à jour chaque frame — voir uiPollInput()
@@ -48,6 +46,17 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         screenWidth = input.fbWidth;
         screenHeight = input.fbHeight;
 
+        // Continu — CHAQUE widget, chaque frame, indépendamment du clic (drag
+        // de slider, capture de touche en cours...). Séparé du dispatch de
+        // clic ci-dessous : pollContinuous ne référence jamais onClick.
+        for (UiWidget w : widgets) {
+            try {
+                w.pollContinuous(input);
+            } catch (Throwable t) {
+                LauncherLog.err("[UiScreenBase] pollContinuous: " + t);
+            }
+        }
+
         if (!input.leftClicked) return;
         for (UiWidget w : widgets) {
             if (w.contains(input.mouseX, input.mouseY)) {
@@ -65,7 +74,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     public void uiDraw(double mouseX, double mouseY) {
         try {
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
-            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, BACKGROUND, screenWidth, screenHeight);
+            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, UiTheme.OVERLAY_BG, screenWidth, screenHeight);
             for (UiWidget w : widgets) {
                 w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             }

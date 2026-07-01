@@ -18,6 +18,17 @@ public final class LauncherLog {
 
     private LauncherLog() {}
 
+    // Référence figée à System.out/err AU CHARGEMENT DE CETTE CLASSE (donc au
+    // tout premier appel de LauncherAgent.premain(), avant tout autre code) —
+    // PAS System.out/err lus dynamiquement à chaque appel. Si quoi que ce soit
+    // plus tard dans le bootstrap (Mixin, LWJGL, SoundSystem...) appelle
+    // System.setOut()/setErr() pour rediriger le flux vers un autre
+    // PrintStream, nos logs continuent d'écrire vers le flux ORIGINAL
+    // (toujours connecté au pipe que Rust lit), au lieu de silencieusement
+    // suivre la redirection et disparaître de ce que le launcher capture.
+    private static final java.io.PrintStream ORIGINAL_OUT = System.out;
+    private static final java.io.PrintStream ORIGINAL_ERR = System.err;
+
     /** Modification d'UI Minecraft — ScreenHelper, mixins clients. */
     public static volatile int UI    = 3;
     /** Patches ASM au démarrage. */
@@ -104,12 +115,12 @@ public final class LauncherLog {
     public static void content(int lvl, String msg) { log("CONTENT", CONTENT, lvl, msg); }
 
     public static void info(String msg) {
-        System.out.println(msg);
+        ORIGINAL_OUT.println(msg);
         toFile(msg);
     }
 
     public static Fatal fatal(String msg) {
-        System.err.println("[FATAL] " + msg);
+        ORIGINAL_ERR.println("[FATAL] " + msg);
         toFile("[FATAL] " + msg);
         throw new Fatal(msg);
     }
@@ -118,8 +129,8 @@ public final class LauncherLog {
         public Fatal(String msg) { super(msg); }
     }
 
-    public static void err(String msg)  { System.err.println("[ERR] " + msg); toFile("[ERR] " + msg); }
-    public static void warn(String msg) { System.err.println("[WARN] " + msg); toFile("[WARN] " + msg); }
+    public static void err(String msg)  { ORIGINAL_ERR.println("[ERR] " + msg); toFile("[ERR] " + msg); }
+    public static void warn(String msg) { ORIGINAL_ERR.println("[WARN] " + msg); toFile("[WARN] " + msg); }
 
     private static void log(String category, int threshold, int level, String msg) {
         String line = (level >= 3 ? "[!] " : "")
@@ -127,7 +138,7 @@ public final class LauncherLog {
                     + msg;
         toFile(line);
         if (threshold == 0 || level < threshold) return;
-        System.out.println(line);
+        ORIGINAL_OUT.println(line);
     }
 
     // ── Fichier permanent, indépendant de la capture console (peu fiable) ────
