@@ -8,7 +8,8 @@
   "mixins": [],
   "client": [
     "client.v1_8.TitleScreenMixin189",
-    "client.v1_8.EntityCullingMixin"
+    "client.v1_8.EntityCullingMixin",
+    "client.v1_8.GlobalUiRenderMixin189"
   ],
   "injectors": {
     "defaultRequire": 1

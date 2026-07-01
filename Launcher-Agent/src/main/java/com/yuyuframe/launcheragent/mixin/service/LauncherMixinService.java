@@ -149,6 +149,11 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "<init>",
             "(Lnet/minecraft/client/gui/screen/Screen;Lnet/minecraft/client/option/GameOptions;)V",
             null),
+        // render() déclaré directement sur GameRenderer — pas de repli. Point
+        // d'accroche global du moteur UI custom, voir GlobalUiRenderMixin.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiRenderMixin",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
     };
 
     /**
