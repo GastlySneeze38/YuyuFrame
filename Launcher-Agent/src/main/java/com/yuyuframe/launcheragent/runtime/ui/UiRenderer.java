@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
+import com.yuyuframe.launcheragent.runtime.log.DiagFile;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
 import java.lang.reflect.Method;
@@ -48,6 +49,7 @@ public final class UiRenderer {
     private int uRect = -1;
     private int uRadius = -1;
     private boolean initFailed = false;
+    private boolean diagOnce = true; // TEMPORAIRE (diagnostic) — retirer une fois validé en jeu
 
     private final Map<String, Method> glMethods = new HashMap<>();
     private ClassLoader gameClassLoader;
@@ -81,9 +83,14 @@ public final class UiRenderer {
 
             LauncherLog.ui(1, "[UiRenderer] shader compilé, program=" + program
                 + " uRect=" + uRect + " uRadius=" + uRadius);
+            DiagFile.log("UiRenderer.ensureInit OK, program=" + program + " uRect=" + uRect + " uRadius=" + uRadius);
         } catch (Throwable t) {
             initFailed = true;
             LauncherLog.err("[UiRenderer] échec compilation shader — repli sur rects non arrondis : " + t);
+            DiagFile.log("UiRenderer.ensureInit EXCEPTION: " + t);
+            java.io.StringWriter sw = new java.io.StringWriter();
+            t.printStackTrace(new java.io.PrintWriter(sw));
+            DiagFile.log(sw.toString());
         }
     }
 
@@ -97,17 +104,40 @@ public final class UiRenderer {
         boolean useShader = program != -1 && !initFailed;
 
         try {
+            // État GL hérité de ce que le jeu a laissé à ce point précis du
+            // render loop (texture encore bindée, depth test actif, blend non
+            // configuré pour notre alpha...) — glPushAttrib/glPopAttrib
+            // (legacy OpenGL, dispo GL2.1+) isole notre dessin sans affecter
+            // la frame suivante du jeu.
+            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
+            glDisable(0x0DE1); // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
             if (useShader) {
                 glUseProgram(program);
                 glUniform4f(uRect, x1, y1, x2, y2);
                 glUniform1f(uRadius, radius);
             }
             drawQuad(x1, y1, x2, y2, color);
+            if (diagOnce) {
+                diagOnce = false;
+                DiagFile.log("drawRoundedRect OK — (" + x1 + "," + y1 + ")-(" + x2 + "," + y2
+                    + ") radius=" + radius + " useShader=" + useShader);
+            }
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawRoundedRect: " + t);
+            DiagFile.log("drawRoundedRect EXCEPTION: " + t);
+            java.io.StringWriter sw = new java.io.StringWriter();
+            t.printStackTrace(new java.io.PrintWriter(sw));
+            DiagFile.log(sw.toString());
         } finally {
             try {
                 if (useShader) glUseProgram(0);
+            } catch (Throwable ignored) {}
+            try {
+                popAttrib();
             } catch (Throwable ignored) {}
         }
     }
@@ -183,5 +213,20 @@ public final class UiRenderer {
     }
     private void glEnd() throws Exception {
         gl("org.lwjgl.opengl.GL11", "glEnd").invoke(null);
+    }
+    private void glEnable(int cap) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glEnable", int.class).invoke(null, cap);
+    }
+    private void glDisable(int cap) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glDisable", int.class).invoke(null, cap);
+    }
+    private void glBlendFunc(int sfactor, int dfactor) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glBlendFunc", int.class, int.class).invoke(null, sfactor, dfactor);
+    }
+    private void pushAttrib(int mask) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glPushAttrib", int.class).invoke(null, mask);
+    }
+    private void popAttrib() throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glPopAttrib").invoke(null);
     }
 }

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.agent;
 
 import com.yuyuframe.launcheragent.mixin.service.LauncherMixinService;
+import com.yuyuframe.launcheragent.runtime.log.DiagFile;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
@@ -49,10 +50,14 @@ public final class IsolatedBootstrap {
      * @param mcVersion version Minecraft détectée par MinecraftVersionDetector.
      */
     public static void start(Instrumentation inst, String yarnPath, boolean fabric, String mcVersion) {
+        System.err.println("[LauncherAgent-DIAG] IsolatedBootstrap.start ENTER (fabric=" + fabric + ", mcVersion=" + mcVersion + ")");
+        DiagFile.log("IsolatedBootstrap.start ENTER (fabric=" + fabric + ", mcVersion=" + mcVersion + ")");
         LauncherLog.agent(1, "[LauncherAgent] IsolatedBootstrap.start (classloader=" + IsolatedBootstrap.class.getClassLoader()
             + ", fabric=" + fabric + ", version=" + mcVersion + ")");
 
         boolean legacy189 = MinecraftVersionDetector.isLegacy189(mcVersion);
+        System.err.println("[LauncherAgent-DIAG] legacy189=" + legacy189);
+        DiagFile.log("legacy189=" + legacy189);
 
         MappingsRegistry.setScheme(fabric
             ? MappingsRegistry.Scheme.INTERMEDIARY
@@ -60,7 +65,11 @@ public final class IsolatedBootstrap {
 
         LauncherMixinService.setInstrumentation(inst);
 
+        System.err.println("[LauncherAgent-DIAG] avant loadYarnMappings");
+        DiagFile.log("avant loadYarnMappings");
         loadYarnMappings(yarnPath, legacy189);
+        System.err.println("[LauncherAgent-DIAG] après loadYarnMappings, isLoaded=" + MappingsRegistry.isLoaded());
+        DiagFile.log("après loadYarnMappings, isLoaded=" + MappingsRegistry.isLoaded());
 
         // Log de sanité : vérifie que la classe principale de la version est bien mappée.
         // Même nom Yarn named "TitleScreen" sur les deux branches — Legacy Fabric
@@ -81,16 +90,30 @@ public final class IsolatedBootstrap {
         // vanilla). refmapMethodReplacement() est scheme-aware (voir
         // LauncherMixinService) : nom officiel brut en vanilla, intermediary
         // sous Fabric — un seul mécanisme couvre les deux cas.
+        System.err.println("[LauncherAgent-DIAG] avant writeRefmapFile");
+        DiagFile.log("avant writeRefmapFile");
         writeRefmapFile(inst, fabric);
+        System.err.println("[LauncherAgent-DIAG] après writeRefmapFile");
+        DiagFile.log("après writeRefmapFile");
 
         // Sélection du fichier de config Mixin selon la version MC.
         String mixinConfig = legacy189
             ? "mixins.launcheragent-1.8.json"
             : "mixins.launcheragent.json";
 
+        System.err.println("[LauncherAgent-DIAG] avant discoverMixinTargets (" + mixinConfig + ")");
+        DiagFile.log("avant discoverMixinTargets (" + mixinConfig + ")");
         Set<String> mixinTargets = discoverMixinTargets(mixinConfig);
-        bootstrapMixin(inst, mixinTargets, mixinConfig);
+        System.err.println("[LauncherAgent-DIAG] après discoverMixinTargets: " + mixinTargets);
+        DiagFile.log("après discoverMixinTargets: " + mixinTargets);
+        System.err.println("[LauncherAgent-DIAG] avant bootstrapMixin");
+        DiagFile.log("avant bootstrapMixin");
+        boolean bootOk = bootstrapMixin(inst, mixinTargets, mixinConfig);
+        System.err.println("[LauncherAgent-DIAG] après bootstrapMixin, ok=" + bootOk);
+        DiagFile.log("après bootstrapMixin, ok=" + bootOk);
         scheduleDelayedRetransform(inst, mixinTargets);
+        System.err.println("[LauncherAgent-DIAG] IsolatedBootstrap.start EXIT");
+        DiagFile.log("IsolatedBootstrap.start EXIT");
     }
 
     /**
@@ -140,6 +163,7 @@ public final class IsolatedBootstrap {
             LauncherLog.agent(1, "[LauncherAgent] refmap contenu : " + json);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] writeRefmapFile: " + t);
+            DiagFile.log("writeRefmapFile EXCEPTION: " + t);
         }
     }
 
@@ -158,7 +182,9 @@ public final class IsolatedBootstrap {
     /** @return true si le bootstrap a réussi. */
     private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig) {
         try {
+            DiagFile.log("bootstrapMixin: avant MixinBootstrap.init()");
             MixinBootstrap.init();
+            DiagFile.log("bootstrapMixin: après MixinBootstrap.init()");
 
             if (MappingsRegistry.isLoaded()) {
                 MixinEnvironment.getDefaultEnvironment().getRemappers().add(MappingsRegistry.INSTANCE);
@@ -173,12 +199,16 @@ public final class IsolatedBootstrap {
                 LauncherLog.agent(1, "[LauncherAgent] gotoPhase(DEFAULT) OK");
             } catch (Exception ex) {
                 LauncherLog.warn("[LauncherAgent] gotoPhase(DEFAULT) erreur: " + ex);
+                DiagFile.log("gotoPhase erreur: " + ex);
             }
 
+            DiagFile.log("bootstrapMixin: avant Mixins.addConfiguration(" + mixinConfig + ")");
             Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
             LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + mixinConfig);
+            DiagFile.log("bootstrapMixin: après Mixins.addConfiguration");
 
             LauncherMixinService.installWrapper();
+            DiagFile.log("bootstrapMixin: après installWrapper");
 
             try {
                 java.lang.reflect.Method injectMethod =
@@ -186,17 +216,25 @@ public final class IsolatedBootstrap {
                 injectMethod.setAccessible(true);
                 injectMethod.invoke(null);
                 LauncherLog.agent(1, "[LauncherAgent] MixinBootstrap.inject() OK");
+                DiagFile.log("bootstrapMixin: MixinBootstrap.inject() OK");
             } catch (Exception ex) {
                 LauncherLog.warn("[LauncherAgent] inject() non accessible: " + ex.getMessage());
+                DiagFile.log("bootstrapMixin: inject() erreur: " + ex);
             }
 
+            DiagFile.log("bootstrapMixin: avant retransformLoadedTargets, targets=" + mixinTargets);
             retransformLoadedTargets(inst, mixinTargets);
+            DiagFile.log("bootstrapMixin: après retransformLoadedTargets");
             return true;
         } catch (Throwable e) {
             // Throwable, pas Exception : certains échecs Mixin (ex: MixinInitialisationError)
             // sont des Error, pas des Exception.
             LauncherLog.err("[LauncherAgent] ERREUR Mixin bootstrap : " + e.getMessage());
             e.printStackTrace(System.err);
+            DiagFile.log("bootstrapMixin EXCEPTION: " + e);
+            java.io.StringWriter sw = new java.io.StringWriter();
+            e.printStackTrace(new java.io.PrintWriter(sw));
+            DiagFile.log(sw.toString());
             return false;
         }
     }
@@ -313,7 +351,11 @@ public final class IsolatedBootstrap {
                     int arrEnd = json.indexOf(']', arrStart);
                     if (arrStart < 0 || arrEnd < 0) continue;
 
-                    Matcher m = Pattern.compile("\"([A-Za-z][A-Za-z0-9$.]+)\"")
+                    // "_" inclus : requis par le package v1_8 (Mixins 1.8.9) — sans
+                    // lui, "client.v1_8.XXX" ne matche jamais (aucune erreur ni
+                    // warning déclenché non plus : targets reste juste vide en
+                    // silence, bug découvert via diagnostic fichier, voir diag.log).
+                    Matcher m = Pattern.compile("\"([A-Za-z][A-Za-z0-9$._]+)\"")
                             .matcher(json.substring(arrStart + 1, arrEnd));
                     while (m.find()) {
                         String entry = m.group(1);

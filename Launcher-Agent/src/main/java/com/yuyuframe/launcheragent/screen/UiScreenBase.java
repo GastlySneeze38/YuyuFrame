@@ -8,7 +8,6 @@ import com.yuyuframe.launcheragent.runtime.ui.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.UiWidget;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,8 +31,16 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     protected final List<UiWidget> widgets = new ArrayList<>();
     protected int screenWidth, screenHeight; // pixels framebuffer, mis à jour chaque frame — voir uiPollInput()
 
+    /**
+     * Constructeur no-arg de Screen (PAS Screen(Component title)) — ce dernier
+     * n'existe pas forcément sur toutes les versions (ex: absent en 1.8.9,
+     * observé via NoSuchMethodError: axu.<init>(Leu;)V lors du premier test en
+     * jeu). Notre écran ne s'appuie de toute façon jamais sur le rendu de
+     * titre intégré de Screen — {@code title} n'est conservé ici que pour un
+     * usage éventuel (logs, debug), jamais transmis à la superclasse.
+     */
     protected UiScreenBase(String title) {
-        super((Component) ScreenHelper.literal(title));
+        super();
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.agent;
 
+import com.yuyuframe.launcheragent.runtime.log.DiagFile;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 
@@ -27,9 +28,27 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-01-v73";
+    private static final String BUILD_VERSION = "2026-07-01-v81";
 
     public static void premain(String agentArgs, Instrumentation inst) {
+        // TEMPORAIRE (diagnostic) : println direct, bypass LauncherLog, pour
+        // localiser précisément où l'exécution s'arrête si aucun autre log
+        // n'apparaît — retirer une fois le pipeline 1.8.9 validé en jeu.
+        System.err.println("[LauncherAgent-DIAG] premain() ENTER");
+        DiagFile.log("premain() ENTER");
+        try {
+            premain0(agentArgs, inst);
+            System.err.println("[LauncherAgent-DIAG] premain() EXIT (normal)");
+            DiagFile.log("premain() EXIT (normal)");
+        } catch (Throwable t) {
+            System.err.println("[LauncherAgent-DIAG] premain() EXCEPTION NON CAPTURÉE :");
+            t.printStackTrace(System.err);
+            DiagFile.log("premain() EXCEPTION: " + t);
+            throw t;
+        }
+    }
+
+    private static void premain0(String agentArgs, Instrumentation inst) {
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources
         // (validParentCodeSources) — sinon KnotClassDelegate.loadClass() refuse de
         // résoudre toute classe dont le jar (launcher-agent.jar, ajouté via
@@ -80,12 +99,14 @@ public class LauncherAgent {
                 new java.io.File(agentJarFile, "launcher-agent.jar").getAbsolutePath());
         }
 
+        System.err.println("[LauncherAgent-DIAG] avant IsolatedBootstrap.start (fabric=" + fabric + ", mcVersion=" + mcVersion + ")");
         if (fabric) {
             LauncherLog.agent(1, "[LauncherAgent] Fabric détecté — bootstrap Mixin via classloader isolé");
             startIsolated(inst, config.yarnPath, mcVersion);
         } else {
             IsolatedBootstrap.start(inst, config.yarnPath, false, mcVersion);
         }
+        System.err.println("[LauncherAgent-DIAG] après IsolatedBootstrap.start");
 
         LauncherLog.agent(3, "[LauncherAgent] Prêt — en attente du chargement Minecraft");
     }
