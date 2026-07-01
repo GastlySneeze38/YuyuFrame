@@ -1,6 +1,7 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { invoke } from '@tauri-apps/api/core'
 
 interface LogLine {
   id: number
@@ -103,6 +104,15 @@ export default function Console() {
         }
       }),
     ]
+
+    // Signale au backend que le listener game_log est bien attaché — débloque
+    // l'attente posée côté Rust (register_console_waiter dans launch_game),
+    // qui sinon pouvait émettre ses tout premiers logs avant que ce listener
+    // n'existe (lancement rapide, ex: 1.8.9 vanilla tout en cache), les
+    // perdant silencieusement.
+    Promise.all(unsubPromises).then(() => {
+      invoke('console_ready', { consoleLabel: win.label }).catch(() => {})
+    })
 
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)

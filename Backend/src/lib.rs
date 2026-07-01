@@ -126,6 +126,7 @@ pub fn run() {
             commands::versions::list_versions,
             commands::launch::launch_game,
             commands::launch::reload_agent,
+            commands::launch::console_ready,
             commands::mods::mods_list,
             commands::mods::mods_toggle,
             commands::mods::mods_delete,

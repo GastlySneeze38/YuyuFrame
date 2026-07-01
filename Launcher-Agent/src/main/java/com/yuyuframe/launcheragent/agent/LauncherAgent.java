@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-01-v86";
+    private static final String BUILD_VERSION = "2026-07-01-v87";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -40,6 +40,14 @@ public class LauncherAgent {
     }
 
     private static void premain0(String agentArgs, Instrumentation inst) {
+        // Tout premier appel : lit launcher-agent.properties (log.agent=1 etc.)
+        // et applique les seuils AVANT le moindre autre log. Sans ça, les
+        // seuils restent à leur valeur par défaut (3 = critique seul) jusqu'à
+        // ce que LauncherMixinConfigPlugin.onLoad() charge la même config —
+        // qui n'arrive QUE tard dans le bootstrap Mixin, bien après la
+        // plupart des logs de démarrage utiles (voir LauncherLog.loadConfigFromDefaultLocations).
+        LauncherLog.loadConfigFromDefaultLocations(LauncherAgent.class.getClassLoader());
+
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources
         // (validParentCodeSources) — sinon KnotClassDelegate.loadClass() refuse de
         // résoudre toute classe dont le jar (launcher-agent.jar, ajouté via

@@ -37,6 +37,52 @@ public final class LauncherLog {
         SHOW_CATEGORY = boolProp(p, "log.show_category", SHOW_CATEGORY);
     }
 
+    private static final String PROPS_FILENAME = "launcher-agent.properties";
+
+    /**
+     * Lit launcher-agent.properties (JAR embarqué, puis externe qui prend le
+     * dessus) et applique aussitôt les seuils — appelé en tout premier dans
+     * LauncherAgent.premain(), AVANT le moindre autre log.
+     *
+     * Sans cet appel précoce, les seuils restent à leur valeur par défaut (3 =
+     * critique seul) jusqu'à ce que LauncherMixinConfigPlugin.onLoad() charge
+     * la même config, ce qui n'arrive QUE tard dans le bootstrap (à
+     * l'intérieur de Mixins.addConfiguration(), après loadYarnMappings/
+     * writeRefmapFile/discoverMixinTargets) — la quasi-totalité des logs de
+     * démarrage utiles (niveau 1/2) se retrouvait donc filtrée de la console
+     * avant même que log.agent=1 (etc.) ne soit lu, alors que le fichier de
+     * log (toFile(), toujours écrit) les contenait déjà tous. onLoad()
+     * continue d'appeler loadConfig() une seconde fois — redondant mais sans
+     * risque, et nécessaire pour capter un fichier externe déposé/modifié
+     * entre l'appel précoce et le chargement de la config Mixin.
+     */
+    public static void loadConfigFromDefaultLocations(ClassLoader cl) {
+        loadConfig(loadPropertiesFromDefaultLocations(cl));
+    }
+
+    /** Réutilisé par LauncherMixinConfigPlugin (a aussi besoin des Properties brutes pour ses propres clés). */
+    public static java.util.Properties loadPropertiesFromDefaultLocations(ClassLoader cl) {
+        java.util.Properties props = new java.util.Properties();
+
+        try (java.io.InputStream is = cl.getResourceAsStream(PROPS_FILENAME)) {
+            if (is != null) props.load(is);
+        } catch (Exception ignored) {}
+
+        String externPath = System.getenv("APPDATA") != null
+            ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\" + PROPS_FILENAME
+            : null;
+        if (externPath != null) {
+            java.io.File external = new java.io.File(externPath);
+            if (external.exists()) {
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(external)) {
+                    props.load(fis);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        return props;
+    }
+
     private static int intProp(java.util.Properties p, String key, int fallback) {
         try { return Integer.parseInt(p.getProperty(key, String.valueOf(fallback)).trim()); }
         catch (NumberFormatException ignored) { return fallback; }
