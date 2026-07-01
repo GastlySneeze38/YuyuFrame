@@ -1,6 +1,5 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
-import com.yuyuframe.launcheragent.runtime.log.DiagFile;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
 import java.lang.reflect.Method;
@@ -49,7 +48,6 @@ public final class UiRenderer {
     private int uRect = -1;
     private int uRadius = -1;
     private boolean initFailed = false;
-    private boolean diagOnce = true; // TEMPORAIRE (diagnostic) — retirer une fois validé en jeu
 
     private final Map<String, Method> glMethods = new HashMap<>();
     private ClassLoader gameClassLoader;
@@ -83,14 +81,9 @@ public final class UiRenderer {
 
             LauncherLog.ui(1, "[UiRenderer] shader compilé, program=" + program
                 + " uRect=" + uRect + " uRadius=" + uRadius);
-            DiagFile.log("UiRenderer.ensureInit OK, program=" + program + " uRect=" + uRect + " uRadius=" + uRadius);
         } catch (Throwable t) {
             initFailed = true;
             LauncherLog.err("[UiRenderer] échec compilation shader — repli sur rects non arrondis : " + t);
-            DiagFile.log("UiRenderer.ensureInit EXCEPTION: " + t);
-            java.io.StringWriter sw = new java.io.StringWriter();
-            t.printStackTrace(new java.io.PrintWriter(sw));
-            DiagFile.log(sw.toString());
         }
     }
 
@@ -159,17 +152,8 @@ public final class UiRenderer {
             popMatrix();
             matrixMode(0x1701); // GL_PROJECTION
             popMatrix();
-            if (diagOnce) {
-                diagOnce = false;
-                DiagFile.log("drawRoundedRect OK — (" + x1 + "," + y1 + ")-(" + x2 + "," + y2
-                    + ") radius=" + radius + " useShader=" + useShader);
-            }
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawRoundedRect: " + t);
-            DiagFile.log("drawRoundedRect EXCEPTION: " + t);
-            java.io.StringWriter sw = new java.io.StringWriter();
-            t.printStackTrace(new java.io.PrintWriter(sw));
-            DiagFile.log(sw.toString());
         } finally {
             try {
                 if (useShader) glUseProgram(0);

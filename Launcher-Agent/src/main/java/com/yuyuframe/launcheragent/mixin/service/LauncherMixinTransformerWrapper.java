@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.service;
 
 import com.yuyuframe.launcheragent.mixin.service.transformer.ScreenStubPatcher;
-import com.yuyuframe.launcheragent.runtime.log.DiagFile;
 import org.spongepowered.asm.mixin.transformer.IMixinTransformer;
 
 import java.lang.instrument.ClassFileTransformer;
@@ -34,12 +33,6 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         this.transformer = transformer;
     }
 
-    // TEMPORAIRE (diagnostic pipeline 1.8.9) — cibles obfusquées connues de ce
-    // test (TitleScreen=aya, EntityRenderDispatcher=biu, GameRenderer=bfk) —
-    // retirer une fois validé en jeu.
-    private static final java.util.Set<String> DIAG_TARGETS = new java.util.HashSet<String>(
-        java.util.Arrays.asList("aya", "biu", "bfk"));
-
     @Override
     public byte[] transform(ClassLoader loader, String className,
                             Class<?> classBeingRedefined,
@@ -47,9 +40,6 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
                             byte[] classfileBuffer) {
         if (classfileBuffer == null || className == null) return null;
         if (isBootstrapPackage(className)) return null;
-
-        boolean diag = DIAG_TARGETS.contains(className);
-        if (diag) DiagFile.log("transform() APPELÉ pour " + className + " (taille=" + classfileBuffer.length + ")");
 
         // ── Nos propres écrans : remap stubs Screen / Text ───────────────────
         if (STUB_PATCHED_SCREENS.contains(className)) {
@@ -60,22 +50,7 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         String obfDot = className.replace('/', '.');
         String yarnNamed = com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.INSTANCE.unmap(className);
 
-        if (diag) DiagFile.log("transform() " + className + " → obfDot=" + obfDot + " yarnNamed=" + yarnNamed);
-
-        try {
-            byte[] result = transformer.transformClassBytes(obfDot, yarnNamed.replace('/', '.'), classfileBuffer);
-            if (diag) DiagFile.log("transform() " + className + " résultat: "
-                + (result == null ? "null (inchangé)" : "modifié, taille=" + result.length));
-            return result;
-        } catch (Throwable t) {
-            if (diag) {
-                DiagFile.log("transform() " + className + " EXCEPTION: " + t);
-                java.io.StringWriter sw = new java.io.StringWriter();
-                t.printStackTrace(new java.io.PrintWriter(sw));
-                DiagFile.log(sw.toString());
-            }
-            throw t;
-        }
+        return transformer.transformClassBytes(obfDot, yarnNamed.replace('/', '.'), classfileBuffer);
     }
 
     /**

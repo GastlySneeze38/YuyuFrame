@@ -26,9 +26,7 @@ import java.util.List;
  */
 public abstract class UiScreenBase extends Screen implements UiDrawable {
 
-    // TEMPORAIRE (diagnostic) : magenta opaque impossible à manquer — remettre
-    // (0,0,0,160) une fois le rendu confirmé visible en jeu.
-    private static final UiColor BACKGROUND = new UiColor(255, 0, 255, 255);
+    private static final UiColor BACKGROUND = new UiColor(0, 0, 0, 160);
 
     protected final List<UiWidget> widgets = new ArrayList<>();
     protected int screenWidth, screenHeight; // pixels framebuffer, mis à jour chaque frame — voir uiPollInput()

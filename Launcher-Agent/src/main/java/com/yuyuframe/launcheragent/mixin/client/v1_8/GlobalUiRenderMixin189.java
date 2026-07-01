@@ -1,6 +1,5 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
-import com.yuyuframe.launcheragent.runtime.log.DiagFile;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.screen.UiMainMenuScreen;
@@ -38,28 +37,11 @@ public abstract class GlobalUiRenderMixin189 {
 
     private static UiInputPoller inputPoller;
 
-    // TEMPORAIRE (diagnostic) : compteur de frames pour un log throttlé —
-    // preuve définitive que ce Mixin s'exécute réellement, indépendamment du
-    // bruit de démarrage. Retirer une fois le pipeline 1.8.9 validé en jeu.
-    private static long frameCount = 0;
-
-    private static boolean firstCall = true;
-
     @Inject(method = "render(FJ)V", at = @At("TAIL"))
     private void la$onRenderTail(CallbackInfo ci) {
-        if (firstCall) {
-            firstCall = false;
-            DiagFile.log("la$onRenderTail: PREMIER APPEL (le handler Mixin s'exécute)");
-        }
         try {
             Object mc = getMcInstance();
-            if (mc == null) {
-                if (frameCount++ % 120 == 0) {
-                    System.err.println("[LauncherAgent-DIAG] la$onRenderTail: mc==null");
-                    DiagFile.log("la$onRenderTail: mc==null");
-                }
-                return;
-            }
+            if (mc == null) return;
 
             if (inputPoller == null) {
                 inputPoller = new UiInputPollerLegacy(GlobalUiRenderMixin189.class.getClassLoader());
@@ -68,17 +50,8 @@ public abstract class GlobalUiRenderMixin189 {
 
             Object currentScreen = getCurrentScreen(mc);
 
-            if (frameCount++ % 120 == 0) {
-                String line = "la$onRenderTail tick — currentScreen=" + currentScreen
-                    + " menuKeyDown=" + inputPoller.menuKeyDown + " menuKeyPressed=" + inputPoller.menuKeyPressed;
-                System.err.println("[LauncherAgent-DIAG] " + line);
-                DiagFile.log(line);
-            }
-
             if (currentScreen == null) {
                 if (inputPoller.menuKeyPressed) {
-                    System.err.println("[LauncherAgent-DIAG] menuKeyPressed=true → setScreen(UiMainMenuScreen)");
-                    DiagFile.log("menuKeyPressed=true → setScreen(UiMainMenuScreen)");
                     setScreen(mc, new UiMainMenuScreen(null));
                 }
                 return;
@@ -90,10 +63,6 @@ public abstract class GlobalUiRenderMixin189 {
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: " + t);
-            DiagFile.log("la$onRenderTail EXCEPTION: " + t);
-            java.io.StringWriter sw = new java.io.StringWriter();
-            t.printStackTrace(new java.io.PrintWriter(sw));
-            DiagFile.log(sw.toString());
         }
     }
 
