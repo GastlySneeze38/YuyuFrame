@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.modules.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.modules.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
@@ -78,7 +79,8 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         widgets.add(new SidebarBackground());
         widgets.add(new SidebarItem(MARGIN, screenHeight - 84, SIDEBAR_W - MARGIN * 2, "Accueil", true, null));
-        widgets.add(new SidebarItem(MARGIN, screenHeight - 114, SIDEBAR_W - MARGIN * 2, "Parametres", false, null));
+        widgets.add(new SidebarItem(MARGIN, screenHeight - 114, SIDEBAR_W - MARGIN * 2, "Parametres", false,
+            () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, GlobalUiSettings.INSTANCE))));
         // Épinglé en bas de la sidebar (pas empilé sous les items du haut) —
         // même position quel que soit le nombre d'items ajoutés au-dessus.
         widgets.add(new SidebarItem(MARGIN, MARGIN, SIDEBAR_W - MARGIN * 2, "Modifier le HUD", false,
@@ -138,7 +140,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         }
     }
 
-    /** Item de nav sidebar — "action" null = purement visuel (ex: "Parametres", pas encore de page derriere). */
+    /** Item de nav sidebar — "action" null = purement visuel (ex: "Accueil", déjà l'écran affiché). */
     private final class SidebarItem extends UiWidget {
         private final String label;
         private final boolean active;

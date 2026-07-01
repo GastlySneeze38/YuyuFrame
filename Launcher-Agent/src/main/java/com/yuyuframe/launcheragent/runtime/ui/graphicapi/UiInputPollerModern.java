@@ -155,7 +155,17 @@ public final class UiInputPollerModern extends UiInputPoller {
 
     @Override
     protected boolean readMenuKeyDown() throws Exception {
-        return glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_RIGHT_SHIFT, GLFW_PRESS
+        int code = menuKeyCode(menuKeyName);
+        if (code < 0) return false;
+        return glfwGetKey(windowHandle, code) == 1; // GLFW_PRESS
+    }
+
+    /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
+    private static int menuKeyCode(String name) {
+        for (Object[] entry : CAPTURABLE_KEYS) {
+            if (entry[1].equals(name)) return (Integer) entry[0];
+        }
+        return -1;
     }
 
     @Override

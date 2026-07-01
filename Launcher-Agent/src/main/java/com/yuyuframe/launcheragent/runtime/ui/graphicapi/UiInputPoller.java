@@ -29,7 +29,17 @@ public abstract class UiInputPoller {
     protected boolean prevLeftDown, prevRightDown;
     public boolean leftClicked, rightClicked; // "juste pressé cette frame"
 
-    /** Touche d'ouverture du menu (Right Shift) — utilisable même sans écran ouvert, voir readMenuKeyDown(). */
+    /**
+     * Nom de la touche d'ouverture du menu — même format que
+     * {@link #pollAnyKeyJustPressed()} ("RSHIFT", "F1"...), lu par
+     * {@link #readMenuKeyDown()} dans chaque implémentation. STATIC (pas un
+     * champ d'instance) : GlobalUiSettings (runtime.modules) l'écrit
+     * directement, sans avoir besoin d'une référence vers l'instance active
+     * (créée tardivement et paresseusement par le Mixin global).
+     */
+    public static volatile String menuKeyName = "RSHIFT";
+
+    /** Touche d'ouverture du menu (voir {@link #menuKeyName}) — utilisable même sans écran ouvert, voir readMenuKeyDown(). */
     public boolean menuKeyDown, menuKeyPressed;
     private boolean prevMenuKeyDown;
 

@@ -25,7 +25,8 @@ public final class UiInputPollerLegacy extends UiInputPoller {
     private Class<?> mouseClass;
     private Class<?> displayClass;
     private Class<?> keyboardClass;
-    private Integer keyRShiftCode;
+    private String cachedMenuKeyName;
+    private int cachedMenuKeyCode = -1;
 
     public UiInputPollerLegacy(ClassLoader gameClassLoader) {
         this.gameClassLoader = gameClassLoader;
@@ -102,12 +103,17 @@ public final class UiInputPollerLegacy extends UiInputPoller {
 
     @Override
     protected boolean readMenuKeyDown() throws Exception {
-        if (keyRShiftCode == null) {
-            // Lu par réflexion plutôt que codé en dur : évite de deviner la
-            // valeur numérique exacte de la constante KEY_RSHIFT.
-            keyRShiftCode = keyboardClass().getField("KEY_RSHIFT").getInt(null);
+        String wanted = menuKeyName;
+        if (!wanted.equals(cachedMenuKeyName)) {
+            // getKeyIndex(String) est l'inverse de getKeyName(int) (déjà
+            // utilisé par pollAnyKeyJustPressed) — même format de nom des deux
+            // côtés, donc réutilisable tel quel pour une touche configurable
+            // (voir UiInputPoller.menuKeyName, écrit par GlobalUiSettings).
+            cachedMenuKeyName = wanted;
+            cachedMenuKeyCode = (int) keyboardClass().getMethod("getKeyIndex", String.class).invoke(null, wanted);
         }
-        return (boolean) keyboardClass().getMethod("isKeyDown", int.class).invoke(null, keyRShiftCode);
+        if (cachedMenuKeyCode < 0) return false;
+        return (boolean) keyboardClass().getMethod("isKeyDown", int.class).invoke(null, cachedMenuKeyCode);
     }
 
     /**
