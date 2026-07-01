@@ -7,7 +7,7 @@
   "verbose": false,
   "mixins": [],
   "client": [
-    "client.v1_8.GuiMainMenuMixin",
+    "client.v1_8.TitleScreenMixin189",
     "client.v1_8.EntityCullingMixin"
   ],
   "injectors": {

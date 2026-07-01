@@ -174,15 +174,17 @@ echo [Build] JAR cree : build\launcher-agent.jar (%JAR_KB% Ko)
 :: les jars/DLL des deux agents (voir docs/LauncherAgent/index.md).
 
 set "AGENT_DEPLOY_DIR=%APPDATA%\YuyuFrame\agent"
+set "LIBS_DEPLOY_DIR=%AGENT_DEPLOY_DIR%\libs"
 echo [Deploy] Destination : %AGENT_DEPLOY_DIR%
 if not exist "%AGENT_DEPLOY_DIR%" mkdir "%AGENT_DEPLOY_DIR%"
+if not exist "%LIBS_DEPLOY_DIR%"  mkdir "%LIBS_DEPLOY_DIR%"
 copy /Y "%JAR%"                       "%AGENT_DEPLOY_DIR%\launcher-agent.jar"    >nul
-copy /Y "%LIB%\mixin.jar"             "%AGENT_DEPLOY_DIR%\mixin.jar"             >nul
-copy /Y "%LIB%\asm-9.5.jar"           "%AGENT_DEPLOY_DIR%\asm-9.5.jar"           >nul
-copy /Y "%LIB%\asm-tree-9.5.jar"      "%AGENT_DEPLOY_DIR%\asm-tree-9.5.jar"      >nul
-copy /Y "%LIB%\asm-util-9.5.jar"      "%AGENT_DEPLOY_DIR%\asm-util-9.5.jar"      >nul
-copy /Y "%LIB%\asm-analysis-9.5.jar"  "%AGENT_DEPLOY_DIR%\asm-analysis-9.5.jar"  >nul
-copy /Y "%LIB%\asm-commons-9.5.jar"   "%AGENT_DEPLOY_DIR%\asm-commons-9.5.jar"   >nul
+copy /Y "%LIB%\mixin.jar"             "%LIBS_DEPLOY_DIR%\mixin.jar"              >nul
+copy /Y "%LIB%\asm-9.5.jar"           "%LIBS_DEPLOY_DIR%\asm-9.5.jar"            >nul
+copy /Y "%LIB%\asm-tree-9.5.jar"      "%LIBS_DEPLOY_DIR%\asm-tree-9.5.jar"       >nul
+copy /Y "%LIB%\asm-util-9.5.jar"      "%LIBS_DEPLOY_DIR%\asm-util-9.5.jar"       >nul
+copy /Y "%LIB%\asm-analysis-9.5.jar"  "%LIBS_DEPLOY_DIR%\asm-analysis-9.5.jar"   >nul
+copy /Y "%LIB%\asm-commons-9.5.jar"   "%LIBS_DEPLOY_DIR%\asm-commons-9.5.jar"    >nul
 if exist "%~dp0content-core\target\release\content_core.dll" (
     copy /Y "%~dp0content-core\target\release\content_core.dll" "%AGENT_DEPLOY_DIR%\content_core.dll" >nul
     echo [Deploy] content_core.dll deploye
@@ -201,6 +203,7 @@ echo.
 echo  ================================================
 echo    Build termine !  Version : %VER_MSG%
 echo    %AGENT_DEPLOY_DIR%\launcher-agent.jar
+echo    %LIBS_DEPLOY_DIR%\mixin.jar + asm-*.jar
 echo  ================================================
 echo.
 pause

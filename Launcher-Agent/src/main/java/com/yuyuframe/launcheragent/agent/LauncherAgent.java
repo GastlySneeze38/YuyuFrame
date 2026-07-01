@@ -120,17 +120,20 @@ public class LauncherAgent {
                 return;
             }
 
-            String[] jarNames = {
-                "launcher-agent.jar", "mixin.jar", "asm-9.5.jar", "asm-tree-9.5.jar",
+            // launcher-agent.jar est dans agentDir, les dépendances dans agentDir/libs/
+            java.io.File libsDir = new java.io.File(agentDir, "libs");
+            String[] libJarNames = {
+                "mixin.jar", "asm-9.5.jar", "asm-tree-9.5.jar",
                 "asm-util-9.5.jar", "asm-analysis-9.5.jar", "asm-commons-9.5.jar",
             };
             List<URL> urls = new ArrayList<>();
-            for (String name : jarNames) {
-                java.io.File f = new java.io.File(agentDir, name);
+            urls.add(new java.io.File(agentDir, "launcher-agent.jar").toURI().toURL());
+            for (String name : libJarNames) {
+                java.io.File f = new java.io.File(libsDir, name);
                 if (f.exists()) {
                     urls.add(f.toURI().toURL());
                 } else {
-                    LauncherLog.warn("[LauncherAgent] isolation: " + name + " manquant dans " + agentDir);
+                    LauncherLog.warn("[LauncherAgent] isolation: " + name + " manquant dans " + libsDir);
                 }
             }
 
@@ -155,7 +158,7 @@ public class LauncherAgent {
             }
 
             if (urls.isEmpty()) {
-                LauncherLog.err("[LauncherAgent] isolation: aucun JAR trouvé dans " + agentDir + " — abandon");
+                LauncherLog.err("[LauncherAgent] isolation: aucun JAR trouvé dans " + agentDir + " / " + libsDir + " — abandon");
                 return;
             }
 
@@ -232,7 +235,7 @@ public class LauncherAgent {
         return null;
     }
 
-    /** Dossier contenant ce JAR (et ses jars frères mixin.jar/asm-*.jar) — %APPDATA%\YuyuFrame\agent\. */
+    /** Dossier contenant launcher-agent.jar — %APPDATA%\YuyuFrame\agent\. Les libs (mixin/asm) sont dans agent\libs\. */
     private static java.io.File agentDir() {
         try {
             java.net.URI uri = LauncherAgent.class.getProtectionDomain()

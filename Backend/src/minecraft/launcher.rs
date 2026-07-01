@@ -27,12 +27,19 @@ pub fn minecraft_dir() -> PathBuf {
 
 /// Dossier LauncherAgent dans AppData/YuyuFrame/agent/ — séparé de
 /// AppData/YuyuFrame/p2p/ (voir docs/LauncherAgent/index.md).
-/// Doit contenir : launcher-agent.jar, mixin.jar, asm-*.jar, content_core.dll
+/// Doit contenir : launcher-agent.jar, content_core.dll, libs/ (mixin.jar, asm-*.jar)
 fn launcher_agent_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("YuyuFrame")
         .join("agent")
+}
+
+/// Sous-dossier libs/ de launcher_agent_dir() — mixin.jar + asm-*.jar, séparés
+/// du jar principal pour laisser la racine ouverte au chargement dynamique de
+/// mods (voir build.bat de Launcher-Agent).
+fn launcher_agent_libs_dir() -> PathBuf {
+    launcher_agent_dir().join("libs")
 }
 
 fn set_progress(app: &tauri::AppHandle, current: u64, total: u64, message: &str) {
@@ -392,13 +399,14 @@ pub async fn download_and_launch(
     // Resource packs Modrinth in-game (voir docs/LauncherAgent/index.md). Agent
     // totalement indépendant du p2p-agent — actif que P2P soit activé ou non.
     let (launcher_agent_jvm_args, launcher_agent_extra_cp): (Vec<String>, Vec<String>) = {
-        let mixin_jar    = launcher_agent_dir().join("mixin.jar");
+        let libs_dir = launcher_agent_libs_dir();
+        let mixin_jar    = libs_dir.join("mixin.jar");
         let agent_jar    = launcher_agent_dir().join("launcher-agent.jar");
-        let asm_jar          = launcher_agent_dir().join("asm-9.5.jar");
-        let asm_tree_jar     = launcher_agent_dir().join("asm-tree-9.5.jar");
-        let asm_util_jar     = launcher_agent_dir().join("asm-util-9.5.jar");
-        let asm_analysis_jar = launcher_agent_dir().join("asm-analysis-9.5.jar");
-        let asm_commons_jar  = launcher_agent_dir().join("asm-commons-9.5.jar");
+        let asm_jar          = libs_dir.join("asm-9.5.jar");
+        let asm_tree_jar     = libs_dir.join("asm-tree-9.5.jar");
+        let asm_util_jar     = libs_dir.join("asm-util-9.5.jar");
+        let asm_analysis_jar = libs_dir.join("asm-analysis-9.5.jar");
+        let asm_commons_jar  = libs_dir.join("asm-commons-9.5.jar");
 
         if !agent_jar.exists() {
             tracing::warn!(
