@@ -175,7 +175,7 @@ public class UiMainMenuScreen extends UiScreenBase {
 
             float textX = x + 12 + iconSize + 12;
             renderer.drawText(mod.name, textX, y + h - 26, UiTheme.TEXT_PRIMARY, 0.42f, vpWidth, vpHeight);
-            renderer.drawText(mod.desc, textX, y + h - 44, UiTheme.TEXT_SECONDARY, 0.32f, vpWidth, vpHeight);
+            renderer.drawText(mod.desc, textX, y + h - 46, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
         }
 
         @Override

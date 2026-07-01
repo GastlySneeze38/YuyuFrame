@@ -63,8 +63,8 @@ public class UiSlider extends UiWidget {
         renderer.drawRoundedRect(knobX - KNOB_R, cy - KNOB_R, knobX + KNOB_R, cy + KNOB_R, KNOB_R, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
 
         String text = formatValue();
-        float tw = renderer.textWidth(text, 0.36f);
-        renderer.drawText(text, x + w - tw, cy - 4f, UiTheme.TEXT_SECONDARY, 0.36f, vpWidth, vpHeight);
+        float tw = renderer.textWidth(text, 0.4f);
+        renderer.drawText(text, x + w - tw, cy - 4f, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
     }
 
     @Override

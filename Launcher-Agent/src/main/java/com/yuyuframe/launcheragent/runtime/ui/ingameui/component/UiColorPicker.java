@@ -63,7 +63,7 @@ public class UiColorPicker extends UiWidget {
     }
 
     private void drawRow(UiRenderer renderer, UiSlider slider, String label, int vpW, int vpH) {
-        renderer.drawText(label, x, slider.y + 2f, UiTheme.TEXT_SECONDARY, 0.35f, vpW, vpH);
+        renderer.drawText(label, x, slider.y + 2f, UiTheme.TEXT_SECONDARY, 0.4f, vpW, vpH);
         slider.draw(renderer, 0, 0, vpW, vpH);
     }
 

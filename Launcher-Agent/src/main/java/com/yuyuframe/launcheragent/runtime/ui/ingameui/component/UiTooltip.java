@@ -12,7 +12,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 public final class UiTooltip {
     private UiTooltip() {}
 
-    private static final float SCALE = 0.34f;
+    private static final float SCALE = 0.4f;
     private static final float PAD = 6f;
     private static final float CURSOR_OFFSET = 14f;
 
@@ -37,7 +37,7 @@ public final class UiTooltip {
         }
 
         renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
-        renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE,
+        renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE * UiFont.SIZE_CORRECTION,
             UiTheme.TEXT_PRIMARY, SCALE, vpWidth, vpHeight);
     }
 }

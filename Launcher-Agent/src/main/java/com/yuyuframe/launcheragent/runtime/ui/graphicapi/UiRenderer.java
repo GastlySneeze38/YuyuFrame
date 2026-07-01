@@ -44,10 +44,45 @@ public final class UiRenderer {
         "    gl_FragColor = vec4(gl_Color.rgb, gl_Color.a * alpha);\n" +
         "}\n";
 
-    private int program = -1;
+    private int rectProgram = -1;
     private int uRect = -1;
     private int uRadius = -1;
-    private boolean initFailed = false;
+    private boolean rectInitFailed = false;
+
+    // ── Shader de texte SDF (distance field) — voir UiFont pour le pourquoi :
+    // l'alpha de l'atlas encode une distance signée au bord du glyphe, pas
+    // une couverture directe. dFdx/dFdy/fwidth sont cœur GLSL 1.10+ pour un
+    // fragment shader (aucune extension à déclarer), donc dispo aussi bien en
+    // GL2.1 compat (1.8.9/LWJGL2) qu'en GL3.2+ compat (1.21+/LWJGL3).
+    private static final String TEXT_VERTEX_SRC =
+        "void main() {\n" +
+        "    gl_Position = ftransform();\n" +
+        "    gl_FrontColor = gl_Color;\n" +
+        "    gl_TexCoord[0] = gl_MultiTexCoord0;\n" +
+        "}\n";
+
+    // BIAS : sans lui, les traits fins (barres de "i"/"l"/"j") disparaissent
+    // presque entièrement dans le texte le plus petit de l'UI (descriptions,
+    // ~8px de haut affiché) — leur trait est alors plus étroit que la zone de
+    // transition du champ de distance elle-même, donc quasiment aucun texel
+    // n'atteint franchement "dedans" (dist > 0.5). Décaler la distance vers
+    // "dedans" avant le seuillage épaissit légèrement TOUT le texte (effet
+    // "gras" standard en rendu SDF) pour que ces traits fins restent visibles,
+    // au prix d'un contour à peine plus épais partout ailleurs — imperceptible
+    // sur le texte de taille normale/grande.
+    private static final String TEXT_FRAGMENT_SRC =
+        "uniform sampler2D u_Tex;\n" +
+        "const float BIAS = 0.06;\n" +
+        "void main() {\n" +
+        "    float dist = texture2D(u_Tex, gl_TexCoord[0].xy).a + BIAS;\n" +
+        "    float w = fwidth(dist);\n" +
+        "    float alpha = smoothstep(0.5 - w, 0.5 + w, dist);\n" +
+        "    gl_FragColor = vec4(gl_Color.rgb, gl_Color.a * alpha);\n" +
+        "}\n";
+
+    private int textProgram = -1;
+    private int uTex = -1;
+    private boolean textInitFailed = false;
 
     private final Map<String, Method> glMethods = new HashMap<>();
     private ClassLoader gameClassLoader;
@@ -64,8 +99,8 @@ public final class UiRenderer {
         return instance;
     }
 
-    private void ensureInit() {
-        if (program != -1 || initFailed) return;
+    private void ensureRectShaderInit() {
+        if (rectProgram != -1 || rectInitFailed) return;
         try {
             int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
             glShaderSource(vsh, VERTEX_SRC);
@@ -75,19 +110,44 @@ public final class UiRenderer {
             glShaderSource(fsh, FRAGMENT_SRC);
             glCompileShader(fsh);
 
-            program = glCreateProgram();
-            glAttachShader(program, vsh);
-            glAttachShader(program, fsh);
-            glLinkProgram(program);
+            rectProgram = glCreateProgram();
+            glAttachShader(rectProgram, vsh);
+            glAttachShader(rectProgram, fsh);
+            glLinkProgram(rectProgram);
 
-            uRect = glGetUniformLocation(program, "u_Rect");
-            uRadius = glGetUniformLocation(program, "u_Radius");
+            uRect = glGetUniformLocation(rectProgram, "u_Rect");
+            uRadius = glGetUniformLocation(rectProgram, "u_Radius");
 
-            LauncherLog.ui(1, "[UiRenderer] shader compilé, program=" + program
+            LauncherLog.ui(1, "[UiRenderer] shader rect compilé, program=" + rectProgram
                 + " uRect=" + uRect + " uRadius=" + uRadius);
         } catch (Throwable t) {
-            initFailed = true;
-            LauncherLog.err("[UiRenderer] échec compilation shader — repli sur rects non arrondis : " + t);
+            rectInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader rect — repli sur rects non arrondis : " + t);
+        }
+    }
+
+    private void ensureTextShaderInit() {
+        if (textProgram != -1 || textInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, TEXT_VERTEX_SRC);
+            glCompileShader(vsh);
+
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, TEXT_FRAGMENT_SRC);
+            glCompileShader(fsh);
+
+            textProgram = glCreateProgram();
+            glAttachShader(textProgram, vsh);
+            glAttachShader(textProgram, fsh);
+            glLinkProgram(textProgram);
+
+            uTex = glGetUniformLocation(textProgram, "u_Tex");
+
+            LauncherLog.ui(1, "[UiRenderer] shader texte (SDF) compilé, program=" + textProgram + " uTex=" + uTex);
+        } catch (Throwable t) {
+            textInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader texte SDF — texte non affiché : " + t);
         }
     }
 
@@ -104,14 +164,14 @@ public final class UiRenderer {
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
-        ensureInit();
+        ensureRectShaderInit();
         // radius<=0 : bypass total du shader — bug dégénéré sinon. Dans
         // "alpha = 1 - smoothstep(radius-1, radius, dist)", avec radius=0 tout
         // pixel intérieur a dist=0, qui tombe EXACTEMENT sur le bord haut du
         // smoothstep(-1, 0, 0) → 1.0, donc alpha=0 partout : rect totalement
         // invisible malgré un dessin "réussi" (aucune exception). Observé en
         // test 1.8.9 : le fond plein écran (radius=0) ne s'affichait jamais.
-        boolean useShader = program != -1 && !initFailed && radius > 0f;
+        boolean useShader = rectProgram != -1 && !rectInitFailed && radius > 0f;
 
         try {
             // État GL hérité de ce que le jeu a laissé à ce point précis du
@@ -146,7 +206,7 @@ public final class UiRenderer {
             loadIdentity();
 
             if (useShader) {
-                glUseProgram(program);
+                glUseProgram(rectProgram);
                 glUniform4f(uRect, x1, y1, x2, y2);
                 glUniform1f(uRadius, radius);
             }
@@ -194,18 +254,20 @@ public final class UiRenderer {
 
     /**
      * Dessine {@code text} avec la ligne de base à {@code y} (espace pixels
-     * framebuffer, origine bas-gauche — comme drawRoundedRect). Pas de shader
-     * dédié : la teinte vient de glColor4f combiné à la texture (alpha de
-     * l'atlas, RGB blanc uni) via GL_MODULATE, la technique standard de police
-     * bitmap en pipeline fixe — posé explicitement plutôt que supposé, au cas
-     * où le jeu aurait laissé GL_TEXTURE_ENV_MODE sur autre chose (GL_REPLACE
-     * ferait disparaître toute teinte, GL_DECAL casserait l'alpha).
+     * framebuffer, origine bas-gauche — comme drawRoundedRect). Shader SDF
+     * dédié (voir TEXT_FRAGMENT_SRC/UiFont) : l'atlas encode une distance
+     * signée au bord du glyphe dans son canal alpha, pas une couverture
+     * directe — un simple GL_MODULATE fixe ne saurait pas l'interpréter
+     * (donnerait un halo flou au lieu d'un bord net), d'où ce programme
+     * séparé de celui de drawRoundedRect.
      */
     public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
                           int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) return;
         int texId = ensureFontTexture(font);
         if (texId < 0) return;
+        ensureTextShaderInit();
+        if (textInitFailed) return; // shader cassé : rien à faire de l'alpha-distance brute, mieux vaut ne rien dessiner
 
         try {
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
@@ -215,7 +277,8 @@ public final class UiRenderer {
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             glBindTexture(0x0DE1, texId);
-            glTexEnvi(0x2300, 0x2200, 0x2100); // GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE
+            glUseProgram(textProgram);
+            glUniform1i(uTex, 0); // texture unit 0 (celle qu'on vient de bind)
 
             matrixMode(0x1701); // GL_PROJECTION
             pushMatrix();
@@ -227,18 +290,32 @@ public final class UiRenderer {
 
             glColor4f(color.r, color.g, color.b, color.a);
 
-            float penX = x;
-            float yTop = y + font.ascent * scale;
-            float yBottom = y - font.descent * scale;
+            // cs ("scale corrigé") compense UiFont.RASTER_PX (résolution de
+            // rasterisation, un curseur de QUALITÉ) pour que la taille
+            // affichée ne dépende que de "scale", calibré une fois pour
+            // toutes sur UiFont.REFERENCE_PX — voir UiFont pour le pourquoi.
+            float cs = scale * UiFont.SIZE_CORRECTION;
+
+            // Alignement pixel entier — LA vraie cause du flou observé (pas la
+            // résolution de l'atlas, déjà testée x8 sans aucun effet visible) :
+            // des coordonnées de quad en sous-pixel (ex: y=412.63) forcent le
+            // GPU à échantillonner la texture ENTRE deux texels, brouillant le
+            // bord des lettres même avec un filtrage parfait. Minecraft aligne
+            // son propre texte sur des pixels entiers pour cette raison. Chaque
+            // avance de plume est elle-même arrondie (pas juste la position de
+            // départ) pour que l'arrondi ne dérive pas caractère après caractère.
+            float penX = Math.round(x);
+            float yTop = Math.round(y + font.ascent * cs);
+            float yBottom = Math.round(y - font.descent * cs);
             glBegin(7); // GL_QUADS
             for (int i = 0; i < text.length(); i++) {
                 UiFont.Glyph g = font.glyph(text.charAt(i));
-                float gw = g.width * scale;
+                float gw = Math.round(g.width * cs);
                 glTexCoord2f(g.u0, g.v0); glVertex2f(penX, yTop);
                 glTexCoord2f(g.u0, g.v1); glVertex2f(penX, yBottom);
                 glTexCoord2f(g.u1, g.v1); glVertex2f(penX + gw, yBottom);
                 glTexCoord2f(g.u1, g.v0); glVertex2f(penX + gw, yTop);
-                penX += g.advance * scale;
+                penX += Math.round(g.advance * cs);
             }
             glEnd();
 
@@ -249,6 +326,7 @@ public final class UiRenderer {
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawText: " + t);
         } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
             try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
             try { popAttrib(); } catch (Throwable ignored) {}
         }
@@ -282,13 +360,23 @@ public final class UiRenderer {
 
             int texId = glGenTextures();
             glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
-            // GL_LINEAR (pas GL_NEAREST) : l'atlas est rasterisé à BASE_PX=32
-            // puis réduit au dessin (scale ~0.3-0.55 pour du texte courant) —
-            // l'échantillonnage plus-proche-voisin donnait un rendu en blocs
-            // très visible une fois réduit. Bilinéaire lisse ça nettement.
-            glTexParameteri(0x0DE1, 0x2801, 0x2601); // GL_TEXTURE_MIN_FILTER, GL_LINEAR
-            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
             glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+            // L'atlas est rasterisé à BASE_PX puis réduit au dessin (scale
+            // ~0.35-0.6 pour du texte courant) — un simple filtre bilinéaire
+            // MIN_FILTER (une seule passe, un seul niveau de mip) laissait
+            // encore de l'aliasing visible à ce ratio de réduction. Trilinéaire
+            // (mipmaps + LINEAR_MIPMAP_LINEAR) échantillonne un niveau
+            // pré-réduit adapté au ratio réel, nettement plus net.
+            glGenerateMipmap(0x0DE1);
+            glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
+            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+            // CLAMP_TO_EDGE (pas le défaut GL_REPEAT) : un glyphe échantillonné
+            // pile à son bord u0/u1 pourrait sinon piocher un texel de l'autre
+            // côté de l'atlas (wraparound) au lieu de simplement dupliquer son
+            // propre bord — ceinture-bretelles avec la marge de UiFont contre
+            // le bleed de mipmap (opacité incohérente entre lettres).
+            glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+            glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
             glBindTexture(0x0DE1, 0);
 
             fontTextures.put(font, texId);
@@ -357,6 +445,9 @@ public final class UiRenderer {
     private void glUniform1f(int loc, float v) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glUniform1f", int.class, float.class).invoke(null, loc, v);
     }
+    private void glUniform1i(int loc, int v) throws Exception {
+        gl("org.lwjgl.opengl.GL20", "glUniform1i", int.class, int.class).invoke(null, loc, v);
+    }
     private void glUniform4f(int loc, float a, float b, float c, float d) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glUniform4f", int.class, float.class, float.class, float.class, float.class)
             .invoke(null, loc, a, b, c, d);
@@ -423,10 +514,13 @@ public final class UiRenderer {
             int.class, int.class, int.class, java.nio.ByteBuffer.class)
             .invoke(null, target, level, internalFormat, width, height, border, format, type, pixels);
     }
-    private void glTexEnvi(int target, int pname, int param) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glTexEnvi", int.class, int.class, int.class).invoke(null, target, pname, param);
-    }
     private void glScissor(int x, int y, int w, int h) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glScissor", int.class, int.class, int.class, int.class).invoke(null, x, y, w, h);
+    }
+    private void glGenerateMipmap(int target) throws Exception {
+        // GL30 (promu depuis GL_ARB_framebuffer_object) — dispo aussi bien
+        // sous LWJGL2 (1.8.9, contexte GL2.1) que LWJGL3 (1.21), l'extension
+        // sous-jacente étant supportée par tout GPU ~2006+.
+        gl("org.lwjgl.opengl.GL30", "glGenerateMipmap", int.class).invoke(null, target);
     }
 }

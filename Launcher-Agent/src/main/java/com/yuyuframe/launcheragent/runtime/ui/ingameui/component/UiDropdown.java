@@ -64,7 +64,7 @@ public class UiDropdown extends UiWidget {
                 renderer.drawRoundedRect(x + 2, rowBottom + 1, x + w - 2, rowTop - 1, 2f,
                     i == selectedIndex ? UiTheme.ACCENT_DIM : UiTheme.CARD_HOVER, vpWidth, vpHeight);
             }
-            renderer.drawText(options.get(i), x + 8, rowBottom + ROW_H / 2f - 4f, UiTheme.TEXT_PRIMARY, 0.38f, vpWidth, vpHeight);
+            renderer.drawText(options.get(i), x + 8, rowBottom + ROW_H / 2f - 4f, UiTheme.TEXT_PRIMARY, 0.42f, vpWidth, vpHeight);
         }
     }
 
