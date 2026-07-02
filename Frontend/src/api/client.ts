@@ -39,13 +39,15 @@ export const api = {
 
   instances: {
     list: () => invoke<Instance[]>('instance_list'),
-    create: (name: string, mc_version: string, loader: string, ram_mb: number, description?: string) =>
-      invoke<Instance>('instance_create', { name, mcVersion: mc_version, loader, ramMb: ram_mb, description }),
+    create: (name: string, mc_version: string, loader: string, ram_mb: number, description?: string, optifine_jar_path?: string) =>
+      invoke<Instance>('instance_create', { name, mcVersion: mc_version, loader, ramMb: ram_mb, description, optifineJarPath: optifine_jar_path }),
     delete: (id: string) => invoke<void>('instance_delete', { id }),
-    update: (id: string, name: string, mc_version: string, loader: string, ram_mb: number, description?: string) =>
-      invoke<Instance>('instance_update', { id, name, mcVersion: mc_version, loader, ramMb: ram_mb, description }),
+    update: (id: string, name: string, mc_version: string, loader: string, ram_mb: number, description?: string, optifine_jar_path?: string) =>
+      invoke<Instance>('instance_update', { id, name, mcVersion: mc_version, loader, ramMb: ram_mb, description, optifineJarPath: optifine_jar_path }),
     duplicate: (sourceId: string, name: string, mc_version: string, ram_mb: number) =>
       invoke<Instance>('instance_duplicate', { sourceId, name, mcVersion: mc_version, ramMb: ram_mb }),
+    importOptifine: (id: string, preset?: string) =>
+      invoke<Instance>('instance_import_optifine', { id, preset }),
     toggleFavorite: (id: string) => invoke<Instance>('instance_toggle_favorite', { id }),
     startupSync: (mode: string) => invoke<void>('instance_startup_sync', { mode }),
     exportSettings: (instanceId: string) => invoke<void>('instance_export_settings', { instanceId }),
@@ -124,9 +126,6 @@ export const api = {
 
     icon: (instanceId: string, name: string) =>
       invoke<string>('mod_icon', { instanceId, name }),
-
-    importOptifine: (instanceId: string, preset?: string) =>
-      invoke<Mod>('mods_import_optifine', { instanceId, preset }),
 
     checkUpdateSafety: (
       instanceId: string,

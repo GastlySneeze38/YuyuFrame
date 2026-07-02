@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-02-v201";
+    private static final String BUILD_VERSION = "2026-07-02-v202";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -58,6 +58,29 @@ public class LauncherAgent {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save(); } catch (Throwable ignored) {}
         }, "YuyuFrame-ConfigSave"));
+
+        // Réchauffe UiFont/AWT Toolkit ICI, MAINTENANT, PENDANT premain() — pas
+        // un simple souci de perf. UiFont mesure le texte via un
+        // BufferedImage.createGraphics().getFontMetrics(), mais sous Java 8/
+        // Windows ça déclenche quand même en interne Toolkit.getDefaultToolkit()
+        // (FontDesignMetrics.getDefaultFrc() -> Win32GraphicsEnvironment ->
+        // D3DGraphicsDevice.<clinit>), qui lui-même essaie d'enregistrer SON
+        // PROPRE shutdown hook (AWTAutoShutdown). Si cette toute première
+        // init AWT du process arrive DEPUIS un shutdown hook déjà en cours
+        // (ex: le hook YuyuFrame-ConfigSave juste au-dessus, ou tout autre
+        // hook, déclenché par un crash précoce de la JVM avant même que
+        // Minecraft démarre) -> "Shutdown in progress" pendant l'init AWT ->
+        // bloqué indéfiniment (observé : JVM figée des minutes, RAM occupée,
+        // 0% CPU, jamais de logs/latest.log créé — le process ne quitte
+        // jamais alors qu'il a déjà planté). En la forçant ici, sur le thread
+        // principal, bien avant qu'un quelconque shutdown ne puisse démarrer,
+        // toute réutilisation ultérieure (rendu HUD normal OU shutdown hook)
+        // retombe sur un Toolkit déjà chaud, donc instantanée et sans risque.
+        try {
+            com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth("YuyuFrame", 1f);
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] Réchauffage UiFont/AWT échoué (non bloquant) : " + t);
+        }
 
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources
         // (validParentCodeSources) — sinon KnotClassDelegate.loadClass() refuse de

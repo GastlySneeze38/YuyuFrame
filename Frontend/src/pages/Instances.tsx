@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { open } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance, Loader } from '@/types'
 import { ModsContent, updateModsForNewVersion } from '@/pages/Mods'
 import { INSTANCE_PRESETS, PVP_PRESET, type InstancePreset } from '@/data/presets'
 
-const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge']
+const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge', 'optifine']
 const RAM_OPTIONS = [1024, 2048, 4096, 6144, 8192]
 
 function formatRam(mb: number) {
@@ -16,6 +17,7 @@ function formatRam(mb: number) {
 function loaderColor(loader: string) {
   if (loader === 'fabric') return '#b5a0ff'
   if (loader === 'forge') return '#f0a040'
+  if (loader === 'optifine') return '#7fd858'
   return 'rgba(255,255,255,0.4)'
 }
 
@@ -380,6 +382,14 @@ function CreateModal({
               </div>
             )}
 
+            {mode === 'blank' && loader === 'optifine' && (
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'rgba(127,216,88,0.08)', border: '1px solid rgba(127,216,88,0.25)' }}>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                  Tu configureras le jar OptiFine juste après, dans l'édition de l'instance.
+                </p>
+              </div>
+            )}
+
             <RamPicker value={ram} onChange={setRam} />
 
             <DescriptionInput value={description} onChange={setDescription} />
@@ -410,19 +420,47 @@ function EditModal({
   const [name, setName] = useState(instance.name)
   const [description, setDescription] = useState(instance.description)
   const [mcVersion, setMcVersion] = useState(instance.mc_version)
+  const [loader, setLoader] = useState<Loader>(instance.loader)
+  const [optifineJarPath, setOptifineJarPath] = useState(instance.optifine_jar_path)
+  const [configuringOptifine, setConfiguringOptifine] = useState(false)
   const [ram, setRam] = useState(instance.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Enregistrement...')
   const [error, setError] = useState('')
 
+  /**
+   * OptiFine interdit toute redistribution sans permission écrite de son
+   * auteur (cf. https://optifine.net/copyright) — on ne le télécharge donc
+   * jamais nous-mêmes. Premier clic : ouvre la vraie page officielle pour
+   * que l'utilisateur télécharge lui-même. Reclic (après téléchargement) :
+   * le backend détecte le jar dans Téléchargements, le copie dans le
+   * dossier propre à cette instance, et le patch réel (fusion des classes
+   * dans le jar vanilla) se fera au lancement (voir launch.rs) — pas ici.
+   */
+  const handleConfigureOptifine = async () => {
+    if (configuringOptifine) return
+    setConfiguringOptifine(true)
+    setError('')
+    try {
+      const updated = await api.instances.importOptifine(instance.id)
+      setOptifineJarPath(updated.optifine_jar_path)
+    } catch {
+      await open('https://optifine.net/downloads')
+      setError('Télécharge OptiFine depuis l’onglet qui vient de s’ouvrir, puis reclique sur "Configurer OptiFine".')
+    } finally {
+      setConfiguringOptifine(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!name.trim()) { setError('Nom requis'); return }
+    if (loader === 'optifine' && !optifineJarPath) { setError('Configure OptiFine avant d’enregistrer (bouton ci-dessus).'); return }
     setLoading(true); setError(''); setLoadingLabel('Enregistrement...')
     try {
-      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, instance.loader, ram, description.trim())
+      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim(), optifineJarPath)
       if (mcVersion !== instance.mc_version) {
         setLoadingLabel('Mise à jour des mods...')
-        await updateModsForNewVersion(instance.id, mcVersion, instance.loader)
+        await updateModsForNewVersion(instance.id, mcVersion, loader)
       }
       onUpdate(updated)
     } catch (e) {
@@ -437,26 +475,71 @@ function EditModal({
       <div className="flex flex-col gap-4">
         <NameInput value={name} onChange={setName} onEnter={handleSave} />
 
-        <div>
-          <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Version MC</label>
-          <div className="relative mt-1">
-            <select
-              value={mcVersion}
-              onChange={(e) => setMcVersion(e.target.value)}
-              className="w-full appearance-none rounded-xl px-3 pr-7 text-sm font-medium text-white outline-none"
-              style={{ height: 40, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              {versions.map((v) => (
-                <option key={v} value={v} style={{ background: '#111118' }}>{v}</option>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Version MC</label>
+            <div className="relative mt-1">
+              <select
+                value={mcVersion}
+                onChange={(e) => setMcVersion(e.target.value)}
+                className="w-full appearance-none rounded-xl px-3 pr-7 text-sm font-medium text-white outline-none"
+                style={{ height: 40, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                {versions.map((v) => (
+                  <option key={v} value={v} style={{ background: '#111118' }}>{v}</option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                <svg viewBox="0 0 10 6" fill="white" width={10} height={6} style={{ opacity: 0.4 }}>
+                  <path d="M0 0l5 6 5-6z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Loader</label>
+            <div className="flex gap-1 mt-1">
+              {LOADERS.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLoader(l)}
+                  className="rounded-xl text-xs font-semibold transition-all duration-150"
+                  style={{
+                    height: 40, padding: '0 12px',
+                    background: loader === l ? 'rgba(75,63,207,0.35)' : 'rgba(0,0,0,0.35)',
+                    border: `1px solid ${loader === l ? 'rgba(75,63,207,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                    color: loader === l ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)',
+                  }}
+                >
+                  {l.charAt(0).toUpperCase() + l.slice(1)}
+                </button>
               ))}
-            </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-              <svg viewBox="0 0 10 6" fill="white" width={10} height={6} style={{ opacity: 0.4 }}>
-                <path d="M0 0l5 6 5-6z" />
-              </svg>
             </div>
           </div>
         </div>
+
+        {loader === 'optifine' && (
+          <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: 'rgba(127,216,88,0.08)', border: '1px solid rgba(127,216,88,0.25)' }}>
+            <div className="flex-1">
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                {optifineJarPath ? 'OptiFine configuré pour cette instance.' : 'OptiFine doit être fourni par toi-même (licence OptiFine).'}
+              </p>
+            </div>
+            <button
+              onClick={handleConfigureOptifine}
+              disabled={configuringOptifine}
+              className="rounded-lg text-xs font-semibold transition-all duration-150"
+              style={{
+                height: 32, padding: '0 12px', flexShrink: 0,
+                background: 'rgba(127,216,88,0.2)', border: '1px solid rgba(127,216,88,0.5)',
+                color: 'rgba(255,255,255,0.9)', opacity: configuringOptifine ? 0.6 : 1,
+              }}
+            >
+              {configuringOptifine ? '...' : optifineJarPath ? 'Reconfigurer OptiFine' : 'Configurer OptiFine'}
+            </button>
+          </div>
+        )}
 
         <RamPicker value={ram} onChange={setRam} />
 

@@ -106,6 +106,7 @@ pub async fn download_and_launch(
     p2p: bool,
     avoid_beta: bool,
     console_label: &str,
+    optifine_jar_path: Option<&str>,
 ) -> Result<()> {
     let mc_dir = minecraft_dir();
     tokio::fs::create_dir_all(game_dir).await?;
@@ -332,8 +333,27 @@ pub async fn download_and_launch(
         match loader.unwrap_or("vanilla") {
             "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta).await?,
             "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app).await?,
+            // OptiFine (pré-1.13, cas 1.8.9) ne change ni main_class ni libs —
+            // juste le JAR CLIENT lui-même (fusion des classes OptiFine dans
+            // une copie du vanilla, voir optifine::ensure_patched). Le jar
+            // patché est calculé plus bas (a besoin de client_jar déjà
+            // téléchargé, donc après ce match) et remplace client_jar avant
+            // le calcul de effective_client_jar.
             _ => (details.main_class.clone(), vec![], vec![], vec![]),
         };
+
+    let client_jar = if matches!(loader, Some("optifine")) {
+        let optifine_jar = optifine_jar_path
+            .filter(|p| !p.is_empty())
+            .ok_or_else(|| anyhow!("OptiFine sélectionné mais aucun jar configuré — clique sur \"Configurer OptiFine\" dans les réglages de l'instance"))?;
+        let optifine_dir = game_dir.join("optifine");
+        log_to_console(&app, &console_label, "Patch OptiFine du jar client (peut prendre un instant la première fois)...", "out");
+        crate::minecraft::optifine::ensure_patched(&optifine_dir, version_id, &client_jar, std::path::Path::new(optifine_jar), &java)
+            .await
+            .map_err(|e| anyhow!("Patch OptiFine échoué : {}", e))?
+    } else {
+        client_jar
+    };
 
     // ── P2P setup ────────────────────────────────────────────────────────────
     // Démarre le signaling, télécharge les mappings Mojang et prépare les javaagents.
@@ -566,6 +586,7 @@ pub async fn download_and_launch(
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         java_cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    tracing::info!("[MC launch] {} {}", java, args.join(" "));
     let mut child = java_cmd.spawn()?;
 
     let stdout = child.stdout.take().map(BufReader::new);
@@ -582,6 +603,11 @@ pub async fn download_and_launch(
             while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
                 let trimmed = line.trim_end().to_string();
                 log_to_console(&app_out, &label_out, &trimmed, "out");
+                // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
+                // main.rs) — la fenêtre console (webview) ne garde rien après
+                // un crash/fermeture, ce qui rendait tout diagnostic après-coup
+                // impossible sans que l'utilisateur ait déjà tout copié à temps.
+                tracing::info!("[MC stdout] {}", trimmed);
                 line.clear();
             }
         });
@@ -593,6 +619,7 @@ pub async fn download_and_launch(
             while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
                 let trimmed = line.trim_end().to_string();
                 log_to_console(&app_err, &label_err, &trimmed, "err");
+                tracing::error!("[MC stderr] {}", trimmed);
                 line.clear();
             }
         });

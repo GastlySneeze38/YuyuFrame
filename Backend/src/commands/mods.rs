@@ -272,61 +272,12 @@ pub async fn mods_upload(
     Ok(ModInfo { name: safe_name, size, enabled: true, sha1 })
 }
 
-/// Cherche le jar OptiFine le plus récent dans le dossier Téléchargements de
-/// l'utilisateur et le copie dans les mods de l'instance.
-///
-/// OptiFine n'autorise aucune redistribution sans permission écrite de son
-/// auteur (cf. https://optifine.net/copyright) — on ne télécharge donc
-/// jamais le jar nous-mêmes. L'utilisateur passe par le vrai site officiel
-/// (bouton "Ouvrir OptiFine" côté Frontend), et cette commande se contente de
-/// déplacer le fichier qu'il vient de télécharger lui-même vers le bon
-/// dossier — aucun contenu OptiFine ne transite par nos serveurs.
-#[tauri::command]
-pub async fn mods_import_optifine(instance_id: String, preset: Option<String>) -> Result<ModInfo, String> {
-    let downloads = dirs::download_dir().ok_or("Dossier Téléchargements introuvable")?;
-
-    let mut candidates: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
-    let mut entries = tokio::fs::read_dir(&downloads).await.map_err(|e| e.to_string())?;
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let path = entry.path();
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-        if name.starts_with("optifine") && name.ends_with(".jar") {
-            if let Ok(meta) = entry.metadata().await {
-                if let Ok(modified) = meta.modified() {
-                    candidates.push((modified, path));
-                }
-            }
-        }
-    }
-
-    candidates.sort_by_key(|(t, _)| *t);
-    let (_, source) = candidates
-        .pop()
-        .ok_or("Aucun fichier OptiFine_*.jar trouvé dans Téléchargements — télécharge-le d'abord depuis le site officiel")?;
-
-    let safe_name = source
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "OptiFine.jar".to_string());
-
-    let dir = instance_mods_dir(&instance_id);
-    tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
-    let dest = dir.join(&safe_name);
-
-    tokio::fs::copy(&source, &dest).await.map_err(|e| e.to_string())?;
-    let size = tokio::fs::metadata(&dest).await.map(|m| m.len()).unwrap_or(0);
-    let sha1 = tokio::task::spawn_blocking(move || sha1_cached(&dest))
-        .await
-        .unwrap_or_default();
-
-    // Préréglages graphiques écrits uniquement si options.txt n'existe pas encore
-    // (ne jamais écraser une config que l'utilisateur a déjà réglée à la main).
-    write_optifine_presets(&instance_id, preset.as_deref());
-
-    Ok(ModInfo { name: safe_name, size, enabled: true, sha1 })
-}
-
-fn write_optifine_presets(instance_id: &str, preset: Option<&str>) {
+/// Écrit les préréglages graphiques OptiFine (options.txt/optionsof.txt) —
+/// appelée désormais depuis `instances::instance_import_optifine` (OptiFine
+/// est un mode de chargement à part entière, plus un mod qu'on ajoute depuis
+/// cet onglet — voir sa javadoc). `pub` pour rester appelable depuis
+/// `commands::instances`.
+pub fn write_optifine_presets(instance_id: &str, preset: Option<&str>) {
     enum Tier { Performance, Normal, Quality }
 
     let tier = match preset {

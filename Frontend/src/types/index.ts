@@ -37,7 +37,7 @@ export interface Mod {
   sha1: string
 }
 
-export type Loader = 'vanilla' | 'fabric' | 'forge'
+export type Loader = 'vanilla' | 'fabric' | 'forge' | 'optifine'
 
 export interface Instance {
   id: string
@@ -47,6 +47,8 @@ export interface Instance {
   ram_mb: number
   favorite: boolean
   description: string
+  /** Chemin vers le jar OptiFine fourni par l'utilisateur — utilisé seulement si loader === 'optifine' (voir docs/product/TODO.md). */
+  optifine_jar_path: string
 }
 
 export interface ModpackMeta {

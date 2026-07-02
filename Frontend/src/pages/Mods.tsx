@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { open } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance, Mod, ModpackMeta } from '@/types'
@@ -286,14 +285,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const mcVersion = instance.mc_version
   const loader = instance.loader
   const isPlugin = loader === 'vanilla'
-  const { avoidBetaDependencies, optifinePreset } = useStore()
+  const { avoidBetaDependencies } = useStore()
 
   const [tab, setTab] = useState<Tab>('installed')
   const [mods, setMods] = useState<Mod[]>([])
   const [loadingMods, setLoadingMods] = useState(true)
   const [modsError, setModsError] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [importingOptifine, setImportingOptifine] = useState(false)
   const [versionMap, setVersionMap] = useState<Record<string, ModrinthInfo>>({})
   const [updates, setUpdates] = useState<ModUpdate[]>([])
   const [updatingMods, setUpdatingMods] = useState<Set<string>>(new Set())
@@ -554,31 +552,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
-  /**
-   * OptiFine interdit toute redistribution sans permission écrite de son
-   * auteur (cf. https://optifine.net/copyright) — on ne le télécharge donc
-   * jamais nous-mêmes. Premier clic : ouvre la vraie page officielle pour
-   * que l'utilisateur télécharge lui-même. Reclic (après téléchargement) :
-   * récupère le jar depuis son dossier Téléchargements et l'installe.
-   */
-  const handleImportOptifine = async () => {
-    if (importingOptifine) return
-    setImportingOptifine(true)
-    setModsError('')
-    try {
-      const newMod = await api.mods.importOptifine(instanceId, optifinePreset ?? undefined)
-      setMods((prev) =>
-        [...prev.filter((m) => m.name !== newMod.name), newMod]
-          .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-      )
-    } catch {
-      await open('https://optifine.net/downloads')
-      setModsError('Télécharge OptiFine depuis l’onglet qui vient de s’ouvrir, puis reclique sur "Ajouter OptiFine".')
-    } finally {
-      setImportingOptifine(false)
-    }
-  }
-
   const runSearch = async (q: string) => {
     setSearching(true)
     setSearchError('')
@@ -722,28 +695,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
             </svg>
             {uploading ? 'Import...' : isPlugin ? 'Importer un plugin' : 'Importer un mod'}
           </button>
-          {loader === 'forge' && (
-            <button
-              onClick={handleImportOptifine}
-              disabled={importingOptifine}
-              className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95"
-              style={{
-                height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
-                borderLeft: '1px solid rgba(75,63,207,0.35)',
-                background: importingOptifine ? 'rgba(40,38,65,0.7)' : 'transparent',
-                color: importingOptifine ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.55)',
-                cursor: importingOptifine ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={(e) => { if (!importingOptifine) e.currentTarget.style.background = 'rgba(75,63,207,0.12)' }}
-              onMouseLeave={(e) => { if (!importingOptifine) e.currentTarget.style.background = 'transparent' }}
-              title="Ouvre le site officiel OptiFine ; reclique une fois téléchargé pour l'ajouter automatiquement à cette instance"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-              </svg>
-              {importingOptifine ? 'Import...' : 'Ajouter OptiFine'}
-            </button>
-          )}
         </div>
         <input ref={fileInputRef} type="file" accept=".jar" className="hidden" onChange={handleFileChange} />
 
