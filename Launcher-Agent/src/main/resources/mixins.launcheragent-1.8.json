@@ -13,7 +13,13 @@
     "client.v1_8.GlobalUiRenderMixin189",
     "client.v1_8.MixinGameRenderer189",
     "client.v1_8.MixinToggleSprint189",
-    "client.v1_8.MixinToggleSneak189"
+    "client.v1_8.MixinToggleSneak189",
+    "client.v1_8.MixinSwingSpeed189",
+    "client.v1_8.MixinDiagonalSword189",
+    "client.v1_8.MixinOldItemRotations189",
+    "client.v1_8.MixinSwingWhileBlocking189",
+    "client.v1_8.MixinOldBow189",
+    "client.v1_8.MixinOldConsume189"
   ],
   "injectors": {
     "defaultRequire": 1

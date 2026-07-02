@@ -2,13 +2,19 @@ package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.module.ArmorDurabilityModule;
 import com.yuyuframe.launcheragent.runtime.module.CoordsModule;
+import com.yuyuframe.launcheragent.runtime.module.DiagonalSwordModule;
 import com.yuyuframe.launcheragent.runtime.module.FovModule;
 import com.yuyuframe.launcheragent.runtime.module.FpsModule;
 import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
 import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
+import com.yuyuframe.launcheragent.runtime.module.OldBowModule;
+import com.yuyuframe.launcheragent.runtime.module.OldConsumeModule;
+import com.yuyuframe.launcheragent.runtime.module.OldItemRotationsModule;
 import com.yuyuframe.launcheragent.runtime.module.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.PotionEffectsModule;
+import com.yuyuframe.launcheragent.runtime.module.SwingSpeedModule;
+import com.yuyuframe.launcheragent.runtime.module.SwingWhileBlockingModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSneakModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSprintModule;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
@@ -52,6 +58,12 @@ public final class ModuleRegistry {
         register(new HurtCamModule());
         register(new ToggleSprintModule());
         register(new ToggleSneakModule());
+        register(new SwingSpeedModule());
+        register(new DiagonalSwordModule());
+        register(new OldItemRotationsModule());
+        register(new SwingWhileBlockingModule());
+        register(new OldBowModule());
+        register(new OldConsumeModule());
     }
 
     public static void register(LauncherModule module) {
