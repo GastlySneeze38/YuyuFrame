@@ -159,13 +159,25 @@ public class UiScrollContainer {
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         applyOffsets();
         renderer.beginScissor((int) vx, (int) vy, (int) vw, (int) vh);
+        // try/finally OBLIGATOIRE ici : sans lui, une exception dans UN SEUL
+        // w.draw() (widget de la liste) saute endScissor() — GL_SCISSOR_TEST
+        // reste actif indéfiniment (aucun code ailleurs ne le redésactive de
+        // lui-même), avec CE rectangle comme zone de clip pour TOUT rendu GL
+        // suivant, frame après frame, jusqu'au prochain begin/endScissor
+        // symétrique — y compris des éléments totalement indépendants comme
+        // LowHealthTintModule, dont le dégradé se retrouvait alors découpé
+        // net à ce rectangle, invariant à toute retouche d'opacité/courbe
+        // (un scissor test est un clip binaire, pas un blend d'alpha).
         String hoveredTooltip = null;
-        for (UiWidget w : content) {
-            if (!visible(w)) continue;
-            w.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
-            if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
+        try {
+            for (UiWidget w : content) {
+                if (!visible(w)) continue;
+                w.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
+                if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
+            }
+        } finally {
+            renderer.endScissor();
         }
-        renderer.endScissor();
 
         drawScrollbar(renderer, vpWidth, vpHeight);
         if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, vpWidth, vpHeight);

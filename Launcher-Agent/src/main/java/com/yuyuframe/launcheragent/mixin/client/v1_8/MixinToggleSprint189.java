@@ -4,130 +4,91 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import net.minecraft.client.option.KeyBinding;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.lang.reflect.Field;
 
 /**
- * Toggle Sprint — port de la technique RÉELLE de PolySprint (mod open source,
- * décompilé directement depuis PolySprint-1.8.9-forge-1.0.2.jar installé dans
- * l'instance du joueur pour vérifier, PAS depuis le code multi-version de leur
- * dépôt GitHub qui vise 1.21+) : {@code MixinEntityPlayerSP} redirige TOUT
- * appel à {@code KeyBinding.isKeyDown()} dans {@code onLivingUpdate()} vers
- * une fonction "shouldSetSprint" — même principe ici.
+ * Toggle Sprint — technique PolySprint ADAPTÉE à ce bootstrap (voir aussi
+ * MixinToggleSneak189, même principe). @Redirect sur KeyBinding.isKeyDown()
+ * comme le fait le vrai PolySprint s'est révélé IMPOSSIBLE ici (voir
+ * historique de session : Object/stub nommé rejetés "expected avb", aucun
+ * remapping de signature de handler dans ce bootstrap custom).
  *
- * Remplace l'ancienne approche (poll clavier LWJGL brut + réflexion à CHAQUE
- * FRAME RENDUE, donc des centaines de fois/seconde) : ce Redirect s'exécute
- * exactement à la cadence du vrai tick vanilla (0 poll séparé, 0 overhead de
- * réflexion en dehors de ces appels déjà existants) — "notre sprint prenait
- * trop de perf" corrigé à la racine plutôt qu'optimisé en surface.
+ * REDESIGN (v169 causait des rollbacks serveur sur Hypixel) : la première
+ * version appelait directement {@code Entity.setSprinting(true)} par
+ * réflexion depuis un @Inject en TAIL, avec un seul garde-fou approximatif
+ * ({@code movementForward >= 0.8f}). Ça contourne TOUTES les autres
+ * conditions internes vanilla de tickMovement() (faim, monture, cécité,
+ * sneaking, etc. — logique complexe jamais entièrement décompilée) : le
+ * serveur peut recevoir un paquet START_SPRINTING alors que SA PROPRE
+ * simulation dit que ce n'est pas censé être possible → flag anti-triche →
+ * rollback.
  *
- * Bytecode RÉEL vérifié (javap sur le vrai .minecraft/versions/1.8.9/1.8.9.jar,
- * classe officielle "bew") : {@code ClientPlayerEntity.tickMovement()}
- * (lettre officielle "m") appelle DEUX FOIS {@code KeyBinding.isPressed()}
- * (lettre officielle "d" — PAS single-consumer, voir javadoc ci-dessous),
- * les deux fois sur {@code GameOptions.sprintKey} (lettre "ae") — aucune
- * autre touche vérifiée dans cette méthode, donc rediriger TOUS les appels
- * sans ordinal est sûr (mêmes garanties que le binaire PolySprint réel).
- *
- * IMPORTANT — correction d'une erreur de ce projet tout au long de la
- * session : {@code KeyBinding.isPressed()} (lettre "d", method_6619) N'EST
- * PAS la méthode "à un seul consommateur" — celle-ci décrémente
- * {@code timesPressed}, c'est {@code KeyBinding.wasPressed()} (lettre "f",
- * method_841). Vérifié en décompilant avb.class (KeyBinding) du vrai jar
- * vanilla : {@code d()} fait juste {@code return this.pressed;} (aucun effet
- * de bord), {@code f()} décrémente bien un compteur. isPressed() est donc
- * SÛRE à lire/rediriger ici, contrairement à ce qu'affirmaient les
- * commentaires précédents dans ce module (voir KeystrokesModule/
- * ToggleKeyModule, qui évitaient isPressed() par erreur).
+ * Nouvelle approche : on n'encadre PLUS que {@code KeyBinding.pressed}
+ * (sprintKey) — on le force à {@code true} juste AVANT que tickMovement() ne
+ * l'examine (HEAD), puis on le restaure juste APRÈS (TAIL). tickMovement()
+ * tourne alors SANS AUCUNE modification, avec TOUTES ses vraies conditions
+ * internes intactes — comportement rigoureusement identique à un maintien
+ * physique de la touche, donc indiscernable d'un appui réel pour le serveur
+ * (paquet réseau envoyé par le même chemin, au même moment, dans les mêmes
+ * conditions que vanilla l'aurait fait lui-même).
  */
 @Mixin(targets = "net.minecraft.entity.player.ClientPlayerEntity")
 public abstract class MixinToggleSprint189 {
 
     private boolean la$prevDown;
     private boolean la$toggled;
-    private static boolean la$diagLogged;
-    private static boolean la$headDiagLogged;
+    private boolean la$overriding;
 
-    /** Diagnostic isolé : confirme si Mixin trouve ne serait-ce que la méthode "m()V" elle-même, indépendamment du @Redirect ci-dessous. */
     @Inject(method = "m()V", at = @At("HEAD"), require = 0)
-    private void la$diagHead(CallbackInfo ci) {
-        if (la$headDiagLogged) return;
-        la$headDiagLogged = true;
-        LauncherLog.info("[MixinToggleSprint189] HEAD de m()V ATTEINT");
-    }
-
-    // "m()V" — lettre officielle DIRECTE, pas le nom Yarn "tickMovement" : ce
-    // nom n'est indexé dans mappings-1.8.9.tiny QUE sous la classe ancêtre
-    // LivingEntity (où la méthode est déclarée à l'origine), jamais ré-indexé
-    // pour l'override réel de ClientPlayerEntity — MappingsRegistry.getObfMethodName
-    // échoue donc silencieusement pour CE scope de classe précis et retombe
-    // sur le nom Yarn tel quel ("tickMovement", qui n'existe pas dans le
-    // bytecode réel) → l'injecteur ne matchait JAMAIS rien (confirmé : le
-    // diagnostic "redirect ATTEINT" ne s'affichait jamais en jeu). "m" est la
-    // lettre RÉELLE vérifiée via javap sur bew.class (le vrai .minecraft/
-    // versions/1.8.9/1.8.9.jar) — fiable ici car ce déploiement tourne en
-    // Scheme.OFFICIAL (Forge, pas Fabric/intermediary, confirmé par les logs :
-    // "fabric=false").
-    // "Lavb;d()Z" — même raison que method="m()V" : la résolution du "target"
-    // d'@At(INVOKE) passe par le même pipeline de remapping yarn→officiel que
-    // "method", jamais exercé avant dans ce bootstrap (les Mixins existants
-    // n'utilisent que @At("TAIL")/@At("HEAD"), jamais INVOKE) — diagnostic
-    // HEAD confirmé atteint, mais le Redirect ne matchait toujours rien avec
-    // le nom Yarn "Lnet/minecraft/client/option/KeyBinding;isPressed()Z".
-    // "avb" = KeyBinding, "d" = isPressed, vérifiés tous les deux par javap
-    // sur le vrai jar 1.8.9.
-    @Redirect(method = "m()V",
-        at = @At(value = "INVOKE", target = "Lavb;d()Z"),
-        require = 0)
-    private boolean la$toggleSprint(KeyBinding keyBinding) {
+    private void la$sprintHead(CallbackInfo ci) {
+        la$overriding = false;
         try {
-            if (!la$diagLogged) {
-                la$diagLogged = true;
-                LauncherLog.info("[MixinToggleSprint189] redirect ATTEINT, keyBinding=" + keyBinding);
-            }
-            boolean realDown = pressedField(keyBinding);
-
             LauncherModule module = ModuleRegistry.get("toggle-sprint");
-            if (module == null || !module.isEnabled() || !isSprintKey(keyBinding)) return realDown;
 
-            // Détection du front montant EXACTEMENT une fois par tick réel
-            // (cet appel EST le tick, pas un poll séparé) — bascule sur
-            // appui, comme un vrai bouton toggle.
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+            Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+            if (options == null) return;
+            Object sprintKey = McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "sprintKey").get(options);
+            if (sprintKey == null) return;
+
+            Field pressedField = McReflect.field(sprintKey.getClass(), "net/minecraft/client/option/KeyBinding", "pressed");
+            if (pressedField == null) return;
+            boolean realDown = pressedField.getBoolean(sprintKey);
+
             if (realDown && !la$prevDown) la$toggled = !la$toggled;
             la$prevDown = realDown;
 
-            return la$toggled;
+            if (module != null && module.isEnabled() && la$toggled && !realDown) {
+                pressedField.setBoolean(sprintKey, true);
+                la$overriding = true;
+            }
         } catch (Throwable t) {
-            LauncherLog.err("[MixinToggleSprint189] la$toggleSprint: " + t);
-            return pressedFieldSafe(keyBinding);
+            LauncherLog.err("[MixinToggleSprint189] la$sprintHead: " + t);
         }
     }
 
-    private boolean isSprintKey(Object keyBinding) {
+    @Inject(method = "m()V", at = @At("TAIL"), require = 0)
+    private void la$sprintTail(CallbackInfo ci) {
+        if (!la$overriding) return;
         try {
             Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
+            if (mc == null) return;
             Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
-            if (options == null) return false;
+            if (options == null) return;
             Object sprintKey = McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "sprintKey").get(options);
-            return sprintKey == keyBinding;
+            if (sprintKey == null) return;
+            Field pressedField = McReflect.field(sprintKey.getClass(), "net/minecraft/client/option/KeyBinding", "pressed");
+            if (pressedField != null) pressedField.setBoolean(sprintKey, false);
         } catch (Throwable t) {
-            return false;
+            LauncherLog.err("[MixinToggleSprint189] la$sprintTail: " + t);
+        } finally {
+            la$overriding = false;
         }
-    }
-
-    private boolean pressedField(Object keyBinding) throws Exception {
-        Field f = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed");
-        return f != null && f.getBoolean(keyBinding);
-    }
-
-    private boolean pressedFieldSafe(Object keyBinding) {
-        try { return pressedField(keyBinding); } catch (Throwable t) { return false; }
     }
 }

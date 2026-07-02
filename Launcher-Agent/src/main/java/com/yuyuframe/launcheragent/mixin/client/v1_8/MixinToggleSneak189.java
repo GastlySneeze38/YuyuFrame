@@ -4,101 +4,83 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import net.minecraft.client.option.KeyBinding;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.lang.reflect.Field;
 
 /**
- * Toggle Sneak — même technique que {@link MixinToggleSprint189} (voir sa
- * javadoc pour le contexte PolySprint complet), appliquée à
- * {@code KeyboardInput.tick()} plutôt que {@code ClientPlayerEntity.tickMovement()}.
+ * Toggle Sneak — même redesign "fake KeyBinding.pressed" que
+ * {@link MixinToggleSprint189} (voir sa javadoc pour le contexte complet :
+ * rollbacks serveur sur Hypixel avec l'ancienne version qui forçait
+ * directement Input.sneaking + le ralentissement ×0.3 + Entity.setSneaking()
+ * à la main).
  *
- * Bytecode RÉEL vérifié (javap sur bev.class = KeyboardInput, extrait du vrai
- * .minecraft/versions/1.8.9/1.8.9.jar) : sa méthode {@code tick()} (lettre
- * officielle "a") appelle {@code KeyBinding.isPressed()} SIX fois — une par
- * touche de mouvement (avant/arrière/gauche/droite/saut/SNEAK, dans cet
- * ordre), chacune sur un champ DIFFÉRENT de GameOptions. Rediriger TOUS ces
- * appels sans ordinal est sûr : {@link #isSneakKey} ne change le résultat que
- * pour {@code GameOptions.sneakKey} (lettre "ad") — les 5 autres retombent
- * sur {@code realDown}, comportement vanilla inchangé.
- *
- * C'est CE point précis (KeyboardInput.tick() recalculant l'état à chaque
- * tick, indépendamment de Entity.setSneaking()) qui expliquait pourquoi le
- * forçage précédent (juste appeler setSneaking(true) depuis une boucle de
- * rendu séparée) perdait systématiquement la course — voir l'historique de
- * ToggleKeyModule, remplacé par cette approche.
+ * En encadrant KeyboardInput.tick() (bev.a()) d'un HEAD/TAIL qui bascule
+ * UNIQUEMENT {@code sneakKey.pressed}, vanilla recalcule LUI-MÊME
+ * {@code this.d} (sneaking, à l'offset ~121-127 du bytecode réel de bev.a())
+ * ET applique LUI-MÊME le ralentissement ×0.3 sur movementSideways/
+ * movementForward (offset ~130-165) — plus besoin de le répliquer à la main.
+ * La synchro serveur passe par {@code ClientPlayerEntity.p()}
+ * (sendMovementPackets, lit {@code av()} qui lit directement
+ * {@code input.sneaking}) exactement comme pour un appui réel — comportement
+ * rigoureusement identique à un maintien physique de la touche, donc
+ * indiscernable d'un appui réel pour le serveur.
  */
 @Mixin(targets = "net.minecraft.client.input.KeyboardInput")
 public abstract class MixinToggleSneak189 {
 
     private boolean la$prevDown;
     private boolean la$toggled;
-    private static boolean la$diagLogged;
-    private static boolean la$headDiagLogged;
+    private boolean la$overriding;
 
-    /** Diagnostic isolé : confirme si Mixin trouve ne serait-ce que la méthode "a()V" elle-même, indépendamment du @Redirect ci-dessous. */
     @Inject(method = "a()V", at = @At("HEAD"), require = 0)
-    private void la$diagHead(CallbackInfo ci) {
-        if (la$headDiagLogged) return;
-        la$headDiagLogged = true;
-        LauncherLog.info("[MixinToggleSneak189] HEAD de a()V ATTEINT");
-    }
-
-    // "a()V" — lettre officielle DIRECTE, même raison que MixinToggleSprint189 :
-    // le nom Yarn "tick" n'est indexé QUE sous la classe de base Input, jamais
-    // pour l'override réel de KeyboardInput — la résolution par nom échouait
-    // silencieusement. "a" vérifié via javap sur bev.class (vrai jar 1.8.9).
-    // "Lavb;d()Z" — même correctif que MixinToggleSprint189 : lettres
-    // officielles directes pour le target d'@At(INVOKE), jamais résolu
-    // correctement via le nom Yarn dans ce bootstrap.
-    @Redirect(method = "a()V",
-        at = @At(value = "INVOKE", target = "Lavb;d()Z"),
-        require = 0)
-    private boolean la$toggleSneak(KeyBinding keyBinding) {
+    private void la$sneakHead(CallbackInfo ci) {
+        la$overriding = false;
         try {
-            if (!la$diagLogged) {
-                la$diagLogged = true;
-                LauncherLog.info("[MixinToggleSneak189] redirect ATTEINT, keyBinding=" + keyBinding);
-            }
-            boolean realDown = pressedField(keyBinding);
-
             LauncherModule module = ModuleRegistry.get("toggle-sneak");
-            if (module == null || !module.isEnabled() || !isSneakKey(keyBinding)) return realDown;
+
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+            Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+            if (options == null) return;
+            Object sneakKey = McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "sneakKey").get(options);
+            if (sneakKey == null) return;
+
+            Field pressedField = McReflect.field(sneakKey.getClass(), "net/minecraft/client/option/KeyBinding", "pressed");
+            if (pressedField == null) return;
+            boolean realDown = pressedField.getBoolean(sneakKey);
 
             if (realDown && !la$prevDown) la$toggled = !la$toggled;
             la$prevDown = realDown;
 
-            return la$toggled;
+            if (module != null && module.isEnabled() && la$toggled && !realDown) {
+                pressedField.setBoolean(sneakKey, true);
+                la$overriding = true;
+            }
         } catch (Throwable t) {
-            LauncherLog.err("[MixinToggleSneak189] la$toggleSneak: " + t);
-            return pressedFieldSafe(keyBinding);
+            LauncherLog.err("[MixinToggleSneak189] la$sneakHead: " + t);
         }
     }
 
-    private boolean isSneakKey(Object keyBinding) {
+    @Inject(method = "a()V", at = @At("TAIL"), require = 0)
+    private void la$sneakTail(CallbackInfo ci) {
+        if (!la$overriding) return;
         try {
             Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
+            if (mc == null) return;
             Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
-            if (options == null) return false;
+            if (options == null) return;
             Object sneakKey = McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "sneakKey").get(options);
-            return sneakKey == keyBinding;
+            if (sneakKey == null) return;
+            Field pressedField = McReflect.field(sneakKey.getClass(), "net/minecraft/client/option/KeyBinding", "pressed");
+            if (pressedField != null) pressedField.setBoolean(sneakKey, false);
         } catch (Throwable t) {
-            return false;
+            LauncherLog.err("[MixinToggleSneak189] la$sneakTail: " + t);
+        } finally {
+            la$overriding = false;
         }
-    }
-
-    private boolean pressedField(Object keyBinding) throws Exception {
-        Field f = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed");
-        return f != null && f.getBoolean(keyBinding);
-    }
-
-    private boolean pressedFieldSafe(Object keyBinding) {
-        try { return pressedField(keyBinding); } catch (Throwable t) { return false; }
     }
 }

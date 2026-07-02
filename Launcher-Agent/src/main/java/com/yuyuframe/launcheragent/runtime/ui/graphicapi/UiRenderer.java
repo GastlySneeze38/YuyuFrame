@@ -56,6 +56,52 @@ public final class UiRenderer {
     private int uRadius = -1;
     private boolean rectInitFailed = false;
 
+    // ── Shader de vignette (dégradé continu depuis les 4 bords) — voir
+    // LowHealthTintModule : dessiner le dégradé comme des bandes de rects
+    // empilées (seule option sans shader dédié) produit des paliers visibles
+    // à l'œil nu (l'alpha change par MARCHES, pas en continu), même une fois
+    // le chevauchement des coins corrigé. Ici l'alpha de CHAQUE PIXEL est
+    // calculé directement par le GPU à partir de sa distance au bord le plus
+    // proche — un seul quad plein écran, dégradé parfaitement lisse, et les
+    // coins se traitent naturellement (min des 4 distances, jamais de double
+    // comptage contrairement à des rects superposés).
+    private static final String VIGNETTE_FRAGMENT_SRC =
+        "uniform vec2 u_ViewportSize;\n" +
+        "uniform float u_VSize;\n" +
+        "void main() {\n" +
+        "    vec2 p = gl_FragCoord.xy;\n" +
+        "    float distTop = u_ViewportSize.y - p.y;\n" +
+        "    float distBottom = p.y;\n" +
+        "    float distLeft = p.x;\n" +
+        "    float distRight = u_ViewportSize.x - p.x;\n" +
+        "    float distEdge = min(min(distTop, distBottom), min(distLeft, distRight));\n" +
+        // Revenu à smootherstep (Ken Perlin, 6t^5-15t^4+10t^3) — la tentative
+        // "ease-out" (1-t)^3 n'était pas nécessaire : la vraie cause du bord
+        // net était GL_ALPHA_TEST resté actif (rejet binaire des pixels sous
+        // ~10% d'alpha, voir plus bas/pushAttrib), pas la forme de la courbe.
+        // smootherstep reste la référence standard pour ce type de dégradé
+        // (dérivée première ET seconde nulles aux deux bornes).
+        "    float t = clamp(distEdge / u_VSize, 0.0, 1.0);\n" +
+        "    float eased = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
+        "    float alpha = 1.0 - eased;\n" +
+        // Le framebuffer ne code que 256 niveaux par canal — même une courbe
+        // parfaitement lisse en maths QUANTIFIE en un nombre limité de paliers
+        // réellement affichables sur une zone large/fort contraste (encore
+        // visible en jeu après smootherstep). NanoVG (PvP-Mod) anticrénèle en
+        // interne, on n'a pas cet équivalent ici — on ajoute donc un bruit
+        // (dithering, hash pseudo-aléatoire par pixel) de l'ordre d'1 LSB pour
+        // casser les paliers résiduels, technique standard contre le banding
+        // sur les dégradés écran (ciel, vignette...).
+        "    float dither = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;\n" +
+        "    alpha = clamp(alpha + dither / 128.0, 0.0, 1.0);\n" +
+        "    gl_FragColor = vec4(gl_Color.rgb, gl_Color.a * alpha);\n" +
+        "}\n";
+
+    private int vignetteProgram = -1;
+    private int uViewportSize = -1;
+    private int uVSize = -1;
+    private boolean vignetteInitFailed = false;
+
     // ── Shader de texte SDF (distance field) — voir UiFont pour le pourquoi :
     // l'alpha de l'atlas encode une distance signée au bord du glyphe, pas
     // une couverture directe. dFdx/dFdy/fwidth sont cœur GLSL 1.10+ pour un
@@ -133,6 +179,110 @@ public final class UiRenderer {
         }
     }
 
+    private void ensureVignetteShaderInit() {
+        if (vignetteProgram != -1 || vignetteInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, VERTEX_SRC);
+            glCompileShader(vsh);
+
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, VIGNETTE_FRAGMENT_SRC);
+            glCompileShader(fsh);
+
+            vignetteProgram = glCreateProgram();
+            glAttachShader(vignetteProgram, vsh);
+            glAttachShader(vignetteProgram, fsh);
+            glLinkProgram(vignetteProgram);
+
+            uViewportSize = glGetUniformLocation(vignetteProgram, "u_ViewportSize");
+            uVSize = glGetUniformLocation(vignetteProgram, "u_VSize");
+
+            LauncherLog.ui(1, "[UiRenderer] shader vignette compilé, program=" + vignetteProgram
+                + " uViewportSize=" + uViewportSize + " uVSize=" + uVSize);
+        } catch (Throwable t) {
+            vignetteInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader vignette : " + t);
+        }
+    }
+
+    /** {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se replier sur une approximation par bandes. */
+    public boolean isVignetteAvailable() {
+        ensureVignetteShaderInit();
+        return !vignetteInitFailed;
+    }
+
+    /**
+     * Dessine un dégradé plein écran depuis les 4 bords vers le centre —
+     * {@code edgeColor.a} est l'opacité AU BORD (0 au-delà de {@code vSize}
+     * pixels de distance du bord le plus proche). Voir VIGNETTE_FRAGMENT_SRC :
+     * un seul quad, alpha calculé par pixel côté GPU, aucun palier possible.
+     */
+    public void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        ensureVignetteShaderInit();
+        if (vignetteInitFailed || vSize <= 0f) return;
+
+        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        try {
+            // NOTE : 0x00004000 = GL_COLOR_BUFFER_BIT (PAS GL_ENABLE_BIT,
+            // 0x00002000 — erreur de commentaire historique). Couvre quand
+            // même ce qu'il faut ici : GL_COLOR_BUFFER_BIT sauvegarde/restaure
+            // déjà l'état GL_ALPHA_TEST (enable + func/ref) et GL_BLEND.
+            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
+            attribPushed = true;
+            glDisable(0x0DE1); // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            // GL_ALPHA_TEST : vanilla l'active avec glAlphaFunc(GL_GREATER, 0.1)
+            // pour les textures découpées (feuilles, vitres...) — laissé actif
+            // depuis le rendu du monde juste avant ce hook, TOUT pixel de notre
+            // dégradé sous ~10% d'opacité (0.1) serait REJETÉ (pas blendé, pas
+            // dessiné du tout) au lieu de fondre vers 0 — un rejet binaire, pas
+            // un blend, d'où un "mur" net et invariant à toute courbe/opacité
+            // testée jusqu'ici. C'était la vraie cause.
+            glDisable(0x0BC0); // GL_ALPHA_TEST
+            // Un GL_SCISSOR_TEST resté actif (ex: UiScrollContainer, si
+            // endScissor() a sauté suite à une exception, voir son correctif)
+            // découperait ce quad plein écran à un rectangle sans rapport —
+            // symptôme observé : dégradé net et INVARIANT à toute retouche
+            // d'opacité/courbe (un clip est binaire, pas un blend). On
+            // désactive donc explicitement ici, restauré par popAttrib
+            // (GL_ENABLE_BIT couvre ce toggle) — notre overlay ne doit jamais
+            // dépendre de l'état laissé par un widget de menu sans rapport.
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+
+            glUseProgram(vignetteProgram);
+            glUniform2f(uViewportSize, vpWidth, vpHeight);
+            glUniform1f(uVSize, vSize);
+            drawQuad(0, 0, vpWidth, vpHeight, edgeColor);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawEdgeVignette: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (attribPushed) popAttrib();
+            } catch (Throwable ignored) {}
+        }
+    }
+
     private void ensureTextShaderInit() {
         if (textProgram != -1 || textInitFailed) return;
         try {
@@ -200,6 +350,8 @@ public final class UiRenderer {
             glDisable(0x0B44); // GL_CULL_FACE — sinon un quad mal orienté (winding) par rapport à ce que
                                 // le rendu 3D du monde a laissé actif peut être silencieusement éliminé,
                                 // sans erreur : dessin "réussi" en apparence, rien de visible en jeu.
+            glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
+            glDisable(0x0C11); // GL_SCISSOR_TEST — voir drawEdgeVignette pour le pourquoi
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
@@ -358,6 +510,7 @@ public final class UiRenderer {
             // n'était pas null ("seule la première icône s'affiche").
             glClear(0x00000100); // GL_DEPTH_BUFFER_BIT
             glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0C11); // GL_SCISSOR_TEST — voir drawEdgeVignette pour le pourquoi
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             // Unité de texture 0 explicitement — l'overlay (glint d'enchant,
@@ -454,6 +607,8 @@ public final class UiRenderer {
             glEnable(0x0DE1);  // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
+            glDisable(0x0C11); // GL_SCISSOR_TEST — voir drawEdgeVignette pour le pourquoi
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             glBindTexture(0x0DE1, texId);
@@ -645,6 +800,9 @@ public final class UiRenderer {
     }
     private void glUniform1i(int loc, int v) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glUniform1i", int.class, int.class).invoke(null, loc, v);
+    }
+    private void glUniform2f(int loc, float a, float b) throws Exception {
+        gl("org.lwjgl.opengl.GL20", "glUniform2f", int.class, float.class, float.class).invoke(null, loc, a, b);
     }
     private void glUniform4f(int loc, float a, float b, float c, float d) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glUniform4f", int.class, float.class, float.class, float.class, float.class)
