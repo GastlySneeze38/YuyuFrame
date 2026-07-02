@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.hud;
+package com.yuyuframe.launcheragent.runtime.ui.hud;
 
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
@@ -16,7 +16,7 @@ public final class HudPanelRenderer {
     private HudPanelRenderer() {}
 
     /**
-     * Mutable — GlobalUiSettings (runtime.modules) le réassigne directement
+     * Mutable — GlobalUiSettings (runtime.ui) le réassigne directement
      * ("Opacité du HUD", DISTINCTE de UiTheme.CARD_BG qui vise les cartes du
      * menu, pas les panneaux en jeu). Alpha 120/255 — valeur RÉELLE par défaut
      * d'OneConfig (cc.polyfrost.oneconfig.hud.BasicHud, vérifiée sur son

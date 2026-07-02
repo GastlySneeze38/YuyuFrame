@@ -7,7 +7,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
  * cohérence visuelle entre tous les widgets/écrans custom.
  *
  * CARD_BG/CARD_HOVER/ACCENT/ACCENT_DIM/SIDEBAR_ACTIVE/RADIUS_MD sont
- * NON-final — {@link com.yuyuframe.launcheragent.runtime.modules.GlobalUiSettings}
+ * NON-final — {@link com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings}
  * les réassigne en direct (pas de couche d'indirection/getter) depuis l'écran
  * "Paramètres" : un réglage "ultra générique" doit changer TOUT l'affichage,
  * pas juste sa propre page.

@@ -1,11 +1,11 @@
-package com.yuyuframe.launcheragent.runtime.modules;
+package com.yuyuframe.launcheragent.runtime.ui;
 
-import com.yuyuframe.launcheragent.runtime.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.modules.config.ConfigColor;
-import com.yuyuframe.launcheragent.runtime.modules.config.ConfigDropdown;
-import com.yuyuframe.launcheragent.runtime.modules.config.ConfigKeybind;
-import com.yuyuframe.launcheragent.runtime.modules.config.ConfigSlider;
-import com.yuyuframe.launcheragent.runtime.modules.config.ConfigToggle;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;

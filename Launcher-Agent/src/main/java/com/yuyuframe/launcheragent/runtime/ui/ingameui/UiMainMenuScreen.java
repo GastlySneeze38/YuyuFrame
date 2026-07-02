@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
-import com.yuyuframe.launcheragent.runtime.modules.GlobalUiSettings;
-import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.modules.ModuleRegistry;
+import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
+import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;

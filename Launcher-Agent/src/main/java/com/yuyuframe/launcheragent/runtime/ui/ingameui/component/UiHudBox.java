@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
-import com.yuyuframe.launcheragent.runtime.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.hud.HudPanelRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;

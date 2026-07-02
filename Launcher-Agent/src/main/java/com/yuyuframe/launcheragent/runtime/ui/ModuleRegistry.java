@@ -1,14 +1,14 @@
-package com.yuyuframe.launcheragent.runtime.modules;
+package com.yuyuframe.launcheragent.runtime.ui;
 
-import com.yuyuframe.launcheragent.runtime.modules.builtin.ArmorDurabilityModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.CoordsModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.FovModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.FpsModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.HurtCamModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.KeystrokesModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.LowHealthTintModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.PingModule;
-import com.yuyuframe.launcheragent.runtime.modules.builtin.PotionEffectsModule;
+import com.yuyuframe.launcheragent.runtime.module.ArmorDurabilityModule;
+import com.yuyuframe.launcheragent.runtime.module.CoordsModule;
+import com.yuyuframe.launcheragent.runtime.module.FovModule;
+import com.yuyuframe.launcheragent.runtime.module.FpsModule;
+import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
+import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
+import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
+import com.yuyuframe.launcheragent.runtime.module.PingModule;
+import com.yuyuframe.launcheragent.runtime.module.PotionEffectsModule;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
 import java.util.ArrayList;

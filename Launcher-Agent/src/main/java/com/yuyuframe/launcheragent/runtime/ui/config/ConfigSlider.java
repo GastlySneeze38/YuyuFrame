@@ -1,16 +1,18 @@
-package com.yuyuframe.launcheragent.runtime.modules.config;
+package com.yuyuframe.launcheragent.runtime.ui.config;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Marque un champ {@code int} (index sélectionné) comme une liste déroulante — voir {@link ConfigToggle} pour le principe général. */
+/** Marque un champ {@code float} comme un curseur numérique — voir {@link ConfigToggle} pour le principe général. */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
-public @interface ConfigDropdown {
+public @interface ConfigSlider {
     String name();
     String description() default "";
     String category() default "Général";
-    String[] options();
+    float min();
+    float max();
+    float step() default 1f;
 }

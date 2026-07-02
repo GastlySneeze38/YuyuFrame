@@ -1,6 +1,6 @@
-package com.yuyuframe.launcheragent.runtime.modules.builtin;
+package com.yuyuframe.launcheragent.runtime.module;
 
-import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 
 /**
  * Désactive le tremblement/inclinaison de la caméra à la prise de dégâts —

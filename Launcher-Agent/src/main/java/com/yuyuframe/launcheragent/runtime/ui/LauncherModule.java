@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.modules;
+package com.yuyuframe.launcheragent.runtime.ui;
 
 /**
  * Base commune de tout module réel (YuyuPvP, HUD Vanilla+...) — équivalent

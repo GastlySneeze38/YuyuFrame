@@ -1,9 +1,9 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
-import com.yuyuframe.launcheragent.runtime.hud.HudOverlayRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.runtime.modules.ModuleRegistry;
+import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
@@ -50,7 +50,7 @@ public abstract class GlobalUiRenderMixin189 {
             if (inputPoller == null) {
                 inputPoller = new UiInputPollerLegacy(GlobalUiRenderMixin189.class.getClassLoader());
                 // Force le chargement des modules intégrés (voir ModuleRegistry) dès
-                // la première frame — sinon leurs éléments HUD (voir runtime.modules.builtin)
+                // la première frame — sinon leurs éléments HUD (voir runtime.module)
                 // ne s'enregistreraient qu'à la première ouverture du menu "YuyuFrame".
                 ModuleRegistry.all();
             }

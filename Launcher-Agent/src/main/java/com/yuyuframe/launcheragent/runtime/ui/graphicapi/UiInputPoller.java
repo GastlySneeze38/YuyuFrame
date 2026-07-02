@@ -33,7 +33,7 @@ public abstract class UiInputPoller {
      * Nom de la touche d'ouverture du menu — même format que
      * {@link #pollAnyKeyJustPressed()} ("RSHIFT", "F1"...), lu par
      * {@link #readMenuKeyDown()} dans chaque implémentation. STATIC (pas un
-     * champ d'instance) : GlobalUiSettings (runtime.modules) l'écrit
+     * champ d'instance) : GlobalUiSettings (runtime.ui) l'écrit
      * directement, sans avoir besoin d'une référence vers l'instance active
      * (créée tardivement et paresseusement par le Mixin global).
      */

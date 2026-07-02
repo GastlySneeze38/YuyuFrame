@@ -1,7 +1,7 @@
-package com.yuyuframe.launcheragent.runtime.modules.builtin;
+package com.yuyuframe.launcheragent.runtime.module;
 
-import com.yuyuframe.launcheragent.runtime.hud.HudAnchor;
-import com.yuyuframe.launcheragent.runtime.hud.HudElement;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;

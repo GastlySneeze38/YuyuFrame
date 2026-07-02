@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.hud;
+package com.yuyuframe.launcheragent.runtime.ui.hud;
 
 /**
  * Un élément HUD déplaçable — un mod déclare son élément ici (voir
@@ -26,7 +26,7 @@ package com.yuyuframe.launcheragent.runtime.hud;
  * {@code locked}/{@code showWhenScreenOpen}/{@code paddingX}/{@code paddingY}/
  * {@code scale} — réglages génériques façon OneConfig, exposés
  * automatiquement dans la page de config d'un module qui possède un élément
- * HUD (voir ConfigScreenBuilder + runtime.modules.HudElementOwner) — PAS
+ * HUD (voir ConfigScreenBuilder + runtime.ui.HudElementOwner) — PAS
  * repris : couleur de fond/bordure/coins personnalisés par élément (jugés
  * superflus, le panneau partagé HudPanelRenderer suffit) et le dropdown
  * "Position Alignment" d'OneConfig (redondant avec notre système d'ancre
@@ -39,7 +39,7 @@ public class HudElement {
     /** Au-dessus, la boîte devient déraisonnablement grande — plafond de {@link #scale}. */
     public static final float MAX_SCALE = 4f;
 
-    /** Fournit le contenu affiché (une ligne par entrée), recalculé à CHAQUE frame — voir runtime.modules.builtin.FpsModule/PingModule/CoordsModule (leur ContentSource nichée) pour des exemples réels. */
+    /** Fournit le contenu affiché (une ligne par entrée), recalculé à CHAQUE frame — voir runtime.module.FpsModule/PingModule/CoordsModule (leur ContentSource nichée) pour des exemples réels. */
     public interface ContentSource {
         String[] lines();
     }
@@ -47,7 +47,7 @@ public class HudElement {
     /**
      * Rendu personnalisé, pour un contenu qui ne tient pas dans un simple
      * empilement de lignes de texte (grille de touches, pastilles colorées
-     * d'effets de potion...) — voir runtime.modules.builtin.KeystrokesModule/
+     * d'effets de potion...) — voir runtime.module.KeystrokesModule/
      * PotionEffectsModule (leur Renderer niché).
      * {@link HudPanelRenderer} dessine TOUJOURS le panneau de fond (même
      * style que les éléments texte, pour rester cohérent dans l'éditeur comme

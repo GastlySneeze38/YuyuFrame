@@ -1,8 +1,8 @@
-package com.yuyuframe.launcheragent.runtime.modules.builtin;
+package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
-import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.modules.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 
 import java.lang.reflect.Field;
 

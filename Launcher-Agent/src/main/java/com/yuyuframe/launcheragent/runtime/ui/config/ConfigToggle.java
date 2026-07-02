@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.modules.config;
+package com.yuyuframe.launcheragent.runtime.ui.config;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -6,8 +6,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marque un champ {@code boolean} d'un {@link com.yuyuframe.launcheragent.runtime.modules.LauncherModule}
- * comme un réglage à cocher — {@link com.yuyuframe.launcheragent.runtime.modules.ConfigScreenBuilder}
+ * Marque un champ {@code boolean} d'un {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule}
+ * comme un réglage à cocher — {@link com.yuyuframe.launcheragent.runtime.ui.ConfigScreenBuilder}
  * génère la ligne (UiToggle) automatiquement, aucun code d'écran à écrire.
  */
 @Retention(RetentionPolicy.RUNTIME)

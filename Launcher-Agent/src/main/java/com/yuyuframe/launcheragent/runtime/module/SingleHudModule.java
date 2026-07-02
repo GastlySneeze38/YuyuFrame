@@ -1,9 +1,9 @@
-package com.yuyuframe.launcheragent.runtime.modules.builtin;
+package com.yuyuframe.launcheragent.runtime.module;
 
-import com.yuyuframe.launcheragent.runtime.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.hud.HudRegistry;
-import com.yuyuframe.launcheragent.runtime.modules.HudElementOwner;
-import com.yuyuframe.launcheragent.runtime.modules.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudRegistry;
+import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
+import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 
 /**
  * Base commune des modules qui n'ajoutent RIEN d'autre qu'un unique élément

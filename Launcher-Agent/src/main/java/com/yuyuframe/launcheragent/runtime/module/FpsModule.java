@@ -1,7 +1,7 @@
-package com.yuyuframe.launcheragent.runtime.modules.builtin;
+package com.yuyuframe.launcheragent.runtime.module;
 
-import com.yuyuframe.launcheragent.runtime.hud.HudAnchor;
-import com.yuyuframe.launcheragent.runtime.hud.HudElement;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
+import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 
 import java.lang.reflect.Field;
@@ -10,7 +10,7 @@ import java.lang.reflect.Field;
  * Port de PvP-Mod FpsConfig/FpsHud — sa propre carte, comme dans la
  * référence. Le module fournit UNIQUEMENT les données (voir ContentSource
  * nichée ci-dessous) — tout le rendu passe par l'API générique partagée
- * (runtime.hud : HudElement/HudPanelRenderer/HudOverlayRenderer), jamais de
+ * (runtime.ui.hud : HudElement/HudPanelRenderer/HudOverlayRenderer), jamais de
  * code de dessin ici.
  */
 public final class FpsModule extends SingleHudModule {

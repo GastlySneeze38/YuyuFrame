@@ -1,15 +1,15 @@
-package com.yuyuframe.launcheragent.runtime.hud;
+package com.yuyuframe.launcheragent.runtime.ui.hud;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Registre global des éléments HUD déplaçables — un module (voir
- * runtime.modules.builtin.SingleHudModule) appelle {@link #register}/
+ * runtime.module.SingleHudModule) appelle {@link #register}/
  * {@link #unregister} pour que son propre élément apparaisse ou non dans
  * UiHudEditorScreen et HudOverlayRenderer, typiquement en fonction de son
  * propre état activé/désactivé. Vide par défaut — aucune donnée factice ni
- * entrée figée en dur ici, tout vient des modules (runtime.modules.builtin :
+ * entrée figée en dur ici, tout vient des modules (runtime.module :
  * FpsModule/PingModule/CoordsModule/etc., voir leur ContentSource nichée).
  */
 public final class HudRegistry {

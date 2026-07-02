@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.hud;
+package com.yuyuframe.launcheragent.runtime.ui.hud;
 
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 

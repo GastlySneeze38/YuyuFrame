@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Pont réflexion partagé par les modules (voir runtime.modules.builtin :
+ * Pont réflexion partagé par les modules (voir runtime.module :
  * FpsModule/PingModule/CoordsModule/ArmorDurabilityModule/KeystrokesModule/
  * PotionEffectsModule/FovModule/LowHealthTintModule) — s'appuie sur l'API
  * haut niveau de {@link MappingsRegistry} (loadClass/getObfFieldName/
@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * depuis du code non-tissé à chaque frame — d'où le cache Method/Field
  * statique.
  *
- * Vit dans {@code runtime.mapping} (pas {@code runtime.hud}) : ce n'est PAS
+ * Vit dans {@code runtime.mapping} (pas {@code runtime.ui.hud}) : ce n'est PAS
  * un composant du HUD, juste un utilitaire de réflexion générique vers le
  * jeu — le placer dans le package HUD aurait mélangé "API du moteur HUD" et
  * "outil de réflexion générique", contribuant au désordre qui a motivé cette
