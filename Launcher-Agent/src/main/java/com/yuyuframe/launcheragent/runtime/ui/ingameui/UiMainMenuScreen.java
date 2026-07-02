@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import com.yuyuframe.launcheragent.runtime.ui.ModuleGroup;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
@@ -102,9 +103,18 @@ public class UiMainMenuScreen extends UiScreenBase {
         searchField.h = SEARCH_H;
         widgets.add(searchField);
 
+        // Chaque entrée est SOIT un LauncherModule (carte + toggle propre,
+        // comme avant), SOIT un ModuleGroup (carte seule, pas de toggle —
+        // elle ouvre un écran à onglets où CHAQUE module membre a son propre
+        // toggle, voir UiModGroupConfigScreen). Les groupes d'abord, puis les
+        // modules non groupés (ModuleRegistry.ungrouped() exclut déjà tout
+        // module membre d'un groupe — sinon il apparaîtrait deux fois).
         String filter = searchField.text().trim().toLowerCase(Locale.ROOT);
-        List<LauncherModule> filtered = new ArrayList<>();
-        for (LauncherModule m : ModuleRegistry.all()) {
+        List<Object> filtered = new ArrayList<>();
+        for (ModuleGroup g : ModuleRegistry.groups()) {
+            if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
+        }
+        for (LauncherModule m : ModuleRegistry.ungrouped()) {
             if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
         }
 
@@ -112,20 +122,28 @@ public class UiMainMenuScreen extends UiScreenBase {
         float top = searchField.y - 24f;
 
         for (int i = 0; i < filtered.size(); i++) {
-            LauncherModule mod = filtered.get(i);
+            Object entry = filtered.get(i);
             int col = i % 2, row = i / 2;
             float cx = contentX + col * (cardW + CARD_GAP);
             float cy = top - row * (CARD_H + CARD_GAP) - CARD_H;
 
-            // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
-            // PAR-DESSUS, sinon le fond plein de la carte le recouvrait
-            // entièrement — visible nulle part bien que toujours cliquable
-            // en dessous). ModCard.contains() exclut explicitement la zone du
-            // toggle pour que le clic dessus continue de basculer le toggle
-            // plutôt que d'ouvrir la config du mod.
-            widgets.add(new ModCard(cx, cy, cardW, mod));
-            widgets.add(new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(),
-                v -> { mod.setEnabled(v); HudConfigStore.save(); }));
+            if (entry instanceof ModuleGroup) {
+                ModuleGroup group = (ModuleGroup) entry;
+                widgets.add(new ModCard(cx, cy, cardW, group.name, group.description,
+                    () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
+            } else {
+                LauncherModule mod = (LauncherModule) entry;
+                // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
+                // PAR-DESSUS, sinon le fond plein de la carte le recouvrait
+                // entièrement — visible nulle part bien que toujours cliquable
+                // en dessous). ModCard.contains() exclut explicitement la zone du
+                // toggle pour que le clic dessus continue de basculer le toggle
+                // plutôt que d'ouvrir la config du mod.
+                widgets.add(new ModCard(cx, cy, cardW, mod.name, mod.description,
+                    () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod))));
+                widgets.add(new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(),
+                    v -> { mod.setEnabled(v); HudConfigStore.save(); }));
+            }
         }
     }
 
@@ -190,12 +208,16 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     private final class ModCard extends UiWidget {
-        private final LauncherModule mod;
+        private final String cardName, cardDescription;
+        private final Runnable onOpen;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        ModCard(float x, float y, float w, LauncherModule mod) {
+        /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
+        ModCard(float x, float y, float w, String name, String description, Runnable onOpen) {
             super(x, y, w, CARD_H);
-            this.mod = mod;
+            this.cardName = name;
+            this.cardDescription = description;
+            this.onOpen = onOpen;
         }
 
         // Exclut la zone du toggle (mêmes coordonnées que celles utilisées
@@ -219,18 +241,18 @@ public class UiMainMenuScreen extends UiScreenBase {
             float iconSize = 36f;
             renderer.drawRoundedRect(x + 12, y + h - iconSize - 12, x + 12 + iconSize, y + h - 12,
                 UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM, vpWidth, vpHeight);
-            String initial = mod.name.substring(0, 1).toUpperCase(Locale.ROOT);
+            String initial = cardName.substring(0, 1).toUpperCase(Locale.ROOT);
             float iw = renderer.textWidth(initial, 0.5f);
             renderer.drawText(initial, x + 12 + (iconSize - iw) / 2f, y + h - 12 - iconSize / 2f - 6f, UiTheme.ACCENT, 0.5f, vpWidth, vpHeight);
 
             float textX = x + 12 + iconSize + 12;
-            renderer.drawText(mod.name, textX, y + h - 26, UiTheme.TEXT_PRIMARY, 0.42f, vpWidth, vpHeight);
-            renderer.drawText(mod.description, textX, y + h - 46, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
+            renderer.drawText(cardName, textX, y + h - 26, UiTheme.TEXT_PRIMARY, 0.42f, vpWidth, vpHeight);
+            renderer.drawText(cardDescription, textX, y + h - 46, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
         }
 
         @Override
         public void onClick() {
-            closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod));
+            onOpen.run();
         }
     }
 

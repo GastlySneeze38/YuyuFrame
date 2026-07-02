@@ -1,10 +1,13 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.module.ArmorDurabilityModule;
+import com.yuyuframe.launcheragent.runtime.module.ChatEnhancementsModule;
 import com.yuyuframe.launcheragent.runtime.module.CoordsModule;
+import com.yuyuframe.launcheragent.runtime.module.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.module.DiagonalSwordModule;
 import com.yuyuframe.launcheragent.runtime.module.FovModule;
 import com.yuyuframe.launcheragent.runtime.module.FpsModule;
+import com.yuyuframe.launcheragent.runtime.module.FullbrightModule;
 import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
 import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
@@ -17,9 +20,11 @@ import com.yuyuframe.launcheragent.runtime.module.SwingSpeedModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingWhileBlockingModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSneakModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSprintModule;
+import com.yuyuframe.launcheragent.runtime.module.WorldTimeModule;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -46,6 +51,7 @@ public final class ModuleRegistry {
     private ModuleRegistry() {}
 
     private static final List<LauncherModule> MODULES = new ArrayList<>();
+    private static final List<ModuleGroup> GROUPS = new ArrayList<>();
     static {
         register(new FpsModule());
         register(new PingModule());
@@ -64,6 +70,21 @@ public final class ModuleRegistry {
         register(new SwingWhileBlockingModule());
         register(new OldBowModule());
         register(new OldConsumeModule());
+        register(new CrosshairModule());
+        register(new FullbrightModule());
+        register(new WorldTimeModule());
+        register(new ChatEnhancementsModule());
+
+        // Regroupement demandé — voir ModuleGroup : purement de la
+        // présentation, les modules ci-dessus restent enregistrés
+        // individuellement juste au-dessus (tickAll/renderOverlayAll/persistance
+        // inchangés), seul UiMainMenuScreen les affiche fusionnés sous une
+        // carte au lieu d'une par module.
+        GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Hurt Cam, Sprint/Sneak",
+            Arrays.asList(get("fov"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"))));
+        GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire",
+            Arrays.asList(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
+                get("swing-while-blocking"), get("old-bow"), get("old-consume"))));
     }
 
     public static void register(LauncherModule module) {
@@ -77,6 +98,21 @@ public final class ModuleRegistry {
     }
 
     public static List<LauncherModule> all() { return Collections.unmodifiableList(MODULES); }
+
+    public static List<ModuleGroup> groups() { return Collections.unmodifiableList(GROUPS); }
+
+    /** Modules qui n'appartiennent à AUCUN {@link ModuleGroup} — ce sont ceux qui gardent leur propre carte sur l'écran d'accueil. */
+    public static List<LauncherModule> ungrouped() {
+        List<LauncherModule> result = new ArrayList<>();
+        for (LauncherModule m : MODULES) {
+            boolean grouped = false;
+            for (ModuleGroup g : GROUPS) {
+                if (g.members.contains(m)) { grouped = true; break; }
+            }
+            if (!grouped) result.add(m);
+        }
+        return result;
+    }
 
     public static LauncherModule get(String id) {
         for (LauncherModule m : MODULES) if (m.id.equals(id)) return m;
