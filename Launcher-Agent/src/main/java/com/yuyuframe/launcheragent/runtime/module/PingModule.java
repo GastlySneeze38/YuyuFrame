@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 
 import java.util.UUID;
 
@@ -11,6 +12,8 @@ public final class PingModule extends SingleHudModule {
     public PingModule() {
         super("ping", "Ping", "Affiche la latence réseau", true,
             new HudElement("ping", "Ping", HudAnchor.TOP_RIGHT, 8f, 8f, new ContentSource()));
+        hudElement().textColor = new UiColor(120, 220, 140, 255);
+        hudElement().accentSuffix = " ms";
     }
 
     /** Ping réel du joueur local — retrouve le PlayerListEntry via son UUID (même chemin que l'onglet multijoueur vanilla). */

@@ -6,8 +6,19 @@ package com.yuyuframe.launcheragent.runtime.ui.hud;
  * (UiHudEditorScreen, ouvert depuis la sidebar de l'accueil) ET en jeu
  * (HudOverlayRenderer) — même rendu dans les deux cas (voir HudPanelRenderer).
  *
- * Position stockée comme (ancre + décalage en pixels), PAS en coordonnées
- * absolues — voir HudAnchor.
+ * Position stockée comme (ancre + décalage), PAS en coordonnées absolues —
+ * voir HudAnchor. Le décalage lui-même ({@link #offsetX}/{@link #offsetY})
+ * est stocké comme une FRACTION du viewport (0.05 = 5% de la largeur/hauteur
+ * ACTUELLE), pas des pixels bruts : un décalage en pixels fixes ne "suit" pas
+ * un changement de taille de fenêtre/résolution — un élément glissé vers le
+ * centre de l'écran (donc à une grande distance en pixels de son ancre)
+ * pouvait se retrouver hors écran si la fenêtre rétrécissait ensuite (bug
+ * remonté par l'utilisateur : "la position ne s'adapte pas à la taille de
+ * l'écran"). Les constructeurs prennent toujours des valeurs "en pixels" par
+ * lisibilité (ex: {@code 8f, 8f} pour un coin) mais les convertissent en
+ * fraction via {@link #REFERENCE_WIDTH}/{@link #REFERENCE_HEIGHT} — voir
+ * {@link #screenX}/{@link #screenY} (fraction → pixels courants) et
+ * {@link #setScreenPosition} (pixels glissés → fraction, sens inverse).
  *
  * {@code w}/{@code h} ne sont PLUS librement réglables indépendamment l'un de
  * l'autre — après inspection du fonctionnement réel d'OneConfig (constaté
@@ -38,6 +49,10 @@ public class HudElement {
     public static final float MIN_SCALE = 0.5f;
     /** Au-dessus, la boîte devient déraisonnablement grande — plafond de {@link #scale}. */
     public static final float MAX_SCALE = 4f;
+
+    /** Résolution de référence pour convertir les décalages "en pixels" des constructeurs en fraction du viewport — voir la javadoc de classe. Purement conventionnelle (1920x1080), aucun lien avec la résolution réelle du joueur. */
+    private static final float REFERENCE_WIDTH = 1920f;
+    private static final float REFERENCE_HEIGHT = 1080f;
 
     /** Fournit le contenu affiché (une ligne par entrée), recalculé à CHAQUE frame — voir runtime.module.FpsModule/PingModule/CoordsModule (leur ContentSource nichée) pour des exemples réels. */
     public interface ContentSource {
@@ -76,8 +91,21 @@ public class HudElement {
     public float w, h;
     public final ContentSource content;
     public final CustomRenderer customRenderer;
+    /**
+     * Couleur d'accent pour le contenu ContentSource — null = pas d'accent,
+     * tout en UiTheme.TEXT_PRIMARY (comportement par défaut). Sans effet sur
+     * un CustomRenderer, qui choisit déjà ses propres couleurs par ligne.
+     * Si {@link #accentSuffix} est aussi défini ET qu'une ligne se termine par
+     * ce suffixe littéral, SEUL le suffixe est peint dans cette couleur (le
+     * reste — ex: la valeur numérique — reste TEXT_PRIMARY) ; sinon la ligne
+     * entière est peinte dans cette couleur.
+     */
+    public com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor textColor;
+    /** Suffixe littéral à isoler pour la coloration (ex: " FPS", " ms") — voir {@link #textColor}. */
+    public String accentSuffix;
 
     public HudAnchor anchor;
+    /** Fraction du viewport (voir javadoc de classe), PAS des pixels — ne jamais assigner de valeur "en pixels" directement ici, passer par {@link #setScreenPosition}. */
     public float offsetX, offsetY;
 
     // ── Réglages génériques façon OneConfig ─────────────────────────────────
@@ -92,32 +120,39 @@ public class HudElement {
     private final HudAnchor defaultAnchor;
     private final float defaultOffsetX, defaultOffsetY;
 
+    /**
+     * {@code offsetX}/{@code offsetY} ici sont des pixels "à la résolution de
+     * référence" ({@link #REFERENCE_WIDTH}/{@link #REFERENCE_HEIGHT}) — juste
+     * pour rester lisible dans le code des modules (ex: {@code 8f, 8f} pour
+     * un coin) — convertis immédiatement en fraction, la SEULE forme stockée
+     * (voir javadoc de classe).
+     */
     public HudElement(String id, String displayName, HudAnchor anchor, float offsetX, float offsetY, ContentSource content) {
         this.id = id;
         this.displayName = displayName;
         this.anchor = anchor;
-        this.offsetX = offsetX;
-        this.offsetY = offsetY;
+        this.offsetX = offsetX / REFERENCE_WIDTH;
+        this.offsetY = offsetY / REFERENCE_HEIGHT;
         this.content = content;
         this.customRenderer = null;
         this.defaultAnchor = anchor;
-        this.defaultOffsetX = offsetX;
-        this.defaultOffsetY = offsetY;
+        this.defaultOffsetX = this.offsetX;
+        this.defaultOffsetY = this.offsetY;
         recomputeSize();
     }
 
-    /** Variante rendu personnalisé — voir {@link CustomRenderer}. */
+    /** Variante rendu personnalisé — voir {@link CustomRenderer}. Mêmes unités "pixels de référence" que l'autre constructeur. */
     public HudElement(String id, String displayName, HudAnchor anchor, float offsetX, float offsetY, CustomRenderer customRenderer) {
         this.id = id;
         this.displayName = displayName;
         this.anchor = anchor;
-        this.offsetX = offsetX;
-        this.offsetY = offsetY;
+        this.offsetX = offsetX / REFERENCE_WIDTH;
+        this.offsetY = offsetY / REFERENCE_HEIGHT;
         this.content = null;
         this.customRenderer = customRenderer;
         this.defaultAnchor = anchor;
-        this.defaultOffsetX = offsetX;
-        this.defaultOffsetY = offsetY;
+        this.defaultOffsetX = this.offsetX;
+        this.defaultOffsetY = this.offsetY;
         recomputeSize();
     }
 
@@ -194,54 +229,85 @@ public class HudElement {
         return new float[]{ naturalW, naturalH };
     }
 
-    /** Coin bas-gauche de la boîte (espace pixels framebuffer, comme UiWidget) pour un viewport donné. */
+    /**
+     * Coin bas-gauche de la boîte (espace pixels framebuffer, comme UiWidget)
+     * pour un viewport donné — reconvertit offsetX (fraction) en pixels du
+     * viewport COURANT à chaque appel, voir javadoc de classe.
+     *
+     * Clampé au final dans {@code [0, vpWidth - w]} : la LARGEUR de la boîte
+     * reste fixe en pixels (voir naturalSize()) alors que sa POSITION est
+     * proportionnelle — un élément glissé loin de son ancre (ex: FPS ancré
+     * TOP_LEFT mais glissé côté droit, offsetX proche de 1.0) voit sa position
+     * proportionnelle se resserrer en rétrécissant la fenêtre SANS que la
+     * largeur fixe de la boîte ne suive, ce qui peut pousser son bord au-delà
+     * de l'écran ("des HUD sont en dehors de la fenêtre" en redimensionnant).
+     * Ce clamp final est un filet de sécurité générique, pareil que celui déjà
+     * appliqué pendant le glisser-déposer dans l'éditeur (voir UiHudBox) —
+     * étendu ici à TOUS les chemins de rendu (jeu ET éditeur), pas seulement
+     * pendant un drag actif.
+     */
     public float screenX(int vpWidth) {
+        float offsetXPx = offsetX * vpWidth;
+        float x;
         switch (anchor) {
             case TOP_RIGHT:
             case BOTTOM_RIGHT:
-                return vpWidth - offsetX - w;
+                x = vpWidth - offsetXPx - w;
+                break;
             case TOP_CENTER:
             case BOTTOM_CENTER:
-                return vpWidth / 2f - w / 2f + offsetX;
+                x = vpWidth / 2f - w / 2f + offsetXPx;
+                break;
             default: // TOP_LEFT, BOTTOM_LEFT
-                return offsetX;
+                x = offsetXPx;
         }
+        return Math.max(0f, Math.min(vpWidth - w, x));
     }
 
+    /** Même clamp final que {@link #screenX} — voir sa javadoc. */
     public float screenY(int vpHeight) {
+        float offsetYPx = offsetY * vpHeight;
+        float y;
         switch (anchor) {
             case TOP_LEFT:
             case TOP_CENTER:
             case TOP_RIGHT:
-                return vpHeight - offsetY - h;
+                y = vpHeight - offsetYPx - h;
+                break;
             default: // BOTTOM_*
-                return offsetY;
+                y = offsetYPx;
         }
+        return Math.max(0f, Math.min(vpHeight - h, y));
     }
 
-    /** Recalcule offsetX/offsetY à partir d'une position absolue glissée (recomposée selon l'ancre actuelle). */
+    /** Recalcule offsetX/offsetY (fraction, voir javadoc de classe) à partir d'une position absolue glissée en pixels (recomposée selon l'ancre actuelle). */
     public void setScreenPosition(float absX, float absY, int vpWidth, int vpHeight) {
+        float offsetXPx;
         switch (anchor) {
             case TOP_RIGHT:
             case BOTTOM_RIGHT:
-                offsetX = vpWidth - absX - w;
+                offsetXPx = vpWidth - absX - w;
                 break;
             case TOP_CENTER:
             case BOTTOM_CENTER:
-                offsetX = absX - (vpWidth / 2f - w / 2f);
+                offsetXPx = absX - (vpWidth / 2f - w / 2f);
                 break;
             default:
-                offsetX = absX;
+                offsetXPx = absX;
         }
+        offsetX = offsetXPx / vpWidth;
+
+        float offsetYPx;
         switch (anchor) {
             case TOP_LEFT:
             case TOP_CENTER:
             case TOP_RIGHT:
-                offsetY = vpHeight - absY - h;
+                offsetYPx = vpHeight - absY - h;
                 break;
             default:
-                offsetY = absY;
+                offsetYPx = absY;
         }
+        offsetY = offsetYPx / vpHeight;
     }
 
     /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+décalage tels que déclarés à la construction, PAS la taille/l'échelle (volontairement laissées telles quelles). */

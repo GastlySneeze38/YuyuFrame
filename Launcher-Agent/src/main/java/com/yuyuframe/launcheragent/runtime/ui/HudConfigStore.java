@@ -33,8 +33,8 @@ import java.util.Properties;
  * <pre>
  * &lt;id&gt;.enabled=true|false
  * &lt;id&gt;.hud.anchor=TOP_LEFT
- * &lt;id&gt;.hud.offsetX=8.0
- * &lt;id&gt;.hud.offsetY=8.0
+ * &lt;id&gt;.hud.offsetX=0.0041  (FRACTION du viewport, pas des pixels — voir HudElement)
+ * &lt;id&gt;.hud.offsetY=0.0074
  * &lt;id&gt;.hud.scale=1.0
  * &lt;id&gt;.hud.locked=false
  * &lt;id&gt;.hud.showWhenScreenOpen=false

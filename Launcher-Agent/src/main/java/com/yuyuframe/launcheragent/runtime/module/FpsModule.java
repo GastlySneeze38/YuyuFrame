@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 
 import java.lang.reflect.Field;
 
@@ -17,6 +18,8 @@ public final class FpsModule extends SingleHudModule {
     public FpsModule() {
         super("fps", "FPS", "Affiche le nombre d'images par seconde", true,
             new HudElement("fps", "FPS", HudAnchor.TOP_LEFT, 8f, 8f, new ContentSource()));
+        hudElement().textColor = new UiColor(100, 180, 255, 255);
+        hudElement().accentSuffix = " FPS";
     }
 
     /** FPS réel courant — lecture du champ Minecraft.currentFps. */

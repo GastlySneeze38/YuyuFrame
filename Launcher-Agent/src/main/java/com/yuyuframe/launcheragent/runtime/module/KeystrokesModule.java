@@ -60,6 +60,7 @@ public final class KeystrokesModule extends SingleHudModule {
         private static final float CPS_H = 20f;
         private static final UiColor IDLE_BG = new UiColor(255, 255, 255, 30);
         private static final UiColor PRESSED_BG = new UiColor(255, 255, 255, 210);
+        private static final UiColor ACCENT = new UiColor(100, 180, 255, 255);
 
         /** Mutable directement par KeystrokesModule.onConfigChanged(). */
         volatile boolean showSpaceKey = true;
@@ -214,10 +215,13 @@ public final class KeystrokesModule extends SingleHudModule {
 
             float labelScale = 0.28f * scale;
             float lw = renderer.textWidth(label, labelScale);
-            renderer.drawText(label, x + (w - lw) / 2f, y + h * 0.62f, UiTheme.TEXT_SECONDARY, labelScale, vpWidth, vpHeight);
+            renderer.drawText(label, x + (w - lw) / 2f, y + h * 0.62f, ACCENT, labelScale, vpWidth, vpHeight);
 
+            // 0.4 (même échelle que le label du dessus, en plus grand) faisait
+            // largement déborder le compteur de la petite boîte CPS (28x20) —
+            // ramené sous celle du label pour rester DANS la boîte.
             String count = String.valueOf(cps);
-            float countScale = 0.4f * scale;
+            float countScale = 0.24f * scale;
             float cw = renderer.textWidth(count, countScale);
             renderer.drawText(count, x + (w - cw) / 2f, y + h * 0.2f, UiTheme.TEXT_PRIMARY, countScale, vpWidth, vpHeight);
         }

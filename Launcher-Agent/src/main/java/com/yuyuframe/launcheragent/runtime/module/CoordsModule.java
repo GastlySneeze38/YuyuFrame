@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
@@ -34,6 +35,7 @@ public final class CoordsModule extends SingleHudModule {
         // Largeur du CONTENU seul (marge ajoutée par le moteur, voir HudElement.naturalSize).
         private static final float NATURAL_WIDTH = 140f;
         private static final UiColor BIOME_COLOR = new UiColor(120, 220, 140, 255);
+        private static final UiColor ACCENT = new UiColor(100, 180, 255, 255);
 
         @Override
         public float[] naturalSize() {
@@ -68,11 +70,19 @@ public final class CoordsModule extends SingleHudModule {
 
             float ty = y + h - textScale * 24f; // première ligne, en haut de la zone de contenu
             renderer.drawText(xLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
-            drawRightAligned(renderer, "–", rightEdge, ty, UiTheme.TEXT_MUTED, textScale, vpWidth, vpHeight); // tiret décoratif
+            // "--" (2 tirets ASCII), PAS le caractère tiret cadratin "–"
+            // (U+2013) : hors de la plage de glyphes générée par UiFont (32-126
+            // + 160-255 + Œ/œ, voir UiFont.java) — retombait sur le glyphe de
+            // repli, affiché comme un point d'interrogation.
+            drawRightAligned(renderer, "--", rightEdge, ty, ACCENT, textScale, vpWidth, vpHeight); // tiret décoratif
             ty -= lineH;
 
             renderer.drawText(yLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
-            if (facing != null) drawRightAligned(renderer, facing, rightEdge, ty, UiTheme.TEXT_MUTED, textScale, vpWidth, vpHeight);
+            // Valeur d'orientation (N/S/E/O) EN ACCENT — contrairement à FPS/ms
+            // où seule l'ÉTIQUETTE (FPS/ms) prend la couleur, jamais la VALEUR
+            // numérique : ici c'est l'inverse, c'est justement la valeur
+            // (la lettre de direction) qui doit ressortir.
+            if (facing != null) drawRightAligned(renderer, facing, rightEdge, ty, ACCENT, textScale, vpWidth, vpHeight);
             ty -= lineH;
 
             renderer.drawText(zLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
@@ -100,27 +110,85 @@ public final class CoordsModule extends SingleHudModule {
             return "E";
         }
 
-        /** World.getBiome(BlockPos) — accesseur retrouvé dans mappings-1.8.9.tiny (absent de la passe précédente, qui avait conclu à tort qu'aucun chemin n'existait). */
+        private static boolean DIAG_LOGGED = false;
+        private static Method cachedGetBiome;
+        private static boolean getBiomeResolveAttempted;
+
+        /**
+         * World.getBiome(BlockPos) — le nom Yarn "getBiome" ne se résolvait PAS
+         * via McReflect.oneArgMethod (diagnostic : getObfMethodName renvoyait
+         * le nom Yarn tel quel, signe que la source de mappings réellement
+         * chargée à l'exécution (JAR Yarn auto-détecté ou argument yarn=, voir
+         * IsolatedBootstrap.loadYarnMappings) n'indexe pas cette entrée-là,
+         * MÊME SI mappings/mappings-1.8.9.tiny du repo la contient bien —
+         * cette source n'est pas forcément celle réellement chargée). La
+         * méthode existe pourtant bel et bien à l'exécution (confirmé par le
+         * diagnostic précédent : "adm.b(cj)" listé parmi les candidats à 1
+         * paramètre) — on la retrouve donc SANS dépendre du nom Yarn : seule
+         * méthode à 1 paramètre BlockPos dont le type de retour est Biome, ce
+         * qui l'identifie de façon unique parmi les ~30 candidats "cj" de World.
+         */
+        private Method resolveGetBiome(Object world, Class<?> blockPosClass, Class<?> biomeClass) {
+            if (cachedGetBiome != null) return cachedGetBiome;
+            if (getBiomeResolveAttempted) return null;
+            getBiomeResolveAttempted = true;
+
+            Method m = McReflect.oneArgMethod(world.getClass(), "net/minecraft/world/World", "getBiome", blockPosClass);
+            if (m == null) {
+                Class<?> c = world.getClass();
+                outer:
+                while (c != null) {
+                    for (Method cand : c.getDeclaredMethods()) {
+                        if (cand.getParameterCount() == 1
+                                && cand.getParameterTypes()[0].isAssignableFrom(blockPosClass)
+                                && biomeClass.isAssignableFrom(cand.getReturnType())) {
+                            cand.setAccessible(true);
+                            m = cand;
+                            break outer;
+                        }
+                    }
+                    c = c.getSuperclass();
+                }
+                diag(m != null
+                    ? "getBiome retrouvé par repli type-retour : " + m
+                    : "getBiome introuvable même par repli type-retour (world class=" + world.getClass() + ")");
+            }
+            cachedGetBiome = m;
+            return m;
+        }
+
         private String biomeName(Object player, int bx, int by, int bz) {
             try {
                 Object world = McReflect.field(player.getClass(), "net/minecraft/entity/Entity", "world").get(player);
-                if (world == null) return null;
+                if (world == null) { diag("world == null"); return null; }
 
                 Class<?> blockPosClass = McReflect.yarnClass("net/minecraft/util/math/BlockPos");
-                if (blockPosClass == null) return null;
+                if (blockPosClass == null) { diag("blockPosClass == null"); return null; }
+                Class<?> biomeClass = McReflect.yarnClass("net/minecraft/world/biome/Biome");
+                if (biomeClass == null) { diag("biomeClass == null"); return null; }
                 Constructor<?> ctor = blockPosClass.getConstructor(int.class, int.class, int.class);
                 Object pos = ctor.newInstance(bx, by, bz);
 
-                Method getBiome = McReflect.oneArgMethod(world.getClass(), "net/minecraft/world/World", "getBiome", blockPosClass);
+                Method getBiome = resolveGetBiome(world, blockPosClass, biomeClass);
                 if (getBiome == null) return null;
                 Object biome = getBiome.invoke(world, pos);
-                if (biome == null) return null;
+                if (biome == null) { diag("biome == null"); return null; }
 
-                Object name = McReflect.field(biome.getClass(), "net/minecraft/world/biome/Biome", "name").get(biome);
+                Field nameField = McReflect.field(biome.getClass(), "net/minecraft/world/biome/Biome", "name");
+                if (nameField == null) { diag("name field == null (biome class=" + biome.getClass() + ")"); return null; }
+                Object name = nameField.get(biome);
+                diag("OK, name=" + name);
                 return name == null ? null : name.toString();
             } catch (Throwable t) {
+                diag("exception: " + t);
                 return null;
             }
+        }
+
+        private void diag(String msg) {
+            if (DIAG_LOGGED) return;
+            DIAG_LOGGED = true;
+            com.yuyuframe.launcheragent.runtime.log.LauncherLog.info("[CoordsModule] biomeName diag: " + msg);
         }
     }
 }

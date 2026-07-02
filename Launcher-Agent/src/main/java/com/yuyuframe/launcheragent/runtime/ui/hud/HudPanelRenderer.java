@@ -115,7 +115,21 @@ public final class HudPanelRenderer {
         float ascentPx = UiFont.REGULAR.ascent * textScale * UiFont.SIZE_CORRECTION;
         float ty = blockTop - ascentPx;
         for (String line : lines) {
-            renderer.drawText(line, cx, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+            // Si accentSuffix est défini ET que la ligne s'y termine (ex: "60"
+            // + " FPS") : seul le suffixe est peint dans element.textColor, le
+            // reste (la VALEUR) reste TEXT_PRIMARY — demandé explicitement
+            // ("il ne faut pas prendre les valeurs dans fps et ms"). Sinon
+            // (pas de suffixe défini/matché), toute la ligne prend
+            // element.textColor si présente.
+            if (element.textColor != null && element.accentSuffix != null && line.endsWith(element.accentSuffix)) {
+                String main = line.substring(0, line.length() - element.accentSuffix.length());
+                renderer.drawText(main, cx, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+                float mainW = renderer.textWidth(main, textScale);
+                renderer.drawText(element.accentSuffix, cx + mainW, ty, element.textColor, textScale, vpWidth, vpHeight);
+            } else {
+                UiColor color = element.textColor != null ? element.textColor : UiTheme.TEXT_PRIMARY;
+                renderer.drawText(line, cx, ty, color, textScale, vpWidth, vpHeight);
+            }
             ty -= lineH;
         }
     }
