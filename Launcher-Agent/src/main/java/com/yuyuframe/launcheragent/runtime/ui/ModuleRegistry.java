@@ -50,7 +50,15 @@ public final class ModuleRegistry {
         register(new HurtCamModule());
     }
 
-    public static void register(LauncherModule module) { MODULES.add(module); }
+    public static void register(LauncherModule module) {
+        MODULES.add(module);
+        // Écrase les valeurs par défaut (fixées dans le constructeur du
+        // module, juste avant ce point) avec la config persistée — voir
+        // HudConfigStore. Placé ICI (pas dans le bloc static{}) pour que tout
+        // futur module enregistré dynamiquement (pas seulement les 9 modules
+        // intégrés) bénéficie aussi de la persistance sans y penser.
+        HudConfigStore.applyTo(module);
+    }
 
     public static List<LauncherModule> all() { return Collections.unmodifiableList(MODULES); }
 

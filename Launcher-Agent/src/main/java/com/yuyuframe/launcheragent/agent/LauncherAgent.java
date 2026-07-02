@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-02-v147";
+    private static final String BUILD_VERSION = "2026-07-02-v148";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -47,6 +47,17 @@ public class LauncherAgent {
         // qui n'arrive QUE tard dans le bootstrap Mixin, bien après la
         // plupart des logs de démarrage utiles (voir LauncherLog.loadConfigFromDefaultLocations).
         LauncherLog.loadConfigFromDefaultLocations(LauncherAgent.class.getClassLoader());
+
+        // Filet de sécurité pour HudConfigStore (runtime.ui) : les points
+        // d'accroche normaux (ConfigScreenBuilder, UiHudBox, toggle
+        // d'activation) sauvegardent déjà à chaque changement, mais un futur
+        // point de mutation oublié ne perdrait ainsi jamais les changements
+        // en cours à la fermeture du jeu — save() est déjà défensif
+        // (try/catch complet), sûr même si le classloader Fabric isolé est
+        // déjà en cours de démontage.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save(); } catch (Throwable ignored) {}
+        }, "YuyuFrame-ConfigSave"));
 
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources
         // (validParentCodeSources) — sinon KnotClassDelegate.loadClass() refuse de

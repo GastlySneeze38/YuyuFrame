@@ -78,20 +78,25 @@ public final class ConfigScreenBuilder {
 
         cursor = toggleRow(rows, x, w, cursor, "Verrouillé",
             "Empêche de déplacer/redimensionner cet élément dans l'éditeur de HUD.",
-            element.locked, v -> { element.locked = v; module.onConfigChanged(); });
+            element.locked, v -> { element.locked = v; module.onConfigChanged(); HudConfigStore.save(); });
         cursor = toggleRow(rows, x, w, cursor, "Afficher même avec un écran ouvert",
             "Reste visible pendant le chat, l'inventaire ou tout autre écran (sauf nos propres menus).",
-            element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); });
+            element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); HudConfigStore.save(); });
         cursor = sliderRow(rows, x, w, cursor, "Échelle",
             "Taille de toute la boîte (largeur ET hauteur ensemble, jamais l'une sans l'autre).",
-            HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); });
+            HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); HudConfigStore.save(); });
         cursor = sliderRow(rows, x, w, cursor, "Marge horizontale",
             "Espace entre le bord de la boîte et le contenu (X).",
-            0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); });
+            0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); HudConfigStore.save(); });
         cursor = sliderRow(rows, x, w, cursor, "Marge verticale",
             "Espace entre le bord de la boîte et le contenu (Y).",
-            0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); });
-        cursor = buttonRow(rows, x, w, cursor, "Réinitialiser la position", element::resetPosition);
+            0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); HudConfigStore.save(); });
+        // Réinitialise anchor/offset (voir HudElement.resetPosition) — devait
+        // AUSSI persister le résultat, sinon le prochain redémarrage ramenait
+        // la position "sauvegardée" précédente au lieu du reset qu'on vient
+        // de demander (oublié avant ce correctif, aucun onConfigChanged/save
+        // n'était appelé après element::resetPosition).
+        cursor = buttonRow(rows, x, w, cursor, "Réinitialiser la position", () -> { element.resetPosition(); module.onConfigChanged(); HudConfigStore.save(); });
 
         cursors.put(category, cursor);
     }
@@ -109,27 +114,27 @@ public final class ConfigScreenBuilder {
         if (field.isAnnotationPresent(ConfigToggle.class)) {
             ConfigToggle a = field.getAnnotation(ConfigToggle.class);
             return toggleRow(rows, x, w, cursor, a.name(), a.description(), getBoolean(field, module),
-                v -> { setBoolean(field, module, v); module.onConfigChanged(); });
+                v -> { setBoolean(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigSlider.class)) {
             ConfigSlider a = field.getAnnotation(ConfigSlider.class);
             return sliderRow(rows, x, w, cursor, a.name(), a.description(), a.min(), a.max(), a.step(), getFloat(field, module),
-                v -> { setFloat(field, module, v); module.onConfigChanged(); });
+                v -> { setFloat(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigColor.class)) {
             ConfigColor a = field.getAnnotation(ConfigColor.class);
             return colorRow(rows, x, w, cursor, a.name(), a.description(), getColor(field, module),
-                v -> { setColor(field, module, v); module.onConfigChanged(); });
+                v -> { setColor(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigDropdown.class)) {
             ConfigDropdown a = field.getAnnotation(ConfigDropdown.class);
             return dropdownRow(rows, x, w, cursor, a.name(), a.description(), Arrays.asList(a.options()), getInt(field, module),
-                v -> { setInt(field, module, v); module.onConfigChanged(); });
+                v -> { setInt(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigKeybind.class)) {
             ConfigKeybind a = field.getAnnotation(ConfigKeybind.class);
             return keybindRow(rows, x, w, cursor, a.name(), a.description(), getString(field, module),
-                v -> { setString(field, module, v); module.onConfigChanged(); });
+                v -> { setString(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         return cursor;
     }

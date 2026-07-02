@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
+import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
@@ -123,7 +124,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             // toggle pour que le clic dessus continue de basculer le toggle
             // plutôt que d'ouvrir la config du mod.
             widgets.add(new ModCard(cx, cy, cardW, mod));
-            widgets.add(new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(), mod::setEnabled));
+            widgets.add(new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(),
+                v -> { mod.setEnabled(v); HudConfigStore.save(); }));
         }
     }
 

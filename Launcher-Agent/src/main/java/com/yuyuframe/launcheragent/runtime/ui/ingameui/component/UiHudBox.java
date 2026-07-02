@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
+import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
@@ -119,7 +120,10 @@ public class UiHudBox extends UiWidget {
     public void pollContinuous(UiInputPoller input) {
         if (element.locked) return;
         if (resizing) {
-            if (!input.leftDown) { resizing = false; snappedToNaturalSize = false; return; }
+            // Sauvegarde à la FIN du geste (relâchement), pas à chaque frame
+            // de glissement — écrire sur disque 60x/seconde pendant un resize
+            // serait un gaspillage inutile pour un résultat identique.
+            if (!input.leftDown) { resizing = false; snappedToNaturalSize = false; HudConfigStore.save(); return; }
 
             // Redimensionnement DIAGONAL UNIQUEMENT : le déplacement souris
             // est PROJETÉ sur la diagonale du rectangle "naturel" (largeur ET
@@ -178,6 +182,7 @@ public class UiHudBox extends UiWidget {
             dragging = false;
             snapGuideX = null;
             snapGuideY = null;
+            HudConfigStore.save();
             return;
         }
 
