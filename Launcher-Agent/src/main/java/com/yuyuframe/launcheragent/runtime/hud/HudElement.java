@@ -51,16 +51,22 @@ public class HudElement {
      * PotionEffectsModule (leur Renderer niché).
      * {@link HudPanelRenderer} dessine TOUJOURS le panneau de fond (même
      * style que les éléments texte, pour rester cohérent dans l'éditeur comme
-     * en jeu), puis délègue le CONTENU à ce renderer plutôt qu'à
-     * {@link ContentSource} quand celui-ci est fourni. {@code scale} est le
-     * multiplicateur générique de l'élément (voir {@link HudElement#scale}) —
-     * à appliquer par le renderer à ses propres constantes de taille.
+     * en jeu), PUIS calcule lui-même la marge (padding de base + padding
+     * extra du module, voir {@link HudElement#paddingX}/{@link HudElement#paddingY})
+     * et ne délègue que la zone déjà rétrécie à ce renderer — {@code x/y/w/h}
+     * reçus ici sont donc DÉJÀ la zone de contenu utile, PAS la boîte totale.
+     * {@link #naturalSize()} doit donc renvoyer une taille CONTENU SEUL, sans
+     * ajouter sa propre marge (le moteur s'en charge, une seule fois, au même
+     * endroit pour tous les modules — c'était auparavant dupliqué dans chaque
+     * module, source d'incohérences). {@code scale} est le multiplicateur
+     * générique de l'élément (voir {@link HudElement#scale}) — à appliquer
+     * par le renderer à ses propres constantes de taille.
      */
     public interface CustomRenderer {
         void draw(com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer renderer,
                   float x, float y, float w, float h, float scale, int vpWidth, int vpHeight);
 
-        /** Taille "naturelle" à scale=1, {@code {largeur, hauteur}} — voir HudElement.naturalSize(), base de tout calcul de taille. */
+        /** Taille "naturelle" du CONTENU SEUL à scale=1 (sans marge — le moteur l'ajoute), {@code {largeur, hauteur}}. */
         float[] naturalSize();
     }
 
@@ -127,6 +133,21 @@ public class HudElement {
         recomputeSize();
     }
 
+    /**
+     * Recalcule w/h depuis naturalSize()*scale sans changer scale — à appeler
+     * CHAQUE FRAME avant lecture de w/h (voir HudOverlayRenderer/UiHudBox) :
+     * un contenu texte de largeur variable (FPS/Ping, "9 FPS" vs "144 FPS")
+     * n'était mesuré QU'À LA CONSTRUCTION de l'élément (avant même que
+     * MinecraftClient existe, donc sur un texte de repli), jamais remesuré
+     * ensuite — la boîte restait figée sur cette largeur de repli alors que
+     * le texte réel affiché changeait de largeur en jeu ("le calcul de la
+     * taille était pas bon" : gros espace vide ou texte débordant selon le
+     * texte de repli utilisé au démarrage).
+     */
+    public void refreshSize() {
+        recomputeSize();
+    }
+
     private void recomputeSize() {
         float[] size = naturalSize();
         this.w = size[0] * scale;
@@ -134,19 +155,29 @@ public class HudElement {
     }
 
     /**
-     * Taille "naturelle" du contenu à scale=1, {@code {largeur, hauteur}} —
-     * délègue à {@link CustomRenderer#naturalSize()} si présent, sinon calcule
-     * depuis {@link ContentSource#lines()} (nombre de lignes × hauteur de
-     * ligne, largeur = ligne la plus longue) avec les mêmes constantes que
-     * HudPanelRenderer. Base de TOUT calcul de taille (voir recomputeSize()).
+     * Taille "naturelle" (contenu + marge) à scale=1, {@code {largeur, hauteur}}
+     * — base de TOUT calcul de taille (voir recomputeSize()). La marge est
+     * calculée UNE SEULE FOIS ici, jamais par les modules eux-mêmes : marge de
+     * base ({@link HudPanelRenderer#PADDING}, la même pour tout le monde) +
+     * marge extra optionnelle du module ({@link #paddingX}/{@link #paddingY},
+     * 0 par défaut, réglable depuis la config — voir ConfigScreenBuilder).
+     * Avant ce correctif chaque module (Keystrokes, Coords, ArmorDurability...)
+     * réimplémentait sa propre constante PADDING en plus de celle-ci, et le
+     * padding "extra" n'était ni pris en compte dans la taille de la boîte ni
+     * mis à l'échelle avec {@link #scale} — d'où une marge tantôt trop grande
+     * tantôt trop petite selon le module/l'échelle.
      */
     public float[] naturalSize() {
+        float padX = HudPanelRenderer.PADDING + paddingX;
+        float padY = HudPanelRenderer.PADDING + paddingY;
         if (customRenderer != null) {
+            float[] contentSize;
             try {
-                return customRenderer.naturalSize();
+                contentSize = customRenderer.naturalSize();
             } catch (Throwable t) {
-                return new float[]{ 80f, 24f };
+                contentSize = new float[]{ 80f, 24f };
             }
+            return new float[]{ contentSize[0] + 2 * padX, contentSize[1] + 2 * padY };
         }
         String[] lines;
         try {
@@ -154,16 +185,12 @@ public class HudElement {
         } catch (Throwable t) {
             lines = new String[]{ "--" };
         }
-        // Marge des DEUX côtés (gauche+droite, haut+bas) — avant ce correctif,
-        // une seule PADDING était comptée pour la largeur et AUCUNE pour la
-        // hauteur : le texte touchait pile le bord droit (et haut/bas) de la
-        // boîte par défaut, "ça fait bizarre, pas de marge" sur les panneaux
-        // à une seule ligne (FPS/Ping) où ça se voyait le plus.
-        float naturalH = lines.length * HudPanelRenderer.LINE_H + 2 * HudPanelRenderer.PADDING;
-        float naturalW = 2 * HudPanelRenderer.PADDING;
+        float contentW = 0f;
         for (String line : lines) {
-            naturalW = Math.max(naturalW, 2 * HudPanelRenderer.PADDING + com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
+            contentW = Math.max(contentW, com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
         }
+        float naturalH = lines.length * HudPanelRenderer.LINE_H + 2 * padY;
+        float naturalW = contentW + 2 * padX;
         return new float[]{ naturalW, naturalH };
     }
 

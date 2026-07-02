@@ -72,6 +72,18 @@ public class UiHudBox extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        // Voir HudElement.refreshSize() : un contenu de largeur variable
+        // (FPS/Ping) doit rester à jour même dans l'éditeur (le jeu tourne
+        // toujours derrière l'écran d'édition) — sauté pendant un drag/resize
+        // actif pour ne jamais contredire le geste de l'utilisateur en cours.
+        if (!dragging && !resizing) {
+            element.refreshSize();
+            x = element.screenX(vpWidth);
+            y = element.screenY(vpHeight);
+            w = element.w;
+            h = element.h;
+        }
+
         hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
 
         // Panneau + contenu — dessin PARTAGÉ avec HudOverlayRenderer (rendu réel

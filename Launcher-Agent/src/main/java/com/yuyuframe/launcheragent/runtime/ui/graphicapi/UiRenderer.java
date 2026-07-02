@@ -297,6 +297,14 @@ public final class UiRenderer {
             attribPushed = true;
             glEnable(0x0DE1); // GL_TEXTURE_2D
             glEnable(0x0B71); // GL_DEPTH_TEST — vanilla s'appuie dessus pour l'ordre icône/overlay
+            // Sans ce clear, le depth buffer garde les valeurs laissées par la
+            // scène 3D derrière le HUD (ou par l'icône précédente dessinée
+            // cette même frame, voir ArmorDurabilityModule qui appelle cette
+            // méthode plusieurs fois de suite) — le test de profondeur d'un
+            // appel ultérieur pouvait alors échouer au hasard contre ce
+            // résidu, rendant certaines icônes invisibles alors que le stack
+            // n'était pas null ("seule la première icône s'affiche").
+            glClear(0x00000100); // GL_DEPTH_BUFFER_BIT
             glDisable(0x0B44); // GL_CULL_FACE
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
@@ -582,6 +590,9 @@ public final class UiRenderer {
     }
     private void glBlendFunc(int sfactor, int dfactor) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glBlendFunc", int.class, int.class).invoke(null, sfactor, dfactor);
+    }
+    private void glClear(int mask) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glClear", int.class).invoke(null, mask);
     }
     private void pushAttrib(int mask) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glPushAttrib", int.class).invoke(null, mask);

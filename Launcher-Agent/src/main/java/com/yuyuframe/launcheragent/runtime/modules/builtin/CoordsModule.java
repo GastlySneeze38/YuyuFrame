@@ -29,22 +29,22 @@ public final class CoordsModule extends SingleHudModule {
     }
 
     private static final class Renderer implements HudElement.CustomRenderer {
-        private static final float PADDING = 5f;
         private static final float LINE_H = 16f;
         private static final float TEXT_SCALE = 0.4f;
-        private static final float NATURAL_WIDTH = 150f;
+        // Largeur du CONTENU seul (marge ajoutée par le moteur, voir HudElement.naturalSize).
+        private static final float NATURAL_WIDTH = 140f;
         private static final UiColor BIOME_COLOR = new UiColor(120, 220, 140, 255);
 
         @Override
         public float[] naturalSize() {
-            return new float[]{ NATURAL_WIDTH, 4 * LINE_H + 2 * PADDING };
+            return new float[]{ NATURAL_WIDTH, 4 * LINE_H };
         }
 
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
-            float padding = PADDING * scale, lineH = LINE_H * scale, textScale = TEXT_SCALE * scale;
-            float rowX = x + padding;
-            float rightEdge = x + w - padding;
+            float lineH = LINE_H * scale, textScale = TEXT_SCALE * scale;
+            float rowX = x;
+            float rightEdge = x + w;
 
             String xLine = "X: --", yLine = "Y: --", zLine = "Z: --", facing = null, biome = null;
             try {
@@ -66,7 +66,7 @@ public final class CoordsModule extends SingleHudModule {
                 }
             } catch (Throwable ignored) {}
 
-            float ty = y + h - padding - textScale * 24f; // première ligne, sous le padding haut
+            float ty = y + h - textScale * 24f; // première ligne, en haut de la zone de contenu
             renderer.drawText(xLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
             drawRightAligned(renderer, "–", rightEdge, ty, UiTheme.TEXT_MUTED, textScale, vpWidth, vpHeight); // tiret décoratif
             ty -= lineH;

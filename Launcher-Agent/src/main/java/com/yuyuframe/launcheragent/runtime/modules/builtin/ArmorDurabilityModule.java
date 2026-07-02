@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.modules.builtin;
 import com.yuyuframe.launcheragent.runtime.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
@@ -36,18 +37,27 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         private static final float ICON = 28f;
         private static final float GAP = 6f;
         private static final float ROW_H = 30f;
-        private static final float PADDING = 5f;
-        private static final float NATURAL_WIDTH = 130f;
+        private static final float TEXT_SCALE = 0.4f;
+        /** Largeur mini du CONTENU avant que le joueur ne soit chargé (repli, comme FPS/Ping). */
+        private static final float FALLBACK_WIDTH = 90f;
 
         @Override
         public float[] naturalSize() {
-            return new float[]{ NATURAL_WIDTH, 5 * ROW_H + 2 * PADDING };
+            // Largeur = icône + espace + texte le plus large parmi les 5
+            // emplacements, RECALCULÉE À CHAQUE FRAME (comme FPS/Ping, voir
+            // HudElement.refreshSize()) — une largeur FIXE (120 en dur, choisie
+            // au hasard) était soit trop large pour "363/363" (gros espace vide
+            // à droite), soit trop étroite pour un objet à plus de 3 chiffres.
+            float maxTextW = 0f;
+            for (Object stack : currentStacks()) {
+                String text = durabilityText(stack);
+                if (text != null) maxTextW = Math.max(maxTextW, UiFont.REGULAR.textWidth(text, TEXT_SCALE));
+            }
+            float contentW = maxTextW > 0f ? ICON + GAP + maxTextW : FALLBACK_WIDTH;
+            return new float[]{ contentW, 5 * ROW_H };
         }
 
-        @Override
-        public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
-            float icon = ICON * scale, gap = GAP * scale, rowH = ROW_H * scale, padding = PADDING * scale;
-
+        private Object[] currentStacks() {
             Object helmet = null, chest = null, legs = null, boots = null, held = null;
             try {
                 Object mc = McReflect.minecraftClient();
@@ -66,11 +76,17 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                     }
                 }
             } catch (Throwable ignored) {}
+            return new Object[]{ helmet, chest, legs, boots, held };
+        }
 
-            Object[] stacks = { helmet, chest, legs, boots, held };
-            float rowY = y + h - padding - icon;
+        @Override
+        public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
+            float icon = ICON * scale, rowH = ROW_H * scale;
+
+            Object[] stacks = currentStacks();
+            float rowY = y + h - icon;
             for (Object stack : stacks) {
-                drawRow(renderer, x + padding, rowY, icon, stack, scale, vpWidth, vpHeight);
+                drawRow(renderer, x, rowY, icon, stack, scale, vpWidth, vpHeight);
                 rowY -= rowH;
             }
         }
@@ -81,7 +97,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             }
             String text = durabilityText(stack);
             if (text != null) {
-                float textScale = 0.4f * scale;
+                float textScale = TEXT_SCALE * scale;
                 renderer.drawText(text, x + iconSize + GAP * scale, y + iconSize * 0.35f, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
             }
         }

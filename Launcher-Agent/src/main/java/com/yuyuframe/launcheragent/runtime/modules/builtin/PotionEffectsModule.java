@@ -4,11 +4,14 @@ import com.yuyuframe.launcheragent.runtime.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /** Port de PvP-Mod PotionEffectsConfig/PotionEffectsHud — sa propre carte, comme dans la référence. */
 public final class PotionEffectsModule extends SingleHudModule {
@@ -26,46 +29,60 @@ public final class PotionEffectsModule extends SingleHudModule {
      */
     private static final class Renderer implements HudElement.CustomRenderer {
         private static final String[] ROMAN = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
-        private static final float LINE_H = 18f;
+        // 28, pas 18 : chaque effet dessine DEUX lignes (nom au-dessus, durée
+        // en-dessous — voir drawRow), pas une seule — leur écart réel (nom à
+        // ty, durée à ty-12) dépassait déjà les 18px d'espacement entre deux
+        // effets consécutifs, faisant chevaucher la durée d'un effet avec le
+        // nom du suivant ("les effets se chevauchent").
+        private static final float LINE_H = 28f;
         private static final float ICON = 10f;
-        private static final float PADDING = 5f;
-        /** Largeur "naturelle" à scale=1 — pas de calcul dynamique fiable, les noms d'effets varient trop en longueur. */
-        private static final float NATURAL_WIDTH = 130f;
-        /** Nombre d'effets supposé pour la taille PAR DÉFAUT de la boîte — le vrai nombre n'est connu qu'en jeu (accès joueur), pas à la construction du module. */
-        private static final int DEFAULT_EFFECT_COUNT = 2;
+        private static final float NAME_SCALE = 0.36f;
+        private static final float TIME_SCALE = 0.3f;
+        /** Repli avant que le joueur/les effets ne soient connus (comme FPS/Ping). */
+        private static final float FALLBACK_WIDTH = 100f;
+        private static final int FALLBACK_COUNT = 2;
 
-        @Override
-        public float[] naturalSize() {
-            return new float[]{ NATURAL_WIDTH, DEFAULT_EFFECT_COUNT * LINE_H + 2 * PADDING };
+        private static final class EffectRow {
+            final String name, time;
+            final UiColor color;
+            EffectRow(String name, String time, UiColor color) { this.name = name; this.time = time; this.color = color; }
         }
 
         @Override
-        public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
+        public float[] naturalSize() {
+            // Largeur ET hauteur RECALCULÉES À CHAQUE FRAME depuis les effets
+            // RÉELLEMENT actifs (comme FPS/Ping/ArmorDurability, voir
+            // HudElement.refreshSize()) — un nombre de lignes fixe en dur ne
+            // correspondait pas au nombre d'effets réellement affichés dans
+            // draw(), d'où le chevauchement dès qu'il y en avait plus que ce
+            // nombre supposé.
+            List<EffectRow> rows = currentRows();
+            if (rows.isEmpty()) return new float[]{ FALLBACK_WIDTH, FALLBACK_COUNT * LINE_H };
+            float maxNameW = 0f;
+            for (EffectRow row : rows) maxNameW = Math.max(maxNameW, UiFont.REGULAR.textWidth(row.name, NAME_SCALE));
+            float contentW = Math.max(FALLBACK_WIDTH, ICON + 5f + maxNameW);
+            return new float[]{ contentW, rows.size() * LINE_H };
+        }
+
+        private List<EffectRow> currentRows() {
+            List<EffectRow> rows = new ArrayList<>();
             try {
                 Object mc = McReflect.minecraftClient();
-                if (mc == null) return;
+                if (mc == null) return rows;
                 Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
-                if (player == null) return;
+                if (player == null) return rows;
 
                 Method getInstances = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStatusEffectInstances");
-                if (getInstances == null) return;
+                if (getInstances == null) return rows;
                 Collection<?> effects = (Collection<?>) getInstances.invoke(player);
-                if (effects == null || effects.isEmpty()) return;
+                if (effects == null || effects.isEmpty()) return rows;
 
                 Class<?> effectClass = McReflect.yarnClass("net/minecraft/entity/effect/StatusEffect");
                 Object[] statusEffects = effectClass != null
                     ? (Object[]) McReflect.field(effectClass, "net/minecraft/entity/effect/StatusEffect", "STATUS_EFFECTS").get(null)
                     : null;
 
-                // w/h dérivent TOUJOURS de naturalSize()*scale — pas
-                // d'agrandissement automatique supplémentaire ici. Si le
-                // nombre d'effets ACTIFS dépasse DEFAULT_EFFECT_COUNT, le
-                // contenu peut déborder la boîte — acceptable, l'utilisateur
-                // peut l'agrandir (scale, linéaire et fiable).
-                float icon = ICON * scale, padding = PADDING * scale, lineH = LINE_H * scale;
-
                 Class<?> instanceClass = null;
-                float ty = y + h - padding - icon;
                 for (Object instance : effects) {
                     if (instanceClass == null) instanceClass = instance.getClass();
 
@@ -80,13 +97,24 @@ public final class PotionEffectsModule extends SingleHudModule {
                     int seconds = duration / 20;
                     String time = (seconds >= 60 ? (seconds / 60) + "m " : "") + (seconds % 60) + "s";
 
-                    renderer.drawRoundedRect(x + padding, ty, x + padding + icon, ty + icon, icon / 2f, effectColor(effect), vpWidth, vpHeight);
-                    renderer.drawText(name, x + padding + icon + 5f * scale, ty + 1f * scale, UiTheme.TEXT_PRIMARY, 0.36f * scale, vpWidth, vpHeight);
-                    renderer.drawText(time, x + padding + icon + 5f * scale, ty - 9f * scale, UiTheme.TEXT_SECONDARY, 0.3f * scale, vpWidth, vpHeight);
-
-                    ty -= lineH;
+                    rows.add(new EffectRow(name, time, effectColor(effect)));
                 }
             } catch (Throwable ignored) {}
+            return rows;
+        }
+
+        @Override
+        public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
+            List<EffectRow> rows = currentRows();
+            float icon = ICON * scale, lineH = LINE_H * scale;
+
+            float ty = y + h - icon;
+            for (EffectRow row : rows) {
+                renderer.drawRoundedRect(x, ty, x + icon, ty + icon, icon / 2f, row.color, vpWidth, vpHeight);
+                renderer.drawText(row.name, x + icon + 5f * scale, ty, UiTheme.TEXT_PRIMARY, NAME_SCALE * scale, vpWidth, vpHeight);
+                renderer.drawText(row.time, x + icon + 5f * scale, ty - 12f * scale, UiTheme.TEXT_SECONDARY, TIME_SCALE * scale, vpWidth, vpHeight);
+                ty -= lineH;
+            }
         }
 
         private String effectName(Object effect) {

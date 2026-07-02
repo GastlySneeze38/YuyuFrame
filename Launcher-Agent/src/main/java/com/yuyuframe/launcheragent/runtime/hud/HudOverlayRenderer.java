@@ -18,6 +18,11 @@ public final class HudOverlayRenderer {
 
     public static void render(UiRenderer renderer, int vpWidth, int vpHeight) {
         for (HudElement element : HudRegistry.elements()) {
+            // Voir HudElement.refreshSize() : un contenu de largeur variable
+            // (FPS/Ping) doit être remesuré à CHAQUE frame, pas une seule fois
+            // à la construction — sinon la boîte reste figée sur le texte de
+            // repli initial pendant que le vrai texte affiché change de largeur.
+            element.refreshSize();
             float x = element.screenX(vpWidth);
             float y = element.screenY(vpHeight);
             HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);
@@ -34,6 +39,7 @@ public final class HudOverlayRenderer {
     public static void renderPersistent(UiRenderer renderer, int vpWidth, int vpHeight) {
         for (HudElement element : HudRegistry.elements()) {
             if (!element.showWhenScreenOpen) continue;
+            element.refreshSize();
             float x = element.screenX(vpWidth);
             float y = element.screenY(vpHeight);
             HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);

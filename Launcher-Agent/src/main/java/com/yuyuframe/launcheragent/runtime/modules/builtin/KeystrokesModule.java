@@ -58,7 +58,6 @@ public final class KeystrokesModule extends SingleHudModule {
         // disproportionnées à côté des touches.
         private static final float CPS_W = 28f;
         private static final float CPS_H = 20f;
-        private static final float PADDING = 5f;
         private static final UiColor IDLE_BG = new UiColor(255, 255, 255, 30);
         private static final UiColor PRESSED_BG = new UiColor(255, 255, 255, 210);
 
@@ -69,21 +68,21 @@ public final class KeystrokesModule extends SingleHudModule {
         private boolean prevLeftDown, prevRightDown;
 
         /**
-         * Espace occupé à scale=1 — DOIT prendre la ligne la plus LARGE des
-         * deux (grille WASD OU les 2 boîtes CPS côte à côte) : les compter
-         * séparément sous-estimait la largeur réelle quand les boîtes CPS
-         * sont plus larges que la grille (texte des boîtes CPS débordant
-         * l'une sur l'autre, la boîte par défaut étant trop étroite).
+         * Espace occupé à scale=1 (CONTENU SEUL, la marge est ajoutée par le
+         * moteur — voir HudElement.naturalSize()) — DOIT prendre la ligne la
+         * plus LARGE des deux (grille WASD OU les 2 boîtes CPS côte à côte) :
+         * les compter séparément sous-estimait la largeur réelle quand les
+         * boîtes CPS sont plus larges que la grille (texte des boîtes CPS
+         * débordant l'une sur l'autre, la boîte par défaut étant trop étroite).
          */
         private float naturalWidth() {
             float wasdRowW = 3 * BOX + 2 * GAP;
             float cpsRowW = 2 * CPS_W + GAP;
-            return 2 * PADDING + Math.max(wasdRowW, cpsRowW);
+            return Math.max(wasdRowW, cpsRowW);
         }
 
         private float naturalHeight() {
-            float stacked = 2 * BOX + 2 * GAP + (showSpaceKey ? BOX + GAP : 0) + CPS_H;
-            return 2 * PADDING + stacked;
+            return 2 * BOX + 2 * GAP + (showSpaceKey ? BOX + GAP : 0) + CPS_H;
         }
 
         @Override
@@ -110,20 +109,22 @@ public final class KeystrokesModule extends SingleHudModule {
                 // w/h dérivent TOUJOURS de naturalSize()*scale (HudElement.setScale)
                 // — aucun agrandissement automatique supplémentaire ici (l'appliquer
                 // reviendrait à multiplier scale par lui-même, voir HudPanelRenderer).
-                float box = BOX * scale, gap = GAP * scale, padding = PADDING * scale;
+                // x/y/w/h reçus sont DÉJÀ la zone de contenu (marge retirée par le
+                // moteur, voir HudPanelRenderer.draw) — pas de padding à soustraire ici.
+                float box = BOX * scale, gap = GAP * scale;
                 float cpsW = CPS_W * scale, cpsH = CPS_H * scale;
 
                 // Chaque ligne (grille WASD, barre ESPACE, boîtes CPS) est
                 // CENTRÉE dans la largeur réellement disponible plutôt que
                 // toujours alignée à gauche — nécessaire car les 2 boîtes CPS
                 // côte à côte peuvent être plus larges que la grille WASD.
-                float availableW = w - 2 * padding;
+                float availableW = w;
                 float wasdRowW = 3 * box + 2 * gap;
                 float cpsRowW = 2 * cpsW + gap;
-                float wasdX0 = x + padding + (availableW - wasdRowW) / 2f;
-                float cpsX0 = x + padding + (availableW - cpsRowW) / 2f;
+                float wasdX0 = x + (availableW - wasdRowW) / 2f;
+                float cpsX0 = x + (availableW - cpsRowW) / 2f;
 
-                float row1Y = y + h - padding - box;
+                float row1Y = y + h - box;
                 float row2Y = row1Y - gap - box;
 
                 drawKey(renderer, wasdX0 + box + gap, row1Y, box, box, keyLabel(forward), isDown(forward), scale, vpWidth, vpHeight);
