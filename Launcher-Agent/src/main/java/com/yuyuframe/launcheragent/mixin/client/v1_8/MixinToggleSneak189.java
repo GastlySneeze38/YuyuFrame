@@ -32,8 +32,11 @@ import java.lang.reflect.Field;
 @Mixin(targets = "net.minecraft.client.input.KeyboardInput")
 public abstract class MixinToggleSneak189 {
 
-    private boolean la$prevDown;
-    private boolean la$toggled;
+    // static — voir MixinToggleSprint189 pour le pourquoi (chaque mort/
+    // changement de serveur recrée une nouvelle instance de KeyboardInput,
+    // un champ d'instance perdrait la bascule à chaque fois).
+    private static boolean la$prevDown;
+    private static boolean la$toggled;
     private boolean la$overriding;
 
     @Inject(method = "a()V", at = @At("HEAD"), require = 0)

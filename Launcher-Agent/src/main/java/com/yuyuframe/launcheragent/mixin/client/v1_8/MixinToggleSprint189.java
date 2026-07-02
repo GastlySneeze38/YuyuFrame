@@ -40,8 +40,13 @@ import java.lang.reflect.Field;
 @Mixin(targets = "net.minecraft.entity.player.ClientPlayerEntity")
 public abstract class MixinToggleSprint189 {
 
-    private boolean la$prevDown;
-    private boolean la$toggled;
+    // static, PAS un champ d'instance : à chaque mort/changement de serveur,
+    // vanilla recrée une TOUTE NOUVELLE instance de ClientPlayerEntity — un
+    // champ d'instance perdrait la bascule à chaque fois (retour silencieux à
+    // "désactivé"). static persiste tant que le processus du jeu tourne,
+    // indépendamment du nombre d'instances d'entité créées entre-temps.
+    private static boolean la$prevDown;
+    private static boolean la$toggled;
     private boolean la$overriding;
 
     @Inject(method = "m()V", at = @At("HEAD"), require = 0)
