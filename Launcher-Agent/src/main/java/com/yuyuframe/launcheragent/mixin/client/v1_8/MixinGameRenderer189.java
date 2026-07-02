@@ -29,26 +29,42 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * annulée via un @Inject cancellable en HEAD, même pattern déjà utilisé par
  * EntityCullingMixin dans ce projet (donc pas une nouvelle capacité, juste
  * une nouvelle cible).
+ *
+ * CORRECTIF (session de débogage sprint/sneak) : {@code method=} en nom Yarn
+ * ("updateMovementFovMultiplier()V"/"bobViewWhenHurt(F)V") ne se résolvait
+ * JAMAIS dans ce bootstrap Mixin custom — confirmé en jeu via le logger Mixin
+ * enfin relié à notre fichier de log (voir LauncherLogger) :
+ * "InvalidInjectionException ... could not find any targets matching
+ * 'updateMovementFovMultiplier()V' in bfk" — CE Mixin n'a donc probablement
+ * JAMAIS fonctionné depuis sa création (le FOV de base se réglait bien via
+ * réflexion directe, mais le multiplicateur sprint/ralenti n'était jamais
+ * neutralisé, d'où "le FOV ne marche pas" en bougeant). Remplacé par les
+ * lettres officielles directes ("l"/"d", vérifiées via javap sur le vrai
+ * bfk.class), même correctif que MixinToggleSprint189/MixinToggleSneak189.
  */
 @Mixin(targets = "net.minecraft.client.render.GameRenderer")
 public abstract class MixinGameRenderer189 {
 
-    @Shadow private float movementFovMultiplier;
-    @Shadow private float lastMovementFovMultiplier;
+    // Noms de champs Java = lettres officielles DIRECTES ("x"/"y"), même
+    // raison que pour method= : @Shadow passe par le même remapping yarn qui
+    // ne fonctionne pas dans ce bootstrap — movementFovMultiplier="x",
+    // lastMovementFovMultiplier="y" (vérifiés via javap sur bfk.class).
+    @Shadow private float x;
+    @Shadow private float y;
 
-    @Inject(method = "updateMovementFovMultiplier()V", at = @At("TAIL"))
+    @Inject(method = "l()V", at = @At("TAIL"))
     private void la$neutralizeSprintFov(CallbackInfo ci) {
         try {
             LauncherModule fov = ModuleRegistry.get("fov");
             if (fov == null || !fov.isEnabled()) return;
-            this.movementFovMultiplier = 1.0f;
-            this.lastMovementFovMultiplier = 1.0f;
+            this.x = 1.0f;
+            this.y = 1.0f;
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] MixinGameRenderer189 la$neutralizeSprintFov: " + t);
         }
     }
 
-    @Inject(method = "bobViewWhenHurt(F)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "d(F)V", at = @At("HEAD"), cancellable = true)
     private void la$cancelHurtCam(float partialTicks, CallbackInfo ci) {
         try {
             LauncherModule hurtCam = ModuleRegistry.get("hurt-cam");

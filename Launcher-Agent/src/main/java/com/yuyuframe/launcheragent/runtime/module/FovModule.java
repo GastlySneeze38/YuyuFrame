@@ -20,6 +20,7 @@ public final class FovModule extends LauncherModule {
     public float fovValue = 90f;
 
     private float savedVanillaFov = -1f;
+    private static boolean DIAG_LOGGED = false;
 
     public FovModule() {
         super("fov", "FOV", "Remplace le FOV vanilla (sprint/ralenti compris)", false);
@@ -28,11 +29,23 @@ public final class FovModule extends LauncherModule {
     @Override
     public void onTick() {
         try {
+            Object options = optionsInstance();
             Field fovField = fovField();
-            if (fovField == null) return;
-            if (savedVanillaFov < 0f) savedVanillaFov = fovField.getFloat(optionsInstance());
-            fovField.setFloat(optionsInstance(), fovValue);
-        } catch (Throwable ignored) {}
+            if (fovField == null) { diag("fovField == null, options=" + options); return; }
+            float before = fovField.getFloat(options);
+            if (savedVanillaFov < 0f) savedVanillaFov = before;
+            fovField.setFloat(options, fovValue);
+            float after = fovField.getFloat(options);
+            diag("options=" + options + " before=" + before + " target=" + fovValue + " after=" + after);
+        } catch (Throwable t) {
+            diag("exception: " + t);
+        }
+    }
+
+    private void diag(String msg) {
+        if (DIAG_LOGGED) return;
+        DIAG_LOGGED = true;
+        com.yuyuframe.launcheragent.runtime.log.LauncherLog.info("[FovModule] diag: " + msg);
     }
 
     @Override

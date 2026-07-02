@@ -9,6 +9,8 @@ import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
 import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
 import com.yuyuframe.launcheragent.runtime.module.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.PotionEffectsModule;
+import com.yuyuframe.launcheragent.runtime.module.ToggleSneakModule;
+import com.yuyuframe.launcheragent.runtime.module.ToggleSprintModule;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
 import java.util.ArrayList;
@@ -48,6 +50,8 @@ public final class ModuleRegistry {
         register(new LowHealthTintModule());
         register(new FovModule());
         register(new HurtCamModule());
+        register(new ToggleSprintModule());
+        register(new ToggleSneakModule());
     }
 
     public static void register(LauncherModule module) {
