@@ -23,6 +23,12 @@ import java.util.Map;
  */
 public final class UiRenderer {
 
+    /** Voir drawVanillaItemIcon — log de diagnostic une seule fois, pas à chaque frame/icône. */
+    private static boolean DIAG_LOGGED = false;
+    /** Voir drawVanillaItemIcon — compteur d'appels pour limiter le log glGetError() aux ~2 premières frames seulement. */
+    private static int DIAG_CALLS = 0;
+    private static final int DIAG_CALL_LIMIT = 12;
+
     private static final String VERTEX_SRC =
         "void main() {\n" +
         "    gl_Position = ftransform();\n" +
@@ -284,6 +290,16 @@ public final class UiRenderer {
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
         if (itemStack == null) return;
         boolean attribPushed = false, projPushed = false, modelPushed = false;
+        // Diagnostic glGetError() limité aux DIAG_CALL_LIMIT premiers appels
+        // (sinon spam à chaque frame) — glGetError() ne lève PAS d'exception
+        // Java, une corruption silencieuse de l'état GL (GL_INVALID_OPERATION
+        // etc.) est donc invisible dans les logs habituels malgré aucune
+        // exception observée jusqu'ici.
+        int diagCall = ++DIAG_CALLS;
+        boolean diag = diagCall <= DIAG_CALL_LIMIT;
+        if (diag) {
+            try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " stack=" + itemStack + " entryErr=" + drainGlErrors()); } catch (Throwable ignored) {}
+        }
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
@@ -293,6 +309,42 @@ public final class UiRenderer {
                 "renderInGuiWithOverrides", itemStack.getClass(), int.class, int.class);
             if (render == null) return;
 
+            // DiffuseLighting = renommage Yarn de RenderHelper (MCP) — voir
+            // PvP-Mod/ArmorDurabilityHud.java (référence Forge 1.8.9, seule
+            // autre source du repo appelant ce rendu d'item plusieurs fois par
+            // frame) : elle pose RenderHelper.enableGUIStandardItemLighting()
+            // avant CHAQUE appel et disableStandardItemLighting() après —
+            // jamais fait ici avant ce correctif. Sans ces 2 lumières GL
+            // positionnées, le modèle 3D de l'item rend avec un éclairage
+            // résiduel non garanti d'un appel à l'autre : la 1ère icône profite
+            // par chance de l'état laissé par le jeu juste avant le hook HUD,
+            // les suivantes héritent de l'état CONSOMMÉ par le rendu précédent
+            // — d'où les icônes 2+ affichées comme des formes blanches
+            // fragmentées (éclairage/texture incorrects) au lieu du vrai item.
+            Class<?> diffuseLighting = McReflect.yarnClass("net/minecraft/client/render/DiffuseLighting");
+            Method enableLighting = diffuseLighting != null ? McReflect.method(diffuseLighting, "net/minecraft/client/render/DiffuseLighting", "enable") : null;
+            Method disableLighting = diffuseLighting != null ? McReflect.method(diffuseLighting, "net/minecraft/client/render/DiffuseLighting", "disable") : null;
+            // Diagnostic UNE SEULE FOIS (voir DIAG_LOGGED) : vérifier que la
+            // résolution par réflexion réussit vraiment plutôt que d'échouer
+            // silencieusement (yarnClass()/method() avalent leurs exceptions
+            // et renvoient null sans logguer) — sinon ce correctif pourrait
+            // n'avoir aucun effet sans qu'on le sache.
+            if (!DIAG_LOGGED) {
+                DIAG_LOGGED = true;
+                LauncherLog.info("[UiRenderer] drawVanillaItemIcon diag: diffuseLighting=" + diffuseLighting
+                    + " enableLighting=" + enableLighting + " disableLighting=" + disableLighting);
+            }
+
+            // Notre shader SDF custom (drawText) OU celui de drawRoundedRect
+            // peut être encore actif si une icône PRÉCÉDENTE de cette même
+            // boucle a échoué avant d'atteindre son propre glUseProgram(0) de
+            // nettoyage (ex: exception avalée) — vanilla rend cette icône en
+            // pipeline FIXE (glBegin/glEnd, pas de shader) et interprèterait
+            // alors les données de texture RGBA normales de l'item À TRAVERS
+            // notre shader SDF (qui les lit comme un champ de distance signée
+            // dans le canal alpha) : exactement le genre de rendu "cassé"
+            // observé (formes fragmentées au lieu de la vraie icône).
+            glUseProgram(0);
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000 | 0x00100000 | 0x00080000); // GL_ENABLE_BIT|GL_CURRENT_BIT|GL_TEXTURE_BIT|GL_TRANSFORM_BIT|GL_LIGHTING_BIT
             attribPushed = true;
             glEnable(0x0DE1); // GL_TEXTURE_2D
@@ -308,6 +360,11 @@ public final class UiRenderer {
             glDisable(0x0B44); // GL_CULL_FACE
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            // Unité de texture 0 explicitement — l'overlay (glint d'enchant,
+            // barre de durabilité) d'un appel précédent peut avoir laissé une
+            // unité de multitexturing non-0 active, faisant échouer le bind
+            // de texture du prochain appel (texture "blanche"/non trouvée).
+            try { glActiveTexture(0x84C0); } catch (Throwable ignored) {} // GL_TEXTURE0
 
             matrixMode(0x1701); // GL_PROJECTION
             pushMatrix();
@@ -333,10 +390,21 @@ public final class UiRenderer {
             float vanillaYPhysical = vpHeight - y - size;
             float vanillaX = vanillaXPhysical / zoom;
             float vanillaY = vanillaYPhysical / zoom;
-            render.invoke(itemRenderer, itemStack, (int) vanillaX, (int) vanillaY);
+
+            // Posée/déposée à CHAQUE appel (pas seulement au début/fin du lot
+            // de 5 icônes) — exactement le pattern PvP-Mod/ArmorDurabilityHud.
+            if (enableLighting != null) { try { enableLighting.invoke(null); } catch (Throwable ignored) {} }
+            if (diag) { try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " preRenderErr=" + drainGlErrors()); } catch (Throwable ignored) {} }
+            try {
+                render.invoke(itemRenderer, itemStack, (int) vanillaX, (int) vanillaY);
+            } finally {
+                if (disableLighting != null) { try { disableLighting.invoke(null); } catch (Throwable ignored) {} }
+            }
+            if (diag) { try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " postRenderErr=" + drainGlErrors()); } catch (Throwable ignored) {} }
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawVanillaItemIcon: " + t);
         } finally {
+            try { glActiveTexture(0x84C0); glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {} // GL_TEXTURE0, unbind
             try {
                 if (modelPushed) { matrixMode(0x1700); popMatrix(); }
             } catch (Throwable ignored) {}
@@ -534,6 +602,19 @@ public final class UiRenderer {
         return m;
     }
 
+    private int glGetError() throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL11", "glGetError").invoke(null);
+    }
+    /** Vide tous les codes d'erreur en attente, retourne le premier non-zéro rencontré (0 = aucune erreur). */
+    private int drainGlErrors() throws Exception {
+        int first = 0, code;
+        int guard = 0;
+        while ((code = glGetError()) != 0 && guard++ < 16) {
+            if (first == 0) first = code;
+        }
+        return first;
+    }
+
     private int glCreateShader(int type) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL20", "glCreateShader", int.class).invoke(null, type);
     }
@@ -594,6 +675,10 @@ public final class UiRenderer {
     private void glClear(int mask) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glClear", int.class).invoke(null, mask);
     }
+    /** GL13, pas GL11 — sélection d'unité de texture (multitexturing), voir drawVanillaItemIcon. */
+    private void glActiveTexture(int texture) throws Exception {
+        gl("org.lwjgl.opengl.GL13", "glActiveTexture", int.class).invoke(null, texture);
+    }
     private void pushAttrib(int mask) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glPushAttrib", int.class).invoke(null, mask);
     }
@@ -628,7 +713,46 @@ public final class UiRenderer {
     private int glGenTextures() throws Exception {
         return (int) gl("org.lwjgl.opengl.GL11", "glGenTextures").invoke(null);
     }
+    /** Voir glBindTexture — résolu paresseusement, mis en cache, jamais réassigné après un premier échec (évite de retenter la réflexion à chaque frame). */
+    private static Method glStateManagerBindTexture;
+    private static boolean glStateManagerBindTextureResolved;
+
+    /**
+     * Route le bind GL_TEXTURE_2D via {@code GlStateManager.bindTexture(int)}
+     * (Yarn "bfl.i", `method_9839`) plutôt que l'appel LWJGL brut — CRUCIAL :
+     * `GlStateManager` maintient son PROPRE cache Java de "texture active par
+     * unité" (`field_10722 activeTexture` / `field_10715 TEXTURES`, vérifié
+     * dans mappings-1.8.9.tiny) et SAUTE le vrai `glBindTexture` GL s'il croit
+     * que la texture demandée est déjà active. Nos appels précédents en
+     * `GL11.glBindTexture` brut changeaient la texture RÉELLE sans jamais
+     * mettre à jour ce cache — désynchronisant la croyance de GlStateManager
+     * de l'état GL réel. Résultat concret : après un drawText() (police,
+     * bind brut), l'appel vanilla suivant à `renderInGuiWithOverrides`
+     * (armor icon) demande à re-binder l'atlas de blocs via
+     * `GlStateManager.bindTexture(...)`, qui CROIT l'avoir déjà fait (son
+     * cache dit "atlas déjà actif") et SAUTE le bind réel — l'icône se
+     * retrouve alors dessinée avec la texture RÉELLEMENT active, notre atlas
+     * de police SDF, d'où les formes blanches fragmentées. Router NOS PROPRES
+     * binds à travers ce même GlStateManager élimine le désync à la racine
+     * (nos binds ET ceux de vanilla passent désormais par la même source de
+     * vérité), au lieu d'un fix ponctuel côté rendu d'item seulement.
+     */
     private void glBindTexture(int target, int texture) throws Exception {
+        if (target == 0x0DE1 && !glStateManagerBindTextureResolved) { // GL_TEXTURE_2D
+            glStateManagerBindTextureResolved = true;
+            try {
+                Class<?> glStateManager = McReflect.yarnClass("com/mojang/blaze3d/platform/GlStateManager");
+                glStateManagerBindTexture = glStateManager != null
+                    ? McReflect.method(glStateManager, "com/mojang/blaze3d/platform/GlStateManager", "bindTexture", int.class)
+                    : null;
+            } catch (Throwable ignored) {}
+        }
+        if (target == 0x0DE1 && glStateManagerBindTexture != null) {
+            try {
+                glStateManagerBindTexture.invoke(null, texture);
+                return;
+            } catch (Throwable ignored) {} // repli sur l'appel brut ci-dessous
+        }
         gl("org.lwjgl.opengl.GL11", "glBindTexture", int.class, int.class).invoke(null, target, texture);
     }
     private void glTexParameteri(int target, int pname, int param) throws Exception {
