@@ -66,7 +66,6 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN plan_expires_at INTEGER", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN description TEXT NOT NULL DEFAULT ''", []);
-    let _ = conn.execute("ALTER TABLE instances ADD COLUMN optifine_jar_path TEXT NOT NULL DEFAULT ''", []);
 
     Ok(conn)
 }
@@ -284,12 +283,11 @@ pub struct InstanceRow {
     pub ram_mb: u32,
     pub favorite: bool,
     pub description: String,
-    pub optifine_jar_path: String,
 }
 
 pub fn instance_list(conn: &Connection, user_id: i64) -> Result<Vec<InstanceRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, mc_version, loader, ram_mb, favorite, description, optifine_jar_path FROM instances
+        "SELECT id, name, mc_version, loader, ram_mb, favorite, description FROM instances
          WHERE yuyu_user_id = ?1 ORDER BY created_at ASC",
     )?;
     let rows = stmt
@@ -302,7 +300,6 @@ pub fn instance_list(conn: &Connection, user_id: i64) -> Result<Vec<InstanceRow>
                 ram_mb: r.get::<_, u32>(4)?,
                 favorite: r.get::<_, i64>(5)? != 0,
                 description: r.get(6)?,
-                optifine_jar_path: r.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -311,7 +308,7 @@ pub fn instance_list(conn: &Connection, user_id: i64) -> Result<Vec<InstanceRow>
 
 pub fn instance_get(conn: &Connection, id: &str, user_id: i64) -> Result<Option<InstanceRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, mc_version, loader, ram_mb, favorite, description, optifine_jar_path FROM instances
+        "SELECT id, name, mc_version, loader, ram_mb, favorite, description FROM instances
          WHERE id = ?1 AND yuyu_user_id = ?2",
     )?;
     match stmt.query_row(params![id, user_id], |r| {
@@ -323,7 +320,6 @@ pub fn instance_get(conn: &Connection, id: &str, user_id: i64) -> Result<Option<
             ram_mb: r.get::<_, u32>(4)?,
             favorite: r.get::<_, i64>(5)? != 0,
             description: r.get(6)?,
-            optifine_jar_path: r.get(7)?,
         })
     }) {
         Ok(row) => Ok(Some(row)),
@@ -349,13 +345,12 @@ pub fn instance_insert(
     loader: &str,
     ram_mb: u32,
     description: &str,
-    optifine_jar_path: &str,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(
-        "INSERT INTO instances (id, yuyu_user_id, name, mc_version, loader, ram_mb, created_at, description, optifine_jar_path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![id, user_id, name, mc_version, loader, ram_mb, now, description, optifine_jar_path],
+        "INSERT INTO instances (id, yuyu_user_id, name, mc_version, loader, ram_mb, created_at, description)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![id, user_id, name, mc_version, loader, ram_mb, now, description],
     )?;
     Ok(())
 }
@@ -369,12 +364,11 @@ pub fn instance_update(
     loader: &str,
     ram_mb: u32,
     description: &str,
-    optifine_jar_path: &str,
 ) -> Result<()> {
     let n = conn.execute(
-        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5, optifine_jar_path=?6
-         WHERE id=?7 AND yuyu_user_id=?8",
-        params![name, mc_version, loader, ram_mb, description, optifine_jar_path, id, user_id],
+        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5
+         WHERE id=?6 AND yuyu_user_id=?7",
+        params![name, mc_version, loader, ram_mb, description, id, user_id],
     )?;
     if n == 0 {
         return Err(anyhow::anyhow!("Instance introuvable"));

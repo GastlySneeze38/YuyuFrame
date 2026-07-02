@@ -1,6 +1,4 @@
-import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 
 export default function Settings() {
@@ -9,15 +7,7 @@ export default function Settings() {
     brightness, setBrightness, defaultRam, setDefaultRam, closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
     syncGameSettings, setSyncGameSettings,
-    optifinePreset, setOptifinePreset,
   } = useStore()
-
-  // Initialise le preset OptiFine selon le PC si pas encore défini
-  useEffect(() => {
-    if (optifinePreset === null) {
-      api.system.memoryInfo().then((info) => setOptifinePreset(info.suggested_optifine_preset)).catch(() => {})
-    }
-  }, [])
 
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
@@ -153,41 +143,6 @@ export default function Settings() {
                     }}
                   />
                 </button>
-              </div>
-
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
-
-              {/* Préréglage OptiFine */}
-              <div className="flex flex-col gap-3">
-                <div>
-                  <p className="text-sm font-medium text-white">Préréglage OptiFine</p>
-                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                    Appliqué automatiquement à l'import d'OptiFine si l'instance n'a pas encore de config vidéo
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    { value: 'performance', label: 'Performance', desc: 'FPS max, petite config' },
-                    { value: 'normal',      label: 'Normal',      desc: 'Équilibre FPS / rendu' },
-                    { value: 'quality',     label: 'Qualité',     desc: 'Beaux graphismes, bonne config' },
-                  ] as const).map(({ value, label, desc }) => {
-                    const active = (optifinePreset ?? 'normal') === value
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => setOptifinePreset(value)}
-                        className="flex flex-col gap-1 rounded-xl p-3 text-left transition-all duration-150"
-                        style={{
-                          background: active ? 'rgba(75,63,207,0.2)' : 'rgba(255,255,255,0.03)',
-                          border: `1px solid ${active ? 'rgba(75,63,207,0.55)' : 'rgba(255,255,255,0.07)'}`,
-                        }}
-                      >
-                        <span className="font-semibold text-white" style={{ fontSize: 12 }}>{label}</span>
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', lineHeight: 1.4 }}>{desc}</span>
-                      </button>
-                    )
-                  })}
-                </div>
               </div>
 
               <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />

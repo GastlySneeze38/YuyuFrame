@@ -143,7 +143,6 @@ pub fn run() {
             commands::instances::instance_create,
             commands::instances::instance_delete,
             commands::instances::instance_update,
-            commands::instances::instance_import_optifine,
             commands::instances::instance_toggle_favorite,
             commands::instances::instance_duplicate,
             commands::instances::instance_startup_sync,

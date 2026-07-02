@@ -106,7 +106,6 @@ pub async fn download_and_launch(
     p2p: bool,
     avoid_beta: bool,
     console_label: &str,
-    optifine_jar_path: Option<&str>,
 ) -> Result<()> {
     let mc_dir = minecraft_dir();
     tokio::fs::create_dir_all(game_dir).await?;
@@ -325,6 +324,7 @@ pub async fn download_and_launch(
         .map(|j| j.component.as_str())
         .unwrap_or("jre-legacy"); // composant Mojang pour Java 8
     let java = ensure_java(java_component, required_java, &mc_dir, &client, &app).await?;
+    ensure_gpu_preference(&java).await;
     let java_major = detect_java_major_version(&java).await.unwrap_or(17);
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
@@ -333,27 +333,8 @@ pub async fn download_and_launch(
         match loader.unwrap_or("vanilla") {
             "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta).await?,
             "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app).await?,
-            // OptiFine (pré-1.13, cas 1.8.9) ne change ni main_class ni libs —
-            // juste le JAR CLIENT lui-même (fusion des classes OptiFine dans
-            // une copie du vanilla, voir optifine::ensure_patched). Le jar
-            // patché est calculé plus bas (a besoin de client_jar déjà
-            // téléchargé, donc après ce match) et remplace client_jar avant
-            // le calcul de effective_client_jar.
             _ => (details.main_class.clone(), vec![], vec![], vec![]),
         };
-
-    let client_jar = if matches!(loader, Some("optifine")) {
-        let optifine_jar = optifine_jar_path
-            .filter(|p| !p.is_empty())
-            .ok_or_else(|| anyhow!("OptiFine sélectionné mais aucun jar configuré — clique sur \"Configurer OptiFine\" dans les réglages de l'instance"))?;
-        let optifine_dir = game_dir.join("optifine");
-        log_to_console(&app, &console_label, "Patch OptiFine du jar client (peut prendre un instant la première fois)...", "out");
-        crate::minecraft::optifine::ensure_patched(&optifine_dir, version_id, &client_jar, std::path::Path::new(optifine_jar), &java)
-            .await
-            .map_err(|e| anyhow!("Patch OptiFine échoué : {}", e))?
-    } else {
-        client_jar
-    };
 
     // ── P2P setup ────────────────────────────────────────────────────────────
     // Démarre le signaling, télécharge les mappings Mojang et prépare les javaagents.
@@ -959,6 +940,47 @@ extern "system" {
     fn timeBeginPeriod(uPeriod: u32) -> u32;
     fn timeEndPeriod(uPeriod: u32) -> u32;
 }
+
+/// Force la préférence GPU "Performances élevées" (GPU dédié) pour CE
+/// java.exe précis, sur les configs GPU hybrides (portable avec iGPU +
+/// NVIDIA/AMD dédié) — même registre que "Paramètres Windows > Affichage >
+/// Graphismes" quand on ajoute une appli manuellement et choisit "Hautes
+/// performances" (HKCU\...\UserGpuPreferences, valeur "GpuPreference=2;").
+///
+/// Sans ça, Windows assigne java.exe au GPU par défaut du système — sur un
+/// portable hybride, souvent l'iGPU — observé en conditions réelles : ~100
+/// FPS au lieu de plusieurs centaines sur une RTX 4060, alors que d'autres
+/// launchers Java (le launcher officiel Mojang notamment, confirmé présent
+/// dans ce même registre pour SES propres java.exe) fonctionnent bien parce
+/// qu'ILS ont déjà cette préférence positionnée pour leur propre exécutable
+/// — jamais faite pour le nôtre puisque chaque composant runtime Mojang
+/// (jre-legacy, java-runtime-delta, etc.) vit à un chemin distinct.
+///
+/// Best-effort silencieux : ne bloque jamais le lancement si `reg.exe` est
+/// absent ou la clé inaccessible (HKCU, donc normalement toujours
+/// accessible sans élévation, mais on ne veut prendre aucun risque ici).
+#[cfg(target_os = "windows")]
+async fn ensure_gpu_preference(java_exe: &str) {
+    const KEY: &str = r"HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
+
+    let already_set = tokio::process::Command::new("reg")
+        .args(["query", KEY, "/v", java_exe])
+        .output()
+        .await
+        .map(|out| out.status.success())
+        .unwrap_or(false);
+    if already_set {
+        return;
+    }
+
+    let _ = tokio::process::Command::new("reg")
+        .args(["add", KEY, "/v", java_exe, "/t", "REG_SZ", "/d", "GpuPreference=2;", "/f"])
+        .output()
+        .await;
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn ensure_gpu_preference(_java_exe: &str) {}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -14,8 +14,6 @@ pub struct Instance {
     pub ram_mb: u32,
     pub favorite: bool,
     pub description: String,
-    #[serde(default)]
-    pub optifine_jar_path: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -27,11 +25,9 @@ struct InstanceMeta {
     ram_mb: u32,
     #[serde(default)]
     description: String,
-    #[serde(default)]
-    optifine_jar_path: String,
 }
 
-fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32, description: &str, optifine_jar_path: &str) {
+fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32, description: &str) {
     let meta = InstanceMeta {
         id: id.to_string(),
         name: name.to_string(),
@@ -39,7 +35,6 @@ fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32,
         loader: loader.to_string(),
         ram_mb,
         description: description.to_string(),
-        optifine_jar_path: optifine_jar_path.to_string(),
     };
     if let Ok(json) = serde_json::to_string_pretty(&meta) {
         let _ = std::fs::write(instance_dir(id).join("meta.json"), json);
@@ -54,10 +49,6 @@ pub fn instance_mods_dir(id: &str) -> PathBuf {
     instance_dir(id).join("mods")
 }
 
-pub fn instance_optifine_dir(id: &str) -> PathBuf {
-    instance_dir(id).join("optifine")
-}
-
 fn gen_id() -> String {
     use rand::Rng;
     rand::thread_rng()
@@ -69,7 +60,7 @@ fn gen_id() -> String {
 }
 
 fn row_to_instance(r: db::InstanceRow) -> Instance {
-    Instance { id: r.id, name: r.name, mc_version: r.mc_version, loader: r.loader, ram_mb: r.ram_mb, favorite: r.favorite, description: r.description, optifine_jar_path: r.optifine_jar_path }
+    Instance { id: r.id, name: r.name, mc_version: r.mc_version, loader: r.loader, ram_mb: r.ram_mb, favorite: r.favorite, description: r.description }
 }
 
 fn user_id(s: &crate::state::AppState) -> i64 {
@@ -94,25 +85,23 @@ pub async fn instance_create(
     loader: String,
     ram_mb: u32,
     description: Option<String>,
-    optifine_jar_path: Option<String>,
 ) -> Result<Instance, String> {
     if name.trim().is_empty() {
         return Err("Le nom de l'instance est requis".into());
     }
     let description = description.unwrap_or_default().trim().to_string();
-    let optifine_jar_path = optifine_jar_path.unwrap_or_default().trim().to_string();
     let id = gen_id();
     tokio::fs::create_dir_all(instance_dir(&id))
         .await
         .map_err(|e| e.to_string())?;
     let name = name.trim().to_string();
-    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &optifine_jar_path);
+    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description);
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &optifine_jar_path)
+    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description)
         .map_err(|e| e.to_string())?;
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, optifine_jar_path })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description })
 }
 
 #[tauri::command]
@@ -160,61 +149,19 @@ pub async fn instance_update(
     loader: String,
     ram_mb: u32,
     description: Option<String>,
-    optifine_jar_path: Option<String>,
 ) -> Result<Instance, String> {
     let name = name.trim().to_string();
     let description = description.unwrap_or_default().trim().to_string();
-    let optifine_jar_path = optifine_jar_path.unwrap_or_default().trim().to_string();
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &optifine_jar_path)
+    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description)
         .map_err(|e| e.to_string())?;
-    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &optifine_jar_path);
+    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description);
     let row = db::instance_get(&db, &id, uid)
         .map_err(|e| e.to_string())?
         .ok_or("Instance introuvable")?;
     Ok(row_to_instance(row))
-}
-
-/// Détecte le jar OptiFine_*.jar le plus récent dans Téléchargements et le
-/// copie dans le dossier propre à cette instance (voir
-/// `crate::minecraft::optifine::import_from_downloads`) — remplace
-/// l'ancienne `mods_import_optifine` (qui copiait dans `mods/`, valable
-/// seulement avec Forge) : OptiFine est maintenant un mode de chargement à
-/// part entière (loader "optifine"), le patch réel du jar vanilla se fait au
-/// lancement (voir launch.rs), cette commande capture juste la référence
-/// stable au jar fourni par l'utilisateur.
-#[tauri::command]
-pub async fn instance_import_optifine(
-    state: tauri::State<'_, SharedState>,
-    id: String,
-    preset: Option<String>,
-) -> Result<Instance, String> {
-    let dest = crate::minecraft::optifine::import_from_downloads(&instance_optifine_dir(&id))
-        .await
-        .map_err(|e| e.to_string())?;
-    let optifine_jar_path = dest.to_string_lossy().to_string();
-
-    let s = state.read().await;
-    let uid = user_id(&s);
-    let db = s.db.lock().await;
-    let row = db::instance_get(&db, &id, uid)
-        .map_err(|e| e.to_string())?
-        .ok_or("Instance introuvable")?;
-    db::instance_update(&db, &id, uid, &row.name, &row.mc_version, &row.loader, row.ram_mb, &row.description, &optifine_jar_path)
-        .map_err(|e| e.to_string())?;
-    write_meta(&id, &row.name, &row.mc_version, &row.loader, row.ram_mb, &row.description, &optifine_jar_path);
-
-    // Préréglages graphiques écrits uniquement si options.txt n'existe pas
-    // encore (ne jamais écraser une config que l'utilisateur a déjà réglée à
-    // la main) — voir crate::commands::mods::write_optifine_presets.
-    crate::commands::mods::write_optifine_presets(&id, preset.as_deref());
-
-    let updated = db::instance_get(&db, &id, uid)
-        .map_err(|e| e.to_string())?
-        .ok_or("Instance introuvable")?;
-    Ok(row_to_instance(updated))
 }
 
 #[tauri::command]
@@ -230,14 +177,14 @@ pub async fn instance_duplicate(
     }
     let name = name.trim().to_string();
 
-    let (loader, optifine_jar_path) = {
+    let loader = {
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
         let src = db::instance_get(&db, &source_id, uid)
             .map_err(|e| e.to_string())?
             .ok_or("Instance source introuvable")?;
-        (src.loader, src.optifine_jar_path)
+        src.loader
     };
 
     let new_id = gen_id();
@@ -258,15 +205,15 @@ pub async fn instance_duplicate(
         }
     }
 
-    write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "", &optifine_jar_path);
+    write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "");
 
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "", &optifine_jar_path)
+    db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "")
         .map_err(|e| e.to_string())?;
 
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), optifine_jar_path })
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new() })
 }
 
 /// Copie `options.txt` de l'instance vers un template global dans le dossier
@@ -345,7 +292,7 @@ pub async fn instance_startup_sync(
                 let meta_path = instances_root.join(&id).join("meta.json");
                 if let Ok(json) = std::fs::read_to_string(&meta_path) {
                     if let Ok(meta) = serde_json::from_str::<InstanceMeta>(&json) {
-                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description, &meta.optifine_jar_path).ok();
+                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description).ok();
                     }
                 }
                 // Pas de meta.json → on laisse le dossier, impossible d'importer

@@ -45,7 +45,6 @@ pub async fn launch_game(
         ram_mb: instance.ram_mb,
         favorite: instance.favorite,
         description: instance.description,
-        optifine_jar_path: instance.optifine_jar_path,
     };
 
     let game_dir = instance_dir(&instance_id);
@@ -118,7 +117,6 @@ pub async fn launch_game(
             p2p.unwrap_or(false),
             avoid_beta.unwrap_or(true),
             &window_label,
-            Some(instance.optifine_jar_path.as_str()).filter(|p| !p.is_empty()),
         )
         .await
         {

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { open } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance, Loader } from '@/types'
 import { ModsContent, updateModsForNewVersion } from '@/pages/Mods'
-import { INSTANCE_PRESETS, PVP_PRESET, type InstancePreset } from '@/data/presets'
+import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 
-const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge', 'optifine']
+const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge']
 const RAM_OPTIONS = [1024, 2048, 4096, 6144, 8192]
 
 function formatRam(mb: number) {
@@ -17,7 +16,6 @@ function formatRam(mb: number) {
 function loaderColor(loader: string) {
   if (loader === 'fabric') return '#b5a0ff'
   if (loader === 'forge') return '#f0a040'
-  if (loader === 'optifine') return '#7fd858'
   return 'rgba(255,255,255,0.4)'
 }
 
@@ -382,14 +380,6 @@ function CreateModal({
               </div>
             )}
 
-            {mode === 'blank' && loader === 'optifine' && (
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'rgba(127,216,88,0.08)', border: '1px solid rgba(127,216,88,0.25)' }}>
-                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
-                  Tu configureras le jar OptiFine juste après, dans l'édition de l'instance.
-                </p>
-              </div>
-            )}
-
             <RamPicker value={ram} onChange={setRam} />
 
             <DescriptionInput value={description} onChange={setDescription} />
@@ -421,43 +411,16 @@ function EditModal({
   const [description, setDescription] = useState(instance.description)
   const [mcVersion, setMcVersion] = useState(instance.mc_version)
   const [loader, setLoader] = useState<Loader>(instance.loader)
-  const [optifineJarPath, setOptifineJarPath] = useState(instance.optifine_jar_path)
-  const [configuringOptifine, setConfiguringOptifine] = useState(false)
   const [ram, setRam] = useState(instance.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Enregistrement...')
   const [error, setError] = useState('')
 
-  /**
-   * OptiFine interdit toute redistribution sans permission écrite de son
-   * auteur (cf. https://optifine.net/copyright) — on ne le télécharge donc
-   * jamais nous-mêmes. Premier clic : ouvre la vraie page officielle pour
-   * que l'utilisateur télécharge lui-même. Reclic (après téléchargement) :
-   * le backend détecte le jar dans Téléchargements, le copie dans le
-   * dossier propre à cette instance, et le patch réel (fusion des classes
-   * dans le jar vanilla) se fera au lancement (voir launch.rs) — pas ici.
-   */
-  const handleConfigureOptifine = async () => {
-    if (configuringOptifine) return
-    setConfiguringOptifine(true)
-    setError('')
-    try {
-      const updated = await api.instances.importOptifine(instance.id)
-      setOptifineJarPath(updated.optifine_jar_path)
-    } catch {
-      await open('https://optifine.net/downloads')
-      setError('Télécharge OptiFine depuis l’onglet qui vient de s’ouvrir, puis reclique sur "Configurer OptiFine".')
-    } finally {
-      setConfiguringOptifine(false)
-    }
-  }
-
   const handleSave = async () => {
     if (!name.trim()) { setError('Nom requis'); return }
-    if (loader === 'optifine' && !optifineJarPath) { setError('Configure OptiFine avant d’enregistrer (bouton ci-dessus).'); return }
     setLoading(true); setError(''); setLoadingLabel('Enregistrement...')
     try {
-      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim(), optifineJarPath)
+      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim())
       if (mcVersion !== instance.mc_version) {
         setLoadingLabel('Mise à jour des mods...')
         await updateModsForNewVersion(instance.id, mcVersion, loader)
@@ -518,28 +481,6 @@ function EditModal({
             </div>
           </div>
         </div>
-
-        {loader === 'optifine' && (
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: 'rgba(127,216,88,0.08)', border: '1px solid rgba(127,216,88,0.25)' }}>
-            <div className="flex-1">
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
-                {optifineJarPath ? 'OptiFine configuré pour cette instance.' : 'OptiFine doit être fourni par toi-même (licence OptiFine).'}
-              </p>
-            </div>
-            <button
-              onClick={handleConfigureOptifine}
-              disabled={configuringOptifine}
-              className="rounded-lg text-xs font-semibold transition-all duration-150"
-              style={{
-                height: 32, padding: '0 12px', flexShrink: 0,
-                background: 'rgba(127,216,88,0.2)', border: '1px solid rgba(127,216,88,0.5)',
-                color: 'rgba(255,255,255,0.9)', opacity: configuringOptifine ? 0.6 : 1,
-              }}
-            >
-              {configuringOptifine ? '...' : optifineJarPath ? 'Reconfigurer OptiFine' : 'Configurer OptiFine'}
-            </button>
-          </div>
-        )}
 
         <RamPicker value={ram} onChange={setRam} />
 
@@ -867,8 +808,6 @@ export default function Instances() {
   const [editTarget, setEditTarget] = useState<Instance | null>(null)
   const [duplicateSource, setDuplicateSource] = useState<Instance | null>(null)
   const [othersExpanded, setOthersExpanded] = useState(true)
-  const [creatingPvp, setCreatingPvp] = useState(false)
-  const [pvpProgress, setPvpProgress] = useState('')
   const loaded = useRef(false)
 
   const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? null
@@ -905,26 +844,6 @@ export default function Instances() {
       const updated = await api.instances.toggleFavorite(id)
       updateInstance(updated)
     } catch { /* ignore */ }
-  }
-
-  const handleCreatePvp = async () => {
-    if (creatingPvp) return
-    setCreatingPvp(true)
-    setPvpProgress('Création...')
-    try {
-      let name = PVP_PRESET.name
-      let n = 2
-      while (instances.some((i) => i.name === name)) { name = `${PVP_PRESET.name} (${n})`; n++ }
-      const instance = await api.instances.create(name, PVP_PRESET.mcVersion, PVP_PRESET.loader, PVP_PRESET.ramMb, PVP_PRESET.description)
-      addInstance(instance)
-      setSelectedInstanceId(instance.id)
-      await installPresetMods(instance.id, PVP_PRESET, (done, total) => {
-        setPvpProgress(`Installation (${done}/${total})...`)
-      })
-    } catch { /* best-effort */ } finally {
-      setCreatingPvp(false)
-      setPvpProgress('')
-    }
   }
 
   function renderCard(inst: Instance) {
@@ -1026,28 +945,6 @@ export default function Instances() {
 
           {/* Fixed bottom button */}
           <div className="flex-shrink-0 flex flex-col gap-2 p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-            <button
-              onClick={handleCreatePvp}
-              disabled={creatingPvp}
-              className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95"
-              style={{
-                height: 44, borderRadius: 12, fontSize: 13,
-                background: creatingPvp ? 'rgba(40,38,65,0.7)' : 'rgba(207,63,75,0.18)',
-                border: '1px solid rgba(207,63,75,0.4)',
-                boxShadow: creatingPvp ? 'none' : '0 4px 20px rgba(207,63,75,0.12)',
-                cursor: creatingPvp ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={(e) => { if (!creatingPvp) e.currentTarget.style.background = 'rgba(207,63,75,0.3)' }}
-              onMouseLeave={(e) => { if (!creatingPvp) e.currentTarget.style.background = 'rgba(207,63,75,0.18)' }}
-            >
-              {creatingPvp ? (
-                <span className="h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.7)' }} />
-              ) : (
-                <span style={{ fontSize: 14 }}>⚔️</span>
-              )}
-              {creatingPvp ? pvpProgress : 'Instance PvP'}
-            </button>
-
             <button
               onClick={() => setShowCreate(true)}
               className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95"
