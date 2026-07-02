@@ -41,7 +41,7 @@ public class UiKeybindButton extends UiWidget {
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
 
         String label = listening ? "..." : keyName;
-        float scale = 0.4f;
+        float scale = 0.48f;
         float tw = renderer.textWidth(label, scale);
         float baseline = y + h / 2f - (UiFont.REGULAR.ascent - UiFont.REGULAR.descent) * scale * UiFont.SIZE_CORRECTION / 2f;
         renderer.drawText(label, x + (w - tw) / 2f, baseline, listening ? UiTheme.ACCENT : UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);

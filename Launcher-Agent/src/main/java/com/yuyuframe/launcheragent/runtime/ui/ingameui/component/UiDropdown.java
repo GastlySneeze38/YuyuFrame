@@ -19,8 +19,8 @@ import java.util.function.IntConsumer;
  */
 public class UiDropdown extends UiWidget {
 
-    private static final float ROW_H = 20f;
-    private static final float PANEL_PAD = 4f;
+    private static final float ROW_H = 26f;
+    private static final float PANEL_PAD = 5f;
 
     private final List<String> options;
     private int selectedIndex;
@@ -45,10 +45,10 @@ public class UiDropdown extends UiWidget {
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
 
         String label = options.get(selectedIndex);
-        renderer.drawText(label, x + 8, y + h / 2f - 4f, UiTheme.TEXT_PRIMARY, 0.4f, vpWidth, vpHeight);
+        renderer.drawText(label, x + 8, y + h / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.48f, vpWidth, vpHeight);
         String arrow = expanded ? "^" : "v";
-        float aw = renderer.textWidth(arrow, 0.4f);
-        renderer.drawText(arrow, x + w - aw - 8, y + h / 2f - 4f, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
+        float aw = renderer.textWidth(arrow, 0.48f);
+        renderer.drawText(arrow, x + w - aw - 8, y + h / 2f - 5f, UiTheme.TEXT_SECONDARY, 0.48f, vpWidth, vpHeight);
 
         if (!expanded) return;
 
@@ -64,7 +64,7 @@ public class UiDropdown extends UiWidget {
                 renderer.drawRoundedRect(x + 2, rowBottom + 1, x + w - 2, rowTop - 1, 2f,
                     i == selectedIndex ? UiTheme.ACCENT_DIM : UiTheme.CARD_HOVER, vpWidth, vpHeight);
             }
-            renderer.drawText(options.get(i), x + 8, rowBottom + ROW_H / 2f - 4f, UiTheme.TEXT_PRIMARY, 0.42f, vpWidth, vpHeight);
+            renderer.drawText(options.get(i), x + 8, rowBottom + ROW_H / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.48f, vpWidth, vpHeight);
         }
     }
 

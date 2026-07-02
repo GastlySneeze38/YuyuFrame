@@ -42,8 +42,8 @@ public class UiTextField extends UiWidget {
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
             focused ? UiTheme.ACCENT_DIM : UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
 
-        float scale = 0.4f;
-        float baseline = y + h / 2f - 4f;
+        float scale = 0.48f;
+        float baseline = y + h / 2f - 5f;
         if (text.length() == 0 && !focused) {
             if (placeholder != null) renderer.drawText(placeholder, x + 8, baseline, UiTheme.TEXT_MUTED, scale, vpWidth, vpHeight);
             return;

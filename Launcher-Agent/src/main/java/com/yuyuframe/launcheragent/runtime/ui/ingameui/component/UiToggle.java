@@ -17,7 +17,7 @@ public class UiToggle extends UiWidget {
     private final UiAnimatedFloat anim;
 
     public UiToggle(float x, float y, boolean initial, Consumer<Boolean> onChange) {
-        super(x, y, 34f, 18f);
+        super(x, y, 44f, 24f);
         this.value = initial;
         this.onChange = onChange;
         this.anim = new UiAnimatedFloat(initial ? 1f : 0f, ANIM_SPEED);

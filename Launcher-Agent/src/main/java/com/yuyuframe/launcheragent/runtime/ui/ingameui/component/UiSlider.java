@@ -19,9 +19,9 @@ import java.util.function.Consumer;
  */
 public class UiSlider extends UiWidget {
 
-    private static final float TRACK_H = 4f;
-    private static final float KNOB_R = 6f;
-    private static final float READOUT_W = 34f;
+    private static final float TRACK_H = 5f;
+    private static final float KNOB_R = 8f;
+    private static final float READOUT_W = 44f;
 
     private final float min, max, step;
     private float value;
@@ -29,7 +29,7 @@ public class UiSlider extends UiWidget {
     private boolean dragging;
 
     public UiSlider(float x, float y, float w, float min, float max, float step, float initial, Consumer<Float> onChange) {
-        super(x, y, w, 16f);
+        super(x, y, w, 20f);
         this.min = min;
         this.max = max;
         this.step = step;
@@ -63,8 +63,8 @@ public class UiSlider extends UiWidget {
         renderer.drawRoundedRect(knobX - KNOB_R, cy - KNOB_R, knobX + KNOB_R, cy + KNOB_R, KNOB_R, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
 
         String text = formatValue();
-        float tw = renderer.textWidth(text, 0.4f);
-        renderer.drawText(text, x + w - tw, cy - 4f, UiTheme.TEXT_SECONDARY, 0.4f, vpWidth, vpHeight);
+        float tw = renderer.textWidth(text, 0.48f);
+        renderer.drawText(text, x + w - tw, cy - 5f, UiTheme.TEXT_SECONDARY, 0.48f, vpWidth, vpHeight);
     }
 
     @Override

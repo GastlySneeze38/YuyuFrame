@@ -14,7 +14,7 @@ public final class UiPanel {
     public static void draw(UiRenderer renderer, float x, float y, float w, float h, String title, int vpWidth, int vpHeight) {
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.PANEL_BG, vpWidth, vpHeight);
         if (title != null && !title.isEmpty()) {
-            renderer.drawText(UiFont.BOLD, title, x + 16, y + h - 24, UiTheme.TEXT_SECONDARY, 0.42f, vpWidth, vpHeight);
+            renderer.drawText(UiFont.BOLD, title, x + 16, y + h - 28, UiTheme.TEXT_SECONDARY, 0.5f, vpWidth, vpHeight);
         }
     }
 }

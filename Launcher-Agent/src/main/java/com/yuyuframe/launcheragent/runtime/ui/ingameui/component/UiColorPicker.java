@@ -24,11 +24,11 @@ import java.util.function.Consumer;
  */
 public class UiColorPicker extends UiWidget {
 
-    private static final float SWATCH_W = 32f, SWATCH_H = 20f;
-    private static final float PANEL_W = 170f, PANEL_PAD = 8f;
-    private static final float PREVIEW_H = 22f;
-    private static final float LABEL_H = 12f, BAND_H = 14f, ROW_GAP = 6f;
-    private static final float HEX_H = 20f;
+    private static final float SWATCH_W = 42f, SWATCH_H = 26f;
+    private static final float PANEL_W = 210f, PANEL_PAD = 10f;
+    private static final float PREVIEW_H = 28f;
+    private static final float LABEL_H = 15f, BAND_H = 18f, ROW_GAP = 8f;
+    private static final float HEX_H = 26f;
     private static final int BANDS = 24;
 
     private float hue, sat, bri; // HSB, tous 0..1
@@ -102,8 +102,8 @@ public class UiColorPicker extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        renderer.drawRoundedRect(x, y, x + w, y + h, 3f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
-        renderer.drawRoundedRect(x + 2, y + 2, x + w - 2, y + h - 2, 2f, rgbColor(), vpWidth, vpHeight);
+        renderer.drawRoundedRect(x, y, x + w, y + h, 4f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
+        renderer.drawRoundedRect(x + 3, y + 3, x + w - 3, y + h - 3, 3f, rgbColor(), vpWidth, vpHeight);
 
         if (!expanded) return;
 
@@ -111,7 +111,7 @@ public class UiColorPicker extends UiWidget {
 
         float bx = x + PANEL_PAD, bw = PANEL_W - 2 * PANEL_PAD;
 
-        renderer.drawRoundedRect(bx, previewY(), bx + bw, panelTop() - PANEL_PAD / 2f, 3f, rgbColor(), vpWidth, vpHeight);
+        renderer.drawRoundedRect(bx, previewY(), bx + bw, panelTop() - PANEL_PAD / 2f, 4f, rgbColor(), vpWidth, vpHeight);
 
         drawBandLabel(renderer, bx, hueLabelY(), "Teinte", vpWidth, vpHeight);
         drawBands(renderer, bx, hueBandY(), bw, hue, this::hueBandColor, vpWidth, vpHeight);
@@ -134,7 +134,7 @@ public class UiColorPicker extends UiWidget {
     private interface BandColorFn { UiColor at(float t); }
 
     private void drawBandLabel(UiRenderer renderer, float x, float y, String label, int vpW, int vpH) {
-        renderer.drawText(label, x, y + 2f, UiTheme.TEXT_SECONDARY, 0.32f, vpW, vpH);
+        renderer.drawText(label, x, y + 2f, UiTheme.TEXT_SECONDARY, 0.4f, vpW, vpH);
     }
 
     private void drawBands(UiRenderer renderer, float x, float y, float w, float value, BandColorFn colorFn, int vpW, int vpH) {
@@ -144,7 +144,7 @@ public class UiColorPicker extends UiWidget {
             renderer.drawRoundedRect(x + i * bandW, y, x + i * bandW + bandW + 1f, y + BAND_H, 0, colorFn.at(t), vpW, vpH);
         }
         float markerX = x + value * w;
-        renderer.drawRoundedRect(markerX - 1.5f, y - 1f, markerX + 1.5f, y + BAND_H + 1f, 1f, UiTheme.TEXT_PRIMARY, vpW, vpH);
+        renderer.drawRoundedRect(markerX - 2f, y - 1f, markerX + 2f, y + BAND_H + 1f, 1f, UiTheme.TEXT_PRIMARY, vpW, vpH);
     }
 
     private UiColor hueBandColor(float t) {

@@ -29,11 +29,11 @@ public class UiScrollContainer {
     // les ascendantes/descendantes du texte réellement dessiné. Sans cette
     // marge, la première/dernière ligne se ferait tronquer pile au bord du
     // scissor en position de scroll extrême.
-    private static final float EDGE_PADDING = 12f;
+    private static final float EDGE_PADDING = 14f;
 
-    private static final float SCROLLBAR_W = 5f;
-    private static final float SCROLLBAR_MARGIN = 3f;
-    private static final float SCROLLBAR_MIN_H = 20f;
+    private static final float SCROLLBAR_W = 6f;
+    private static final float SCROLLBAR_MARGIN = 4f;
+    private static final float SCROLLBAR_MIN_H = 24f;
 
     private final float vx, vy, vw, vh; // viewport en espace écran, (vx,vy) = coin bas-gauche
     private final List<UiWidget> content = new ArrayList<>();

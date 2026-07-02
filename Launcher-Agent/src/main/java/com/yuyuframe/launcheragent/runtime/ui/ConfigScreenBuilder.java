@@ -42,8 +42,8 @@ import java.util.function.IntConsumer;
 public final class ConfigScreenBuilder {
     private ConfigScreenBuilder() {}
 
-    private static final float ROW_H = 26f, ROW_GAP = 6f;
-    private static final float LABEL_SCALE = 0.42f;
+    private static final float ROW_H = 34f, ROW_GAP = 8f;
+    private static final float LABEL_SCALE = 0.5f;
 
     public static LinkedHashMap<String, List<UiWidget>> build(LauncherModule module, float x, float w) {
         LinkedHashMap<String, List<UiWidget>> byCategory = new LinkedHashMap<>();
@@ -142,7 +142,7 @@ public final class ConfigScreenBuilder {
     // ── Lignes — mêmes proportions que l'ancien UiModConfigScreen codé en dur ──
 
     private static float rowLabel(List<UiWidget> rows, float x, float rowY, String label, String tooltip) {
-        rows.add(new UiLabel(x, rowY + ROW_H / 2f - 4f, label, UiTheme.TEXT_PRIMARY, LABEL_SCALE).tooltip(tooltip));
+        rows.add(new UiLabel(x, rowY + ROW_H / 2f - 5f, label, UiTheme.TEXT_PRIMARY, LABEL_SCALE).tooltip(tooltip));
         return rowY;
     }
 
@@ -150,7 +150,7 @@ public final class ConfigScreenBuilder {
                                     boolean initial, Consumer<Boolean> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        rows.add(new UiToggle(x + w - 34f, rowY + (ROW_H - 18f) / 2f, initial, onChange));
+        rows.add(new UiToggle(x + w - 44f, rowY + (ROW_H - 24f) / 2f, initial, onChange));
         return rowY - ROW_GAP;
     }
 
@@ -158,8 +158,8 @@ public final class ConfigScreenBuilder {
                                     float min, float max, float step, float initial, Consumer<Float> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        float sliderW = 150f;
-        rows.add(new UiSlider(x + w - sliderW, rowY + (ROW_H - 16f) / 2f, sliderW, min, max, step, initial, onChange));
+        float sliderW = 190f;
+        rows.add(new UiSlider(x + w - sliderW, rowY + (ROW_H - 20f) / 2f, sliderW, min, max, step, initial, onChange));
         return rowY - ROW_GAP;
     }
 
@@ -167,35 +167,35 @@ public final class ConfigScreenBuilder {
                                    UiColor initial, Consumer<UiColor> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        rows.add(new UiColorPicker(x + w - 32f, rowY + (ROW_H - 20f) / 2f, initial, onChange));
+        rows.add(new UiColorPicker(x + w - 42f, rowY + (ROW_H - 26f) / 2f, initial, onChange));
         // Marge supplémentaire : le panneau déroulant du color picker s'ouvre vers le bas.
-        return rowY - ROW_GAP - 90f;
+        return rowY - ROW_GAP - 115f;
     }
 
     private static float dropdownRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
                                       List<String> options, int initialIndex, IntConsumer onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        float dw = 130f;
-        rows.add(new UiDropdown(x + w - dw, rowY + (ROW_H - 20f) / 2f, dw, 20f, options, initialIndex, onChange));
+        float dw = 170f;
+        rows.add(new UiDropdown(x + w - dw, rowY + (ROW_H - 26f) / 2f, dw, 26f, options, initialIndex, onChange));
         // Même raison que colorRow : réserve la hauteur du panneau déroulé.
-        return rowY - ROW_GAP - (options.size() * 20f + 8f);
+        return rowY - ROW_GAP - (options.size() * 26f + 10f);
     }
 
     private static float keybindRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
                                      String initialKey, Consumer<String> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        float kw = 90f;
-        rows.add(new UiKeybindButton(x + w - kw, rowY + (ROW_H - 20f) / 2f, kw, 20f, initialKey, onChange));
+        float kw = 110f;
+        rows.add(new UiKeybindButton(x + w - kw, rowY + (ROW_H - 26f) / 2f, kw, 26f, initialKey, onChange));
         return rowY - ROW_GAP;
     }
 
     /** Ligne bouton seul (pas de label à gauche, ex: "Réinitialiser la position") — pas de valeur associée, juste une action. */
     private static float buttonRow(List<UiWidget> rows, float x, float w, float cursor, String label, Runnable action) {
         float rowY = cursor - ROW_H;
-        float bw = 160f;
-        rows.add(new UiButton(x + w - bw, rowY + (ROW_H - 22f) / 2f, bw, 22f, label, action));
+        float bw = 190f;
+        rows.add(new UiButton(x + w - bw, rowY + (ROW_H - 28f) / 2f, bw, 28f, label, action));
         return rowY - ROW_GAP;
     }
 

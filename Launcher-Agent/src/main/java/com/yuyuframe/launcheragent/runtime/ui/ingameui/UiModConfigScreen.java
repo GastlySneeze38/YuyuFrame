@@ -32,10 +32,10 @@ import java.util.List;
  */
 public class UiModConfigScreen extends UiScreenBase {
 
-    private static final float HEADER_H = 64f;
+    private static final float HEADER_H = 72f;
     private static final float SIDE_MARGIN = 48f;
-    private static final float SUB_SIDEBAR_W = 150f;
-    private static final float CONTENT_MAX_W = 480f;
+    private static final float SUB_SIDEBAR_W = 180f;
+    private static final float CONTENT_MAX_W = 620f;
 
     private final Object lastScreen;
     private final LauncherModule module;
@@ -62,7 +62,7 @@ public class UiModConfigScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            renderer.drawText(UiFont.BOLD, module.name, SIDE_MARGIN + 40, screenHeight - 40, UiTheme.TEXT_PRIMARY, 0.55f, screenWidth, screenHeight);
+            renderer.drawText(UiFont.BOLD, module.name, SIDE_MARGIN + 46, screenHeight - 44, UiTheme.TEXT_PRIMARY, 0.68f, screenWidth, screenHeight);
             UiPanel.draw(renderer, panelX, panelY, panelW, panelH, null, screenWidth, screenHeight);
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
         } catch (Throwable ignored) {}
@@ -98,7 +98,7 @@ public class UiModConfigScreen extends UiScreenBase {
 
         int i = 0;
         for (String category : categoryWidgets.keySet()) {
-            widgets.add(new CategoryTab(SIDE_MARGIN, panelTop - 20f - i * 30f, SUB_SIDEBAR_W, category));
+            widgets.add(new CategoryTab(SIDE_MARGIN, panelTop - 24f - i * 38f, SUB_SIDEBAR_W, category));
             i++;
         }
 
@@ -118,7 +118,7 @@ public class UiModConfigScreen extends UiScreenBase {
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
         CategoryTab(float x, float y, float w, String name) {
-            super(x, y, w, 26f);
+            super(x, y, w, 34f);
             this.name = name;
         }
 
@@ -133,7 +133,7 @@ public class UiModConfigScreen extends UiScreenBase {
                 UiColor bg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hoverAnim.get());
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
             }
-            renderer.drawText(name, x + 12, y + h / 2f - 4f, active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, 0.4f, vpWidth, vpHeight);
+            renderer.drawText(name, x + 14, y + h / 2f - 5f, active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, 0.48f, vpWidth, vpHeight);
         }
 
         @Override
@@ -143,7 +143,7 @@ public class UiModConfigScreen extends UiScreenBase {
     private final class BackButton extends UiWidget {
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        BackButton() { super(SIDE_MARGIN, screenHeight - HEADER_H + 18f, 32f, 32f); }
+        BackButton() { super(SIDE_MARGIN, screenHeight - HEADER_H + 20f, 38f, 38f); }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
@@ -151,8 +151,8 @@ public class UiModConfigScreen extends UiScreenBase {
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
             String arrow = "<";
-            float tw = renderer.textWidth(arrow, 0.5f);
-            renderer.drawText(arrow, x + (w - tw) / 2f, y + h / 2f - 6f, UiTheme.TEXT_PRIMARY, 0.5f, vpWidth, vpHeight);
+            float tw = renderer.textWidth(arrow, 0.6f);
+            renderer.drawText(arrow, x + (w - tw) / 2f, y + h / 2f - 7f, UiTheme.TEXT_PRIMARY, 0.6f, vpWidth, vpHeight);
         }
 
         @Override

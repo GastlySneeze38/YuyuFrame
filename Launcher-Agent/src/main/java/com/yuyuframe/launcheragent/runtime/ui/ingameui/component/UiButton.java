@@ -10,9 +10,9 @@ public class UiButton extends UiWidget {
 
     private static final UiColor BASE = new UiColor(45, 45, 50, 230);
     private static final UiColor HOVER = new UiColor(65, 65, 72, 230);
-    private static final float RADIUS = 4f;
+    private static final float RADIUS = 5f;
     private static final float HOVER_ANIM_SPEED = 16f;
-    private static final float LABEL_SCALE = 0.36f;
+    private static final float LABEL_SCALE = 0.46f;
 
     private final String label;
     private final Runnable action;
@@ -31,7 +31,7 @@ public class UiButton extends UiWidget {
         renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, color, vpWidth, vpHeight);
         if (label != null) {
             float tw = renderer.textWidth(label, LABEL_SCALE);
-            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 4f, UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
+            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 5f, UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
         }
     }
 
