@@ -101,6 +101,21 @@ if not exist "%LIB%\asm-commons-9.5.jar" (
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM-Commons echoue & goto :error )
 )
 
+:: JNA (BorderlessWindowNative, module "Fenetre sans bordure") : appel direct
+:: de l'API Win32 (User32/Kernel32) depuis du Java pur, sans ecrire/compiler
+:: le moindre code natif nous-memes — contrairement a content_core.dll/
+:: rust_core.dll, aucune nouvelle DLL Rust pour cette feature.
+if not exist "%LIB%\jna.jar" (
+    echo [Deps] Telechargement JNA 5.14.0...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.14.0/jna-5.14.0.jar' -OutFile '%LIB%\jna.jar' -UseBasicParsing"
+    if errorlevel 1 ( echo [ERREUR] Telechargement JNA echoue & goto :error )
+)
+if not exist "%LIB%\jna-platform.jar" (
+    echo [Deps] Telechargement JNA-Platform 5.14.0...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/net/java/dev/jna/jna-platform/5.14.0/jna-platform-5.14.0.jar' -OutFile '%LIB%\jna-platform.jar' -UseBasicParsing"
+    if errorlevel 1 ( echo [ERREUR] Telechargement JNA-Platform echoue & goto :error )
+)
+
 :: --- Compiler les stubs MC (compile-only, non inclus dans le JAR final) ------
 
 if exist "%OUT_STUBS%" rmdir /s /q "%OUT_STUBS%"
@@ -155,7 +170,7 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
 :: gardes-fous ci-dessus. -proc:none l'empeche de tourner du tout, plutot
 :: que de corriger un mecanisme qu'on ne veut pas.
 "%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
-  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%OUT_STUBS%" ^
+  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
 del "%SRCLIST%" 2>nul
@@ -222,6 +237,8 @@ copy /Y "%LIB%\asm-tree-9.5.jar"      "%LIBS_DEPLOY_DIR%\asm-tree-9.5.jar"      
 copy /Y "%LIB%\asm-util-9.5.jar"      "%LIBS_DEPLOY_DIR%\asm-util-9.5.jar"       >nul
 copy /Y "%LIB%\asm-analysis-9.5.jar"  "%LIBS_DEPLOY_DIR%\asm-analysis-9.5.jar"   >nul
 copy /Y "%LIB%\asm-commons-9.5.jar"   "%LIBS_DEPLOY_DIR%\asm-commons-9.5.jar"    >nul
+copy /Y "%LIB%\jna.jar"               "%LIBS_DEPLOY_DIR%\jna.jar"                >nul
+copy /Y "%LIB%\jna-platform.jar"      "%LIBS_DEPLOY_DIR%\jna-platform.jar"       >nul
 if exist "%~dp0content-core\target\release\content_core.dll" (
     copy /Y "%~dp0content-core\target\release\content_core.dll" "%AGENT_DEPLOY_DIR%\content_core.dll" >nul
     echo [Deploy] content_core.dll deploye

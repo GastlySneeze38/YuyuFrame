@@ -28,7 +28,7 @@ pub fn minecraft_dir() -> PathBuf {
 
 /// Dossier LauncherAgent dans AppData/YuyuFrame/agent/ — séparé de
 /// AppData/YuyuFrame/p2p/ (voir docs/LauncherAgent/index.md).
-/// Doit contenir : launcher-agent.jar, content_core.dll, libs/ (mixin.jar, asm-*.jar)
+/// Doit contenir : launcher-agent.jar, content_core.dll, libs/ (mixin.jar, asm-*.jar, jna*.jar)
 fn launcher_agent_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -70,7 +70,7 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         return;
     }
 
-    let files: [(&str, PathBuf); 8] = [
+    let files: [(&str, PathBuf); 10] = [
         ("launcher-agent.jar", dest_dir.join("launcher-agent.jar")),
         ("content_core.dll", dest_dir.join("content_core.dll")),
         ("libs/mixin.jar", dest_libs.join("mixin.jar")),
@@ -79,6 +79,10 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         ("libs/asm-util-9.5.jar", dest_libs.join("asm-util-9.5.jar")),
         ("libs/asm-analysis-9.5.jar", dest_libs.join("asm-analysis-9.5.jar")),
         ("libs/asm-commons-9.5.jar", dest_libs.join("asm-commons-9.5.jar")),
+        // JNA (module "Fenêtre sans bordure", BorderlessWindowNative) — appel
+        // direct de l'API Win32 depuis du Java pur, pas de nouvelle DLL Rust.
+        ("libs/jna.jar", dest_libs.join("jna.jar")),
+        ("libs/jna-platform.jar", dest_libs.join("jna-platform.jar")),
     ];
 
     let mut deployed = 0;
@@ -490,6 +494,11 @@ pub async fn download_and_launch(
         let asm_util_jar     = libs_dir.join("asm-util-9.5.jar");
         let asm_analysis_jar = libs_dir.join("asm-analysis-9.5.jar");
         let asm_commons_jar  = libs_dir.join("asm-commons-9.5.jar");
+        // JNA (module optimodule "Fenêtre sans bordure", BorderlessWindowNative) —
+        // pas de conflit "duplicate classes" façon ASM/Fabric, donc ajoutée au
+        // classpath dans tous les cas (vanilla ET Fabric), pas seulement !is_fabric.
+        let jna_jar          = libs_dir.join("jna.jar");
+        let jna_platform_jar = libs_dir.join("jna-platform.jar");
 
         if !agent_jar.exists() {
             tracing::warn!(
@@ -525,6 +534,13 @@ pub async fn download_and_launch(
                             } else {
                                 tracing::warn!("[LauncherAgent] {} manquant — peut causer NoClassDefFoundError au démarrage", jar.display());
                             }
+                        }
+                    }
+                    for jar in [&jna_jar, &jna_platform_jar] {
+                        if jar.exists() {
+                            extra_cp.push(jar.to_string_lossy().to_string());
+                        } else {
+                            tracing::warn!("[LauncherAgent] {} manquant — module \"Fenêtre sans bordure\" indisponible", jar.display());
                         }
                     }
 

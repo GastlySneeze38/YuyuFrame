@@ -111,6 +111,17 @@ public class UiMainMenuScreen extends UiScreenBase {
         // module membre d'un groupe — sinon il apparaîtrait deux fois).
         String filter = searchField.text().trim().toLowerCase(Locale.ROOT);
         List<Object> filtered = new ArrayList<>();
+        // Carte "action" — ouvre un écran au clic, ni toggle ni ModuleRegistry
+        // (pas un effet continu à activer/désactiver, juste un outil ponctuel,
+        // voir ActionCard). Seul autre précédent d'une action hors toggle :
+        // "Modifier le HUD" dans la sidebar, câblé en dur de la même façon.
+        // Ouvre ModrinthResourcePackScreen (notre propre pipeline graphique,
+        // version-générique) — PAS l'ancien screen.ResourcePackSearchScreen
+        // (compile contre les stubs vanilla + ScreenHelper, cassé sur 1.8.9,
+        // voir la javadoc de ModrinthResourcePackScreen pour le détail).
+        ActionCard resourcePacks = new ActionCard("Resource Packs (Modrinth)", "Rechercher et installer un resource pack",
+            () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthResourcePackScreen(UiMainMenuScreen.this)));
+        if (filter.isEmpty() || resourcePacks.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(resourcePacks);
         for (ModuleGroup g : ModuleRegistry.groups()) {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
         }
@@ -131,6 +142,9 @@ public class UiMainMenuScreen extends UiScreenBase {
                 ModuleGroup group = (ModuleGroup) entry;
                 widgets.add(new ModCard(cx, cy, cardW, group.name, group.description,
                     () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
+            } else if (entry instanceof ActionCard) {
+                ActionCard action = (ActionCard) entry;
+                widgets.add(new ModCard(cx, cy, cardW, action.name, action.description, action.action));
             } else {
                 LauncherModule mod = (LauncherModule) entry;
                 // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
@@ -144,6 +158,21 @@ public class UiMainMenuScreen extends UiScreenBase {
                 widgets.add(new UiToggle(cx + cardW - 34f - 12f, cy + CARD_H - 18f - 10f, mod.isEnabled(),
                     v -> { mod.setEnabled(v); HudConfigStore.save(); }));
             }
+        }
+    }
+
+    /**
+     * Entrée de grille "action" — carte qui exécute {@code action} au clic,
+     * sans toggle ni {@link LauncherModule}/{@link ModuleRegistry} (outil
+     * ponctuel, pas un effet continu à activer/désactiver — voir rebuildAll()).
+     */
+    private static final class ActionCard {
+        final String name, description;
+        final Runnable action;
+        ActionCard(String name, String description, Runnable action) {
+            this.name = name;
+            this.description = description;
+            this.action = action;
         }
     }
 
