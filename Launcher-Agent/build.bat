@@ -145,7 +145,16 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
     goto :error
 )
 
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 ^
+:: -proc:none : mixin.jar sur le -cp expose l'annotation processor Sponge
+:: Mixin (META-INF/services), auto-detecte par javac par defaut - on ne
+:: l'utilise jamais (refmap genere a la compilation), tout est resolu a
+:: l'execution via LauncherMixinService. Sur le runner CI, ce processor
+:: plante (NoClassDefFoundError: com.google.gson.JsonParseException, Gson
+:: absent du classpath minimal) et javac continue quand meme (exit 0) SANS
+:: emettre la moindre classe - jar final de 2 Ko, silencieux avant les
+:: gardes-fous ci-dessus. -proc:none l'empeche de tourner du tout, plutot
+:: que de corriger un mecanisme qu'on ne veut pas.
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
