@@ -110,7 +110,16 @@ pub fn run() {
             // Déploie le LauncherAgent (jar + libs) embarqué dans l'installateur
             // vers %AppData%\YuyuFrame\agent\ — voir minecraft::launcher pour le
             // pourquoi (avant ça, un beta testeur n'avait jamais ces fichiers).
-            minecraft::launcher::deploy_bundled_agent(app.handle());
+            // JAMAIS en dev : `cargo tauri dev` résout resource_dir() vers un
+            // instantané de ressources potentiellement périmé (pris au premier
+            // démarrage du process, pas re-synchronisé à chaque hot-reload) —
+            // un dev qui relance le process après un rebuild de l'agent voyait
+            // ce jar figé (parfois un ancien build cassé) ÉCRASER le jar tout
+            // frais déployé par build.bat, seule source de vérité en dev (voir
+            // CLAUDE.md : toujours build.bat, jamais un autre mécanisme).
+            if !cfg!(dev) {
+                minecraft::launcher::deploy_bundled_agent(app.handle());
+            }
 
             Ok(())
         })
