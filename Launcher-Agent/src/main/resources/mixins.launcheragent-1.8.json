@@ -29,7 +29,9 @@
     "client.v1_8.optimodule.MixinTileEntityRenderDistance189",
     "client.v1_8.optimodule.MixinChunkBuilderThreads189",
     "client.v1_8.optimodule.MixinCachedFancyClouds189",
-    "client.v1_8.optimodule.MixinLabelRenderDistance189"
+    "client.v1_8.optimodule.MixinLabelRenderDistance189",
+    "client.v1_8.optimodule.MixinCachedStringWidth189",
+    "client.v1_8.optimodule.MixinParticleRenderDistance189"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -26,6 +26,7 @@ import com.yuyuframe.launcheragent.runtime.module.optimodule.ChunkBuilderThreads
 import com.yuyuframe.launcheragent.runtime.module.optimodule.EntityBackfaceCullingModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.LabelRenderDistanceModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.LowAnimationTickModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.ParticleRenderDistanceModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.PlayerBackfaceCullingModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.TileEntityRenderDistanceModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.UnstackedItemsModule;
@@ -90,6 +91,7 @@ public final class ModuleRegistry {
         register(new ChunkBuilderThreadsModule());
         register(new CachedFancyCloudsModule());
         register(new LabelRenderDistanceModule());
+        register(new ParticleRenderDistanceModule());
 
         // Regroupement demandé — voir ModuleGroup : purement de la
         // présentation, les modules ci-dessus restent enregistrés
@@ -107,7 +109,8 @@ public final class ModuleRegistry {
         GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés",
             Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
                 get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
-                get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"))));
+                get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"),
+                get("particle-render-distance"))));
     }
 
     public static void register(LauncherModule module) {
