@@ -110,6 +110,17 @@ echo [Stubs] Compilation des stubs Minecraft...
 set "STUBLIST=%TEMP%\launcheragent_stubs.txt"
 powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%AGENT_DIR%src\stubs' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST%', $files)"
 
+:: Garde-fou : une liste vide fait "reussir" javac trivialement (0 fichier a
+:: compiler, exit code 0) sans AUCUNE erreur — deja arrive en CI (jar final
+:: de 3 Ko, juste le manifeste, aucune classe dedans, personne ne s'en rend
+:: compte tant que le jeu ne plante pas au lancement). Mieux vaut echouer ICI,
+:: bruyamment, que produire un agent silencieusement casse.
+for %%A in ("%STUBLIST%") do if %%~zA==0 (
+    echo [ERREUR] Aucun fichier .java trouve dans src\stubs — chemin/checkout incorrect ?
+    del "%STUBLIST%" 2>nul
+    goto :error
+)
+
 "%JAVAC_CMD%" --release 8 -d "%OUT_STUBS%" "@%STUBLIST%"
 del "%STUBLIST%" 2>nul
 if errorlevel 1 (
@@ -126,6 +137,13 @@ echo [Build] Compilation principale...
 
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
 powershell -NoProfile -Command "$q=[char]34; $dirs=@('%AGENT_DIR%src\main\java','%AGENT_DIR%src\stubs'); $files=$dirs | ForEach-Object { Get-ChildItem -Recurse -Filter '*.java' $_ } | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+
+:: Meme garde-fou que pour STUBLIST — voir plus haut.
+for %%A in ("%SRCLIST%") do if %%~zA==0 (
+    echo [ERREUR] Aucun fichier .java trouve dans src\main\java — chemin/checkout incorrect ?
+    del "%SRCLIST%" 2>nul
+    goto :error
+)
 
 "%JAVAC_CMD%" --release 8 ^
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%OUT_STUBS%" ^
@@ -168,6 +186,16 @@ if errorlevel 1 (
 )
 for %%F in ("%JAR%") do set /a JAR_KB=%%~zF / 1024
 echo [Build] JAR cree : build\launcher-agent.jar (%JAR_KB% Ko)
+
+:: Garde-fou final : le jar reel fait ~330 Ko (184 classes). En dessous de
+:: 50 Ko, quelque chose s'est mal passe en amont (OUT_MAIN quasi vide malgre
+:: les gardes-fous ci-dessus) — ne JAMAIS deployer/publier un agent dans cet
+:: etat (deja arrive : jar de 3 Ko, juste le manifeste, cause un
+:: ClassNotFoundException/FATAL ERROR -javaagent au lancement du jeu).
+if %JAR_KB% LSS 50 (
+    echo [ERREUR] JAR anormalement petit ^(%JAR_KB% Ko^) — compilation probablement vide, build interrompu.
+    goto :error
+)
 
 :: --- Deployer dans AppData\YuyuFrame\agent\ ----------------------------------
 :: Sous-dossier dedie, separe de %APPDATA%\YuyuFrame\p2p\ — ne jamais melanger
