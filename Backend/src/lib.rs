@@ -106,6 +106,12 @@ pub fn run() {
             }));
 
             app.manage(app_state);
+
+            // Déploie le LauncherAgent (jar + libs) embarqué dans l'installateur
+            // vers %AppData%\YuyuFrame\agent\ — voir minecraft::launcher pour le
+            // pourquoi (avant ça, un beta testeur n'avait jamais ces fichiers).
+            minecraft::launcher::deploy_bundled_agent(app.handle());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

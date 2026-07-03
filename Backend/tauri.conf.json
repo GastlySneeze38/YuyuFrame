@@ -27,7 +27,17 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/icon.ico"],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "../Launcher-Agent/build/launcher-agent.jar": "agent/launcher-agent.jar",
+      "../Launcher-Agent/content-core/target/release/content_core.dll": "agent/content_core.dll",
+      "../Launcher-Agent/lib/mixin.jar": "agent/libs/mixin.jar",
+      "../Launcher-Agent/lib/asm-9.5.jar": "agent/libs/asm-9.5.jar",
+      "../Launcher-Agent/lib/asm-tree-9.5.jar": "agent/libs/asm-tree-9.5.jar",
+      "../Launcher-Agent/lib/asm-util-9.5.jar": "agent/libs/asm-util-9.5.jar",
+      "../Launcher-Agent/lib/asm-analysis-9.5.jar": "agent/libs/asm-analysis-9.5.jar",
+      "../Launcher-Agent/lib/asm-commons-9.5.jar": "agent/libs/asm-commons-9.5.jar"
+    }
   },
   "plugins": {
     "shell": {
