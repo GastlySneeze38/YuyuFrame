@@ -206,12 +206,12 @@ echo    %AGENT_DEPLOY_DIR%\launcher-agent.jar
 echo    %LIBS_DEPLOY_DIR%\mixin.jar + asm-*.jar
 echo  ================================================
 echo.
-pause
+if not defined CI pause
 exit /b 0
 
 :error
 echo.
 echo  [BUILD ECHOUE]
 echo.
-pause
+if not defined CI pause
 exit /b 1
