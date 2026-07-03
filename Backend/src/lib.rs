@@ -106,6 +106,12 @@ pub fn run() {
             }));
 
             app.manage(app_state);
+
+            // Déploie le LauncherAgent (jar + libs) embarqué dans l'installateur
+            // vers %AppData%\YuyuFrame\agent\ — voir minecraft::launcher pour le
+            // pourquoi (avant ça, un beta testeur n'avait jamais ces fichiers).
+            minecraft::launcher::deploy_bundled_agent(app.handle());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -126,12 +132,12 @@ pub fn run() {
             commands::versions::list_versions,
             commands::launch::launch_game,
             commands::launch::reload_agent,
+            commands::launch::console_ready,
             commands::mods::mods_list,
             commands::mods::mods_toggle,
             commands::mods::mods_delete,
             commands::mods::mods_install,
             commands::mods::mods_upload,
-            commands::mods::mods_import_optifine,
             commands::mods::mod_icon,
             commands::mods::mods_check_update_safety,
             commands::modpack::modpack_fetch_index,
@@ -146,6 +152,8 @@ pub fn run() {
             commands::instances::instance_toggle_favorite,
             commands::instances::instance_duplicate,
             commands::instances::instance_startup_sync,
+            commands::instances::instance_export_settings,
+            commands::instances::instance_apply_settings,
             commands::sync::sync_list_instances,
             commands::sync::sync_list_saves,
             commands::sync::sync_push_instance,

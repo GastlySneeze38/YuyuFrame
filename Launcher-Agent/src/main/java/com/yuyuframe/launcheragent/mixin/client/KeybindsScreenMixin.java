@@ -25,13 +25,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * OptionsScreen) : exactement le "parent" dont on a besoin pour le bouton
  * Retour de notre écran, sans avoir à capturer un paramètre typé Screen/
  * GameOptions dans le handler (Mixin exige une correspondance de type EXACTE
- * pour tout paramètre capturé, et on n'a pas de stub compilable pour le nom
- * obfusqué réel de Screen ici).
+ * pour tout paramètre capturé — on évite ce problème en ne capturant rien).
  */
 @Mixin(targets = "net.minecraft.client.gui.screen.option.KeybindsScreen")
 public abstract class KeybindsScreenMixin {
 
-    @Inject(method = "<init>(Lgsb;Lgfo;)V", at = @At("TAIL"))
+    @Inject(
+        method = "<init>(Lnet/minecraft/client/gui/screen/Screen;Lnet/minecraft/client/option/GameOptions;)V",
+        at = @At("TAIL")
+    )
     private void la$onInit(CallbackInfo ci) {
         try {
             FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());

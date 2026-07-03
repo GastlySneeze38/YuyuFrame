@@ -55,6 +55,12 @@ pub async fn launch_game(
     if let Some(existing) = app.get_webview_window(&window_label) {
         let _ = existing.close();
     }
+    // Enregistré AVANT le build() de la fenêtre : garantit qu'aucun signal
+    // console_ready (invoqué par Console.tsx dès que son listener game_log est
+    // attaché) ne peut arriver avant que ce Notify n'existe déjà dans le
+    // registre — voir launcher::register_console_waiter.
+    let console_ready = launcher::register_console_waiter(&window_label);
+
     let _ = tauri::WebviewWindowBuilder::new(
         &app,
         &window_label,
@@ -74,6 +80,16 @@ pub async fn launch_game(
     let state_clone = state.inner().clone();
 
     tokio::spawn(async move {
+        // Attend que Console.tsx ait fini d'attacher son listener game_log
+        // avant d'émettre le moindre log — sans ça, un lancement rapide (tout
+        // en cache, ex: 1.8.9 vanilla) peut atteindre les premiers
+        // log_to_console() avant que le webview n'ait fini son démarrage
+        // React, perdant silencieusement ces lignes (aucun listener encore
+        // attaché côté frontend). Timeout de sécurité : ne bloque jamais
+        // indéfiniment si Console.tsx ne signale jamais (vieux build frontend
+        // sans cet appel, ou fenêtre fermée avant d'avoir eu le temps).
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), console_ready.notified()).await;
+
         let started_at = chrono::Utc::now().timestamp();
 
         let session_id: Option<i64> = {
@@ -122,6 +138,16 @@ pub async fn launch_game(
         }));
     });
 
+    Ok(())
+}
+
+/// Invoquée par Console.tsx dès que son listener `game_log` est attaché —
+/// débloque l'attente posée dans `launch_game` (voir `register_console_waiter`)
+/// pour que le lancement ne commence à émettre des logs qu'une fois le
+/// frontend prêt à les recevoir.
+#[tauri::command]
+pub async fn console_ready(console_label: String) -> Result<(), String> {
+    launcher::signal_console_ready(&console_label);
     Ok(())
 }
 

@@ -41,6 +41,15 @@ public class LauncherLogger implements ILogger {
         String formatted = args.length == 0 ? msg : String.format(msg.replace("{}", "%s"), (Object[]) args);
         java.io.PrintStream out = (lvl.ordinal() >= Level.WARN.ordinal()) ? System.err : System.out;
         out.println("[Mixin/" + lvl + "] [" + id + "] " + formatted);
+        // Miroir temporaire vers notre fichier de log persistant — le flux
+        // System.out/err de ce logger n'atteint PAS launcher-agent.log (voir
+        // toFile() de LauncherLog, indépendant de la capture stdout du
+        // launcher Rust, jugée peu fiable) : impossible jusqu'ici de voir les
+        // WARN/ERROR internes de Sponge Mixin (ex: injecteur qui ne trouve
+        // pas sa cible) pendant le débogage de MixinToggleSprint189/Sneak189.
+        if (lvl.ordinal() >= Level.WARN.ordinal()) {
+            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[Mixin/" + lvl + "] [" + id + "] " + formatted);
+        }
     }
 
     @Override

@@ -13,7 +13,7 @@ if errorlevel 1 (
     echo.
     echo  [ERREUR] Compilation Rust echouee.
     echo.
-    pause
+    if not defined CI pause
     exit /b 1
 )
 
@@ -29,5 +29,5 @@ echo    content_core.dll deploye dans :
 echo    %AGENT_DIR%
 echo  ========================================
 echo.
-pause
+if not defined CI pause
 exit /b 0

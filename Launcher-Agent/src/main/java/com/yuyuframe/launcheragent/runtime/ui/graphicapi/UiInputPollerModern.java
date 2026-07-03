@@ -1,0 +1,318 @@
+package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
+
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Implémentation LWJGL3/GLFW (1.13+, dont 1.21) de UiInputPoller.
+ *
+ * glfwGetCursorPos() renvoie des coordonnées "fenêtre" (origine HAUT-gauche),
+ * alors que gl_FragCoord (utilisé par UiRenderer) est en pixels FRAMEBUFFER
+ * (origine BAS-gauche) — deux conversions nécessaires, pas juste un flip :
+ *   1. Passage fenêtre → framebuffer : les deux peuvent différer sur un écran
+ *      HiDPI/Retina (framebuffer = fenêtre × content-scale), d'où le ratio
+ *      framebufferSize/windowSize appliqué aux deux axes.
+ *   2. Flip Y : uniquement après la mise à l'échelle, sur la hauteur
+ *      framebuffer (pas la hauteur fenêtre).
+ */
+public final class UiInputPollerModern extends UiInputPoller {
+
+    private final long windowHandle;
+    private final ClassLoader gameClassLoader;
+    private final Map<String, Method> glfwMethods = new HashMap<>();
+
+    // GLFW n'a pas d'état de molette pollable (contrairement à LWJGL2
+    // Mouse.getDWheel()) — uniquement un callback. Accumulé ici entre deux
+    // poll(), consommé/remis à zéro par readScrollDelta().
+    private volatile double pendingScroll;
+    private final Object[] previousScrollCb = new Object[1];
+
+    // Touches "capturables" pour UiKeybindButton — codes GLFW standards (API
+    // publique stable, pas obfusqués, littéraux sûrs comme les constantes GL
+    // ailleurs dans ce package). Pas de callback clavier ici (contrairement à
+    // la molette) : un simple scan isKeyDown/frame suffit et reste dans le
+    // même style "poll" que le reste de cette classe, uniquement appelé par
+    // le widget en mode écoute (jamais chaque frame inconditionnellement).
+    private static final Object[][] CAPTURABLE_KEYS = buildCapturableKeys();
+    private final Map<Integer, Boolean> prevKeyDown = new HashMap<>();
+
+    // Saisie de texte (UiTextField) — GLFW n'a pas non plus d'état "caractères
+    // tapés" pollable, uniquement un callback (comme la molette). Backspace,
+    // lui, n'a PAS besoin de callback : contrairement à LWJGL2 où tout passe
+    // par une seule file d'événements partagée (Keyboard.next()), GLFW expose
+    // key callback et char callback comme deux flux INDÉPENDANTS — un simple
+    // scan isKeyDown suffit donc pour Backspace, sans risquer de "voler" les
+    // événements caractère.
+    private final StringBuilder pendingChars = new StringBuilder();
+    private final Object[] previousCharCb = new Object[1];
+    private boolean prevBackspaceDown;
+
+    public UiInputPollerModern(long windowHandle, ClassLoader gameClassLoader) {
+        this.windowHandle = windowHandle;
+        this.gameClassLoader = gameClassLoader;
+        registerScrollCallback();
+        registerCharCallback();
+    }
+
+    private static Object[][] buildCapturableKeys() {
+        Map<Integer, String> m = new LinkedHashMap<>();
+        for (int i = 0; i < 26; i++) m.put(65 + i, String.valueOf((char) ('A' + i)));
+        for (int i = 0; i <= 9; i++) m.put(48 + i, String.valueOf(i));
+        for (int i = 0; i < 12; i++) m.put(290 + i, "F" + (i + 1));
+        m.put(32, "SPACE"); m.put(257, "ENTER"); m.put(258, "TAB"); m.put(256, "ESCAPE");
+        m.put(340, "LSHIFT"); m.put(344, "RSHIFT"); m.put(341, "LCTRL"); m.put(345, "RCTRL");
+        m.put(342, "LALT"); m.put(346, "RALT");
+        m.put(263, "LEFT"); m.put(262, "RIGHT"); m.put(265, "UP"); m.put(264, "DOWN");
+        m.put(259, "BACKSPACE"); m.put(261, "DELETE"); m.put(280, "CAPSLOCK"); m.put(96, "GRAVE");
+        Object[][] out = new Object[m.size()][2];
+        int idx = 0;
+        for (Map.Entry<Integer, String> e : m.entrySet()) out[idx++] = new Object[]{ e.getKey(), e.getValue() };
+        return out;
+    }
+
+    /**
+     * S'abonne au callback de molette GLFW en CHAÎNANT vers celui déjà en
+     * place (retourné par glfwSetScrollCallback, ce qui remplace TOUJOURS le
+     * précédent) — sans ça, on casserait silencieusement le scroll vanilla
+     * (sélection hotbar, zoom longue-vue) partout dans le jeu, pas seulement
+     * quand un de nos écrans custom est ouvert.
+     *
+     * CORRECTIF IMPORTANT (crash natif 0xC0000409 en jeu, trouvé après
+     * élimination de tous les mods tiers — voir historique du projet) : la
+     * version précédente passait le {@code java.lang.reflect.Proxy}
+     * directement à {@code glfwSetScrollCallback}. Un Proxy implémente bien
+     * l'interface Java {@code GLFWScrollCallbackI}, mais ce n'est PAS un vrai
+     * objet natif-appelable — LWJGL construit ses callbacks via des classes
+     * dédiées ({@code GLFWScrollCallback extends Callback}) qui mettent en
+     * place un vrai pont natif (libffi), ce qu'un Proxy ne fait jamais. Passer
+     * un Proxy brut à une fonction GLFW native est exactement le genre de
+     * chose qui peut corrompre la pile quand GLFW essaie réellement d'invoquer
+     * ce "callback" plus tard (molette/saisie), plutôt que d'échouer proprement
+     * à chaque fois. Fix : envelopper le Proxy via la fabrique officielle
+     * {@code GLFWScrollCallback.create(GLFWScrollCallbackI)} — elle renvoie un
+     * VRAI objet Callback natif-appelable dont l'implémentation délègue en
+     * simple appel Java normal vers notre Proxy (donc notre logique de
+     * chaînage vers l'ancien callback reste inchangée), c'est CET objet qu'il
+     * faut passer à glfwSetScrollCallback, jamais le Proxy brut.
+     */
+    private void registerScrollCallback() {
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWScrollCallbackI", true, gameClassLoader);
+            Class<?> cbClass = Class.forName("org.lwjgl.glfw.GLFWScrollCallback", true, gameClassLoader);
+            Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                // Cause RÉELLE du NPE trouvée en test (voir historique du projet) :
+                // GLFWScrollCallbackI hérite de CallbackI, qui a des méthodes DEFAULT
+                // (le vrai pont natif "callback(long)" que le proxy doit honorer, pas
+                // juste notre "invoke" SAM) — les ignorer et renvoyer null pour tout ce
+                // qui n'est pas notre "invoke" cassait justement CE pont natif.
+                if (method.isDefault()) return invokeDefault(p, method, args);
+                if (args != null && args.length == 3 && "invoke".equals(method.getName())) {
+                    pendingScroll += (Double) args[2];
+                    Object prev = previousScrollCb[0];
+                    if (prev != null) {
+                        try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                    }
+                }
+                return null;
+            });
+            Method create = cbClass.getMethod("create", cbIface);
+            Object realCallback = create.invoke(null, proxy);
+            Method setCb = glfwClass.getMethod("glfwSetScrollCallback", long.class, cbIface);
+            previousScrollCb[0] = setCb.invoke(null, windowHandle, realCallback);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiInputPollerModern] registerScrollCallback: " + rootCause(t));
+        }
+    }
+
+    /** Même principe de chaînage ET du même correctif (wrapping via la fabrique officielle) que registerScrollCallback() — ne casse jamais la saisie de texte vanilla (chat, champs d'écrans). */
+    private void registerCharCallback() {
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWCharCallbackI", true, gameClassLoader);
+            Class<?> cbClass = Class.forName("org.lwjgl.glfw.GLFWCharCallback", true, gameClassLoader);
+            Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                if (method.isDefault()) return invokeDefault(p, method, args);
+                if (args != null && args.length == 2 && "invoke".equals(method.getName())) {
+                    int codepoint = (Integer) args[1];
+                    synchronized (pendingChars) {
+                        pendingChars.append(Character.toChars(codepoint));
+                    }
+                    Object prev = previousCharCb[0];
+                    if (prev != null) {
+                        try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                    }
+                }
+                return null;
+            });
+            Method create = cbClass.getMethod("create", cbIface);
+            Object realCallback = create.invoke(null, proxy);
+            Method setCb = glfwClass.getMethod("glfwSetCharCallback", long.class, cbIface);
+            previousCharCb[0] = setCb.invoke(null, windowHandle, realCallback);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiInputPollerModern] registerCharCallback: " + rootCause(t));
+        }
+    }
+
+    /** InvocationTargetException.toString() cache la vraie cause — la déballer pour un log utile. */
+    private static String rootCause(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) cur = cur.getCause();
+        java.io.StringWriter sw = new java.io.StringWriter();
+        cur.printStackTrace(new java.io.PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private static Method invocationHandlerInvokeDefault;
+    private static boolean invocationHandlerInvokeDefaultFailed;
+
+    /**
+     * {@code InvocationHandler.invokeDefault(Object, Method, Object...)}
+     * (JDK 16+) exécute la VRAIE implémentation par défaut d'une méthode
+     * d'interface pour un Proxy donné — indispensable ici car les interfaces
+     * de callback LWJGL (ex: GLFWScrollCallbackI) héritent de méthodes
+     * default de {@code org.lwjgl.system.CallbackI} qui font le vrai pont
+     * natif ; sans ça, notre handler renvoyait null pour toute méthode qui
+     * n'était pas notre "invoke" attendu, cassant ce pont (NPE constaté :
+     * "Cannot invoke Long.longValue() because the return value of
+     * InvocationHandler.invoke(...) is null").
+     *
+     * Résolu par réflexion (pas d'appel direct compilé) : ce module compile
+     * avec {@code --release 8} (voir build.bat), qui masque cette méthode au
+     * moment de la compilation même si le JDK qui exécute réellement cette
+     * branche (1.21.11, JAVA_17 mini) l'a bien à l'exécution.
+     */
+    private static Object invokeDefault(Object proxy, Method method, Object[] args) throws Throwable {
+        if (invocationHandlerInvokeDefault == null && !invocationHandlerInvokeDefaultFailed) {
+            try {
+                invocationHandlerInvokeDefault = java.lang.reflect.InvocationHandler.class
+                    .getMethod("invokeDefault", Object.class, Method.class, Object[].class);
+            } catch (Throwable t) {
+                invocationHandlerInvokeDefaultFailed = true;
+            }
+        }
+        if (invocationHandlerInvokeDefault == null) return null;
+        try {
+            return invocationHandlerInvokeDefault.invoke(null, proxy, method, args == null ? new Object[0] : args);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw e.getCause();
+        }
+    }
+
+    @Override
+    protected void readState() throws Exception {
+        double[] cx = new double[1];
+        double[] cy = new double[1];
+        glfwGetCursorPos(windowHandle, cx, cy);
+
+        int[] winW = new int[1], winH = new int[1];
+        glfwGetWindowSize(windowHandle, winW, winH);
+        int[] fbW = new int[1], fbH = new int[1];
+        glfwGetFramebufferSize(windowHandle, fbW, fbH);
+
+        // winW/winH peuvent valoir 0 juste après création de fenêtre — repli
+        // sans mise à l'échelle (ratio 1) plutôt qu'une division par zéro.
+        double scaleX = winW[0] > 0 ? (double) fbW[0] / winW[0] : 1.0;
+        double scaleY = winH[0] > 0 ? (double) fbH[0] / winH[0] : 1.0;
+
+        mouseX = cx[0] * scaleX;
+        mouseY = fbH[0] - (cy[0] * scaleY); // flip après mise à l'échelle, sur la hauteur framebuffer
+        fbWidth = fbW[0];
+        fbHeight = fbH[0];
+
+        leftDown = glfwGetMouseButton(windowHandle, 0) == 1;  // GLFW_MOUSE_BUTTON_LEFT
+        rightDown = glfwGetMouseButton(windowHandle, 1) == 1; // GLFW_MOUSE_BUTTON_RIGHT
+    }
+
+    @Override
+    protected boolean readMenuKeyDown() throws Exception {
+        int code = menuKeyCode(menuKeyName);
+        if (code < 0) return false;
+        return glfwGetKey(windowHandle, code) == 1; // GLFW_PRESS
+    }
+
+    /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
+    private static int menuKeyCode(String name) {
+        for (Object[] entry : CAPTURABLE_KEYS) {
+            if (entry[1].equals(name)) return (Integer) entry[0];
+        }
+        return -1;
+    }
+
+    @Override
+    protected synchronized int readScrollDelta() throws Exception {
+        int delta = (int) Math.round(pendingScroll);
+        pendingScroll = 0;
+        return delta;
+    }
+
+    @Override
+    public String pollAnyKeyJustPressed() {
+        try {
+            for (Object[] entry : CAPTURABLE_KEYS) {
+                int code = (Integer) entry[0];
+                boolean down = glfwGetKey(windowHandle, code) == 1;
+                boolean was = Boolean.TRUE.equals(prevKeyDown.get(code));
+                prevKeyDown.put(code, down);
+                if (down && !was) return (String) entry[1];
+            }
+        } catch (Exception e) {
+            LauncherLog.err("[UiInputPollerModern] pollAnyKeyJustPressed: " + e);
+        }
+        return null;
+    }
+
+    @Override
+    public void pollTextEdit(StringBuilder buffer) {
+        synchronized (pendingChars) {
+            if (pendingChars.length() > 0) {
+                buffer.append(pendingChars);
+                pendingChars.setLength(0);
+            }
+        }
+        try {
+            boolean down = glfwGetKey(windowHandle, 259) == 1; // GLFW_KEY_BACKSPACE
+            if (down && !prevBackspaceDown && buffer.length() > 0) buffer.deleteCharAt(buffer.length() - 1);
+            prevBackspaceDown = down;
+        } catch (Exception e) {
+            LauncherLog.err("[UiInputPollerModern] pollTextEdit: " + e);
+        }
+    }
+
+    private int glfwGetKey(long handle, int key) throws Exception {
+        return (int) glfw("glfwGetKey", long.class, int.class).invoke(null, handle, key);
+    }
+
+    // ── GLFW via réflexion (org.lwjgl.glfw.GLFW — API publique, pas obfusquée) ──
+
+    private Method glfw(String name, Class<?>... params) throws Exception {
+        String key = name + java.util.Arrays.toString(params);
+        Method m = glfwMethods.get(key);
+        if (m != null) return m;
+        Class<?> c = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+        m = c.getMethod(name, params);
+        glfwMethods.put(key, m);
+        return m;
+    }
+
+    private void glfwGetCursorPos(long handle, double[] xOut, double[] yOut) throws Exception {
+        glfw("glfwGetCursorPos", long.class, double[].class, double[].class).invoke(null, handle, xOut, yOut);
+    }
+
+    private void glfwGetWindowSize(long handle, int[] wOut, int[] hOut) throws Exception {
+        glfw("glfwGetWindowSize", long.class, int[].class, int[].class).invoke(null, handle, wOut, hOut);
+    }
+
+    private void glfwGetFramebufferSize(long handle, int[] wOut, int[] hOut) throws Exception {
+        glfw("glfwGetFramebufferSize", long.class, int[].class, int[].class).invoke(null, handle, wOut, hOut);
+    }
+
+    private int glfwGetMouseButton(long handle, int button) throws Exception {
+        return (int) glfw("glfwGetMouseButton", long.class, int.class).invoke(null, handle, button);
+    }
+}

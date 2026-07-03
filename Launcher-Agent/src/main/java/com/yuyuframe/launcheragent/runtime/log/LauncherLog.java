@@ -6,11 +6,28 @@ package com.yuyuframe.launcheragent.runtime.log;
  * Niveau d'un appel   : 1=verbose  2=info  3=critique
  * Seuil d'une catégorie : 0=désactivé  1=tout  2=info+critique  3=critique seul
  *
- * Un log s'affiche si : seuil > 0  ET  niveau_appel >= seuil
+ * Un log s'affiche sur la CONSOLE si : seuil > 0 ET niveau_appel >= seuil.
+ * En revanche, TOUT log (quel que soit le seuil) est aussi écrit dans
+ * %APPDATA%\YuyuFrame\agent\logs\launcher-agent.log — la capture stdout/stderr
+ * du launcher Rust s'est avérée peu fiable pendant le diagnostic du pipeline
+ * 1.8.9 (lignes manquantes sans rapport avec l'exécution réelle du code) ;
+ * ce fichier permet de vérifier après coup ce qui s'est vraiment passé, sans
+ * dépendre de cette capture.
  */
 public final class LauncherLog {
 
     private LauncherLog() {}
+
+    // Référence figée à System.out/err AU CHARGEMENT DE CETTE CLASSE (donc au
+    // tout premier appel de LauncherAgent.premain(), avant tout autre code) —
+    // PAS System.out/err lus dynamiquement à chaque appel. Si quoi que ce soit
+    // plus tard dans le bootstrap (Mixin, LWJGL, SoundSystem...) appelle
+    // System.setOut()/setErr() pour rediriger le flux vers un autre
+    // PrintStream, nos logs continuent d'écrire vers le flux ORIGINAL
+    // (toujours connecté au pipe que Rust lit), au lieu de silencieusement
+    // suivre la redirection et disparaître de ce que le launcher capture.
+    private static final java.io.PrintStream ORIGINAL_OUT = System.out;
+    private static final java.io.PrintStream ORIGINAL_ERR = System.err;
 
     /** Modification d'UI Minecraft — ScreenHelper, mixins clients. */
     public static volatile int UI    = 3;
@@ -29,6 +46,52 @@ public final class LauncherLog {
         AGENT   = intProp(p, "log.agent",   AGENT);
         CONTENT = intProp(p, "log.content", CONTENT);
         SHOW_CATEGORY = boolProp(p, "log.show_category", SHOW_CATEGORY);
+    }
+
+    private static final String PROPS_FILENAME = "launcher-agent.properties";
+
+    /**
+     * Lit launcher-agent.properties (JAR embarqué, puis externe qui prend le
+     * dessus) et applique aussitôt les seuils — appelé en tout premier dans
+     * LauncherAgent.premain(), AVANT le moindre autre log.
+     *
+     * Sans cet appel précoce, les seuils restent à leur valeur par défaut (3 =
+     * critique seul) jusqu'à ce que LauncherMixinConfigPlugin.onLoad() charge
+     * la même config, ce qui n'arrive QUE tard dans le bootstrap (à
+     * l'intérieur de Mixins.addConfiguration(), après loadYarnMappings/
+     * writeRefmapFile/discoverMixinTargets) — la quasi-totalité des logs de
+     * démarrage utiles (niveau 1/2) se retrouvait donc filtrée de la console
+     * avant même que log.agent=1 (etc.) ne soit lu, alors que le fichier de
+     * log (toFile(), toujours écrit) les contenait déjà tous. onLoad()
+     * continue d'appeler loadConfig() une seconde fois — redondant mais sans
+     * risque, et nécessaire pour capter un fichier externe déposé/modifié
+     * entre l'appel précoce et le chargement de la config Mixin.
+     */
+    public static void loadConfigFromDefaultLocations(ClassLoader cl) {
+        loadConfig(loadPropertiesFromDefaultLocations(cl));
+    }
+
+    /** Réutilisé par LauncherMixinConfigPlugin (a aussi besoin des Properties brutes pour ses propres clés). */
+    public static java.util.Properties loadPropertiesFromDefaultLocations(ClassLoader cl) {
+        java.util.Properties props = new java.util.Properties();
+
+        try (java.io.InputStream is = cl.getResourceAsStream(PROPS_FILENAME)) {
+            if (is != null) props.load(is);
+        } catch (Exception ignored) {}
+
+        String externPath = System.getenv("APPDATA") != null
+            ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\" + PROPS_FILENAME
+            : null;
+        if (externPath != null) {
+            java.io.File external = new java.io.File(externPath);
+            if (external.exists()) {
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(external)) {
+                    props.load(fis);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        return props;
     }
 
     private static int intProp(java.util.Properties p, String key, int fallback) {
@@ -51,10 +114,14 @@ public final class LauncherLog {
     public static void agent(int lvl, String msg)   { log("AGENT",   AGENT,   lvl, msg); }
     public static void content(int lvl, String msg) { log("CONTENT", CONTENT, lvl, msg); }
 
-    public static void info(String msg) { System.out.println(msg); }
+    public static void info(String msg) {
+        ORIGINAL_OUT.println(msg);
+        toFile(msg);
+    }
 
     public static Fatal fatal(String msg) {
-        System.err.println("[FATAL] " + msg);
+        ORIGINAL_ERR.println("[FATAL] " + msg);
+        toFile("[FATAL] " + msg);
         throw new Fatal(msg);
     }
 
@@ -62,14 +129,34 @@ public final class LauncherLog {
         public Fatal(String msg) { super(msg); }
     }
 
-    public static void err(String msg)  { System.err.println("[ERR] " + msg); }
-    public static void warn(String msg) { System.err.println("[WARN] " + msg); }
+    public static void err(String msg)  { ORIGINAL_ERR.println("[ERR] " + msg); toFile("[ERR] " + msg); }
+    public static void warn(String msg) { ORIGINAL_ERR.println("[WARN] " + msg); toFile("[WARN] " + msg); }
 
     private static void log(String category, int threshold, int level, String msg) {
-        if (threshold == 0 || level < threshold) return;
         String line = (level >= 3 ? "[!] " : "")
                     + (SHOW_CATEGORY ? "[" + category + "] " : "")
                     + msg;
-        System.out.println(line);
+        toFile(line);
+        if (threshold == 0 || level < threshold) return;
+        ORIGINAL_OUT.println(line);
+    }
+
+    // ── Fichier permanent, indépendant de la capture console (peu fiable) ────
+
+    private static final String LOG_PATH =
+        System.getenv("APPDATA") != null
+            ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\logs\\launcher-agent.log"
+            : null;
+
+    private static synchronized void toFile(String line) {
+        if (LOG_PATH == null) return;
+        try {
+            java.io.File f = new java.io.File(LOG_PATH);
+            java.io.File dir = f.getParentFile();
+            if (dir != null) dir.mkdirs();
+            try (java.io.FileWriter fw = new java.io.FileWriter(f, true)) {
+                fw.write("[" + System.currentTimeMillis() + "] " + line + "\n");
+            }
+        } catch (Throwable ignored) {}
     }
 }

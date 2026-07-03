@@ -110,7 +110,7 @@ echo [Stubs] Compilation des stubs Minecraft...
 set "STUBLIST=%TEMP%\launcheragent_stubs.txt"
 powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%AGENT_DIR%src\stubs' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST%', $files)"
 
-"%JAVAC_CMD%" --release 17 -d "%OUT_STUBS%" "@%STUBLIST%"
+"%JAVAC_CMD%" --release 8 -d "%OUT_STUBS%" "@%STUBLIST%"
 del "%STUBLIST%" 2>nul
 if errorlevel 1 (
     echo [ERREUR] Compilation stubs echouee.
@@ -127,7 +127,7 @@ echo [Build] Compilation principale...
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
 powershell -NoProfile -Command "$q=[char]34; $dirs=@('%AGENT_DIR%src\main\java','%AGENT_DIR%src\stubs'); $files=$dirs | ForEach-Object { Get-ChildItem -Recurse -Filter '*.java' $_ } | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
-"%JAVAC_CMD%" --release 17 ^
+"%JAVAC_CMD%" --release 8 ^
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
@@ -174,15 +174,17 @@ echo [Build] JAR cree : build\launcher-agent.jar (%JAR_KB% Ko)
 :: les jars/DLL des deux agents (voir docs/LauncherAgent/index.md).
 
 set "AGENT_DEPLOY_DIR=%APPDATA%\YuyuFrame\agent"
+set "LIBS_DEPLOY_DIR=%AGENT_DEPLOY_DIR%\libs"
 echo [Deploy] Destination : %AGENT_DEPLOY_DIR%
 if not exist "%AGENT_DEPLOY_DIR%" mkdir "%AGENT_DEPLOY_DIR%"
+if not exist "%LIBS_DEPLOY_DIR%"  mkdir "%LIBS_DEPLOY_DIR%"
 copy /Y "%JAR%"                       "%AGENT_DEPLOY_DIR%\launcher-agent.jar"    >nul
-copy /Y "%LIB%\mixin.jar"             "%AGENT_DEPLOY_DIR%\mixin.jar"             >nul
-copy /Y "%LIB%\asm-9.5.jar"           "%AGENT_DEPLOY_DIR%\asm-9.5.jar"           >nul
-copy /Y "%LIB%\asm-tree-9.5.jar"      "%AGENT_DEPLOY_DIR%\asm-tree-9.5.jar"      >nul
-copy /Y "%LIB%\asm-util-9.5.jar"      "%AGENT_DEPLOY_DIR%\asm-util-9.5.jar"      >nul
-copy /Y "%LIB%\asm-analysis-9.5.jar"  "%AGENT_DEPLOY_DIR%\asm-analysis-9.5.jar"  >nul
-copy /Y "%LIB%\asm-commons-9.5.jar"   "%AGENT_DEPLOY_DIR%\asm-commons-9.5.jar"   >nul
+copy /Y "%LIB%\mixin.jar"             "%LIBS_DEPLOY_DIR%\mixin.jar"              >nul
+copy /Y "%LIB%\asm-9.5.jar"           "%LIBS_DEPLOY_DIR%\asm-9.5.jar"            >nul
+copy /Y "%LIB%\asm-tree-9.5.jar"      "%LIBS_DEPLOY_DIR%\asm-tree-9.5.jar"       >nul
+copy /Y "%LIB%\asm-util-9.5.jar"      "%LIBS_DEPLOY_DIR%\asm-util-9.5.jar"       >nul
+copy /Y "%LIB%\asm-analysis-9.5.jar"  "%LIBS_DEPLOY_DIR%\asm-analysis-9.5.jar"   >nul
+copy /Y "%LIB%\asm-commons-9.5.jar"   "%LIBS_DEPLOY_DIR%\asm-commons-9.5.jar"    >nul
 if exist "%~dp0content-core\target\release\content_core.dll" (
     copy /Y "%~dp0content-core\target\release\content_core.dll" "%AGENT_DEPLOY_DIR%\content_core.dll" >nul
     echo [Deploy] content_core.dll deploye
@@ -201,14 +203,15 @@ echo.
 echo  ================================================
 echo    Build termine !  Version : %VER_MSG%
 echo    %AGENT_DEPLOY_DIR%\launcher-agent.jar
+echo    %LIBS_DEPLOY_DIR%\mixin.jar + asm-*.jar
 echo  ================================================
 echo.
-pause
+if not defined CI pause
 exit /b 0
 
 :error
 echo.
 echo  [BUILD ECHOUE]
 echo.
-pause
+if not defined CI pause
 exit /b 1

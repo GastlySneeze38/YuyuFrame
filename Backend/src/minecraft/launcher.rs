@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
-use tokio::sync::Semaphore;
+use tokio::sync::{Notify, Semaphore};
 use tokio::task::JoinSet;
 
 use tauri::Manager;
@@ -27,12 +28,71 @@ pub fn minecraft_dir() -> PathBuf {
 
 /// Dossier LauncherAgent dans AppData/YuyuFrame/agent/ — séparé de
 /// AppData/YuyuFrame/p2p/ (voir docs/LauncherAgent/index.md).
-/// Doit contenir : launcher-agent.jar, mixin.jar, asm-*.jar, content_core.dll
+/// Doit contenir : launcher-agent.jar, content_core.dll, libs/ (mixin.jar, asm-*.jar)
 fn launcher_agent_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("YuyuFrame")
         .join("agent")
+}
+
+/// Sous-dossier libs/ de launcher_agent_dir() — mixin.jar + asm-*.jar, séparés
+/// du jar principal pour laisser la racine ouverte au chargement dynamique de
+/// mods (voir build.bat de Launcher-Agent).
+fn launcher_agent_libs_dir() -> PathBuf {
+    launcher_agent_dir().join("libs")
+}
+
+/// Copie l'agent bundlé dans l'installateur (voir tauri.conf.json,
+/// bundle.resources) vers `%AppData%\YuyuFrame\agent\` — sans ce mécanisme,
+/// un beta testeur qui installe l'app n'a jamais ces fichiers (jusqu'ici seul
+/// build.bat, en dev, les y copiait manuellement). Écrase toujours l'existant
+/// : un utilisateur qui met à jour l'app doit récupérer la version de l'agent
+/// qui correspond à CETTE version installée, jamais garder une copie d'un
+/// ancien build. À appeler une fois au démarrage (voir lib.rs setup()) —
+/// échec loggé mais jamais fatal (un dev qui lance `cargo tauri dev` sans
+/// avoir buildé l'agent, ou avant que content-core existe, ne doit pas voir
+/// l'app planter pour autant).
+pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
+    let resource_dir = match app.path().resource_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            tracing::warn!("[LauncherAgent] resource_dir() indisponible ({}) — agent bundlé non déployé", e);
+            return;
+        }
+    };
+    let bundled = resource_dir.join("agent");
+
+    let dest_dir = launcher_agent_dir();
+    let dest_libs = launcher_agent_libs_dir();
+    if let Err(e) = std::fs::create_dir_all(&dest_libs) {
+        tracing::warn!("[LauncherAgent] impossible de créer {}: {}", dest_libs.display(), e);
+        return;
+    }
+
+    let files: [(&str, PathBuf); 8] = [
+        ("launcher-agent.jar", dest_dir.join("launcher-agent.jar")),
+        ("content_core.dll", dest_dir.join("content_core.dll")),
+        ("libs/mixin.jar", dest_libs.join("mixin.jar")),
+        ("libs/asm-9.5.jar", dest_libs.join("asm-9.5.jar")),
+        ("libs/asm-tree-9.5.jar", dest_libs.join("asm-tree-9.5.jar")),
+        ("libs/asm-util-9.5.jar", dest_libs.join("asm-util-9.5.jar")),
+        ("libs/asm-analysis-9.5.jar", dest_libs.join("asm-analysis-9.5.jar")),
+        ("libs/asm-commons-9.5.jar", dest_libs.join("asm-commons-9.5.jar")),
+    ];
+
+    let mut deployed = 0;
+    for (rel, dest) in &files {
+        let src = bundled.join(rel);
+        // content_core.dll notamment n'existe pas toujours (voir build.bat,
+        // "non implementee") — absence normale, pas une erreur.
+        if !src.exists() { continue; }
+        match std::fs::copy(&src, dest) {
+            Ok(_) => deployed += 1,
+            Err(e) => tracing::warn!("[LauncherAgent] copie {} -> {} échouée: {}", src.display(), dest.display(), e),
+        }
+    }
+    tracing::info!("[LauncherAgent] {} fichier(s) de l'agent bundlé déployé(s) vers {}", deployed, dest_dir.display());
 }
 
 fn set_progress(app: &tauri::AppHandle, current: u64, total: u64, message: &str) {
@@ -52,6 +112,35 @@ fn log_to_console(app: &tauri::AppHandle, console_label: &str, line: &str, level
         let _ = win.emit("game_log", &payload);
     } else {
         let _ = app.emit("game_log", &payload);
+    }
+}
+
+/// Registre des signaux "la fenêtre console a fini d'attacher son listener JS
+/// game_log" — un `Notify` par fenêtre, indexé par son label. Remplace un
+/// délai fixe (1500ms) qui laissait passer les toutes premières lignes quand
+/// le lancement était rapide (tout en cache — typiquement 1.8.9 vanilla) : le
+/// webview n'avait alors pas forcément fini son démarrage React/JS avant que
+/// nos premiers logs ne soient déjà émis, qui étaient donc silencieusement
+/// perdus (aucun listener encore attaché côté frontend pour les recevoir).
+/// Voir `register_console_waiter`/`signal_console_ready` et la commande Tauri
+/// `console_ready` (invoquée par Console.tsx une fois ses listeners attachés).
+static CONSOLE_READY: LazyLock<Mutex<HashMap<String, Arc<Notify>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// À appeler SYNCHRONEMENT juste après la création de la fenêtre console,
+/// avant tout travail async — garantit qu'aucun signal_console_ready() ne
+/// peut arriver avant que ce Notify n'existe déjà dans le registre.
+pub fn register_console_waiter(console_label: &str) -> Arc<Notify> {
+    let notify = Arc::new(Notify::new());
+    CONSOLE_READY.lock().unwrap().insert(console_label.to_string(), notify.clone());
+    notify
+}
+
+/// Invoqué par la commande Tauri `console_ready` — réveille l'attente
+/// éventuelle de `register_console_waiter` pour cette fenêtre.
+pub fn signal_console_ready(console_label: &str) {
+    if let Some(notify) = CONSOLE_READY.lock().unwrap().get(console_label) {
+        notify.notify_waiters();
     }
 }
 
@@ -287,6 +376,7 @@ pub async fn download_and_launch(
         .map(|j| j.component.as_str())
         .unwrap_or("jre-legacy"); // composant Mojang pour Java 8
     let java = ensure_java(java_component, required_java, &mc_dir, &client, &app).await?;
+    ensure_gpu_preference(&java).await;
     let java_major = detect_java_major_version(&java).await.unwrap_or(17);
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
@@ -392,13 +482,14 @@ pub async fn download_and_launch(
     // Resource packs Modrinth in-game (voir docs/LauncherAgent/index.md). Agent
     // totalement indépendant du p2p-agent — actif que P2P soit activé ou non.
     let (launcher_agent_jvm_args, launcher_agent_extra_cp): (Vec<String>, Vec<String>) = {
-        let mixin_jar    = launcher_agent_dir().join("mixin.jar");
+        let libs_dir = launcher_agent_libs_dir();
+        let mixin_jar    = libs_dir.join("mixin.jar");
         let agent_jar    = launcher_agent_dir().join("launcher-agent.jar");
-        let asm_jar          = launcher_agent_dir().join("asm-9.5.jar");
-        let asm_tree_jar     = launcher_agent_dir().join("asm-tree-9.5.jar");
-        let asm_util_jar     = launcher_agent_dir().join("asm-util-9.5.jar");
-        let asm_analysis_jar = launcher_agent_dir().join("asm-analysis-9.5.jar");
-        let asm_commons_jar  = launcher_agent_dir().join("asm-commons-9.5.jar");
+        let asm_jar          = libs_dir.join("asm-9.5.jar");
+        let asm_tree_jar     = libs_dir.join("asm-tree-9.5.jar");
+        let asm_util_jar     = libs_dir.join("asm-util-9.5.jar");
+        let asm_analysis_jar = libs_dir.join("asm-analysis-9.5.jar");
+        let asm_commons_jar  = libs_dir.join("asm-commons-9.5.jar");
 
         if !agent_jar.exists() {
             tracing::warn!(
@@ -439,10 +530,18 @@ pub async fn download_and_launch(
 
                     // mixin.jar DOIT être listé AVANT launcher-agent.jar — même contrainte
                     // que pour le p2p-agent (MixinAgent.premain() capture l'Instrumentation).
+                    //
+                    // version=... explicite ici : -Dminecraft.version n'est posé QUE par
+                    // Fabric, jamais par un lancement vanilla (Mojang passe la version en
+                    // argument de jeu "--version", pas en system property) — sans ce
+                    // paramètre, MinecraftVersionDetector.detect() renvoie "unknown" sur
+                    // vanilla, et LauncherAgent charge par erreur la config Mixin 1.21+
+                    // contre un jeu 1.8.9 (mismatch fatal). Rust connaît déjà version_id
+                    // avec certitude, pas besoin de deviner côté agent.
                     let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
                     let agent_arg = format!(
-                        "-javaagent:{}=yarn={}",
-                        agent_jar.display(), yarn_path.display(),
+                        "-javaagent:{}=yarn={},version={}",
+                        agent_jar.display(), yarn_path.display(), version_id,
                     );
                     log_to_console(&app, &console_label, &format!("[LauncherAgent] Mixin : {}", mixin_arg), "out");
                     log_to_console(&app, &console_label, &format!("[LauncherAgent] Agent : {}", agent_arg), "out");
@@ -520,6 +619,7 @@ pub async fn download_and_launch(
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         java_cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    tracing::info!("[MC launch] {} {}", java, args.join(" "));
     let mut child = java_cmd.spawn()?;
 
     let stdout = child.stdout.take().map(BufReader::new);
@@ -536,6 +636,11 @@ pub async fn download_and_launch(
             while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
                 let trimmed = line.trim_end().to_string();
                 log_to_console(&app_out, &label_out, &trimmed, "out");
+                // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
+                // main.rs) — la fenêtre console (webview) ne garde rien après
+                // un crash/fermeture, ce qui rendait tout diagnostic après-coup
+                // impossible sans que l'utilisateur ait déjà tout copié à temps.
+                tracing::info!("[MC stdout] {}", trimmed);
                 line.clear();
             }
         });
@@ -547,6 +652,7 @@ pub async fn download_and_launch(
             while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
                 let trimmed = line.trim_end().to_string();
                 log_to_console(&app_err, &label_err, &trimmed, "err");
+                tracing::error!("[MC stderr] {}", trimmed);
                 line.clear();
             }
         });
@@ -886,6 +992,47 @@ extern "system" {
     fn timeBeginPeriod(uPeriod: u32) -> u32;
     fn timeEndPeriod(uPeriod: u32) -> u32;
 }
+
+/// Force la préférence GPU "Performances élevées" (GPU dédié) pour CE
+/// java.exe précis, sur les configs GPU hybrides (portable avec iGPU +
+/// NVIDIA/AMD dédié) — même registre que "Paramètres Windows > Affichage >
+/// Graphismes" quand on ajoute une appli manuellement et choisit "Hautes
+/// performances" (HKCU\...\UserGpuPreferences, valeur "GpuPreference=2;").
+///
+/// Sans ça, Windows assigne java.exe au GPU par défaut du système — sur un
+/// portable hybride, souvent l'iGPU — observé en conditions réelles : ~100
+/// FPS au lieu de plusieurs centaines sur une RTX 4060, alors que d'autres
+/// launchers Java (le launcher officiel Mojang notamment, confirmé présent
+/// dans ce même registre pour SES propres java.exe) fonctionnent bien parce
+/// qu'ILS ont déjà cette préférence positionnée pour leur propre exécutable
+/// — jamais faite pour le nôtre puisque chaque composant runtime Mojang
+/// (jre-legacy, java-runtime-delta, etc.) vit à un chemin distinct.
+///
+/// Best-effort silencieux : ne bloque jamais le lancement si `reg.exe` est
+/// absent ou la clé inaccessible (HKCU, donc normalement toujours
+/// accessible sans élévation, mais on ne veut prendre aucun risque ici).
+#[cfg(target_os = "windows")]
+async fn ensure_gpu_preference(java_exe: &str) {
+    const KEY: &str = r"HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
+
+    let already_set = tokio::process::Command::new("reg")
+        .args(["query", KEY, "/v", java_exe])
+        .output()
+        .await
+        .map(|out| out.status.success())
+        .unwrap_or(false);
+    if already_set {
+        return;
+    }
+
+    let _ = tokio::process::Command::new("reg")
+        .args(["add", KEY, "/v", java_exe, "/t", "REG_SZ", "/d", "GpuPreference=2;", "/f"])
+        .output()
+        .await;
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn ensure_gpu_preference(_java_exe: &str) {}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

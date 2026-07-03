@@ -47,13 +47,13 @@ public final class KeybindSettings {
         if (loaded) return;
         loaded = true;
         Properties p = new Properties();
-        try (var in = Files.newInputStream(file())) {
+        try (java.io.InputStream in = Files.newInputStream(file())) {
             p.load(in);
             showUnbound = Boolean.parseBoolean(p.getProperty("showUnbound", "false"));
             String expanded = p.getProperty("expandedCategories", "");
             if (!expanded.isEmpty()) {
                 for (String id : expanded.split(",")) {
-                    if (!id.isBlank()) expandedCategories.add(id);
+                    if (!id.trim().isEmpty()) expandedCategories.add(id);
                 }
             }
         } catch (IOException ignored) {
@@ -91,7 +91,7 @@ public final class KeybindSettings {
         try {
             Path f = file();
             Files.createDirectories(f.getParent());
-            try (var out = Files.newOutputStream(f)) {
+            try (java.io.OutputStream out = Files.newOutputStream(f)) {
                 p.store(out, "LauncherAgent — préférences écran Controls (généré, ne pas éditer à la main)");
             }
         } catch (IOException e) {

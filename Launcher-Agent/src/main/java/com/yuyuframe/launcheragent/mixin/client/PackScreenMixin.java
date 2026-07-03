@@ -30,7 +30,7 @@ public abstract class PackScreenMixin {
     private static final int BUTTON_WIDTH = 100;
     private static final int BUTTON_GAP = 4;
 
-    @Inject(method = "bg_()V", at = @At("TAIL"))
+    @Inject(method = "init()V", at = @At("TAIL"))
     private void la$onInit(CallbackInfo ci) {
         FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
         LauncherLog.ui(1, "[LauncherAgent] PackScreenMixin.la$onInit() appelé");

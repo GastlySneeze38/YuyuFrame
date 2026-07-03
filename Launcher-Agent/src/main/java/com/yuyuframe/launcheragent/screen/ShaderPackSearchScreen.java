@@ -293,7 +293,7 @@ public class ShaderPackSearchScreen extends Screen {
         Set<String> names = new HashSet<>();
         try {
             if (java.nio.file.Files.isDirectory(shaderPacksDir)) {
-                try (var stream = java.nio.file.Files.list(shaderPacksDir)) {
+                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(shaderPacksDir)) {
                     stream.forEach(p -> names.add(normalize(p.getFileName().toString())));
                 }
             }

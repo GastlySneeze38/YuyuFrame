@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.agent;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 
 import java.lang.instrument.Instrumentation;
 import java.net.URL;
@@ -26,9 +27,61 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-06-23-v64";
+    private static final String BUILD_VERSION = "2026-07-03-v247";
 
     public static void premain(String agentArgs, Instrumentation inst) {
+        try {
+            premain0(agentArgs, inst);
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] premain() exception non capturée : " + t);
+            t.printStackTrace(System.err);
+            throw t;
+        }
+    }
+
+    private static void premain0(String agentArgs, Instrumentation inst) {
+        // Tout premier appel : lit launcher-agent.properties (log.agent=1 etc.)
+        // et applique les seuils AVANT le moindre autre log. Sans ça, les
+        // seuils restent à leur valeur par défaut (3 = critique seul) jusqu'à
+        // ce que LauncherMixinConfigPlugin.onLoad() charge la même config —
+        // qui n'arrive QUE tard dans le bootstrap Mixin, bien après la
+        // plupart des logs de démarrage utiles (voir LauncherLog.loadConfigFromDefaultLocations).
+        LauncherLog.loadConfigFromDefaultLocations(LauncherAgent.class.getClassLoader());
+
+        // Filet de sécurité pour HudConfigStore (runtime.ui) : les points
+        // d'accroche normaux (ConfigScreenBuilder, UiHudBox, toggle
+        // d'activation) sauvegardent déjà à chaque changement, mais un futur
+        // point de mutation oublié ne perdrait ainsi jamais les changements
+        // en cours à la fermeture du jeu — save() est déjà défensif
+        // (try/catch complet), sûr même si le classloader Fabric isolé est
+        // déjà en cours de démontage.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save(); } catch (Throwable ignored) {}
+        }, "YuyuFrame-ConfigSave"));
+
+        // Réchauffe UiFont/AWT Toolkit ICI, MAINTENANT, PENDANT premain() — pas
+        // un simple souci de perf. UiFont mesure le texte via un
+        // BufferedImage.createGraphics().getFontMetrics(), mais sous Java 8/
+        // Windows ça déclenche quand même en interne Toolkit.getDefaultToolkit()
+        // (FontDesignMetrics.getDefaultFrc() -> Win32GraphicsEnvironment ->
+        // D3DGraphicsDevice.<clinit>), qui lui-même essaie d'enregistrer SON
+        // PROPRE shutdown hook (AWTAutoShutdown). Si cette toute première
+        // init AWT du process arrive DEPUIS un shutdown hook déjà en cours
+        // (ex: le hook YuyuFrame-ConfigSave juste au-dessus, ou tout autre
+        // hook, déclenché par un crash précoce de la JVM avant même que
+        // Minecraft démarre) -> "Shutdown in progress" pendant l'init AWT ->
+        // bloqué indéfiniment (observé : JVM figée des minutes, RAM occupée,
+        // 0% CPU, jamais de logs/latest.log créé — le process ne quitte
+        // jamais alors qu'il a déjà planté). En la forçant ici, sur le thread
+        // principal, bien avant qu'un quelconque shutdown ne puisse démarrer,
+        // toute réutilisation ultérieure (rendu HUD normal OU shutdown hook)
+        // retombe sur un Toolkit déjà chaud, donc instantanée et sans risque.
+        try {
+            com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth("YuyuFrame", 1f);
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] Réchauffage UiFont/AWT échoué (non bloquant) : " + t);
+        }
+
         // Doit être posé avant que Knot ne construise sa whitelist de codeSources
         // (validParentCodeSources) — sinon KnotClassDelegate.loadClass() refuse de
         // résoudre toute classe dont le jar (launcher-agent.jar, ajouté via
@@ -44,6 +97,14 @@ public class LauncherAgent {
 
         AgentConfig config = AgentConfig.parse(agentArgs);
         LauncherLog.agent(1, "[LauncherAgent] instanceId=" + config.instanceId);
+
+        // Version détectée ici (avant tout chargement Mixin) — system props déjà
+        // posées par le launcher vanilla, donc détection fiable à ce stade.
+        String mcVersion = config.forcedVersion != null
+            ? config.forcedVersion
+            : MinecraftVersionDetector.detect();
+        LauncherLog.agent(1, "[LauncherAgent] version MC détectée : " + mcVersion);
+        System.setProperty("launcheragent.mcVersion", mcVersion);
 
         boolean fabric = isFabricPresent();
 
@@ -73,9 +134,9 @@ public class LauncherAgent {
 
         if (fabric) {
             LauncherLog.agent(1, "[LauncherAgent] Fabric détecté — bootstrap Mixin via classloader isolé");
-            startIsolated(inst, config.yarnPath);
+            startIsolated(inst, config.yarnPath, mcVersion);
         } else {
-            IsolatedBootstrap.start(inst, config.yarnPath, false);
+            IsolatedBootstrap.start(inst, config.yarnPath, false, mcVersion);
         }
 
         LauncherLog.agent(3, "[LauncherAgent] Prêt — en attente du chargement Minecraft");
@@ -103,7 +164,7 @@ public class LauncherAgent {
      * chargées par Fabric (KnotClassLoader) — voir IsolatedBootstrap pour le
      * détail.
      */
-    private static void startIsolated(Instrumentation inst, String yarnPath) {
+    private static void startIsolated(Instrumentation inst, String yarnPath, String mcVersion) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
@@ -111,17 +172,20 @@ public class LauncherAgent {
                 return;
             }
 
-            String[] jarNames = {
-                "launcher-agent.jar", "mixin.jar", "asm-9.5.jar", "asm-tree-9.5.jar",
+            // launcher-agent.jar est dans agentDir, les dépendances dans agentDir/libs/
+            java.io.File libsDir = new java.io.File(agentDir, "libs");
+            String[] libJarNames = {
+                "mixin.jar", "asm-9.5.jar", "asm-tree-9.5.jar",
                 "asm-util-9.5.jar", "asm-analysis-9.5.jar", "asm-commons-9.5.jar",
             };
             List<URL> urls = new ArrayList<>();
-            for (String name : jarNames) {
-                java.io.File f = new java.io.File(agentDir, name);
+            urls.add(new java.io.File(agentDir, "launcher-agent.jar").toURI().toURL());
+            for (String name : libJarNames) {
+                java.io.File f = new java.io.File(libsDir, name);
                 if (f.exists()) {
                     urls.add(f.toURI().toURL());
                 } else {
-                    LauncherLog.warn("[LauncherAgent] isolation: " + name + " manquant dans " + agentDir);
+                    LauncherLog.warn("[LauncherAgent] isolation: " + name + " manquant dans " + libsDir);
                 }
             }
 
@@ -146,7 +210,7 @@ public class LauncherAgent {
             }
 
             if (urls.isEmpty()) {
-                LauncherLog.err("[LauncherAgent] isolation: aucun JAR trouvé dans " + agentDir + " — abandon");
+                LauncherLog.err("[LauncherAgent] isolation: aucun JAR trouvé dans " + agentDir + " / " + libsDir + " — abandon");
                 return;
             }
 
@@ -165,12 +229,12 @@ public class LauncherAgent {
             urls.add(0, generatedDir.toURI().toURL());
 
             ClassLoader isolatedCl = new URLClassLoader(
-                urls.toArray(new URL[0]), ClassLoader.getPlatformClassLoader());
+                urls.toArray(new URL[0]), platformClassLoaderOrNull());
 
             Class<?> bootstrapClass = Class.forName(
                 "com.yuyuframe.launcheragent.agent.IsolatedBootstrap", true, isolatedCl);
             java.lang.reflect.Method startMethod =
-                bootstrapClass.getMethod("start", Instrumentation.class, String.class, boolean.class);
+                bootstrapClass.getMethod("start", Instrumentation.class, String.class, boolean.class, String.class);
 
             // Mixin résout son IMixinService via ServiceLoader, qui se base par
             // défaut sur le classloader de CONTEXTE du thread courant — pas
@@ -183,7 +247,7 @@ public class LauncherAgent {
             ClassLoader previousContext = current.getContextClassLoader();
             current.setContextClassLoader(isolatedCl);
             try {
-                startMethod.invoke(null, inst, yarnPath, true);
+                startMethod.invoke(null, inst, yarnPath, true, mcVersion);
             } finally {
                 current.setContextClassLoader(previousContext);
             }
@@ -192,6 +256,22 @@ public class LauncherAgent {
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] Bootstrap isolé échoué : " + t);
             t.printStackTrace(System.err);
+        }
+    }
+
+    /**
+     * ClassLoader.getPlatformClassLoader() n'existe qu'à partir de Java 9 —
+     * l'agent compile en bytecode Java 8 (Forge 1.8.9/LaunchWrapper l'exige,
+     * incompatible Java 9+), mais Fabric (seul appelant de ce chemin) ne
+     * tourne que sur JVM moderne : appelé par réflexion pour profiter du vrai
+     * classloader plateforme quand il existe, {@code null} (bootstrap) sinon.
+     */
+    private static ClassLoader platformClassLoaderOrNull() {
+        try {
+            java.lang.reflect.Method m = ClassLoader.class.getMethod("getPlatformClassLoader");
+            return (ClassLoader) m.invoke(null);
+        } catch (Throwable t) {
+            return null;
         }
     }
 
@@ -223,7 +303,7 @@ public class LauncherAgent {
         return null;
     }
 
-    /** Dossier contenant ce JAR (et ses jars frères mixin.jar/asm-*.jar) — %APPDATA%\YuyuFrame\agent\. */
+    /** Dossier contenant launcher-agent.jar — %APPDATA%\YuyuFrame\agent\. Les libs (mixin/asm) sont dans agent\libs\. */
     private static java.io.File agentDir() {
         try {
             java.net.URI uri = LauncherAgent.class.getProtectionDomain()

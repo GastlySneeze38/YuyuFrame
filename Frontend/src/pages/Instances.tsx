@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance, Loader } from '@/types'
 import { ModsContent, updateModsForNewVersion } from '@/pages/Mods'
-import { INSTANCE_PRESETS, PVP_PRESET, type InstancePreset } from '@/data/presets'
+import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 
 const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge']
 const RAM_OPTIONS = [1024, 2048, 4096, 6144, 8192]
@@ -410,6 +410,7 @@ function EditModal({
   const [name, setName] = useState(instance.name)
   const [description, setDescription] = useState(instance.description)
   const [mcVersion, setMcVersion] = useState(instance.mc_version)
+  const [loader, setLoader] = useState<Loader>(instance.loader)
   const [ram, setRam] = useState(instance.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Enregistrement...')
@@ -419,10 +420,10 @@ function EditModal({
     if (!name.trim()) { setError('Nom requis'); return }
     setLoading(true); setError(''); setLoadingLabel('Enregistrement...')
     try {
-      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, instance.loader, ram, description.trim())
+      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim())
       if (mcVersion !== instance.mc_version) {
         setLoadingLabel('Mise à jour des mods...')
-        await updateModsForNewVersion(instance.id, mcVersion, instance.loader)
+        await updateModsForNewVersion(instance.id, mcVersion, loader)
       }
       onUpdate(updated)
     } catch (e) {
@@ -437,23 +438,46 @@ function EditModal({
       <div className="flex flex-col gap-4">
         <NameInput value={name} onChange={setName} onEnter={handleSave} />
 
-        <div>
-          <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Version MC</label>
-          <div className="relative mt-1">
-            <select
-              value={mcVersion}
-              onChange={(e) => setMcVersion(e.target.value)}
-              className="w-full appearance-none rounded-xl px-3 pr-7 text-sm font-medium text-white outline-none"
-              style={{ height: 40, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              {versions.map((v) => (
-                <option key={v} value={v} style={{ background: '#111118' }}>{v}</option>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Version MC</label>
+            <div className="relative mt-1">
+              <select
+                value={mcVersion}
+                onChange={(e) => setMcVersion(e.target.value)}
+                className="w-full appearance-none rounded-xl px-3 pr-7 text-sm font-medium text-white outline-none"
+                style={{ height: 40, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                {versions.map((v) => (
+                  <option key={v} value={v} style={{ background: '#111118' }}>{v}</option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                <svg viewBox="0 0 10 6" fill="white" width={10} height={6} style={{ opacity: 0.4 }}>
+                  <path d="M0 0l5 6 5-6z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>Loader</label>
+            <div className="flex gap-1 mt-1">
+              {LOADERS.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLoader(l)}
+                  className="rounded-xl text-xs font-semibold transition-all duration-150"
+                  style={{
+                    height: 40, padding: '0 12px',
+                    background: loader === l ? 'rgba(75,63,207,0.35)' : 'rgba(0,0,0,0.35)',
+                    border: `1px solid ${loader === l ? 'rgba(75,63,207,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                    color: loader === l ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)',
+                  }}
+                >
+                  {l.charAt(0).toUpperCase() + l.slice(1)}
+                </button>
               ))}
-            </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-              <svg viewBox="0 0 10 6" fill="white" width={10} height={6} style={{ opacity: 0.4 }}>
-                <path d="M0 0l5 6 5-6z" />
-              </svg>
             </div>
           </div>
         </div>
@@ -701,6 +725,11 @@ function InstanceCard({
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>}
                       />
                       <MenuItem
+                        onClick={() => { setMenuOpen(false); api.instances.exportSettings(instance.id).catch(() => {}) }}
+                        label="Exporter mes paramètres"
+                        icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>}
+                      />
+                      <MenuItem
                         onClick={() => setConfirm(true)}
                         label="Supprimer définitivement"
                         danger
@@ -771,7 +800,7 @@ export default function Instances() {
     versions, setVersions,
     instances, setInstances, addInstance, updateInstance, removeInstance,
     selectedInstanceId, setSelectedInstanceId,
-    defaultRam,
+    defaultRam, syncGameSettings,
   } = useStore()
 
   const [loading, setLoading] = useState(true)
@@ -779,8 +808,6 @@ export default function Instances() {
   const [editTarget, setEditTarget] = useState<Instance | null>(null)
   const [duplicateSource, setDuplicateSource] = useState<Instance | null>(null)
   const [othersExpanded, setOthersExpanded] = useState(true)
-  const [creatingPvp, setCreatingPvp] = useState(false)
-  const [pvpProgress, setPvpProgress] = useState('')
   const loaded = useRef(false)
 
   const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? null
@@ -817,26 +844,6 @@ export default function Instances() {
       const updated = await api.instances.toggleFavorite(id)
       updateInstance(updated)
     } catch { /* ignore */ }
-  }
-
-  const handleCreatePvp = async () => {
-    if (creatingPvp) return
-    setCreatingPvp(true)
-    setPvpProgress('Création...')
-    try {
-      let name = PVP_PRESET.name
-      let n = 2
-      while (instances.some((i) => i.name === name)) { name = `${PVP_PRESET.name} (${n})`; n++ }
-      const instance = await api.instances.create(name, PVP_PRESET.mcVersion, PVP_PRESET.loader, PVP_PRESET.ramMb, PVP_PRESET.description)
-      addInstance(instance)
-      setSelectedInstanceId(instance.id)
-      await installPresetMods(instance.id, PVP_PRESET, (done, total) => {
-        setPvpProgress(`Installation (${done}/${total})...`)
-      })
-    } catch { /* best-effort */ } finally {
-      setCreatingPvp(false)
-      setPvpProgress('')
-    }
   }
 
   function renderCard(inst: Instance) {
@@ -939,28 +946,6 @@ export default function Instances() {
           {/* Fixed bottom button */}
           <div className="flex-shrink-0 flex flex-col gap-2 p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <button
-              onClick={handleCreatePvp}
-              disabled={creatingPvp}
-              className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95"
-              style={{
-                height: 44, borderRadius: 12, fontSize: 13,
-                background: creatingPvp ? 'rgba(40,38,65,0.7)' : 'rgba(207,63,75,0.18)',
-                border: '1px solid rgba(207,63,75,0.4)',
-                boxShadow: creatingPvp ? 'none' : '0 4px 20px rgba(207,63,75,0.12)',
-                cursor: creatingPvp ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={(e) => { if (!creatingPvp) e.currentTarget.style.background = 'rgba(207,63,75,0.3)' }}
-              onMouseLeave={(e) => { if (!creatingPvp) e.currentTarget.style.background = 'rgba(207,63,75,0.18)' }}
-            >
-              {creatingPvp ? (
-                <span className="h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.7)' }} />
-              ) : (
-                <span style={{ fontSize: 14 }}>⚔️</span>
-              )}
-              {creatingPvp ? pvpProgress : 'Instance PvP'}
-            </button>
-
-            <button
               onClick={() => setShowCreate(true)}
               className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95"
               style={{ height: 44, borderRadius: 12, fontSize: 13, background: '#4B3FCF', boxShadow: '0 4px 20px rgba(75,63,207,0.3)' }}
@@ -1002,6 +987,7 @@ export default function Instances() {
           onCreate={(inst) => {
             addInstance(inst)
             setSelectedInstanceId(inst.id)
+            if (syncGameSettings) api.instances.applySettings(inst.id).catch(() => {})
           }}
         />
       )}

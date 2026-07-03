@@ -102,7 +102,7 @@ public class ShaderPackDetailScreen extends Screen {
         if (needle.isEmpty()) return false;
         try {
             if (!java.nio.file.Files.isDirectory(shaderPacksDir)) return false;
-            try (var stream = java.nio.file.Files.list(shaderPacksDir)) {
+            try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(shaderPacksDir)) {
                 return stream.anyMatch(p -> normalize(p.getFileName().toString()).contains(needle));
             }
         } catch (Exception e) {

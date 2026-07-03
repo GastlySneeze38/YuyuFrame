@@ -48,6 +48,8 @@ export const api = {
       invoke<Instance>('instance_duplicate', { sourceId, name, mcVersion: mc_version, ramMb: ram_mb }),
     toggleFavorite: (id: string) => invoke<Instance>('instance_toggle_favorite', { id }),
     startupSync: (mode: string) => invoke<void>('instance_startup_sync', { mode }),
+    exportSettings: (instanceId: string) => invoke<void>('instance_export_settings', { instanceId }),
+    applySettings: (instanceId: string) => invoke<boolean>('instance_apply_settings', { instanceId }),
   },
 
   yuyu: {
@@ -122,9 +124,6 @@ export const api = {
 
     icon: (instanceId: string, name: string) =>
       invoke<string>('mod_icon', { instanceId, name }),
-
-    importOptifine: (instanceId: string) =>
-      invoke<Mod>('mods_import_optifine', { instanceId }),
 
     checkUpdateSafety: (
       instanceId: string,

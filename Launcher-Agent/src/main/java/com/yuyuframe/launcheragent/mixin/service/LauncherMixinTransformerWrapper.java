@@ -17,13 +17,15 @@ import java.security.ProtectionDomain;
 public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
 
     /** Classes compilées contre les stubs Screen/Text — à patcher au chargement. */
-    private static final java.util.Set<String> STUB_PATCHED_SCREENS = java.util.Set.of(
-        "com/yuyuframe/launcheragent/screen/ResourcePackSearchScreen",
-        "com/yuyuframe/launcheragent/screen/ResourcePackDetailScreen",
-        "com/yuyuframe/launcheragent/screen/ShaderPackSearchScreen",
-        "com/yuyuframe/launcheragent/screen/ShaderPackDetailScreen",
-        "com/yuyuframe/launcheragent/screen/CustomKeybindsScreen"
-    );
+    private static final java.util.Set<String> STUB_PATCHED_SCREENS = java.util.Collections.unmodifiableSet(
+        new java.util.HashSet<String>(java.util.Arrays.asList(
+            "com/yuyuframe/launcheragent/screen/ResourcePackSearchScreen",
+            "com/yuyuframe/launcheragent/screen/ResourcePackDetailScreen",
+            "com/yuyuframe/launcheragent/screen/ShaderPackSearchScreen",
+            "com/yuyuframe/launcheragent/screen/ShaderPackDetailScreen",
+            "com/yuyuframe/launcheragent/screen/CustomKeybindsScreen",
+            "com/yuyuframe/launcheragent/runtime/ui/ingameui/UiScreenBase"
+        )));
 
     private final IMixinTransformer transformer;
 
@@ -41,7 +43,7 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
 
         // ── Nos propres écrans : remap stubs Screen / Text ───────────────────
         if (STUB_PATCHED_SCREENS.contains(className)) {
-            byte[] patched = ScreenStubPatcher.patch(classfileBuffer);
+            byte[] patched = ScreenStubPatcher.patch(classfileBuffer, loader);
             if (patched != null) return patched;
         }
 

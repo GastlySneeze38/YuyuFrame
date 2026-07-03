@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import org.objectweb.asm.*;
 
+import java.util.Map;
+
 /**
  * Transforme ResourcePackSearchScreen pour remplacer les stubs de compilation
  * par les classes réelles obfusquées résolues via Yarn.
@@ -33,8 +35,24 @@ public final class ScreenStubPatcher {
      * qu'attendu par MappingsRegistry.runtimeMethod().
      */
     private static final class OverrideMethods {
-        private record Key(String name, String desc) {}
-        private record Owner(String officialClass, String officialName, String officialDesc) {}
+        private static final class Key {
+            final String name, desc;
+            Key(String name, String desc) { this.name = name; this.desc = desc; }
+            @Override public boolean equals(Object o) {
+                if (!(o instanceof Key)) return false;
+                Key k = (Key) o;
+                return name.equals(k.name) && desc.equals(k.desc);
+            }
+            @Override public int hashCode() { return name.hashCode() * 31 + desc.hashCode(); }
+        }
+        private static final class Owner {
+            final String officialClass, officialName, officialDesc;
+            Owner(String officialClass, String officialName, String officialDesc) {
+                this.officialClass = officialClass;
+                this.officialName = officialName;
+                this.officialDesc = officialDesc;
+            }
+        }
         private final java.util.Map<Key, Owner> table = new java.util.HashMap<>();
 
         void register(String declaredName, String declaredDesc, String officialClass, String officialName, String officialDesc) {
@@ -44,8 +62,47 @@ public final class ScreenStubPatcher {
         String translate(String declaredName, String declaredDesc) {
             Owner o = table.get(new Key(declaredName, declaredDesc));
             if (o == null) return declaredName;
-            return MappingsRegistry.runtimeMethod(o.officialClass(), o.officialName(), o.officialDesc());
+            return MappingsRegistry.runtimeMethod(o.officialClass, o.officialName, o.officialDesc);
         }
+    }
+
+    /**
+     * {@code Screen()} (no-arg) N'EXISTE PAS PARTOUT — trouvé en test réel
+     * (voir historique du projet) : 1.8.9 (official {@code axu}) n'a QUE le
+     * no-arg (vérifié par désassemblage : {@code public axu();}, aucune autre
+     * surcharge) ; 1.21.11 (official {@code gsb}) n'a QUE
+     * {@code protected gsb(yh)} (Text) — confirmé par
+     * {@code NoSuchMethodError: gsb: method 'void <init>()' not found} en
+     * jeu quand {@code UiScreenBase} appelait {@code super()} sans argument.
+     * Comme le choix du BON super-constructeur ne peut pas se décider à la
+     * compilation (une seule version tourne à la fois, mais le même .class
+     * source doit fonctionner sur les deux), on le résout ICI par réflexion
+     * sur la VRAIE classe Screen résolue, et on réécrit l'appel
+     * {@code INVOKESPECIAL <stub>.<init>()V} en conséquence : appel no-arg
+     * inchangé si dispo, sinon injection d'un {@code Text.literal("")} juste
+     * avant l'appel au constructeur (Lyh;)V réel.
+     */
+    private static final Map<String, Boolean> NO_ARG_CTOR_CACHE = new java.util.HashMap<>();
+
+    private static boolean screenHasNoArgConstructor(String realScreenSlash, ClassLoader loader) {
+        Boolean cached = NO_ARG_CTOR_CACHE.get(realScreenSlash);
+        if (cached != null) return cached;
+        boolean result;
+        try {
+            Class<?> screenClass = Class.forName(realScreenSlash.replace('/', '.'), false, loader);
+            result = false;
+            for (java.lang.reflect.Constructor<?> c : screenClass.getDeclaredConstructors()) {
+                if (c.getParameterCount() == 0) { result = true; break; }
+            }
+        } catch (Throwable t) {
+            // Introuvable à ce stade (classe pas encore chargée) : par défaut,
+            // supposer no-arg (comportement historique, sûr pour 1.8.9) —
+            // le vrai résultat sera mis en cache dès qu'un chargement
+            // ultérieur de cette même classe stub réussira à résoudre la classe.
+            result = true;
+        }
+        NO_ARG_CTOR_CACHE.put(realScreenSlash, result);
+        return result;
     }
 
     private static final OverrideMethods OVERRIDE_METHODS = new OverrideMethods();
@@ -64,23 +121,31 @@ public final class ScreenStubPatcher {
         OVERRIDE_METHODS.register("shouldCloseOnEsc", "()Z", "gsb", "aY_", "()Z");
     }
 
-    public static byte[] patch(byte[] classBytes) {
+    public static byte[] patch(byte[] classBytes, ClassLoader loader) {
         try {
             final String STUB_SCREEN     = "net/minecraft/client/gui/screen/Screen";
             final String STUB_SCREEN_ALT = "net/minecraft/client/gui/screens/Screen";
             final String STUB_COMP       = "net/minecraft/text/Text";
             final String STUB_COMP_ALT   = "net/minecraft/network/chat/Component";
+            final String STUB_MUTABLE_TEXT = "net/minecraft/text/MutableText";
 
             ClassReader cr = new ClassReader(classBytes);
             String realScreen = MappingsRegistry.INSTANCE.map(STUB_SCREEN);
             String realComp   = MappingsRegistry.INSTANCE.map(STUB_COMP);
+            String realMutableText = MappingsRegistry.INSTANCE.map(STUB_MUTABLE_TEXT);
 
             if (STUB_SCREEN.equals(realScreen)) {
                 LauncherLog.asm(1, "[LauncherAgent ASM] " + cr.getClassName() + ": Screen non mappé (mode non-obfusqué), skip");
                 return null;
             }
+            // Voir screenHasNoArgConstructor : 1.8.9 (axu) n'a QUE le no-arg,
+            // 1.21.11 (gsb) n'a QUE (Text) — jamais les deux, résolu par
+            // réflexion sur la vraie classe une fois qu'elle est chargeable.
+            boolean screenNoArgOk = screenHasNoArgConstructor(realScreen, loader);
+            String literalMethodName = MappingsRegistry.runtimeMethod("yh", "b", "(Ljava/lang/String;)Lyw;");
+            String literalDesc = "(Ljava/lang/String;)L" + realMutableText + ";";
             LauncherLog.asm(1, "[LauncherAgent ASM] " + cr.getClassName() + ": Screen=" + realScreen
-                    + "  Text=" + realComp);
+                    + "  Text=" + realComp + "  noArgCtor=" + screenNoArgOk);
             ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS) {
                 @Override protected String getCommonSuperClass(String t1, String t2) {
                     return "java/lang/Object";
@@ -134,6 +199,20 @@ public final class ScreenStubPatcher {
                         @Override
                         public void visitMethodInsn(int opcode, String owner, String mName,
                                                     String mDesc, boolean isInterface) {
+                            // CORRECTIF (NoSuchMethodError confirmé en jeu sur
+                            // 1.21.11 — voir screenHasNoArgConstructor) : le
+                            // stub déclare un constructeur no-arg ET un
+                            // (Component) — notre code source appelle TOUJOURS
+                            // le no-arg (super()), qui ne correspond au VRAI
+                            // constructeur Screen que sur certaines versions
+                            // (1.8.9). Sur les autres (1.21.11), on injecte un
+                            // Text.literal("") juste avant l'appel réel.
+                            if (isStubScreen(owner) && "<init>".equals(mName) && "()V".equals(mDesc) && !screenNoArgOk) {
+                                super.visitLdcInsn("");
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, realComp, literalMethodName, literalDesc, true);
+                                super.visitMethodInsn(opcode, realScreen, "<init>", "(L" + realComp + ";)V", false);
+                                return;
+                            }
                             if (isStubScreen(owner)) owner = realScreen;
                             else if (isStubComp(owner)) {
                                 owner = realComp;

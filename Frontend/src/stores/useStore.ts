@@ -63,6 +63,9 @@ interface Store {
   avoidBetaDependencies: boolean
   setAvoidBetaDependencies: (v: boolean) => void
 
+  syncGameSettings: boolean
+  setSyncGameSettings: (v: boolean) => void
+
   // ── Game state (par instance) ─────────────────────────────────────────────
   runningInstances: string[]
   isInstanceRunning: (id: string) => boolean
@@ -181,6 +184,9 @@ export const useStore = create<Store>()(
       avoidBetaDependencies: true,
       setAvoidBetaDependencies: (avoidBetaDependencies) => set({ avoidBetaDependencies }),
 
+      syncGameSettings: false,
+      setSyncGameSettings: (syncGameSettings) => set({ syncGameSettings }),
+
       // Game (multi-instance)
       runningInstances: [],
       isInstanceRunning: (id) => get().runningInstances.includes(id),
@@ -208,6 +214,7 @@ export const useStore = create<Store>()(
         brightness: s.brightness,
         instanceSyncMode: s.instanceSyncMode,
         avoidBetaDependencies: s.avoidBetaDependencies,
+        syncGameSettings: s.syncGameSettings,
         username: s.username,
         uuid: s.uuid,
         lastSession: s.lastSession,

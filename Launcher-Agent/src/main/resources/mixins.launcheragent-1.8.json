@@ -1,0 +1,39 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.yuyuframe.launcheragent.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "plugin": "com.yuyuframe.launcheragent.mixin.LauncherMixinConfigPlugin",
+  "refmap": "mixins.launcheragent.refmap.json",
+  "verbose": false,
+  "mixins": [],
+  "client": [
+    "client.v1_8.TitleScreenMixin189",
+    "client.v1_8.EntityCullingMixin",
+    "client.v1_8.GlobalUiRenderMixin189",
+    "client.v1_8.MixinGameRenderer189",
+    "client.v1_8.MixinToggleSprint189",
+    "client.v1_8.MixinToggleSneak189",
+    "client.v1_8.MixinSwingSpeed189",
+    "client.v1_8.MixinDiagonalSword189",
+    "client.v1_8.MixinOldItemRotations189",
+    "client.v1_8.MixinSwingWhileBlocking189",
+    "client.v1_8.MixinOldBow189",
+    "client.v1_8.MixinOldConsume189",
+    "client.v1_8.MixinCrosshair189",
+    "client.v1_8.MixinWorldTime189",
+    "client.v1_8.optimodule.MixinUnstackedItems189",
+    "client.v1_8.optimodule.MixinPlayerBackfaceCulling189",
+    "client.v1_8.optimodule.MixinEntityBackfaceCulling189",
+    "client.v1_8.optimodule.MixinLowAnimationTick189",
+    "client.v1_8.optimodule.MixinTileEntityRenderDistance189",
+    "client.v1_8.optimodule.MixinChunkBuilderThreads189",
+    "client.v1_8.optimodule.MixinCachedFancyClouds189",
+    "client.v1_8.optimodule.MixinLabelRenderDistance189",
+    "client.v1_8.optimodule.MixinCachedStringWidth189",
+    "client.v1_8.optimodule.MixinParticleRenderDistance189"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

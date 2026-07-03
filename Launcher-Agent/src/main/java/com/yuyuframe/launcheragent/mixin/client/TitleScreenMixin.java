@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "net.minecraft.client.gui.screen.TitleScreen")
 public abstract class TitleScreenMixin {
 
-    @Inject(method = "bg_()V", at = @At("TAIL"))
+    @Inject(method = "init()V", at = @At("TAIL"))
     private void la$onInit(CallbackInfo ci) {
         FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
         LauncherLog.ui(3, "[LauncherAgent] Hook TitleScreen.init() OK — pipeline Mixin opérationnel");

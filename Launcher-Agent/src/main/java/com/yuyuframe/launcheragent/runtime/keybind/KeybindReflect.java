@@ -41,11 +41,11 @@ public final class KeybindReflect {
             Field f = kbClass.getDeclaredField(fieldName);
             f.setAccessible(true);
             Object v = f.get(null);
-            if (v instanceof Map<?, ?> map) return new ArrayList<>(map.values());
+            if (v instanceof Map) return new ArrayList<Object>(((Map<?, ?>) v).values());
         } catch (Exception e) {
             LauncherLog.warn("[LauncherAgent-Keybind] getAllKeyBindings: " + e);
         }
-        return List.of();
+        return java.util.Collections.emptyList();
     }
 
     /** KeyBinding.getId() ("k", ()Ljava/lang/String;). */
@@ -56,7 +56,7 @@ public final class KeybindReflect {
     /** KeyBinding.isUnbound() ("m", ()Z). */
     public static boolean isUnbound(Object keyBinding) {
         Object r = invoke0(keyBinding, CLS_KEYBINDING, "m");
-        return r instanceof Boolean b && b;
+        return (r instanceof Boolean) && ((Boolean) r);
     }
 
     /** KeyBinding.getBoundKeyLocalizedText() ("n", ()Lyh;) — Text déjà localisé/formaté pour affichage. */
@@ -67,7 +67,7 @@ public final class KeybindReflect {
     /** KeyBinding.isDefault() ("o", ()Z) — la touche assignée est-elle celle par défaut. */
     public static boolean isDefault(Object keyBinding) {
         Object r = invoke0(keyBinding, CLS_KEYBINDING, "o");
-        return r instanceof Boolean b && b;
+        return (r instanceof Boolean) && ((Boolean) r);
     }
 
     /** KeyBinding.reset() ("i", ()V) — remet CETTE touche à sa valeur par défaut (appeler updateKeysByCode() après). */
@@ -226,7 +226,7 @@ public final class KeybindReflect {
         } catch (Exception e) {
             LauncherLog.warn("[LauncherAgent-Keybind] getAllCategories: " + e);
         }
-        return List.of();
+        return java.util.Collections.emptyList();
     }
 
     // ── Input (rebind listening) ─────────────────────────────────────────────

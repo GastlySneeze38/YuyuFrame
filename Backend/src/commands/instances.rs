@@ -181,10 +181,10 @@ pub async fn instance_duplicate(
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
-        db::instance_get(&db, &source_id, uid)
+        let src = db::instance_get(&db, &source_id, uid)
             .map_err(|e| e.to_string())?
-            .ok_or("Instance source introuvable")?
-            .loader
+            .ok_or("Instance source introuvable")?;
+        src.loader
     };
 
     let new_id = gen_id();
@@ -214,6 +214,34 @@ pub async fn instance_duplicate(
         .map_err(|e| e.to_string())?;
 
     Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new() })
+}
+
+/// Copie `options.txt` de l'instance vers un template global dans le dossier
+/// YuyuFrame — ce template sera appliqué aux nouvelles instances si le réglage
+/// "sync paramètres" est actif côté launcher.
+#[tauri::command]
+pub async fn instance_export_settings(instance_id: String) -> Result<(), String> {
+    let src = instance_dir(&instance_id).join("options.txt");
+    if !src.exists() {
+        return Err("Aucun fichier options.txt dans cette instance — lance le jeu au moins une fois pour le générer".into());
+    }
+    let dest = minecraft_dir().join("shared_options.txt");
+    tokio::fs::copy(&src, &dest).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Applique le template global `shared_options.txt` à une instance.
+/// Retourne `true` si le template existait et a été copié, `false` s'il est absent.
+#[tauri::command]
+pub async fn instance_apply_settings(instance_id: String) -> Result<bool, String> {
+    let src = minecraft_dir().join("shared_options.txt");
+    if !src.exists() {
+        return Ok(false);
+    }
+    tokio::fs::create_dir_all(instance_dir(&instance_id)).await.map_err(|e| e.to_string())?;
+    let dest = instance_dir(&instance_id).join("options.txt");
+    tokio::fs::copy(&src, &dest).await.map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 /// Synchronise la DB avec les dossiers réels au démarrage.

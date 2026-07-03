@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.mixin.service.LauncherMixinService;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
+import com.yuyuframe.launcheragent.runtime.version.VersionBracket;
+import com.yuyuframe.launcheragent.runtime.version.VersionBracketRegistry;
 import org.spongepowered.asm.launch.MixinBootstrap;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 import org.spongepowered.asm.mixin.Mixins;
@@ -43,58 +45,79 @@ public final class IsolatedBootstrap {
     private IsolatedBootstrap() {}
 
     /**
-     * @param fabric vrai si Fabric Loader est présent — déterminé par
-     *               LauncherAgent (pas redétectable ici : sous isolation, le
-     *               classloader de CETTE classe n'a justement pas accès aux
-     *               classes de Fabric, donc toute détection locale échouerait
-     *               systématiquement même quand Fabric est bien là).
+     * @param fabric    vrai si Fabric Loader est présent — déterminé par LauncherAgent
+     *                  (pas redétectable ici sous isolation classloader).
+     * @param mcVersion version Minecraft détectée par MinecraftVersionDetector.
      */
-    public static void start(Instrumentation inst, String yarnPath, boolean fabric) {
+    public static void start(Instrumentation inst, String yarnPath, boolean fabric, String mcVersion) {
         LauncherLog.agent(1, "[LauncherAgent] IsolatedBootstrap.start (classloader=" + IsolatedBootstrap.class.getClassLoader()
-            + ", fabric=" + fabric + ")");
+            + ", fabric=" + fabric + ", version=" + mcVersion + ")");
 
-        // Doit être fixé avant tout usage de MappingsRegistry ci-dessous : sous
-        // Fabric, les classes/méthodes/champs du jeu sont nommés "intermediary"
-        // à l'exécution, pas "official" (obfusqué brut Mojang) — voir
-        // MappingsRegistry.Scheme et docs/LauncherAgent/index.md.
+        VersionBracket bracket = VersionBracketRegistry.resolve(mcVersion);
+        if (bracket == null) {
+            LauncherLog.err("[LauncherAgent] Version MC \"" + mcVersion + "\" non supportée — aucun bracket "
+                + "ne correspond dans VersionBracketRegistry, bootstrap Mixin ABANDONNÉ (pas de Mixin appliqué, "
+                + "mais l'agent continue de tourner). Voir VersionBracketRegistry pour la liste des versions "
+                + "supportées et la convention pour en ajouter une.");
+            return;
+        }
+        LauncherLog.agent(1, "[LauncherAgent] Bracket de version résolu : " + bracket.key);
+
         MappingsRegistry.setScheme(fabric
             ? MappingsRegistry.Scheme.INTERMEDIARY
             : MappingsRegistry.Scheme.OFFICIAL);
 
-        // Doit être (re)fait ici, pas seulement dans LauncherAgent.premain() :
-        // sous Fabric, cette classe (et donc LauncherMixinService) est chargée
-        // par le classloader isolé — un objet DIFFÉRENT de celui que premain()
-        // a configuré côté classloader système. Sans ça, le champ statique
-        // Instrumentation de la copie isolée resterait null.
         LauncherMixinService.setInstrumentation(inst);
 
-        loadYarnMappings(yarnPath);
+        loadYarnMappings(yarnPath, bracket);
 
+        // Log de sanité : vérifie que la classe principale de la version est bien mappée.
+        // Même nom Yarn named "TitleScreen" sur les deux branches — Legacy Fabric
+        // (1.8.9) reprend la nomenclature Yarn moderne, PAS les noms MCP
+        // historiques type "GuiMainMenu" (vérifié dans mappings-1.8.9.tiny).
         if (MappingsRegistry.isLoaded()) {
-            String obfClass = MappingsRegistry.INSTANCE.map("net/minecraft/client/gui/screen/TitleScreen");
-            LauncherLog.agent(1, "[LauncherAgent] Yarn TitleScreen → \"" + obfClass + "\""
-                + (obfClass.equals("net/minecraft/client/gui/screen/TitleScreen") ? "  ← NON MAPPÉ" : "  ← OK"));
+            String probe = "net/minecraft/client/gui/screen/TitleScreen";
+            String obfClass = MappingsRegistry.INSTANCE.map(probe);
+            LauncherLog.agent(1, "[LauncherAgent] Yarn probe → \"" + obfClass + "\""
+                + (obfClass.equals(probe) ? "  ← NON MAPPÉ" : "  ← OK"));
         }
 
-        // Doit s'exécuter AVANT bootstrapMixin() (donc avant Mixins.addConfiguration) :
-        // Mixin lit le refmap au moment où il prépare la config. Le dossier
-        // "generated" est déjà sur le classpath isolé (ajouté par
-        // LauncherAgent.startIsolated() avant la construction du classloader) —
-        // il suffit d'y écrire le fichier pour qu'il devienne résolvable.
-        if (fabric) writeRefmapFile();
+        // Refmap requis dans TOUS les cas (vanilla ET Fabric) : nos @Inject
+        // utilisent des noms Yarn NAMED ("init", pas "bg_"/"b" en dur) — sans
+        // refmap écrit, Mixin valide les cibles contre la chaîne named
+        // littérale, qui ne correspond à rien dans le jar obfusqué chargé →
+        // "could not find any targets matching". refmapMethodReplacement() est
+        // scheme-aware (voir LauncherMixinService) : nom officiel brut en
+        // vanilla, intermediary sous Fabric — un seul mécanisme couvre les deux cas.
+        writeRefmapFile(inst, fabric);
 
-        Set<String> mixinTargets = discoverMixinTargets();
-        bootstrapMixin(inst, mixinTargets);
+        // Sélection du fichier de config Mixin selon la version MC.
+        String mixinConfig = bracket.mixinConfigResource;
+
+        Set<String> mixinTargets = discoverMixinTargets(mixinConfig);
+        bootstrapMixin(inst, mixinTargets, mixinConfig);
         scheduleDelayedRetransform(inst, mixinTargets);
     }
 
     /**
-     * Écrit mixins.launcheragent.refmap.json dans <agentDir>/generated/ —
-     * voir LauncherMixinService.buildRefmapJson() pour le contenu et
-     * LauncherAgent.startIsolated() pour pourquoi ce dossier précis (déjà sur
-     * le classpath du classloader isolé).
+     * Écrit mixins.launcheragent.refmap.json — voir LauncherMixinService.buildRefmapJson()
+     * pour le contenu.
+     *
+     * Deux mécanismes de résolution selon le mode de chargement :
+     *   - Fabric (isolé) : <agentDir>/generated/ est déjà sur le classpath du
+     *     classloader isolé dédié (ajouté par LauncherAgent.startIsolated()
+     *     AVANT sa construction) — écrire le fichier brut dans ce dossier
+     *     suffit, il devient résolvable immédiatement.
+     *   - Vanilla/Forge (non isolé) : IsolatedBootstrap tourne sur le
+     *     classloader SYSTÈME, que launcher.rs n'a jamais configuré pour
+     *     inclure <agentDir>/generated/ dans son -cp — écrire le fichier là
+     *     ne suffit pas, il resterait introuvable. java.lang.instrument
+     *     n'offre PAS d'équivalent "ajoute ce dossier au classpath système" à
+     *     chaud (seulement Instrumentation.appendToSystemClassLoaderSearch(),
+     *     qui n'accepte qu'un JarFile) — le refmap est donc empaqueté dans un
+     *     petit jar dédié, ajouté au classloader système via cette API.
      */
-    private static void writeRefmapFile() {
+    private static void writeRefmapFile(Instrumentation inst, boolean fabric) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
@@ -103,10 +126,24 @@ public final class IsolatedBootstrap {
             }
             java.io.File dir = new java.io.File(agentDir, "generated");
             dir.mkdirs();
-            java.io.File file = new java.io.File(dir, "mixins.launcheragent.refmap.json");
             String json = LauncherMixinService.buildRefmapJson();
-            java.nio.file.Files.write(file.toPath(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            LauncherLog.agent(1, "[LauncherAgent] refmap écrit : " + file + " = " + json);
+
+            if (fabric) {
+                java.io.File file = new java.io.File(dir, "mixins.launcheragent.refmap.json");
+                java.nio.file.Files.write(file.toPath(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                LauncherLog.agent(1, "[LauncherAgent] refmap écrit (fichier brut, classloader isolé) : " + file);
+            } else {
+                java.io.File jarFile = new java.io.File(dir, "refmap.jar");
+                try (java.util.jar.JarOutputStream jos =
+                        new java.util.jar.JarOutputStream(new java.io.FileOutputStream(jarFile))) {
+                    jos.putNextEntry(new java.util.zip.ZipEntry("mixins.launcheragent.refmap.json"));
+                    jos.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    jos.closeEntry();
+                }
+                inst.appendToSystemClassLoaderSearch(new java.util.jar.JarFile(jarFile));
+                LauncherLog.agent(1, "[LauncherAgent] refmap écrit (jar ajouté au classloader système) : " + jarFile);
+            }
+            LauncherLog.agent(1, "[LauncherAgent] refmap contenu : " + json);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] writeRefmapFile: " + t);
         }
@@ -125,7 +162,7 @@ public final class IsolatedBootstrap {
     }
 
     /** @return true si le bootstrap a réussi. */
-    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets) {
+    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig) {
         try {
             MixinBootstrap.init();
 
@@ -144,8 +181,8 @@ public final class IsolatedBootstrap {
                 LauncherLog.warn("[LauncherAgent] gotoPhase(DEFAULT) erreur: " + ex);
             }
 
-            Mixins.addConfiguration("mixins.launcheragent.json", (IMixinConfigSource) null);
-            LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée");
+            Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
+            LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + mixinConfig);
 
             LauncherMixinService.installWrapper();
 
@@ -160,6 +197,8 @@ public final class IsolatedBootstrap {
             }
 
             retransformLoadedTargets(inst, mixinTargets);
+            LauncherLog.agent(3, "[LauncherAgent] Composant Mixin initialisé avec succès ("
+                + mixinConfig + ", " + mixinTargets.size() + " cible(s) : " + mixinTargets + ")");
             return true;
         } catch (Throwable e) {
             // Throwable, pas Exception : certains échecs Mixin (ex: MixinInitialisationError)
@@ -170,7 +209,7 @@ public final class IsolatedBootstrap {
         }
     }
 
-    private static void loadYarnMappings(String explicitPath) {
+    private static void loadYarnMappings(String explicitPath, VersionBracket bracket) {
         if (explicitPath != null && !explicitPath.isEmpty()) {
             try {
                 if (explicitPath.endsWith(".jar") || explicitPath.endsWith(".zip")) {
@@ -185,6 +224,9 @@ public final class IsolatedBootstrap {
             }
         }
 
+        // Cherche d'abord un JAR Yarn dont le nom contient l'indice du bracket
+        // résolu (ex: "1.8.9" pour la tranche legacy189, "1.21.11" pour la
+        // tranche moderne actuelle) — voir VersionBracket.yarnJarNameHint.
         String[] searchRoots = {
             System.getProperty("user.home") + "\\.gradle\\caches\\fabric-loom",
             System.getProperty("user.home") + "\\.gradle\\caches",
@@ -192,7 +234,7 @@ public final class IsolatedBootstrap {
         };
         for (String root : searchRoots) {
             if (root == null) continue;
-            java.io.File found = findYarnJar(new java.io.File(root), 0);
+            java.io.File found = findYarnJar(new java.io.File(root), bracket.yarnJarNameHint, 0);
             if (found != null) {
                 try {
                     YarnMappings.loadFromJar(found.getAbsolutePath());
@@ -214,39 +256,56 @@ public final class IsolatedBootstrap {
             LauncherLog.agent(1, "[LauncherAgent] Yarn resource JAR non chargée : " + e.getMessage());
         }
 
-        LauncherLog.warn("[LauncherAgent] Yarn non disponible — " +
-            "passez yarn=<chemin vers yarn-X.X.X+build.Y-mergedv2.jar> en argument de l'agent");
+        LauncherLog.warn("[LauncherAgent] Yarn non disponible pour le bracket \"" + bracket.key + "\" — "
+            + "passez yarn=<chemin vers un jar Yarn mergedv2 contenant \"" + bracket.yarnJarNameHint
+            + "\"> en argument de l'agent (legacy189 : maven.legacyfabric.net).");
     }
 
-    private static java.io.File findYarnJar(java.io.File dir, int depth) {
+    /**
+     * Cherche un JAR Yarn dans {@code dir}. Priorité aux JARs dont le nom
+     * contient {@code yarnJarNameHint} (voir VersionBracket.yarnJarNameHint).
+     */
+    private static java.io.File findYarnJar(java.io.File dir, String yarnJarNameHint, int depth) {
         if (depth > 6 || !dir.isDirectory()) return null;
         java.io.File[] children = dir.listFiles();
         if (children == null) return null;
         for (java.io.File f : children) {
-            if (f.isFile() && f.getName().contains("yarn") && f.getName().endsWith("-mergedv2.jar")) {
-                return f;
-            }
+            if (!f.isFile() || !f.getName().contains("yarn") || !f.getName().endsWith("-mergedv2.jar")) continue;
+            if (yarnJarNameHint != null && f.getName().contains(yarnJarNameHint)) return f;
+        }
+        // Deuxième passe : accepter n'importe quel Yarn si rien de version-exact trouvé
+        for (java.io.File f : children) {
+            if (f.isFile() && f.getName().contains("yarn") && f.getName().endsWith("-mergedv2.jar")) return f;
         }
         for (java.io.File f : children) {
             if (f.isDirectory()) {
-                java.io.File r = findYarnJar(f, depth + 1);
+                java.io.File r = findYarnJar(f, yarnJarNameHint, depth + 1);
                 if (r != null) return r;
             }
         }
         return null;
     }
 
-    private static Set<String> discoverMixinTargets() {
+    /** InputStream.readAllBytes() n'existe qu'à partir de Java 9 — équivalent Java 8. */
+    private static byte[] readAllBytes(java.io.InputStream is) throws java.io.IOException {
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int n;
+        while ((n = is.read(chunk)) != -1) buf.write(chunk, 0, n);
+        return buf.toByteArray();
+    }
+
+    private static Set<String> discoverMixinTargets(String configName) {
         Set<String> targets = new LinkedHashSet<>();
         Map<String, String> unmapped = new LinkedHashMap<>();
         try {
             ClassLoader agentCL = IsolatedBootstrap.class.getClassLoader();
-            try (java.io.InputStream cfgIs = agentCL.getResourceAsStream("mixins.launcheragent.json")) {
+            try (java.io.InputStream cfgIs = agentCL.getResourceAsStream(configName)) {
                 if (cfgIs == null) {
-                    LauncherLog.err("[LauncherAgent] mixins.launcheragent.json introuvable");
+                    LauncherLog.err("[LauncherAgent] " + configName + " introuvable dans le JAR");
                     return targets;
                 }
-                String json = new String(cfgIs.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                String json = new String(readAllBytes(cfgIs), java.nio.charset.StandardCharsets.UTF_8);
                 String pkg = jsonString(json, "package");
                 if (pkg == null) return targets;
 
@@ -257,7 +316,11 @@ public final class IsolatedBootstrap {
                     int arrEnd = json.indexOf(']', arrStart);
                     if (arrStart < 0 || arrEnd < 0) continue;
 
-                    Matcher m = Pattern.compile("\"([A-Za-z][A-Za-z0-9$.]+)\"")
+                    // "_" inclus : requis par le package v1_8 (Mixins 1.8.9) — sans
+                    // lui, "client.v1_8.XXX" ne matche jamais (aucune erreur ni
+                    // warning déclenché non plus : targets reste juste vide en
+                    // silence, bug découvert via diagnostic fichier, voir diag.log).
+                    Matcher m = Pattern.compile("\"([A-Za-z][A-Za-z0-9$._]+)\"")
                             .matcher(json.substring(arrStart + 1, arrEnd));
                     while (m.find()) {
                         String entry = m.group(1);
@@ -269,7 +332,7 @@ public final class IsolatedBootstrap {
                                 unmapped.put(entry, ".class introuvable dans le JAR (" + classRes + ")");
                                 continue;
                             }
-                            targets.addAll(extractMixinTargets(cls.readAllBytes(), entry, unmapped));
+                            targets.addAll(extractMixinTargets(readAllBytes(cls), entry, unmapped));
                         } catch (Throwable e) {
                             LauncherLog.err("[LauncherAgent]   → ERREUR " + entry + ": " + e);
                             unmapped.put(entry, "exception au scan : " + e);
@@ -365,6 +428,13 @@ public final class IsolatedBootstrap {
         int count = 0;
         for (Class<?> cls : inst.getAllLoadedClasses()) {
             if (!targets.contains(cls.getName())) continue;
+            // Défensif : si la classe est déjà mixée (voir countHooks), pas besoin
+            // de retransform, même ici — même raisonnement que scheduleDelayedRetransform.
+            if (countHooks(cls) > 0) {
+                LauncherLog.agent(1, "[LauncherAgent] Cible déjà mixée (retransform immédiat): "
+                        + cls.getName() + " — skip");
+                continue;
+            }
             boolean modifiable = inst.isModifiableClass(cls);
             LauncherLog.agent(1, "[LauncherAgent] Retransform immédiat: " + cls.getName()
                     + " | modifiable=" + modifiable);
@@ -414,10 +484,25 @@ public final class IsolatedBootstrap {
         t.start();
     }
 
+    /**
+     * CORRECTIF (bug de timing réel, trouvé via log DIAG dans
+     * LauncherMixinTransformerWrapper — voir historique du projet) : Mixin
+     * RENOMME les méthodes handler effectivement appliquées en
+     * "handler$<id>$<nomOriginal>" (ex: "handler$zza000$la$onInit", vu dans
+     * les logs) — un nom qui NE COMMENCE JAMAIS par "la$" même quand
+     * l'injection a parfaitement réussi. L'ancien test
+     * ("startsWith(\"la$\")") ne trouvait donc JAMAIS rien, y compris sur des
+     * classes déjà mixées avec succès au chargement initial — ce qui faisait
+     * forcer un retransform à chaud INUTILE (et dans certains cas dangereux,
+     * en conflit avec le mixin d'un autre mod sur la même classe, ex:
+     * fabric-rendering-v1 sur GameRenderer) sur des cibles qui n'en avaient
+     * en réalité aucun besoin. Chercher "la$" n'importe où dans le nom
+     * (au lieu d'exiger qu'il soit en tête) détecte correctement ce cas.
+     */
     private static int countHooks(Class<?> cls) {
         int n = 0;
         for (java.lang.reflect.Method m : cls.getDeclaredMethods())
-            if (m.getName().startsWith("la$")) n++;
+            if (m.getName().contains("la$")) n++;
         return n;
     }
 }
