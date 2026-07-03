@@ -1,166 +1,224 @@
 package com.yuyuframe.launcheragent.runtime.module.optimodule;
 
-import com.sun.jna.platform.win32.Kernel32;
+import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinDef.HWND;
 import com.sun.jna.platform.win32.WinDef.RECT;
-import com.sun.jna.platform.win32.WinUser.HMONITOR;
-import com.sun.jna.platform.win32.WinUser.MONITORINFO;
-import com.sun.jna.ptr.IntByReference;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+
 /**
  * Fenêtre sans bordure (borderless windowed fullscreen) via l'API Win32 pure
- * (JNA — jna.jar/jna-platform.jar, PAS de nouvelle DLL Rust : contrairement à
- * content_core.dll/rust_core.dll, aucun code natif à écrire/compiler nous-mêmes
- * ici, JNA embarque déjà son propre pont natif générique). Voir
+ * (JNA — jna.jar/jna-platform.jar, PAS de nouvelle DLL Rust). Voir
  * BorderlessWindowModule pour le module/toggle, MixinBorderlessWindow189 pour
  * le point d'entrée (intercepte MinecraftClient.toggleFullscreen(), donc F11
  * reste la touche d'activation).
  *
- * Manipule directement le HWND réel de la fenêtre LWJGL2 (style + taille/
- * position), SANS jamais toucher au contexte OpenGL (aucun Display.destroy()/
- * create() ici, aucune perte de texture) — contrairement au vrai plein écran
- * natif (Display.setFullscreen), qui change de mode vidéo et cause les soucis
- * remontés par l'utilisateur (alt-tab instable, écran noir, minimisation) :
- * ici la fenêtre reste une fenêtre normale aux yeux de Windows (alt-tab/
- * changement d'appli instantané, stabilité d'une fenêtre classique), juste
- * sans cadre ni bordure et redimensionnée/repositionnée sur tout l'écran.
+ * On NE calcule PLUS aucune géométrie nous-mêmes (ni via java.awt.Toolkit, ni
+ * via MonitorFromWindow/GetMonitorInfo, ni via Display.setDisplayMode/
+ * setLocation — trois variantes essayées, chacune a fini par déraper d'une
+ * façon différente : bordure qui reste, fenêtre plus grande que demandée,
+ * débordement en bas d'écran). À la place : on retire juste la bordure
+ * (SetWindowLong) puis {@code ShowWindow(SW_MAXIMIZE)} — une fenêtre SANS
+ * WS_CAPTION/WS_THICKFRAME qu'on maximise remplit NATIVEMENT l'écran entier
+ * (pas juste la work area hors barre des tâches, contrairement à une fenêtre
+ * décorée normale), Windows s'occupe de tout le calcul. On se contente
+ * ensuite de RELIRE le résultat (GetWindowRect) pour mettre à jour l'état
+ * interne de Minecraft ({@link #applyMinecraftResize}) — jamais pour
+ * redemander à LWJGL/Windows de redimensionner quoi que ce soit une seconde
+ * fois. Symétriquement, sortir repasse par {@code ShowWindow(SW_RESTORE)},
+ * qui restaure automatiquement la taille/position "normale" que Windows a
+ * mémorisée lui-même en entrant dans l'état maximisé — pas besoin de la
+ * sauvegarder/réappliquer nous-mêmes non plus.
  *
- * IMPORTANT — pourquoi on appelle AUSSI Display.setDisplayMode() (LWJGL2, via
- * réflexion, même technique que UiInputPollerLegacy) : un SetWindowPos Win32
- * pur redimensionne bien la fenêtre RÉELLE, mais LWJGL2 ne surveille pas les
- * resize externes sur une fenêtre non-resizable (Display.setResizable() jamais
- * appelé par vanilla 1.8.9) — sans passer par son API, Display.getWidth()/
- * getHeight() (donc le viewport GL et Minecraft.resize()) restent bloqués sur
- * l'ANCIENNE taille (symptôme observé : bordure enlevée mais zone de rendu pas
- * redimensionnée), et LWJGL peut même re-forcer la fenêtre à son ancienne
- * taille/position au prochain Display.update(). setDisplayMode() est le point
- * d'entrée normal que vanilla utilise déjà pour tout changement de résolution
- * — il redimensionne la fenêtre ET met à jour l'état interne de LWJGL/déclenche
- * le resize de Minecraft, sans jamais recréer le contexte GL (aucune perte de
- * texture, juste un changement de taille de la surface de rendu).
+ * Ne touche JAMAIS au contexte OpenGL (aucun Display.destroy()/create()) —
+ * juste la taille/position/bordure de la fenêtre + les champs de cache
+ * width/height de Minecraft, donc aucune perte de texture.
  */
 public final class BorderlessWindowNative {
     private BorderlessWindowNative() {}
 
-    private static HWND cachedHwnd;
-    private static int savedStyle;
-    private static RECT savedRect;
-    private static Object savedDisplayMode;
+    private static final HWND HWND_TOPMOST = new HWND(Pointer.createConstant(-1));
+    private static final HWND HWND_NOTOPMOST = new HWND(Pointer.createConstant(-2));
+
+    private static final int GWL_STYLE = -16;
+    // WS_OVERLAPPEDWINDOW = WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_MINIMIZEBOX|WS_MAXIMIZEBOX
+    private static final int WS_OVERLAPPEDWINDOW = User32.WS_CAPTION | User32.WS_SYSMENU
+        | User32.WS_THICKFRAME | User32.WS_MINIMIZEBOX | User32.WS_MAXIMIZEBOX;
+
     private static boolean active;
 
-    private static Class<?> displayClass() { return McReflect.rawClass("org.lwjgl.opengl.Display"); }
-    private static Class<?> displayModeClass() { return McReflect.rawClass("org.lwjgl.opengl.DisplayMode"); }
+    /**
+     * HWND réel de la fenêtre LWJGL2 — lu directement depuis le champ interne
+     * privé {@code Display.display_impl} (implémentation spécifique
+     * plateforme, {@code WindowsDisplay} sous Windows) puis sa méthode
+     * {@code getHwnd()} — même technique que BorderlessFullscreen (mod Forge
+     * 1.8.9 open source, github.com/sky-is-winning/BorderlessFullscreen),
+     * plus fiable qu'une énumération EnumWindows (jamais ambigu même si le
+     * process a d'autres fenêtres visibles). Jamais mis en cache : résolu à
+     * chaque appel, au cas où LWJGL recréerait la fenêtre en interne.
+     */
+    private static HWND ownWindow() {
+        try {
+            Class<?> displayClass = McReflect.rawClass("org.lwjgl.opengl.Display");
+            if (displayClass == null) return null;
+            Field implField = displayClass.getDeclaredField("display_impl");
+            implField.setAccessible(true);
+            Object displayImpl = implField.get(null);
+            if (displayImpl == null) return null;
 
-    /** {@code Display.setDisplayMode(new DisplayMode(width, height))} — voir la javadoc de classe pour pourquoi c'est nécessaire en plus de SetWindowPos. */
-    private static void setLwjglDisplayMode(int width, int height) throws Exception {
-        Class<?> displayClass = displayClass(), modeClass = displayModeClass();
-        if (displayClass == null || modeClass == null) return;
-        Object mode = modeClass.getConstructor(int.class, int.class).newInstance(width, height);
-        McReflect.rawMethod(displayClass, "setDisplayMode", modeClass).invoke(null, mode);
+            Method getHwnd = displayImpl.getClass().getDeclaredMethod("getHwnd");
+            getHwnd.setAccessible(true);
+            long hwnd = (long) getHwnd.invoke(displayImpl);
+            return new HWND(Pointer.createConstant(hwnd));
+        } catch (Throwable t) {
+            LauncherLog.err("[BorderlessWindowNative] ownWindow: " + t);
+            return null;
+        }
     }
 
-    private static Object currentLwjglDisplayMode() throws Exception {
-        Class<?> displayClass = displayClass();
-        if (displayClass == null) return null;
-        return McReflect.rawMethod(displayClass, "getDisplayMode").invoke(null);
+    // ── org.lwjgl.input.Mouse (API publique, réflexion) — grab/curseur, pour éviter que le mouse-look devienne erratique pendant la transition ──
+
+    private static Class<?> mouseClass() { return McReflect.rawClass("org.lwjgl.input.Mouse"); }
+
+    private static boolean mouseGrabbed() {
+        try { return (boolean) McReflect.rawMethod(mouseClass(), "isGrabbed").invoke(null); }
+        catch (Throwable t) { return false; }
+    }
+
+    private static void setMouseGrabbed(boolean grabbed) {
+        try { McReflect.rawMethod(mouseClass(), "setGrabbed", boolean.class).invoke(null, grabbed); }
+        catch (Throwable ignored) {}
+    }
+
+    private static void centerCursor(int width, int height) {
+        try { McReflect.rawMethod(mouseClass(), "setCursorPosition", int.class, int.class).invoke(null, width / 2, height / 2); }
+        catch (Throwable ignored) {}
     }
 
     /**
-     * Résout le HWND de la fenêtre du jeu par énumération des fenêtres visibles
-     * du process courant (EnumWindows + GetWindowThreadProcessId) — PAS via les
-     * internes LWJGL2 (Display.getImplementation() est privé/spécifique
-     * plateforme, non garanti stable d'une version LWJGL à l'autre). Premier
-     * match retenu et mis en cache : Minecraft n'a qu'une seule fenêtre top-level
-     * visible.
+     * Appelle {@code MinecraftClient.onResolutionChanged(width, height)}
+     * (Yarn method_2923, PRIVATE — vérifié par désassemblage bytecode réel du
+     * 1.8.9.jar) : c'est LA vraie méthode vanilla de resize, PAS juste
+     * resizeFramebuffer() — elle clampe width/height (Math.max(1, ...)),
+     * notifie l'écran actuellement ouvert via un objet Window/ScaledResolution
+     * (repositionne ses propres widgets à la nouvelle résolution), RECRÉE
+     * LoadingScreenRenderer (dépend de la résolution), PUIS appelle
+     * resizeFramebuffer() en dernier.
      */
-    private static HWND ownWindow() {
-        if (cachedHwnd != null) return cachedHwnd;
+    private static void applyMinecraftResize(int width, int height) {
         try {
-            int pid = Kernel32.INSTANCE.GetCurrentProcessId();
-            HWND[] found = new HWND[1];
-            User32.INSTANCE.EnumWindows((hWnd, data) -> {
-                IntByReference owner = new IntByReference();
-                User32.INSTANCE.GetWindowThreadProcessId(hWnd, owner);
-                if (owner.getValue() == pid && User32.INSTANCE.IsWindowVisible(hWnd)) {
-                    found[0] = hWnd;
-                    return false; // arrête l'énumération
-                }
-                return true;
-            }, null);
-            cachedHwnd = found[0];
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+            Method onResolutionChanged = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "onResolutionChanged", int.class, int.class);
+            if (onResolutionChanged != null) onResolutionChanged.invoke(mc, width, height);
+
+            Method updateDisplay = McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "updateDisplay");
+            if (updateDisplay != null) updateDisplay.invoke(mc);
         } catch (Throwable t) {
-            LauncherLog.err("[BorderlessWindowNative] ownWindow: " + t);
+            LauncherLog.err("[BorderlessWindowNative] applyMinecraftResize: " + t);
         }
-        return cachedHwnd;
     }
 
-    /** Retire la bordure et redimensionne/repositionne sur le moniteur courant (celui de la fenêtre, pas forcément le principal). */
+    /**
+     * Dance de focus barre des tâches — sans ça Windows peut laisser la
+     * fenêtre TOPMOST fraîchement redimensionnée dans un état visuel
+     * incohérent (mal repeinte) pendant un court instant. Même technique que
+     * BorderlessFullscreen.
+     */
+    private static void refocusDance(HWND hwnd) {
+        try {
+            HWND shell = User32.INSTANCE.FindWindow("Shell_TrayWnd", null);
+            if (shell != null) {
+                User32.INSTANCE.SetForegroundWindow(shell);
+                Thread.sleep(50);
+            }
+            User32.INSTANCE.SetForegroundWindow(hwnd);
+        } catch (Throwable ignored) {}
+    }
+
+    /** Retire la bordure puis maximise — voir la javadoc de classe pour le pourquoi. */
     public static void enterBorderless() {
+        boolean grabbed = mouseGrabbed();
+        if (grabbed) setMouseGrabbed(false);
         try {
             HWND hwnd = ownWindow();
             if (hwnd == null) return;
 
-            savedStyle = User32.INSTANCE.GetWindowLong(hwnd, User32.GWL_STYLE);
-            savedRect = new RECT();
-            User32.INSTANCE.GetWindowRect(hwnd, savedRect);
-            try { savedDisplayMode = currentLwjglDisplayMode(); } catch (Throwable ignored) {}
-
-            HMONITOR monitor = User32.INSTANCE.MonitorFromWindow(hwnd, User32.MONITOR_DEFAULTTONEAREST);
-            MONITORINFO info = new MONITORINFO();
-            info.cbSize = info.size();
-            User32.INSTANCE.GetMonitorInfo(monitor, info);
-            RECT r = info.rcMonitor;
-            int width = r.right - r.left, height = r.bottom - r.top;
-
-            int newStyle = savedStyle & ~(User32.WS_CAPTION | User32.WS_THICKFRAME
-                | User32.WS_MINIMIZEBOX | User32.WS_MAXIMIZEBOX | User32.WS_SYSMENU);
-            User32.INSTANCE.SetWindowLong(hwnd, User32.GWL_STYLE, newStyle);
+            int style = User32.INSTANCE.GetWindowLong(hwnd, GWL_STYLE);
+            int newStyle = style & ~WS_OVERLAPPEDWINDOW;
+            User32.INSTANCE.SetWindowLong(hwnd, GWL_STYLE, newStyle);
             // Point de non-retour : la bordure est déjà enlevée sur la vraie
-            // fenêtre — actif à partir d'ici même si la suite (resize LWJGL,
-            // repositionnement) échoue, sinon un F11 suivant ne ferait plus
-            // rien (exitBorderless() renvoie immédiatement si !active) et
-            // l'utilisateur resterait bloqué sans bordure ET sans pouvoir
-            // revenir en arrière (bug remonté par l'utilisateur).
+            // fenêtre — actif à partir d'ici même si la suite échoue, sinon
+            // un F11 suivant ne ferait plus rien (exitBorderless() renvoie
+            // immédiatement si !active) et l'utilisateur resterait bloqué.
             active = true;
 
-            // Redimensionne RÉELLEMENT la surface de rendu (voir javadoc de
-            // classe) — sans ça la fenêtre change de taille côté Windows mais
-            // Minecraft/LWJGL continuent de dessiner à l'ancienne taille.
-            setLwjglDisplayMode(width, height);
+            // Force Windows à recalculer la non-client area sur le NOUVEAU
+            // style AVANT de maximiser (sinon ShowWindow peut se baser sur
+            // d'anciennes métriques de bordure encore en cache).
+            User32.INSTANCE.SetWindowPos(hwnd, null, 0, 0, 0, 0,
+                User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOZORDER | User32.SWP_FRAMECHANGED);
+            User32.INSTANCE.ShowWindow(hwnd, User32.SW_MAXIMIZE);
+            User32.INSTANCE.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                User32.SWP_NOMOVE | User32.SWP_NOSIZE);
 
-            User32.INSTANCE.SetWindowPos(hwnd, null, r.left, r.top, width, height,
-                User32.SWP_NOZORDER | User32.SWP_NOACTIVATE | User32.SWP_FRAMECHANGED);
+            // On relit la géométrie RÉELLE que Windows a choisie — jamais
+            // recalculée/réimposée par nous (voir javadoc de classe).
+            RECT rect = new RECT();
+            User32.INSTANCE.GetWindowRect(hwnd, rect);
+            int width = rect.right - rect.left;
+            int height = rect.bottom - rect.top;
+
+            applyMinecraftResize(width, height);
+            refocusDance(hwnd);
+            centerCursor(width, height);
         } catch (Throwable t) {
             LauncherLog.err("[BorderlessWindowNative] enterBorderless: " + t);
+        } finally {
+            if (grabbed) setMouseGrabbed(true);
         }
     }
 
-    /** Restaure exactement le style/la position/la taille/le mode d'affichage sauvegardés par {@link #enterBorderless()} — ne fait rien si on n'était pas actif. */
+    /** Restaure bordure + taille/position d'origine (mémorisées par Windows lui-même, voir javadoc de classe) — ne fait rien si on n'était pas actif. */
     public static void exitBorderless() {
         if (!active) return;
+        boolean grabbed = mouseGrabbed();
+        if (grabbed) setMouseGrabbed(false);
         try {
             HWND hwnd = ownWindow();
-            if (hwnd != null && savedRect != null) {
-                User32.INSTANCE.SetWindowLong(hwnd, User32.GWL_STYLE, savedStyle);
-                if (savedDisplayMode != null) {
-                    try {
-                        McReflect.rawMethod(displayClass(), "setDisplayMode", displayModeClass()).invoke(null, savedDisplayMode);
-                    } catch (Throwable t) {
-                        LauncherLog.err("[BorderlessWindowNative] restore setDisplayMode: " + t);
-                    }
-                }
-                User32.INSTANCE.SetWindowPos(hwnd, null, savedRect.left, savedRect.top,
-                    savedRect.right - savedRect.left, savedRect.bottom - savedRect.top,
-                    User32.SWP_NOZORDER | User32.SWP_NOACTIVATE | User32.SWP_FRAMECHANGED);
+            if (hwnd != null) {
+                // Sort de l'état "maximisé" AVANT de restaurer la bordure —
+                // sinon la fenêtre resterait logiquement maximisée avec un
+                // style redécoré, incohérent. Restaure aussi automatiquement
+                // la taille/position "normale" d'avant (mémorisée par Windows
+                // lui-même dans le WINDOWPLACEMENT de la fenêtre).
+                User32.INSTANCE.ShowWindow(hwnd, User32.SW_RESTORE);
+
+                int style = User32.INSTANCE.GetWindowLong(hwnd, GWL_STYLE);
+                style |= WS_OVERLAPPEDWINDOW;
+                User32.INSTANCE.SetWindowLong(hwnd, GWL_STYLE, style);
+
+                User32.INSTANCE.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                    User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
+
+                RECT rect = new RECT();
+                User32.INSTANCE.GetWindowRect(hwnd, rect);
+                int width = rect.right - rect.left;
+                int height = rect.bottom - rect.top;
+
+                applyMinecraftResize(width, height);
+                centerCursor(width, height);
             }
         } catch (Throwable t) {
             LauncherLog.err("[BorderlessWindowNative] exitBorderless: " + t);
         } finally {
             active = false;
+            if (grabbed) setMouseGrabbed(true);
         }
     }
 
