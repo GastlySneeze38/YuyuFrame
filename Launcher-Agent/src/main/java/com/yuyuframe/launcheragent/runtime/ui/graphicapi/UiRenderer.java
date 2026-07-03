@@ -2,8 +2,10 @@ package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 
 import java.lang.reflect.Method;
+import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,11 +19,27 @@ import java.util.Map;
  * le même nom de paquet, donc résolus par réflexion comme le reste de
  * l'agent : org.lwjgl n'est PAS obfusqué, pas besoin de MappingsRegistry ici).
  *
- * GLSL 120 volontairement (pas 330+) : compatible profil de compatibilité
- * GL2.1 (1.8.9/LWJGL2) ET GL3.2+ compat (1.21+/LWJGL3) sans variante par
- * version — à valider en jeu sur les deux (voir docs/LauncherAgent/index.md).
+ * DEUX PIPELINES DE RENDU (voir {@link #modern}, historique du projet) :
+ *  - LEGACY (1.8.9) : pipeline fixe OpenGL 1.x/2.x (glBegin/glVertex2f,
+ *    glMatrixMode/glPushMatrix/glOrtho, ftransform()/gl_Color côté shader) —
+ *    confirmé fonctionnel en jeu sur 1.8.9 (contexte GL2.1 compatibilité).
+ *  - MODERNE (1.21.11+) : ce même pipeline fixe crashe NATIVEMENT (JVM,
+ *    0xC0000409) sur cette version — confirmé en test réel, diagnostic
+ *    ligne par ligne, jusqu'à isoler `glMatrixMode` lui-même comme point de
+ *    crash (après un premier correctif ayant déjà isolé et supprimé
+ *    `glPushAttrib`, également fautif). Le contexte GL de Minecraft 1.21.11
+ *    n'accepte donc PLUS aucune fonction de la pile de matrices ni du mode
+ *    immédiat. Remplacé par un pipeline VAO/VBO + matrice de projection
+ *    explicite en uniform + shaders GLSL 150 (in/out, pas de gl_Vertex/
+ *    gl_Color/ftransform), voir ensure*ShaderInitModern / draw*Modern.
  */
 public final class UiRenderer {
+
+    /** Déterminé une fois à la construction — voir la javadoc de la classe. */
+    private final boolean modern;
+
+    /** true si ce renderer utilise le pipeline moderne (1.21.11+), false si legacy (1.8.9) — voir javadoc de la classe. */
+    public boolean isModern() { return modern; }
 
     /** Voir drawVanillaItemIcon — log de diagnostic une seule fois, pas à chaque frame/icône. */
     private static boolean DIAG_LOGGED = false;
@@ -144,7 +162,134 @@ public final class UiRenderer {
     // premier drawText(), jamais régénéré ensuite (l'atlas ne change pas).
     private final Map<UiFont, Integer> fontTextures = new HashMap<>();
 
+    // ══════════════════════════════════════════════════════════════════════
+    // ── Pipeline MODERNE (1.21.11+) — voir javadoc de la classe pour le
+    // pourquoi. GLSL 150 (in/out, pas de builtins fixed-function), matrice de
+    // projection explicite en uniform (pas de glMatrixMode/glOrtho), VAO/VBO +
+    // glDrawArrays (pas de glBegin/glVertex2f). Un seul VAO/VBO partagé par
+    // les 3 shaders (même layout de vertex : vec2 position + vec2 texCoord =
+    // 4 floats/sommet, texCoord ignoré par les shaders rect/vignette).
+    // ══════════════════════════════════════════════════════════════════════
+
+    private static final String VERTEX_SRC_MODERN =
+        "#version 150\n" +
+        "in vec2 aPos;\n" +
+        "in vec2 aTexCoord;\n" +
+        "uniform mat4 uProjection;\n" +
+        "out vec2 vTexCoord;\n" +
+        "void main() {\n" +
+        "    gl_Position = uProjection * vec4(aPos, 0.0, 1.0);\n" +
+        "    vTexCoord = aTexCoord;\n" +
+        "}\n";
+
+    private static final String FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform vec4 uColor;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 p = gl_FragCoord.xy;\n" +
+        "    vec2 innerMin = u_Rect.xy + vec2(u_Radius);\n" +
+        "    vec2 innerMax = u_Rect.zw - vec2(u_Radius);\n" +
+        "    vec2 clamped = clamp(p, innerMin, innerMax);\n" +
+        "    float dist = length(p - clamped);\n" +
+        "    float alpha = 1.0 - smoothstep(u_Radius - 1.0, u_Radius, dist);\n" +
+        "    fragColor = vec4(uColor.rgb, uColor.a * alpha);\n" +
+        "}\n";
+
+    /**
+     * Shader "couleur plate" — AUCUN calcul de distance/alpha, juste
+     * {@code fragColor = uColor} tel quel. Nécessaire pour radius&lt;=0 (rect
+     * plein sans coins arrondis) : réutiliser le shader vignette avec un
+     * {@code u_VSize} proche de 0 (tentative initiale) est FAUX — ce shader
+     * calcule un dégradé du BORD vers le CENTRE (opaque au bord, transparent
+     * au centre), l'inverse de ce qu'il faut ; avec u_VSize≈0 le dégradé
+     * atteint alpha≈0 quasi partout (t=distEdge/u_VSize sature à 1 dès que
+     * distEdge dépasse quelques centièmes de pixel) → rect INVISIBLE partout
+     * sauf littéralement sur son contour. Confirmé en jeu (carré de test
+     * radius=0 invisible) — voir historique du projet.
+     */
+    private static final String FLAT_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec4 uColor;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    fragColor = uColor;\n" +
+        "}\n";
+
+    private int flatProgramModern = -1;
+    private int uColorFlatModern = -1, uProjectionFlatModern = -1;
+    private boolean flatInitFailedModern = false;
+
+    private int rectProgramModern = -1;
+    private int uRectModern = -1, uRadiusModern = -1, uColorRectModern = -1, uProjectionRectModern = -1;
+    private boolean rectInitFailedModern = false;
+
+    private static final String VIGNETTE_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec2 u_ViewportSize;\n" +
+        "uniform float u_VSize;\n" +
+        "uniform vec4 uColor;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 p = gl_FragCoord.xy;\n" +
+        "    float distTop = u_ViewportSize.y - p.y;\n" +
+        "    float distBottom = p.y;\n" +
+        "    float distLeft = p.x;\n" +
+        "    float distRight = u_ViewportSize.x - p.x;\n" +
+        "    float distEdge = min(min(distTop, distBottom), min(distLeft, distRight));\n" +
+        "    float t = clamp(distEdge / u_VSize, 0.0, 1.0);\n" +
+        "    float eased = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
+        "    float alpha = 1.0 - eased;\n" +
+        "    float dither = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;\n" +
+        "    alpha = clamp(alpha + dither / 128.0, 0.0, 1.0);\n" +
+        "    fragColor = vec4(uColor.rgb, uColor.a * alpha);\n" +
+        "}\n";
+
+    private int vignetteProgramModern = -1;
+    private int uViewportSizeModern = -1, uVSizeModern = -1, uColorVignetteModern = -1, uProjectionVignetteModern = -1;
+    private boolean vignetteInitFailedModern = false;
+
+    private static final String TEXT_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform sampler2D u_Tex;\n" +
+        "uniform vec4 uColor;\n" +
+        "in vec2 vTexCoord;\n" +
+        "out vec4 fragColor;\n" +
+        "const float BIAS = 0.06;\n" +
+        "void main() {\n" +
+        "    float dist = texture(u_Tex, vTexCoord).a + BIAS;\n" +
+        "    float w = fwidth(dist);\n" +
+        "    float alpha = smoothstep(0.5 - w, 0.5 + w, dist);\n" +
+        "    fragColor = vec4(uColor.rgb, uColor.a * alpha);\n" +
+        "}\n";
+
+    private int textProgramModern = -1;
+    private int uTexModern = -1, uColorTextModern = -1, uProjectionTextModern = -1;
+    private boolean textInitFailedModern = false;
+
+    private int modernVao = -1, modernVbo = -1;
+    private boolean modernBuffersInitFailed = false;
+    // Capacité courante du VBO en sommets (redimensionné au besoin — drawText
+    // peut avoir besoin de bien plus de 4 sommets pour une chaîne entière,
+    // 6 sommets/glyphe car GL_TRIANGLES, pas de fan possible pour des quads
+    // disjoints contrairement à rect/vignette qui n'en ont besoin que d'UN).
+    private int modernVboCapacityVerts = 0;
+
     private static UiRenderer instance;
+
+    /**
+     * "1_8"/"1_8_9" → pipeline legacy ; toute autre version détectée → pipeline
+     * moderne (voir javadoc de la classe). Même détection que
+     * {@code IsolatedBootstrap}/{@code VersionBracketRegistry} — la version
+     * MC est déjà posée en system property par {@code IsolatedBootstrap.start()}
+     * avant que quoi que ce soit ne s'affiche, donc toujours dispo ici.
+     */
+    private UiRenderer() {
+        String mcVersion = System.getProperty("launcheragent.mcVersion", "");
+        this.modern = !MinecraftVersionDetector.isLegacy189(mcVersion);
+    }
 
     public static UiRenderer get(ClassLoader gameClassLoader) {
         if (instance == null) instance = new UiRenderer();
@@ -179,6 +324,37 @@ public final class UiRenderer {
         }
     }
 
+    private void ensureRectShaderInitModern() {
+        if (rectProgramModern != -1 || rectInitFailedModern) return;
+        try {
+            rectProgramModern = compileModernProgram(VERTEX_SRC_MODERN, FRAGMENT_SRC_MODERN);
+            uRectModern = glGetUniformLocation(rectProgramModern, "u_Rect");
+            uRadiusModern = glGetUniformLocation(rectProgramModern, "u_Radius");
+            uColorRectModern = glGetUniformLocation(rectProgramModern, "uColor");
+            uProjectionRectModern = glGetUniformLocation(rectProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader rect (moderne) compilé, program=" + rectProgramModern
+                + " uRect=" + uRectModern + " uRadius=" + uRadiusModern
+                + " uColor=" + uColorRectModern + " uProjection=" + uProjectionRectModern);
+        } catch (Throwable t) {
+            rectInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader rect moderne — repli sur rects non arrondis : " + t);
+        }
+    }
+
+    private void ensureFlatShaderInitModern() {
+        if (flatProgramModern != -1 || flatInitFailedModern) return;
+        try {
+            flatProgramModern = compileModernProgram(VERTEX_SRC_MODERN, FLAT_FRAGMENT_SRC_MODERN);
+            uColorFlatModern = glGetUniformLocation(flatProgramModern, "uColor");
+            uProjectionFlatModern = glGetUniformLocation(flatProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader plat (moderne) compilé, program=" + flatProgramModern
+                + " uColor=" + uColorFlatModern + " uProjection=" + uProjectionFlatModern);
+        } catch (Throwable t) {
+            flatInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader plat moderne : " + t);
+        }
+    }
+
     private void ensureVignetteShaderInit() {
         if (vignetteProgram != -1 || vignetteInitFailed) return;
         try {
@@ -206,8 +382,27 @@ public final class UiRenderer {
         }
     }
 
+    private void ensureVignetteShaderInitModern() {
+        if (vignetteProgramModern != -1 || vignetteInitFailedModern) return;
+        try {
+            vignetteProgramModern = compileModernProgram(VERTEX_SRC_MODERN, VIGNETTE_FRAGMENT_SRC_MODERN);
+            uViewportSizeModern = glGetUniformLocation(vignetteProgramModern, "u_ViewportSize");
+            uVSizeModern = glGetUniformLocation(vignetteProgramModern, "u_VSize");
+            uColorVignetteModern = glGetUniformLocation(vignetteProgramModern, "uColor");
+            uProjectionVignetteModern = glGetUniformLocation(vignetteProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader vignette (moderne) compilé, program=" + vignetteProgramModern);
+        } catch (Throwable t) {
+            vignetteInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader vignette moderne : " + t);
+        }
+    }
+
     /** {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se replier sur une approximation par bandes. */
     public boolean isVignetteAvailable() {
+        if (modern) {
+            ensureVignetteShaderInitModern();
+            return !vignetteInitFailedModern;
+        }
         ensureVignetteShaderInit();
         return !vignetteInitFailed;
     }
@@ -219,15 +414,55 @@ public final class UiRenderer {
      * un seul quad, alpha calculé par pixel côté GPU, aucun palier possible.
      */
     public void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        if (vSize <= 0f) return;
+        if (modern) {
+            drawEdgeVignetteModern(edgeColor, vSize, vpWidth, vpHeight);
+            return;
+        }
+        drawEdgeVignetteLegacy(edgeColor, vSize, vpWidth, vpHeight);
+    }
+
+    private void drawEdgeVignetteModern(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        ensureVignetteShaderInitModern();
+        if (vignetteInitFailedModern) return;
+        try {
+            // GL_TEXTURE_2D/GL_ALPHA_TEST : concepts du pipeline fixe, qui
+            // n'existent PLUS DU TOUT en Core Profile (texturage/test alpha
+            // toujours gérés par le shader ici, jamais par un état fixe) —
+            // les activer/désactiver renvoie GL_INVALID_ENUM (confirmé par le
+            // debug log OpenGL en jeu : "Cannot enable <cap> in the current
+            // profile"). Contrairement à glPushAttrib/glMatrixMode, ça ne
+            // plante pas, mais ça reste une erreur GL inutile à chaque frame.
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            glUseProgram(vignetteProgramModern);
+            glUniform2f(uViewportSizeModern, vpWidth, vpHeight);
+            glUniform1f(uVSizeModern, vSize);
+            glUniform4f(uColorVignetteModern, edgeColor.r, edgeColor.g, edgeColor.b, edgeColor.a);
+            uploadProjectionModern(uProjectionVignetteModern, vpWidth, vpHeight);
+            drawQuadModern(0, 0, vpWidth, vpHeight);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawEdgeVignetteModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawEdgeVignetteLegacy(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
         ensureVignetteShaderInit();
-        if (vignetteInitFailed || vSize <= 0f) return;
+        if (vignetteInitFailed) return;
 
         boolean attribPushed = false, projPushed = false, modelPushed = false;
         try {
-            // NOTE : 0x00004000 = GL_COLOR_BUFFER_BIT (PAS GL_ENABLE_BIT,
-            // 0x00002000 — erreur de commentaire historique). Couvre quand
-            // même ce qu'il faut ici : GL_COLOR_BUFFER_BIT sauvegarde/restaure
-            // déjà l'état GL_ALPHA_TEST (enable + func/ref) et GL_BLEND.
+            // Legacy (1.8.9, Compatibility Profile) — pushAttrib n'y a jamais
+            // crashé (voir pushAttrib()), contrairement au pipeline moderne.
+            // Sans lui, nos glDisable(...) restent appliqués en permanence
+            // après ce dessin, cassant le rendu vanilla suivant (régression
+            // confirmée : monde/HUD tout blanc + gros lag).
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
             attribPushed = true;
             glDisable(0x0DE1); // GL_TEXTURE_2D
@@ -245,10 +480,7 @@ public final class UiRenderer {
             // endScissor() a sauté suite à une exception, voir son correctif)
             // découperait ce quad plein écran à un rectangle sans rapport —
             // symptôme observé : dégradé net et INVARIANT à toute retouche
-            // d'opacité/courbe (un clip est binaire, pas un blend). On
-            // désactive donc explicitement ici, restauré par popAttrib
-            // (GL_ENABLE_BIT couvre ce toggle) — notre overlay ne doit jamais
-            // dépendre de l'état laissé par un widget de menu sans rapport.
+            // d'opacité/courbe (un clip est binaire, pas un blend).
             glDisable(0x0C11); // GL_SCISSOR_TEST
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
@@ -308,6 +540,20 @@ public final class UiRenderer {
         }
     }
 
+    private void ensureTextShaderInitModern() {
+        if (textProgramModern != -1 || textInitFailedModern) return;
+        try {
+            textProgramModern = compileModernProgram(VERTEX_SRC_MODERN, TEXT_FRAGMENT_SRC_MODERN);
+            uTexModern = glGetUniformLocation(textProgramModern, "u_Tex");
+            uColorTextModern = glGetUniformLocation(textProgramModern, "uColor");
+            uProjectionTextModern = glGetUniformLocation(textProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader texte moderne (SDF) compilé, program=" + textProgramModern);
+        } catch (Throwable t) {
+            textInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader texte SDF moderne — texte non affiché : " + t);
+        }
+    }
+
     /**
      * Dessine un rect avec coins arrondis, en pixels physiques écran (x1,y1)-(x2,y2).
      * radius=0 → rect plein classique. Fallback silencieux vers un quad plein
@@ -321,6 +567,60 @@ public final class UiRenderer {
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
+        if (modern) {
+            drawRoundedRectModern(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+            return;
+        }
+        drawRoundedRectLegacy(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+    }
+
+    private void drawRoundedRectModern(float x1, float y1, float x2, float y2, float radius, UiColor color,
+                                        int vpWidth, int vpHeight) {
+        ensureRectShaderInitModern();
+        // Voir drawRoundedRectLegacy pour le pourquoi de ce garde-fou radius<=0.
+        boolean useShader = rectProgramModern != -1 && !rectInitFailedModern && radius > 0f;
+        try {
+            // Voir drawEdgeVignetteModern : GL_TEXTURE_2D/GL_ALPHA_TEST retirés
+            // (GL_INVALID_ENUM en Core Profile, concepts fixed-function inexistants ici).
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            if (useShader) {
+                glUseProgram(rectProgramModern);
+                glUniform4f(uRectModern, x1, y1, x2, y2);
+                glUniform1f(uRadiusModern, radius);
+                glUniform4f(uColorRectModern, color.r, color.g, color.b, color.a);
+                uploadProjectionModern(uProjectionRectModern, vpWidth, vpHeight);
+            } else {
+                // radius<=0 (rect plein sans arrondi) OU échec de compilation
+                // du shader rect : besoin quand même d'UN programme actif
+                // (le pipeline moderne n'a pas d'équivalent "sans shader" du
+                // mode immédiat legacy) — shader "couleur plate" dédié, voir
+                // FLAT_FRAGMENT_SRC_MODERN pour le pourquoi (le shader
+                // vignette utilisé initialement ici était FAUX : son dégradé
+                // rendait tout invisible sauf le contour, confirmé en jeu).
+                ensureFlatShaderInitModern();
+                if (!flatInitFailedModern) {
+                    glUseProgram(flatProgramModern);
+                    glUniform4f(uColorFlatModern, color.r, color.g, color.b, color.a);
+                    uploadProjectionModern(uProjectionFlatModern, vpWidth, vpHeight);
+                } else {
+                    return;
+                }
+            }
+            drawQuadModern(x1, y1, x2, y2);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawRoundedRectModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawRoundedRectLegacy(float x1, float y1, float x2, float y2, float radius, UiColor color,
+                                 int vpWidth, int vpHeight) {
         ensureRectShaderInit();
         // radius<=0 : bypass total du shader — bug dégénéré sinon. Dans
         // "alpha = 1 - smoothstep(radius-1, radius, dist)", avec radius=0 tout
@@ -331,18 +631,15 @@ public final class UiRenderer {
         boolean useShader = rectProgram != -1 && !rectInitFailed && radius > 0f;
 
         // Chaque pop n'est tenté QUE si son push correspondant a réellement
-        // réussi — sinon une exception entre pushAttrib/pushMatrix et son pop
-        // (ex: résolution réflexion GL en échec) laisserait un popAttrib/
-        // popMatrix orphelin dans le finally, qui dépile une pile déjà vide :
-        // GL_STACK_UNDERFLOW ("Stack underflow"), observé en jeu sans lien
-        // évident avec le dessin en cours.
+        // réussi — sinon une exception entre pushMatrix et son pop (ex:
+        // résolution réflexion GL en échec) laisserait un popMatrix orphelin
+        // dans le finally, qui dépile une pile déjà vide : GL_STACK_UNDERFLOW
+        // ("Stack underflow"), observé en jeu sans lien évident avec le dessin
+        // en cours.
         boolean attribPushed = false, projPushed = false, modelPushed = false;
         try {
-            // État GL hérité de ce que le jeu a laissé à ce point précis du
-            // render loop (texture encore bindée, depth test actif, blend non
-            // configuré pour notre alpha...) — glPushAttrib/glPopAttrib
-            // (legacy OpenGL, dispo GL2.1+) isole notre dessin sans affecter
-            // la frame suivante du jeu.
+            // Legacy (1.8.9) — voir pushAttrib()/drawEdgeVignetteLegacy pour le
+            // pourquoi (rétabli, jamais crashé sur cette version).
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
             attribPushed = true;
             glDisable(0x0DE1); // GL_TEXTURE_2D
@@ -412,6 +709,190 @@ public final class UiRenderer {
         }
     }
 
+    // ── Helpers partagés du pipeline MODERNE (voir javadoc de la classe) ────
+
+    /**
+     * Compile+lie un programme moderne (GLSL 150) — {@code aPos}/{@code aTexCoord}
+     * liés respectivement aux emplacements 0/1 AVANT le link (glBindAttribLocation),
+     * pour que {@link #ensureModernBuffersInit()} puisse configurer UN SEUL VAO
+     * réutilisable par les 3 shaders (rect/vignette/texte), au lieu d'interroger
+     * un emplacement différent par programme.
+     */
+    /**
+     * VÉRIFICATION JAMAIS FAITE JUSQU'ICI (voir historique du projet) : une
+     * erreur de compilation/link GLSL ne lève AUCUNE exception Java —
+     * glCompileShader/glLinkProgram "réussissent" toujours du point de vue
+     * Java même si le shader résultant est invalide, seul
+     * glGetShaderiv(GL_COMPILE_STATUS)/glGetProgramiv(GL_LINK_STATUS)
+     * révèle le vrai résultat. Utiliser un programme qui a échoué à lier est
+     * un comportement indéfini côté spec — concrètement, observé ici : draws
+     * qui s'exécutent sans aucune erreur mais qui n'affichent RIEN, aucune
+     * exception nulle part.
+     */
+    private void checkShaderCompile(int shader, String label) throws Exception {
+        int status = glGetShaderi(shader, 0x8B81); // GL_COMPILE_STATUS
+        if (status == 0) {
+            String log = glGetShaderInfoLog(shader);
+            LauncherLog.err("[UiRenderer] ÉCHEC COMPILATION shader " + label + ": " + log);
+        }
+    }
+
+    private void checkProgramLink(int program, String label) throws Exception {
+        int status = glGetProgrami(program, 0x8B82); // GL_LINK_STATUS
+        if (status == 0) {
+            String log = glGetProgramInfoLog(program);
+            LauncherLog.err("[UiRenderer] ÉCHEC LINK programme " + label + ": " + log);
+        } else {
+            LauncherLog.ui(1, "[UiRenderer] programme " + label + " lié avec succès (program=" + program + ")");
+        }
+    }
+
+    private int compileModernProgram(String vertexSrc, String fragmentSrc) throws Exception {
+        int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+        glShaderSource(vsh, vertexSrc);
+        glCompileShader(vsh);
+        checkShaderCompile(vsh, "vertex");
+
+        int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+        glShaderSource(fsh, fragmentSrc);
+        glCompileShader(fsh);
+        checkShaderCompile(fsh, "fragment");
+
+        int program = glCreateProgram();
+        glAttachShader(program, vsh);
+        glAttachShader(program, fsh);
+        glBindAttribLocation(program, 0, "aPos");
+        glBindAttribLocation(program, 1, "aTexCoord");
+        glLinkProgram(program);
+        checkProgramLink(program, "modern(" + vsh + "," + fsh + ")");
+        return program;
+    }
+
+    /** VAO + VBO partagés — layout fixe : vec2 position (loc 0) + vec2 texCoord (loc 1), 4 floats/sommet. */
+    private void ensureModernBuffersInit() {
+        if (modernVao != -1 || modernBuffersInitFailed) return;
+        try {
+            LauncherLog.info("[UiRenderer] DIAG3: avant glGenVertexArrays");
+            modernVao = glGenVertexArrays();
+            LauncherLog.info("[UiRenderer] DIAG3: avant glBindVertexArray vao=" + modernVao);
+            glBindVertexArray(modernVao);
+            LauncherLog.info("[UiRenderer] DIAG3: avant glGenBuffers");
+            modernVbo = glGenBuffers();
+            LauncherLog.info("[UiRenderer] DIAG3: avant glBindBuffer vbo=" + modernVbo);
+            glBindBuffer(0x8892, modernVbo); // GL_ARRAY_BUFFER
+            LauncherLog.info("[UiRenderer] DIAG3: avant glEnableVertexAttribArray/glVertexAttribPointer");
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 2, 0x1406, false, 16, 0L);  // GL_FLOAT, stride=4*4=16, offset=0
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 2, 0x1406, false, 16, 8L);  // offset=2*4=8 (après x,y)
+            glBindVertexArray(0);
+            LauncherLog.ui(1, "[UiRenderer] VAO/VBO modernes initialisés (vao=" + modernVao + ", vbo=" + modernVbo + ")");
+        } catch (Throwable t) {
+            modernBuffersInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec init VAO/VBO moderne — rien ne sera dessiné (pipeline moderne) : " + t);
+        }
+    }
+
+    /** Direct, comme exigé par tout buffer réellement uploadé en GL (glBufferData attend un buffer NIO natif). */
+    private FloatBuffer floatBuffer(int capacityFloats) {
+        return java.nio.ByteBuffer.allocateDirect(capacityFloats * 4)
+            .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
+    }
+
+    private void putVertex(FloatBuffer buf, float x, float y, float u, float v) {
+        buf.put(x).put(y).put(u).put(v);
+    }
+
+    /** Un seul quad plein écran/rect (rect arrondi, vignette) — 4 sommets, GL_TRIANGLE_FAN (même topologie que l'ancien GL_QUADS). */
+    private void drawQuadModern(float x1, float y1, float x2, float y2) {
+        ensureModernBuffersInit();
+        if (modernBuffersInitFailed) return;
+        try {
+            FloatBuffer verts = floatBuffer(4 * 4);
+            putVertex(verts, x1, y1, 0f, 0f);
+            putVertex(verts, x1, y2, 0f, 1f);
+            putVertex(verts, x2, y2, 1f, 1f);
+            putVertex(verts, x2, y1, 1f, 0f);
+            verts.flip();
+            uploadAndDraw(verts, 6, 4); // GL_TRIANGLE_FAN
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawQuadModern: " + t);
+        }
+    }
+
+    /** Sommets déjà préparés en GL_TRIANGLES (ex: texte, un ou plusieurs quads disjoints, 6 sommets/quad). */
+    private void drawTrianglesModern(FloatBuffer verts) {
+        ensureModernBuffersInit();
+        if (modernBuffersInitFailed) return;
+        try {
+            uploadAndDraw(verts, 4, verts.remaining() / 4); // GL_TRIANGLES
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawTrianglesModern: " + t);
+        }
+    }
+
+    private static boolean fboDiagLogged = false;
+
+    private void uploadAndDraw(FloatBuffer verts, int glMode, int vertexCount) throws Exception {
+        // DIAGNOSTIC : quel framebuffer est actif à ce point précis (TAIL de
+        // GameRenderer.render()) ? Si non-zéro, nos dessins partent vers une
+        // cible hors-écran (FBO) au lieu de la fenêtre réellement affichée —
+        // hypothèse plausible pour "rien de visible malgré des draws sans
+        // erreur". 0x8CA6 = GL_FRAMEBUFFER_BINDING.
+        if (!fboDiagLogged) {
+            fboDiagLogged = true;
+            try {
+                int fb = glGetInteger(0x8CA6);
+                LauncherLog.info("[UiRenderer] DIAG5: framebuffer actif au moment du dessin = " + fb
+                    + " (0 = framebuffer par défaut/fenêtre — non-zéro = FBO hors-écran)");
+            } catch (Throwable t) {
+                LauncherLog.err("[UiRenderer] DIAG5: échec lecture framebuffer actif: " + t);
+            }
+        }
+        // Sécurité : force le framebuffer par défaut, au cas où quelque chose
+        // (Sodium, un post-process) en aurait laissé un autre actif à ce point.
+        glBindFramebuffer(0x8D40, 0); // GL_FRAMEBUFFER, 0 = fenêtre
+
+        glBindVertexArray(modernVao);
+        glBindBuffer(0x8892, modernVbo); // GL_ARRAY_BUFFER
+        // GL_DYNAMIC_DRAW (0x88E8) : contenu réécrit à chaque draw (HUD redessiné
+        // chaque frame), jamais GL_STATIC_DRAW qui suppose un contenu stable.
+        glBufferData(0x8892, verts, 0x88E8);
+        glDrawArrays(glMode, 0, vertexCount);
+        glBindVertexArray(0);
+    }
+
+    /**
+     * Matrice de projection orthographique équivalente à
+     * {@code glOrtho(0, vpWidth, 0, vpHeight, -1, 1)} (voir drawRoundedRectLegacy
+     * pour le pourquoi de cette convention bas-gauche origine, Y-up) — uploadée
+     * en tant que {@code uniform mat4}, remplace la pile de matrices fixe
+     * (glMatrixMode/glPushMatrix/glOrtho), absente/cassée en Core Profile.
+     * Colonne-majeure (convention OpenGL/GLSL).
+     */
+    private static boolean loggedBadProjectionLoc = false;
+
+    private void uploadProjectionModern(int uniformLoc, int vpWidth, int vpHeight) throws Exception {
+        // -1 = uniform introuvable/optimisé — glUniformMatrix4fv est alors un
+        // NO-OP SILENCIEUX (spec GL) : le shader garderait sa valeur par
+        // défaut (matrice ZÉRO), donc gl_Position = 0 pour CHAQUE sommet —
+        // tout devient un point dégénéré invisible, sans aucune erreur nulle
+        // part. Log une seule fois si ça arrive, ça confirmerait direct la cause.
+        if (uniformLoc < 0 && !loggedBadProjectionLoc) {
+            loggedBadProjectionLoc = true;
+            LauncherLog.err("[UiRenderer] DIAG6: uProjection introuvable (location=" + uniformLoc
+                + ") — la matrice ne sera JAMAIS appliquée, rendu invisible garanti");
+        }
+        FloatBuffer m = floatBuffer(16);
+        float w = vpWidth, h = vpHeight;
+        m.put(2f / w).put(0f).put(0f).put(0f);
+        m.put(0f).put(2f / h).put(0f).put(0f);
+        m.put(0f).put(0f).put(-1f).put(0f);
+        m.put(-1f).put(-1f).put(0f).put(1f);
+        m.flip();
+        glUniformMatrix4fv(uniformLoc, false, m);
+    }
+
     // ── Icône d'objet vanilla (ItemRenderer, immediate-mode/fixed-function) ──
 
     /**
@@ -439,8 +920,28 @@ public final class UiRenderer {
      * interne du rendu d'item (petit, proche de 0) tomberait hors de la plage
      * de clipping et l'icône resterait invisible malgré un appel "réussi".
      */
+    private static boolean modernItemIconWarned = false;
+
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
         if (itemStack == null) return;
+        if (modern) {
+            // Pas encore réécrit pour le pipeline moderne (voir javadoc de la
+            // classe) : cette méthode pose SA PROPRE pile de matrices legacy
+            // (glMatrixMode/glOrtho/glTranslatef/glScalef, confirmées cassées
+            // en 1.21.11) pour établir la convention de coordonnées GUI
+            // vanilla attendue par renderInGuiWithOverrides — jamais exercée
+            // par aucun test de crash de cette session (seul
+            // ArmorDurabilityModule l'appelle, désactivé par défaut), donc pas
+            // de preuve directe qu'il faille la réécrire, mais l'appeler
+            // telle quelle risquerait le même crash natif que le reste de ce
+            // fichier avant correctif. Skip volontaire plutôt que deviner —
+            // à traiter si/quand un module l'utilisant est activé en 1.21+.
+            if (!modernItemIconWarned) {
+                modernItemIconWarned = true;
+                LauncherLog.warn("[UiRenderer] drawVanillaItemIcon: pas encore supporté sur le pipeline moderne (1.21+) — icône non dessinée");
+            }
+            return;
+        }
         boolean attribPushed = false, projPushed = false, modelPushed = false;
         // Diagnostic glGetError() limité aux DIAG_CALL_LIMIT premiers appels
         // (sinon spam à chaque frame) — glGetError() ne lève PAS d'exception
@@ -497,6 +998,7 @@ public final class UiRenderer {
             // dans le canal alpha) : exactement le genre de rendu "cassé"
             // observé (formes fragmentées au lieu de la vraie icône).
             glUseProgram(0);
+            // Legacy (1.8.9) — voir pushAttrib()/drawEdgeVignetteLegacy.
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000 | 0x00100000 | 0x00080000); // GL_ENABLE_BIT|GL_CURRENT_BIT|GL_TEXTURE_BIT|GL_TRANSFORM_BIT|GL_LIGHTING_BIT
             attribPushed = true;
             glEnable(0x0DE1); // GL_TEXTURE_2D
@@ -592,14 +1094,76 @@ public final class UiRenderer {
     public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
                           int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) return;
+        if (modern) {
+            drawTextModern(font, text, x, y, color, scale, vpWidth, vpHeight);
+            return;
+        }
+        drawTextLegacy(font, text, x, y, color, scale, vpWidth, vpHeight);
+    }
+
+    private void drawTextModern(UiFont font, String text, float x, float y, UiColor color, float scale,
+                                 int vpWidth, int vpHeight) {
+        int texId = ensureFontTexture(font);
+        if (texId < 0) return;
+        ensureTextShaderInitModern();
+        if (textInitFailedModern) return;
+        try {
+            // Voir drawEdgeVignetteModern : GL_TEXTURE_2D en tant que CAPACITÉ
+            // (glEnable/glDisable) retiré — GL_INVALID_ENUM en Core Profile.
+            // glBindTexture(GL_TEXTURE_2D, ...) juste en dessous reste lui
+            // parfaitement valide : c'est une CIBLE de bind, pas une capacité
+            // fixed-function, ces deux usages du même enum sont indépendants.
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            glBindTexture(0x0DE1, texId);
+            glUseProgram(textProgramModern);
+            glUniform1i(uTexModern, 0);
+            glUniform4f(uColorTextModern, color.r, color.g, color.b, color.a);
+            uploadProjectionModern(uProjectionTextModern, vpWidth, vpHeight);
+
+            float cs = scale * UiFont.SIZE_CORRECTION;
+            float penX = Math.round(x);
+            float yTop = Math.round(y + font.ascent * cs);
+            float yBottom = Math.round(y - font.descent * cs);
+
+            // 6 sommets/glyphe (2 triangles, GL_TRIANGLES — pas de fan possible,
+            // chaque glyphe est un quad DISJOINT des autres, contrairement au
+            // rect/vignette qui n'ont besoin que d'UN seul quad).
+            FloatBuffer verts = floatBuffer(text.length() * 6 * 4);
+            for (int i = 0; i < text.length(); i++) {
+                UiFont.Glyph g = font.glyph(text.charAt(i));
+                float gw = Math.round(g.width * cs);
+                float x0 = penX, x1 = penX + gw;
+                // v0=haut-gauche, v1=bas-gauche, v2=bas-droite, v3=haut-droite — même ordre que le mode immédiat legacy.
+                putVertex(verts, x0, yTop, g.u0, g.v0);
+                putVertex(verts, x0, yBottom, g.u0, g.v1);
+                putVertex(verts, x1, yBottom, g.u1, g.v1);
+                putVertex(verts, x0, yTop, g.u0, g.v0);
+                putVertex(verts, x1, yBottom, g.u1, g.v1);
+                putVertex(verts, x1, yTop, g.u1, g.v0);
+                penX += Math.round(g.advance * cs);
+            }
+            verts.flip();
+            drawTrianglesModern(verts);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawTextModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawTextLegacy(UiFont font, String text, float x, float y, UiColor color, float scale,
+                          int vpWidth, int vpHeight) {
         int texId = ensureFontTexture(font);
         if (texId < 0) return;
         ensureTextShaderInit();
         if (textInitFailed) return; // shader cassé : rien à faire de l'alpha-distance brute, mieux vaut ne rien dessiner
 
-        // Voir drawRoundedRect : chaque pop n'est tenté que si son push a
-        // réellement réussi, pour ne jamais dépiler une pile GL déjà vide
-        // (GL_STACK_UNDERFLOW) si une exception survient entre les deux.
+        // Legacy (1.8.9) — voir pushAttrib()/drawEdgeVignetteLegacy.
         boolean attribPushed = false, projPushed = false, modelPushed = false;
         try {
             pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
@@ -792,6 +1356,18 @@ public final class UiRenderer {
         return (int) gl("org.lwjgl.opengl.GL20", "glGetUniformLocation", int.class, CharSequence.class)
             .invoke(null, program, name);
     }
+    private int glGetShaderi(int shader, int pname) throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL20", "glGetShaderi", int.class, int.class).invoke(null, shader, pname);
+    }
+    private String glGetShaderInfoLog(int shader) throws Exception {
+        return (String) gl("org.lwjgl.opengl.GL20", "glGetShaderInfoLog", int.class).invoke(null, shader);
+    }
+    private int glGetProgrami(int program, int pname) throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL20", "glGetProgrami", int.class, int.class).invoke(null, program, pname);
+    }
+    private String glGetProgramInfoLog(int program) throws Exception {
+        return (String) gl("org.lwjgl.opengl.GL20", "glGetProgramInfoLog", int.class).invoke(null, program);
+    }
     private void glUseProgram(int program) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glUseProgram", int.class).invoke(null, program);
     }
@@ -837,6 +1413,20 @@ public final class UiRenderer {
     private void glActiveTexture(int texture) throws Exception {
         gl("org.lwjgl.opengl.GL13", "glActiveTexture", int.class).invoke(null, texture);
     }
+    /**
+     * RÉTABLI (voir historique du projet) : glPushAttrib/glPopAttrib avaient
+     * été supprimés PARTOUT dans ce fichier suite au crash natif 0xC0000409
+     * confirmé sur 1.21.11 (Core Profile — cette fonction n'y est plus
+     * implémentée). Mais cette suppression a aussi touché les méthodes
+     * *Legacy (1.8.9, Compatibility Profile, où pushAttrib n'a JAMAIS crashé)
+     * — sans save/restore, nos glDisable(GL_TEXTURE_2D/GL_ALPHA_TEST/...)
+     * restaient appliqués en PERMANENCE après notre dessin (rien ne les
+     * réactive avant la frame suivante côté vanilla 1.8.9, qui suppose cet
+     * état stable), cassant tout rendu texturé ultérieur (monde blanc,
+     * lag lié à la corruption d'état) — régression confirmée en jeu. Donc :
+     * gardé RETIRÉ des méthodes *Modern (1.21.11), RÉTABLI dans les méthodes
+     * *Legacy uniquement (voir chaque appelant).
+     */
     private void pushAttrib(int mask) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glPushAttrib", int.class).invoke(null, mask);
     }
@@ -930,5 +1520,69 @@ public final class UiRenderer {
         // sous LWJGL2 (1.8.9, contexte GL2.1) que LWJGL3 (1.21), l'extension
         // sous-jacente étant supportée par tout GPU ~2006+.
         gl("org.lwjgl.opengl.GL30", "glGenerateMipmap", int.class).invoke(null, target);
+    }
+
+    // ── GL réflexion — pipeline MODERNE uniquement (VAO/VBO, GL15/GL20/GL30) ──
+
+    private void glDrawArrays(int mode, int first, int count) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glDrawArrays", int.class, int.class, int.class).invoke(null, mode, first, count);
+    }
+    private int glGetInteger(int pname) throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL11", "glGetInteger", int.class).invoke(null, pname);
+    }
+    private void glBindFramebuffer(int target, int framebuffer) throws Exception {
+        gl("org.lwjgl.opengl.GL30", "glBindFramebuffer", int.class, int.class).invoke(null, target, framebuffer);
+    }
+    private int glGenVertexArrays() throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL30", "glGenVertexArrays").invoke(null);
+    }
+    private void glBindVertexArray(int array) throws Exception {
+        gl("org.lwjgl.opengl.GL30", "glBindVertexArray", int.class).invoke(null, array);
+    }
+    private int glGenBuffers() throws Exception {
+        return (int) gl("org.lwjgl.opengl.GL15", "glGenBuffers").invoke(null);
+    }
+    private void glBindBuffer(int target, int buffer) throws Exception {
+        gl("org.lwjgl.opengl.GL15", "glBindBuffer", int.class, int.class).invoke(null, target, buffer);
+    }
+    private void glBufferData(int target, FloatBuffer data, int usage) throws Exception {
+        gl("org.lwjgl.opengl.GL15", "glBufferData", int.class, FloatBuffer.class, int.class).invoke(null, target, data, usage);
+    }
+    private void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, long pointer) throws Exception {
+        gl("org.lwjgl.opengl.GL20", "glVertexAttribPointer", int.class, int.class, int.class, boolean.class, int.class, long.class)
+            .invoke(null, index, size, type, normalized, stride, pointer);
+    }
+    private void glEnableVertexAttribArray(int index) throws Exception {
+        gl("org.lwjgl.opengl.GL20", "glEnableVertexAttribArray", int.class).invoke(null, index);
+    }
+    private void glBindAttribLocation(int program, int index, String name) throws Exception {
+        gl("org.lwjgl.opengl.GL20", "glBindAttribLocation", int.class, int.class, CharSequence.class).invoke(null, program, index, name);
+    }
+    private void glUniformMatrix4fv(int location, boolean transpose, FloatBuffer value) throws Exception {
+        gl("org.lwjgl.opengl.GL20", "glUniformMatrix4fv", int.class, boolean.class, FloatBuffer.class).invoke(null, location, transpose, value);
+    }
+    private void glReadPixels(int x, int y, int width, int height, int format, int type, java.nio.ByteBuffer pixels) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glReadPixels", int.class, int.class, int.class, int.class, int.class, int.class, java.nio.ByteBuffer.class)
+            .invoke(null, x, y, width, height, format, type, pixels);
+    }
+
+    /**
+     * DIAGNOSTIC : lit directement le framebuffer actif à la coordonnée
+     * (x,y) (origine bas-gauche, même convention que le reste du pipeline
+     * moderne) juste après un dessin — permet de trancher définitivement
+     * entre "le draw n'écrit rien" (readback ≠ couleur attendue) et "le
+     * draw écrit bien mais quelque chose APRÈS notre hook TAIL écrase
+     * l'image avant présentation" (readback = couleur attendue MALGRÉ
+     * rien de visible à l'écran pour le joueur).
+     */
+    public int[] debugReadPixel(int x, int y) {
+        try {
+            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(4);
+            glReadPixels(x, y, 1, 1, 0x1908 /*GL_RGBA*/, 0x1401 /*GL_UNSIGNED_BYTE*/, buf);
+            return new int[]{buf.get(0) & 0xFF, buf.get(1) & 0xFF, buf.get(2) & 0xFF, buf.get(3) & 0xFF};
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] debugReadPixel: " + t);
+            return null;
+        }
     }
 }

@@ -43,21 +43,11 @@ public abstract class GlobalUiRenderMixin {
     private static final String CLS_WINDOW = "fyk"; // net.minecraft.client.util.Window
 
     private static UiInputPoller inputPoller;
-
-    /**
-     * DIAGNOSTIC TEMPORAIRE (crash natif 0xC0000409 à la jointure d'une
-     * partie, voir historique du projet) — coupe tout le corps de ce hook
-     * pour déterminer si le crash vient de notre logique par frame ou
-     * d'ailleurs. À retirer une fois le diagnostic conclu.
-     */
-    private static final boolean DIAG_DISABLE_RENDER_TAIL = false;
-    /** Étape 2 du diagnostic : ne coupe plus que le rendu HUD lui-même (poll/tick restent actifs). */
-    private static final boolean DIAG_DISABLE_HUD_RENDER = false;
-    private static final boolean DIAG_DISABLE_MODULE_OVERLAY = true;
+    private static final java.util.Set<Class<?>> DIAG_LOGGED_CLASSES =
+        java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
 
     @Inject(method = "render(Lnet/minecraft/client/render/RenderTickCounter;Z)V", at = @At("TAIL"))
     private void la$onRenderTail(CallbackInfo ci) {
-        if (DIAG_DISABLE_RENDER_TAIL) return;
         try {
             Object mc = getMcInstance();
             if (mc == null) return;
@@ -81,23 +71,28 @@ public abstract class GlobalUiRenderMixin {
 
             Object currentScreen = getCurrentScreen(mc);
             if (currentScreen == null) {
-                if (!DIAG_DISABLE_HUD_RENDER) {
-                    UiRenderer renderer = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
-                    // Overlay HUD permanent — même règle que le HUD vanilla
-                    // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
-                    // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
-                    // les UiHudBox de cet écran qui dessinent, pas cet appel.
-                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                    // Étape 3 du diagnostic : renderOverlayAll (modules) coupé séparément
-                    // de HudOverlayRenderer.render pour isoler lequel des deux crashe.
-                    if (!DIAG_DISABLE_MODULE_OVERLAY) {
-                        ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                UiRenderer renderer = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
+                // Overlay HUD permanent — même règle que le HUD vanilla
+                // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
+                // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
+                // les UiHudBox de cet écran qui dessinent, pas cet appel.
+                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                if (inputPoller.menuKeyPressed) {
+                    LauncherLog.info("[LauncherAgent] DIAG4: menuKeyPressed détecté, ouverture UiMainMenuScreen");
+                    try {
+                        setScreen(mc, new UiMainMenuScreen(null));
+                        LauncherLog.info("[LauncherAgent] DIAG4: setScreen(UiMainMenuScreen) appelé sans exception");
+                    } catch (Throwable t) {
+                        LauncherLog.err("[LauncherAgent] DIAG4: setScreen(UiMainMenuScreen) a levé: " + t);
                     }
                 }
-                if (inputPoller.menuKeyPressed) {
-                    setScreen(mc, new UiMainMenuScreen(null));
-                }
                 return;
+            }
+
+            if (DIAG_LOGGED_CLASSES.add(currentScreen.getClass())) {
+                LauncherLog.info("[LauncherAgent] DIAG4: currentScreen=" + currentScreen
+                    + " class=" + currentScreen.getClass() + " isUiDrawable=" + (currentScreen instanceof UiDrawable));
             }
 
             if (!(currentScreen instanceof UiDrawable)) {
@@ -111,6 +106,28 @@ public abstract class GlobalUiRenderMixin {
             }
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
+            // DIAGNOSTIC TEMPORAIRE : gros carré rouge test, indépendant de
+            // toute logique de menu — confirme si le pipeline moderne affiche
+            // QUOI QUE CE SOIT de visible une fois un écran ouvert. À retirer
+            // une fois le diagnostic conclu.
+            // Diagnostic réservé au pipeline MODERNE (1.21.11) — jamais sur
+            // legacy (1.8.9), sinon ce carré s'affiche par-dessus le menu
+            // sur TOUTE version (régression constatée en jeu).
+            UiRenderer r = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
+            if (r.isModern()) {
+                try {
+                    r.drawRoundedRect(
+                        50, 50, 250, 250, 0f,
+                        new com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor(1f, 0f, 0f, 1f),
+                        inputPoller.fbWidth, inputPoller.fbHeight);
+                    int[] px = r.debugReadPixel(150, 150);
+                    LauncherLog.info("[LauncherAgent] DIAG7: pixel(150,150) juste après le dessin du carré rouge = "
+                        + java.util.Arrays.toString(px)
+                        + " (attendu ~[255,0,0,255] si le draw écrit vraiment le framebuffer)");
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] DIAG4 carré test: " + t);
+                }
+            }
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
 
             // Navigation demandée par l'écran lui-même (UiScreenBase.closeTo,

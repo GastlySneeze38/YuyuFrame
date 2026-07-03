@@ -121,6 +121,14 @@ public final class ModuleRegistry {
         // futur module enregistré dynamiquement (pas seulement les 9 modules
         // intégrés) bénéficie aussi de la persistance sans y penser.
         HudConfigStore.applyTo(module);
+        // applyTo() écrit les champs @Config* par réflexion mais n'appelle
+        // jamais onConfigChanged() — un module qui, comme KeystrokesModule,
+        // ne lit sa config qu'à travers onConfigChanged() (ex: pour recopier
+        // vers un objet Renderer statique séparé) ignorait donc la valeur
+        // persistée jusqu'au premier changement manuel dans l'UI pendant la
+        // session (régression constatée : option désactivée en config mais
+        // toujours affichée au lancement).
+        module.onConfigChanged();
     }
 
     public static List<LauncherModule> all() { return Collections.unmodifiableList(MODULES); }

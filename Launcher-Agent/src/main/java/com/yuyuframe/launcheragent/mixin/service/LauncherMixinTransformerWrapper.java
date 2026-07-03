@@ -43,7 +43,7 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
 
         // ── Nos propres écrans : remap stubs Screen / Text ───────────────────
         if (STUB_PATCHED_SCREENS.contains(className)) {
-            byte[] patched = ScreenStubPatcher.patch(classfileBuffer);
+            byte[] patched = ScreenStubPatcher.patch(classfileBuffer, loader);
             if (patched != null) return patched;
         }
 
