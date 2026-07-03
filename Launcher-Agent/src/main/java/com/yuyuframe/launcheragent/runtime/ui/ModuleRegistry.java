@@ -21,6 +21,14 @@ import com.yuyuframe.launcheragent.runtime.module.SwingWhileBlockingModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSneakModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSprintModule;
 import com.yuyuframe.launcheragent.runtime.module.WorldTimeModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.CachedFancyCloudsModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.ChunkBuilderThreadsModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.EntityBackfaceCullingModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.LabelRenderDistanceModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.LowAnimationTickModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.PlayerBackfaceCullingModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.TileEntityRenderDistanceModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.UnstackedItemsModule;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
 import java.util.ArrayList;
@@ -74,6 +82,14 @@ public final class ModuleRegistry {
         register(new FullbrightModule());
         register(new WorldTimeModule());
         register(new ChatEnhancementsModule());
+        register(new UnstackedItemsModule());
+        register(new PlayerBackfaceCullingModule());
+        register(new EntityBackfaceCullingModule());
+        register(new LowAnimationTickModule());
+        register(new TileEntityRenderDistanceModule());
+        register(new ChunkBuilderThreadsModule());
+        register(new CachedFancyCloudsModule());
+        register(new LabelRenderDistanceModule());
 
         // Regroupement demandé — voir ModuleGroup : purement de la
         // présentation, les modules ci-dessus restent enregistrés
@@ -85,6 +101,13 @@ public final class ModuleRegistry {
         GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire",
             Arrays.asList(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
                 get("swing-while-blocking"), get("old-bow"), get("old-consume"))));
+        // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
+        // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),
+        // pas de dépendance sur PolyPatcher lui-même, juste la même idée en Mixin natif.
+        GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés",
+            Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
+                get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
+                get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"))));
     }
 
     public static void register(LauncherModule module) {

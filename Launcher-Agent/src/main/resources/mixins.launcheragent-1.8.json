@@ -21,7 +21,15 @@
     "client.v1_8.MixinOldBow189",
     "client.v1_8.MixinOldConsume189",
     "client.v1_8.MixinCrosshair189",
-    "client.v1_8.MixinWorldTime189"
+    "client.v1_8.MixinWorldTime189",
+    "client.v1_8.optimodule.MixinUnstackedItems189",
+    "client.v1_8.optimodule.MixinPlayerBackfaceCulling189",
+    "client.v1_8.optimodule.MixinEntityBackfaceCulling189",
+    "client.v1_8.optimodule.MixinLowAnimationTick189",
+    "client.v1_8.optimodule.MixinTileEntityRenderDistance189",
+    "client.v1_8.optimodule.MixinChunkBuilderThreads189",
+    "client.v1_8.optimodule.MixinCachedFancyClouds189",
+    "client.v1_8.optimodule.MixinLabelRenderDistance189"
   ],
   "injectors": {
     "defaultRequire": 1
