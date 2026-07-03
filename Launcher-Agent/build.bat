@@ -121,7 +121,7 @@ for %%A in ("%STUBLIST%") do if %%~zA==0 (
     goto :error
 )
 
-"%JAVAC_CMD%" --release 8 -d "%OUT_STUBS%" "@%STUBLIST%"
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS%" "@%STUBLIST%"
 del "%STUBLIST%" 2>nul
 if errorlevel 1 (
     echo [ERREUR] Compilation stubs echouee.
@@ -145,7 +145,7 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
     goto :error
 )
 
-"%JAVAC_CMD%" --release 8 ^
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 ^
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
