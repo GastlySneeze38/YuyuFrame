@@ -4,7 +4,8 @@ import com.yuyuframe.launcheragent.mixin.service.LauncherMixinService;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
-import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
+import com.yuyuframe.launcheragent.runtime.version.VersionBracket;
+import com.yuyuframe.launcheragent.runtime.version.VersionBracketRegistry;
 import org.spongepowered.asm.launch.MixinBootstrap;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 import org.spongepowered.asm.mixin.Mixins;
@@ -52,7 +53,15 @@ public final class IsolatedBootstrap {
         LauncherLog.agent(1, "[LauncherAgent] IsolatedBootstrap.start (classloader=" + IsolatedBootstrap.class.getClassLoader()
             + ", fabric=" + fabric + ", version=" + mcVersion + ")");
 
-        boolean legacy189 = MinecraftVersionDetector.isLegacy189(mcVersion);
+        VersionBracket bracket = VersionBracketRegistry.resolve(mcVersion);
+        if (bracket == null) {
+            LauncherLog.err("[LauncherAgent] Version MC \"" + mcVersion + "\" non supportée — aucun bracket "
+                + "ne correspond dans VersionBracketRegistry, bootstrap Mixin ABANDONNÉ (pas de Mixin appliqué, "
+                + "mais l'agent continue de tourner). Voir VersionBracketRegistry pour la liste des versions "
+                + "supportées et la convention pour en ajouter une.");
+            return;
+        }
+        LauncherLog.agent(1, "[LauncherAgent] Bracket de version résolu : " + bracket.key);
 
         MappingsRegistry.setScheme(fabric
             ? MappingsRegistry.Scheme.INTERMEDIARY
@@ -60,7 +69,7 @@ public final class IsolatedBootstrap {
 
         LauncherMixinService.setInstrumentation(inst);
 
-        loadYarnMappings(yarnPath, legacy189);
+        loadYarnMappings(yarnPath, bracket);
 
         // Log de sanité : vérifie que la classe principale de la version est bien mappée.
         // Même nom Yarn named "TitleScreen" sur les deux branches — Legacy Fabric
@@ -83,9 +92,7 @@ public final class IsolatedBootstrap {
         writeRefmapFile(inst, fabric);
 
         // Sélection du fichier de config Mixin selon la version MC.
-        String mixinConfig = legacy189
-            ? "mixins.launcheragent-1.8.json"
-            : "mixins.launcheragent.json";
+        String mixinConfig = bracket.mixinConfigResource;
 
         Set<String> mixinTargets = discoverMixinTargets(mixinConfig);
         bootstrapMixin(inst, mixinTargets, mixinConfig);
@@ -202,7 +209,7 @@ public final class IsolatedBootstrap {
         }
     }
 
-    private static void loadYarnMappings(String explicitPath, boolean legacy189) {
+    private static void loadYarnMappings(String explicitPath, VersionBracket bracket) {
         if (explicitPath != null && !explicitPath.isEmpty()) {
             try {
                 if (explicitPath.endsWith(".jar") || explicitPath.endsWith(".zip")) {
@@ -217,8 +224,9 @@ public final class IsolatedBootstrap {
             }
         }
 
-        // Pour 1.8.9, chercher d'abord les JARs Legacy Fabric Yarn (contiennent "1.8.9")
-        // puis les Yarn modernes. Pour 1.14+, l'inverse.
+        // Cherche d'abord un JAR Yarn dont le nom contient l'indice du bracket
+        // résolu (ex: "1.8.9" pour la tranche legacy189, "1.21.11" pour la
+        // tranche moderne actuelle) — voir VersionBracket.yarnJarNameHint.
         String[] searchRoots = {
             System.getProperty("user.home") + "\\.gradle\\caches\\fabric-loom",
             System.getProperty("user.home") + "\\.gradle\\caches",
@@ -226,7 +234,7 @@ public final class IsolatedBootstrap {
         };
         for (String root : searchRoots) {
             if (root == null) continue;
-            java.io.File found = findYarnJar(new java.io.File(root), legacy189, 0);
+            java.io.File found = findYarnJar(new java.io.File(root), bracket.yarnJarNameHint, 0);
             if (found != null) {
                 try {
                     YarnMappings.loadFromJar(found.getAbsolutePath());
@@ -248,28 +256,22 @@ public final class IsolatedBootstrap {
             LauncherLog.agent(1, "[LauncherAgent] Yarn resource JAR non chargée : " + e.getMessage());
         }
 
-        if (legacy189) {
-            LauncherLog.warn("[LauncherAgent] Yarn 1.8.9 non disponible — "
-                + "passez yarn=<chemin vers legacy-yarn-1.8.9+build.X-mergedv2.jar> en argument de l'agent. "
-                + "Téléchargeable sur maven.legacyfabric.net");
-        } else {
-            LauncherLog.warn("[LauncherAgent] Yarn non disponible — "
-                + "passez yarn=<chemin vers yarn-X.X.X+build.Y-mergedv2.jar> en argument de l'agent");
-        }
+        LauncherLog.warn("[LauncherAgent] Yarn non disponible pour le bracket \"" + bracket.key + "\" — "
+            + "passez yarn=<chemin vers un jar Yarn mergedv2 contenant \"" + bracket.yarnJarNameHint
+            + "\"> en argument de l'agent (legacy189 : maven.legacyfabric.net).");
     }
 
     /**
-     * Cherche un JAR Yarn dans {@code dir}.
-     * En mode legacy189, priorité aux JARs contenant "1.8.9" dans le nom.
+     * Cherche un JAR Yarn dans {@code dir}. Priorité aux JARs dont le nom
+     * contient {@code yarnJarNameHint} (voir VersionBracket.yarnJarNameHint).
      */
-    private static java.io.File findYarnJar(java.io.File dir, boolean legacy189, int depth) {
+    private static java.io.File findYarnJar(java.io.File dir, String yarnJarNameHint, int depth) {
         if (depth > 6 || !dir.isDirectory()) return null;
         java.io.File[] children = dir.listFiles();
         if (children == null) return null;
         for (java.io.File f : children) {
             if (!f.isFile() || !f.getName().contains("yarn") || !f.getName().endsWith("-mergedv2.jar")) continue;
-            boolean is189Jar = f.getName().contains("1.8.9");
-            if (legacy189 == is189Jar) return f;
+            if (yarnJarNameHint != null && f.getName().contains(yarnJarNameHint)) return f;
         }
         // Deuxième passe : accepter n'importe quel Yarn si rien de version-exact trouvé
         for (java.io.File f : children) {
@@ -277,7 +279,7 @@ public final class IsolatedBootstrap {
         }
         for (java.io.File f : children) {
             if (f.isDirectory()) {
-                java.io.File r = findYarnJar(f, legacy189, depth + 1);
+                java.io.File r = findYarnJar(f, yarnJarNameHint, depth + 1);
                 if (r != null) return r;
             }
         }
@@ -426,6 +428,13 @@ public final class IsolatedBootstrap {
         int count = 0;
         for (Class<?> cls : inst.getAllLoadedClasses()) {
             if (!targets.contains(cls.getName())) continue;
+            // Défensif : si la classe est déjà mixée (voir countHooks), pas besoin
+            // de retransform, même ici — même raisonnement que scheduleDelayedRetransform.
+            if (countHooks(cls) > 0) {
+                LauncherLog.agent(1, "[LauncherAgent] Cible déjà mixée (retransform immédiat): "
+                        + cls.getName() + " — skip");
+                continue;
+            }
             boolean modifiable = inst.isModifiableClass(cls);
             LauncherLog.agent(1, "[LauncherAgent] Retransform immédiat: " + cls.getName()
                     + " | modifiable=" + modifiable);
@@ -475,10 +484,25 @@ public final class IsolatedBootstrap {
         t.start();
     }
 
+    /**
+     * CORRECTIF (bug de timing réel, trouvé via log DIAG dans
+     * LauncherMixinTransformerWrapper — voir historique du projet) : Mixin
+     * RENOMME les méthodes handler effectivement appliquées en
+     * "handler$<id>$<nomOriginal>" (ex: "handler$zza000$la$onInit", vu dans
+     * les logs) — un nom qui NE COMMENCE JAMAIS par "la$" même quand
+     * l'injection a parfaitement réussi. L'ancien test
+     * ("startsWith(\"la$\")") ne trouvait donc JAMAIS rien, y compris sur des
+     * classes déjà mixées avec succès au chargement initial — ce qui faisait
+     * forcer un retransform à chaud INUTILE (et dans certains cas dangereux,
+     * en conflit avec le mixin d'un autre mod sur la même classe, ex:
+     * fabric-rendering-v1 sur GameRenderer) sur des cibles qui n'en avaient
+     * en réalité aucun besoin. Chercher "la$" n'importe où dans le nom
+     * (au lieu d'exiger qu'il soit en tête) détecte correctement ce cas.
+     */
     private static int countHooks(Class<?> cls) {
         int n = 0;
         for (java.lang.reflect.Method m : cls.getDeclaredMethods())
-            if (m.getName().startsWith("la$")) n++;
+            if (m.getName().contains("la$")) n++;
         return n;
     }
 }

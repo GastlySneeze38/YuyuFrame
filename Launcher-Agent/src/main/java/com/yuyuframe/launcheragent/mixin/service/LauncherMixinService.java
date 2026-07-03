@@ -227,15 +227,34 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
 
     /**
      * Yarn named → official pour un nom de méthode.
-     * Cherche d'abord dans la classe cible, puis dans fallbackNamedOwner.
-     * Retourne namedMethod tel quel si introuvable (constructeur ou méthode non obfusquée).
+     * Cherche d'abord dans la classe cible (avec puis sans descripteur), puis
+     * dans fallbackNamedOwner (idem). Retourne namedMethod tel quel si
+     * introuvable (constructeur ou méthode non obfusquée).
+     *
+     * CORRECTIF (bug réel trouvé en test 1.21.11) : plusieurs méthodes Yarn
+     * peuvent partager le même NOM avec des descripteurs différents (ex:
+     * Screen a deux méthodes "init" : init()V → official bg_, et
+     * init(II)V → official b, complètement différentes). Chercher par NOM
+     * SEUL (sans descripteur) est ambigu et peut retourner la mauvaise
+     * surcharge selon l'ordre d'insertion dans le tiny — observé : nos
+     * @Inject visant Screen.init()V se retrouvaient reciblés vers "b"
+     * (init(II)V) au lieu de "bg_", donc "Mixin apply failed ... could not
+     * find any targets matching b()V". D'où la priorité à la lookup EXACTE
+     * (avec descripteur officiel, traduit via resolveOfficialDesc), avec
+     * repli sur la lookup par nom seul uniquement si la lookup exacte échoue
+     * (robustesse pour d'éventuels cas où la traduction de descripteur ne
+     * matcherait pas exactement, ex: type non présent dans les mappings).
      */
     private static String resolveOfficialMethodName(String yarnClass, String namedMethod,
                                                      String namedDesc, String fallbackNamedOwner) {
         if ("<init>".equals(namedMethod)) return "<init>";
-        YarnMappings.MethodEntry me = YarnMappings.getOfficialMethod(yarnClass, namedMethod);
-        if (me == null && fallbackNamedOwner != null)
-            me = YarnMappings.getOfficialMethod(fallbackNamedOwner, namedMethod);
+        String officialDesc = resolveOfficialDesc(namedDesc);
+        YarnMappings.MethodEntry me = YarnMappings.getOfficialMethod(yarnClass, namedMethod, officialDesc);
+        if (me == null) me = YarnMappings.getOfficialMethod(yarnClass, namedMethod);
+        if (me == null && fallbackNamedOwner != null) {
+            me = YarnMappings.getOfficialMethod(fallbackNamedOwner, namedMethod, officialDesc);
+            if (me == null) me = YarnMappings.getOfficialMethod(fallbackNamedOwner, namedMethod);
+        }
         if (me != null) {
             LauncherLog.asm(1, "[LauncherAgent] refmap named→official: " + namedMethod + " → " + me.officialName);
             return me.officialName;

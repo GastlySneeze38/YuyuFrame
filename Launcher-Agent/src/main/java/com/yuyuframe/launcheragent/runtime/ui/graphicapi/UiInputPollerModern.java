@@ -81,12 +81,37 @@ public final class UiInputPollerModern extends UiInputPoller {
      * précédent) — sans ça, on casserait silencieusement le scroll vanilla
      * (sélection hotbar, zoom longue-vue) partout dans le jeu, pas seulement
      * quand un de nos écrans custom est ouvert.
+     *
+     * CORRECTIF IMPORTANT (crash natif 0xC0000409 en jeu, trouvé après
+     * élimination de tous les mods tiers — voir historique du projet) : la
+     * version précédente passait le {@code java.lang.reflect.Proxy}
+     * directement à {@code glfwSetScrollCallback}. Un Proxy implémente bien
+     * l'interface Java {@code GLFWScrollCallbackI}, mais ce n'est PAS un vrai
+     * objet natif-appelable — LWJGL construit ses callbacks via des classes
+     * dédiées ({@code GLFWScrollCallback extends Callback}) qui mettent en
+     * place un vrai pont natif (libffi), ce qu'un Proxy ne fait jamais. Passer
+     * un Proxy brut à une fonction GLFW native est exactement le genre de
+     * chose qui peut corrompre la pile quand GLFW essaie réellement d'invoquer
+     * ce "callback" plus tard (molette/saisie), plutôt que d'échouer proprement
+     * à chaque fois. Fix : envelopper le Proxy via la fabrique officielle
+     * {@code GLFWScrollCallback.create(GLFWScrollCallbackI)} — elle renvoie un
+     * VRAI objet Callback natif-appelable dont l'implémentation délègue en
+     * simple appel Java normal vers notre Proxy (donc notre logique de
+     * chaînage vers l'ancien callback reste inchangée), c'est CET objet qu'il
+     * faut passer à glfwSetScrollCallback, jamais le Proxy brut.
      */
     private void registerScrollCallback() {
         try {
             Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
             Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWScrollCallbackI", true, gameClassLoader);
+            Class<?> cbClass = Class.forName("org.lwjgl.glfw.GLFWScrollCallback", true, gameClassLoader);
             Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                // Cause RÉELLE du NPE trouvée en test (voir historique du projet) :
+                // GLFWScrollCallbackI hérite de CallbackI, qui a des méthodes DEFAULT
+                // (le vrai pont natif "callback(long)" que le proxy doit honorer, pas
+                // juste notre "invoke" SAM) — les ignorer et renvoyer null pour tout ce
+                // qui n'est pas notre "invoke" cassait justement CE pont natif.
+                if (method.isDefault()) return invokeDefault(p, method, args);
                 if (args != null && args.length == 3 && "invoke".equals(method.getName())) {
                     pendingScroll += (Double) args[2];
                     Object prev = previousScrollCb[0];
@@ -96,19 +121,23 @@ public final class UiInputPollerModern extends UiInputPoller {
                 }
                 return null;
             });
+            Method create = cbClass.getMethod("create", cbIface);
+            Object realCallback = create.invoke(null, proxy);
             Method setCb = glfwClass.getMethod("glfwSetScrollCallback", long.class, cbIface);
-            previousScrollCb[0] = setCb.invoke(null, windowHandle, proxy);
+            previousScrollCb[0] = setCb.invoke(null, windowHandle, realCallback);
         } catch (Throwable t) {
-            LauncherLog.err("[UiInputPollerModern] registerScrollCallback: " + t);
+            LauncherLog.err("[UiInputPollerModern] registerScrollCallback: " + rootCause(t));
         }
     }
 
-    /** Même principe de chaînage que registerScrollCallback() — ne casse jamais la saisie de texte vanilla (chat, champs d'écrans). */
+    /** Même principe de chaînage ET du même correctif (wrapping via la fabrique officielle) que registerScrollCallback() — ne casse jamais la saisie de texte vanilla (chat, champs d'écrans). */
     private void registerCharCallback() {
         try {
             Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
             Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWCharCallbackI", true, gameClassLoader);
+            Class<?> cbClass = Class.forName("org.lwjgl.glfw.GLFWCharCallback", true, gameClassLoader);
             Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                if (method.isDefault()) return invokeDefault(p, method, args);
                 if (args != null && args.length == 2 && "invoke".equals(method.getName())) {
                     int codepoint = (Integer) args[1];
                     synchronized (pendingChars) {
@@ -121,10 +150,57 @@ public final class UiInputPollerModern extends UiInputPoller {
                 }
                 return null;
             });
+            Method create = cbClass.getMethod("create", cbIface);
+            Object realCallback = create.invoke(null, proxy);
             Method setCb = glfwClass.getMethod("glfwSetCharCallback", long.class, cbIface);
-            previousCharCb[0] = setCb.invoke(null, windowHandle, proxy);
+            previousCharCb[0] = setCb.invoke(null, windowHandle, realCallback);
         } catch (Throwable t) {
-            LauncherLog.err("[UiInputPollerModern] registerCharCallback: " + t);
+            LauncherLog.err("[UiInputPollerModern] registerCharCallback: " + rootCause(t));
+        }
+    }
+
+    /** InvocationTargetException.toString() cache la vraie cause — la déballer pour un log utile. */
+    private static String rootCause(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) cur = cur.getCause();
+        java.io.StringWriter sw = new java.io.StringWriter();
+        cur.printStackTrace(new java.io.PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private static Method invocationHandlerInvokeDefault;
+    private static boolean invocationHandlerInvokeDefaultFailed;
+
+    /**
+     * {@code InvocationHandler.invokeDefault(Object, Method, Object...)}
+     * (JDK 16+) exécute la VRAIE implémentation par défaut d'une méthode
+     * d'interface pour un Proxy donné — indispensable ici car les interfaces
+     * de callback LWJGL (ex: GLFWScrollCallbackI) héritent de méthodes
+     * default de {@code org.lwjgl.system.CallbackI} qui font le vrai pont
+     * natif ; sans ça, notre handler renvoyait null pour toute méthode qui
+     * n'était pas notre "invoke" attendu, cassant ce pont (NPE constaté :
+     * "Cannot invoke Long.longValue() because the return value of
+     * InvocationHandler.invoke(...) is null").
+     *
+     * Résolu par réflexion (pas d'appel direct compilé) : ce module compile
+     * avec {@code --release 8} (voir build.bat), qui masque cette méthode au
+     * moment de la compilation même si le JDK qui exécute réellement cette
+     * branche (1.21.11, JAVA_17 mini) l'a bien à l'exécution.
+     */
+    private static Object invokeDefault(Object proxy, Method method, Object[] args) throws Throwable {
+        if (invocationHandlerInvokeDefault == null && !invocationHandlerInvokeDefaultFailed) {
+            try {
+                invocationHandlerInvokeDefault = java.lang.reflect.InvocationHandler.class
+                    .getMethod("invokeDefault", Object.class, Method.class, Object[].class);
+            } catch (Throwable t) {
+                invocationHandlerInvokeDefaultFailed = true;
+            }
+        }
+        if (invocationHandlerInvokeDefault == null) return null;
+        try {
+            return invocationHandlerInvokeDefault.invoke(null, proxy, method, args == null ? new Object[0] : args);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw e.getCause();
         }
     }
 

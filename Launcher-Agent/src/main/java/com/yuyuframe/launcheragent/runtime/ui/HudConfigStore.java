@@ -59,10 +59,35 @@ import java.util.Properties;
 public final class HudConfigStore {
     private HudConfigStore() {}
 
-    private static final String CONFIG_PATH =
-        System.getenv("APPDATA") != null
-            ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\module-config.properties"
-            : null;
+    /**
+     * Un fichier de config PAR INSTANCE, pas un seul fichier global partagé —
+     * chaque instance (1.8.9 PvP, 1.21.11 vanilla, etc.) a ses propres modules
+     * actifs et réglages, qui n'ont aucune raison de se partager ou de
+     * s'écraser entre eux.
+     *
+     * L'identifiant d'instance vient du dossier de travail du process Java :
+     * {@code Backend/src/minecraft/launcher.rs} lance TOUJOURS le process
+     * avec {@code .current_dir(&mc_game_dir)}, où {@code mc_game_dir} =
+     * {@code instances/<instanceId>/} (voir {@code launch.rs:50,556}) — donc
+     * {@code user.dir} EST le dossier de l'instance, peu importe la version
+     * MC. On ne garde que le dernier segment du chemin (le slug d'instance,
+     * ex: "vqjgwrmed6mr") comme nom de fichier — déjà un nom de dossier
+     * Windows valide, aucune sanitization nécessaire. Pas besoin de toucher
+     * au Rust ni d'ajouter un nouvel argument d'agent : cette info est déjà
+     * disponible telle quelle.
+     */
+    private static final String CONFIG_PATH = computeConfigPath();
+
+    private static String computeConfigPath() {
+        String appData = System.getenv("APPDATA");
+        if (appData == null) return null;
+        String userDir = System.getProperty("user.dir", "");
+        String instanceSlug = userDir.replace('\\', '/');
+        int lastSlash = instanceSlug.lastIndexOf('/');
+        instanceSlug = lastSlash >= 0 ? instanceSlug.substring(lastSlash + 1) : instanceSlug;
+        if (instanceSlug.isEmpty()) instanceSlug = "default";
+        return appData + "\\YuyuFrame\\agent\\module-config\\" + instanceSlug + ".properties";
+    }
 
     private static final Properties DATA = new Properties();
     private static boolean loaded = false;

@@ -44,8 +44,20 @@ public abstract class GlobalUiRenderMixin {
 
     private static UiInputPoller inputPoller;
 
+    /**
+     * DIAGNOSTIC TEMPORAIRE (crash natif 0xC0000409 à la jointure d'une
+     * partie, voir historique du projet) — coupe tout le corps de ce hook
+     * pour déterminer si le crash vient de notre logique par frame ou
+     * d'ailleurs. À retirer une fois le diagnostic conclu.
+     */
+    private static final boolean DIAG_DISABLE_RENDER_TAIL = false;
+    /** Étape 2 du diagnostic : ne coupe plus que le rendu HUD lui-même (poll/tick restent actifs). */
+    private static final boolean DIAG_DISABLE_HUD_RENDER = false;
+    private static final boolean DIAG_DISABLE_MODULE_OVERLAY = true;
+
     @Inject(method = "render(Lnet/minecraft/client/render/RenderTickCounter;Z)V", at = @At("TAIL"))
     private void la$onRenderTail(CallbackInfo ci) {
+        if (DIAG_DISABLE_RENDER_TAIL) return;
         try {
             Object mc = getMcInstance();
             if (mc == null) return;
@@ -69,13 +81,19 @@ public abstract class GlobalUiRenderMixin {
 
             Object currentScreen = getCurrentScreen(mc);
             if (currentScreen == null) {
-                UiRenderer renderer = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
-                // Overlay HUD permanent — même règle que le HUD vanilla
-                // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
-                // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
-                // les UiHudBox de cet écran qui dessinent, pas cet appel.
-                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                if (!DIAG_DISABLE_HUD_RENDER) {
+                    UiRenderer renderer = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
+                    // Overlay HUD permanent — même règle que le HUD vanilla
+                    // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
+                    // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
+                    // les UiHudBox de cet écran qui dessinent, pas cet appel.
+                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    // Étape 3 du diagnostic : renderOverlayAll (modules) coupé séparément
+                    // de HudOverlayRenderer.render pour isoler lequel des deux crashe.
+                    if (!DIAG_DISABLE_MODULE_OVERLAY) {
+                        ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    }
+                }
                 if (inputPoller.menuKeyPressed) {
                     setScreen(mc, new UiMainMenuScreen(null));
                 }
