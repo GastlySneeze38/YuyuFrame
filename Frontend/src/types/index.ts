@@ -39,6 +39,25 @@ export interface Mod {
 
 export type Loader = 'vanilla' | 'fabric' | 'forge'
 
+export interface DetectedSource {
+  kind: 'multimc_prism' | 'curseforge' | 'atlauncher' | 'unknown'
+  name: string | null
+  mcVersion: string | null
+  loader: string | null
+}
+
+export interface ScanResult {
+  modsDir: string
+  source: DetectedSource
+  mods: Mod[]
+}
+
+export interface ImportResult {
+  instanceId: string
+  imported: Mod[]
+  skipped: string[]
+}
+
 export interface Instance {
   id: string
   name: string

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AuthStatus, DeviceAuthResponse, Instance, Mod, ModpackMeta, PollResponse, SaveInfo, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -122,6 +122,9 @@ export const api = {
       return invoke<Mod>('mods_upload', { instanceId, filename: file.name, data })
     },
 
+    importPaths: (instanceId: string, paths: string[]) =>
+      invoke<ImportResult>('mods_import_paths', { instanceId, paths }),
+
     icon: (instanceId: string, name: string) =>
       invoke<string>('mod_icon', { instanceId, name }),
 
@@ -156,5 +159,16 @@ export const api = {
     remove: (instanceId: string) => invoke<void>('modpack_remove', { instanceId }),
     renameFile: (instanceId: string, oldName: string, newName: string) =>
       invoke<ModpackMeta | null>('modpack_rename_file', { instanceId, oldName, newName }),
+  },
+
+  importSource: {
+    scanFolder: (path: string) => invoke<ScanResult>('import_scan_folder', { path }),
+    apply: (input: {
+      sourceModsDir: string
+      selectedFiles: string[]
+      mode: 'new' | 'existing'
+      targetInstanceId?: string
+      newInstance?: { name: string; mcVersion: string; loader: string; ramMb: number }
+    }) => invoke<ImportResult>('import_apply', input),
   },
 }

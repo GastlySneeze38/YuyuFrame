@@ -42,6 +42,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let db_path = if cfg!(dev) {
                 // Dev : garde la DB dans Backend/ à côté du code source
@@ -149,6 +150,9 @@ pub fn run() {
             commands::mods::mods_upload,
             commands::mods::mod_icon,
             commands::mods::mods_check_update_safety,
+            commands::import::import_scan_folder,
+            commands::import::import_apply,
+            commands::import::mods_import_paths,
             commands::modpack::modpack_fetch_index,
             commands::modpack::modpack_install,
             commands::modpack::modpack_remove,

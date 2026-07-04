@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client;
 
+import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
@@ -50,13 +51,35 @@ public abstract class GlobalUiRenderMixin {
     @Inject(method = "render(Lnet/minecraft/client/render/RenderTickCounter;Z)V", at = @At("TAIL"))
     private void la$onRenderTail(CallbackInfo ci) {
         try {
+            // DOIT être la toute première chose exécutée ici — ce hook tourne
+            // à CHAQUE frame dès le tout début du client, très probablement
+            // avant même que TitleScreen.init() ne s'exécute une seule fois
+            // (seul autre appelant de ensureExposed(), voir TitleScreenMixin).
+            // Sans ça, ModuleRegistry.all() juste en dessous (et tout ce qui
+            // en dépend : ModuleGroup, UiColor, etc.) se chargeait AVANT que
+            // Knot ne sache que notre jar est SA PROPRE source de code — Knot
+            // déléguait alors entièrement au classloader système ('app', via
+            // -javaagent), qui définissait sa propre copie de ces classes.
+            // Plus tard, le bytecode de nos @Inject (fusionné dans GameRenderer,
+            // défini par Knot) redemande CES MÊMES classes — mais cette fois
+            // via Knot, qui en définit une DEUXIÈME copie incompatible avec la
+            // première (ClassCastException/LinkageError observés en jeu :
+            // "ModuleGroup ... loader 'app' ... loader 'knot'" — le menu ne
+            // s'ouvrait jamais sur 1.21.11 à cause de ça). this.getClass()
+            // ici est le VRAI type à l'exécution (GameRenderer, fusionné par
+            // Mixin), donc son classloader est bien Knot — jamais
+            // GlobalUiRenderMixin.class.getClassLoader() (la classe DONOR,
+            // chargée par l'agent isolé, PAS par Knot) comme utilisé par
+            // erreur plus bas jusqu'ici.
+            FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
+
             Object mc = getMcInstance();
             if (mc == null) return;
 
             if (inputPoller == null) {
                 long handle = getWindowHandle(mc);
                 if (handle == 0L) return;
-                inputPoller = new UiInputPollerModern(handle, GlobalUiRenderMixin.class.getClassLoader());
+                inputPoller = new UiInputPollerModern(handle, this.getClass().getClassLoader());
                 // Force le chargement des modules intégrés (voir ModuleRegistry) dès
                 // la première frame — sinon leurs éléments HUD (voir runtime.module)
                 // ne s'enregistreraient qu'à la première ouverture du menu "YuyuFrame".
@@ -83,7 +106,7 @@ public abstract class GlobalUiRenderMixin {
 
             Object currentScreen = getCurrentScreen(mc);
             if (currentScreen == null) {
-                UiRenderer renderer = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
+                UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
                 // Overlay HUD permanent — même règle que le HUD vanilla
                 // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
                 // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
@@ -112,7 +135,7 @@ public abstract class GlobalUiRenderMixin {
                 // vanilla/mod) — seuls les éléments HUD marqués
                 // showWhenScreenOpen restent visibles (voir HudElement, réglage
                 // générique façon OneConfig).
-                HudOverlayRenderer.renderPersistent(UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader()),
+                HudOverlayRenderer.renderPersistent(UiRenderer.get(this.getClass().getClassLoader()),
                     inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
@@ -125,7 +148,7 @@ public abstract class GlobalUiRenderMixin {
             // Diagnostic réservé au pipeline MODERNE (1.21.11) — jamais sur
             // legacy (1.8.9), sinon ce carré s'affiche par-dessus le menu
             // sur TOUTE version (régression constatée en jeu).
-            UiRenderer r = UiRenderer.get(GlobalUiRenderMixin.class.getClassLoader());
+            UiRenderer r = UiRenderer.get(this.getClass().getClassLoader());
             if (r.isModern()) {
                 try {
                     r.drawRoundedRect(

@@ -5,6 +5,7 @@ import { useStore } from '@/stores/useStore'
 import type { Instance, Loader } from '@/types'
 import { ModsContent, updateModsForNewVersion } from '@/pages/Mods'
 import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
+import ImportSourceModal from '@/components/ImportSourceModal'
 
 const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge']
 const RAM_OPTIONS = [1024, 2048, 4096, 6144, 8192]
@@ -805,6 +806,7 @@ export default function Instances() {
 
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [editTarget, setEditTarget] = useState<Instance | null>(null)
   const [duplicateSource, setDuplicateSource] = useState<Instance | null>(null)
   const [othersExpanded, setOthersExpanded] = useState(true)
@@ -957,6 +959,18 @@ export default function Instances() {
               </svg>
               Nouvelle instance
             </button>
+            <button
+              onClick={() => setShowImport(true)}
+              className="w-full flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-95"
+              style={{ height: 38, borderRadius: 12, fontSize: 12, background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+              </svg>
+              Importer une instance
+            </button>
           </div>
         </div>
 
@@ -1013,6 +1027,16 @@ export default function Instances() {
             addInstance(inst)
             setSelectedInstanceId(inst.id)
             setDuplicateSource(null)
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportSourceModal
+          onClose={() => setShowImport(false)}
+          onImported={(instanceId) => {
+            api.instances.list().then(setInstances)
+            setSelectedInstanceId(instanceId)
           }}
         />
       )}
