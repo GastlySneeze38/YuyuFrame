@@ -213,6 +213,19 @@ public final class ScreenStubPatcher {
                                 super.visitMethodInsn(opcode, realScreen, "<init>", "(L" + realComp + ";)V", false);
                                 return;
                             }
+                            // CAS SYMÉTRIQUE (NoSuchMethodError confirmé en jeu sur
+                            // 1.8.9 : "axu.<init>(Leu;)V" — découvert via
+                            // ResourcePackSearchScreen, écrit pour 1.21.11 et appelant
+                            // TOUJOURS super(Component title)). Sur 1.8.9, axu n'a QUE
+                            // le no-arg — le titre déjà poussé sur la pile (par l'appel
+                            // précédent, ex: ScreenHelper.literal(...)) est jeté (POP,
+                            // 1 slot : un type référence) et on appelle le vrai
+                            // constructeur no-arg à la place.
+                            if (isStubScreen(owner) && "<init>".equals(mName) && !"()V".equals(mDesc) && screenNoArgOk) {
+                                super.visitInsn(Opcodes.POP);
+                                super.visitMethodInsn(opcode, realScreen, "<init>", "()V", false);
+                                return;
+                            }
                             if (isStubScreen(owner)) owner = realScreen;
                             else if (isStubComp(owner)) {
                                 owner = realComp;

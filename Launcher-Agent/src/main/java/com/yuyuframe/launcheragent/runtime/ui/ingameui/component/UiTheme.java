@@ -37,4 +37,29 @@ public final class UiTheme {
     public static final float RADIUS_SM = 4f;
     public static float RADIUS_MD = 8f;
     public static final float RADIUS_LG = 12f;
+
+    /**
+     * Échelle générale de l'interface (Petite/Normale/Grande, voir
+     * GlobalUiSettings) — 1f = taille d'origine. Appliquée par les écrans/
+     * widgets à leurs propres constantes de mise en page via {@link #scaled}
+     * plutôt que par un vrai système de transform/DPI (qui n'existe pas dans
+     * ce pipeline de rendu pixel-à-pixel) : chaque constante de taille/
+     * espacement doit être multipliée EXPLICITEMENT à son point d'usage.
+     */
+    public static float UI_SCALE = 1f;
+
+    /** Raccourci {@code v * UI_SCALE} — lisibilité aux points d'usage (voir UiMainMenuScreen/ConfigScreenBuilder). */
+    public static float scaled(float v) { return v * UI_SCALE; }
+
+    /**
+     * Variante plus claire/plus sombre de {@link #ACCENT} — recalculée à
+     * CHAQUE appel depuis la valeur COURANTE de {@code ACCENT} (jamais un
+     * champ figé) : {@code ACCENT} est réassignable en direct depuis l'écran
+     * "Paramètres" (voir javadoc de classe), un champ dérivé figé au
+     * chargement resterait sur l'ancienne couleur après un tel changement.
+     * Utilisées pour les dégradés/jeux de lumière (voir UiToggle, ModCard,
+     * SidebarItem) — jamais pour une couleur "à plat", qui doit rester ACCENT.
+     */
+    public static UiColor accentLight() { return UiColor.lerp(ACCENT, new UiColor(255, 255, 255, 255), 0.28f); }
+    public static UiColor accentDark() { return UiColor.lerp(ACCENT, new UiColor(0, 0, 0, 255), 0.35f); }
 }

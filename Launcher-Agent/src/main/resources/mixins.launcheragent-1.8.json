@@ -20,6 +20,7 @@
     "client.v1_8.MixinSwingWhileBlocking189",
     "client.v1_8.MixinOldBow189",
     "client.v1_8.MixinOldConsume189",
+    "client.v1_8.MixinSneakRamp189",
     "client.v1_8.MixinCrosshair189",
     "client.v1_8.MixinWorldTime189",
     "client.v1_8.optimodule.MixinUnstackedItems189",
@@ -31,7 +32,8 @@
     "client.v1_8.optimodule.MixinCachedFancyClouds189",
     "client.v1_8.optimodule.MixinLabelRenderDistance189",
     "client.v1_8.optimodule.MixinCachedStringWidth189",
-    "client.v1_8.optimodule.MixinParticleRenderDistance189"
+    "client.v1_8.optimodule.MixinParticleRenderDistance189",
+    "client.v1_8.optimodule.MixinBorderlessWindow189"
   ],
   "injectors": {
     "defaultRequire": 1

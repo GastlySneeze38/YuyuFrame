@@ -28,4 +28,9 @@ public final class UiColor {
             from.a + (to.a - from.a) * t
         );
     }
+
+    /** Même couleur, alpha multiplié par {@code factor} (0..1) — pour un fondu d'entrée/sortie (voir UiTransition) sans changer chaque couleur d'un widget une par une. */
+    public UiColor multiplyAlpha(float factor) {
+        return new UiColor(r, g, b, a * factor);
+    }
 }

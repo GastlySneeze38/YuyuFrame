@@ -23,17 +23,20 @@ import java.util.List;
  */
 public class UiScrollContainer {
 
-    private static final float SCROLL_STEP_PX = 36f;
+    // Non static — dépendent de UiTheme.UI_SCALE au moment de la construction
+    // (voir GlobalUiSettings, réglage "Taille de l'interface"), même motif que
+    // UiSlider/UiToggle/UiColorPicker.
+    private final float SCROLL_STEP_PX = UiTheme.scaled(36f);
     // Marge haut/bas — les UiLabel ont une hauteur de widget nulle (leur y est
     // la ligne de base, voir UiLabel), donc contentTop/Bottom ne couvrent pas
     // les ascendantes/descendantes du texte réellement dessiné. Sans cette
     // marge, la première/dernière ligne se ferait tronquer pile au bord du
     // scissor en position de scroll extrême.
-    private static final float EDGE_PADDING = 14f;
+    private final float EDGE_PADDING = UiTheme.scaled(14f);
 
-    private static final float SCROLLBAR_W = 6f;
-    private static final float SCROLLBAR_MARGIN = 4f;
-    private static final float SCROLLBAR_MIN_H = 24f;
+    private final float SCROLLBAR_W = UiTheme.scaled(6f);
+    private final float SCROLLBAR_MARGIN = UiTheme.scaled(4f);
+    private final float SCROLLBAR_MIN_H = UiTheme.scaled(24f);
 
     private final float vx, vy, vw, vh; // viewport en espace écran, (vx,vy) = coin bas-gauche
     private final List<UiWidget> content = new ArrayList<>();
@@ -121,7 +124,8 @@ public class UiScrollContainer {
             float tx = vx + vw - SCROLLBAR_W - SCROLLBAR_MARGIN;
             if (!thumbDragging) {
                 float ty = thumbY(lastAnimatedScroll);
-                boolean overThumb = input.mouseX >= tx - 3 && input.mouseX <= tx + SCROLLBAR_W + 3
+                float hitPad = UiTheme.scaled(3f);
+                boolean overThumb = input.mouseX >= tx - hitPad && input.mouseX <= tx + SCROLLBAR_W + hitPad
                     && input.mouseY >= ty && input.mouseY <= ty + th;
                 if (input.leftClicked && overThumb) {
                     thumbDragging = true;

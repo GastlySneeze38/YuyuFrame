@@ -11,16 +11,20 @@ import com.yuyuframe.launcheragent.runtime.module.FullbrightModule;
 import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
 import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
+import com.yuyuframe.launcheragent.runtime.module.MumbleLinkModule;
 import com.yuyuframe.launcheragent.runtime.module.OldBowModule;
 import com.yuyuframe.launcheragent.runtime.module.OldConsumeModule;
 import com.yuyuframe.launcheragent.runtime.module.OldItemRotationsModule;
 import com.yuyuframe.launcheragent.runtime.module.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.PotionEffectsModule;
+import com.yuyuframe.launcheragent.runtime.module.SneakRampModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingSpeedModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingWhileBlockingModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSneakModule;
 import com.yuyuframe.launcheragent.runtime.module.ToggleSprintModule;
 import com.yuyuframe.launcheragent.runtime.module.WorldTimeModule;
+import com.yuyuframe.launcheragent.runtime.module.ZoomModule;
+import com.yuyuframe.launcheragent.runtime.module.optimodule.BorderlessWindowModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.CachedFancyCloudsModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.ChunkBuilderThreadsModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.EntityBackfaceCullingModule;
@@ -70,6 +74,11 @@ public final class ModuleRegistry {
         register(new ArmorDurabilityModule());
         register(new LowHealthTintModule());
         register(new FovModule());
+        // Enregistré JUSTE APRÈS FovModule — tickAll() itère MODULES dans
+        // l'ordre d'enregistrement, donc si les deux sont actifs, le zoom
+        // s'applique EN DERNIER chaque frame et n'est jamais écrasé par le
+        // FOV permanent de FovModule (voir ZoomModule pour le détail).
+        register(new ZoomModule());
         register(new HurtCamModule());
         register(new ToggleSprintModule());
         register(new ToggleSneakModule());
@@ -79,6 +88,7 @@ public final class ModuleRegistry {
         register(new SwingWhileBlockingModule());
         register(new OldBowModule());
         register(new OldConsumeModule());
+        register(new SneakRampModule());
         register(new CrosshairModule());
         register(new FullbrightModule());
         register(new WorldTimeModule());
@@ -92,25 +102,47 @@ public final class ModuleRegistry {
         register(new CachedFancyCloudsModule());
         register(new LabelRenderDistanceModule());
         register(new ParticleRenderDistanceModule());
+        register(new BorderlessWindowModule());
+        register(new MumbleLinkModule());
 
         // Regroupement demandé — voir ModuleGroup : purement de la
         // présentation, les modules ci-dessus restent enregistrés
         // individuellement juste au-dessus (tickAll/renderOverlayAll/persistance
         // inchangés), seul UiMainMenuScreen les affiche fusionnés sous une
         // carte au lieu d'une par module.
-        GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Hurt Cam, Sprint/Sneak",
-            Arrays.asList(get("fov"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"))));
-        GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire",
+        GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak",
+            Arrays.asList(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"))));
+        GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak",
             Arrays.asList(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
-                get("swing-while-blocking"), get("old-bow"), get("old-consume"))));
+                get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"))));
         // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
         // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),
         // pas de dépendance sur PolyPatcher lui-même, juste la même idée en Mixin natif.
-        GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés",
-            Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
-                get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
-                get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"),
-                get("particle-render-distance"))));
+        List<LauncherModule> optimisationMembers = Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
+            get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
+            get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"),
+            get("particle-render-distance"), get("borderless-window"));
+        // Onglets regroupés — demandé explicitement pour réduire le nombre
+        // d'onglets ET la longueur de leurs noms dans la sous-sidebar (les
+        // noms complets des modules débordaient de la largeur des onglets,
+        // voir UiModGroupConfigScreen) : les 2 modules de culling face
+        // arrière (joueur/entités) et les 3 modules de distance de rendu
+        // (tile entities/labels/particules) partagent maintenant chacun un
+        // seul onglet au lieu d'un par module — chaque module GARDE son
+        // propre toggle d'activation et ses réglages annotés, juste empilés
+        // à la suite les uns des autres dans le même onglet (voir
+        // UiModGroupConfigScreen.buildLayout()). Les modules restants gardent
+        // un onglet dédié (Tab à un seul membre).
+        GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés", optimisationMembers,
+            Arrays.asList(
+                new ModuleGroup.Tab("Items non empilés", Collections.singletonList(get("unstacked-items"))),
+                new ModuleGroup.Tab("Culling face arrière", Arrays.asList(get("player-backface-culling"), get("entity-backface-culling"))),
+                new ModuleGroup.Tab("Animations réduites", Collections.singletonList(get("low-animation-tick"))),
+                new ModuleGroup.Tab("Distance de rendu", Arrays.asList(get("tile-entity-render-distance"), get("label-render-distance"), get("particle-render-distance"))),
+                new ModuleGroup.Tab("Threads de construction", Collections.singletonList(get("chunk-builder-threads"))),
+                new ModuleGroup.Tab("Nuages Fancy en cache", Collections.singletonList(get("cached-fancy-clouds"))),
+                new ModuleGroup.Tab("Fenêtre sans bordure", Collections.singletonList(get("borderless-window")))
+            )));
     }
 
     public static void register(LauncherModule module) {

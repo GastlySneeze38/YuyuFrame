@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.mixin.client.v1_8;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -53,6 +54,10 @@ public abstract class GlobalUiRenderMixin189 {
                 // la première frame — sinon leurs éléments HUD (voir runtime.module)
                 // ne s'enregistreraient qu'à la première ouverture du menu "YuyuFrame".
                 ModuleRegistry.all();
+                // Idem pour GlobalUiSettings — voir GlobalUiRenderMixin (1.21+)
+                // pour le détail du bug que ça corrige (mauvaise taille
+                // d'interface dès la première ouverture du menu).
+                GlobalUiSettings.INSTANCE.onConfigChanged();
             }
             inputPoller.poll();
 

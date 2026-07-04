@@ -19,9 +19,14 @@ import java.util.function.Consumer;
  */
 public class UiSlider extends UiWidget {
 
-    private static final float TRACK_H = 5f;
-    private static final float KNOB_R = 8f;
-    private static final float READOUT_W = 44f;
+    // Non static (contrairement à l'habitude) — dépendent de UiTheme.UI_SCALE
+    // au moment de la construction (voir GlobalUiSettings, réglage "Taille de
+    // l'interface"), donc figées PAR INSTANCE plutôt que partagées telles
+    // quelles à tous les sliders sans distinction d'échelle.
+    private final float TRACK_H = UiTheme.scaled(5f);
+    private final float KNOB_R = UiTheme.scaled(8f);
+    private final float READOUT_W = UiTheme.scaled(44f);
+    private final float textScale = UiTheme.scaled(0.48f);
 
     private final float min, max, step;
     private float value;
@@ -29,7 +34,7 @@ public class UiSlider extends UiWidget {
     private boolean dragging;
 
     public UiSlider(float x, float y, float w, float min, float max, float step, float initial, Consumer<Float> onChange) {
-        super(x, y, w, 20f);
+        super(x, y, w, UiTheme.scaled(20f));
         this.min = min;
         this.max = max;
         this.step = step;
@@ -63,8 +68,8 @@ public class UiSlider extends UiWidget {
         renderer.drawRoundedRect(knobX - KNOB_R, cy - KNOB_R, knobX + KNOB_R, cy + KNOB_R, KNOB_R, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
 
         String text = formatValue();
-        float tw = renderer.textWidth(text, 0.48f);
-        renderer.drawText(text, x + w - tw, cy - 5f, UiTheme.TEXT_SECONDARY, 0.48f, vpWidth, vpHeight);
+        float tw = renderer.textWidth(text, textScale);
+        renderer.drawText(text, x + w - tw, cy - UiTheme.scaled(5f), UiTheme.TEXT_SECONDARY, textScale, vpWidth, vpHeight);
     }
 
     @Override

@@ -3,8 +3,10 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiEasing;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
@@ -34,6 +36,33 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     private Object navigationTarget;
 
     /**
+     * "Rideau" qui se lève à l'apparition de CET écran — pas une vraie
+     * transition croisée entre l'ancien et le nouveau Screen (le nouveau
+     * Screen ne devient "courant" qu'à la frame SUIVANTE, voir closeTo()/
+     * GlobalUiRenderMixin : les deux ne sont jamais dessinés simultanément,
+     * donc pas de fondu enchaîné possible sans retarder le vrai
+     * mc.setScreen(), un changement bien plus risqué sur du code Mixin
+     * partagé par les deux pipelines). À la place : tout l'écran (fond +
+     * widgets) est dessiné normalement dès la première frame, puis recouvert
+     * d'un voile opaque qui s'estompe en {@link #uiDraw} — l'écran semble
+     * "se révéler" au lieu d'apparaître d'un coup sec. Générique ici (PAS
+     * dans UiMainMenuScreen) : chaque écran custom (config d'un module, HUD
+     * editor...) en profite automatiquement, aucun changement par écran.
+     */
+    private final UiTransition enterAnim = new UiTransition(0.22f, 0f, UiEasing.EASE_OUT_CUBIC);
+
+    /**
+     * Dernier écran custom effectivement dessiné, TOUS types confondus — sert
+     * UNIQUEMENT à détecter une RÉ-activation d'un écran déjà existant (ex:
+     * "Retour" vers l'instance de UiMainMenuScreen passée en lastScreen à
+     * l'ouverture d'un écran de config, voir closeTo()) : cette instance n'est
+     * jamais reconstruite, donc son enterAnim (déjà à 1.0 depuis longtemps) ne
+     * rejouerait jamais sans ça — l'écran de retour semblait apparaître d'un
+     * coup sec, sans transition, contrairement à un écran fraîchement ouvert.
+     */
+    private static UiScreenBase lastActiveScreen;
+
+    /**
      * Constructeur no-arg de Screen (PAS Screen(Component title)) — ce dernier
      * n'existe pas forcément sur toutes les versions (ex: absent en 1.8.9,
      * observé via NoSuchMethodError: axu.<init>(Leu;)V lors du premier test en
@@ -43,6 +72,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      */
     protected UiScreenBase(String title) {
         super();
+        enterAnim.show();
     }
 
     @Override
@@ -77,16 +107,47 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     @Override
     public void uiDraw(double mouseX, double mouseY) {
         try {
+            // Détecte une (RÉ)activation de CET écran — soit tout frais, soit
+            // un "Retour" vers une instance déjà existante (voir javadoc de
+            // lastActiveScreen) — et relance le rideau depuis 0 dans le second
+            // cas (le premier l'a déjà, enterAnim.show() du constructeur
+            // suffit alors, replay() est juste redondant/sans effet visible).
+            if (lastActiveScreen != this) {
+                lastActiveScreen = this;
+                enterAnim.replay();
+            }
+
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
             renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0, overlayColor(), screenWidth, screenHeight);
+
             String hoveredTooltip = null;
             for (UiWidget w : widgets) {
                 w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
                 if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }
             if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, screenWidth, screenHeight);
+
+            drawRevealVeil(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[UiScreenBase] uiDraw: " + t);
+        }
+    }
+
+    /**
+     * Voile de révélation — voir javadoc d'{@code enterAnim}. Opaque au
+     * premier instant (masque tout), s'estompe ensuite pour "révéler" l'écran
+     * déjà entièrement dessiné dessous. Appelé automatiquement en fin de
+     * {@link #uiDraw} ci-dessus, MAIS aussi ré-appelable explicitement par une
+     * sous-classe qui rajoute son propre contenu APRÈS {@code super.uiDraw()}
+     * (titres/logos par-dessus tout, voir UiMainMenuScreen) : sans ce second
+     * appel, ce contenu additionnel apparaîtrait d'un coup sec, jamais couvert
+     * par le voile puisque dessiné après lui.
+     */
+    protected void drawRevealVeil(UiRenderer renderer) {
+        float reveal = 1f - Math.max(0f, Math.min(1f, enterAnim.eased()));
+        if (reveal > 0.001f) {
+            renderer.drawRoundedRect(0, 0, screenWidth, screenHeight, 0,
+                new UiColor(8, 8, 12, 255).multiplyAlpha(reveal), screenWidth, screenHeight);
         }
     }
 

@@ -19,8 +19,14 @@ import java.util.function.IntConsumer;
  */
 public class UiDropdown extends UiWidget {
 
-    private static final float ROW_H = 26f;
-    private static final float PANEL_PAD = 5f;
+    // Non static — dépendent de UiTheme.UI_SCALE au moment de la construction
+    // (voir GlobalUiSettings, réglage "Taille de l'interface"), même motif que
+    // UiSlider/UiToggle/UiColorPicker.
+    private final float ROW_H = UiTheme.scaled(26f);
+    private final float PANEL_PAD = UiTheme.scaled(5f);
+    private final float textScale = UiTheme.scaled(0.48f);
+    private final float textPad = UiTheme.scaled(8f);
+    private final float textVOff = UiTheme.scaled(5f);
 
     private final List<String> options;
     private int selectedIndex;
@@ -45,10 +51,10 @@ public class UiDropdown extends UiWidget {
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
 
         String label = options.get(selectedIndex);
-        renderer.drawText(label, x + 8, y + h / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.48f, vpWidth, vpHeight);
+        renderer.drawText(label, x + textPad, y + h / 2f - textVOff, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
         String arrow = expanded ? "^" : "v";
-        float aw = renderer.textWidth(arrow, 0.48f);
-        renderer.drawText(arrow, x + w - aw - 8, y + h / 2f - 5f, UiTheme.TEXT_SECONDARY, 0.48f, vpWidth, vpHeight);
+        float aw = renderer.textWidth(arrow, textScale);
+        renderer.drawText(arrow, x + w - aw - textPad, y + h / 2f - textVOff, UiTheme.TEXT_SECONDARY, textScale, vpWidth, vpHeight);
 
         if (!expanded) return;
 
@@ -56,15 +62,16 @@ public class UiDropdown extends UiWidget {
         float panelBottom = panelTop - options.size() * ROW_H;
         renderer.drawRoundedRect(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
 
+        float rowInset = UiTheme.scaled(2f), rowRadius = UiTheme.scaled(2f);
         for (int i = 0; i < options.size(); i++) {
             float rowTop = panelTop - i * ROW_H;
             float rowBottom = rowTop - ROW_H;
             boolean hoveredRow = mouseX >= x && mouseX <= x + w && mouseY >= rowBottom && mouseY <= rowTop;
             if (i == selectedIndex || hoveredRow) {
-                renderer.drawRoundedRect(x + 2, rowBottom + 1, x + w - 2, rowTop - 1, 2f,
+                renderer.drawRoundedRect(x + rowInset, rowBottom + 1, x + w - rowInset, rowTop - 1, rowRadius,
                     i == selectedIndex ? UiTheme.ACCENT_DIM : UiTheme.CARD_HOVER, vpWidth, vpHeight);
             }
-            renderer.drawText(options.get(i), x + 8, rowBottom + ROW_H / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.48f, vpWidth, vpHeight);
+            renderer.drawText(options.get(i), x + textPad, rowBottom + ROW_H / 2f - textVOff, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
         }
     }
 

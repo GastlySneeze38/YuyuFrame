@@ -120,6 +120,54 @@ public final class UiRenderer {
     private int uVSize = -1;
     private boolean vignetteInitFailed = false;
 
+    // ── Shader "FX" (ombre portée / contour / dégradé) — un seul shader pour
+    // les 3 effets, tous dérivés de la MÊME distance signée à un rectangle
+    // arrondi (formule Inigo Quilez : contrairement au shader rect ci-dessus,
+    // dont le calcul de distance n'est correct QUE près des coins arrondis
+    // — les bords droits ont toujours dist=0 —, celle-ci donne une distance
+    // signée valide PARTOUT, nécessaire pour un contour d'épaisseur uniforme
+    // sur les 4 côtés et un flou d'ombre cohérent) :
+    //  - u_BorderWidth > 0  → contour creux (anneau de cette épaisseur)
+    //  - u_Blur > 0 (et u_BorderWidth == 0) → bord adouci sur u_Blur pixels
+    //    (ombre portée façon CSS box-shadow — u_Rect déjà agrandi du "spread"
+    //    par l'appelant, pas géré ici)
+    //  - u_Gradient > 0.5 → interpole u_ColorA (bord y1) → u_ColorB (bord y2)
+    //    verticalement, au lieu de la couleur plate u_ColorA
+    private static final String FX_FRAGMENT_SRC =
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform float u_Blur;\n" +
+        "uniform float u_BorderWidth;\n" +
+        "uniform vec4 u_ColorA;\n" +
+        "uniform vec4 u_ColorB;\n" +
+        "uniform float u_Gradient;\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha;\n" +
+        "    if (u_BorderWidth > 0.0) {\n" +
+        "        float outer = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "        float inner = 1.0 - smoothstep(-1.0, 0.0, dist + u_BorderWidth);\n" +
+        "        alpha = outer - inner;\n" +
+        "    } else {\n" +
+        "        float b = max(u_Blur, 1.0);\n" +
+        "        alpha = 1.0 - smoothstep(-b, b, dist);\n" +
+        "    }\n" +
+        "    vec3 rgb = u_ColorA.rgb;\n" +
+        "    if (u_Gradient > 0.5) {\n" +
+        "        float t = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
+        "        rgb = mix(u_ColorA.rgb, u_ColorB.rgb, t);\n" +
+        "    }\n" +
+        "    gl_FragColor = vec4(rgb, u_ColorA.a * alpha);\n" +
+        "}\n";
+
+    private int fxProgram = -1;
+    private int uFxRect = -1, uFxRadius = -1, uFxBlur = -1, uFxBorderWidth = -1, uFxColorA = -1, uFxColorB = -1, uFxGradient = -1;
+    private boolean fxInitFailed = false;
+
     // ── Shader de texte SDF (distance field) — voir UiFont pour le pourquoi :
     // l'alpha de l'atlas encode une distance signée au bord du glyphe, pas
     // une couverture directe. dFdx/dFdy/fwidth sont cœur GLSL 1.10+ pour un
@@ -250,6 +298,46 @@ public final class UiRenderer {
     private int vignetteProgramModern = -1;
     private int uViewportSizeModern = -1, uVSizeModern = -1, uColorVignetteModern = -1, uProjectionVignetteModern = -1;
     private boolean vignetteInitFailedModern = false;
+
+    // ── Shader "FX" moderne — même logique que FX_FRAGMENT_SRC (legacy), voir
+    // son commentaire pour le détail des 3 modes (contour/ombre/dégradé).
+    private static final String FX_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform float u_Blur;\n" +
+        "uniform float u_BorderWidth;\n" +
+        "uniform vec4 u_ColorA;\n" +
+        "uniform vec4 u_ColorB;\n" +
+        "uniform float u_Gradient;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha;\n" +
+        "    if (u_BorderWidth > 0.0) {\n" +
+        "        float outer = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "        float inner = 1.0 - smoothstep(-1.0, 0.0, dist + u_BorderWidth);\n" +
+        "        alpha = outer - inner;\n" +
+        "    } else {\n" +
+        "        float b = max(u_Blur, 1.0);\n" +
+        "        alpha = 1.0 - smoothstep(-b, b, dist);\n" +
+        "    }\n" +
+        "    vec3 rgb = u_ColorA.rgb;\n" +
+        "    if (u_Gradient > 0.5) {\n" +
+        "        float t = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
+        "        rgb = mix(u_ColorA.rgb, u_ColorB.rgb, t);\n" +
+        "    }\n" +
+        "    fragColor = vec4(rgb, u_ColorA.a * alpha);\n" +
+        "}\n";
+
+    private int fxProgramModern = -1;
+    private int uFxRectModern = -1, uFxRadiusModern = -1, uFxBlurModern = -1, uFxBorderWidthModern = -1,
+        uFxColorAModern = -1, uFxColorBModern = -1, uFxGradientModern = -1, uProjectionFxModern = -1;
+    private boolean fxInitFailedModern = false;
 
     private static final String TEXT_FRAGMENT_SRC_MODERN =
         "#version 150\n" +
@@ -394,6 +482,56 @@ public final class UiRenderer {
         } catch (Throwable t) {
             vignetteInitFailedModern = true;
             LauncherLog.err("[UiRenderer] échec compilation shader vignette moderne : " + t);
+        }
+    }
+
+    private void ensureFxShaderInit() {
+        if (fxProgram != -1 || fxInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, VERTEX_SRC);
+            glCompileShader(vsh);
+
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, FX_FRAGMENT_SRC);
+            glCompileShader(fsh);
+
+            fxProgram = glCreateProgram();
+            glAttachShader(fxProgram, vsh);
+            glAttachShader(fxProgram, fsh);
+            glLinkProgram(fxProgram);
+
+            uFxRect = glGetUniformLocation(fxProgram, "u_Rect");
+            uFxRadius = glGetUniformLocation(fxProgram, "u_Radius");
+            uFxBlur = glGetUniformLocation(fxProgram, "u_Blur");
+            uFxBorderWidth = glGetUniformLocation(fxProgram, "u_BorderWidth");
+            uFxColorA = glGetUniformLocation(fxProgram, "u_ColorA");
+            uFxColorB = glGetUniformLocation(fxProgram, "u_ColorB");
+            uFxGradient = glGetUniformLocation(fxProgram, "u_Gradient");
+
+            LauncherLog.ui(1, "[UiRenderer] shader FX compilé, program=" + fxProgram);
+        } catch (Throwable t) {
+            fxInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader FX (ombre/contour/dégradé) : " + t);
+        }
+    }
+
+    private void ensureFxShaderInitModern() {
+        if (fxProgramModern != -1 || fxInitFailedModern) return;
+        try {
+            fxProgramModern = compileModernProgram(VERTEX_SRC_MODERN, FX_FRAGMENT_SRC_MODERN);
+            uFxRectModern = glGetUniformLocation(fxProgramModern, "u_Rect");
+            uFxRadiusModern = glGetUniformLocation(fxProgramModern, "u_Radius");
+            uFxBlurModern = glGetUniformLocation(fxProgramModern, "u_Blur");
+            uFxBorderWidthModern = glGetUniformLocation(fxProgramModern, "u_BorderWidth");
+            uFxColorAModern = glGetUniformLocation(fxProgramModern, "u_ColorA");
+            uFxColorBModern = glGetUniformLocation(fxProgramModern, "u_ColorB");
+            uFxGradientModern = glGetUniformLocation(fxProgramModern, "u_Gradient");
+            uProjectionFxModern = glGetUniformLocation(fxProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader FX (moderne) compilé, program=" + fxProgramModern);
+        } catch (Throwable t) {
+            fxInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader FX moderne : " + t);
         }
     }
 
@@ -574,6 +712,46 @@ public final class UiRenderer {
         drawRoundedRectLegacy(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
+    /**
+     * Ombre portée façon CSS box-shadow (flou + spread), même distance signée
+     * que {@link #drawRoundedRect} mais valide sur TOUS les bords (pas juste
+     * les coins) — voir le commentaire du shader FX. À dessiner AVANT le
+     * panneau/la carte elle-même (pas après, sinon l'ombre recouvre le
+     * contenu).
+     *
+     * @param blur   largeur du flou en pixels (plus grand = ombre plus diffuse/étalée).
+     * @param spread agrandissement du rectangle source AVANT flou (positif =
+     *               ombre qui déborde du contour de la carte, négatif = ombre
+     *               rétractée à l'intérieur) — 0 = ombre calée exactement sur
+     *               les bords de {@code (x1,y1)-(x2,y2)}.
+     */
+    public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
+                            UiColor color, int vpWidth, int vpHeight) {
+        drawFx(x1 - spread, y1 - spread, x2 + spread, y2 + spread, radius + spread, blur, 0f,
+            color, color, false, vpWidth, vpHeight);
+    }
+
+    /** Contour creux (anneau) d'épaisseur {@code borderWidth}, coins arrondis — le rect lui-même reste transparent (à dessiner par-dessus un fond déjà posé avec {@link #drawRoundedRect}, pas à sa place). */
+    public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
+                                       UiColor color, int vpWidth, int vpHeight) {
+        drawFx(x1, y1, x2, y2, radius, 0f, borderWidth, color, color, false, vpWidth, vpHeight);
+    }
+
+    /** Dégradé vertical {@code colorBottom} (bord y1) → {@code colorTop} (bord y2), coins arrondis optionnels (radius=0 = rect plein). */
+    public void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
+                                  UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
+        drawFx(x1, y1, x2, y2, radius, 0f, 0f, colorBottom, colorTop, true, vpWidth, vpHeight);
+    }
+
+    private void drawFx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
+                         UiColor colorA, UiColor colorB, boolean gradient, int vpWidth, int vpHeight) {
+        if (modern) {
+            drawFxModern(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
+            return;
+        }
+        drawFxLegacy(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
+    }
+
     private void drawRoundedRectModern(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                         int vpWidth, int vpHeight) {
         ensureRectShaderInitModern();
@@ -683,6 +861,103 @@ public final class UiRenderer {
             try {
                 if (useShader) glUseProgram(0);
             } catch (Throwable ignored) {}
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (attribPushed) popAttrib();
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawFxModern(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
+                               UiColor colorA, UiColor colorB, boolean gradient, int vpWidth, int vpHeight) {
+        ensureFxShaderInitModern();
+        if (fxInitFailedModern) return;
+        try {
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            glUseProgram(fxProgramModern);
+            glUniform4f(uFxRectModern, x1, y1, x2, y2);
+            glUniform1f(uFxRadiusModern, radius);
+            glUniform1f(uFxBlurModern, blur);
+            glUniform1f(uFxBorderWidthModern, borderWidth);
+            glUniform4f(uFxColorAModern, colorA.r, colorA.g, colorA.b, colorA.a);
+            glUniform4f(uFxColorBModern, colorB.r, colorB.g, colorB.b, colorB.a);
+            glUniform1f(uFxGradientModern, gradient ? 1f : 0f);
+            uploadProjectionModern(uProjectionFxModern, vpWidth, vpHeight);
+            // u_Rect (ci-dessus) garde la boîte LOGIQUE exacte (nécessaire au
+            // calcul de distance) mais le quad RASTÉRISÉ doit déborder de
+            // "blur" pixels au-delà — sinon aucun pixel n'existe au-delà de
+            // (x1,y1)-(x2,y2) pour recevoir la fin du dégradé, qui se
+            // retrouve coupé net exactement sur ce bord (confirmé en jeu :
+            // "carré" visible autour d'un halo pourtant mathématiquement
+            // circulaire — la formule de distance était correcte, seule la
+            // géométrie dessinée était trop petite pour la montrer en entier).
+            float pad = Math.max(blur, 1f);
+            drawQuadModern(x1 - pad, y1 - pad, x2 + pad, y2 + pad);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawFxModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawFxLegacy(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
+                               UiColor colorA, UiColor colorB, boolean gradient, int vpWidth, int vpHeight) {
+        ensureFxShaderInit();
+        if (fxInitFailed) return;
+
+        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        try {
+            // Même garde que drawRoundedRectLegacy — voir son commentaire pour
+            // le détail de chaque état désactivé/pourquoi.
+            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
+            attribPushed = true;
+            glDisable(0x0DE1); // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0BC0); // GL_ALPHA_TEST
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+
+            glUseProgram(fxProgram);
+            glUniform4f(uFxRect, x1, y1, x2, y2);
+            glUniform1f(uFxRadius, radius);
+            glUniform1f(uFxBlur, blur);
+            glUniform1f(uFxBorderWidth, borderWidth);
+            glUniform4f(uFxColorA, colorA.r, colorA.g, colorA.b, colorA.a);
+            glUniform4f(uFxColorB, colorB.r, colorB.g, colorB.b, colorB.a);
+            glUniform1f(uFxGradient, gradient ? 1f : 0f);
+            // Couleur "courante" (gl_Color) ignorée par ce shader (les
+            // couleurs viennent des uniforms u_ColorA/B ci-dessus) — appel
+            // conservé uniquement pour réutiliser drawQuad() tel quel.
+            // Quad débordé de "blur" pixels au-delà de u_Rect — voir
+            // drawFxModern pour le pourquoi (même correction des deux côtés).
+            float pad = Math.max(blur, 1f);
+            drawQuad(x1 - pad, y1 - pad, x2 + pad, y2 + pad, colorA);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawFxLegacy: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
             try {
                 if (modelPushed) { matrixMode(0x1700); popMatrix(); }
             } catch (Throwable ignored) {}

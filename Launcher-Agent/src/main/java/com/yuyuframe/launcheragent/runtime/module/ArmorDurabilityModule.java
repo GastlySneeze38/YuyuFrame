@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
@@ -21,10 +22,27 @@ import java.lang.reflect.Method;
  * l'équivalent MCP getCurrentArmor utilisé par PvP-Mod).
  */
 public final class ArmorDurabilityModule extends SingleHudModule {
+
+    // STATIC (pas un champ d'instance capturé par lambda) : le renderer doit
+    // être construit et passé au super(...) de SingleHudModule AVANT que le
+    // constructeur de cette classe n'ait fini — javac interdit toute
+    // référence à `this` dans les arguments d'un appel super() (même pattern
+    // que KeystrokesModule.RENDERER).
+    private static final Renderer RENDERER = new Renderer();
+
+    @ConfigDropdown(name = "Disposition", description = "Empilée verticalement (une ligne par emplacement) ou côte à côte horizontalement.",
+        category = "Réglages", options = { "Verticale", "Horizontale" })
+    public int layout = 0;
+
     public ArmorDurabilityModule() {
         super("armor-durability", "Armure/Durabilité", "Durabilité de l'armure et de l'objet en main", false,
             new HudElement("armor-durability", "Armure/Durabilité", HudAnchor.BOTTOM_RIGHT, 8f, 8f,
-                (HudElement.CustomRenderer) new Renderer()));
+                (HudElement.CustomRenderer) RENDERER));
+    }
+
+    @Override
+    public void onConfigChanged() {
+        RENDERER.horizontal = layout == 1;
     }
 
     /** Rendu personnalisé (voir HudElement.CustomRenderer) : une icône à côté d'un texte, par ligne, ne rentre pas dans le modèle "une ligne de texte" de ContentSource. */
@@ -40,6 +58,11 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         private static final float TEXT_SCALE = 0.4f;
         /** Largeur mini du CONTENU avant que le joueur ne soit chargé (repli, comme FPS/Ping). */
         private static final float FALLBACK_WIDTH = 90f;
+        /** Espace entre deux emplacements consécutifs en disposition horizontale. */
+        private static final float ITEM_GAP = 10f;
+
+        /** Mutable directement par ArmorDurabilityModule.onConfigChanged() — false = verticale (défaut). */
+        volatile boolean horizontal = false;
 
         @Override
         public float[] naturalSize() {
@@ -48,13 +71,18 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             // HudElement.refreshSize()) — une largeur FIXE (120 en dur, choisie
             // au hasard) était soit trop large pour "363/363" (gros espace vide
             // à droite), soit trop étroite pour un objet à plus de 3 chiffres.
+            float itemW = itemWidth(currentStacks());
+            if (horizontal) return new float[]{ 5 * itemW + 4 * ITEM_GAP, ROW_H };
+            return new float[]{ itemW, 5 * ROW_H };
+        }
+
+        private float itemWidth(Object[] stacks) {
             float maxTextW = 0f;
-            for (Object stack : currentStacks()) {
+            for (Object stack : stacks) {
                 String text = durabilityText(stack);
                 if (text != null) maxTextW = Math.max(maxTextW, UiFont.REGULAR.textWidth(text, TEXT_SCALE));
             }
-            float contentW = maxTextW > 0f ? ICON + GAP + maxTextW : FALLBACK_WIDTH;
-            return new float[]{ contentW, 5 * ROW_H };
+            return maxTextW > 0f ? ICON + GAP + maxTextW : FALLBACK_WIDTH;
         }
 
         private Object[] currentStacks() {
@@ -81,9 +109,21 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
-            float icon = ICON * scale, rowH = ROW_H * scale;
-
+            float icon = ICON * scale;
             Object[] stacks = currentStacks();
+
+            if (horizontal) {
+                float itemW = itemWidth(stacks) * scale, itemGap = ITEM_GAP * scale;
+                float rowY = y + h - icon;
+                float colX = x;
+                for (Object stack : stacks) {
+                    drawRow(renderer, colX, rowY, icon, stack, scale, vpWidth, vpHeight);
+                    colX += itemW + itemGap;
+                }
+                return;
+            }
+
+            float rowH = ROW_H * scale;
             float rowY = y + h - icon;
             for (Object stack : stacks) {
                 drawRow(renderer, x, rowY, icon, stack, scale, vpWidth, vpHeight);

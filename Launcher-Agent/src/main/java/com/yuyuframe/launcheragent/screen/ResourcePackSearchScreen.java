@@ -70,6 +70,20 @@ public class ResourcePackSearchScreen extends Screen {
         this.mc = ScreenHelper.getMc(this);
     }
 
+    /**
+     * Dossier resourcepacks par défaut, sans dépendre d'un écran vanilla
+     * PackScreen déjà ouvert (voir PackScreenMixin.la$getResourcePacksDir, qui
+     * lit un champ Path existant sur CETTE instance — inutilisable depuis le
+     * menu custom, qui n'est pas un PackScreen). {@code user.dir} = dossier de
+     * travail du process Java = dossier de l'instance (voir HudConfigStore,
+     * même convention déjà établie côté launcher.rs : {@code .current_dir(&mc_game_dir)}) —
+     * "resourcepacks" est son sous-dossier standard vanilla, toujours au même
+     * endroit relatif quelle que soit la version MC.
+     */
+    public static Path defaultResourcePacksDir() {
+        return java.nio.file.Paths.get(System.getProperty("user.dir", "."), "resourcepacks");
+    }
+
     public void bg_() {
         int w = ScreenHelper.getWidth(this);
         int h = ScreenHelper.getHeight(this);

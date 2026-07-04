@@ -71,6 +71,8 @@ public class UiHudEditorScreen extends UiScreenBase {
                 Float gy = box.snapGuideY();
                 if (gy != null) renderer.drawRoundedRect(0, gy - 0.5f, screenWidth, gy + 0.5f, 0, UiTheme.ACCENT, screenWidth, screenHeight);
             }
+            // Voir UiModConfigScreen — ré-appliqué pour couvrir les lignes de guide ci-dessus.
+            drawRevealVeil(renderer);
         } catch (Throwable ignored) {}
     }
 
@@ -104,7 +106,8 @@ public class UiHudEditorScreen extends UiScreenBase {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
-            String label = "< Retour";
+            // "«" (chevron double, U+00AB) plutôt que "<" — voir UiModConfigScreen.BackButton pour le détail du choix.
+            String label = "« Retour";
             float tw = renderer.textWidth(label, 0.44f);
             renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.44f, vpWidth, vpHeight);
         }

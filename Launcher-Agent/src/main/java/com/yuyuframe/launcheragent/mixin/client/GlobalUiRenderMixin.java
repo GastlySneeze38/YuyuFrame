@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.mixin.client;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -60,6 +61,17 @@ public abstract class GlobalUiRenderMixin {
                 // la première frame — sinon leurs éléments HUD (voir runtime.module)
                 // ne s'enregistreraient qu'à la première ouverture du menu "YuyuFrame".
                 ModuleRegistry.all();
+                // Idem pour GlobalUiSettings — singleton à part, JAMAIS dans
+                // ModuleRegistry (voir sa javadoc), donc jamais chargé par la
+                // ligne ci-dessus. Sans ce forçage, sa classe (et donc
+                // UiTheme.UI_SCALE/CARD_BG/ACCENT/etc., voir son
+                // onConfigChanged()) ne se chargeait qu'à la première visite
+                // de l'écran "Paramètres" — bug remonté : mauvaise taille
+                // d'interface dès la première ouverture du menu (UI_SCALE
+                // resté sur la valeur de départ codée en dur de UiTheme, pas
+                // même le défaut de GlobalUiSettings), "corrigée" seulement
+                // après être passé par Paramètres puis retour en arrière.
+                GlobalUiSettings.INSTANCE.onConfigChanged();
             }
             inputPoller.poll();
 
