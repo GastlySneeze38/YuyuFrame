@@ -17,7 +17,7 @@ public class UiToggle extends UiWidget {
     private final UiAnimatedFloat anim;
 
     public UiToggle(float x, float y, boolean initial, Consumer<Boolean> onChange) {
-        super(x, y, 44f, 24f);
+        super(x, y, UiTheme.scaled(44f), UiTheme.scaled(24f));
         this.value = initial;
         this.onChange = onChange;
         this.anim = new UiAnimatedFloat(initial ? 1f : 0f, ANIM_SPEED);
@@ -28,8 +28,14 @@ public class UiToggle extends UiWidget {
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         float t = anim.get();
-        UiColor track = UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.ACCENT, t);
-        renderer.drawRoundedRect(x, y, x + w, y + h, h / 2f, track, vpWidth, vpHeight);
+        // Piste en dégradé (haut plus clair, bas = accent normal) plutôt
+        // qu'une couleur plate à l'état ON — petit reflet "glossy" cohérent
+        // avec les jeux de lumière du reste de l'appli (voir ModCard/
+        // SidebarItem). Le OFF reste plat (TRACK_OFF des deux côtés) : le
+        // dégradé n'apparaît qu'en se rapprochant de ON.
+        UiColor top = UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.accentLight(), t);
+        UiColor bottom = UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.ACCENT, t);
+        renderer.drawGradientRect(x, y, x + w, y + h, h / 2f, bottom, top, vpWidth, vpHeight);
 
         float knobD = h - 4f;
         float knobXOff = 2f + t * (w - knobD - 4f); // 2f (position OFF) -> w-knobD-2f (position ON)

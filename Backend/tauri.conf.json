@@ -36,7 +36,9 @@
       "../Launcher-Agent/lib/asm-tree-9.5.jar": "agent/libs/asm-tree-9.5.jar",
       "../Launcher-Agent/lib/asm-util-9.5.jar": "agent/libs/asm-util-9.5.jar",
       "../Launcher-Agent/lib/asm-analysis-9.5.jar": "agent/libs/asm-analysis-9.5.jar",
-      "../Launcher-Agent/lib/asm-commons-9.5.jar": "agent/libs/asm-commons-9.5.jar"
+      "../Launcher-Agent/lib/asm-commons-9.5.jar": "agent/libs/asm-commons-9.5.jar",
+      "../Launcher-Agent/lib/jna.jar": "agent/libs/jna.jar",
+      "../Launcher-Agent/lib/jna-platform.jar": "agent/libs/jna-platform.jar"
     }
   },
   "plugins": {

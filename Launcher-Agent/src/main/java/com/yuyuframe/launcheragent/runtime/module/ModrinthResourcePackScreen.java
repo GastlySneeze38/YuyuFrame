@@ -115,6 +115,8 @@ public class ModrinthResourcePackScreen extends UiScreenBase {
                 renderer.drawText(status, MARGIN, screenHeight - 190, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
             }
             if (results != null) results.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            // Voir UiModConfigScreen — ré-appliqué pour couvrir le titre/la liste ci-dessus.
+            drawRevealVeil(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthResourcePackScreen] uiDraw: " + t);
         }

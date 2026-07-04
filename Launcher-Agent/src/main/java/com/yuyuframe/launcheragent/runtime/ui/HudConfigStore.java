@@ -160,41 +160,15 @@ public final class HudConfigStore {
         if (CONFIG_PATH == null) return;
         try {
             for (LauncherModule module : ModuleRegistry.all()) {
-                String id = module.id;
-                DATA.setProperty(id + ".enabled", String.valueOf(module.isEnabled()));
-
-                if (module instanceof HudElementOwner) {
-                    HudElement element = ((HudElementOwner) module).hudElement();
-                    DATA.setProperty(id + ".hud.anchor", element.anchor.name());
-                    DATA.setProperty(id + ".hud.offsetX", String.valueOf(element.offsetX));
-                    DATA.setProperty(id + ".hud.offsetY", String.valueOf(element.offsetY));
-                    DATA.setProperty(id + ".hud.scale", String.valueOf(element.scale));
-                    DATA.setProperty(id + ".hud.locked", String.valueOf(element.locked));
-                    DATA.setProperty(id + ".hud.showWhenScreenOpen", String.valueOf(element.showWhenScreenOpen));
-                    DATA.setProperty(id + ".hud.paddingX", String.valueOf(element.paddingX));
-                    DATA.setProperty(id + ".hud.paddingY", String.valueOf(element.paddingY));
-                }
-
-                for (Field field : module.getClass().getDeclaredFields()) {
-                    field.setAccessible(true);
-                    String key = id + ".field." + field.getName();
-                    try {
-                        if (field.isAnnotationPresent(ConfigToggle.class)) {
-                            DATA.setProperty(key, String.valueOf(field.getBoolean(module)));
-                        } else if (field.isAnnotationPresent(ConfigSlider.class)) {
-                            DATA.setProperty(key, String.valueOf(field.getFloat(module)));
-                        } else if (field.isAnnotationPresent(ConfigDropdown.class)) {
-                            DATA.setProperty(key, String.valueOf(field.getInt(module)));
-                        } else if (field.isAnnotationPresent(ConfigKeybind.class)) {
-                            Object v = field.get(module);
-                            if (v != null) DATA.setProperty(key, (String) v);
-                        } else if (field.isAnnotationPresent(ConfigColor.class)) {
-                            UiColor c = (UiColor) field.get(module);
-                            if (c != null) DATA.setProperty(key, c.r + "," + c.g + "," + c.b + "," + c.a);
-                        }
-                    } catch (Throwable ignored) {}
-                }
+                serializeModule(module);
             }
+            // GlobalUiSettings n'est JAMAIS dans ModuleRegistry (voir sa
+            // javadoc de classe) — sans cette ligne, "Taille de l'interface"
+            // et les autres réglages généraux n'étaient JAMAIS écrits sur
+            // disque, silencieusement perdus à chaque relance du jeu (voir
+            // aussi son constructeur, qui charge maintenant ces valeurs via
+            // HudConfigStore.applyTo()).
+            serializeModule(GlobalUiSettings.INSTANCE);
 
             File f = new File(CONFIG_PATH);
             File dir = f.getParentFile();
@@ -204,6 +178,43 @@ public final class HudConfigStore {
             }
         } catch (Throwable t) {
             LauncherLog.err("[HudConfigStore] save: " + t);
+        }
+    }
+
+    private static void serializeModule(LauncherModule module) {
+        String id = module.id;
+        DATA.setProperty(id + ".enabled", String.valueOf(module.isEnabled()));
+
+        if (module instanceof HudElementOwner) {
+            HudElement element = ((HudElementOwner) module).hudElement();
+            DATA.setProperty(id + ".hud.anchor", element.anchor.name());
+            DATA.setProperty(id + ".hud.offsetX", String.valueOf(element.offsetX));
+            DATA.setProperty(id + ".hud.offsetY", String.valueOf(element.offsetY));
+            DATA.setProperty(id + ".hud.scale", String.valueOf(element.scale));
+            DATA.setProperty(id + ".hud.locked", String.valueOf(element.locked));
+            DATA.setProperty(id + ".hud.showWhenScreenOpen", String.valueOf(element.showWhenScreenOpen));
+            DATA.setProperty(id + ".hud.paddingX", String.valueOf(element.paddingX));
+            DATA.setProperty(id + ".hud.paddingY", String.valueOf(element.paddingY));
+        }
+
+        for (Field field : module.getClass().getDeclaredFields()) {
+            field.setAccessible(true);
+            String key = id + ".field." + field.getName();
+            try {
+                if (field.isAnnotationPresent(ConfigToggle.class)) {
+                    DATA.setProperty(key, String.valueOf(field.getBoolean(module)));
+                } else if (field.isAnnotationPresent(ConfigSlider.class)) {
+                    DATA.setProperty(key, String.valueOf(field.getFloat(module)));
+                } else if (field.isAnnotationPresent(ConfigDropdown.class)) {
+                    DATA.setProperty(key, String.valueOf(field.getInt(module)));
+                } else if (field.isAnnotationPresent(ConfigKeybind.class)) {
+                    Object v = field.get(module);
+                    if (v != null) DATA.setProperty(key, (String) v);
+                } else if (field.isAnnotationPresent(ConfigColor.class)) {
+                    UiColor c = (UiColor) field.get(module);
+                    if (c != null) DATA.setProperty(key, c.r + "," + c.g + "," + c.b + "," + c.a);
+                }
+            } catch (Throwable ignored) {}
         }
     }
 

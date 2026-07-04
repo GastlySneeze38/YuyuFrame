@@ -42,10 +42,18 @@ import java.util.function.IntConsumer;
 public final class ConfigScreenBuilder {
     private ConfigScreenBuilder() {}
 
-    private static final float ROW_H = 34f, ROW_GAP = 8f;
-    private static final float LABEL_SCALE = 0.5f;
+    // Non final — recalculées à chaque build() depuis UiTheme.UI_SCALE
+    // (réglage "Taille de l'interface", voir GlobalUiSettings) : cette classe
+    // est un utilitaire 100% statique (jamais instanciée), donc pas de champ
+    // d'instance possible comme pour UiSlider/UiToggle/UiColorPicker.
+    private static float ROW_H = 34f, ROW_GAP = 8f;
+    private static float LABEL_SCALE = 0.5f;
 
     public static LinkedHashMap<String, List<UiWidget>> build(LauncherModule module, float x, float w) {
+        ROW_H = UiTheme.scaled(34f);
+        ROW_GAP = UiTheme.scaled(8f);
+        LABEL_SCALE = UiTheme.scaled(0.5f);
+
         LinkedHashMap<String, List<UiWidget>> byCategory = new LinkedHashMap<>();
         LinkedHashMap<String, Float> cursors = new LinkedHashMap<>();
 
@@ -142,7 +150,7 @@ public final class ConfigScreenBuilder {
     // ── Lignes — mêmes proportions que l'ancien UiModConfigScreen codé en dur ──
 
     private static float rowLabel(List<UiWidget> rows, float x, float rowY, String label, String tooltip) {
-        rows.add(new UiLabel(x, rowY + ROW_H / 2f - 5f, label, UiTheme.TEXT_PRIMARY, LABEL_SCALE).tooltip(tooltip));
+        rows.add(new UiLabel(x, rowY + ROW_H / 2f - UiTheme.scaled(5f), label, UiTheme.TEXT_PRIMARY, LABEL_SCALE).tooltip(tooltip));
         return rowY;
     }
 
@@ -150,7 +158,8 @@ public final class ConfigScreenBuilder {
                                     boolean initial, Consumer<Boolean> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        rows.add(new UiToggle(x + w - 44f, rowY + (ROW_H - 24f) / 2f, initial, onChange));
+        float toggleH = UiTheme.scaled(24f);
+        rows.add(new UiToggle(x + w - UiTheme.scaled(44f), rowY + (ROW_H - toggleH) / 2f, initial, onChange));
         return rowY - ROW_GAP;
     }
 
@@ -158,8 +167,8 @@ public final class ConfigScreenBuilder {
                                     float min, float max, float step, float initial, Consumer<Float> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        float sliderW = 190f;
-        rows.add(new UiSlider(x + w - sliderW, rowY + (ROW_H - 20f) / 2f, sliderW, min, max, step, initial, onChange));
+        float sliderW = UiTheme.scaled(190f);
+        rows.add(new UiSlider(x + w - sliderW, rowY + (ROW_H - UiTheme.scaled(20f)) / 2f, sliderW, min, max, step, initial, onChange));
         return rowY - ROW_GAP;
     }
 
@@ -167,35 +176,38 @@ public final class ConfigScreenBuilder {
                                    UiColor initial, Consumer<UiColor> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        rows.add(new UiColorPicker(x + w - 42f, rowY + (ROW_H - 26f) / 2f, initial, onChange));
+        rows.add(new UiColorPicker(x + w - UiTheme.scaled(42f), rowY + (ROW_H - UiTheme.scaled(26f)) / 2f, initial, onChange));
         // Marge supplémentaire : le panneau déroulant du color picker s'ouvre vers le bas.
-        return rowY - ROW_GAP - 115f;
+        return rowY - ROW_GAP - UiTheme.scaled(115f);
     }
 
     private static float dropdownRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
                                       List<String> options, int initialIndex, IntConsumer onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        float dw = 170f;
-        rows.add(new UiDropdown(x + w - dw, rowY + (ROW_H - 26f) / 2f, dw, 26f, options, initialIndex, onChange));
+        float dw = UiTheme.scaled(170f);
+        float ddH = UiTheme.scaled(26f);
+        rows.add(new UiDropdown(x + w - dw, rowY + (ROW_H - ddH) / 2f, dw, ddH, options, initialIndex, onChange));
         // Même raison que colorRow : réserve la hauteur du panneau déroulé.
-        return rowY - ROW_GAP - (options.size() * 26f + 10f);
+        return rowY - ROW_GAP - (options.size() * ddH + UiTheme.scaled(10f));
     }
 
     private static float keybindRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
                                      String initialKey, Consumer<String> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, rowY, label, tooltip);
-        float kw = 110f;
-        rows.add(new UiKeybindButton(x + w - kw, rowY + (ROW_H - 26f) / 2f, kw, 26f, initialKey, onChange));
+        float kw = UiTheme.scaled(110f);
+        float kh = UiTheme.scaled(26f);
+        rows.add(new UiKeybindButton(x + w - kw, rowY + (ROW_H - kh) / 2f, kw, kh, initialKey, onChange));
         return rowY - ROW_GAP;
     }
 
     /** Ligne bouton seul (pas de label à gauche, ex: "Réinitialiser la position") — pas de valeur associée, juste une action. */
     private static float buttonRow(List<UiWidget> rows, float x, float w, float cursor, String label, Runnable action) {
         float rowY = cursor - ROW_H;
-        float bw = 190f;
-        rows.add(new UiButton(x + w - bw, rowY + (ROW_H - 28f) / 2f, bw, 28f, label, action));
+        float bw = UiTheme.scaled(190f);
+        float bh = UiTheme.scaled(28f);
+        rows.add(new UiButton(x + w - bw, rowY + (ROW_H - bh) / 2f, bw, bh, label, action));
         return rowY - ROW_GAP;
     }
 

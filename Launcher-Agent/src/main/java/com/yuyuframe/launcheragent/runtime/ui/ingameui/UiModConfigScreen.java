@@ -32,10 +32,13 @@ import java.util.List;
  */
 public class UiModConfigScreen extends UiScreenBase {
 
-    private static final float HEADER_H = 72f;
-    private static final float SIDE_MARGIN = 48f;
-    private static final float SUB_SIDEBAR_W = 180f;
-    private static final float CONTENT_MAX_W = 620f;
+    // Non static/final — recalculées à chaque buildLayout() depuis
+    // UiTheme.UI_SCALE (voir GlobalUiSettings, réglage "Taille de
+    // l'interface"), même motif que UiMainMenuScreen/UiModGroupConfigScreen.
+    private float HEADER_H = 72f;
+    private float SIDE_MARGIN = 48f;
+    private float SUB_SIDEBAR_W = 180f;
+    private float CONTENT_MAX_W = 620f;
 
     private final Object lastScreen;
     private final LauncherModule module;
@@ -44,6 +47,7 @@ public class UiModConfigScreen extends UiScreenBase {
     private UiScrollContainer scroll;
     private float panelX, panelY, panelW, panelH;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
+    private float lastUiScale = -1f;
 
     public UiModConfigScreen(Object lastScreen, LauncherModule module) {
         super(module.name);
@@ -54,17 +58,23 @@ public class UiModConfigScreen extends UiScreenBase {
     @Override
     public void uiDraw(double mouseX, double mouseY) {
         if (screenWidth > 0 && screenHeight > 0
-                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight)) {
+                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight || UiTheme.UI_SCALE != lastUiScale)) {
             buildLayout();
             lastLayoutWidth = screenWidth;
             lastLayoutHeight = screenHeight;
+            lastUiScale = UiTheme.UI_SCALE;
         }
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            renderer.drawText(UiFont.BOLD, module.name, SIDE_MARGIN + 46, screenHeight - 44, UiTheme.TEXT_PRIMARY, 0.68f, screenWidth, screenHeight);
+            renderer.drawText(UiFont.BOLD, module.name, SIDE_MARGIN + UiTheme.scaled(46f), screenHeight - UiTheme.scaled(44f),
+                UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
             UiPanel.draw(renderer, panelX, panelY, panelW, panelH, null, screenWidth, screenHeight);
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            // Ré-appliqué ici (déjà dessiné une fois dans super.uiDraw()) — voir
+            // sa javadoc : sans ça, le titre/panneau ci-dessus apparaîtrait
+            // d'un coup sec, jamais couvert par le voile.
+            drawRevealVeil(renderer);
         } catch (Throwable ignored) {}
     }
 
@@ -75,30 +85,36 @@ public class UiModConfigScreen extends UiScreenBase {
     }
 
     private void buildLayout() {
+        HEADER_H = UiTheme.scaled(72f);
+        SIDE_MARGIN = UiTheme.scaled(48f);
+        SUB_SIDEBAR_W = UiTheme.scaled(180f);
+        CONTENT_MAX_W = UiTheme.scaled(620f);
+
         widgets.clear();
         widgets.add(new BackButton());
 
-        float panelXLocal = SIDE_MARGIN + SUB_SIDEBAR_W + 16f;
+        float panelXLocal = SIDE_MARGIN + SUB_SIDEBAR_W + UiTheme.scaled(16f);
         float panelWLocal = Math.min(CONTENT_MAX_W, screenWidth - panelXLocal - SIDE_MARGIN);
         float panelTop = screenHeight - HEADER_H;
-        float panelBottom = 20f;
+        float panelBottom = UiTheme.scaled(20f);
         this.panelX = panelXLocal;
         this.panelY = panelBottom;
         this.panelW = panelWLocal;
         this.panelH = panelTop - panelBottom;
 
-        float rowX = panelX + 16f;
-        float rowW = panelW - 32f;
-        scroll = new UiScrollContainer(rowX, panelY + 16f, rowW, panelH - 32f);
+        float rowX = panelX + UiTheme.scaled(16f);
+        float rowW = panelW - UiTheme.scaled(32f);
+        scroll = new UiScrollContainer(rowX, panelY + UiTheme.scaled(16f), rowW, panelH - UiTheme.scaled(32f));
 
         categoryWidgets = ConfigScreenBuilder.build(module, rowX, rowW);
         if (activeCategory == null || !categoryWidgets.containsKey(activeCategory)) {
             activeCategory = categoryWidgets.isEmpty() ? null : categoryWidgets.keySet().iterator().next();
         }
 
+        float tabH = UiTheme.scaled(34f), tabGap = UiTheme.scaled(38f), tabTopGap = UiTheme.scaled(24f);
         int i = 0;
         for (String category : categoryWidgets.keySet()) {
-            widgets.add(new CategoryTab(SIDE_MARGIN, panelTop - 24f - i * 38f, SUB_SIDEBAR_W, category));
+            widgets.add(new CategoryTab(SIDE_MARGIN, panelTop - tabTopGap - i * tabGap, SUB_SIDEBAR_W, tabH, category));
             i++;
         }
 
@@ -117,8 +133,8 @@ public class UiModConfigScreen extends UiScreenBase {
         private final String name;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        CategoryTab(float x, float y, float w, String name) {
-            super(x, y, w, 34f);
+        CategoryTab(float x, float y, float w, float h, String name) {
+            super(x, y, w, h);
             this.name = name;
         }
 
@@ -126,14 +142,15 @@ public class UiModConfigScreen extends UiScreenBase {
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             boolean active = name.equals(activeCategory);
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float edgeW = UiTheme.scaled(3f), edgeInset = UiTheme.scaled(3f), edgeRadius = UiTheme.scaled(1.5f);
             if (active) {
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_ACTIVE, vpWidth, vpHeight);
-                renderer.drawRoundedRect(x, y + 3, x + 3, y + h - 3, 1.5f, UiTheme.ACCENT, vpWidth, vpHeight);
+                renderer.drawRoundedRect(x, y + edgeInset, x + edgeW, y + h - edgeInset, edgeRadius, UiTheme.ACCENT, vpWidth, vpHeight);
             } else {
                 UiColor bg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hoverAnim.get());
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
             }
-            renderer.drawText(name, x + 14, y + h / 2f - 5f, active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, 0.48f, vpWidth, vpHeight);
+            renderer.drawText(name, x + UiTheme.scaled(14f), y + h / 2f - UiTheme.scaled(5f), active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, UiTheme.scaled(0.48f), vpWidth, vpHeight);
         }
 
         @Override
@@ -143,16 +160,25 @@ public class UiModConfigScreen extends UiScreenBase {
     private final class BackButton extends UiWidget {
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        BackButton() { super(SIDE_MARGIN, screenHeight - HEADER_H + 20f, 38f, 38f); }
+        BackButton() { super(SIDE_MARGIN, screenHeight - HEADER_H + UiTheme.scaled(20f), UiTheme.scaled(38f), UiTheme.scaled(38f)); }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
+            float hover = hoverAnim.get();
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
-            String arrow = "<";
-            float tw = renderer.textWidth(arrow, 0.6f);
-            renderer.drawText(arrow, x + (w - tw) / 2f, y + h / 2f - 7f, UiTheme.TEXT_PRIMARY, 0.6f, vpWidth, vpHeight);
+            // "«" (chevron double, U+00AB, présent dans l'atlas Latin-1 de
+            // UiFont) plutôt que "<" — un simple signe "inférieur à" détourné
+            // en flèche, jugé "moche" par l'utilisateur. Police BOLD (plus
+            // épaisse, un vrai pictogramme plutôt qu'un caractère de
+            // ponctuation) + léger glissement vers la gauche au survol
+            // (affordance "on te tire vers l'arrière").
+            String arrow = "«";
+            float scale = UiTheme.scaled(0.7f);
+            float tw = renderer.textWidth(UiFont.BOLD, arrow, scale);
+            float slide = hover * UiTheme.scaled(3f);
+            renderer.drawText(UiFont.BOLD, arrow, x + (w - tw) / 2f - slide, y + h / 2f - UiTheme.scaled(7f), UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
         }
 
         @Override

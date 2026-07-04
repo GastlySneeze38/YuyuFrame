@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
@@ -51,12 +52,30 @@ public final class GlobalUiSettings extends LauncherModule {
     @ConfigColor(name = "Couleur d'accent", description = "Couleur principale utilisée dans tout le menu.", category = "Apparence")
     public UiColor accentColor = UiTheme.ACCENT;
 
+    @ConfigDropdown(name = "Taille de l'interface", description = "Échelle générale du menu (cartes, texte, boutons, réglages...) — pas la taille des éléments HUD affichés en jeu, qui se règlent individuellement (voir chaque module).",
+        category = "Apparence", options = { "Petite", "Normale", "Grande" })
+    public int uiSize = 1;
+
     @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;
 
     private GlobalUiSettings() {
         super("ui-settings", "Paramètres", "Réglages généraux de l'interface", true);
-        onConfigChanged(); // applique les valeurs par défaut dès la construction
+        // Charge les valeurs persistées AVANT de les appliquer — ce singleton
+        // n'est JAMAIS enregistré dans ModuleRegistry (voir javadoc de
+        // classe), donc jamais couvert par l'appel générique
+        // HudConfigStore.applyTo() fait dans ModuleRegistry.register() pour
+        // tout autre module. Sans cet appel explicite, "Taille de
+        // l'interface" (et tous les autres réglages ici) revenaient
+        // silencieusement à leur valeur par défaut codée en dur à CHAQUE
+        // relance du jeu, quoi que l'utilisateur ait choisi la session
+        // précédente — voir aussi HudConfigStore.save() (même singleton
+        // ajouté explicitement à la sérialisation) et GlobalUiRenderMixin/189
+        // (force le chargement de CETTE classe dès la première frame, sinon
+        // UiTheme.UI_SCALE restait bloqué sur la valeur de départ codée en
+        // dur de UiTheme jusqu'à la première visite de l'écran "Paramètres").
+        HudConfigStore.applyTo(this);
+        onConfigChanged();
     }
 
     @Override
@@ -73,5 +92,11 @@ public final class GlobalUiSettings extends LauncherModule {
         UiTheme.ACCENT_DIM = new UiColor(accentColor.r, accentColor.g, accentColor.b, 70f / 255f);
         UiTheme.SIDEBAR_ACTIVE = new UiColor(accentColor.r, accentColor.g, accentColor.b, 34f / 255f);
         UiInputPoller.menuKeyName = menuKey;
+
+        // Échelle décalée d'un cran vers le haut (demandé explicitement) :
+        // l'ancienne "Normale" (1f) est maintenant "Petite", l'ancienne
+        // "Grande" (1.18f) est maintenant "Normale", et un nouveau palier
+        // "Grande" plus grand encore (1.4f) a été ajouté.
+        UiTheme.UI_SCALE = uiSize == 0 ? 1f : uiSize == 2 ? 1.4f : 1.18f;
     }
 }
