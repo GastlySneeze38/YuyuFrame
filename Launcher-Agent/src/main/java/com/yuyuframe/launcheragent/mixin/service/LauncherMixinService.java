@@ -221,6 +221,22 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/MixinCrosshair1204",
             "net/minecraft/client/gui/hud/InGameHud",
             "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;)V", null),
+
+        // ── Branche ~1.21-1.21.5 (mixin.client.v1_21_4.*) — bracket "D" :
+        // même profil GL Core que "C", mais render(RenderTickCounter,Z)V
+        // (RenderTickCounter introduit entre la 1.20.4 et la 1.21) — voir
+        // VersionBracketRegistry.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/GlobalUiRenderMixin1214",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/GlobalTickMixin1214",
+            "net/minecraft/client/MinecraftClient",
+            "tick", "()V", null),
+        // InGameHud.renderCrosshair(DrawContext, RenderTickCounter) — un
+        // paramètre de plus que 1.20.4, voir MixinCrosshair1214.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MixinCrosshair1214",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
     };
 
     /**

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 
@@ -599,15 +600,15 @@ public final class UiRenderer {
         ensureVignetteShaderInit();
         if (vignetteInitFailed) return;
 
-        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
         try {
-            // Legacy (1.8.9, Compatibility Profile) — pushAttrib n'y a jamais
-            // crashé (voir pushAttrib()), contrairement au pipeline moderne.
-            // Sans lui, nos glDisable(...) restent appliqués en permanence
-            // après ce dessin, cassant le rendu vanilla suivant (régression
-            // confirmée : monde/HUD tout blanc + gros lag).
-            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
-            attribPushed = true;
+            // Legacy (1.8.9, Compatibility Profile) — voir captureLegacyGlState/
+            // restoreLegacyGlState : sans restauration, nos glDisable(...)
+            // restent appliqués en permanence après ce dessin, cassant le
+            // rendu vanilla suivant (régression confirmée : monde/HUD tout
+            // blanc + gros lag).
+            savedGlState = captureLegacyGlState();
             glDisable(0x0DE1); // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
@@ -652,9 +653,7 @@ public final class UiRenderer {
             try {
                 if (projPushed) { matrixMode(0x1701); popMatrix(); }
             } catch (Throwable ignored) {}
-            try {
-                if (attribPushed) popAttrib();
-            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -819,12 +818,11 @@ public final class UiRenderer {
         // dans le finally, qui dépile une pile déjà vide : GL_STACK_UNDERFLOW
         // ("Stack underflow"), observé en jeu sans lien évident avec le dessin
         // en cours.
-        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
         try {
-            // Legacy (1.8.9) — voir pushAttrib()/drawEdgeVignetteLegacy pour le
-            // pourquoi (rétabli, jamais crashé sur cette version).
-            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
-            attribPushed = true;
+            // Legacy (1.8.9) — voir captureLegacyGlState()/drawEdgeVignetteLegacy.
+            savedGlState = captureLegacyGlState();
             glDisable(0x0DE1); // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE — sinon un quad mal orienté (winding) par rapport à ce que
@@ -872,9 +870,7 @@ public final class UiRenderer {
             try {
                 if (projPushed) { matrixMode(0x1701); popMatrix(); }
             } catch (Throwable ignored) {}
-            try {
-                if (attribPushed) popAttrib();
-            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -920,12 +916,12 @@ public final class UiRenderer {
         ensureFxShaderInit();
         if (fxInitFailed) return;
 
-        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
         try {
             // Même garde que drawRoundedRectLegacy — voir son commentaire pour
             // le détail de chaque état désactivé/pourquoi.
-            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
-            attribPushed = true;
+            savedGlState = captureLegacyGlState();
             glDisable(0x0DE1); // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
@@ -969,9 +965,7 @@ public final class UiRenderer {
             try {
                 if (projPushed) { matrixMode(0x1701); popMatrix(); }
             } catch (Throwable ignored) {}
-            try {
-                if (attribPushed) popAttrib();
-            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -1070,7 +1064,23 @@ public final class UiRenderer {
         } catch (Throwable t) {
             modernBuffersInitFailed = true;
             LauncherLog.err("[UiRenderer] échec init VAO/VBO moderne — rien ne sera dessiné (pipeline moderne) : " + t);
+            return;
         }
+        // TENTATIVE ABANDONNÉE (voir historique de session) : préchauffer les
+        // 2 atlas de police ICI (juste après l'init VAO/VBO, à froid) pour
+        // éviter une création "tardive" de BOLD — RÉGRESSION CONSTATÉE EN JEU :
+        // le crash natif se produit maintenant sur le TOUT PREMIER
+        // glTexImage2D (REGULAR), immédiatement, alors qu'avant ce
+        // changement REGULAR réussissait de façon fiable sur PLUSIEURS
+        // sessions de test. La cause n'est donc PAS "création tardive après
+        // beaucoup d'activité GL" (hypothèse infirmée) — le crash semble
+        // plus intermittent/imprévisible qu'un simple ordre de création,
+        // possible piste : un vrai crash driver GPU (TDR) sans rapport
+        // causal direct avec CE glTexImage2D précis, qui ne fait que se
+        // trouver être l'appel GL le plus distinctif en cours au moment où
+        // le driver plante. Retiré — retour au comportement paresseux
+        // d'origine (chaque police créée à la demande, seulement quand un
+        // texte l'utilisant est dessiné pour la première fois).
     }
 
     /** Direct, comme exigé par tout buffer réellement uploadé en GL (glBufferData attend un buffer NIO natif). */
@@ -1231,7 +1241,8 @@ public final class UiRenderer {
             }
             return;
         }
-        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
         // Diagnostic glGetError() limité aux DIAG_CALL_LIMIT premiers appels
         // (sinon spam à chaque frame) — glGetError() ne lève PAS d'exception
         // Java, une corruption silencieuse de l'état GL (GL_INVALID_OPERATION
@@ -1287,9 +1298,8 @@ public final class UiRenderer {
             // dans le canal alpha) : exactement le genre de rendu "cassé"
             // observé (formes fragmentées au lieu de la vraie icône).
             glUseProgram(0);
-            // Legacy (1.8.9) — voir pushAttrib()/drawEdgeVignetteLegacy.
-            pushAttrib(0x00004000 | 0x00000001 | 0x00040000 | 0x00100000 | 0x00080000); // GL_ENABLE_BIT|GL_CURRENT_BIT|GL_TEXTURE_BIT|GL_TRANSFORM_BIT|GL_LIGHTING_BIT
-            attribPushed = true;
+            // Legacy (1.8.9) — voir captureLegacyGlState()/drawEdgeVignetteLegacy.
+            savedGlState = captureLegacyGlState();
             glEnable(0x0DE1); // GL_TEXTURE_2D
             glEnable(0x0B71); // GL_DEPTH_TEST — vanilla s'appuie dessus pour l'ordre icône/overlay
             // Sans ce clear, le depth buffer garde les valeurs laissées par la
@@ -1355,9 +1365,7 @@ public final class UiRenderer {
             try {
                 if (projPushed) { matrixMode(0x1701); popMatrix(); }
             } catch (Throwable ignored) {}
-            try {
-                if (attribPushed) popAttrib();
-            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -1452,11 +1460,11 @@ public final class UiRenderer {
         ensureTextShaderInit();
         if (textInitFailed) return; // shader cassé : rien à faire de l'alpha-distance brute, mieux vaut ne rien dessiner
 
-        // Legacy (1.8.9) — voir pushAttrib()/drawEdgeVignetteLegacy.
-        boolean attribPushed = false, projPushed = false, modelPushed = false;
+        // Legacy (1.8.9) — voir captureLegacyGlState()/drawEdgeVignetteLegacy.
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
         try {
-            pushAttrib(0x00004000 | 0x00000001 | 0x00040000); // GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT
-            attribPushed = true;
+            savedGlState = captureLegacyGlState();
             glEnable(0x0DE1);  // GL_TEXTURE_2D
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
@@ -1519,67 +1527,249 @@ public final class UiRenderer {
             try {
                 if (projPushed) { matrixMode(0x1701); popMatrix(); }
             } catch (Throwable ignored) {}
-            try {
-                if (attribPushed) popAttrib();
-            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
         }
     }
 
     private int ensureFontTexture(UiFont font) {
         Integer cached = fontTextures.get(font);
         if (cached != null) return cached;
-        try {
-            java.awt.image.BufferedImage img = font.atlasImage();
-            int w = img.getWidth(), h = img.getHeight();
 
-            // BufferedImage.getRGB renvoie du ARGB par ligne (row 0 = haut) —
-            // reconverti en RGBA 1 octet/composante, ordre attendu par
-            // glTexImage2D(GL_RGBA, GL_UNSIGNED_BYTE, ...). Row 0 uploadée en
-            // premier = mappée à v=0 : cohérent avec la construction des UV
-            // dans UiFont (v0 = haut du glyphe), donc AUCUN flip nécessaire ici.
-            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
-            int[] row = new int[w];
-            for (int y = 0; y < h; y++) {
-                img.getRGB(0, y, w, 1, row, 0, w);
-                for (int x = 0; x < w; x++) {
-                    int argb = row[x];
-                    buf.put((byte) ((argb >> 16) & 0xFF)); // R
-                    buf.put((byte) ((argb >> 8) & 0xFF));  // G
-                    buf.put((byte) (argb & 0xFF));         // B
-                    buf.put((byte) ((argb >> 24) & 0xFF)); // A
-                }
+        ensureNativeTextureApiResolved();
+        if (nativeTextureApiAvailable) {
+            try {
+                int texId = createFontTextureViaNativeImage(font);
+                fontTextures.put(font, texId);
+                LauncherLog.ui(1, "[UiRenderer] atlas police uploadé via NativeImage/TextureManager, texId=" + texId);
+                return texId;
+            } catch (Throwable t) {
+                LauncherLog.err("[UiRenderer] createFontTextureViaNativeImage a échoué, repli sur glTexImage2D brut : " + t);
+                // repli ci-dessous
             }
-            buf.flip();
-
-            int texId = glGenTextures();
-            glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
-            glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
-            // L'atlas est rasterisé à BASE_PX puis réduit au dessin (scale
-            // ~0.35-0.6 pour du texte courant) — un simple filtre bilinéaire
-            // MIN_FILTER (une seule passe, un seul niveau de mip) laissait
-            // encore de l'aliasing visible à ce ratio de réduction. Trilinéaire
-            // (mipmaps + LINEAR_MIPMAP_LINEAR) échantillonne un niveau
-            // pré-réduit adapté au ratio réel, nettement plus net.
-            glGenerateMipmap(0x0DE1);
-            glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
-            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
-            // CLAMP_TO_EDGE (pas le défaut GL_REPEAT) : un glyphe échantillonné
-            // pile à son bord u0/u1 pourrait sinon piocher un texel de l'autre
-            // côté de l'atlas (wraparound) au lieu de simplement dupliquer son
-            // propre bord — ceinture-bretelles avec la marge de UiFont contre
-            // le bleed de mipmap (opacité incohérente entre lettres).
-            glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
-            glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
-            glBindTexture(0x0DE1, 0);
-
+        }
+        try {
+            int texId = createFontTextureRaw(font);
             fontTextures.put(font, texId);
-            LauncherLog.ui(1, "[UiRenderer] atlas police uploadé (" + w + "x" + h + "), texId=" + texId);
+            LauncherLog.ui(1, "[UiRenderer] atlas police uploadé (repli brut), texId=" + texId);
             return texId;
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] ensureFontTexture: " + t);
             fontTextures.put(font, -1);
             return -1;
         }
+    }
+
+    private static Class<?> nativeImageClass, nativeImageBackedTextureClass, textureManagerClass, abstractTextureClass, identifierClass;
+    private static Object nativeImageFormatRgba;
+    private static java.lang.reflect.Constructor<?> nativeImageCtor, nativeImageBackedTextureCtor;
+    private static java.lang.reflect.Field nativeImagePointerField;
+    private static Method nativeImageSetColor, nativeImageCloseMethod, textureUploadMethod, textureGetGlIdMethod,
+        textureBindTextureMethod, textureManagerRegisterTextureMethod, identifierOfMethod, mcGetTextureManagerMethod,
+        memCopyMethod, memAddressMethod;
+    private static boolean nativeTextureApiResolveAttempted, nativeTextureApiAvailable, bulkCopyAvailable;
+    private static int fontTextureCounter;
+
+    /**
+     * BUG TROUVÉ (1.21.4, crash natif confirmé par bissection — voir
+     * historique de session) : créer notre PROPRE texture GL brute
+     * (glGenTextures/glTexImage2D/glGenerateMipmap/glTexParameteri via
+     * réflexion) pour l'atlas de police plantait le process de façon
+     * imprévisible (parfois REGULAR, parfois BOLD, jamais un point de code
+     * fixe) — le déplacement de l'ordre de création n'a fait que déplacer le
+     * crash, pas le résoudre. Recherche sur les mods Fabric open-source
+     * confirmée : AUCUN mod sérieux ne crée de texture dynamique en GL brut
+     * — tous passent par {@code NativeImage} + {@code
+     * NativeImageBackedTexture} + {@code TextureManager.registerTexture()},
+     * le chemin de création de texture SUIVI par le système de gestion
+     * d'état interne de Minecraft ({@code GlStateManager}/{@code
+     * RenderSystem}). Notre ancien code contournait entièrement ce suivi —
+     * hypothèse retenue : ça désynchronisait l'état GL que le rendu vanilla
+     * (qui tourne dans la même frame) suppose cohérent, plantage
+     * imprévisible selon ce qui se dessine à côté. Résolu dynamiquement
+     * (aucune classe Minecraft compilée en dur) ; repli sur l'ancien chemin
+     * brut UNIQUEMENT si cette résolution échoue entièrement (ex: signature
+     * qui aurait changé sur une future version).
+     */
+    private void ensureNativeTextureApiResolved() {
+        if (nativeTextureApiResolveAttempted) return;
+        nativeTextureApiResolveAttempted = true;
+        try {
+            nativeImageClass = McReflect.yarnClass("net/minecraft/client/texture/NativeImage");
+            nativeImageBackedTextureClass = McReflect.yarnClass("net/minecraft/client/texture/NativeImageBackedTexture");
+            textureManagerClass = McReflect.yarnClass("net/minecraft/client/texture/TextureManager");
+            abstractTextureClass = McReflect.yarnClass("net/minecraft/client/texture/AbstractTexture");
+            identifierClass = McReflect.yarnClass("net/minecraft/util/Identifier");
+            Class<?> formatClass = McReflect.yarnClass("net/minecraft/client/texture/NativeImage$Format");
+            if (nativeImageClass == null || nativeImageBackedTextureClass == null || textureManagerClass == null
+                    || abstractTextureClass == null || identifierClass == null || formatClass == null) {
+                LauncherLog.warn("[UiRenderer] résolution NativeImage/TextureManager : une classe introuvable, repli brut");
+                return;
+            }
+
+            String rgbaObf = MappingsRegistry.getObfFieldName("net/minecraft/client/texture/NativeImage$Format", "RGBA");
+            java.lang.reflect.Field rgbaField = formatClass.getDeclaredField(rgbaObf);
+            rgbaField.setAccessible(true);
+            nativeImageFormatRgba = rgbaField.get(null);
+
+            nativeImageCtor = nativeImageClass.getDeclaredConstructor(formatClass, int.class, int.class, boolean.class);
+            nativeImageCtor.setAccessible(true);
+            nativeImageBackedTextureCtor = nativeImageBackedTextureClass.getDeclaredConstructor(nativeImageClass);
+            nativeImageBackedTextureCtor.setAccessible(true);
+
+            nativeImageSetColor = McReflect.method(nativeImageClass, "net/minecraft/client/texture/NativeImage", "setColor", int.class, int.class, int.class);
+            nativeImageCloseMethod = McReflect.noArgMethod(nativeImageClass, "net/minecraft/client/texture/NativeImage", "close");
+
+            // BUG DE PERFORMANCE TROUVÉ (v347, signalé par l'utilisateur : "je
+            // lag à 8 FPS") : remplir un atlas 1024x2048 (2 millions de pixels)
+            // via setColor() UN PAR UN — chaque appel étant une réflexion Java
+            // (Method.invoke, avec autoboxing) — coûte des millions
+            // d'invocations réflexives par police créée. Repli : accès direct
+            // à la mémoire native de NativeImage (champ "pointer", un long
+            // pointant vers le buffer hors-tas) via MemoryUtil.memCopy — une
+            // SEULE copie mémoire brute au lieu de 2 millions d'appels
+            // individuels. Notre ByteBuffer existant (octets R,G,B,A
+            // consécutifs) a EXACTEMENT le même agencement mémoire que le
+            // format "RGBA petit-boutiste" de NativeImage (petit-boutiste :
+            // R d'abord en mémoire, A en dernier) — aucune conversion
+            // supplémentaire nécessaire, juste une copie brute octet à octet.
+            try {
+                String pointerObf = MappingsRegistry.getObfFieldName("net/minecraft/client/texture/NativeImage", "pointer");
+                nativeImagePointerField = nativeImageClass.getDeclaredField(pointerObf);
+                nativeImagePointerField.setAccessible(true);
+                memCopyMethod = gl("org.lwjgl.system.MemoryUtil", "memCopy", long.class, long.class, long.class);
+                memAddressMethod = gl("org.lwjgl.system.MemoryUtil", "memAddress", java.nio.ByteBuffer.class);
+                bulkCopyAvailable = true;
+            } catch (Throwable t) {
+                LauncherLog.warn("[UiRenderer] copie mémoire en bloc (MemoryUtil) indisponible, repli sur setColor() pixel par pixel (lent) : " + t);
+                bulkCopyAvailable = false;
+            }
+            textureUploadMethod = McReflect.noArgMethod(nativeImageBackedTextureClass, "net/minecraft/client/texture/NativeImageBackedTexture", "upload");
+            textureGetGlIdMethod = McReflect.noArgMethod(abstractTextureClass, "net/minecraft/client/texture/AbstractTexture", "getGlId");
+            textureBindTextureMethod = McReflect.noArgMethod(abstractTextureClass, "net/minecraft/client/texture/AbstractTexture", "bindTexture");
+            textureManagerRegisterTextureMethod = McReflect.method(textureManagerClass, "net/minecraft/client/texture/TextureManager",
+                "registerTexture", identifierClass, abstractTextureClass);
+            identifierOfMethod = McReflect.method(identifierClass, "net/minecraft/util/Identifier", "of", String.class, String.class);
+            Object mc = McReflect.minecraftClient();
+            mcGetTextureManagerMethod = mc != null
+                ? McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "getTextureManager")
+                : null;
+
+            nativeTextureApiAvailable = nativeImageSetColor != null && textureUploadMethod != null
+                && textureGetGlIdMethod != null && textureBindTextureMethod != null
+                && textureManagerRegisterTextureMethod != null && identifierOfMethod != null
+                && mcGetTextureManagerMethod != null && nativeImageFormatRgba != null;
+            LauncherLog.info("[UiRenderer] API NativeImage/TextureManager résolue : disponible=" + nativeTextureApiAvailable);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] résolution API NativeImage/TextureManager échouée, repli brut : " + t);
+            nativeTextureApiAvailable = false;
+        }
+    }
+
+    private int createFontTextureViaNativeImage(UiFont font) throws Exception {
+        java.awt.image.BufferedImage img = font.atlasImage();
+        int w = img.getWidth(), h = img.getHeight();
+
+        Object nativeImage = nativeImageCtor.newInstance(nativeImageFormatRgba, w, h, false);
+        try {
+            if (bulkCopyAvailable) {
+                // Chemin rapide : une seule copie mémoire brute (voir
+                // ensureNativeTextureApiResolved pour le pourquoi détaillé).
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
+                int[] row = new int[w];
+                for (int y = 0; y < h; y++) {
+                    img.getRGB(0, y, w, 1, row, 0, w);
+                    for (int x = 0; x < w; x++) {
+                        int argb = row[x];
+                        buf.put((byte) ((argb >> 16) & 0xFF)); // R
+                        buf.put((byte) ((argb >> 8) & 0xFF));  // G
+                        buf.put((byte) (argb & 0xFF));         // B
+                        buf.put((byte) ((argb >> 24) & 0xFF)); // A
+                    }
+                }
+                buf.flip();
+                long srcAddr = (long) memAddressMethod.invoke(null, buf);
+                long dstAddr = (long) nativeImagePointerField.get(nativeImage);
+                memCopyMethod.invoke(null, srcAddr, dstAddr, (long) buf.remaining());
+            } else {
+                // Repli lent (voir ensureNativeTextureApiResolved) — évite
+                // juste de ne RIEN dessiner si MemoryUtil ne se résout pas.
+                int[] row = new int[w];
+                for (int y = 0; y < h; y++) {
+                    img.getRGB(0, y, w, 1, row, 0, w);
+                    for (int x = 0; x < w; x++) {
+                        int argb = row[x];
+                        int a = (argb >>> 24) & 0xFF, r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
+                        // NativeImage.setColor attend du RGBA petit-boutiste, donc
+                        // ABGR en notation big-endian habituelle (alpha=octet le
+                        // plus significatif, rouge=le moins significatif) — voir
+                        // sa javadoc Yarn ("little-endian RGBA, or big-endian ABGR").
+                        int nativeColor = (a << 24) | (b << 16) | (g << 8) | r;
+                        nativeImageSetColor.invoke(nativeImage, x, y, nativeColor);
+                    }
+                }
+            }
+
+            Object texture = nativeImageBackedTextureCtor.newInstance(nativeImage);
+            textureUploadMethod.invoke(texture); // fait le VRAI glTexImage2D, via le chemin suivi par Minecraft
+            int texId = (int) textureGetGlIdMethod.invoke(texture);
+
+            // Filtre trilinéaire + clamp-to-edge (voir historique de session
+            // pour le pourquoi) — appliqués APRÈS coup sur une texture déjà
+            // créée par la voie sûre : bind via AbstractTexture.bindTexture()
+            // (passe par GlStateManager, pas notre glBindTexture brut) avant
+            // ces quelques réglages, qui eux restent des appels GL directs
+            // mais bien plus anodins qu'une création de texture complète.
+            textureBindTextureMethod.invoke(texture);
+            glGenerateMipmap(0x0DE1);
+            glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
+            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+            glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+            glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+
+            Object textureManager = mcGetTextureManagerMethod.invoke(McReflect.minecraftClient());
+            Object id = identifierOfMethod.invoke(null, "yuyuframe", "font_" + (fontTextureCounter++));
+            textureManagerRegisterTextureMethod.invoke(textureManager, id, texture);
+            return texId;
+        } finally {
+            // NativeImage possède de la mémoire HORS-TAS (native) — doit être
+            // explicitement libérée, contrairement au ByteBuffer direct de
+            // l'ancien chemin (géré par le GC, voir Cleaner de
+            // ByteBuffer.allocateDirect) : celui-ci ne l'est pas.
+            if (nativeImageCloseMethod != null) {
+                try { nativeImageCloseMethod.invoke(nativeImage); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    /** Ancien chemin (GL brut via réflexion) — conservé UNIQUEMENT en repli si la résolution NativeImage échoue. */
+    private int createFontTextureRaw(UiFont font) throws Exception {
+        java.awt.image.BufferedImage img = font.atlasImage();
+        int w = img.getWidth(), h = img.getHeight();
+
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
+        int[] row = new int[w];
+        for (int y = 0; y < h; y++) {
+            img.getRGB(0, y, w, 1, row, 0, w);
+            for (int x = 0; x < w; x++) {
+                int argb = row[x];
+                buf.put((byte) ((argb >> 16) & 0xFF)); // R
+                buf.put((byte) ((argb >> 8) & 0xFF));  // G
+                buf.put((byte) (argb & 0xFF));         // B
+                buf.put((byte) ((argb >> 24) & 0xFF)); // A
+            }
+        }
+        buf.flip();
+
+        int texId = glGenTextures();
+        glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
+        glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+        glGenerateMipmap(0x0DE1);
+        glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
+        glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+        glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+        glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+        glBindTexture(0x0DE1, 0);
+        return texId;
     }
 
     // ── Scissor (clipping rectangulaire — utilisé par UiScrollContainer) ─────
@@ -1692,6 +1882,9 @@ public final class UiRenderer {
     private void glDisable(int cap) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glDisable", int.class).invoke(null, cap);
     }
+    private boolean glIsEnabled(int cap) throws Exception {
+        return (boolean) gl("org.lwjgl.opengl.GL11", "glIsEnabled", int.class).invoke(null, cap);
+    }
     private void glBlendFunc(int sfactor, int dfactor) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glBlendFunc", int.class, int.class).invoke(null, sfactor, dfactor);
     }
@@ -1703,24 +1896,58 @@ public final class UiRenderer {
         gl("org.lwjgl.opengl.GL13", "glActiveTexture", int.class).invoke(null, texture);
     }
     /**
-     * RÉTABLI (voir historique du projet) : glPushAttrib/glPopAttrib avaient
-     * été supprimés PARTOUT dans ce fichier suite au crash natif 0xC0000409
-     * confirmé sur 1.21.11 (Core Profile — cette fonction n'y est plus
-     * implémentée). Mais cette suppression a aussi touché les méthodes
-     * *Legacy (1.8.9, Compatibility Profile, où pushAttrib n'a JAMAIS crashé)
-     * — sans save/restore, nos glDisable(GL_TEXTURE_2D/GL_ALPHA_TEST/...)
-     * restaient appliqués en PERMANENCE après notre dessin (rien ne les
-     * réactive avant la frame suivante côté vanilla 1.8.9, qui suppose cet
-     * état stable), cassant tout rendu texturé ultérieur (monde blanc,
-     * lag lié à la corruption d'état) — régression confirmée en jeu. Donc :
-     * gardé RETIRÉ des méthodes *Modern (1.21.11), RÉTABLI dans les méthodes
-     * *Legacy uniquement (voir chaque appelant).
+     * BUG TROUVÉ (retrouvé dans l'historique du projet, confirmé responsable
+     * du crash NATIF 0xC0000409 sur 1.21.11 ET reproduit sur 1.21.4) : {@code
+     * glPushAttrib}/{@code glPopAttrib} sont des fonctions de pile
+     * d'attributs OpenGL 1.x très anciennes, quasiment jamais utilisées par
+     * les applications modernes, et un point d'instabilité CONNU des pilotes
+     * GPU récents — même sous Compatibility Profile (1.8.9), où elles
+     * n'avaient encore jamais crashé jusqu'ici, mais rien ne garantit que ça
+     * reste vrai sur tout pilote/GPU. Décision : ne plus JAMAIS les appeler,
+     * nulle part dans ce fichier — remplacées partout par une capture/
+     * restauration manuelle et CIBLÉE des seuls drapeaux GL réellement
+     * modifiés par nos méthodes *Legacy (voir {@link #captureLegacyGlState}/
+     * {@link #restoreLegacyGlState}), au lieu de s'en remettre à une pile
+     * d'attributs entière pour un besoin bien plus restreint.
      */
-    private void pushAttrib(int mask) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glPushAttrib", int.class).invoke(null, mask);
+    private static final int[] LEGACY_TOGGLE_CAPS = {
+        0x0DE1, // GL_TEXTURE_2D
+        0x0B71, // GL_DEPTH_TEST
+        0x0B44, // GL_CULL_FACE
+        0x0BC0, // GL_ALPHA_TEST
+        0x0C11, // GL_SCISSOR_TEST
+        0x0BE2, // GL_BLEND
+    };
+
+    private static final class LegacyGlState {
+        final boolean[] enabled;
+        final int blendSrc, blendDst;
+        LegacyGlState(boolean[] enabled, int blendSrc, int blendDst) {
+            this.enabled = enabled;
+            this.blendSrc = blendSrc;
+            this.blendDst = blendDst;
+        }
     }
-    private void popAttrib() throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glPopAttrib").invoke(null);
+
+    /** Capture l'état AVANT modification — voir {@link #LEGACY_TOGGLE_CAPS}. */
+    private LegacyGlState captureLegacyGlState() throws Exception {
+        boolean[] enabled = new boolean[LEGACY_TOGGLE_CAPS.length];
+        for (int i = 0; i < LEGACY_TOGGLE_CAPS.length; i++) enabled[i] = glIsEnabled(LEGACY_TOGGLE_CAPS[i]);
+        int blendSrc = glGetInteger(0x0BE1); // GL_BLEND_SRC
+        int blendDst = glGetInteger(0x0BE0); // GL_BLEND_DST
+        return new LegacyGlState(enabled, blendSrc, blendDst);
+    }
+
+    /** {@code null} si la capture n'a jamais réussi (exception avant) — no-op silencieux dans ce cas. */
+    private void restoreLegacyGlState(LegacyGlState state) {
+        if (state == null) return;
+        for (int i = 0; i < LEGACY_TOGGLE_CAPS.length; i++) {
+            try {
+                if (state.enabled[i]) glEnable(LEGACY_TOGGLE_CAPS[i]);
+                else glDisable(LEGACY_TOGGLE_CAPS[i]);
+            } catch (Throwable ignored) {}
+        }
+        try { glBlendFunc(state.blendSrc, state.blendDst); } catch (Throwable ignored) {}
     }
     private void matrixMode(int mode) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glMatrixMode", int.class).invoke(null, mode);

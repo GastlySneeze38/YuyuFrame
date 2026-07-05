@@ -126,11 +126,30 @@ public final class PotionEffectsModule extends SingleHudModule {
             }
         }
 
-        /** Voir le commentaire dans currentRows() — nouveau chemin (getEffectType) essayé d'abord, ancien (getEffectId + tableau) en repli. */
+        /**
+         * Voir le commentaire dans currentRows() — nouveau chemin (getEffectType)
+         * essayé d'abord, ancien (getEffectId + tableau) en repli.
+         *
+         * BUG TROUVÉ (1.21.4, "?" affiché à la place du nom/couleur de l'effet) :
+         * {@code StatusEffectInstance.getEffectType()} ne renvoie plus un {@code
+         * StatusEffect} directement — il renvoie un {@code RegistryEntry<StatusEffect>}
+         * (vérifié dans les mappings 1.21.4 : {@code ()Ljr; c method_5579
+         * getEffectType}, {@code jr} = {@code net/minecraft/registry/entry/RegistryEntry})
+         * — EXACTEMENT le même changement "Holder"/RegistryEntry déjà rencontré
+         * pour {@code World.getBiome(BlockPos)} (voir CoordsModule/historique de
+         * session). {@code effectName()}/{@code effectColor()} appelaient
+         * {@code getTranslationKey()}/{@code getColor()} DIRECTEMENT sur ce
+         * RegistryEntry (qui n'a pas ces méthodes) → exception avalée → repli
+         * "?"/couleur par défaut. Déballé ici via {@code RegistryEntry.value()}
+         * (Yarn named, même méthode que pour le biome) avant de renvoyer l'effet.
+         */
         private Object resolveEffect(Class<?> instanceClass, Object instance) {
             try {
                 Method getEffectType = McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectType");
-                if (getEffectType != null) return getEffectType.invoke(instance);
+                if (getEffectType != null) {
+                    Object effect = getEffectType.invoke(instance);
+                    return unwrapRegistryEntry(effect);
+                }
             } catch (Throwable ignored) {}
             try {
                 Method getEffectId = McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectId");
@@ -144,6 +163,30 @@ public final class PotionEffectsModule extends SingleHudModule {
             } catch (Throwable ignored) {
                 return null;
             }
+        }
+
+        private static Class<?> registryEntryClass;
+        private static Method registryEntryValueMethod;
+        private static boolean registryEntryResolveAttempted;
+
+        /** Déballe un {@code RegistryEntry<T>} vers son {@code T} réel via {@code value()} — voir resolveEffect(). {@code obj} tel quel si ce n'en est pas un (repli 1.16.5/1.20.4 où getEffectType renvoie déjà le StatusEffect direct). */
+        private Object unwrapRegistryEntry(Object obj) {
+            if (obj == null) return null;
+            if (!registryEntryResolveAttempted) {
+                registryEntryResolveAttempted = true;
+                registryEntryClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry");
+                if (registryEntryClass != null) {
+                    registryEntryValueMethod = McReflect.noArgMethod(registryEntryClass, "net/minecraft/registry/entry/RegistryEntry", "value");
+                }
+            }
+            if (registryEntryClass != null && registryEntryValueMethod != null && registryEntryClass.isInstance(obj)) {
+                try {
+                    return registryEntryValueMethod.invoke(obj);
+                } catch (Throwable ignored) {
+                    return obj;
+                }
+            }
+            return obj;
         }
 
         private String effectName(Object effect) {

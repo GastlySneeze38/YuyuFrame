@@ -86,16 +86,17 @@ public final class ModuleRegistry {
      * sensation, catégorisé à part lors de l'audit) — reste enregistré
      * partout, y compris en 1.16.5.
      *
-     * Élargi au bracket "C" (1.20.4, voir VersionBracketRegistry) : mêmes
-     * réglages vanilla natifs (FOV/Sprint/Sneak) présents depuis la
-     * "Flattening" (~1.13) et toujours là en 1.20.4, et les mêmes 7 Mixins
-     * "animations 1.7" restent 1.8.9-only — donc les mêmes exclusions
-     * s'appliquent, pas seulement à 1.16.5. Le nom {@code IS_1_16} n'a pas
-     * été renommé (trop de commentaires y référeraient encore) mais couvre
-     * bien les DEUX brackets malgré son nom.
+     * Élargi aux brackets "C" (1.20.4) et "D" (1.21.4, voir
+     * VersionBracketRegistry) : mêmes réglages vanilla natifs (FOV/Sprint/
+     * Sneak, hurt cam) présents depuis la "Flattening" (~1.13) et toujours là
+     * sur ces brackets, et les mêmes 7 Mixins "animations 1.7" restent
+     * 1.8.9-only — donc les mêmes exclusions s'appliquent partout. Le nom
+     * {@code IS_1_16} n'a pas été renommé (trop de commentaires y
+     * référeraient encore) mais couvre bien TOUS ces brackets malgré son nom.
      */
     private static final boolean IS_1_16 = System.getProperty("launcheragent.mcVersion", "").startsWith("1.16")
-        || "1.20.4".equals(System.getProperty("launcheragent.mcVersion", ""));
+        || "1.20.4".equals(System.getProperty("launcheragent.mcVersion", ""))
+        || "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     static {
         register(new FpsModule());

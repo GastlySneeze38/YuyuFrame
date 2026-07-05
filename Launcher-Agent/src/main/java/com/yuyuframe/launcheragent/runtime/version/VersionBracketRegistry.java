@@ -79,6 +79,22 @@ public final class VersionBracketRegistry {
             "mixins.launcheragent-1.20.4.json",
             "1.20.4",
             version -> "1.20.4".equals(version)));
+
+        // Bracket "D" (voir historique de session) — ~1.21 à 1.21.5 : même
+        // profil OpenGL Core que le bracket "C" (1.20.4), mais
+        // GameRenderer.render change de signature — render(RenderTickCounter,
+        // boolean), RenderTickCounter introduit entre la 1.20.4 et la 1.21
+        // (vérifié via mappings/yarn-1.21.4-mergedv2.jar) — MÊME signature
+        // que le bracket 1.21.11 déjà existant, mais celui-ci utilise des
+        // noms obfusqués figés en dur (technique fragile propre à un seul
+        // jar de mappings) plutôt que la résolution 100% dynamique utilisée
+        // ici. Resserré à 1.21.4 (seule version vérifiée par javap/mappings
+        // au moment de l'écriture), pas encore élargi à toute la 1.21-1.21.5.
+        BRACKETS.add(new VersionBracket(
+            "1_21_4",
+            "mixins.launcheragent-1.21.4.json",
+            "1.21.4",
+            version -> "1.21.4".equals(version)));
     }
 
     /** Résout la tranche correspondant à la version détectée, ou {@code null} si aucune ne correspond. */
