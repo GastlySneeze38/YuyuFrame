@@ -52,11 +52,42 @@ public final class UiInputPollerModern extends UiInputPoller {
     private final Object[] previousCharCb = new Object[1];
     private boolean prevBackspaceDown;
 
+    /**
+     * Instance active — voir historique de session : {@code ZoomModule}
+     * (et tout futur module ayant besoin d'une touche configurable pollée
+     * "à la demande", pas via {@link #pollAnyKeyJustPressed()} qui consomme
+     * un état de front montant partagé) utilisait auparavant {@code
+     * org.lwjgl.input.Keyboard} (LWJGL2) inconditionnellement — inexistant
+     * sous LWJGL3/GLFW (1.13+), donc toujours en échec silencieux sur ce
+     * bracket. Exposée ici pour qu'un module puisse vérifier une touche par
+     * NOM sans dépendre de LWJGL2.
+     */
+    public static volatile UiInputPollerModern ACTIVE;
+
     public UiInputPollerModern(long windowHandle, ClassLoader gameClassLoader) {
         this.windowHandle = windowHandle;
         this.gameClassLoader = gameClassLoader;
         registerScrollCallback();
         registerCharCallback();
+        ACTIVE = this;
+    }
+
+    /**
+     * État courant (maintenue ou non) d'une touche nommée arbitraire — même
+     * table/format que {@link #menuKeyCode} (pas limité au champ statique
+     * {@code menuKeyName}). Contrairement à {@link #pollAnyKeyJustPressed()},
+     * ne consomme AUCUN état partagé (pas de front montant, juste l'état brut
+     * GLFW instantané) — donc appelable librement par plusieurs consommateurs
+     * indépendants (un module de touche configurable, etc.) sans interférence.
+     */
+    public boolean isKeyDownByName(String name) {
+        try {
+            int code = menuKeyCode(name);
+            if (code < 0) return false;
+            return glfwGetKey(windowHandle, code) == 1;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static Object[][] buildCapturableKeys() {
@@ -222,8 +253,15 @@ public final class UiInputPollerModern extends UiInputPoller {
 
         mouseX = cx[0] * scaleX;
         mouseY = fbH[0] - (cy[0] * scaleY); // flip après mise à l'échelle, sur la hauteur framebuffer
-        fbWidth = fbW[0];
-        fbHeight = fbH[0];
+
+        // BUG TROUVÉ : glfwGetFramebufferSize renvoie (0,0) quand la fenêtre
+        // est minimisée (iconifiée) — fbWidth/fbHeight à 0 se propagent
+        // jusqu'à glOrtho(0, vpWidth, 0, vpHeight, -1, 1) dans UiRenderer,
+        // où (right-left) ou (top-bottom) devient nul, d'où le spam
+        // GL_INVALID_VALUE "View frustum must not have a zero values".
+        // On garde la dernière taille connue plutôt que d'écraser avec 0.
+        if (fbW[0] > 0) fbWidth = fbW[0];
+        if (fbH[0] > 0) fbHeight = fbH[0];
 
         leftDown = glfwGetMouseButton(windowHandle, 0) == 1;  // GLFW_MOUSE_BUTTON_LEFT
         rightDown = glfwGetMouseButton(windowHandle, 1) == 1; // GLFW_MOUSE_BUTTON_RIGHT
@@ -242,6 +280,32 @@ public final class UiInputPollerModern extends UiInputPoller {
             if (entry[1].equals(name)) return (Integer) entry[0];
         }
         return -1;
+    }
+
+    /**
+     * Sens INVERSE de {@link #menuKeyCode} — nom lisible d'un code GLFW —
+     * utilisé par {@code KeystrokesModule} (voir historique de session,
+     * audit des modules) : {@code KeyBinding.code} (int direct) a disparu en
+     * 1.13+, remplacé par {@code KeyBinding.boundKey} (objet {@code
+     * InputUtil.Key}), dont {@code getCode()} renvoie un code GLFW — plus de
+     * {@code org.lwjgl.input.Keyboard.getKeyName(int)} (LWJGL2) pour le
+     * traduire en texte. Cherche d'abord dans {@link #CAPTURABLE_KEYS} (F1-F12,
+     * flèches, modificateurs — sans représentation imprimable, {@code
+     * glfwGetKeyName} renvoie {@code null} pour eux), sinon retombe sur
+     * {@code glfwGetKeyName} (touches imprimables A-Z/0-9/ponctuation).
+     */
+    public static String nameForKeyCode(int code, ClassLoader gameClassLoader) {
+        for (Object[] entry : CAPTURABLE_KEYS) {
+            if (((Integer) entry[0]) == code) return (String) entry[1];
+        }
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Method m = glfwClass.getMethod("glfwGetKeyName", int.class, int.class);
+            String name = (String) m.invoke(null, code, 0);
+            return name == null ? null : name.toUpperCase(java.util.Locale.ROOT);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     @Override

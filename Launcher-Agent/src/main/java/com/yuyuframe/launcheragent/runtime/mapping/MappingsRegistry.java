@@ -259,6 +259,22 @@ public final class MappingsRegistry implements IRemapper {
         return entry.officialName;
     }
 
+    /**
+     * {@code true} SEULEMENT si ce champ Yarn named existe réellement dans
+     * les mappings chargées pour cette classe — PAS une simple absence
+     * d'exception. Indispensable avant de tenter une résolution "ancien
+     * chemin vs nouveau chemin" (voir historique de session, audit modules) :
+     * {@link #getObfFieldName} retombe sur le nom Yarn INCHANGÉ quand
+     * l'entrée est introuvable — un appelant qui utilise ensuite ce nom tel
+     * quel en réflexion brute peut retomber, PAR COÏNCIDENCE, sur un VRAI
+     * champ obfusqué portant ce même nom court (1-2 lettres, très probable
+     * vu l'alphabet réduit des noms obfusqués) — un faux positif silencieux,
+     * pas juste un échec propre.
+     */
+    public static boolean hasFieldMapping(String yarnClass, String yarnField) {
+        return isLoaded() && YarnMappings.getOfficialField(yarnClass, yarnField) != null;
+    }
+
     public static String getObfFieldName(String yarnClass, String yarnField) {
         if (!isLoaded()) return yarnField;
         YarnMappings.FieldEntry entry = YarnMappings.getOfficialField(yarnClass, yarnField);

@@ -65,6 +65,29 @@ public final class ModuleRegistry {
 
     private static final List<LauncherModule> MODULES = new ArrayList<>();
     private static final List<ModuleGroup> GROUPS = new ArrayList<>();
+
+    /**
+     * 1.16.5 (et plus largement le bracket "B", voir VersionBracketRegistry —
+     * même prédicat {@code startsWith("1.16")}) exclut certains modules dont
+     * la logique ne vit QUE dans des Mixins {@code *189} (1.8.9), jamais
+     * portée ici : les afficher comme des cartes cliquables qui ne font rien
+     * serait trompeur. Exclus (voir historique de session, audit demandé par
+     * l'utilisateur) :
+     *   - ToggleSprint/ToggleSneak/Fov : REDONDANTS avec des réglages vanilla
+     *     natifs déjà présents en 1.13-1.16.5 (Contrôles: Sprint/Sneak
+     *     Maintenir/Basculer ; curseur FOV vidéo).
+     *   - Les 6 "animations 1.7" (Swing/Diagonal/ItemRotations/
+     *     SwingWhileBlocking/OldBow/OldConsume) : PAS redondants avec du
+     *     vanilla (ils restaurent des mécaniques retirées par la mise à jour
+     *     combat 1.9+, toujours pertinents en 1.16.5), mais leur Mixin
+     *     d'implémentation reste 1.8.9 uniquement pour l'instant — à
+     *     réintégrer ici le jour où un Mixin équivalent existe pour ce bracket.
+     * {@code SneakRampModule} n'est PAS dans cette liste (recrée juste une
+     * sensation, catégorisé à part lors de l'audit) — reste enregistré
+     * partout, y compris en 1.16.5.
+     */
+    private static final boolean IS_1_16 = System.getProperty("launcheragent.mcVersion", "").startsWith("1.16");
+
     static {
         register(new FpsModule());
         register(new PingModule());
@@ -73,22 +96,27 @@ public final class ModuleRegistry {
         register(new PotionEffectsModule());
         register(new ArmorDurabilityModule());
         register(new LowHealthTintModule());
-        register(new FovModule());
+        if (!IS_1_16) register(new FovModule());
         // Enregistré JUSTE APRÈS FovModule — tickAll() itère MODULES dans
         // l'ordre d'enregistrement, donc si les deux sont actifs, le zoom
         // s'applique EN DERNIER chaque frame et n'est jamais écrasé par le
         // FOV permanent de FovModule (voir ZoomModule pour le détail).
         register(new ZoomModule());
         register(new HurtCamModule());
-        register(new ToggleSprintModule());
-        register(new ToggleSneakModule());
-        register(new SwingSpeedModule());
-        register(new DiagonalSwordModule());
-        register(new OldItemRotationsModule());
-        register(new SwingWhileBlockingModule());
-        register(new OldBowModule());
-        register(new OldConsumeModule());
-        register(new SneakRampModule());
+        if (!IS_1_16) register(new ToggleSprintModule());
+        if (!IS_1_16) register(new ToggleSneakModule());
+        if (!IS_1_16) register(new SwingSpeedModule());
+        if (!IS_1_16) register(new DiagonalSwordModule());
+        if (!IS_1_16) register(new OldItemRotationsModule());
+        if (!IS_1_16) register(new SwingWhileBlockingModule());
+        if (!IS_1_16) register(new OldBowModule());
+        if (!IS_1_16) register(new OldConsumeModule());
+        // Ajouté à la liste d'exclusion 1.16.5 sur demande explicite de
+        // l'utilisateur ("enlève-les TOUS") — initialement laissé de côté
+        // lors de l'audit (recrée juste une sensation, pas un vrai portage
+        // 1.7), mais reste visuellement groupé sous "Animations 1.7" dans
+        // l'UI, donc traité pareil que les 6 autres.
+        if (!IS_1_16) register(new SneakRampModule());
         register(new CrosshairModule());
         register(new FullbrightModule());
         register(new WorldTimeModule());
@@ -110,11 +138,21 @@ public final class ModuleRegistry {
         // individuellement juste au-dessus (tickAll/renderOverlayAll/persistance
         // inchangés), seul UiMainMenuScreen les affiche fusionnés sous une
         // carte au lieu d'une par module.
-        GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak",
-            Arrays.asList(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"))));
-        GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak",
-            Arrays.asList(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
-                get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"))));
+        // nonNull() — certains membres ci-dessous ne sont PAS enregistrés sur
+        // 1.16.5 (voir IS_1_16 plus haut) : get(id) renvoie alors null, qu'il
+        // faut filtrer avant de construire le groupe (sinon carte "vide"
+        // cassée dans l'UI).
+        List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"));
+        if (!comfortMembers.isEmpty()) {
+            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak", comfortMembers));
+        }
+        // Groupe entièrement exclu sur 1.16.5 (les 7 membres y sont tous
+        // exclus, voir IS_1_16) — pas de carte vide affichée dans ce cas.
+        List<LauncherModule> legacyMembers = nonNull(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
+            get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"));
+        if (!legacyMembers.isEmpty()) {
+            GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak", legacyMembers));
+        }
         // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
         // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),
         // pas de dépendance sur PolyPatcher lui-même, juste la même idée en Mixin natif.
@@ -183,6 +221,13 @@ public final class ModuleRegistry {
     public static LauncherModule get(String id) {
         for (LauncherModule m : MODULES) if (m.id.equals(id)) return m;
         return null;
+    }
+
+    /** Filtre les {@code null} — voir IS_1_16, certains {@code get(id)} n'ont pas de résultat selon le bracket. */
+    private static List<LauncherModule> nonNull(LauncherModule... modules) {
+        List<LauncherModule> result = new ArrayList<>(modules.length);
+        for (LauncherModule m : modules) if (m != null) result.add(m);
+        return result;
     }
 
     public static void tickAll() {

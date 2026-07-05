@@ -72,25 +72,34 @@ public final class PotionEffectsModule extends SingleHudModule {
                 Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
                 if (player == null) return rows;
 
+                // BUG TROUVÉ (audit modules, voir historique de session) :
+                // "getStatusEffectInstances" (nom Yarn 1.8.9) n'existe plus en
+                // 1.16.5 — renommé "getStatusEffects" (mappings 1.16.5 :
+                // () Ljava/util/Collection; dh method_6026 getStatusEffects).
+                // Vrai renommage de nom Yarn entre versions, pas juste une
+                // forme différente — essaie les deux.
                 Method getInstances = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStatusEffectInstances");
+                if (getInstances == null) {
+                    getInstances = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStatusEffects");
+                }
                 if (getInstances == null) return rows;
                 Collection<?> effects = (Collection<?>) getInstances.invoke(player);
                 if (effects == null || effects.isEmpty()) return rows;
 
-                Class<?> effectClass = McReflect.yarnClass("net/minecraft/entity/effect/StatusEffect");
-                Object[] statusEffects = effectClass != null
-                    ? (Object[]) McReflect.field(effectClass, "net/minecraft/entity/effect/StatusEffect", "STATUS_EFFECTS").get(null)
-                    : null;
-
+                // BUG TROUVÉ (audit modules, voir historique de session) :
+                // StatusEffectInstance.getEffectId() (int) + StatusEffect.STATUS_EFFECTS
+                // (tableau statique indexé par cet int) n'existent PLUS depuis la
+                // refonte "Flattening" (~1.13) — remplacés par getEffectType(),
+                // qui renvoie DIRECTEMENT l'objet StatusEffect, sans tableau à
+                // indexer. Résolu dynamiquement (essaie l'ancien chemin d'abord,
+                // sinon le nouveau) plutôt que de figer un seul des deux.
                 Class<?> instanceClass = null;
                 for (Object instance : effects) {
                     if (instanceClass == null) instanceClass = instance.getClass();
 
-                    int effectId = (int) McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectId").invoke(instance);
                     int amplifier = (int) McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getAmplifier").invoke(instance);
                     int duration = (int) McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getDuration").invoke(instance);
-
-                    Object effect = (statusEffects != null && effectId >= 0 && effectId < statusEffects.length) ? statusEffects[effectId] : null;
+                    Object effect = resolveEffect(instanceClass, instance);
                     String name = effectName(effect);
                     if (amplifier > 0 && amplifier <= ROMAN.length) name += " " + ROMAN[amplifier - 1];
 
@@ -114,6 +123,26 @@ public final class PotionEffectsModule extends SingleHudModule {
                 renderer.drawText(row.name, x + icon + 5f * scale, ty, UiTheme.TEXT_PRIMARY, NAME_SCALE * scale, vpWidth, vpHeight);
                 renderer.drawText(row.time, x + icon + 5f * scale, ty - 12f * scale, UiTheme.TEXT_SECONDARY, TIME_SCALE * scale, vpWidth, vpHeight);
                 ty -= lineH;
+            }
+        }
+
+        /** Voir le commentaire dans currentRows() — nouveau chemin (getEffectType) essayé d'abord, ancien (getEffectId + tableau) en repli. */
+        private Object resolveEffect(Class<?> instanceClass, Object instance) {
+            try {
+                Method getEffectType = McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectType");
+                if (getEffectType != null) return getEffectType.invoke(instance);
+            } catch (Throwable ignored) {}
+            try {
+                Method getEffectId = McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectId");
+                if (getEffectId == null) return null;
+                int effectId = (int) getEffectId.invoke(instance);
+                Class<?> effectClass = McReflect.yarnClass("net/minecraft/entity/effect/StatusEffect");
+                Object[] statusEffects = effectClass != null
+                    ? (Object[]) McReflect.field(effectClass, "net/minecraft/entity/effect/StatusEffect", "STATUS_EFFECTS").get(null)
+                    : null;
+                return (statusEffects != null && effectId >= 0 && effectId < statusEffects.length) ? statusEffects[effectId] : null;
+            } catch (Throwable ignored) {
+                return null;
             }
         }
 

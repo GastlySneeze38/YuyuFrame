@@ -99,11 +99,14 @@ public final class KeystrokesModule extends SingleHudModule {
                 Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
                 if (options == null) return;
 
-                Object forward = optionsField(options, "forwardKey");
-                Object left    = optionsField(options, "leftKey");
-                Object back    = optionsField(options, "backKey");
-                Object right   = optionsField(options, "rightKey");
-                Object jump    = optionsField(options, "jumpKey");
+                // BUG TROUVÉ (audit modules, voir historique de session) :
+                // noms de champ "forwardKey"/"leftKey"/etc. (1.8.9) inversés
+                // en 1.16.5 — "keyForward"/"keyLeft"/etc. Essaie les deux.
+                Object forward = optionsFieldEither(options, "forwardKey", "keyForward");
+                Object left    = optionsFieldEither(options, "leftKey", "keyLeft");
+                Object back    = optionsFieldEither(options, "backKey", "keyBack");
+                Object right   = optionsFieldEither(options, "rightKey", "keyRight");
+                Object jump    = optionsFieldEither(options, "jumpKey", "keyJump");
 
                 trackClicks();
 
@@ -153,6 +156,15 @@ public final class KeystrokesModule extends SingleHudModule {
             }
         }
 
+        /** Essaie {@code oldName} (1.8.9) puis {@code newName} (1.13+) — voir historique de session. */
+        private Object optionsFieldEither(Object options, String oldName, String newName) {
+            if (com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/GameOptions", oldName)) {
+                Object v = optionsField(options, oldName);
+                if (v != null) return v;
+            }
+            return optionsField(options, newName);
+        }
+
         private boolean isDown(Object keyBinding) {
             if (keyBinding == null) return false;
             try {
@@ -162,32 +174,94 @@ public final class KeystrokesModule extends SingleHudModule {
             }
         }
 
+        /**
+         * BUG TROUVÉ (audit modules, voir historique de session) : {@code
+         * KeyBinding.code} (int direct) n'existe plus en 1.13+ — remplacé par
+         * {@code KeyBinding.boundKey} (objet {@code InputUtil.Key}, voir
+         * mappings 1.16.5 : champ {@code c I field_1665 code} appartient en
+         * fait à {@code InputUtil.Key}, PAS à {@code KeyBinding} lui-même,
+         * qui n'a que {@code Ldeo$a; f field_1654 boundKey}). Essaie d'abord
+         * l'ancien champ direct (1.8.9, inchangé), sinon lit {@code
+         * boundKey.getCode()}. Nommage : {@code org.lwjgl.input.Keyboard}
+         * (LWJGL2) n'existe pas sous LWJGL3/GLFW — voir
+         * {@code UiInputPollerModern#nameForKeyCode}.
+         */
         private String keyLabel(Object keyBinding) {
             if (keyBinding == null) return "?";
             try {
-                int code = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "code").getInt(keyBinding);
-                if (code < 0) return "M" + (-code - 100);
-                Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
-                Method getKeyName = McReflect.rawMethod(keyboard, "getKeyName", int.class);
-                if (getKeyName == null) return "?";
-                String name = (String) getKeyName.invoke(null, code);
+                Integer directCode = tryGetInt(keyBinding, "code");
+                if (directCode != null) {
+                    int code = directCode;
+                    if (code < 0) return "M" + (-code - 100);
+                    Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
+                    Method getKeyName = McReflect.rawMethod(keyboard, "getKeyName", int.class);
+                    if (getKeyName == null) return "?";
+                    String name = (String) getKeyName.invoke(null, code);
+                    return name == null || name.isEmpty() ? "?" : name;
+                }
+
+                Object boundKey = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "boundKey").get(keyBinding);
+                if (boundKey == null) return "?";
+                Method getCode = McReflect.noArgMethod(boundKey.getClass(), "net/minecraft/client/util/InputUtil$Key", "getCode");
+                if (getCode == null) return "?";
+                int code = (int) getCode.invoke(boundKey);
+                String name = com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
                 return name == null || name.isEmpty() ? "?" : name;
             } catch (Throwable t) {
                 return "?";
             }
         }
 
+        /**
+         * {@code null} si le champ n'existe pas du tout (pas juste une
+         * valeur négative) — distingue "pas ce champ" de "valeur -1".
+         * Vérifie D'ABORD que le mapping Yarn existe vraiment (voir
+         * historique de session, même piège que CoordsModule.tryField) :
+         * sinon getObfFieldName retombe sur "code" tel quel, qui peut par
+         * coïncidence matcher un vrai champ obfusqué sans rapport (1-2
+         * lettres, faux positif silencieux).
+         */
+        private Integer tryGetInt(Object keyBinding, String yarnField) {
+            if (!com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/KeyBinding", yarnField)) {
+                return null;
+            }
+            try {
+                java.lang.reflect.Field f = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", yarnField);
+                if (f == null) return null;
+                return f.getInt(keyBinding);
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+
+        /**
+         * BUG TROUVÉ (audit modules) : passait TOUJOURS par {@code
+         * org.lwjgl.input.Mouse} (LWJGL2) — inexistant sous LWJGL3/GLFW
+         * (1.13+), CPS toujours à 0 sur ces versions. Utilise désormais
+         * l'état déjà pollé chaque frame par l'instance {@code
+         * UiInputPollerModern} active (champs {@code leftDown}/{@code
+         * rightDown} de la classe de base {@code UiInputPoller}) quand
+         * disponible, sinon retombe sur LWJGL2 (1.8.9, inchangé).
+         */
         private void trackClicks() {
             try {
-                Class<?> mouse = McReflect.rawClass("org.lwjgl.input.Mouse");
-                Method isButtonDown = McReflect.rawMethod(mouse, "isButtonDown", int.class);
-                if (isButtonDown == null) return;
+                com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern modern =
+                    com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.ACTIVE;
+                boolean leftDown, rightDown;
+                if (modern != null) {
+                    leftDown = modern.leftDown;
+                    rightDown = modern.rightDown;
+                } else {
+                    Class<?> mouse = McReflect.rawClass("org.lwjgl.input.Mouse");
+                    Method isButtonDown = McReflect.rawMethod(mouse, "isButtonDown", int.class);
+                    if (isButtonDown == null) return;
+                    leftDown = (boolean) isButtonDown.invoke(null, 0);
+                    rightDown = (boolean) isButtonDown.invoke(null, 1);
+                }
 
-                boolean leftDown = (boolean) isButtonDown.invoke(null, 0);
                 if (leftDown && !prevLeftDown) leftClicks.addLast(System.currentTimeMillis());
                 prevLeftDown = leftDown;
 
-                boolean rightDown = (boolean) isButtonDown.invoke(null, 1);
                 if (rightDown && !prevRightDown) rightClicks.addLast(System.currentTimeMillis());
                 prevRightDown = rightDown;
             } catch (Throwable ignored) {}

@@ -29,8 +29,8 @@ public final class FullbrightModule extends LauncherModule {
             Field gammaField = gammaField();
             if (gammaField == null) return;
             Object options = optionsInstance();
-            if (Float.isNaN(savedVanillaGamma)) savedVanillaGamma = gammaField.getFloat(options);
-            gammaField.setFloat(options, GAMMA_VALUE);
+            if (Float.isNaN(savedVanillaGamma)) savedVanillaGamma = readGamma(gammaField, options);
+            writeGamma(gammaField, options, GAMMA_VALUE);
         } catch (Throwable ignored) {}
     }
 
@@ -40,11 +40,28 @@ public final class FullbrightModule extends LauncherModule {
         try {
             if (Float.isNaN(savedVanillaGamma)) return;
             Field gammaField = gammaField();
-            if (gammaField != null) gammaField.setFloat(optionsInstance(), savedVanillaGamma);
+            if (gammaField != null) writeGamma(gammaField, optionsInstance(), savedVanillaGamma);
         } catch (Throwable ignored) {
         } finally {
             savedVanillaGamma = Float.NaN;
         }
+    }
+
+    /**
+     * BUG TROUVÉ (audit modules, voir historique de session) : {@code
+     * GameOptions.gamma} est un {@code float} en 1.8.9 mais un {@code double}
+     * en 1.13-1.16.5 (mappings 1.16.5 : {@code f D aR field_1840 gamma}) —
+     * {@code getFloat}/{@code setFloat} levait {@code IllegalArgumentException}
+     * sur ce dernier, avalée silencieusement, fullbright totalement
+     * inopérant. Lit le VRAI type du champ au lieu de supposer.
+     */
+    private float readGamma(Field gammaField, Object options) throws Exception {
+        return gammaField.getType() == double.class ? (float) gammaField.getDouble(options) : gammaField.getFloat(options);
+    }
+
+    private void writeGamma(Field gammaField, Object options, float value) throws Exception {
+        if (gammaField.getType() == double.class) gammaField.setDouble(options, value);
+        else gammaField.setFloat(options, value);
     }
 
     private Object optionsInstance() throws Exception {

@@ -85,6 +85,14 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             return maxTextW > 0f ? ICON + GAP + maxTextW : FALLBACK_WIDTH;
         }
 
+        /**
+         * BUG TROUVÉ (audit modules, voir historique de session) : {@code
+         * LivingEntity.getArmorSlot(int)} n'existe plus depuis la refonte
+         * "Flattening" (~1.13) — remplacé par {@code getEquippedStack(EquipmentSlot)}
+         * (enum, plus un entier magique). Essaie l'ancien chemin d'abord
+         * (1.8.9, inchangé), sinon résout les 4 constantes d'armure de
+         * l'enum {@code EquipmentSlot} (FEET/LEGS/CHEST/HEAD) dynamiquement.
+         */
         private Object[] currentStacks() {
             Object helmet = null, chest = null, legs = null, boots = null, held = null;
             try {
@@ -92,19 +100,46 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                 if (mc != null) {
                     Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
                     if (player != null) {
+                        // BUG TROUVÉ (audit modules, voir historique de session) :
+                        // getStackInHand() n'est PAS no-arg — prend un paramètre
+                        // Hand (mappings 1.16.5 : (Laot;)Lbmb; b method_5998
+                        // getStackInHand) — la recherche no-arg ne le trouvait
+                        // donc jamais, "première main" toujours vide.
+                        Class<?> handClass = McReflect.yarnClass("net/minecraft/util/Hand");
+                        Method getStackInHand = handClass != null
+                            ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand", handClass)
+                            : null;
+                        if (getStackInHand != null && handClass != null) {
+                            Object mainHand = McReflect.field(handClass, "net/minecraft/util/Hand", "MAIN_HAND").get(null);
+                            held = getStackInHand.invoke(player, mainHand);
+                        }
+
                         Method getArmorSlot = McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getArmorSlot", int.class);
-                        Method getStackInHand = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand");
-                        if (getArmorSlot != null && getStackInHand != null) {
+                        if (getArmorSlot != null) {
                             helmet = getArmorSlot.invoke(player, 3);
                             chest = getArmorSlot.invoke(player, 2);
                             legs = getArmorSlot.invoke(player, 1);
                             boots = getArmorSlot.invoke(player, 0);
-                            held = getStackInHand.invoke(player);
+                        } else {
+                            Class<?> slotClass = McReflect.yarnClass("net/minecraft/entity/EquipmentSlot");
+                            Method getEquippedStack = slotClass != null
+                                ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getEquippedStack", slotClass)
+                                : null;
+                            if (slotClass != null && getEquippedStack != null) {
+                                helmet = getEquippedStack.invoke(player, equipmentSlot(slotClass, "HEAD"));
+                                chest = getEquippedStack.invoke(player, equipmentSlot(slotClass, "CHEST"));
+                                legs = getEquippedStack.invoke(player, equipmentSlot(slotClass, "LEGS"));
+                                boots = getEquippedStack.invoke(player, equipmentSlot(slotClass, "FEET"));
+                            }
                         }
                     }
                 }
             } catch (Throwable ignored) {}
             return new Object[]{ helmet, chest, legs, boots, held };
+        }
+
+        private Object equipmentSlot(Class<?> slotClass, String yarnConstantName) throws Exception {
+            return McReflect.field(slotClass, "net/minecraft/entity/EquipmentSlot", yarnConstantName).get(null);
         }
 
         @Override

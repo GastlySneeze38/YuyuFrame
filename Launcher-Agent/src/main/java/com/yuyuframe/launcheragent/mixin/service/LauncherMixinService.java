@@ -192,6 +192,18 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/GlobalTickMixin116",
             "net/minecraft/client/MinecraftClient",
             "tick", "()V", null),
+        // InGameHud.renderCrosshair(MatrixStack) — déclaré directement, pas de repli.
+        // Voir MixinCrosshair116 (audit modules — crosshair vanilla jamais masqué sur ce bracket).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/MixinCrosshair116",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/util/math/MatrixStack;)V", null),
+        // MixinWorldTime116 RETIRÉ (voir historique de session) : ciblait
+        // net.minecraft.world.LunarWorldView, une INTERFACE — Sponge Mixin
+        // 0.8.7 rejette @Inject sur une interface (InvalidMixinException:
+        // "@Mixin target type mismatch ... is an interface"), a fait planter
+        // TOUTE la config Mixin en cascade (jeu arrêté). Nécessite une autre
+        // approche (cibler une classe concrète qui APPELLE getSkyAngle, pas
+        // l'interface elle-même) — non résolu pour l'instant.
     };
 
     /**
