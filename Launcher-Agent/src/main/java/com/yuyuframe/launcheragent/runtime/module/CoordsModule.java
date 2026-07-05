@@ -60,12 +60,23 @@ public final class CoordsModule extends SingleHudModule {
                         yLine = "Y: " + (int) Math.floor(py);
                         zLine = "Z: " + (int) Math.floor(pz);
 
-                        float yaw = McReflect.field(player.getClass(), "net/minecraft/entity/Entity", "yaw").getFloat(player);
+                        float yaw = playerYaw(player);
                         facing = facingLetter(yaw);
                         biome = biomeName(player, (int) Math.floor(px), (int) Math.floor(py), (int) Math.floor(pz));
                     }
                 }
-            } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                // BUG TROUVÉ (1.20.4, test utilisateur) : ce catch était
+                // silencieux ("catch (Throwable ignored) {}") — si playerYaw
+                // (ou n'importe quelle ligne AVANT biome dans ce bloc) lève,
+                // ni l'orientation NI le biome ne s'affichaient, et RIEN
+                // n'apparaissait dans les logs pour l'expliquer (contrairement
+                // à registryBiomeName/biomeName plus bas, qui ont leur propre
+                // diagnostic MAIS ne sont jamais atteints si l'exception vient
+                // d'avant). Log une seule fois par session pour ne plus
+                // jamais reproduire ce trou noir de diagnostic.
+                drawExceptionDiag(t);
+            }
 
             float ty = y + h - textScale * 24f; // première ligne, en haut de la zone de contenu
             renderer.drawText(xLine, rowX, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
@@ -121,6 +132,42 @@ public final class CoordsModule extends SingleHudModule {
             return new double[]{ (double) cachedGetX.invoke(player), (double) cachedGetY.invoke(player), (double) cachedGetZ.invoke(player) };
         }
 
+        private static Method cachedGetYaw;
+        private static boolean yawResolveAttempted;
+
+        /**
+         * BUG TROUVÉ (1.20.4, log confirmé après premier fix) : {@code
+         * tryField(player, "yaw")} levait {@code IllegalArgumentException:
+         * Attempt to get bka field "bml.aG" with illegal data type conversion
+         * to float} — "aG" EST bien le vrai nom obfusqué de {@code
+         * Entity.yaw} (mapping Yarn authentique, pas un repli hasardeux), mais
+         * la résolution par remontée de hiérarchie depuis la classe RUNTIME du
+         * JOUEUR s'arrêtait au PREMIER champ littéralement nommé "aG" — une
+         * classe intermédiaire ({@code bml}, entre la classe du joueur et
+         * Entity) définit SA PROPRE "aG" totalement différente (type {@code
+         * bka}, pas float), plus proche dans la hiérarchie que le vrai champ
+         * d'Entity. Fix : {@link McReflect#fieldOnClass} résout directement
+         * sur la classe {@code Entity} elle-même, jamais en remontant depuis
+         * la classe runtime du joueur.
+         */
+        private float playerYaw(Object player) throws Exception {
+            Field yf = McReflect.fieldOnClass("net/minecraft/entity/Entity", "yaw");
+            if (yf != null) return yf.getFloat(player);
+            if (!yawResolveAttempted) {
+                yawResolveAttempted = true;
+                cachedGetYaw = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getYaw");
+            }
+            return cachedGetYaw != null ? (float) cachedGetYaw.invoke(player) : 0f;
+        }
+
+        private static boolean DRAW_EXC_LOGGED = false;
+
+        private void drawExceptionDiag(Throwable t) {
+            if (DRAW_EXC_LOGGED) return;
+            DRAW_EXC_LOGGED = true;
+            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[CoordsModule] draw() exception: " + t);
+        }
+
         private Field tryField(Object obj, String yarnField) {
             // Vérifie que le mapping Yarn existe VRAIMENT (voir historique de
             // session) — sinon getObfFieldName retombe sur "x"/"y"/"z" tel
@@ -168,7 +215,7 @@ public final class CoordsModule extends SingleHudModule {
          * méthode à 1 paramètre BlockPos dont le type de retour est Biome, ce
          * qui l'identifie de façon unique parmi les ~30 candidats "cj" de World.
          */
-        private Method resolveGetBiome(Object world, Class<?> blockPosClass, Class<?> biomeClass) {
+        private Method resolveGetBiome(Object world, Class<?> blockPosClass, Class<?> biomeClass, Class<?> registryEntryClass) {
             if (cachedGetBiome != null) return cachedGetBiome;
             if (getBiomeResolveAttempted) return null;
             getBiomeResolveAttempted = true;
@@ -177,7 +224,7 @@ public final class CoordsModule extends SingleHudModule {
             if (m == null) {
                 Class<?> c = world.getClass();
                 while (m == null && c != null) {
-                    m = findByShape(c.getDeclaredMethods(), blockPosClass, biomeClass);
+                    m = findByShape(c.getDeclaredMethods(), blockPosClass, biomeClass, registryEntryClass);
                     c = c.getSuperclass();
                 }
             }
@@ -188,7 +235,7 @@ public final class CoordsModule extends SingleHudModule {
                 // qu'une méthode DEFAULT d'interface (ex: WorldView/BlockView)
                 // jamais redéclarée concrètement dans la hiérarchie de classes,
                 // donc invisible pour le repli ci-dessus.
-                m = findByShape(world.getClass().getMethods(), blockPosClass, biomeClass);
+                m = findByShape(world.getClass().getMethods(), blockPosClass, biomeClass, registryEntryClass);
             }
             if (m != null) m.setAccessible(true);
             diag(m != null
@@ -206,14 +253,25 @@ public final class CoordsModule extends SingleHudModule {
          * l'autre) : deux Class distincts avec le MÊME nom binaire échouent un
          * test isAssignableFrom même s'ils représentent conceptuellement le
          * même type, alors qu'une comparaison de nom reste correcte.
+         *
+         * BUG TROUVÉ (1.20.4, test utilisateur) : le type de retour attendu
+         * n'est plus forcément {@code Biome} directement — depuis le passage
+         * aux "Holders"/RegistryEntry (~1.19+), {@code World.getBiome(BlockPos)}
+         * renvoie un {@code RegistryEntry<Biome>} (vérifié : {@code (Lhx;)Lih;
+         * t method_23753 getBiome}, {@code ih} = {@code
+         * net.minecraft.registry.entry.RegistryEntry}), donc AUCUNE méthode ne
+         * matchait plus le filtre "retour == Biome" strict d'avant. Accepte
+         * maintenant les DEUX types de retour possibles (Biome direct, comme
+         * en 1.16.5, OU RegistryEntry, comme en 1.20.4).
          */
-        private Method findByShape(Method[] methods, Class<?> blockPosClass, Class<?> biomeClass) {
+        private Method findByShape(Method[] methods, Class<?> blockPosClass, Class<?> biomeClass, Class<?> registryEntryClass) {
             String blockPosName = blockPosClass.getName();
             String biomeName = biomeClass.getName();
+            String registryEntryName = registryEntryClass != null ? registryEntryClass.getName() : null;
             for (Method cand : methods) {
-                if (cand.getParameterCount() == 1
-                        && cand.getParameterTypes()[0].getName().equals(blockPosName)
-                        && cand.getReturnType().getName().equals(biomeName)) {
+                if (cand.getParameterCount() != 1 || !cand.getParameterTypes()[0].getName().equals(blockPosName)) continue;
+                String retName = cand.getReturnType().getName();
+                if (retName.equals(biomeName) || (registryEntryName != null && retName.equals(registryEntryName))) {
                     return cand;
                 }
             }
@@ -222,26 +280,103 @@ public final class CoordsModule extends SingleHudModule {
 
         private String biomeName(Object player, int bx, int by, int bz) {
             try {
-                Object world = McReflect.field(player.getClass(), "net/minecraft/entity/Entity", "world").get(player);
+                // BUG TROUVÉ (1.20.4, même cause que playerYaw) : l'ancienne
+                // résolution (McReflect.field(player.getClass(), ...), qui
+                // remonte la hiérarchie RUNTIME du joueur) tombait sur un champ
+                // "t" SANS RAPPORT déclaré sur la classe intermédiaire {@code
+                // bml} (type {@code agm<Byte>}, une TrackedData interne) au
+                // lieu du vrai champ {@code world} d'Entity, plus haut dans la
+                // hiérarchie — d'où "world class=class agm" dans les logs.
+                // fieldOnClass résout directement sur Entity, jamais en
+                // remontant depuis la classe runtime du joueur.
+                Field worldField = McReflect.fieldOnClass("net/minecraft/entity/Entity", "world");
+                if (worldField == null) { diagBiome("worldField == null"); return null; }
+                Object world = worldField.get(player);
                 if (world == null) { diagBiome("world == null"); return null; }
 
                 Class<?> blockPosClass = McReflect.yarnClass("net/minecraft/util/math/BlockPos");
                 if (blockPosClass == null) { diagBiome("blockPosClass == null"); return null; }
                 Class<?> biomeClass = McReflect.yarnClass("net/minecraft/world/biome/Biome");
                 if (biomeClass == null) { diagBiome("biomeClass == null"); return null; }
+                Class<?> registryEntryClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry");
                 Constructor<?> ctor = blockPosClass.getConstructor(int.class, int.class, int.class);
                 Object pos = ctor.newInstance(bx, by, bz);
 
-                Method getBiome = resolveGetBiome(world, blockPosClass, biomeClass);
+                Method getBiome = resolveGetBiome(world, blockPosClass, biomeClass, registryEntryClass);
                 if (getBiome == null) { diagBiome("resolveGetBiome a renvoyé null"); return null; }
                 Object biome = getBiome.invoke(world, pos);
                 if (biome == null) { diagBiome("biome == null"); return null; }
 
-                String name = registryBiomeName(world, biome);
+                // BUG TROUVÉ (1.20.4, log confirmé après le fix world) :
+                // World.getRegistryManager() introuvable sur le vrai monde
+                // 1.20.4 ("registryBiomeName diag: getRegistryManager
+                // introuvable") — l'API DynamicRegistryManager a encore bougé
+                // entre 1.16.5 et 1.20.4. Mais puisque getBiome renvoie
+                // maintenant un RegistryEntry (voir plus haut), on peut
+                // COURT-CIRCUITER tout ce chemin : RegistryEntry.getKey()
+                // (Yarn named, class_6880) renvoie DIRECTEMENT un
+                // Optional<RegistryKey<Biome>> — RegistryKey.getValue()
+                // donne l'Identifier sans jamais passer par
+                // World.getRegistryManager()/Registry.getId(). Essayé EN
+                // PREMIER (avant le déballage) ; repli sur l'ancien chemin
+                // registre (registryBiomeName, via Biome déballé) seulement
+                // si ce nouveau chemin échoue.
+                String name = null;
+                if (registryEntryClass != null && registryEntryClass.isInstance(biome)) {
+                    name = registryEntryKeyPath(biome);
+                }
+                if (name == null) {
+                    Object rawBiome = biome;
+                    if (registryEntryClass != null && registryEntryClass.isInstance(rawBiome)) {
+                        Method value = McReflect.noArgMethod(rawBiome.getClass(),
+                            "net/minecraft/registry/entry/RegistryEntry", "value");
+                        rawBiome = value != null ? value.invoke(rawBiome) : null;
+                    }
+                    if (rawBiome != null) name = registryBiomeName(world, rawBiome);
+                }
                 diagBiome("OK, name=" + name);
                 return name;
             } catch (Throwable t) {
                 diagBiome("exception: " + t);
+                return null;
+            }
+        }
+
+        /**
+         * Chemin COURT (1.20.4+) : {@code RegistryEntry.getKey()} →
+         * {@code Optional<RegistryKey<Biome>>} → {@code
+         * RegistryKey.getValue()} → {@code Identifier} → {@code getPath()} —
+         * ne dépend JAMAIS de {@code World.getRegistryManager()} (voir
+         * registryBiomeName ci-dessous, qui lui en dépend et échoue sur ce
+         * bracket). {@code null} si une étape échoue (entrée "directe" sans
+         * clé, méthode introuvable...) — l'appelant replie alors sur
+         * l'ancien chemin registre.
+         */
+        private String registryEntryKeyPath(Object registryEntry) {
+            try {
+                Method getKey = McReflect.noArgMethod(registryEntry.getClass(),
+                    "net/minecraft/registry/entry/RegistryEntry", "getKey");
+                if (getKey == null) { diag2("RegistryEntry.getKey() introuvable"); return null; }
+                Object optional = getKey.invoke(registryEntry);
+                if (!(optional instanceof java.util.Optional) || !((java.util.Optional<?>) optional).isPresent()) {
+                    diag2("RegistryEntry.getKey() vide (entrée directe, sans clé)");
+                    return null;
+                }
+                Object registryKey = ((java.util.Optional<?>) optional).get();
+
+                Method getValue = McReflect.noArgMethod(registryKey.getClass(),
+                    "net/minecraft/registry/RegistryKey", "getValue");
+                if (getValue == null) { diag2("RegistryKey.getValue() introuvable"); return null; }
+                Object identifier = getValue.invoke(registryKey);
+                if (identifier == null) { diag2("RegistryKey.getValue() == null"); return null; }
+
+                Method getPath = McReflect.noArgMethod(identifier.getClass(), "net/minecraft/util/Identifier", "getPath");
+                if (getPath == null) { diag2("Identifier.getPath() introuvable"); return null; }
+                String path = (String) getPath.invoke(identifier);
+                diag2("OK (chemin RegistryEntry.getKey()), path=" + path);
+                return prettifyBiomePath(path);
+            } catch (Throwable t) {
+                diag2("registryEntryKeyPath exception: " + t);
                 return null;
             }
         }

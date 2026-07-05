@@ -87,14 +87,23 @@ public final class ZoomModule extends LauncherModule {
      * IllegalArgumentException} sur ce dernier, avalée silencieusement,
      * zoom totalement inopérant. Lit le VRAI type du champ au lieu de
      * supposer, fonctionne sur les deux.
+     *
+     * BUG TROUVÉ #2 (1.20.4, test utilisateur) : depuis la refonte
+     * "SimpleOption" (~1.19-1.20), {@code fov} n'est même plus un float/double
+     * DU TOUT — c'est un objet {@code SimpleOption} FINAL (vérifié : {@code f
+     * Levl; bM field_1826 fov}) — voir {@link McReflect#simpleOptionGetValue}/
+     * {@link McReflect#simpleOptionSetValue} pour le repli.
      */
     private double readFov(Field fovField, Object options) throws Exception {
-        return fovField.getType() == double.class ? fovField.getDouble(options) : fovField.getFloat(options);
+        if (fovField.getType() == double.class) return fovField.getDouble(options);
+        if (fovField.getType() == float.class) return fovField.getFloat(options);
+        return McReflect.simpleOptionGetValue(fovField.get(options));
     }
 
     private void writeFov(Field fovField, Object options, double value) throws Exception {
-        if (fovField.getType() == double.class) fovField.setDouble(options, value);
-        else fovField.setFloat(options, (float) value);
+        if (fovField.getType() == double.class) { fovField.setDouble(options, value); return; }
+        if (fovField.getType() == float.class) { fovField.setFloat(options, (float) value); return; }
+        McReflect.simpleOptionSetValue(fovField.get(options), value);
     }
 
     /**

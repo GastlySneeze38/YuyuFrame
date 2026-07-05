@@ -1115,23 +1115,32 @@ public final class UiRenderer {
 
     private void uploadAndDraw(FloatBuffer verts, int glMode, int vertexCount) throws Exception {
         // DIAGNOSTIC : quel framebuffer est actif à ce point précis (TAIL de
-        // GameRenderer.render()) ? Si non-zéro, nos dessins partent vers une
-        // cible hors-écran (FBO) au lieu de la fenêtre réellement affichée —
-        // hypothèse plausible pour "rien de visible malgré des draws sans
-        // erreur". 0x8CA6 = GL_FRAMEBUFFER_BINDING.
+        // GameRenderer.render()) ? 0x8CA6 = GL_FRAMEBUFFER_BINDING.
+        //
+        // BUG TROUVÉ (comparaison 1.16.5 vs 1.20.4, voir historique de
+        // session) : ce log vaut TOUJOURS 0 en 1.16.5 (le blit vers la
+        // fenêtre se fait DANS GameRenderer.render() avant notre TAIL), mais
+        // vaut 1 (un FBO hors-écran, le vrai "main target" de Minecraft,
+        // MinecraftClient.getFramebuffer()) en 1.20.4 — le blit final vers la
+        // fenêtre s'y fait APRÈS le retour de render(), donc PLUS TARD que
+        // notre hook. L'ancien code forçait ICI un rebind vers 0 ("par
+        // sécurité"), ce qui envoyait nos dessins dans un framebuffer JAMAIS
+        // affiché sur ce bracket (rien de visible malgré des draws sans
+        // erreur, alors même que l'écran vanilla sous-jacent s'assombrissait
+        // normalement). Ne JAMAIS forcer 0 : le framebuffer déjà lié à ce
+        // point est, empiriquement sur les deux brackets testés, TOUJOURS
+        // celui qui finit par être affiché — s'y fier plutôt que d'imposer
+        // une cible fixe.
         if (!fboDiagLogged) {
             fboDiagLogged = true;
             try {
                 int fb = glGetInteger(0x8CA6);
                 LauncherLog.info("[UiRenderer] DIAG5: framebuffer actif au moment du dessin = " + fb
-                    + " (0 = framebuffer par défaut/fenêtre — non-zéro = FBO hors-écran)");
+                    + " (0 = framebuffer par défaut/fenêtre — non-zéro = FBO hors-écran, dessiné dedans quand même)");
             } catch (Throwable t) {
                 LauncherLog.err("[UiRenderer] DIAG5: échec lecture framebuffer actif: " + t);
             }
         }
-        // Sécurité : force le framebuffer par défaut, au cas où quelque chose
-        // (Sodium, un post-process) en aurait laissé un autre actif à ce point.
-        glBindFramebuffer(0x8D40, 0); // GL_FRAMEBUFFER, 0 = fenêtre
 
         glBindVertexArray(modernVao);
         glBindBuffer(0x8892, modernVbo); // GL_ARRAY_BUFFER
@@ -1809,9 +1818,6 @@ public final class UiRenderer {
     }
     private int glGetInteger(int pname) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL11", "glGetInteger", int.class).invoke(null, pname);
-    }
-    private void glBindFramebuffer(int target, int framebuffer) throws Exception {
-        gl("org.lwjgl.opengl.GL30", "glBindFramebuffer", int.class, int.class).invoke(null, target, framebuffer);
     }
     private int glGenVertexArrays() throws Exception {
         return (int) gl("org.lwjgl.opengl.GL30", "glGenVertexArrays").invoke(null);

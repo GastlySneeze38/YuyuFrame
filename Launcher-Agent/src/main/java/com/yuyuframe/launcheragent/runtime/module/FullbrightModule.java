@@ -54,14 +54,22 @@ public final class FullbrightModule extends LauncherModule {
      * {@code getFloat}/{@code setFloat} levait {@code IllegalArgumentException}
      * sur ce dernier, avalée silencieusement, fullbright totalement
      * inopérant. Lit le VRAI type du champ au lieu de supposer.
+     *
+     * BUG TROUVÉ #2 (1.20.4, même refonte "SimpleOption" que ZoomModule.fov) :
+     * {@code gamma} n'est plus un float/double DU TOUT ici — objet {@code
+     * SimpleOption} FINAL (vérifié : {@code f Levl; cb field_1840 gamma}) —
+     * voir {@link McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue}.
      */
     private float readGamma(Field gammaField, Object options) throws Exception {
-        return gammaField.getType() == double.class ? (float) gammaField.getDouble(options) : gammaField.getFloat(options);
+        if (gammaField.getType() == double.class) return (float) gammaField.getDouble(options);
+        if (gammaField.getType() == float.class) return gammaField.getFloat(options);
+        return (float) McReflect.simpleOptionGetValue(gammaField.get(options));
     }
 
     private void writeGamma(Field gammaField, Object options, float value) throws Exception {
-        if (gammaField.getType() == double.class) gammaField.setDouble(options, value);
-        else gammaField.setFloat(options, value);
+        if (gammaField.getType() == double.class) { gammaField.setDouble(options, value); return; }
+        if (gammaField.getType() == float.class) { gammaField.setFloat(options, value); return; }
+        McReflect.simpleOptionSetValue(gammaField.get(options), value);
     }
 
     private Object optionsInstance() throws Exception {

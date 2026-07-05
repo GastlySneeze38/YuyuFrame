@@ -62,6 +62,23 @@ public final class VersionBracketRegistry {
             "mixins.launcheragent-1.16.json",
             "1.16.5",
             version -> version != null && version.startsWith("1.16")));
+
+        // Bracket "C" (voir historique de session) — 1.17 à 1.20.4 : Core
+        // Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé, voir
+        // MinecraftVersionDetector.supportsFixedFunctionDrawing), mais
+        // GameRenderer.render(FJZ)V garde la MÊME signature que le bracket
+        // "B" (vérifié via mappings/yarn-1.20.4-mergedv2.jar) — seul
+        // MixinCrosshair1204 diffère réellement de son équivalent 1.16.5
+        // (InGameHud.renderCrosshair prend un DrawContext, pas un
+        // MatrixStack). Resserré à la version exacte 1.20.4 pour l'instant,
+        // pas encore élargi à toute la 1.17-1.20.4 (même prudence que pour
+        // les autres brackets : une version non testée peut échouer
+        // silencieusement).
+        BRACKETS.add(new VersionBracket(
+            "1_20_4",
+            "mixins.launcheragent-1.20.4.json",
+            "1.20.4",
+            version -> "1.20.4".equals(version)));
     }
 
     /** Résout la tranche correspondant à la version détectée, ou {@code null} si aucune ne correspond. */

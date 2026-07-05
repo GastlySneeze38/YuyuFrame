@@ -204,6 +204,23 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // TOUTE la config Mixin en cascade (jeu arrêté). Nécessite une autre
         // approche (cibler une classe concrète qui APPELLE getSkyAngle, pas
         // l'interface elle-même) — non résolu pour l'instant.
+
+        // ── Branche 1.17-1.20.4 (mixin.client.v1_20_4.*) — bracket "C" : Core
+        // Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé), mais
+        // render(FJZ)V/tick()V gardent la même signature que le bracket "B"
+        // (1.16.5) — voir VersionBracketRegistry.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/GlobalUiRenderMixin1204",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(FJZ)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/GlobalTickMixin1204",
+            "net/minecraft/client/MinecraftClient",
+            "tick", "()V", null),
+        // InGameHud.renderCrosshair(DrawContext) — DIFFÉRENT de 1.16.5
+        // (MatrixStack) : voir MixinCrosshair1204 pour le détail vérifié via
+        // mappings/yarn-1.20.4-mergedv2.jar.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/MixinCrosshair1204",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;)V", null),
     };
 
     /**

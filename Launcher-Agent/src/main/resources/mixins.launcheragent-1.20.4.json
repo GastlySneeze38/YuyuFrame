@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.yuyuframe.launcheragent.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "plugin": "com.yuyuframe.launcheragent.mixin.LauncherMixinConfigPlugin",
+  "refmap": "mixins.launcheragent.refmap.json",
+  "verbose": false,
+  "mixins": [],
+  "client": [
+    "client.v1_20_4.GlobalUiRenderMixin1204",
+    "client.v1_20_4.GlobalTickMixin1204",
+    "client.v1_20_4.MixinCrosshair1204"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

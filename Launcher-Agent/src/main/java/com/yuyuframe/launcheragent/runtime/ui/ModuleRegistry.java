@@ -85,8 +85,17 @@ public final class ModuleRegistry {
      * {@code SneakRampModule} n'est PAS dans cette liste (recrée juste une
      * sensation, catégorisé à part lors de l'audit) — reste enregistré
      * partout, y compris en 1.16.5.
+     *
+     * Élargi au bracket "C" (1.20.4, voir VersionBracketRegistry) : mêmes
+     * réglages vanilla natifs (FOV/Sprint/Sneak) présents depuis la
+     * "Flattening" (~1.13) et toujours là en 1.20.4, et les mêmes 7 Mixins
+     * "animations 1.7" restent 1.8.9-only — donc les mêmes exclusions
+     * s'appliquent, pas seulement à 1.16.5. Le nom {@code IS_1_16} n'a pas
+     * été renommé (trop de commentaires y référeraient encore) mais couvre
+     * bien les DEUX brackets malgré son nom.
      */
-    private static final boolean IS_1_16 = System.getProperty("launcheragent.mcVersion", "").startsWith("1.16");
+    private static final boolean IS_1_16 = System.getProperty("launcheragent.mcVersion", "").startsWith("1.16")
+        || "1.20.4".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     static {
         register(new FpsModule());
@@ -102,7 +111,10 @@ public final class ModuleRegistry {
         // s'applique EN DERNIER chaque frame et n'est jamais écrasé par le
         // FOV permanent de FovModule (voir ZoomModule pour le détail).
         register(new ZoomModule());
-        register(new HurtCamModule());
+        // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
+        // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
+        // désormais natif en vanilla à partir de ce bracket — carte redondante sinon.
+        if (!IS_1_16) register(new HurtCamModule());
         if (!IS_1_16) register(new ToggleSprintModule());
         if (!IS_1_16) register(new ToggleSneakModule());
         if (!IS_1_16) register(new SwingSpeedModule());
