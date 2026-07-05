@@ -1400,6 +1400,15 @@ public final class UiRenderer {
 
     private void drawTextModern(UiFont font, String text, float x, float y, UiColor color, float scale,
                                  int vpWidth, int vpHeight) {
+        // Era E (Blaze3D 1.21.6+) : essaie D'ABORD le vrai pipeline du moteur
+        // (RenderPipelines.GUI_TEXT via GpuDevice/RenderPass, voir
+        // UiTextBlaze3D) — tous nos contournements précédents en GL brut
+        // (glTexImage2D/glBindTexture/glActiveTexture, même routés via
+        // GlStateManager) laissaient la corruption de texte intacte. Repli
+        // silencieux sur le pipeline SDF ci-dessous si Blaze3D est absent
+        // (brackets antérieurs) OU si quoi que ce soit échoue à l'exécution.
+        if (UiTextBlaze3D.drawText(font, text, x, y, color, scale, vpWidth, vpHeight)) return;
+
         int texId = ensureFontTexture(font);
         if (texId < 0) return;
         ensureTextShaderInitModern();
@@ -1415,6 +1424,20 @@ public final class UiRenderer {
             glDisable(0x0C11); // GL_SCISSOR_TEST
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            // BUG TROUVÉ (era E, 1.21.11 — texte corrompu/glyphes illisibles,
+            // alors que les rects/couleurs unies restent parfaits) : notre
+            // hook de dessin tourne désormais APRÈS Framebuffer.blitToScreen()
+            // (voir GlobalUiPresentMixin), donc APRÈS TOUTE la composition de
+            // frame interne de Blaze3D — qui utilise plusieurs UNITÉS de
+            // texture actives (multi-texturing). glBindTexture() seul bind
+            // sur l'unité COURANTE, pas forcément l'unité 0 — si Blaze3D a
+            // laissé une unité différente active, notre atlas se bind au
+            // mauvais endroit pendant que le shader (uTexModern, fixé à
+            // l'unité 0 juste en dessous) lit une texture parasite laissée là
+            // par le rendu vanilla. Jamais un problème sur les brackets C/D
+            // (1.20.4/1.21.4), dont le hook tourne AVANT ce genre de
+            // composition multi-unité tardive.
+            glActiveTexture(0x84C0); // GL_TEXTURE0
             glBindTexture(0x0DE1, texId);
             glUseProgram(textProgramModern);
             glUniform1i(uTexModern, 0);
@@ -1447,6 +1470,54 @@ public final class UiRenderer {
             drawTrianglesModern(verts);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawTextModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
+        }
+    }
+
+    /**
+     * DIAGNOSTIC TEMPORAIRE (era E, bug texte REGULAR corrompu) : dessine
+     * l'atlas COMPLET d'une police (tout le quad = UV 0..1, pas un seul
+     * glyphe) — en réutilisant EXACTEMENT le même bind/shader/draw que
+     * {@link #drawTextModern}, donc sans introduire de nouvel appel GL risqué
+     * (contrairement à glGetTexImage, qui a provoqué un crash natif ici,
+     * voir createFontTextureRaw). Permet de vérifier VISUELLEMENT, via le
+     * VRAI pipeline de rendu, si la texture GPU réellement échantillonnée à
+     * l'écran est déjà corrompue (donc bug côté upload/état GL) ou propre
+     * (donc bug forcément dans le découpage par glyphe — UV individuelles —
+     * ou le batching de nombreux quads dans drawTrianglesModern).
+     * À retirer une fois la cause de la corruption identifiée.
+     */
+    public void drawFontAtlasDebug(UiFont font, float x, float y, float size, int vpWidth, int vpHeight) {
+        int texId = ensureFontTexture(font);
+        if (texId < 0) return;
+        ensureTextShaderInitModern();
+        if (textInitFailedModern) return;
+        try {
+            glDisable(0x0B71); glDisable(0x0B44); glDisable(0x0C11);
+            glEnable(0x0BE2);
+            glBlendFunc(0x0302, 0x0303);
+            glActiveTexture(0x84C0);
+            glBindTexture(0x0DE1, texId);
+            glUseProgram(textProgramModern);
+            glUniform1i(uTexModern, 0);
+            glUniform4f(uColorTextModern, 1f, 1f, 1f, 1f);
+            uploadProjectionModern(uProjectionTextModern, vpWidth, vpHeight);
+
+            float aspect = (float) font.atlasImage().getHeight() / (float) font.atlasImage().getWidth();
+            float h2 = size * aspect;
+            FloatBuffer verts = floatBuffer(6 * 4);
+            putVertex(verts, x, y + h2, 0f, 0f);
+            putVertex(verts, x, y, 0f, 1f);
+            putVertex(verts, x + size, y, 1f, 1f);
+            putVertex(verts, x, y + h2, 0f, 0f);
+            putVertex(verts, x + size, y, 1f, 1f);
+            putVertex(verts, x + size, y + h2, 1f, 0f);
+            verts.flip();
+            drawTrianglesModern(verts);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawFontAtlasDebug: " + t);
         } finally {
             try { glUseProgram(0); } catch (Throwable ignored) {}
             try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
@@ -1539,6 +1610,7 @@ public final class UiRenderer {
         if (nativeTextureApiAvailable) {
             try {
                 int texId = createFontTextureViaNativeImage(font);
+                syncAfterFontUpload(texId);
                 fontTextures.put(font, texId);
                 LauncherLog.ui(1, "[UiRenderer] atlas police uploadé via NativeImage/TextureManager, texId=" + texId);
                 return texId;
@@ -1549,6 +1621,7 @@ public final class UiRenderer {
         }
         try {
             int texId = createFontTextureRaw(font);
+            syncAfterFontUpload(texId);
             fontTextures.put(font, texId);
             LauncherLog.ui(1, "[UiRenderer] atlas police uploadé (repli brut), texId=" + texId);
             return texId;
@@ -1559,9 +1632,40 @@ public final class UiRenderer {
         }
     }
 
+    /**
+     * BUG TROUVÉ (era E, texte REGULAR corrompu un lancement sur deux,
+     * confirmé par capture d'écran : deux sessions IDENTIQUES de la même
+     * instance, mêmes réglages, l'une nette et l'autre corrompue — donc pas
+     * un bug déterministe de code, un vrai résultat différent produit par le
+     * pilote GPU d'un lancement à l'autre) : le log de démarrage confirme
+     * explicitement que CETTE machine a un contournement Sodium actif pour
+     * "NVIDIA_THREADED_OPTIMIZATIONS_BROKEN" — la soumission de commandes en
+     * thread séparé du pilote NVIDIA est documentée bogguée ICI. Sodium
+     * applique ses propres contournements pour SES draws, mais notre
+     * `glTexImage2D`/`glGenerateMipmap` (injectés via Mixin, hors du contrôle
+     * de Sodium) n'en bénéficient pas : rien n'empêche le pilote de renvoyer
+     * la main avant d'avoir RÉELLEMENT terminé l'upload/la génération des
+     * mipmaps en arrière-plan, laissant échantillonner une texture
+     * partiellement écrite (garbage) — l'atlas n'étant créé qu'une seule
+     * fois par lancement, ce résultat de course reste figé pour toute la
+     * session, cohérent avec TOUT ce qui a été observé. Fix : `glFinish()`
+     * juste après l'upload, une seule fois par police par lancement (aucun
+     * risque de perf) — force le pilote à réellement terminer avant qu'on
+     * ne considère la texture prête à être échantillonnée.
+     */
+    private void syncAfterFontUpload(int texId) {
+        if (texId < 0) return;
+        try {
+            glFinish();
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] syncAfterFontUpload (texId=" + texId + "): " + t);
+        }
+    }
+
     private static Class<?> nativeImageClass, nativeImageBackedTextureClass, textureManagerClass, abstractTextureClass, identifierClass;
     private static Object nativeImageFormatRgba;
     private static java.lang.reflect.Constructor<?> nativeImageCtor, nativeImageBackedTextureCtor;
+    private static boolean nativeImageBackedTextureNeedsLabel;
     private static java.lang.reflect.Field nativeImagePointerField;
     private static Method nativeImageSetColor, nativeImageCloseMethod, textureUploadMethod, textureGetGlIdMethod,
         textureBindTextureMethod, textureManagerRegisterTextureMethod, identifierOfMethod, mcGetTextureManagerMethod,
@@ -1613,7 +1717,21 @@ public final class UiRenderer {
 
             nativeImageCtor = nativeImageClass.getDeclaredConstructor(formatClass, int.class, int.class, boolean.class);
             nativeImageCtor.setAccessible(true);
-            nativeImageBackedTextureCtor = nativeImageBackedTextureClass.getDeclaredConstructor(nativeImageClass);
+            // BUG TROUVÉ (era E, 1.21.11) : NativeImageBackedTexture(NativeImage)
+            // (le seul constructeur utilisé jusqu'à la 1.21.4) n'existe plus —
+            // Blaze3D ajoute un label de debug obligatoire en 1er paramètre
+            // (Supplier<String>), confirmé via mappings 1.21.11 :
+            // "(Ljava/util/function/Supplier;Lfyh;)V <init>" (fyh=NativeImage) —
+            // AUCUN constructeur 1-arg NativeImage-seul n'existe plus du tout sur
+            // cette version. Essaie l'ancien d'abord (1.20.4/1.21.4), puis le
+            // nouveau (Supplier<String>, NativeImage) en repli.
+            try {
+                nativeImageBackedTextureCtor = nativeImageBackedTextureClass.getDeclaredConstructor(nativeImageClass);
+                nativeImageBackedTextureNeedsLabel = false;
+            } catch (NoSuchMethodException e) {
+                nativeImageBackedTextureCtor = nativeImageBackedTextureClass.getDeclaredConstructor(java.util.function.Supplier.class, nativeImageClass);
+                nativeImageBackedTextureNeedsLabel = true;
+            }
             nativeImageBackedTextureCtor.setAccessible(true);
 
             nativeImageSetColor = McReflect.method(nativeImageClass, "net/minecraft/client/texture/NativeImage", "setColor", int.class, int.class, int.class);
@@ -1709,7 +1827,9 @@ public final class UiRenderer {
                 }
             }
 
-            Object texture = nativeImageBackedTextureCtor.newInstance(nativeImage);
+            Object texture = nativeImageBackedTextureNeedsLabel
+                ? nativeImageBackedTextureCtor.newInstance((java.util.function.Supplier<String>) () -> "yuyuframe_font", nativeImage)
+                : nativeImageBackedTextureCtor.newInstance(nativeImage);
             textureUploadMethod.invoke(texture); // fait le VRAI glTexImage2D, via le chemin suivi par Minecraft
             int texId = (int) textureGetGlIdMethod.invoke(texture);
 
@@ -1760,15 +1880,79 @@ public final class UiRenderer {
         }
         buf.flip();
 
+        // DIAG-FONTCORRUPT (era E, bug "texte corrompu une fois sur deux" —
+        // stable sur TOUTE une session, jamais un flicker en cours de route,
+        // donc lié à CETTE création unique/mise en cache, pas au dessin par
+        // frame) : cette méthode n'est appelée QU'UNE SEULE FOIS par police
+        // par lancement (voir ensureFontTexture, résultat mis en cache) — un
+        // seul appel de log ici, aucun risque de perf, même motif que DIAG7
+        // (voir historique de session) mais volontairement gardé cette fois
+        // (pas par frame).
+        int activeUnitBefore = glGetInteger(0x84E0); // GL_ACTIVE_TEXTURE
+        int boundTexBefore = glGetInteger(0x8069);   // GL_TEXTURE_BINDING_2D
+        int errBefore = drainGlErrors();
+
         int texId = glGenTextures();
         glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
+        int errAfterBind = drainGlErrors();
         glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+        int errAfterTexImage = drainGlErrors();
         glGenerateMipmap(0x0DE1);
+        int errAfterMipmap = drainGlErrors();
         glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
         glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
         glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
         glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+        int errAfterParams = drainGlErrors();
+
+        // BUG TROUVÉ (era E, texte REGULAR corrompu de façon non-déterministe
+        // — confirmé toujours présent MÊME en vanilla sans aucun mod, donc
+        // rien à voir avec Sodium/le threading NVIDIA, hypothèse infirmée) :
+        // `buf` est un ByteBuffer DIRECT (mémoire hors-tas, libérée par un
+        // Cleaner quand l'objet Java devient inatteignable) — la JVM tourne
+        // ici avec ZGC (voir JVM Arguments dans les logs de lancement,
+        // -XX:+UseZGC -XX:+ZGenerational), un collecteur concurrent
+        // particulièrement agressif. Rien n'empêche la JIT/le GC de
+        // considérer `buf` "mort" dès la dernière ligne qui le RÉFÉRENCE
+        // explicitement (le `glTexImage2D` juste au-dessus) : si le pilote
+        // NVIDIA ne copie pas les octets de façon strictement synchrone
+        // pendant cet appel (contrairement à ce qu'exige la spec OpenGL, mais
+        // des bugs de pilote de ce type existent), un GC concurrent
+        // déclenché entre-temps peut libérer cette mémoire AVANT que le
+        // pilote ait fini de la lire — le pilote lit alors de la mémoire déjà
+        // réutilisée/libérée = texture corrompue, sans qu'aucune erreur GL ne
+        // soit levée (cohérent avec `DIAG-FONTCORRUPT` : jamais un seul
+        // `glErr` observé). Un `glFinish()` seul (tenté juste avant, sans
+        // effet) n'empêche PAS ça : il attend la fin d'une commande qui a
+        // DÉJÀ lu la mauvaise mémoire, trop tard pour corriger le résultat.
+        // Fix : `glFinish()` ICI (PAS seulement dans syncAfterFontUpload,
+        // appelé APRÈS le retour de cette méthode — trop tard, `buf` ne
+        // serait alors déjà plus protégé) suivi de
+        // `Reference.reachabilityFence(buf)` — l'ordre est capital : glFinish
+        // garantit que le pilote a RÉELLEMENT fini de lire `buf`, et la
+        // reachabilityFence juste après garantit que la JVM n'a PAS pu
+        // libérer sa mémoire native PENDANT cette attente, quelle que soit
+        // l'agressivité du GC.
+        glFinish();
+        reachabilityFence(buf);
+
+        // BUG TROUVÉ (era E) : le diagnostic glGetTexImage tenté ici en v362
+        // a provoqué un CRASH JVM natif (EXCEPTION_ACCESS_VIOLATION, écriture
+        // hors bornes côté pilote NVIDIA+DSA — voir hs_err_pid*.log,
+        // confirmé pointer exactement sur cet appel). Retiré définitivement
+        // — ne JAMAIS réintroduire un glGetTexImage ici sans un moyen plus
+        // sûr de vérifier au préalable la taille réellement allouée côté
+        // pilote (ex: glGetTexLevelParameteriv AVANT de dimensionner le
+        // buffer de lecture, jamais en supposant que w/h côté Java
+        // correspondent forcément à ce que le pilote a alloué).
         glBindTexture(0x0DE1, 0);
+
+        LauncherLog.info("[LauncherAgent] DIAG-FONTCORRUPT: texId=" + texId + " atlasW=" + w + " atlasH=" + h
+            + " activeUnitBefore=0x" + Integer.toHexString(activeUnitBefore)
+            + " boundTex2DBefore=" + boundTexBefore
+            + " glErr(before=" + errBefore + ", afterBind=" + errAfterBind
+            + ", afterTexImage=" + errAfterTexImage + ", afterMipmap=" + errAfterMipmap
+            + ", afterParams=" + errAfterParams + ")");
         return texId;
     }
 
@@ -1892,8 +2076,78 @@ public final class UiRenderer {
         gl("org.lwjgl.opengl.GL11", "glClear", int.class).invoke(null, mask);
     }
     /** GL13, pas GL11 — sélection d'unité de texture (multitexturing), voir drawVanillaItemIcon. */
+    /** Voir glBindTexture pour le mécanisme — même cache logiciel côté GlStateManager, désync possible pour l'unité de texture active elle-même, pas seulement la texture bindée. */
+    private static Method glStateManagerActiveTexture;
+    private static boolean glStateManagerActiveTextureResolved;
+
+    /**
+     * BUG TROUVÉ (era E, 1.21.11 — cause RÉELLE de la corruption de texte
+     * "aléatoire d'un lancement à l'autre", après avoir écarté rastérisation/
+     * SDF/upload GPU/GC, tous confirmés innocents par diagnostic direct) :
+     * {@code GlStateManager} (la couche GL de Blaze3D) maintient DEUX caches
+     * logiciels — un par unité de texture bindée (déjà connu, voir
+     * {@link #glBindTexture}) ET un pour l'UNITÉ ACTIVE elle-même (champ
+     * `activeTexture`, vérifié par désassemblage de
+     * {@code com.mojang.blaze3d.opengl.GlStateManager._activeTexture(int)} :
+     * si le cache dit déjà cette unité, le vrai {@code glActiveTexture} est
+     * SAUTÉ). Nos appels précédents en {@code GL13.glActiveTexture} brut
+     * changeaient l'unité RÉELLE sans jamais mettre à jour ce cache — un
+     * appel Blaze3D ultérieur (n'importe quel rendu vanilla après le nôtre,
+     * variable d'une frame/d'un lancement à l'autre selon ce qui a été
+     * dessiné juste avant) qui CROIT être déjà sur la bonne unité saute son
+     * propre {@code glActiveTexture}, laissant la VRAIE unité active être
+     * celle où NOUS l'avons laissée — son {@code bindTexture} suivant se
+     * retrouve alors à binder SA texture sur NOTRE unité (ou vice-versa),
+     * un draw échantillonnant une texture totalement étrangère avec des UV
+     * qui n'ont aucun sens pour elle = bruit visuel, exactement le symptôme
+     * observé, non-déterministe puisqu'il dépend de l'historique de rendu de
+     * CETTE frame précise. Seul {@code glBindTexture} avait été routé via
+     * GlStateManager jusqu'ici (fix plus ancien, pour un bug similaire sur
+     * les icônes d'armure) — {@code glActiveTexture} ne l'a jamais été,
+     * sur AUCUN bracket, ce trou existant depuis toujours mais invisible
+     * tant que rien ne changeait volontairement d'unité de texture avant
+     * cette session (drawTextModern, ajouté pour l'era E, est le premier
+     * code de ce projet à le faire explicitement).
+     */
     private void glActiveTexture(int texture) throws Exception {
+        if (!glStateManagerActiveTextureResolved) {
+            glStateManagerActiveTextureResolved = true;
+            glStateManagerActiveTexture = resolveGlStateManagerMethod("activeTexture", "_activeTexture");
+        }
+        if (glStateManagerActiveTexture != null) {
+            try {
+                glStateManagerActiveTexture.invoke(null, texture);
+                return;
+            } catch (Throwable ignored) {} // repli sur l'appel brut ci-dessous
+        }
         gl("org.lwjgl.opengl.GL13", "glActiveTexture", int.class).invoke(null, texture);
+    }
+
+    /**
+     * Résout {@code GlStateManager.<oldName>(int)} (package
+     * {@code com.mojang.blaze3d.platform}, brackets antérieurs à Blaze3D) ou,
+     * à défaut, {@code GlStateManager.<newName>(int)} (package
+     * {@code com.mojang.blaze3d.opengl}, era E/Blaze3D 1.21.6+ — nom de
+     * méthode préfixé {@code _}, vérifié par désassemblage direct du jar
+     * client 1.21.11, PAS supposé). Classes NON obfusquées (bibliothèque
+     * Blaze3D fournie telle quelle, jamais remappée par Yarn) — {@link
+     * McReflect#rawClass} est le bon outil, PAS {@code yarnClass}/
+     * {@code MappingsRegistry} (réservés aux classes obfusquées "net.minecraft").
+     */
+    private static Method resolveGlStateManagerMethod(String oldName, String newName) {
+        try {
+            Class<?> oldClass = McReflect.rawClass("com.mojang.blaze3d.platform.GlStateManager");
+            if (oldClass != null) {
+                try { return oldClass.getMethod(oldName, int.class); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> newClass = McReflect.rawClass("com.mojang.blaze3d.opengl.GlStateManager");
+            if (newClass != null) {
+                try { return newClass.getMethod(newName, int.class); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
     /**
      * BUG TROUVÉ (retrouvé dans l'historique du projet, confirmé responsable
@@ -1977,6 +2231,35 @@ public final class UiRenderer {
     private int glGenTextures() throws Exception {
         return (int) gl("org.lwjgl.opengl.GL11", "glGenTextures").invoke(null);
     }
+    private void glFinish() throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glFinish").invoke(null);
+    }
+
+    /**
+     * Équivalent de {@code java.lang.ref.Reference.reachabilityFence(Object)}
+     * (JDK 9+) via réflexion — ce fichier compile en {@code --release 8}
+     * (compat multi-version, voir build.bat), qui masque toute API postérieure
+     * à Java 8 à la COMPILATION (contrairement à un simple `-source 8`) : un
+     * appel direct à `reachabilityFence` ne compile pas ("cannot find
+     * symbol"), même si la JVM d'exécution réelle (21 ici) le possède bien.
+     * Résolu paresseusement, mis en cache, jamais réessayé après un premier
+     * échec (même motif que les autres wrappers `gl*` de ce fichier).
+     */
+    private static volatile java.lang.reflect.Method reachabilityFenceMethod;
+    private static void reachabilityFence(Object ref) {
+        try {
+            java.lang.reflect.Method m = reachabilityFenceMethod;
+            if (m == null) {
+                m = java.lang.ref.Reference.class.getMethod("reachabilityFence", Object.class);
+                reachabilityFenceMethod = m;
+            }
+            m.invoke(null, ref);
+        } catch (Throwable ignored) {
+            // Best-effort — sans cette méthode (JDK < 9, ne devrait jamais
+            // arriver au runtime réel), aucune protection supplémentaire,
+            // comportement identique à avant ce fix.
+        }
+    }
     /** Voir glBindTexture — résolu paresseusement, mis en cache, jamais réassigné après un premier échec (évite de retenter la réflexion à chaque frame). */
     private static Method glStateManagerBindTexture;
     private static boolean glStateManagerBindTextureResolved;
@@ -2004,12 +2287,15 @@ public final class UiRenderer {
     private void glBindTexture(int target, int texture) throws Exception {
         if (target == 0x0DE1 && !glStateManagerBindTextureResolved) { // GL_TEXTURE_2D
             glStateManagerBindTextureResolved = true;
-            try {
-                Class<?> glStateManager = McReflect.yarnClass("com/mojang/blaze3d/platform/GlStateManager");
-                glStateManagerBindTexture = glStateManager != null
-                    ? McReflect.method(glStateManager, "com/mojang/blaze3d/platform/GlStateManager", "bindTexture", int.class)
-                    : null;
-            } catch (Throwable ignored) {}
+            // Era E (Blaze3D 1.21.6+) : classe déplacée vers
+            // com.mojang.blaze3d.opengl.GlStateManager, méthode renommée
+            // "_bindTexture" (vérifié par désassemblage direct, voir
+            // resolveGlStateManagerMethod) — l'ancienne résolution ne
+            // couvrait que "com/mojang/blaze3d/platform/GlStateManager"/
+            // "bindTexture" (brackets antérieurs), silencieusement null sur
+            // 1.21.11, d'où un repli permanent sur l'appel brut désynchronisant
+            // le cache de GlStateManager (cause racine du texte corrompu).
+            glStateManagerBindTexture = resolveGlStateManagerMethod("bindTexture", "_bindTexture");
         }
         if (target == 0x0DE1 && glStateManagerBindTexture != null) {
             try {

@@ -149,6 +149,32 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             + " button=" + button + " param=(" + mouseX + "," + mouseY + ") lastInput="
             + (lastInput == null ? "null" : "(" + lastInput.mouseX + "," + lastInput.mouseY + ")")
             + " widgets=" + widgets.size());
+        return dispatchClick(button);
+    }
+
+    /**
+     * Équivalent 1.21.11+ (Blaze3D) de {@link #mouseClicked(double, double, int)}
+     * ci-dessus — sur cette version, {@code Element.mouseClicked} ne prend
+     * plus {@code (double, double, int)} mais un type record {@code Click}
+     * (voir stub {@code net.minecraft.client.gui.Click}, patché par
+     * ScreenStubPatcher comme {@code Screen}/{@code Component}) : notre
+     * ancienne surcharge ne correspond alors plus à AUCUN override réel côté
+     * JVM (nom+descripteur exacts requis) et reste une méthode inerte — EXACT
+     * même symptôme ("boutons pas cliquables") déjà rencontré et réglé pour
+     * le bracket 1.13-1.16.x, mais cette fois-ci le changement porte sur le
+     * DESCRIPTEUR entier de la méthode, pas juste son nom obfusqué. Ignore le
+     * 2e paramètre ({@code boolean}, "focused"/dispatch interne vanilla —
+     * jamais eu besoin de le lire). Coordonnées : {@link #lastInput} comme
+     * partout ailleurs, pas {@code click.x()}/{@code click.y()} (même espace
+     * "GUI scaled" que l'ancien mouseX/mouseY, voir javadoc ci-dessus).
+     */
+    public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubleClick) {
+        LauncherLog.info("[LauncherAgent] DIAG-E11: mouseClicked(Click) appelé sur " + getClass().getSimpleName()
+            + " button=" + click.button() + " widgets=" + widgets.size());
+        return dispatchClick(click.button());
+    }
+
+    private boolean dispatchClick(int button) {
         if (button != 0 || lastInput == null) return false;
         for (UiWidget w : widgets) {
             if (w.contains(lastInput.mouseX, lastInput.mouseY)) {
@@ -164,7 +190,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     }
 
     /**
-     * PAS de {@code @Override} — même raison que {@link #mouseClicked}.
+     * PAS de {@code @Override} — même raison que {@link #mouseClicked(double, double, int)}.
      * Échap ferme désormais via ce VRAI callback (routé vers l'exact même
      * {@link #closeTo} que le bouton "Retour"/"Fermer"), et non plus via un
      * sondage GLFW en parallèle (voir historique de session — un ancien
@@ -174,6 +200,21 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         LauncherLog.info("[LauncherAgent] DIAG-116: keyPressed() appelé sur " + getClass().getSimpleName() + " keyCode=" + keyCode);
+        return dispatchKeyPressed(keyCode);
+    }
+
+    /**
+     * Équivalent 1.21.11+ de {@link #keyPressed(int, int, int)} — même
+     * raison que {@link #mouseClicked(net.minecraft.client.gui.Click, boolean)} :
+     * {@code Element.keyPressed} prend désormais un type record
+     * {@code KeyInput} (stub {@code net.minecraft.client.input.KeyInput}).
+     */
+    public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
+        LauncherLog.info("[LauncherAgent] DIAG-E11: keyPressed(KeyInput) appelé sur " + getClass().getSimpleName() + " key=" + input.key());
+        return dispatchKeyPressed(input.key());
+    }
+
+    private boolean dispatchKeyPressed(int keyCode) {
         if (keyCode == 256) { // GLFW_KEY_ESCAPE — constante GLFW publique stable, pas d'obfuscation
             closeTo(escapeTarget);
             return true;

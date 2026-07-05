@@ -149,9 +149,36 @@ public final class UiFont {
         }
         g.dispose();
 
+        // DIAG-FONTCORRUPT-2 (era E — corps de texte systématiquement
+        // corrompu, titres UiFont.BOLD toujours nets, aucune erreur GL
+        // observée côté UiRenderer) : dump direct de l'atlas sur disque, AVANT
+        // et APRÈS le passage en champ de distance signée — une seule fois par
+        // police par lancement (construction statique, jamais par frame), pour
+        // voir avec certitude si le contenu est déjà faux à la sortie d'AWT
+        // (bug de rastérisation/placement) ou seulement après
+        // buildSignedDistanceField (bug de la transformée chamfer) — plutôt
+        // que de continuer à deviner sans preuve directe.
+        dumpAtlasDiag(style, "1-raw", atlasImage);
+
         buildSignedDistanceField(atlasImage);
 
+        dumpAtlasDiag(style, "2-sdf", atlasImage);
+
         fallback = glyphs.get('?');
+    }
+
+    private static void dumpAtlasDiag(int style, String stage, BufferedImage img) {
+        try {
+            String appdata = System.getenv("APPDATA");
+            if (appdata == null) return;
+            java.io.File dir = new java.io.File(appdata, "YuyuFrame\\agent\\logs");
+            dir.mkdirs();
+            String styleName = style == Font.BOLD ? "bold" : "plain";
+            java.io.File out = new java.io.File(dir, "fontdiag-" + styleName + "-" + stage + ".png");
+            javax.imageio.ImageIO.write(img, "png", out);
+        } catch (Throwable ignored) {
+            // Best-effort — diagnostic seulement, jamais bloquant.
+        }
     }
 
     /**

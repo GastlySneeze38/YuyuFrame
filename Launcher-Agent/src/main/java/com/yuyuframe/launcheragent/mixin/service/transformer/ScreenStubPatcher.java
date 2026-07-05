@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.mixin.service.transformer;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
 import org.objectweb.asm.*;
 
 import java.util.Map;
@@ -25,6 +26,8 @@ import java.util.Map;
 public final class ScreenStubPatcher {
 
     private ScreenStubPatcher() {}
+
+    private static String orElse(String v, String fallback) { return v != null ? v : fallback; }
 
     /**
      * Méthodes déclarées dans nos écrans custom dont le nom "official" doit
@@ -181,11 +184,23 @@ public final class ScreenStubPatcher {
             final String STUB_COMP       = "net/minecraft/text/Text";
             final String STUB_COMP_ALT   = "net/minecraft/network/chat/Component";
             final String STUB_MUTABLE_TEXT = "net/minecraft/text/MutableText";
+            // Types record introduits avec Blaze3D (1.21.6+) remplaçant les
+            // paramètres primitifs historiques de mouseClicked/keyPressed —
+            // voir stubs Click.java/KeyInput.java et UiScreenBase pour le
+            // pourquoi. N'existent pas comme classes réelles sur les brackets
+            // antérieurs (map() renvoie alors le nom stub INCHANGÉ) — sans
+            // conséquence : les surcharges qui les utilisent restent alors de
+            // simples méthodes inertes sur ces versions-là (voir javadoc de
+            // UiScreenBase.mouseClicked(Click,boolean)).
+            final String STUB_CLICK      = "net/minecraft/client/gui/Click";
+            final String STUB_KEY_INPUT  = "net/minecraft/client/input/KeyInput";
 
             ClassReader cr = new ClassReader(classBytes);
             String realScreen = MappingsRegistry.INSTANCE.map(STUB_SCREEN);
             String realComp   = MappingsRegistry.INSTANCE.map(STUB_COMP);
             String realMutableText = MappingsRegistry.INSTANCE.map(STUB_MUTABLE_TEXT);
+            String realClick     = MappingsRegistry.INSTANCE.map(STUB_CLICK);
+            String realKeyInput  = MappingsRegistry.INSTANCE.map(STUB_KEY_INPUT);
 
             if (STUB_SCREEN.equals(realScreen)) {
                 LauncherLog.asm(1, "[LauncherAgent ASM] " + cr.getClassName() + ": Screen non mappé (mode non-obfusqué), skip");
@@ -242,10 +257,39 @@ public final class ScreenStubPatcher {
                 "net/minecraft/client/gui/Element", "mouseClicked", "(DDI)Z");
             final String realKeyPressedName = MappingsRegistry.getObfMethodName(
                 "net/minecraft/client/gui/Element", "keyPressed", "(III)Z");
+            // BUG TROUVÉ (era E, 1.21.11 — "boutons pas cliquables" persistant
+            // même après un premier correctif ciblant Click/KeyInput) :
+            // getObfMethodName(yarnClass, yarnMethod, officialDesc) — voir sa
+            // javadoc — indexe/recherche par descripteur OFFICIAL (celui
+            // écrit tel quel dans mappings.tiny, colonne 0 = "official", donc
+            // avec les noms de classes OBFUSQUÉS BRUTS, ex: "gzc" pour Click).
+            // Le premier essai construisait ce descripteur avec
+            // realClick/realKeyInput = MappingsRegistry.map(STUB) — qui
+            // renvoie le nom RUNTIME (intermediary sous Fabric en jeu réel,
+            // voir Scheme.INTERMEDIARY), PAS le nom official. En scheme
+            // INTERMEDIARY (le cas réel en jeu), le descripteur ainsi construit
+            // ("(Lclass_XXXX;Z)Z") ne correspond à AUCUNE clé de la table
+            // (indexée sur le descripteur official "(Lgzc;Z)Z") → recherche
+            // toujours en échec → getObfMethodName retombe sur le nom Yarn
+            // INCHANGÉ ("mouseClicked") → jamais un override réel, jamais
+            // appelé par le jeu (confirmé : aucune trace de "DIAG-E11" dans
+            // les logs, même en cliquant). Fix : résoudre le nom OFFICIAL brut
+            // de Click/KeyInput via YarnMappings.getOfficialClass() (jamais
+            // via map(), réservé aux références RUNTIME dans le bytecode
+            // lui-même — CHECKCAST, remapAll()... — un usage totalement
+            // différent, voir plus bas où realClick/realKeyInput restent
+            // utilisés tels quels pour ça).
+            final String officialClick = orElse(YarnMappings.getOfficialClass(STUB_CLICK), STUB_CLICK);
+            final String officialKeyInput = orElse(YarnMappings.getOfficialClass(STUB_KEY_INPUT), STUB_KEY_INPUT);
+            final String realMouseClickedClickName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/Element", "mouseClicked", "(L" + officialClick + ";Z)Z");
+            final String realKeyPressedKeyInputName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/Element", "keyPressed", "(L" + officialKeyInput + ";)Z");
 
             LauncherLog.asm(1, "[LauncherAgent ASM] " + cr.getClassName() + ": Screen=" + realScreen
                     + "  Text=" + realComp + "  noArgCtor=" + screenNoArgOk
-                    + "  mouseClicked->" + realMouseClickedName + "  keyPressed->" + realKeyPressedName);
+                    + "  mouseClicked(DDI)->" + realMouseClickedName + "  keyPressed(III)->" + realKeyPressedName
+                    + "  mouseClicked(Click)->" + realMouseClickedClickName + "  keyPressed(KeyInput)->" + realKeyPressedKeyInputName);
             ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS) {
                 @Override protected String getCommonSuperClass(String t1, String t2) {
                     return "java/lang/Object";
@@ -259,11 +303,15 @@ public final class ScreenStubPatcher {
                 private boolean isStubComp(String s) {
                     return STUB_COMP.equals(s) || STUB_COMP_ALT.equals(s);
                 }
+                private boolean isStubClick(String s) { return STUB_CLICK.equals(s); }
+                private boolean isStubKeyInput(String s) { return STUB_KEY_INPUT.equals(s); }
                 private String remapAll(String desc) {
                     return desc.replace("L" + STUB_SCREEN + ";",     "L" + realScreen + ";")
                                .replace("L" + STUB_SCREEN_ALT + ";", "L" + realScreen + ";")
                                .replace("L" + STUB_COMP + ";",       "L" + realComp + ";")
-                               .replace("L" + STUB_COMP_ALT + ";",   "L" + realComp + ";");
+                               .replace("L" + STUB_COMP_ALT + ";",   "L" + realComp + ";")
+                               .replace("L" + STUB_CLICK + ";",      "L" + realClick + ";")
+                               .replace("L" + STUB_KEY_INPUT + ";",  "L" + realKeyInput + ";");
                 }
 
                 @Override
@@ -298,6 +346,10 @@ public final class ScreenStubPatcher {
                         runtimeName = realMouseClickedName;
                     } else if ("keyPressed".equals(name) && "(III)Z".equals(descriptor)) {
                         runtimeName = realKeyPressedName;
+                    } else if ("mouseClicked".equals(name) && ("(L" + STUB_CLICK + ";Z)Z").equals(descriptor)) {
+                        runtimeName = realMouseClickedClickName;
+                    } else if ("keyPressed".equals(name) && ("(L" + STUB_KEY_INPUT + ";)Z").equals(descriptor)) {
+                        runtimeName = realKeyPressedKeyInputName;
                     } else {
                         runtimeName = OVERRIDE_METHODS.translate(name, descriptor);
                     }
@@ -337,6 +389,12 @@ public final class ScreenStubPatcher {
                             else if (isStubComp(owner)) {
                                 owner = realComp;
                                 mName = MappingsRegistry.getObfMethodName(STUB_COMP, mName);
+                            } else if (isStubClick(owner)) {
+                                owner = realClick;
+                                mName = MappingsRegistry.getObfMethodName(STUB_CLICK, mName);
+                            } else if (isStubKeyInput(owner)) {
+                                owner = realKeyInput;
+                                mName = MappingsRegistry.getObfMethodName(STUB_KEY_INPUT, mName);
                             }
                             super.visitMethodInsn(opcode, owner, mName, remapAll(mDesc), isInterface);
                         }
@@ -345,6 +403,8 @@ public final class ScreenStubPatcher {
                         public void visitTypeInsn(int opcode, String type) {
                             if (isStubScreen(type)) type = realScreen;
                             else if (isStubComp(type)) type = realComp;
+                            else if (isStubClick(type)) type = realClick;
+                            else if (isStubKeyInput(type)) type = realKeyInput;
                             super.visitTypeInsn(opcode, type);
                         }
 

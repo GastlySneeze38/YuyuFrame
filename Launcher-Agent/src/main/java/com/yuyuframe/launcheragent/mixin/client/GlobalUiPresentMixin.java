@@ -4,7 +4,6 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
@@ -80,24 +79,6 @@ public abstract class GlobalUiPresentMixin {
 
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
-            // DIAGNOSTIC TEMPORAIRE : gros carré rouge test, indépendant de
-            // toute logique de menu — confirme si le pipeline moderne affiche
-            // QUOI QUE CE SOIT de visible une fois un écran ouvert. À retirer
-            // une fois le diagnostic conclu.
-            if (renderer.isModern()) {
-                try {
-                    renderer.drawRoundedRect(
-                        50, 50, 250, 250, 0f,
-                        new UiColor(1f, 0f, 0f, 1f),
-                        inputPoller.fbWidth, inputPoller.fbHeight);
-                    int[] px = renderer.debugReadPixel(150, 150);
-                    LauncherLog.info("[LauncherAgent] DIAG7: pixel(150,150) juste après le dessin du carré rouge = "
-                        + java.util.Arrays.toString(px)
-                        + " (attendu ~[255,0,0,255] si le draw écrit vraiment le framebuffer)");
-                } catch (Throwable t) {
-                    LauncherLog.err("[LauncherAgent] DIAG4 carré test: " + t);
-                }
-            }
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
 
             // Navigation demandée par l'écran lui-même (UiScreenBase.closeTo,
