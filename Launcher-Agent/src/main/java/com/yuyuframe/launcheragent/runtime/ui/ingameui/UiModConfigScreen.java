@@ -52,6 +52,7 @@ public class UiModConfigScreen extends UiScreenBase {
     public UiModConfigScreen(Object lastScreen, LauncherModule module) {
         super(module.name);
         this.lastScreen = lastScreen;
+        this.escapeTarget = lastScreen;
         this.module = module;
     }
 

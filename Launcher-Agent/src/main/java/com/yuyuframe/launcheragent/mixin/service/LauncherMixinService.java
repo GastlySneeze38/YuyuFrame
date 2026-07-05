@@ -176,6 +176,22 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/GlobalUiRenderMixin189",
             "net/minecraft/client/render/GameRenderer",
             "render", "(FJ)V", null),
+
+        // ── Branche 1.13-1.16.x (mixin.client.v1_16.*) — bracket "B" : LWJGL3/
+        // GLFW comme le pipeline moderne, mais dessin encore possible en
+        // immédiat (GL en dessous du Core Profile 3.2 imposé depuis la 1.17).
+        // render(FJZ)V — 3 paramètres primitifs, signature partagée avec
+        // 1.17-1.20.4 (voir doc Yarn), DIFFÉRENTE de la 1.8.9 (FJ)V (pas de
+        // booléen "tick") et de la 1.21.11 (RenderTickCounter au lieu de F,J).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/GlobalUiRenderMixin116",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(FJZ)V", null),
+        // tick() déclaré directement sur MinecraftClient — pas de repli. Voir
+        // GlobalTickMixin116 pour le pourquoi (ouverture/fermeture de Screen
+        // déplacée ici depuis le render-tail, comme un vrai mod Fabric).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/GlobalTickMixin116",
+            "net/minecraft/client/MinecraftClient",
+            "tick", "()V", null),
     };
 
     /**

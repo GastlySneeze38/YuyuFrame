@@ -368,15 +368,20 @@ public final class UiRenderer {
     private static UiRenderer instance;
 
     /**
-     * "1_8"/"1_8_9" → pipeline legacy ; toute autre version détectée → pipeline
-     * moderne (voir javadoc de la classe). Même détection que
-     * {@code IsolatedBootstrap}/{@code VersionBracketRegistry} — la version
-     * MC est déjà posée en system property par {@code IsolatedBootstrap.start()}
-     * avant que quoi que ce soit ne s'affiche, donc toujours dispo ici.
+     * "moderne" = dessin exclusivement par shaders/VAO/VBO (Core Profile GL
+     * 3.2+, obligatoire depuis la 1.17) ; "legacy" = dessin immédiat
+     * (glBegin/glMatrixMode), possible sur 1.8.9 ET sur 1.13-1.16.x (ces
+     * dernières utilisent déjà LWJGL3/GLFW pour la fenêtre/l'input — voir
+     * UiInputPollerModern côté Mixin — mais leur contexte GL reste en
+     * dessous de 3.2, donc le pipeline fixe y fonctionne encore) — voir
+     * {@link MinecraftVersionDetector#supportsFixedFunctionDrawing}. La
+     * version MC est déjà posée en system property par
+     * {@code IsolatedBootstrap.start()} avant que quoi que ce soit ne
+     * s'affiche, donc toujours dispo ici.
      */
     private UiRenderer() {
         String mcVersion = System.getProperty("launcheragent.mcVersion", "");
-        this.modern = !MinecraftVersionDetector.isLegacy189(mcVersion);
+        this.modern = !MinecraftVersionDetector.supportsFixedFunctionDrawing(mcVersion);
     }
 
     public static UiRenderer get(ClassLoader gameClassLoader) {

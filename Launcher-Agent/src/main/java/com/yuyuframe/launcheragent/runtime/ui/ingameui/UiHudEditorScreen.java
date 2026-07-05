@@ -43,6 +43,7 @@ public class UiHudEditorScreen extends UiScreenBase {
     public UiHudEditorScreen(Object lastScreen) {
         super("Édition du HUD");
         this.lastScreen = lastScreen;
+        this.escapeTarget = lastScreen;
     }
 
     @Override

@@ -64,6 +64,7 @@ public class UiMainMenuScreen extends UiScreenBase {
     public UiMainMenuScreen(Object lastScreen) {
         super("YuyuFrame");
         this.lastScreen = lastScreen;
+        this.escapeTarget = lastScreen;
     }
 
     @Override

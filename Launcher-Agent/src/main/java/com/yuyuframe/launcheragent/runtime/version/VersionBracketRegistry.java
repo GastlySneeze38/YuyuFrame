@@ -47,6 +47,21 @@ public final class VersionBracketRegistry {
             "mixins.launcheragent.json",
             "1.21.11",
             version -> "1.21.11".equals(version)));
+
+        // Bracket "B" (voir historique de session) — 1.13 à 1.16.x : LWJGL3/
+        // GLFW comme le pipeline 1.21.11, mais contexte GL encore en dessous
+        // du Core Profile 3.2 imposé depuis la 1.17, donc dessin immédiat
+        // encore possible (voir MinecraftVersionDetector.supportsFixedFunctionDrawing
+        // et GlobalUiRenderMixin116). Vérifié concrètement seulement pour
+        // 1.16.5 au moment de l'écriture — resserré à ce sous-ensemble plutôt
+        // que d'inclure toute la 1.13-1.16 par simple confiance dans le
+        // raisonnement architectural (même risque qu'expliqué ci-dessus pour
+        // la 1.21.x : une version non testée peut échouer silencieusement).
+        BRACKETS.add(new VersionBracket(
+            "1_16",
+            "mixins.launcheragent-1.16.json",
+            "1.16.5",
+            version -> version != null && version.startsWith("1.16")));
     }
 
     /** Résout la tranche correspondant à la version détectée, ou {@code null} si aucune ne correspond. */

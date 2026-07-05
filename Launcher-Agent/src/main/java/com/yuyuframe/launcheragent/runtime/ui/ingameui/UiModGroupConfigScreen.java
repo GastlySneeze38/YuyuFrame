@@ -66,6 +66,7 @@ public class UiModGroupConfigScreen extends UiScreenBase {
     public UiModGroupConfigScreen(Object lastScreen, ModuleGroup group) {
         super(group.name);
         this.lastScreen = lastScreen;
+        this.escapeTarget = lastScreen;
         this.group = group;
     }
 

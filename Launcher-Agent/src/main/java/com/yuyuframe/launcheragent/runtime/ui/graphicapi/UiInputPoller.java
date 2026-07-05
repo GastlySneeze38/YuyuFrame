@@ -4,7 +4,13 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
 /**
  * État souris/clavier pollé chaque frame depuis un Mixin global sur le render
- * loop — jamais via Screen.mouseClicked/keyPressed (voir UiDrawable).
+ * loop — pour la position/le survol/le drag continu (voir UiDrawable). Le
+ * CLIC et la touche Échap eux-mêmes ne sont plus dispatchés depuis ce sondage
+ * (voir historique de session) : {@code UiScreenBase} override désormais les
+ * vraies méthodes {@code mouseClicked}/{@code keyPressed} du Screen vanilla,
+ * pour éviter qu'un même clic/une même touche soit traité deux fois (une
+ * fois par le vrai dispatch de Minecraft, une fois par ce sondage) — source
+ * de plusieurs bugs (dont un crash) avant ce changement.
  *
  * Deux implémentations, une par famille LWJGL — choisie par le Mixin global
  * de CHAQUE version (GlobalUiRenderMixin en 1.21+, son équivalent v1_8 pour

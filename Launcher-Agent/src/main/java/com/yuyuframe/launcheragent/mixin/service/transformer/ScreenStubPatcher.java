@@ -105,6 +105,59 @@ public final class ScreenStubPatcher {
         return result;
     }
 
+    /** Nom + descripteur RÉELS (pas supposés) de la méthode "String -> Text" trouvée — voir {@link #findLiteralTextMethod}. */
+    private static final class LiteralMethod {
+        final String name, desc;
+        LiteralMethod(String name, String desc) { this.name = name; this.desc = desc; }
+    }
+
+    private static final Map<String, LiteralMethod> LITERAL_METHOD_CACHE = new java.util.HashMap<>();
+
+    /**
+     * Trouve par RÉFLEXION (pas par nom Yarn) la méthode statique "String ->
+     * Text" (ex: {@code Text.of(String)}) sur la vraie classe Text résolue —
+     * même motif que {@link #screenHasNoArgConstructor} : cherche une FORME
+     * (statique, 1 paramètre String, retour assignable à la classe Text
+     * elle-même), pas un nom précis.
+     *
+     * CORRIGÉ (3e essai, bug trouvé en testant le bracket 1.13-1.16.x) :
+     * 1er essai — résolution par nom Yarn "of" SEUL (sans descripteur) —
+     * cassé : {@code Text} a plusieurs surcharges de "of" sur 1.16.5, retombe
+     * sur la mauvaise (nom obfusqué "b" puis "a" selon la tentative, jamais la
+     * bonne forme). 2e essai — réflexion pour trouver le bon NOM, mais le
+     * DESCRIPTEUR de l'appel bytecode restait construit en supposant un
+     * retour {@code MutableText} (hardcodé) — si la vraie méthode trouvée
+     * retourne autre chose (ex: {@code Text} lui-même, pas obligatoirement
+     * {@code MutableText}), le descripteur généré ne correspondait PLUS à la
+     * signature réelle malgré un nom correct → NoSuchMethodError persistant
+     * avec le MÊME nom qu'avant ("a"), symptôme qui a fait croire à tort que
+     * la réflexion n'avait rien changé. **Fix définitif** : renvoyer aussi le
+     * VRAI type de retour observé par réflexion (jamais supposé), utilisé tel
+     * quel pour construire le descripteur du call-site bytecode.
+     */
+    private static LiteralMethod findLiteralTextMethod(String realCompSlash, ClassLoader loader) {
+        LiteralMethod cached = LITERAL_METHOD_CACHE.get(realCompSlash);
+        if (cached != null) return cached;
+        LiteralMethod result = null;
+        try {
+            Class<?> compClass = Class.forName(realCompSlash.replace('/', '.'), false, loader);
+            for (java.lang.reflect.Method m : compClass.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                Class<?>[] params = m.getParameterTypes();
+                if (params.length != 1 || params[0] != String.class) continue;
+                if (!compClass.isAssignableFrom(m.getReturnType())) continue;
+                String returnSlash = m.getReturnType().getName().replace('.', '/');
+                result = new LiteralMethod(m.getName(), "(Ljava/lang/String;)L" + returnSlash + ";");
+                break;
+            }
+        } catch (Throwable ignored) {
+            // Classe pas encore chargeable à ce stade — pas de cache, on
+            // retentera au prochain écran custom patché.
+        }
+        if (result != null) LITERAL_METHOD_CACHE.put(realCompSlash, result);
+        return result;
+    }
+
     private static final OverrideMethods OVERRIDE_METHODS = new OverrideMethods();
     static {
         // Screen.init() — voir docs/LauncherAgent/index.md, refmap TitleScreen/PackScreen.
@@ -142,10 +195,57 @@ public final class ScreenStubPatcher {
             // 1.21.11 (gsb) n'a QUE (Text) — jamais les deux, résolu par
             // réflexion sur la vraie classe une fois qu'elle est chargeable.
             boolean screenNoArgOk = screenHasNoArgConstructor(realScreen, loader);
-            String literalMethodName = MappingsRegistry.runtimeMethod("yh", "b", "(Ljava/lang/String;)Lyw;");
-            String literalDesc = "(Ljava/lang/String;)L" + realMutableText + ";";
+            // CORRIGÉ (bug trouvé en testant le bracket 1.13-1.16.x, voir
+            // historique de session, 3 essais) : "yh"/"b"/"(Ljava/lang/String;)Lyw;"
+            // étaient des noms OFFICIELS codés en dur, valables UNIQUEMENT pour
+            // le build 1.21.11 précis. Fixé par RÉFLEXION sur la vraie forme
+            // (statique, (String), retour assignable à Text) — NOM ET
+            // DESCRIPTEUR tous deux lus depuis la vraie méthode trouvée,
+            // jamais supposés — voir findLiteralTextMethod, même motif que
+            // screenHasNoArgConstructor juste au-dessus.
+            LiteralMethod foundLiteral = findLiteralTextMethod(realComp, loader);
+            if (foundLiteral == null) {
+                LauncherLog.warn("[LauncherAgent ASM] " + cr.getClassName()
+                    + ": aucune méthode statique (String)->Text trouvée sur " + realComp
+                    + " — le patch pour écran sans constructeur no-arg échouera si nécessaire");
+            }
+            // Repli "of"/MutableText — au pire NoSuchMethodError explicite, pas
+            // un throw ici. Effectively final (référencées depuis la classe
+            // anonyme MethodVisitor plus bas).
+            final String literalMethodName = foundLiteral != null ? foundLiteral.name : "of";
+            final String literalDesc = foundLiteral != null ? foundLiteral.desc : "(Ljava/lang/String;)L" + realMutableText + ";";
+
+            /*
+             * BUG TROUVÉ (voir historique de session — mouseClicked()/keyPressed()
+             * de UiScreenBase ne se déclenchaient JAMAIS, sur aucune version, malgré
+             * une résolution de setScreen() désormais correcte) : ces deux méthodes
+             * sont déclarées sur l'interface Element du VRAI jeu, avec un nom
+             * OBFUSQUÉ (ex: "a" pour les deux, en scheme officiel 1.16.5 — descripteurs
+             * différents qui permettent la surcharge). Notre code source les déclare
+             * sous leur nom NAMED Yarn ("mouseClicked"/"keyPressed") — sans
+             * renommage, ce ne sont PAS des overrides du tout pour la JVM (qui lie
+             * les méthodes par nom EXACT + descripteur, jamais par "ressemblance" de
+             * forme) : elles restent des méthodes inertes, jamais appelées par le
+             * jeu, exactement comme Screen.init()/mouseScrolled()/tick() nécessitaient
+             * déjà ce même renommage ci-dessus (OVERRIDE_METHODS) — sauf que cette
+             * table est figée sur des noms officiels 1.21.11 codés en dur, jamais
+             * étendue pour ces deux méthodes ni pour aucune autre version.
+             *
+             * Fix : résolution DYNAMIQUE (comme tout le reste du pipeline 1.13-1.16.x,
+             * voir GlobalUiRenderMixin116) via MappingsRegistry.getObfMethodName avec
+             * DESCRIPTEUR (pas juste le nom — Element a plusieurs méthodes candidates
+             * par ailleurs) — descripteurs 100% primitifs ici (DDI/III), aucun type de
+             * classe à remapper contrairement à setScreen(Screen), donc pas besoin de
+             * résoudre quoi que ce soit d'autre au préalable.
+             */
+            final String realMouseClickedName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/Element", "mouseClicked", "(DDI)Z");
+            final String realKeyPressedName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/Element", "keyPressed", "(III)Z");
+
             LauncherLog.asm(1, "[LauncherAgent ASM] " + cr.getClassName() + ": Screen=" + realScreen
-                    + "  Text=" + realComp + "  noArgCtor=" + screenNoArgOk);
+                    + "  Text=" + realComp + "  noArgCtor=" + screenNoArgOk
+                    + "  mouseClicked->" + realMouseClickedName + "  keyPressed->" + realKeyPressedName);
             ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS) {
                 @Override protected String getCommonSuperClass(String t1, String t2) {
                     return "java/lang/Object";
@@ -193,7 +293,14 @@ public final class ScreenStubPatcher {
                     // reste vide. remapAll() (descripteurs des appels/champs internes)
                     // ne couvre pas ce cas car ici c'est la DÉCLARATION elle-même qui
                     // doit changer de nom, pas une référence.
-                    String runtimeName = OVERRIDE_METHODS.translate(name, descriptor);
+                    String runtimeName;
+                    if ("mouseClicked".equals(name) && "(DDI)Z".equals(descriptor)) {
+                        runtimeName = realMouseClickedName;
+                    } else if ("keyPressed".equals(name) && "(III)Z".equals(descriptor)) {
+                        runtimeName = realKeyPressedName;
+                    } else {
+                        runtimeName = OVERRIDE_METHODS.translate(name, descriptor);
+                    }
                     MethodVisitor mv = super.visitMethod(access, runtimeName, remapAll(descriptor), signature, exceptions);
                     return new MethodVisitor(Opcodes.ASM9, mv) {
                         @Override
