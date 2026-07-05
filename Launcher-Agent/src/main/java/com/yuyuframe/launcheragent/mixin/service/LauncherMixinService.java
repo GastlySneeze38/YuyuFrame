@@ -159,10 +159,17 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/client/gui/screen/Screen;Lnet/minecraft/client/option/GameOptions;)V",
             null),
         // render() déclaré directement sur GameRenderer — pas de repli. Point
-        // d'accroche global du moteur UI custom, voir GlobalUiRenderMixin.
+        // d'accroche de la LOGIQUE du moteur UI custom (input/tick/ouverture
+        // du menu), voir GlobalUiRenderMixin. Le DESSIN, lui, est sur
+        // Framebuffer.blitToScreen() — voir GlobalUiPresentMixin juste après
+        // (era E, bug de composition Blaze3D, voir javadoc des deux classes).
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiRenderMixin",
             "net/minecraft/client/render/GameRenderer",
             "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+        // blitToScreen() déclaré directement sur Framebuffer — pas de repli.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiPresentMixin",
+            "net/minecraft/client/gl/Framebuffer",
+            "blitToScreen", "()V", null),
 
         // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
         // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.

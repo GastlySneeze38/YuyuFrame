@@ -12,7 +12,8 @@
     "client.PackScreenMixin",
     "client.GameMenuScreenMixin",
     "client.KeybindsScreenMixin",
-    "client.GlobalUiRenderMixin"
+    "client.GlobalUiRenderMixin",
+    "client.GlobalUiPresentMixin"
   ],
   "injectors": {
     "defaultRequire": 1
