@@ -37,9 +37,7 @@ public final class MumbleLinkModule extends LauncherModule {
             double pz = readEntityDouble(player, "z", "getZ");
             float yaw = readEntityFloat(player, "yaw", "getYaw");
             float pitch = readEntityFloat(player, "pitch", "getPitch");
-
-            Method getEyeHeight = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getEyeHeight");
-            float eyeHeight = getEyeHeight != null ? (float) getEyeHeight.invoke(player) : 1.62f;
+            float eyeHeight = readEyeHeight(player);
 
             String username = readUsername(player);
 
@@ -69,15 +67,42 @@ public final class MumbleLinkModule extends LauncherModule {
     private double readEntityDouble(Object player, String yarnField, String yarnGetter) throws Exception {
         java.lang.reflect.Field f = McReflect.fieldOnClass("net/minecraft/entity/Entity", yarnField);
         if (f != null) return f.getDouble(player);
-        Method m = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", yarnGetter);
+        Method m = McReflect.methodOnClass("net/minecraft/entity/Entity", yarnGetter);
         return m != null ? (double) m.invoke(player) : 0;
     }
 
     private float readEntityFloat(Object player, String yarnField, String yarnGetter) throws Exception {
         java.lang.reflect.Field f = McReflect.fieldOnClass("net/minecraft/entity/Entity", yarnField);
         if (f != null) return f.getFloat(player);
-        Method m = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", yarnGetter);
+        Method m = McReflect.methodOnClass("net/minecraft/entity/Entity", yarnGetter);
         return m != null ? (float) m.invoke(player) : 0f;
+    }
+
+    /**
+     * BUG TROUVÉ (1.20.4, log confirmé) : {@code ClassCastException: class
+     * fob cannot be cast to class java.lang.Float} — {@code
+     * Entity.getEyeHeight()} n'a AUCUNE surcharge sans paramètre en 1.20.4
+     * (vérifié dans les mappings : seulement {@code
+     * (EntityPose,EntityDimensions):float} et {@code (EntityPose):float}) —
+     * l'ancien appel {@code noArgMethod(player.getClass(), ..., "getEyeHeight")}
+     * supposait un no-arg à tort, et en remontant la hiérarchie du joueur
+     * tombait sur une méthode SANS RAPPORT (renvoyant un {@code
+     * PlayerListEntry}, "fob") coïncidemment nommée pareil. Résout maintenant
+     * {@code getPose()} (no-arg) puis {@code getEyeHeight(EntityPose)} — les
+     * deux via {@link McReflect#methodOnClass} (résolution directe sur
+     * Entity, jamais en remontant depuis une instance).
+     */
+    private float readEyeHeight(Object player) throws Exception {
+        Method getEyeHeightNoArg = McReflect.methodOnClass("net/minecraft/entity/Entity", "getEyeHeight");
+        if (getEyeHeightNoArg != null) return (float) getEyeHeightNoArg.invoke(player);
+
+        Method getPose = McReflect.methodOnClass("net/minecraft/entity/Entity", "getPose");
+        if (getPose == null) return 1.62f;
+        Object pose = getPose.invoke(player);
+        if (pose == null) return 1.62f;
+
+        Method getEyeHeightPosed = McReflect.methodOnClass("net/minecraft/entity/Entity", "getEyeHeight", pose.getClass());
+        return getEyeHeightPosed != null ? (float) getEyeHeightPosed.invoke(player, pose) : 1.62f;
     }
 
     /**

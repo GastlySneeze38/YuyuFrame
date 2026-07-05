@@ -140,6 +140,49 @@ public final class McReflect {
         });
     }
 
+    /**
+     * BUG TROUVÉ (1.20.4, MumbleLinkModule — même risque que {@link #fieldOnClass}
+     * mais pour une MÉTHODE) : {@code MumbleLinkModule} appelait {@code
+     * noArgMethod(player.getClass(), "net/minecraft/entity/Entity",
+     * "getEyeHeight")} en supposant un no-arg — en réalité, {@code
+     * Entity.getEyeHeight} n'a QUE des surcharges à paramètres en 1.20.4
+     * ({@code (EntityPose,EntityDimensions):float} et
+     * {@code (EntityPose):float}, vérifié dans les mappings), aucune version
+     * sans argument. Le filtre "0 paramètre" de {@code noArgMethod} en
+     * remontant la hiérarchie du joueur tombait donc sur une méthode
+     * SANS RAPPORT (nom obfusqué coïncident sur une classe intermédiaire)
+     * renvoyant un {@code PlayerListEntry} — {@code ClassCastException:
+     * class fob cannot be cast to class java.lang.Float} en résultait.
+     * Résout ici directement sur la classe qui déclare vraiment la méthode
+     * (jamais en remontant depuis une instance), symétrique de {@link
+     * #fieldOnClass} pour les champs.
+     */
+    public static Method methodOnClass(String yarnDeclaringClass, String yarnMethod, Class<?>... paramTypes) {
+        String key = "decl:" + yarnDeclaringClass + "#" + yarnMethod + "(" + java.util.Arrays.toString(paramTypes) + ")";
+        return METHOD_CACHE.computeIfAbsent(key, k -> {
+            try {
+                Class<?> owner = yarnClass(yarnDeclaringClass);
+                if (owner == null) return null;
+                String obfName = MappingsRegistry.getObfMethodName(yarnDeclaringClass, yarnMethod);
+                for (Method m : owner.getDeclaredMethods()) {
+                    if (!m.getName().equals(obfName) || m.getParameterCount() != paramTypes.length) continue;
+                    Class<?>[] actual = m.getParameterTypes();
+                    boolean match = true;
+                    for (int i = 0; i < paramTypes.length; i++) {
+                        if (!actual[i].getName().equals(paramTypes[i].getName())) { match = false; break; }
+                    }
+                    if (match) {
+                        m.setAccessible(true);
+                        return m;
+                    }
+                }
+                return null;
+            } catch (Throwable t) {
+                return null;
+            }
+        });
+    }
+
     /** Méthode sans paramètre — cas le plus fréquent des getters portés depuis PvP-Mod. */
     public static Method noArgMethod(Class<?> owner, String yarnClass, String yarnMethod) {
         return resolveNoArg(owner, yarnClass, yarnMethod);
