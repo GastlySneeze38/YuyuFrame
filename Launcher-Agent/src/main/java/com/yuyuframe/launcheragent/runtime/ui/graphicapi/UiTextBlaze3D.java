@@ -421,6 +421,49 @@ public final class UiTextBlaze3D {
         return whiteTexture;
     }
 
+    // ── Texture "masque coin arrondi" (fonds de panneau HUD, voir drawRect) ──
+
+    private static Object[] cornerMaskTexture; // [GpuTexture, GpuTextureView, GpuSampler]
+    private static final int CORNER_MASK_SIZE = 32;
+
+    /**
+     * Alpha = 1 (opaque) là où texel(tx,ty) est à distance <= N du point
+     * "intérieur" (N,N) (coin bas-droite du carré NxN, voir drawRect pour la
+     * correspondance écran) ; alpha = 0 au-delà, avec un lissage
+     * (smoothstep) sur le dernier pixel — MÊME formule que le shader legacy
+     * (drawRoundedRectLegacy, "alpha = 1 - smoothstep(radius-1, radius,
+     * dist)"), pré-calculée dans une texture au lieu d'un shader dédié
+     * (RenderPipelines.GUI_TEXT n'en a pas) : image = "un coin haut-gauche
+     * arrondi" — les 3 autres coins sont obtenus par retournement UV (voir
+     * putRectQuad), pas 4 textures séparées.
+     */
+    private static Object[] ensureCornerMaskTexture() throws Exception {
+        if (cornerMaskTexture != null) return cornerMaskTexture;
+        int n = CORNER_MASK_SIZE;
+        Object nativeImage = ctorNativeImage.newInstance(fieldNativeImageFormatRgba, n, n, false);
+        for (int ty = 0; ty < n; ty++) {
+            for (int tx = 0; tx < n; tx++) {
+                float dx = tx - n, dy = ty - n;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                float t = Math.max(0f, Math.min(1f, (dist - (n - 1f)) / 1f));
+                float alpha = 1f - (t * t * (3f - 2f * t)); // smoothstep
+                int a = Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f);
+                int nativeColor = (a << 24) | 0x00FFFFFF; // petit-boutiste RGBA — blanc, alpha calculé
+                mNativeImageSetColor.invoke(nativeImage, tx, ty, nativeColor);
+            }
+        }
+        Object device = mGetDevice.invoke(null);
+        java.util.function.Supplier<String> label = () -> "yuyuframe_corner_mask";
+        Object texture = mCreateTexture.invoke(device, label, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, n, n, 1, 1);
+        Object encoder = mCreateCommandEncoder.invoke(device);
+        mWriteToTexture.invoke(encoder, texture, nativeImage);
+        Object textureView = mCreateTextureView.invoke(device, texture);
+        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear);
+        cornerMaskTexture = new Object[]{texture, textureView, sampler};
+        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture masque coin arrondi créée (" + n + "x" + n + ")");
+        return cornerMaskTexture;
+    }
+
     // ── Buffer de sommets persistant (un seul, partagé, jamais recréé sauf agrandissement) ──
 
     private static Object vertexBuffer;
@@ -547,20 +590,46 @@ public final class UiTextBlaze3D {
     // blitToScreen de la frame N+1 : un retard d'UNE frame (~16 ms à 60
     // FPS), imperceptible pour de l'UI, en échange d'un texte enfin RÉELLEMENT
     // visible. Le dessin GL brut (TAIL, inchangé) reste, lui, synchrone.
-    private static final class QueuedText {
-        final UiFont font; final String text; final float x, y, scale; final UiColor color; final int vpWidth, vpHeight;
-        QueuedText(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
-            this.font = font; this.text = text; this.x = x; this.y = y; this.color = color; this.scale = scale;
-            this.vpWidth = vpWidth; this.vpHeight = vpHeight;
-        }
-    }
+    // Empile n'importe quel type de dessin (texte OU rectangle, voir
+    // queueRect ci-dessous) dans UN SEUL ordre d'insertion — flushQueued()
+    // les exécute dans CET ordre, ce qui garantit le bon z-order (un fond de
+    // panneau, empilé avant son texte par HudPanelRenderer.draw(), est donc
+    // TOUJOURS dessiné en premier, exactement comme l'ancien pipeline
+    // immédiat) sans avoir besoin de deux files séparées.
+    private interface QueuedDraw { void execute(); }
 
-    private static final java.util.List<QueuedText> queued = new java.util.ArrayList<>();
+    private static final java.util.List<QueuedDraw> queued = new java.util.ArrayList<>();
 
     /** Appelé depuis {@code UiRenderer.drawTextModern} — empile au lieu de dessiner immédiatement, voir commentaire ci-dessus. */
     public static void queueDraw(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         if (!isAvailable() || text == null || text.isEmpty()) return;
-        queued.add(new QueuedText(font, text, x, y, color, scale, vpWidth, vpHeight));
+        queued.add(() -> drawText(font, text, x, y, color, scale, vpWidth, vpHeight));
+    }
+
+    /**
+     * Appelé depuis {@code UiRenderer.drawRoundedRectHud} — même file que le
+     * texte (voir plus haut), pour un ordre de composition GARANTI correct :
+     * fond DERRIÈRE, texte DEVANT, exactement l'ordre d'appel d'origine, au
+     * lieu du GL brut (TAIL) qui composait TOUJOURS par-dessus le texte déjà
+     * présenté (HEAD), assombrissant le texte sous un fond semi-transparent.
+     */
+    public static void queueRect(float x0, float y0, float x1, float y1, float radius, UiColor color, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        queued.add(() -> drawRect(x0, y0, x1, y1, radius, color, vpWidth, vpHeight));
+    }
+
+    /**
+     * Comme {@link #queueRect} mais dégradé vertical {@code colorBottom}→{@code colorTop}
+     * (voir {@code UiRenderer.drawGradientRect}) — appelé depuis
+     * `UiRenderer.drawGradientRect` (fond de sidebar, pastille d'icône de
+     * carte mod...) : même bug de z-order que les fonds unis (GL brut TAIL
+     * composant par-dessus le texte Blaze3D HEAD, ex. texte de sidebar
+     * invisible sous son propre fond dégradé).
+     */
+    public static void queueGradientRect(float x0, float y0, float x1, float y1, float radius,
+                                          UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        queued.add(() -> drawGradientRect(x0, y0, x1, y1, radius, colorBottom, colorTop, vpWidth, vpHeight));
     }
 
     private static int flushLogCount;
@@ -574,15 +643,13 @@ public final class UiTextBlaze3D {
         // mis en cache après le premier appel et ne le prouvent pas.
         if (flushLogCount < 10) {
             flushLogCount++;
-            LauncherLog.info("[LauncherAgent] DIAG-FLUSH #" + flushLogCount + ": " + queued.size() + " texte(s) en attente");
+            LauncherLog.info("[LauncherAgent] DIAG-FLUSH #" + flushLogCount + ": " + queued.size() + " dessin(s) en attente");
         }
-        // Copie + clear immédiat : si drawText() relance une exception, on ne
+        // Copie + clear immédiat : si un dessin relance une exception, on ne
         // rejoue jamais indéfiniment le même lot en boucle.
-        QueuedText[] batch = queued.toArray(new QueuedText[0]);
+        QueuedDraw[] batch = queued.toArray(new QueuedDraw[0]);
         queued.clear();
-        for (QueuedText q : batch) {
-            drawText(q.font, q.text, q.x, q.y, q.color, q.scale, q.vpWidth, q.vpHeight);
-        }
+        for (QueuedDraw q : batch) q.execute();
     }
 
     private static boolean drawText(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
@@ -810,6 +877,313 @@ public final class UiTextBlaze3D {
             }
             return false;
         }
+    }
+
+    // ── Rectangle arrondi (fond de panneau HUD) — MÊME pipeline GUI_TEXT que
+    // le texte, réutilise TOUT (device/encoder/pass/projection/DynamicTransforms/
+    // buffer de sommets/index partagé) — seule la texture Sampler0 change
+    // (masque de coin, voir ensureCornerMaskTexture) et la géométrie (9 quads
+    // "9-slice" au lieu de 4 sommets par glyphe).
+    private static boolean drawRect(float x0, float y0, float x1, float y1, float radius, UiColor color, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            currentStage = "minecraftClient(rect)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(rect)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(rect)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            currentStage = "ensureCornerMaskTexture";
+            Object[] mask = ensureCornerMaskTexture();
+            Object maskView = mask[1], maskSampler = mask[2];
+            currentStage = "ensureWhiteTexture(rect)";
+            Object[] white = ensureWhiteTexture();
+
+            currentStage = "getDevice(rect)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(rect)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+
+            // Rayon jamais plus grand que la moitié du plus petit côté —
+            // sinon les 4 coins se chevaucheraient (quads dégénérés/inversés).
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+            int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator, comme le texte
+            short light0 = 0, light1 = 0;
+
+            ByteBuffer verts = ByteBuffer.allocateDirect(9 * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            int vertexCount;
+            if (r < 0.5f) {
+                putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
+                vertexCount = 4;
+            } else {
+                // 4 coins — texture du masque, UV variable (retournée par coin).
+                putRectQuad(verts, x0, x0 + r, y0, y0 + r, false, false, rgba, light0, light1); // bas-gauche
+                putRectQuad(verts, x1 - r, x1, y0, y0 + r, true, false, rgba, light0, light1);  // bas-droite
+                putRectQuad(verts, x0, x0 + r, y1 - r, y1, false, true, rgba, light0, light1);  // haut-gauche
+                putRectQuad(verts, x1 - r, x1, y1 - r, y1, true, true, rgba, light0, light1);   // haut-droite
+                // 4 bords + centre — MÊME texture (masque), UV constante loin
+                // du bord (toujours opaque) : pas besoin d'un second binding
+                // Sampler0/pass séparé pour une texture blanche unie.
+                putSolidQuad(verts, x0 + r, x1 - r, y0, y0 + r, rgba, light0, light1);   // bas
+                putSolidQuad(verts, x0 + r, x1 - r, y1 - r, y1, rgba, light0, light1);   // haut
+                putSolidQuad(verts, x0, x0 + r, y0 + r, y1 - r, rgba, light0, light1);   // gauche
+                putSolidQuad(verts, x1 - r, x1, y0 + r, y1 - r, rgba, light0, light1);   // droite
+                putSolidQuad(verts, x0 + r, x1 - r, y0 + r, y1 - r, rgba, light0, light1); // centre
+                vertexCount = 9 * 4;
+            }
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(rect)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            currentStage = "bufferSlice(rect)";
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            currentStage = "writeToBuffer(rect)";
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(rect)";
+            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object colorMod = ctorVector4f.newInstance(color.r, color.g, color.b, color.a);
+            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(rect)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "createRenderPass(rect)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_rect";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                currentStage = "setPipeline(rect)";
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
+                currentStage = "bindDefaultUniforms(rect)";
+                mBindDefaultUniforms.invoke(null, pass);
+                currentStage = "setUniform(Projection)(rect)";
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                currentStage = "setUniform(DynamicTransforms)(rect)";
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                currentStage = "bindTexture(Sampler0)(rect)";
+                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
+                currentStage = "bindTexture(Sampler2)(rect)";
+                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setVertexBuffer(rect)";
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                currentStage = "shapeIndexBuffer(rect)";
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                int indexCount = (vertexCount / 4) * 6;
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                currentStage = "setIndexBuffer(rect)";
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                currentStage = "drawIndexed(rect)";
+                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+            } finally {
+                currentStage = "closePass(rect)";
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D.drawRect a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
+    // ── Rectangle arrondi À DÉGRADÉ (fond de sidebar, pastille d'icône...) —
+    // MÊME structure que drawRect, mais couleur portée par sommet (interpolée
+    // par le GPU à travers chaque quad) au lieu d'un ColorModulator uniforme :
+    // DynamicTransforms.ColorModulator reste neutre (blanc opaque), la
+    // couleur RÉELLE vient de rgba dans putVertexPCTL, voir putRectQuadGradient/
+    // putSolidQuadGradient.
+    private static boolean drawGradientRect(float x0, float y0, float x1, float y1, float radius,
+                                             UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            currentStage = "minecraftClient(gradrect)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(gradrect)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(gradrect)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            currentStage = "ensureCornerMaskTexture(gradrect)";
+            Object[] mask = ensureCornerMaskTexture();
+            Object maskView = mask[1], maskSampler = mask[2];
+            currentStage = "ensureWhiteTexture(gradrect)";
+            Object[] white = ensureWhiteTexture();
+
+            currentStage = "getDevice(gradrect)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(gradrect)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+            short light0 = 0, light1 = 0;
+
+            ByteBuffer verts = ByteBuffer.allocateDirect(9 * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            int vertexCount;
+            if (r < 0.5f) {
+                putSolidQuadGradient(verts, x0, x1, y0, y1, colorBottom, colorTop, y0, y1, light0, light1);
+                vertexCount = 4;
+            } else {
+                putRectQuadGradient(verts, x0, x0 + r, y0, y0 + r, false, false, colorBottom, colorTop, y0, y1, light0, light1);
+                putRectQuadGradient(verts, x1 - r, x1, y0, y0 + r, true, false, colorBottom, colorTop, y0, y1, light0, light1);
+                putRectQuadGradient(verts, x0, x0 + r, y1 - r, y1, false, true, colorBottom, colorTop, y0, y1, light0, light1);
+                putRectQuadGradient(verts, x1 - r, x1, y1 - r, y1, true, true, colorBottom, colorTop, y0, y1, light0, light1);
+                putSolidQuadGradient(verts, x0 + r, x1 - r, y0, y0 + r, colorBottom, colorTop, y0, y1, light0, light1);
+                putSolidQuadGradient(verts, x0 + r, x1 - r, y1 - r, y1, colorBottom, colorTop, y0, y1, light0, light1);
+                putSolidQuadGradient(verts, x0, x0 + r, y0 + r, y1 - r, colorBottom, colorTop, y0, y1, light0, light1);
+                putSolidQuadGradient(verts, x1 - r, x1, y0 + r, y1 - r, colorBottom, colorTop, y0, y1, light0, light1);
+                putSolidQuadGradient(verts, x0 + r, x1 - r, y0 + r, y1 - r, colorBottom, colorTop, y0, y1, light0, light1);
+                vertexCount = 9 * 4;
+            }
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(gradrect)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            currentStage = "bufferSlice(gradrect)";
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            currentStage = "writeToBuffer(gradrect)";
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(gradrect)";
+            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
+            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(gradrect)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "createRenderPass(gradrect)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_gradrect";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                currentStage = "setPipeline(gradrect)";
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
+                currentStage = "bindDefaultUniforms(gradrect)";
+                mBindDefaultUniforms.invoke(null, pass);
+                currentStage = "setUniform(Projection)(gradrect)";
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                currentStage = "setUniform(DynamicTransforms)(gradrect)";
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                currentStage = "bindTexture(Sampler0)(gradrect)";
+                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
+                currentStage = "bindTexture(Sampler2)(gradrect)";
+                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setVertexBuffer(gradrect)";
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                currentStage = "shapeIndexBuffer(gradrect)";
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                int indexCount = (vertexCount / 4) * 6;
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                currentStage = "setIndexBuffer(gradrect)";
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                currentStage = "drawIndexed(gradrect)";
+                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+            } finally {
+                currentStage = "closePass(gradrect)";
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D.drawGradientRect a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Un des 4 coins arrondis : échantillonne {@link #ensureCornerMaskTexture()}
+     * avec l'UV retourné selon le coin (flipU pour les coins DROITE, flipV
+     * pour les coins HAUT — la texture ne représente qu'UN coin haut-gauche,
+     * réutilisé par retournement pour les 3 autres). Dérivation complète
+     * (pourquoi ces retournements précisément) : le "point intérieur" du
+     * masque (alpha=1, coin bas-droite de la texture, voir
+     * ensureCornerMaskTexture) doit toujours correspondre au coin de CE quad
+     * le plus proche du CENTRE du rectangle réel — flipU si ce centre est à
+     * GAUCHE de xLeft/xRight (coins droits), flipV si ce centre est en
+     * DESSOUS de yBottom/yTop (coins hauts, Y-UP : le "haut" du rectangle a
+     * son centre EN DESSOUS de lui).
+     */
+    private static void putRectQuad(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                     boolean flipU, boolean flipV, int rgba, short light0, short light1) {
+        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
+        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
+        // Même ordre/winding que le texte (CCW confirmé visible) :
+        // (xLeft,yTop)→(xLeft,yBottom)→(xRight,yBottom)→(xRight,yTop).
+        putVertexPCTL(buf, xLeft, yTop, rgba, uLeft, vTop, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, rgba, uLeft, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, rgba, uRight, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, rgba, uRight, vTop, light0, light1);
+    }
+
+    /** Bord/centre — UV CONSTANTE loin du bord du masque (toujours opaque, voir ensureCornerMaskTexture), donc un simple remplissage plein. */
+    private static void putSolidQuad(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop, int rgba, short light0, short light1) {
+        float u = 0.95f, v = 0.95f;
+        putVertexPCTL(buf, xLeft, yTop, rgba, u, v, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, rgba, u, v, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, rgba, u, v, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, rgba, u, v, light0, light1);
+    }
+
+    /** Couleur interpolée linéairement entre {@code bottom} (à {@code y0}) et {@code top} (à {@code y1}) pour une position {@code y} donnée — reproduit le dégradé du shader legacy, mais PAR SOMMET (interpolé ensuite par le GPU à travers le triangle). */
+    private static int lerpRgba(UiColor bottom, UiColor top, float y, float y0, float y1) {
+        float t = (y1 - y0) < 1e-6f ? 0f : Math.max(0f, Math.min(1f, (y - y0) / (y1 - y0)));
+        float r = bottom.r + (top.r - bottom.r) * t;
+        float g = bottom.g + (top.g - bottom.g) * t;
+        float b = bottom.b + (top.b - bottom.b) * t;
+        float a = bottom.a + (top.a - bottom.a) * t;
+        int ri = Math.round(r * 255f), gi = Math.round(g * 255f), bi = Math.round(b * 255f), ai = Math.round(a * 255f);
+        return (ai << 24) | (bi << 16) | (gi << 8) | ri;
+    }
+
+    /** Comme {@link #putRectQuad}, mais couleur PAR SOMMET (interpolée entre colorBottom/colorTop selon la position Y de ce sommet dans le rectangle global {@code [rectY0,rectY1]}) au lieu d'un rgba fixe. */
+    private static void putRectQuadGradient(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                             boolean flipU, boolean flipV, UiColor colorBottom, UiColor colorTop,
+                                             float rectY0, float rectY1, short light0, short light1) {
+        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
+        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
+        int rgbaTop = lerpRgba(colorBottom, colorTop, yTop, rectY0, rectY1);
+        int rgbaBottom = lerpRgba(colorBottom, colorTop, yBottom, rectY0, rectY1);
+        putVertexPCTL(buf, xLeft, yTop, rgbaTop, uLeft, vTop, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, rgbaBottom, uLeft, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, rgbaBottom, uRight, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, rgbaTop, uRight, vTop, light0, light1);
+    }
+
+    /** Comme {@link #putSolidQuad}, mais couleur PAR SOMMET (voir {@link #putRectQuadGradient}). */
+    private static void putSolidQuadGradient(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                              UiColor colorBottom, UiColor colorTop, float rectY0, float rectY1,
+                                              short light0, short light1) {
+        float u = 0.95f, v = 0.95f;
+        int rgbaTop = lerpRgba(colorBottom, colorTop, yTop, rectY0, rectY1);
+        int rgbaBottom = lerpRgba(colorBottom, colorTop, yBottom, rectY0, rectY1);
+        putVertexPCTL(buf, xLeft, yTop, rgbaTop, u, v, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, rgbaBottom, u, v, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, rgbaBottom, u, v, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, rgbaTop, u, v, light0, light1);
     }
 
     /** POSITION(float×3) + COLOR(ubyte×4) + UV0(float×2) + UV2/light(short×2) — 28 octets, ordre EXACT vérifié par désassemblage de VertexFormats.POSITION_COLOR_TEXTURE_LIGHT. */

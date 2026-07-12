@@ -83,11 +83,6 @@ public abstract class GlobalUiPresentMixin {
             Object currentScreen = GlobalUiRenderBridge.getCurrentScreen(mc);
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
 
-            // Flush AVANT toute nouvelle traversée (qui repeuplerait la file
-            // pour LA PROCHAINE frame) — dessine les rectangles HUD différés
-            // de la frame précédente, voir UiRenderer#drawRoundedRectHud.
-            renderer.flushHudDeferredQueue();
-
             if (currentScreen == null) {
                 // Overlay HUD permanent — même règle que le HUD vanilla
                 // (hotbar/vie), qui ne s'affiche pas non plus quand un écran

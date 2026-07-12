@@ -707,8 +707,46 @@ public final class UiRenderer {
      *                 de la taille du rect dessiné.
      * @param vpHeight idem, hauteur totale du viewport.
      */
+    // BUG TROUVÉ #1 (glisser un panneau HUD dans l'éditeur — rectangles et
+    // texte désynchronisés visuellement) : essayé de différer juste les
+    // rectangles GL bruts d'une frame (pour rester synchronisés avec le
+    // texte, lui-même différé, voir UiTextBlaze3D) — SANS AUCUN EFFET une
+    // fois testé (preuve que ce n'était PAS un problème de timing, voir BUG
+    // TROUVÉ #2 dans UiTextBlaze3D — axe Y de la projection inversé).
+    //
+    // BUG TROUVÉ #2 (une fois le texte enfin bien positionné, HUD ET menus) :
+    // TOUT rect GL brut (TAIL, APRÈS presentTexture()) compose TOUJOURS
+    // par-dessus TOUT texte Blaze3D (HEAD, déjà présenté) — pas seulement le
+    // HUD : les cartes/lignes de la liste de mods, les onglets des
+    // paramètres, etc. avaient EXACTEMENT le même problème (texte illisible/
+    // invisible sous le fond). Fix définitif, généralisé à drawRoundedRect
+    // LUI-MÊME (pas juste une variante "Hud" séparée) : sur era E, route par
+    // le MÊME pipeline Blaze3D que le texte (voir UiTextBlaze3D#queueRect —
+    // même file d'attente, même ordre d'insertion que l'appelant : un fond
+    // empilé AVANT son texte est composé AVANT lui, garantissant le bon
+    // z-order PARTOUT, pas juste en jeu). Coins arrondis simulés via une
+    // texture de masque (9-slice), le pipeline GUI_TEXT réutilisé n'ayant pas
+    // de shader à distance signée dédié.
+    /**
+     * Dessine un rect avec coins arrondis, en pixels physiques écran (x1,y1)-(x2,y2).
+     * radius=0 → rect plein classique. Sur era E, route par le pipeline
+     * Blaze3D (même z-order garanti que le texte, voir ci-dessus) ; sur les
+     * autres brackets, GL classique immédiat (comportement inchangé, aucun
+     * risque de régression) — fallback silencieux vers un quad plein (pas
+     * d'arrondi) si la compilation shader a échoué sur cette version/GPU.
+     *
+     * @param vpWidth  largeur totale du viewport (framebuffer), PAS la largeur
+     *                 de ce rect précis — nécessaire pour poser une projection
+     *                 orthographique correcte (voir plus bas), indépendamment
+     *                 de la taille du rect dessiné.
+     * @param vpHeight idem, hauteur totale du viewport.
+     */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
+        if (UiTextBlaze3D.isAvailable()) {
+            UiTextBlaze3D.queueRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+            return;
+        }
         if (modern) {
             drawRoundedRectModern(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
             return;
@@ -716,54 +754,11 @@ public final class UiRenderer {
         drawRoundedRectLegacy(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
-    // BUG TROUVÉ (utilisateur : glisser un panneau HUD dans l'éditeur —
-    // rectangles et texte se désynchronisent visuellement, "le texte se
-    // décale symétriquement au module") : sur era E, le texte (voir
-    // UiTextBlaze3D) DOIT être différé d'une frame (contrainte Blaze3D —
-    // dessiner avant presentTexture(), alors que le GL brut DOIT dessiner
-    // après lui, voir GlobalUiPresentMixin) — mais les rectangles bruts
-    // (drawRoundedRect) restaient, eux, SYNCHRONES (dessinés immédiatement,
-    // même frame). Pendant un glisser-déposer continu (position qui change
-    // CHAQUE frame), ce décalage d'une frame entre rects (position actuelle)
-    // et texte (position d'il y a une frame) devient visible.
-    private final java.util.List<Runnable> hudDeferredQueue = new java.util.ArrayList<>();
-
-    /**
-     * Comme {@link #drawRoundedRect}, mais DIFFÉRÉ d'une frame sur era E —
-     * réservé au rendu HUD (panneaux + contenu des modules, voir
-     * HudPanelRenderer/KeystrokesModule) pour rester synchronisé avec le
-     * texte, lui-même différé. Sur les autres brackets (texte SDF synchrone,
-     * {@link UiTextBlaze3D#isAvailable()} faux), dessine immédiatement —
-     * comportement STRICTEMENT inchangé, aucun risque de régression.
-     * JAMAIS utilisé pour les menus/écrans de config (uniquement le HUD en
-     * jeu) : différer TOUT le GL brut de l'UI aurait une portée bien plus
-     * large (survols de boutons, sliders, etc.), non nécessaire ici.
-     */
+    /** @deprecated identique à {@link #drawRoundedRect} depuis que celui-ci route par Blaze3D sur era E — gardé pour ne pas retoucher HudPanelRenderer/KeystrokesModule. */
+    @Deprecated
     public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                     int vpWidth, int vpHeight) {
-        if (!UiTextBlaze3D.isAvailable()) {
-            drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
-            return;
-        }
-        hudDeferredQueue.add(() -> drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight));
-    }
-
-    /**
-     * Dessine tout ce qui a été empilé via {@link #drawRoundedRectHud} lors
-     * de la traversée HUD de la frame PRÉCÉDENTE — appelé UNE FOIS par
-     * frame, au TOUT DÉBUT du dessin HUD (avant toute nouvelle traversée qui
-     * repeuplerait la file), voir GlobalUiPresentMixin. Copie + clear
-     * immédiat avant exécution, même précaution que
-     * {@link UiTextBlaze3D#flushQueued()} (si un rect lève une exception, on
-     * ne rejoue jamais indéfiniment le même lot).
-     */
-    public void flushHudDeferredQueue() {
-        if (hudDeferredQueue.isEmpty()) return;
-        Runnable[] batch = hudDeferredQueue.toArray(new Runnable[0]);
-        hudDeferredQueue.clear();
-        for (Runnable r : batch) {
-            try { r.run(); } catch (Throwable ignored) {}
-        }
+        drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
     /**
@@ -781,6 +776,20 @@ public final class UiRenderer {
      */
     public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
                             UiColor color, int vpWidth, int vpHeight) {
+        // BUG TROUVÉ (carte de mod entièrement noire) : cette ombre est
+        // dessinée AVANT le fond de la carte dans le code appelant (pour
+        // rester dessous), mais reste en GL brut (TAIL, APRÈS
+        // presentTexture()) alors que le fond (drawRoundedRect) passe
+        // maintenant par Blaze3D (HEAD, AVANT presentTexture()) — l'ombre
+        // composait donc TOUJOURS par-dessus le fond, quel que soit l'ordre
+        // d'appel dans le code (c'est le moment HEAD/TAIL qui détermine
+        // l'ordre de composition final, pas l'ordre d'appel). Porter le flou
+        // vers Blaze3D demanderait un vrai flou gaussien, impossible avec le
+        // pipeline GUI_TEXT réutilisé (pas de shader dédié, juste un masque
+        // de coin pré-calculé) — plutôt qu'une ombre mal composée par-dessus
+        // le contenu, on saute l'ombre entièrement sur era E (perte
+        // cosmétique mineure, contenu jamais assombri par erreur).
+        if (UiTextBlaze3D.isAvailable()) return;
         drawFx(x1 - spread, y1 - spread, x2 + spread, y2 + spread, radius + spread, blur, 0f,
             color, color, false, vpWidth, vpHeight);
     }
@@ -791,9 +800,20 @@ public final class UiRenderer {
         drawFx(x1, y1, x2, y2, radius, 0f, borderWidth, color, color, false, vpWidth, vpHeight);
     }
 
-    /** Dégradé vertical {@code colorBottom} (bord y1) → {@code colorTop} (bord y2), coins arrondis optionnels (radius=0 = rect plein). */
+    /**
+     * Dégradé vertical {@code colorBottom} (bord y1) → {@code colorTop} (bord y2), coins arrondis optionnels (radius=0 = rect plein).
+     * Sur era E, route par Blaze3D (même z-order garanti que le texte, voir
+     * {@link #drawRoundedRect}) — BUG TROUVÉ (fond de sidebar, en GL brut,
+     * composait par-dessus le texte des items de la sidebar, Blaze3D : texte
+     * invisible) : couleur portée PAR SOMMET (interpolée par le GPU),
+     * ColorModulator neutre, voir UiTextBlaze3D#drawGradientRect.
+     */
     public void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
                                   UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
+        if (UiTextBlaze3D.isAvailable()) {
+            UiTextBlaze3D.queueGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
+            return;
+        }
         drawFx(x1, y1, x2, y2, radius, 0f, 0f, colorBottom, colorTop, true, vpWidth, vpHeight);
     }
 
