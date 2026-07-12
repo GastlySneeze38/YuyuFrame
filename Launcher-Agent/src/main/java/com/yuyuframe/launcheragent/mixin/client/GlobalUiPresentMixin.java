@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTextBlaze3D;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -19,10 +20,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * à la TAIL de GameRenderer.render() se fait écraser par
  * Framebuffer.blitToScreen(), appelé juste après par MinecraftClient.render
  * (confirmé par désassemblage bytecode). Ce Mixin cible directement
- * Framebuffer.blitToScreen() en TAIL — donc APRÈS que Blaze3D ait fini de
- * composer sa frame sur le framebuffer par défaut, mais AVANT
- * Window.swapBuffers() (plus loin dans MinecraftClient.render) — le seul
- * moment où un dessin GL brut survit jusqu'à l'affichage.
+ * Framebuffer.blitToScreen().
+ *
+ * TENTATIVE ABANDONNÉE (déplacer TOUT le dessin, y compris le GL brut, en
+ * HEAD) : a CASSÉ tout le reste de l'affichage (rects/toggles/etc ne
+ * s'affichaient plus DU TOUT), sans même corriger le problème de render pass
+ * du texte natif. Conclusion : `presentTexture()` fait probablement le VRAI
+ * bind GL vers le framebuffer par défaut de la fenêtre (FBO 0) — le dessin
+ * GL brut DOIT donc rester APRÈS lui (TAIL), sinon il atterrit sur un FBO
+ * différent, jamais affiché.
+ *
+ * MAIS le texte natif Blaze3D (UiTextBlaze3D) a l'exigence de timing
+ * OPPOSÉE : il dessine dans {@code mc.getFramebuffer()}'s texture
+ * intermédiaire — celle-là même que `presentTexture()` copie vers FBO 0.
+ * Dessiné à la TAIL (comme le GL brut), il arrive TROP TARD : la copie vers
+ * FBO 0 a déjà eu lieu, le texte écrit reste invisible jusqu'à être écrasé
+ * par le rendu de la frame suivante, jamais présenté. D'où le SECOND hook
+ * ci-dessous, en HEAD (avant `presentTexture()`), qui ne fait QUE flusher la
+ * file d'attente d'UiTextBlaze3D (rendu différé d'une frame — voir
+ * UiTextBlaze3D#flushQueued) — jamais de dessin GL brut à ce point, pour ne
+ * pas reproduire la régression ci-dessus.
  *
  * Garde : blitToScreen() n'est vérifiée QUE sur le Framebuffer PRINCIPAL
  * (MinecraftClient.getFramebuffer()) — aucun autre appelant connu à ce jour,
@@ -39,6 +56,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "net.minecraft.client.gl.Framebuffer")
 public abstract class GlobalUiPresentMixin {
 
+    @Inject(method = "blitToScreen()V", at = @At("HEAD"))
+    private void la$onBeforeBlit(CallbackInfo ci) {
+        try {
+            Object mc = GlobalUiRenderBridge.getMcInstance();
+            if (mc == null) return;
+            Object mainFramebuffer = GlobalUiRenderBridge.getMainFramebuffer(mc);
+            if (mainFramebuffer != this) return; // même garde que la TAIL — voir javadoc de classe.
+            UiTextBlaze3D.flushQueued();
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin (flush texte HEAD): " + t);
+        }
+    }
+
     @Inject(method = "blitToScreen()V", at = @At("TAIL"))
     private void la$onAfterBlit(CallbackInfo ci) {
         try {
@@ -52,6 +82,11 @@ public abstract class GlobalUiPresentMixin {
 
             Object currentScreen = GlobalUiRenderBridge.getCurrentScreen(mc);
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+
+            // Flush AVANT toute nouvelle traversée (qui repeuplerait la file
+            // pour LA PROCHAINE frame) — dessine les rectangles HUD différés
+            // de la frame précédente, voir UiRenderer#drawRoundedRectHud.
+            renderer.flushHudDeferredQueue();
 
             if (currentScreen == null) {
                 // Overlay HUD permanent — même règle que le HUD vanilla

@@ -716,6 +716,56 @@ public final class UiRenderer {
         drawRoundedRectLegacy(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
+    // BUG TROUVÉ (utilisateur : glisser un panneau HUD dans l'éditeur —
+    // rectangles et texte se désynchronisent visuellement, "le texte se
+    // décale symétriquement au module") : sur era E, le texte (voir
+    // UiTextBlaze3D) DOIT être différé d'une frame (contrainte Blaze3D —
+    // dessiner avant presentTexture(), alors que le GL brut DOIT dessiner
+    // après lui, voir GlobalUiPresentMixin) — mais les rectangles bruts
+    // (drawRoundedRect) restaient, eux, SYNCHRONES (dessinés immédiatement,
+    // même frame). Pendant un glisser-déposer continu (position qui change
+    // CHAQUE frame), ce décalage d'une frame entre rects (position actuelle)
+    // et texte (position d'il y a une frame) devient visible.
+    private final java.util.List<Runnable> hudDeferredQueue = new java.util.ArrayList<>();
+
+    /**
+     * Comme {@link #drawRoundedRect}, mais DIFFÉRÉ d'une frame sur era E —
+     * réservé au rendu HUD (panneaux + contenu des modules, voir
+     * HudPanelRenderer/KeystrokesModule) pour rester synchronisé avec le
+     * texte, lui-même différé. Sur les autres brackets (texte SDF synchrone,
+     * {@link UiTextBlaze3D#isAvailable()} faux), dessine immédiatement —
+     * comportement STRICTEMENT inchangé, aucun risque de régression.
+     * JAMAIS utilisé pour les menus/écrans de config (uniquement le HUD en
+     * jeu) : différer TOUT le GL brut de l'UI aurait une portée bien plus
+     * large (survols de boutons, sliders, etc.), non nécessaire ici.
+     */
+    public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
+                                    int vpWidth, int vpHeight) {
+        if (!UiTextBlaze3D.isAvailable()) {
+            drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+            return;
+        }
+        hudDeferredQueue.add(() -> drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight));
+    }
+
+    /**
+     * Dessine tout ce qui a été empilé via {@link #drawRoundedRectHud} lors
+     * de la traversée HUD de la frame PRÉCÉDENTE — appelé UNE FOIS par
+     * frame, au TOUT DÉBUT du dessin HUD (avant toute nouvelle traversée qui
+     * repeuplerait la file), voir GlobalUiPresentMixin. Copie + clear
+     * immédiat avant exécution, même précaution que
+     * {@link UiTextBlaze3D#flushQueued()} (si un rect lève une exception, on
+     * ne rejoue jamais indéfiniment le même lot).
+     */
+    public void flushHudDeferredQueue() {
+        if (hudDeferredQueue.isEmpty()) return;
+        Runnable[] batch = hudDeferredQueue.toArray(new Runnable[0]);
+        hudDeferredQueue.clear();
+        for (Runnable r : batch) {
+            try { r.run(); } catch (Throwable ignored) {}
+        }
+    }
+
     /**
      * Ombre portée façon CSS box-shadow (flou + spread), même distance signée
      * que {@link #drawRoundedRect} mais valide sur TOUS les bords (pas juste
@@ -1400,14 +1450,24 @@ public final class UiRenderer {
 
     private void drawTextModern(UiFont font, String text, float x, float y, UiColor color, float scale,
                                  int vpWidth, int vpHeight) {
-        // Era E (Blaze3D 1.21.6+) : essaie D'ABORD le vrai pipeline du moteur
-        // (RenderPipelines.GUI_TEXT via GpuDevice/RenderPass, voir
-        // UiTextBlaze3D) — tous nos contournements précédents en GL brut
-        // (glTexImage2D/glBindTexture/glActiveTexture, même routés via
-        // GlStateManager) laissaient la corruption de texte intacte. Repli
-        // silencieux sur le pipeline SDF ci-dessous si Blaze3D est absent
-        // (brackets antérieurs) OU si quoi que ce soit échoue à l'exécution.
-        if (UiTextBlaze3D.drawText(font, text, x, y, color, scale, vpWidth, vpHeight)) return;
+        // Era E (Blaze3D 1.21.6+) : passe EXCLUSIVEMENT par le vrai pipeline du
+        // moteur (RenderPipelines.GUI_TEXT via GpuDevice/RenderPass, voir
+        // UiTextBlaze3D) — jamais de repli sur le pipeline SDF ci-dessous sur
+        // ces brackets, même si UiTextBlaze3D échoue : le SDF y est corrompu
+        // de façon non-déterministe (confirmé sur toute la session, voir
+        // historique) — un texte absent (échec silencieux, loggé côté
+        // UiTextBlaze3D) vaut mieux qu'un texte parfois illisible. Sur les
+        // brackets antérieurs (1.8.9→1.21.4), UiTextBlaze3D.isAvailable() est
+        // {@code false} (classes Blaze3D absentes) — le pipeline SDF
+        // ci-dessous reste alors le SEUL chemin, INCHANGÉ, exactement comme
+        // avant cette era E.
+        if (UiTextBlaze3D.isAvailable()) {
+            // queueDraw (pas drawText direct) : voir UiTextBlaze3D pour le
+            // pourquoi (rendu différé d'une frame, nécessaire pour que le
+            // texte atterrisse dans la texture qui sera présentée).
+            UiTextBlaze3D.queueDraw(font, text, x, y, color, scale, vpWidth, vpHeight);
+            return;
+        }
 
         int texId = ensureFontTexture(font);
         if (texId < 0) return;
@@ -1470,54 +1530,6 @@ public final class UiRenderer {
             drawTrianglesModern(verts);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawTextModern: " + t);
-        } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
-            try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
-        }
-    }
-
-    /**
-     * DIAGNOSTIC TEMPORAIRE (era E, bug texte REGULAR corrompu) : dessine
-     * l'atlas COMPLET d'une police (tout le quad = UV 0..1, pas un seul
-     * glyphe) — en réutilisant EXACTEMENT le même bind/shader/draw que
-     * {@link #drawTextModern}, donc sans introduire de nouvel appel GL risqué
-     * (contrairement à glGetTexImage, qui a provoqué un crash natif ici,
-     * voir createFontTextureRaw). Permet de vérifier VISUELLEMENT, via le
-     * VRAI pipeline de rendu, si la texture GPU réellement échantillonnée à
-     * l'écran est déjà corrompue (donc bug côté upload/état GL) ou propre
-     * (donc bug forcément dans le découpage par glyphe — UV individuelles —
-     * ou le batching de nombreux quads dans drawTrianglesModern).
-     * À retirer une fois la cause de la corruption identifiée.
-     */
-    public void drawFontAtlasDebug(UiFont font, float x, float y, float size, int vpWidth, int vpHeight) {
-        int texId = ensureFontTexture(font);
-        if (texId < 0) return;
-        ensureTextShaderInitModern();
-        if (textInitFailedModern) return;
-        try {
-            glDisable(0x0B71); glDisable(0x0B44); glDisable(0x0C11);
-            glEnable(0x0BE2);
-            glBlendFunc(0x0302, 0x0303);
-            glActiveTexture(0x84C0);
-            glBindTexture(0x0DE1, texId);
-            glUseProgram(textProgramModern);
-            glUniform1i(uTexModern, 0);
-            glUniform4f(uColorTextModern, 1f, 1f, 1f, 1f);
-            uploadProjectionModern(uProjectionTextModern, vpWidth, vpHeight);
-
-            float aspect = (float) font.atlasImage().getHeight() / (float) font.atlasImage().getWidth();
-            float h2 = size * aspect;
-            FloatBuffer verts = floatBuffer(6 * 4);
-            putVertex(verts, x, y + h2, 0f, 0f);
-            putVertex(verts, x, y, 0f, 1f);
-            putVertex(verts, x + size, y, 1f, 1f);
-            putVertex(verts, x, y + h2, 0f, 0f);
-            putVertex(verts, x + size, y, 1f, 1f);
-            putVertex(verts, x + size, y + h2, 1f, 0f);
-            verts.flip();
-            drawTrianglesModern(verts);
-        } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] drawFontAtlasDebug: " + t);
         } finally {
             try { glUseProgram(0); } catch (Throwable ignored) {}
             try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}

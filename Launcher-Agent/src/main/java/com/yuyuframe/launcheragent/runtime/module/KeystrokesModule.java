@@ -128,6 +128,17 @@ public final class KeystrokesModule extends SingleHudModule {
                 float wasdX0 = x + (availableW - wasdRowW) / 2f;
                 float cpsX0 = x + (availableW - cpsRowW) / 2f;
 
+                // FIX v402 ANNULÉ (mauvais diagnostic) : à l'époque, le texte
+                // era E souffrait d'un bug d'axe Y (voir UiTextBlaze3D,
+                // ensureProjectionBuffer) qui le faisait apparaître en miroir
+                // par rapport aux rectangles (lesquels utilisent
+                // drawRoundedRect, Y-UP, JAMAIS buggé) — l'ordre visuel
+                // "compteurs en haut, W en bas" observé alors venait du TEXTE
+                // mal positionné, pas des rectangles. Cet ordre-ci (row1 /
+                // avance-W près de y+h = HAUT en Y-up, empilement DESCENDANT
+                // jusqu'aux boîtes CPS près de y = BAS) était déjà correct
+                // depuis le début. Restauré maintenant que le vrai bug (axe Y
+                // du texte) est corrigé.
                 float row1Y = y + h - box;
                 float row2Y = row1Y - gap - box;
 
@@ -276,7 +287,9 @@ public final class KeystrokesModule extends SingleHudModule {
         }
 
         private void drawKey(UiRenderer renderer, float x, float y, float w, float h, String label, boolean pressed, float scale, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, 3f, pressed ? PRESSED_BG : IDLE_BG, vpWidth, vpHeight);
+            // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
+            // avec le texte différé d'une frame sur era E — voir sa javadoc.
+            renderer.drawRoundedRectHud(x, y, x + w, y + h, 3f, pressed ? PRESSED_BG : IDLE_BG, vpWidth, vpHeight);
             float textScale = 0.32f * scale;
             float tw = renderer.textWidth(label, textScale);
             UiColor textColor = pressed ? new UiColor(10, 10, 10, 255) : UiTheme.TEXT_PRIMARY;
@@ -285,7 +298,7 @@ public final class KeystrokesModule extends SingleHudModule {
 
         /** Libellé (LMB/RMB) + compteur SUR 2 LIGNES SÉPARÉES — évite tout risque de débordement du texte hors de sa propre boîte. */
         private void drawCpsBox(UiRenderer renderer, float x, float y, float w, float h, String label, int cps, float scale, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, 3f, IDLE_BG, vpWidth, vpHeight);
+            renderer.drawRoundedRectHud(x, y, x + w, y + h, 3f, IDLE_BG, vpWidth, vpHeight);
 
             float labelScale = 0.28f * scale;
             float lw = renderer.textWidth(label, labelScale);

@@ -153,11 +153,6 @@ public class UiMainMenuScreen extends UiScreenBase {
             // remonté comme un artefact déroutant plutôt qu'un effet de
             // profondeur voulu.)
 
-            // DIAGNOSTIC TEMPORAIRE (era E, bug texte REGULAR corrompu) —
-            // affiche l'atlas complet dans le coin haut-gauche du contenu.
-            // À retirer une fois la cause identifiée, voir UiRenderer.drawFontAtlasDebug.
-            renderer.drawFontAtlasDebug(UiFont.REGULAR, SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(360f), 320f, screenWidth, screenHeight);
-
             drawRevealVeil(renderer);
         } catch (Throwable ignored) {}
     }
