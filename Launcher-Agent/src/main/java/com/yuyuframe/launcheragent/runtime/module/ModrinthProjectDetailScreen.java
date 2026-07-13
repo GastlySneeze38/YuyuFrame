@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
 import com.yuyuframe.launcheragent.runtime.content.ModrinthJson;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -52,18 +53,26 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
     private static final float MARGIN = 28f;
     private static final float BACK_W = 110f, BACK_H = 34f;
     private static final float INSTALL_BTN_W = 170f, INSTALL_BTN_H = 40f;
-    // Titre/auteur/téléchargements/bouton Installer/statut, réservé au-dessus
-    // du scroll — même esprit que ModrinthContentScreen.HEADER_H.
-    private static final float HEADER_H = 168f;
+    // Titre/auteur/téléchargements, réservé au-dessus du scroll — même esprit
+    // que ModrinthContentScreen.HEADER_H. Chaque *_TOP_GAP est une distance
+    // depuis le HAUT de l'écran (convention Y-UP : y = screenHeight - gap) —
+    // BUG CORRIGÉ (utilisateur : capture d'écran, titre et texte de statut
+    // visuellement superposés) : ces éléments étaient auparavant positionnés
+    // par des formules indépendantes qui retombaient toutes dans la même
+    // bande de ~20px au lieu d'être empilés du haut vers le bas. Le bouton
+    // Installer n'est PLUS dans cette bande (voir InstallButton flottant
+    // ci-dessous) — HEADER_H réduit d'autant, plus de hauteur rendue au
+    // scroll de la description.
+    private static final float TITLE_TOP_GAP = 42f;
+    private static final float META_TOP_GAP = 76f;
+    private static final float HEADER_H = 110f;
     private static final float SCROLLBAR_CLEARANCE = 24f;
-    private static final float LINE_H = 26f;
 
     // Galerie : un visualiseur "carousel" (une image à la fois, navigation
     // précédent/suivant) plutôt qu'une grille de miniatures affichées d'un
     // coup — demande explicite de l'utilisateur ("un truc ou on peut naviguer
     // entre les images facilement"), voir GalleryCarousel.
     private static final float CAROUSEL_H = 300f;
-    private static final float CAROUSEL_ARROW_W = 44f;
 
     // Images inline de la description : une SEULE image (pas de voisine sur
     // la même "ligne") avec une largeur déclarée absente ou > 140px = bannière
@@ -79,6 +88,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
     private boolean wasInstalling;
 
     private UiScrollContainer content;
+    private InstallButton installButton;
     private boolean layoutBuilt;
 
     // Chargement du détail (body + galerie) — même motif "pendingXxx consommé
@@ -130,6 +140,12 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
     public void uiPollInput(UiInputPoller input) {
         super.uiPollInput(input);
         if (content != null) content.pollInput(input);
+        // installButton n'est PLUS dans `widgets` (voir buildLayout/uiDraw,
+        // dessiné à la main APRÈS le scroll pour flotter par-dessus) — son
+        // clic doit donc être détecté ici manuellement, même motif que
+        // ResultCard.pollContinuous/GalleryCarousel.pollContinuous déjà
+        // utilisé dans ce fichier pour des widgets à zone de clic autonome.
+        if (installButton != null) installButton.pollContinuous(input);
     }
 
     @Override
@@ -155,19 +171,39 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
             float titleMaxW = screenWidth - MARGIN * 2 - BACK_W - 16f;
             renderer.drawText(UiFont.BOLD, ModrinthContentScreen.truncate(renderer, hit.title, 0.72f, titleMaxW),
-                MARGIN, screenHeight - 52f, UiTheme.TEXT_PRIMARY, 0.72f, screenWidth, screenHeight);
+                MARGIN, screenHeight - TITLE_TOP_GAP, UiTheme.TEXT_PRIMARY, 0.72f, screenWidth, screenHeight);
 
             String meta = (hit.author != null && !hit.author.isEmpty() ? hit.author + "  ·  " : "")
                 + ModrinthContentScreen.formatDownloads(hit.downloads) + " téléchargements";
-            renderer.drawText(meta, MARGIN, screenHeight - 86f, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
+            renderer.drawText(meta, MARGIN, screenHeight - META_TOP_GAP, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
 
-            String status = detailReady ? parent.statusTextSnapshot() : "Chargement...";
-            if (status != null && !status.isEmpty()) {
-                renderer.drawText(status, MARGIN + INSTALL_BTN_W + 16f, screenHeight - MARGIN - INSTALL_BTN_H / 2f - 5f,
-                    UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+            // content D'ABORD, installButton APRÈS (voir plus bas) : l'ordre
+            // de dessin fait l'ordre Z sur ce moteur (Blaze3D : dernier
+            // empilé = dessiné par-dessus, voir tout l'historique de bugs de
+            // z-order documenté dans ce projet) — le bouton doit rester
+            // visible AU-DESSUS du texte de description qui défile en
+            // dessous de lui (demande explicite de l'utilisateur : "fixed en
+            // bas à droite pour que même avec le scroll on puisse
+            // l'installer"), donc il doit être dessiné EN DERNIER.
+            if (content != null) content.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+
+            // Statut affiché UNIQUEMENT pendant une install déclenchée DEPUIS
+            // cette page — parent.statusTextSnapshot() est un champ PARTAGÉ
+            // avec les messages de comptage de résultats de la liste
+            // (ModrinthContentScreen.statusText, ex. "34 résultat(s)") :
+            // l'afficher sans condition ici faisait apparaître un vieux
+            // message de recherche sans rapport, superposé au titre (BUG
+            // RAPPORTÉ, capture d'écran utilisateur).
+            if (nowInstalling) {
+                String status = parent.statusTextSnapshot();
+                if (status != null && !status.isEmpty()) {
+                    float sw = renderer.textWidth(status, 0.4f);
+                    renderer.drawText(status, installButtonX() - sw - 14f, installButtonY() + INSTALL_BTN_H / 2f - 5f,
+                        UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+                }
             }
 
-            if (content != null) content.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            if (installButton != null) installButton.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             drawRevealVeil(renderer);
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthProjectDetailScreen] uiDraw: " + t);
@@ -178,11 +214,28 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         return parent.isInstalling(hit.projectId);
     }
 
+    // Bouton Installer FLOTTANT, fixe en bas à droite de l'ÉCRAN (pas du
+    // contenu défilant) — demande explicite de l'utilisateur : rester
+    // accessible sans avoir à remonter tout en haut, quelle que soit la
+    // position du scroll. Décalé de SCROLLBAR_CLEARANCE + une marge propre
+    // pour ne jamais chevaucher la scrollbar de `content`, qui vit dans la
+    // même bande verticale à l'extrême droite du conteneur.
+    private float installButtonX() {
+        return screenWidth - MARGIN - SCROLLBAR_CLEARANCE - INSTALL_BTN_W - 8f;
+    }
+
+    private float installButtonY() {
+        return MARGIN;
+    }
+
     private void buildLayout() {
         widgets.clear();
         widgets.add(new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
             "Retour", () -> closeTo(parent)));
-        widgets.add(new InstallButton(MARGIN, screenHeight - MARGIN - INSTALL_BTN_H, INSTALL_BTN_W, INSTALL_BTN_H));
+        // PAS ajouté à `widgets` (contrairement à avant) — voir sa javadoc et
+        // uiDraw/uiPollInput : dessiné/cliqué à la main pour flotter au-dessus
+        // du contenu défilant plutôt que suivre le dispatch générique.
+        installButton = new InstallButton(installButtonX(), installButtonY(), INSTALL_BTN_W, INSTALL_BTN_H);
 
         content = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
         if (detailReady) buildContent();
@@ -218,22 +271,31 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
                 y -= 10f;
                 for (String line : wrapText(renderer, hb.text, scale, innerW, UiFont.BOLD)) {
                     content.add(new UiLabel(MARGIN, y, line, UiTheme.TEXT_PRIMARY, scale, UiFont.BOLD));
-                    y -= scale >= 0.54f ? 36f : 32f;
+                    y -= lineHeight(UiFont.BOLD, scale);
                 }
                 y -= 6f;
             } else if (block instanceof DividerBlock) {
-                y -= 8f;
+                // BUG CORRIGÉ (utilisateur : capture d'écran, une liste
+                // touchait le séparateur qui la suit) : marges avant/après
+                // augmentées (8→16 / 20→26) ET ListItemBlock (juste
+                // au-dessous) a maintenant sa propre marge de fin — avant, un
+                // bloc liste suivi d'un séparateur n'avait QUE la marge du
+                // séparateur pour les séparer, aucune marge de fin propre à
+                // la liste (contrairement à ParagraphBlock, qui en avait déjà
+                // une, voir plus bas).
+                y -= 16f;
                 content.add(new DividerWidget(MARGIN, y, innerW));
-                y -= 20f;
+                y -= 26f;
             } else if (block instanceof ListItemBlock) {
                 ListItemBlock lb = (ListItemBlock) block;
                 float indent = 20f;
                 boolean first = true;
                 for (String line : wrapText(renderer, lb.text, 0.42f, innerW - indent)) {
                     content.add(new UiLabel(MARGIN + indent, y, (first ? lb.bullet + " " : "  ") + line, UiTheme.TEXT_SECONDARY, 0.42f));
-                    y -= LINE_H;
+                    y -= lineHeight(UiFont.REGULAR, 0.42f);
                     first = false;
                 }
+                y -= 6f;
             } else if (block instanceof ImageRowBlock) {
                 ImageRowBlock ib = (ImageRowBlock) block;
                 boolean banner = ib.images.size() == 1 && (ib.images.get(0).declaredW == null || ib.images.get(0).declaredW > 140);
@@ -249,7 +311,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
                 ParagraphBlock pb = (ParagraphBlock) block;
                 for (String line : wrapText(renderer, pb.text, 0.42f, innerW)) {
                     content.add(new UiLabel(MARGIN, y, line, UiTheme.TEXT_SECONDARY, 0.42f));
-                    y -= LINE_H;
+                    y -= lineHeight(UiFont.REGULAR, 0.42f);
                 }
                 y -= 8f;
             }
@@ -305,11 +367,16 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         ImageRowBlock(List<ImgRef> images) { this.images = images; }
     }
 
-    /** Une image référencée en ligne — {@code declaredW} = attribut {@code width="..."} HTML si présent (indice de mise en page avant même que l'image soit chargée), {@code null} pour une image markdown {@code ![]()} (jamais d'attribut de taille). */
+    /** Une image référencée en ligne — {@code declaredW} = attribut {@code width="..."} HTML si présent (indice de mise en page avant même que l'image soit chargée), {@code null} pour une image markdown {@code ![]()} (jamais d'attribut de taille). {@code cacheKey} précalculé UNE FOIS ici (pas reconcaténé à chaque frame dans {@code draw()}, voir InlineIconRow — évite une allocation String + un recalcul de hashCode inutiles 60×/s par badge). */
     private static final class ImgRef {
         final String url;
         final Integer declaredW;
-        ImgRef(String url, Integer declaredW) { this.url = url; this.declaredW = declaredW; }
+        final String cacheKey;
+        ImgRef(String url, Integer declaredW) {
+            this.url = url;
+            this.declaredW = declaredW;
+            this.cacheKey = "badge:" + url;
+        }
     }
 
     private static final class LineImages {
@@ -446,27 +513,70 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'").replace("&nbsp;", " ");
     }
 
+    /**
+     * BUG CORRIGÉ (retour utilisateur : capture d'écran, des lignes
+     * consécutives d'un MÊME paragraphe/item de liste se chevauchaient) :
+     * l'espacement entre lignes utilisait avant une constante à plat
+     * (26px) inventée à la main, sans lien avec la taille RÉELLE des
+     * glyphes rendus à cette échelle — {@code UiFont.lineHeight(scale)}
+     * (ascendant+descendant RÉELS de la police, voir sa javadoc) est la
+     * source de vérité déjà utilisée ailleurs dans ce moteur pour ce genre
+     * de calcul ; un magic number à plat pouvait diverger de cette valeur
+     * réelle selon la police système chargée par AWT. +25% de plomb
+     * (interligne) ajouté par-dessus la valeur brute ascendant+descendant
+     * pour un espacement confortablement lisible (pratique typographique
+     * standard), pas juste la boîte de collision minimale du glyphe.
+     */
+    private static float lineHeight(UiFont font, float scale) {
+        return font.lineHeight(scale) * 1.25f;
+    }
+
     /** Découpe {@code text} en lignes tenant dans {@code maxWidth} — retours à la ligne explicites du texte source respectés (paragraphes), remplissage glouton mot par mot à l'intérieur de chacun. */
     private static List<String> wrapText(UiRenderer renderer, String text, float scale, float maxWidth) {
         return wrapText(renderer, text, scale, maxWidth, UiFont.REGULAR);
     }
 
+    /**
+     * BUG DE PERFORMANCE CORRIGÉ (retour utilisateur : "beaucoup de latence
+     * dans l'interface") : la version précédente recalculait
+     * {@code renderer.textWidth(candidate, scale)} sur la ligne ENTIÈRE en
+     * cours de remplissage à CHAQUE mot ajouté (re-mesure tous les caractères
+     * déjà comptés) — coût proche du carré du nombre de mots par ligne, tout
+     * ça de façon SYNCHRONE sur le thread de rendu dès l'ouverture d'une page
+     * (voir {@code buildContent}), perceptible comme un à-coup pour une
+     * longue description. {@code UiFont.textWidth} n'a AUCUN kerning (simple
+     * somme d'avances par caractère, voir sa javadoc/implémentation) : la
+     * largeur d'un mot ajouté à une ligne peut donc être accumulée
+     * INCRÉMENTALEMENT (largeur du mot mesurée UNE SEULE fois + largeur d'une
+     * espace) sans perte de précision — chaque mot n'est plus mesuré qu'une
+     * seule fois au total, au lieu d'une fois par candidat de ligne.
+     */
     private static List<String> wrapText(UiRenderer renderer, String text, float scale, float maxWidth, UiFont font) {
         List<String> lines = new ArrayList<>();
+        float spaceWidth = renderer.textWidth(font, " ", scale);
         for (String paragraph : text.split("\n", -1)) {
             if (paragraph.isEmpty()) {
                 lines.add("");
                 continue;
             }
             StringBuilder current = new StringBuilder();
+            float currentWidth = 0f;
             for (String word : paragraph.split(" ")) {
                 if (word.isEmpty()) continue;
-                String candidate = current.length() == 0 ? word : current + " " + word;
-                if (current.length() > 0 && renderer.textWidth(font, candidate, scale) > maxWidth) {
+                float wordWidth = renderer.textWidth(font, word, scale);
+                float candidateWidth = current.length() == 0 ? wordWidth : currentWidth + spaceWidth + wordWidth;
+                if (current.length() > 0 && candidateWidth > maxWidth) {
                     lines.add(current.toString());
-                    current = new StringBuilder(word);
+                    current.setLength(0);
+                    current.append(word);
+                    currentWidth = wordWidth;
                 } else {
-                    current = new StringBuilder(candidate);
+                    if (current.length() > 0) {
+                        current.append(' ');
+                        currentWidth += spaceWidth;
+                    }
+                    current.append(word);
+                    currentWidth += wordWidth;
                 }
             }
             if (current.length() > 0) lines.add(current.toString());
@@ -488,10 +598,12 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
     /** Bannière pleine largeur (capture d'écran...) — ratio d'aspect TOUJOURS préservé (jamais de crop/étirement), jamais agrandie au-delà de sa taille source (évite le flou d'une petite image forcée en grand). */
     private static final class InlineBannerImage extends UiWidget {
         private final String url;
+        private final String cacheKey; // précalculé une fois — voir ImgRef.cacheKey pour le même motif
 
         InlineBannerImage(float x, float y, float w, float h, String url) {
             super(x, y, w, h);
             this.url = url;
+            this.cacheKey = "banner:" + url;
         }
 
         @Override
@@ -503,7 +615,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             }
             float scale = Math.min(Math.min(w / img.getWidth(), h / img.getHeight()), 1f);
             float dw = img.getWidth() * scale, dh = img.getHeight() * scale;
-            renderer.drawIcon("banner:" + url, img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh, vpWidth, vpHeight);
+            renderer.drawIcon(cacheKey, img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh, vpWidth, vpHeight);
         }
     }
 
@@ -530,7 +642,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
                 }
                 if (cx + iw > x + w) break; // pas de retour à la ligne — troncature défensive, rare en pratique
                 if (img != null) {
-                    renderer.drawIcon("badge:" + ref.url, img, cx, y + 4f, iw, targetH, vpWidth, vpHeight);
+                    renderer.drawIcon(ref.cacheKey, img, cx, y + 4f, iw, targetH, vpWidth, vpHeight);
                 } else {
                     renderer.drawRoundedRect(cx, y + 4f, cx + iw, y + 4f + targetH, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT.multiplyAlpha(clipFade), vpWidth, vpHeight);
                 }
@@ -551,21 +663,41 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
      * pourraient donc pas distinguer flèche gauche/droite dans un seul widget.
      */
     private static final class GalleryCarousel extends UiWidget {
+        // Boutons flèche CIRCULAIRES flottants au-dessus de l'image (au lieu
+        // des bandes translucides pleine hauteur d'origine, jugées datées) —
+        // demande explicite de l'utilisateur ("un rendu beaucoup plus
+        // moderne pour la galerie"). radius = ARROW_D/2 sur une boîte carrée
+        // = cercle parfait (voir UiRenderer.drawRoundedRect, SDF de boîte
+        // arrondie standard, pas de gestion spéciale de cercle nécessaire).
+        private static final float ARROW_D = 40f;
+        private static final float ARROW_MARGIN = 14f;
+        private static final float DOT_D = 7f;
+        private static final float DOT_GAP = 10f;
+        private static final int MAX_DOTS = 10; // au-delà, un pastille "n / total" remplace les points (illisible sinon)
+
         private final List<String> urls;
+        private final List<String> cacheKeys; // "gallery-full:"+url précalculé une fois par image — voir ImgRef.cacheKey pour le même motif (évite une concaténation String à chaque frame)
         private int index;
         private boolean prevLeftDown;
+        private final UiAnimatedFloat leftHover = new UiAnimatedFloat(0f, 14f);
+        private final UiAnimatedFloat rightHover = new UiAnimatedFloat(0f, 14f);
 
         GalleryCarousel(float x, float y, float w, float h, List<String> urls) {
             super(x, y, w, h);
             this.urls = urls;
+            List<String> keys = new ArrayList<>(urls.size());
+            for (String u : urls) keys.add("gallery-full:" + u);
+            this.cacheKeys = keys;
         }
 
-        private boolean overLeftArrow(double mx, double my) {
-            return mx >= x && mx <= x + CAROUSEL_ARROW_W && my >= y && my <= y + h;
-        }
+        private float leftCx() { return x + ARROW_MARGIN + ARROW_D / 2f; }
+        private float rightCx() { return x + w - ARROW_MARGIN - ARROW_D / 2f; }
+        private float arrowCy() { return y + h / 2f; }
 
-        private boolean overRightArrow(double mx, double my) {
-            return mx >= x + w - CAROUSEL_ARROW_W && mx <= x + w && my >= y && my <= y + h;
+        private boolean overCircle(double mx, double my, float cx, float cy) {
+            double dx = mx - cx, dy = my - cy;
+            float r = ARROW_D / 2f;
+            return dx * dx + dy * dy <= (double) r * r;
         }
 
         @Override
@@ -573,14 +705,15 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             boolean justPressed = input.leftDown && !prevLeftDown;
             prevLeftDown = input.leftDown;
             if (!justPressed || urls.size() <= 1) return;
-            if (overLeftArrow(input.mouseX, input.mouseY)) index = (index - 1 + urls.size()) % urls.size();
-            else if (overRightArrow(input.mouseX, input.mouseY)) index = (index + 1) % urls.size();
+            if (overCircle(input.mouseX, input.mouseY, leftCx(), arrowCy())) index = (index - 1 + urls.size()) % urls.size();
+            else if (overCircle(input.mouseX, input.mouseY, rightCx(), arrowCy())) index = (index + 1) % urls.size();
         }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             float fade = clipFade;
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.PANEL_BG_ALT.multiplyAlpha(fade), vpWidth, vpHeight);
+            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD, 1.4f, UiTheme.TRACK_OFF.multiplyAlpha(fade * 0.8f), vpWidth, vpHeight);
 
             String url = urls.get(index);
             BufferedImage img = UiRemoteImage.get(url);
@@ -590,10 +723,10 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             }
 
             if (img != null && img.getWidth() > 0 && img.getHeight() > 0) {
-                float boxW = w - CAROUSEL_ARROW_W * 2 - 16f, boxH = h - 16f;
+                float boxW = w - (ARROW_MARGIN + ARROW_D) * 2f - 16f, boxH = h - 16f;
                 float scale = Math.min(Math.min(boxW / img.getWidth(), boxH / img.getHeight()), 4f);
                 float dw = img.getWidth() * scale, dh = img.getHeight() * scale;
-                renderer.drawIcon("gallery-full:" + url, img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh, vpWidth, vpHeight);
+                renderer.drawIcon(cacheKeys.get(index), img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh, vpWidth, vpHeight);
             } else {
                 String label = "Chargement...";
                 float lw = renderer.textWidth(label, 0.42f);
@@ -601,22 +734,64 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             }
 
             if (urls.size() > 1) {
-                boolean hoverLeft = overLeftArrow(mouseX, mouseY);
-                boolean hoverRight = overRightArrow(mouseX, mouseY);
-                renderer.drawRoundedRect(x, y, x + CAROUSEL_ARROW_W, y + h, 0f, (hoverLeft ? UiTheme.CARD_HOVER : UiTheme.OVERLAY_BG).multiplyAlpha(fade * 0.9f), vpWidth, vpHeight);
-                renderer.drawRoundedRect(x + w - CAROUSEL_ARROW_W, y, x + w, y + h, 0f, (hoverRight ? UiTheme.CARD_HOVER : UiTheme.OVERLAY_BG).multiplyAlpha(fade * 0.9f), vpWidth, vpHeight);
-                renderer.drawText("<", x + CAROUSEL_ARROW_W / 2f - 5f, y + h / 2f - 8f, UiTheme.TEXT_PRIMARY, 0.55f, vpWidth, vpHeight);
-                renderer.drawText(">", x + w - CAROUSEL_ARROW_W / 2f - 5f, y + h / 2f - 8f, UiTheme.TEXT_PRIMARY, 0.55f, vpWidth, vpHeight);
+                boolean hoverLeft = overCircle(mouseX, mouseY, leftCx(), arrowCy());
+                boolean hoverRight = overCircle(mouseX, mouseY, rightCx(), arrowCy());
+                leftHover.setTarget(hoverLeft ? 1f : 0f);
+                rightHover.setTarget(hoverRight ? 1f : 0f);
+                drawArrowButton(renderer, leftCx(), arrowCy(), "<", leftHover.get(), fade, vpWidth, vpHeight);
+                drawArrowButton(renderer, rightCx(), arrowCy(), ">", rightHover.get(), fade, vpWidth, vpHeight);
 
-                String counter = (index + 1) + " / " + urls.size();
-                float cw = renderer.textWidth(counter, 0.38f);
-                renderer.drawText(counter, x + w - cw - 14f, y + 12f, UiTheme.TEXT_SECONDARY, 0.38f, vpWidth, vpHeight);
+                if (urls.size() <= MAX_DOTS) drawDots(renderer, fade, vpWidth, vpHeight);
+                else drawCounterPill(renderer, fade, vpWidth, vpHeight);
             }
+        }
+
+        private void drawArrowButton(UiRenderer renderer, float cx, float cy, String glyph, float hover, float fade, int vpWidth, int vpHeight) {
+            float radius = ARROW_D / 2f;
+            UiColor bg = UiColor.lerp(UiTheme.OVERLAY_BG, UiTheme.ACCENT, hover * 0.85f).multiplyAlpha(fade * (0.55f + hover * 0.35f));
+            renderer.drawRoundedRect(cx - radius, cy - radius, cx + radius, cy + radius, radius, bg, vpWidth, vpHeight);
+            float gw = renderer.textWidth(glyph, 0.5f);
+            renderer.drawText(glyph, cx - gw / 2f, cy - 7f, UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.5f, vpWidth, vpHeight);
+        }
+
+        /** Indicateurs à points façon carrousel mobile (Instagram/iOS) — point plein ACCENT pour l'image courante, points estompés pour le reste. Seulement si assez peu d'images pour rester lisible (voir MAX_DOTS). */
+        private void drawDots(UiRenderer renderer, float fade, int vpWidth, int vpHeight) {
+            float totalW = urls.size() * DOT_D + (urls.size() - 1) * DOT_GAP;
+            float startX = x + (w - totalW) / 2f;
+            float dotY = y + 16f;
+            for (int i = 0; i < urls.size(); i++) {
+                float cx = startX + i * (DOT_D + DOT_GAP) + DOT_D / 2f;
+                boolean active = i == index;
+                UiColor color = (active ? UiTheme.ACCENT : UiTheme.TEXT_MUTED).multiplyAlpha(fade * (active ? 1f : 0.55f));
+                renderer.drawRoundedRect(cx - DOT_D / 2f, dotY, cx + DOT_D / 2f, dotY + DOT_D, DOT_D / 2f, color, vpWidth, vpHeight);
+            }
+        }
+
+        private void drawCounterPill(UiRenderer renderer, float fade, int vpWidth, int vpHeight) {
+            String counter = (index + 1) + " / " + urls.size();
+            float cw = renderer.textWidth(counter, 0.38f);
+            float pillW = cw + 24f, pillH = 26f;
+            float px = x + w - pillW - 14f, py = y + 14f;
+            renderer.drawRoundedRect(px, py, px + pillW, py + pillH, pillH / 2f, UiTheme.OVERLAY_BG.multiplyAlpha(fade * 0.85f), vpWidth, vpHeight);
+            renderer.drawText(counter, px + 12f, py + 8f, UiTheme.TEXT_SECONDARY.multiplyAlpha(fade), 0.38f, vpWidth, vpHeight);
         }
     }
 
     /** Bouton Installer/Installé/Installation... — état dynamique relu à CHAQUE frame (contrairement à UiButton, libellé figé à la construction) — même esprit que le bouton de ResultCard. */
+    /**
+     * Bouton Installer/Installé/Installation... — FLOTTANT, fixe en bas à
+     * droite de l'écran (voir {@code installButtonX/Y}), pas dans
+     * {@code widgets} (retiré exprès, voir {@code buildLayout}/{@code uiDraw})
+     * pour pouvoir être dessiné APRÈS le scroll de description et rester
+     * visible par-dessus. N'étant plus dans {@code widgets}, il n'est plus
+     * atteint par {@code UiScreenBase.dispatchClick()} — le clic est détecté
+     * ici en autonome via {@code pollContinuous} (appelé à la main depuis
+     * {@code uiPollInput}), même motif déjà établi dans ce fichier pour
+     * {@code ResultCard}/{@code GalleryCarousel}.
+     */
     private final class InstallButton extends UiWidget {
+        private boolean prevLeftDown;
+
         InstallButton(float x, float y, float w, float h) { super(x, y, w, h); }
 
         @Override
@@ -626,8 +801,10 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         }
 
         @Override
-        public void onClick() {
-            if (!alreadyInstalled && !installing() && !parent.isBusy()) parent.installFromDetail(hit);
+        public void pollContinuous(UiInputPoller input) {
+            boolean justPressed = input.leftDown && !prevLeftDown;
+            prevLeftDown = input.leftDown;
+            if (justPressed && contains(input.mouseX, input.mouseY)) parent.installFromDetail(hit);
         }
 
         @Override
