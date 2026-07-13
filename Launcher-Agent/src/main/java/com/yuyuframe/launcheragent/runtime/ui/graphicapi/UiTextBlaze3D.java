@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -69,7 +71,7 @@ public final class UiTextBlaze3D {
 
     private static Method mGetDevice, mGetSamplerCache, mSamplerCacheGet,
         mCreateTexture, mCreateTextureView, mCreateBuffer, mCreateBufferSized, mCreateCommandEncoder,
-        mWriteToTexture, mWriteToBuffer, mBufferSlice, mCreateRenderPass, mSetPipeline, mBindTexture, mSetUniformSlice,
+        mWriteToTexture, mWriteToTextureMip, mWriteToBuffer, mBufferSlice, mCreateRenderPass, mSetPipeline, mBindTexture, mSetUniformSlice,
         mSetVertexBuffer, mDraw, mClosePass, mBindDefaultUniforms, mGetDynamicUniforms,
         mDynamicUniformsWrite, mGetColorAttachmentView, mNativeImageSetColor,
         mShapeIndexBufferGetBuffer, mShapeIndexBufferGetType, mSetIndexBuffer, mDrawIndexed,
@@ -130,12 +132,25 @@ public final class UiTextBlaze3D {
             mBindDefaultUniforms = clsRenderSystem.getMethod("bindDefaultUniforms", clsRenderPass);
             mGetDynamicUniforms = clsRenderSystem.getMethod("getDynamicUniforms");
 
-            // SamplerCache.get(FilterMode) — un seul argument FilterMode parmi 4 surcharges "get" ;
-            // résolu par NOM+DESCRIPTEUR OFFICIEL (jamais par nom seul, ambigu ici) — voir
-            // MappingsRegistry.getObfMethodName, même motif que tout le reste du projet.
+            // BUG TROUVÉ (utilisateur : mipmaps générés — voir ensureTexture —
+            // mais texte "toujours pixelisé", quasi aucun effet visible) :
+            // désassemblage de SamplerCache.init() (pas deviné) — le
+            // paramètre booléen "defaultLineOfDetail" de la surcharge
+            // get(FilterMode,boolean) décide, à la construction du VRAI
+            // GpuSampler (GpuDevice.createSampler(...,maxAniso,lodOption)) :
+            // false → OptionalDouble.of(0.0) = LOD FIGÉ à 0 (ignore TOUS les
+            // niveaux de mip, quels qu'ils soient) ; true →
+            // OptionalDouble.empty() = plage de LOD dynamique COMPLÈTE
+            // (sélection automatique du mip selon l'empreinte écran — ce
+            // qu'on veut). La surcharge à 1 argument get(FilterMode), qu'on
+            // utilisait, appelle EN INTERNE get(FilterMode, false) (confirmé
+            // par désassemblage direct de son bytecode) — notre sampler
+            // était donc VERROUILLÉ sur le mip 0, rendant TOUTE la chaîne de
+            // mips générée totalement inutilisée par le GPU. Fix : résoudre
+            // ET utiliser la surcharge à 2 arguments avec `true`.
             String getSamplerName = MappingsRegistry.getObfMethodName(
-                "net/minecraft/client/gl/SamplerCache", "get", "(Lcom/mojang/blaze3d/textures/FilterMode;)Lfzf;");
-            mSamplerCacheGet = clsSamplerCache.getMethod(getSamplerName, clsFilterMode);
+                "net/minecraft/client/gl/SamplerCache", "get", "(Lcom/mojang/blaze3d/textures/FilterMode;Z)Lfzf;");
+            mSamplerCacheGet = clsSamplerCache.getMethod(getSamplerName, clsFilterMode, boolean.class);
 
             mGetProjectionMatrixBuffer = clsRenderSystem.getMethod("getProjectionMatrixBuffer");
 
@@ -148,6 +163,13 @@ public final class UiTextBlaze3D {
             mBufferSlice = clsGpuBuffer.getMethod("slice", long.class, long.class);
 
             mWriteToTexture = clsCommandEncoder.getMethod("writeToTexture", clsGpuTexture, clsNativeImage);
+            // Variante détaillée (mipLevel explicite) — vérifiée dans les
+            // mappings Yarn officiels (pas devinée) : writeToTexture(target,
+            // source, mipLevel, depth, offsetX, offsetY, width, height,
+            // skipPixels, skipRows). Nécessaire pour uploader les niveaux de
+            // mipmap de l'atlas de police (voir BUG TROUVÉ dans ensureTexture).
+            mWriteToTextureMip = clsCommandEncoder.getMethod("writeToTexture", clsGpuTexture, clsNativeImage,
+                int.class, int.class, int.class, int.class, int.class, int.class, int.class, int.class);
             mWriteToBuffer = clsCommandEncoder.getMethod("writeToBuffer", clsGpuBufferSlice, ByteBuffer.class);
             mCreateRenderPass = clsCommandEncoder.getMethod("createRenderPass",
                 java.util.function.Supplier.class, clsGpuTextureView, OptionalInt.class);
@@ -242,8 +264,9 @@ public final class UiTextBlaze3D {
                 MappingsRegistry.getObfFieldName("net/minecraft/client/gl/RenderPipelines", "GUI_TEXT")).get(null);
             if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || fieldRenderPipelineGuiText == null
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
-                    || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null) {
-                throw new NoSuchMethodException("setColor/RGBA/GUI_TEXT/sharedSequentialQuad introuvable (voir logs)");
+                    || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
+                    || mWriteToTextureMip == null) {
+                throw new NoSuchMethodException("setColor/RGBA/GUI_TEXT/sharedSequentialQuad/writeToTextureMip introuvable (voir logs)");
             }
 
             // BUG TROUVÉ (premier test v373/v374, IllegalStateException) : notre
@@ -350,6 +373,79 @@ public final class UiTextBlaze3D {
         // 1024x2048) — accepté pour cette première version fonctionnelle, à optimiser
         // plus tard via copie mémoire brute (voir memCopy/memAddress dans UiRenderer)
         // une fois le pipeline confirmé correct de bout en bout.
+        Object nativeImage = bufferedImageToNativeImage(img, w, h);
+
+        // BUG TROUVÉ (utilisateur : texte des cartes/titres "un peu pixelisé")
+        // : texture créée avec UN SEUL niveau de mip (dernier paramètre de
+        // createTexture = mipLevels, vérifié dans les mappings Yarn
+        // officiels — pas deviné). La plupart des tailles de texte de l'UI
+        // (échelle ~0.4-0.55) minifient FORTEMENT depuis la résolution native
+        // de l'atlas (RASTER_PX=64) — un filtrage LINEAR sans mipmap ne peut
+        // pas moyenner assez de texels source lors d'une réduction de cette
+        // ampleur, d'où l'aliasing visible. Fix : chaîne de mipmaps complète,
+        // chaque niveau généré par downscale bilinéaire Java2D DEPUIS
+        // L'IMAGE PLEINE RÉSOLUTION (jamais mip-sur-mip, pour éviter
+        // d'accumuler l'erreur de filtrage), uploadée via la variante
+        // détaillée de writeToTexture (mipLevel explicite).
+        // BUG TROUVÉ (utilisateur, une fois le LOD dynamique activé : "c'est
+        // encore pire") : générer des mipmaps sur l'ATLAS ENTIER (pas
+        // glyphe par glyphe) fait rétrécir le padding inter-glyphes
+        // (UiFont.ATLAS_PADDING=16px, à RASTER_PX) PROPORTIONNELLEMENT à
+        // chaque niveau — exactement le risque déjà anticipé dans le
+        // commentaire d'origine de UiFont ("un mipmap ... pourrait mélanger
+        // deux glyphes différents"), jamais respecté ici : 6 niveaux (÷64)
+        // réduisent 16px de marge à 0.25px — bien EN DESSOUS du rayon de
+        // flou d'un filtrage bilinéaire, les glyphes voisins se mélangent
+        // dans les mips grossiers. Avec le LOD figé à 0 (avant le fix
+        // précédent), ces mips corrompus n'étaient JAMAIS échantillonnés —
+        // d'où "aucun effet" ; avec le LOD dynamique désormais actif, le
+        // petit texte sélectionne justement CES mips corrompus, d'où "pire
+        // qu'avant". Fix : arrêter de générer des niveaux dès que le
+        // padding restant descend sous un seuil de sécurité (marge pour le
+        // flou bilinéaire + tampon).
+        int mipLevels = 1;
+        {
+            int mw = w, mh = h;
+            float paddingAtLevel = UiFont.ATLAS_PADDING;
+            final float MIN_SAFE_PADDING = 3f;
+            while (mw > 4 && mh > 4 && mipLevels < 6) {
+                float nextPadding = paddingAtLevel / 2f;
+                if (nextPadding < MIN_SAFE_PADDING) break;
+                mw /= 2; mh /= 2; paddingAtLevel = nextPadding; mipLevels++;
+            }
+        }
+
+        Object device = mGetDevice.invoke(null);
+        final String label = "yuyuframe_font_" + System.identityHashCode(font);
+        java.util.function.Supplier<String> labelSupplier = () -> label;
+        Object texture = mCreateTexture.invoke(device, labelSupplier, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, w, h, 1, mipLevels);
+
+        Object encoder = mCreateCommandEncoder.invoke(device);
+        mWriteToTexture.invoke(encoder, texture, nativeImage); // mip 0 (résolution native)
+
+        for (int level = 1; level < mipLevels; level++) {
+            int mw = Math.max(1, w >> level), mh = Math.max(1, h >> level);
+            BufferedImage scaled = new BufferedImage(mw, mh, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2 = scaled.createGraphics();
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2.drawImage(img, 0, 0, mw, mh, null);
+            g2.dispose();
+            Object mipImage = bufferedImageToNativeImage(scaled, mw, mh);
+            mWriteToTextureMip.invoke(encoder, texture, mipImage, level, 0, 0, 0, mw, mh, 0, 0);
+        }
+
+        Object textureView = mCreateTextureView.invoke(device, texture);
+        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+
+        Object[] result = {texture, textureView, sampler};
+        TEXTURES.put(font, result);
+        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: atlas '" + label + "' créé via GpuDevice.createTexture (w=" + w + " h=" + h + " mipLevels=" + mipLevels + ")");
+        return result;
+    }
+
+    /** ARGB (BufferedImage) → RGBA petit-boutiste (NativeImage) — même conversion que ci-dessus, factorisée pour être réutilisée par chaque niveau de mip. */
+    private static Object bufferedImageToNativeImage(BufferedImage img, int w, int h) throws Exception {
         Object nativeImage = ctorNativeImage.newInstance(fieldNativeImageFormatRgba, w, h, false);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -359,22 +455,7 @@ public final class UiTextBlaze3D {
                 mNativeImageSetColor.invoke(nativeImage, x, y, nativeColor);
             }
         }
-
-        Object device = mGetDevice.invoke(null);
-        final String label = "yuyuframe_font_" + System.identityHashCode(font);
-        java.util.function.Supplier<String> labelSupplier = () -> label;
-        Object texture = mCreateTexture.invoke(device, labelSupplier, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, w, h, 1, 1);
-
-        Object encoder = mCreateCommandEncoder.invoke(device);
-        mWriteToTexture.invoke(encoder, texture, nativeImage);
-
-        Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear);
-
-        Object[] result = {texture, textureView, sampler};
-        TEXTURES.put(font, result);
-        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: atlas '" + label + "' créé via GpuDevice.createTexture (w=" + w + " h=" + h + ")");
-        return result;
+        return nativeImage;
     }
 
     // ── Texture blanche 1×1 dédiée à Sampler2 (voir drawText) ───────────────
@@ -415,7 +496,7 @@ public final class UiTextBlaze3D {
         Object encoder = mCreateCommandEncoder.invoke(device);
         mWriteToTexture.invoke(encoder, texture, nativeImage);
         Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear);
+        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
         whiteTexture = new Object[]{texture, textureView, sampler};
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture blanche 1x1 (Sampler2) créée");
         return whiteTexture;
@@ -458,7 +539,7 @@ public final class UiTextBlaze3D {
         Object encoder = mCreateCommandEncoder.invoke(device);
         mWriteToTexture.invoke(encoder, texture, nativeImage);
         Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear);
+        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
         cornerMaskTexture = new Object[]{texture, textureView, sampler};
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture masque coin arrondi créée (" + n + "x" + n + ")");
         return cornerMaskTexture;
