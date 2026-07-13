@@ -2,6 +2,9 @@ package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * État souris/clavier pollé chaque frame depuis un Mixin global sur le render
  * loop — pour la position/le survol/le drag continu (voir UiDrawable). Le
@@ -44,6 +47,24 @@ public abstract class UiInputPoller {
      * (créée tardivement et paresseusement par le Mixin global).
      */
     public static volatile String menuKeyName = "RSHIFT";
+
+    /**
+     * Vrai quand un {@code UiTextField} a le focus quelque part sur l'écran
+     * custom courant — STATIC (même motif que {@link #menuKeyName}) : le
+     * callback caractère GLFW ({@code UiInputPollerModern.registerCharCallback})
+     * est enregistré UNE FOIS pour toute la session, dès la toute première
+     * frame du jeu, bien avant qu'aucun écran custom n'existe — il n'a aucun
+     * moyen propre d'obtenir une référence vers le champ de texte actif
+     * autrement. Mis à jour par {@code UiTextField.setFocused} (seul point
+     * d'entrée du focus, voir sa javadoc) ET remis à {@code false} par
+     * {@code UiScreenBase.closeTo} (filet de sécurité si un écran se ferme
+     * pendant qu'un champ était encore focus, ex: clic sur "Retour" sans
+     * avoir d'abord perdu le focus). BUG TROUVÉ sans ce flag : le callback
+     * bufferisait INCONDITIONNELLEMENT tout caractère tapé n'importe quand
+     * (jeu normal, chat...), qui ressortait d'un coup dans le prochain champ
+     * de recherche ouvert — voir javadoc de registerCharCallback.
+     */
+    public static volatile boolean textInputActive = false;
 
     /** Touche d'ouverture du menu (voir {@link #menuKeyName}) — utilisable même sans écran ouvert, voir readMenuKeyDown(). */
     public boolean menuKeyDown, menuKeyPressed;
@@ -89,14 +110,81 @@ public abstract class UiInputPoller {
     public abstract String pollAnyKeyJustPressed();
 
     /**
-     * À appeler UNIQUEMENT quand un UiTextField a le focus — applique en une
-     * seule passe les frappes de cette frame à {@code buffer} (ajoute les
-     * caractères imprimables, gère Backspace). Une seule méthode plutôt que
-     * "caractères tapés" + "touches spéciales" séparées : sur LWJGL2, les deux
-     * liraient dans la MÊME file d'événements (Keyboard.next()), consommée une
-     * seule fois — les séparer romprait l'une des deux si les deux étaient
-     * appelées la même frame (ce qui arriverait si un champ texte capturait
-     * Backspace via pollAnyKeyJustPressed en plus de lire les caractères).
+     * Intentions d'édition d'un {@code UiTextField} focus pour LA FRAME
+     * COURANTE — champs publics directement sur {@code UiInputPoller} (PAS un
+     * type imbriqué dédié : un premier jet avec une classe {@code
+     * TextEditFrame} causait un {@code LinkageError: loader constraint
+     * violation} en jeu sous Fabric — "knot" (classloader du jeu, utilisé
+     * pour tisser Mixin) et "app" (classloader normal de launcher-agent.jar)
+     * chargeaient CHACUN leur propre copie de ce type, vues comme deux
+     * classes incompatibles par la JVM dès qu'une valeur créée par l'un
+     * traversait vers du code vérifié par l'autre — AUCUN écran ne pouvait
+     * plus taper le moindre caractère. {@code String}/{@code boolean} (comme
+     * ici) sont chargés par le classloader BOOTSTRAP, partagé par les deux,
+     * donc jamais sujets à ce problème — même raison que {@link #mouseX}/
+     * {@link #leftDown} déjà exposés en champs plats sur cette même classe
+     * plutôt qu'un objet "InputState" dédié). AUCUNE logique de
+     * curseur/sélection/texte ici — tout ça vit dans UiTextField, seul
+     * endroit qui connaît le contenu actuel et la position du curseur.
+     * Chaque champ "action" est déjà débruité par l'implémentation
+     * (répétition typematic pour backspace/delete/flèches via
+     * {@link #keyRepeatFire}, un seul {@code true} par appui réel pour le
+     * reste) — {@code UiTextField} n'a jamais à gérer de front montant.
      */
-    public abstract void pollTextEdit(StringBuilder buffer);
+    public String editTyped = "";
+    public boolean editBackspace, editDelete;
+    public boolean editLeft, editRight, editHome, editEnd;
+    public boolean editEnter;
+    public boolean editSelectAll, editCopy, editCut, editPaste;
+    public boolean editShiftHeld;
+
+    // Répétition typematic (Backspace/Suppr/flèches maintenus) — délai initial
+    // avant la première répétition, puis cadence régulière, exactement le
+    // motif standard des champs de texte OS (pas de dépendance à un système
+    // "repeat events" LWJGL2/GLFW natif, qui n'existe pas de façon uniforme
+    // entre les deux : implémenté ICI, dans la classe ABSTRAITE, pour que
+    // Legacy et Modern partagent la même temporisation sans dupliquer la
+    // logique — chaque implémentation lui fournit juste l'état brut "touche
+    // enfoncée cette frame" via {@link #keyRepeatFire}.
+    private static final long REPEAT_INITIAL_DELAY_MS = 400L;
+    private static final long REPEAT_INTERVAL_MS = 40L;
+    private final Map<String, long[]> keyRepeatState = new HashMap<>();
+
+    /**
+     * Motif "maintenir pour répéter" — {@code true} à l'appui initial, PUIS
+     * de façon répétée après {@link #REPEAT_INITIAL_DELAY_MS}, tant que
+     * {@code down} reste {@code true}. {@code key} identifie la touche
+     * logique (ex: "backspace") — namespacé par l'appelant si plusieurs
+     * touches partagent cette map (voir UiInputPollerLegacy/Modern).
+     */
+    protected final boolean keyRepeatFire(String key, boolean down) {
+        long now = System.currentTimeMillis();
+        if (!down) {
+            keyRepeatState.remove(key);
+            return false;
+        }
+        long[] state = keyRepeatState.get(key);
+        if (state == null) {
+            keyRepeatState.put(key, new long[]{ now, now });
+            return true; // premier appui
+        }
+        if (now - state[0] < REPEAT_INITIAL_DELAY_MS) return false;
+        if (now - state[1] >= REPEAT_INTERVAL_MS) {
+            state[1] = now;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * À appeler UNIQUEMENT quand un UiTextField a le focus — renseigne
+     * TOUS les champs {@code edit*} ci-dessus en une seule passe sur
+     * l'état/la file clavier de cette frame. Sur LWJGL2 (Legacy), plusieurs
+     * de ces intentions partagent la MÊME file d'événements consommable
+     * (Keyboard.next()) — toutes doivent donc être lues ICI, jamais
+     * réparties sur plusieurs appels (voir historique : Backspace capturé
+     * deux fois par pollAnyKeyJustPressed + ceci cassait déjà l'un des deux
+     * avant ce regroupement).
+     */
+    public abstract void pollTextEdit();
 }

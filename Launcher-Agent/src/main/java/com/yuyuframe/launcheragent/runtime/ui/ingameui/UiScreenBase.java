@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -176,15 +177,27 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     private boolean dispatchClick(int button) {
         if (button != 0 || lastInput == null) return false;
+        UiWidget clicked = null;
         for (UiWidget w : widgets) {
             if (w.contains(lastInput.mouseX, lastInput.mouseY)) {
-                try {
-                    w.onClick();
-                } catch (Throwable t) {
-                    LauncherLog.err("[UiScreenBase] onClick: " + t);
-                }
-                return true; // un seul widget cliqué, "handled" — pas de double dispatch vanilla derrière
+                clicked = w;
+                break;
             }
+        }
+        // Perte de focus au clic EXTÉRIEUR — barre de recherche moderne : un
+        // champ texte reste focus indéfiniment sinon (pas de mécanisme
+        // d'exclusivité ailleurs), curseur clignotant en fond même après avoir
+        // cliqué sur un bouton/une carte à côté.
+        for (UiWidget w : widgets) {
+            if (w instanceof UiTextField && w != clicked) ((UiTextField) w).setFocused(false);
+        }
+        if (clicked != null) {
+            try {
+                clicked.onClick();
+            } catch (Throwable t) {
+                LauncherLog.err("[UiScreenBase] onClick: " + t);
+            }
+            return true; // un seul widget cliqué, "handled" — pas de double dispatch vanilla derrière
         }
         return false;
     }
@@ -216,10 +229,28 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     private boolean dispatchKeyPressed(int keyCode) {
         if (keyCode == 256) { // GLFW_KEY_ESCAPE — constante GLFW publique stable, pas d'obfuscation
-            closeTo(escapeTarget);
+            handleEscape();
             return true;
         }
         return false;
+    }
+
+    /**
+     * Premier Échap = juste retirer le focus d'un champ texte en cours de
+     * saisie (n'importe où sur l'écran), SANS fermer l'écran — comportement
+     * barre de recherche moderne (ex: GitHub) : Échap ne doit pas surprendre
+     * l'utilisateur en train de taper en fermant tout d'un coup. Deuxième
+     * Échap (aucun champ focus) : comportement historique inchangé, ferme
+     * vers {@link #escapeTarget}.
+     */
+    private void handleEscape() {
+        for (UiWidget w : widgets) {
+            if (w instanceof UiTextField && ((UiTextField) w).focused()) {
+                ((UiTextField) w).setFocused(false);
+                return;
+            }
+        }
+        closeTo(escapeTarget);
     }
 
     /**
@@ -234,22 +265,12 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * {@link #lastInput}.
      */
     public void mouseClicked(int mouseX, int mouseY, int mouseButton) {
-        if (mouseButton != 0 || lastInput == null) return;
-        for (UiWidget w : widgets) {
-            if (w.contains(lastInput.mouseX, lastInput.mouseY)) {
-                try {
-                    w.onClick();
-                } catch (Throwable t) {
-                    LauncherLog.err("[UiScreenBase] onClick: " + t);
-                }
-                return;
-            }
-        }
+        dispatchClick(mouseButton);
     }
 
     /** Équivalent 1.8.9 de {@link #keyPressed} — GuiScreen.keyTyped(char,int), keyCode 1 = Keyboard.KEY_ESCAPE (LWJGL2). */
     public void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == 1) closeTo(escapeTarget);
+        if (keyCode == 1) handleEscape();
     }
 
     @Override
@@ -328,6 +349,15 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * réellement, juste après avoir appelé uiDraw() cette frame.
      */
     protected void closeTo(Object lastScreen) {
+        // Filet de sécurité : si un champ de texte était encore focus au
+        // moment de la fermeture (ex: clic sur "Retour" en pleine frappe,
+        // sans passer par Échap qui, lui, retire déjà le focus le premier
+        // coup — voir handleEscape), UiInputPoller.textInputActive resterait
+        // sinon bloqué à true pour toute la session, et le callback caractère
+        // GLFW continuerait à bufferiser les touches tapées en jeu (voir sa
+        // javadoc) — remis à false ICI, inconditionnellement, à CHAQUE
+        // fermeture d'écran custom, quel que soit l'état de focus au moment.
+        UiInputPoller.textInputActive = false;
         navigationTarget = lastScreen;
         navigationRequested = true;
     }

@@ -190,7 +190,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         if (searchField == null) {
             // Recréé la grille (pas tout l'écran) à chaque frappe — même
             // instance de champ conservée, voir javadoc de la classe.
-            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll());
+            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll()).searchIcon();
         }
         searchField.x = contentX;
         searchField.y = screenHeight - UiTheme.scaled(64f) - SEARCH_H;

@@ -151,36 +151,90 @@ public final class UiInputPollerLegacy extends UiInputPoller {
         return keyboardClass;
     }
 
-    private Integer keyBackCode;
+    // Codes résolus paresseusement par réflexion sur les constantes PUBLIQUES
+    // de org.lwjgl.input.Keyboard (jamais codés en dur — mêmes noms que la
+    // doc LWJGL2 officielle, stables depuis toujours sur cette lib figée).
+    private Integer keyBackCode, keyDeleteCode, keyReturnCode, keyNumpadEnterCode;
+    private Integer keyLeftCode, keyRightCode, keyHomeCode, keyEndCode;
+    private Integer keyLShiftCode, keyRShiftCode;
+
+    private void resolveTextEditKeyCodes(Class<?> kc) throws Exception {
+        if (keyBackCode != null) return;
+        keyBackCode = kc.getField("KEY_BACK").getInt(null);
+        keyDeleteCode = kc.getField("KEY_DELETE").getInt(null);
+        keyReturnCode = kc.getField("KEY_RETURN").getInt(null);
+        keyNumpadEnterCode = kc.getField("KEY_NUMPADENTER").getInt(null);
+        keyLeftCode = kc.getField("KEY_LEFT").getInt(null);
+        keyRightCode = kc.getField("KEY_RIGHT").getInt(null);
+        keyHomeCode = kc.getField("KEY_HOME").getInt(null);
+        keyEndCode = kc.getField("KEY_END").getInt(null);
+        keyLShiftCode = kc.getField("KEY_LSHIFT").getInt(null);
+        keyRShiftCode = kc.getField("KEY_RSHIFT").getInt(null);
+    }
 
     /**
      * Même file d'événements que pollAnyKeyJustPressed() (Keyboard.next()) —
-     * drainée ICI en une seule passe (caractère + Backspace) plutôt que dans
-     * deux méthodes séparées, précisément pour ne jamais entrer en conflit
-     * avec elle (voir javadoc UiInputPoller.pollTextEdit). getEventCharacter()
-     * tient compte du layout clavier (AZERTY/QWERTY, Shift) contrairement à
-     * getKeyName() — c'est la bonne source pour du texte tapé, pas pour un
-     * nom de touche de rebind.
+     * drainée ICI en une seule passe pour TOUT ce qui a besoin d'un événement
+     * discret (caractères tapés, Entrée, Origine/Fin, Ctrl+A/C/X/V), pour ne
+     * jamais entrer en conflit avec elle (voir javadoc de
+     * {@link UiInputPoller#pollTextEdit()}). Backspace/Suppr/flèches, EUX,
+     * sont lus en ÉTAT CONTINU (isKeyDown), PAS via cette file — nécessaire
+     * pour la répétition typematic (voir {@link UiInputPoller#keyRepeatFire})
+     * : la file ne donne qu'un événement par appui/relâchement, jamais "reste
+     * enfoncée depuis 400ms". Donc ignorés explicitement s'ils apparaissent
+     * dans la file (déjà traités via isKeyDown ci-dessous, sinon double
+     * traitement). getEventCharacter() tient compte du layout clavier
+     * (AZERTY/QWERTY, Shift) contrairement à getKeyName() — bonne source pour
+     * du texte tapé, pas pour un nom de touche de rebind.
      */
     @Override
-    public void pollTextEdit(StringBuilder buffer) {
+    public void pollTextEdit() {
+        editTyped = "";
+        editBackspace = editDelete = editLeft = editRight = editHome = editEnd = false;
+        editEnter = editSelectAll = editCopy = editCut = editPaste = editShiftHeld = false;
         try {
             Class<?> kc = keyboardClass();
-            if (keyBackCode == null) keyBackCode = kc.getField("KEY_BACK").getInt(null);
+            resolveTextEditKeyCodes(kc);
+            Method isKeyDown = kc.getMethod("isKeyDown", int.class);
+            editShiftHeld = (boolean) isKeyDown.invoke(null, keyLShiftCode) || (boolean) isKeyDown.invoke(null, keyRShiftCode);
+
             Method next = kc.getMethod("next");
             Method eventKey = kc.getMethod("getEventKey");
             Method eventChar = kc.getMethod("getEventCharacter");
             Method eventKeyState = kc.getMethod("getEventKeyState");
+            StringBuilder typed = new StringBuilder();
             while ((boolean) next.invoke(null)) {
                 if (!(boolean) eventKeyState.invoke(null)) continue; // touche RELÂCHÉE — ignorée
                 int code = (int) eventKey.invoke(null);
-                if (code == keyBackCode) {
-                    if (buffer.length() > 0) buffer.deleteCharAt(buffer.length() - 1);
-                    continue;
+                if (code == keyBackCode || code == keyDeleteCode || code == keyLeftCode || code == keyRightCode) {
+                    continue; // gérés en continu ci-dessous (répétition), jamais ici
                 }
+                if (code == keyReturnCode || code == keyNumpadEnterCode) { editEnter = true; continue; }
+                if (code == keyHomeCode) { editHome = true; continue; }
+                if (code == keyEndCode) { editEnd = true; continue; }
                 char c = (char) eventChar.invoke(null);
-                if (c >= 32 && c != 127) buffer.append(c);
+                // Ctrl+A/C/X/V — détectés via les codes de contrôle ASCII
+                // classiques (1/3/24/22) que Windows produit pour Ctrl+lettre,
+                // INDÉPENDANTS du layout clavier — BUG TROUVÉ (clavier AZERTY
+                // français) : les scancodes KEY_A/KEY_C/KEY_V/KEY_X de LWJGL2
+                // sont des POSITIONS PHYSIQUES calées QWERTY (la touche "A"
+                // physique sur AZERTY est en position "Q"), donc jamais
+                // déclenchés par la touche réellement labellisée "A". Même
+                // correctif que côté GLFW/Modern (physicalKeyForLetter), sous
+                // une forme différente adaptée à LWJGL2 (pas d'équivalent
+                // glfwGetKeyName ici).
+                if (c == 1) { editSelectAll = true; continue; }
+                if (c == 3) { editCopy = true; continue; }
+                if (c == 24) { editCut = true; continue; }
+                if (c == 22) { editPaste = true; continue; }
+                if (c >= 32 && c != 127) typed.append(c);
             }
+            editTyped = typed.toString();
+
+            editBackspace = keyRepeatFire("legacy.backspace", (boolean) isKeyDown.invoke(null, keyBackCode));
+            editDelete = keyRepeatFire("legacy.delete", (boolean) isKeyDown.invoke(null, keyDeleteCode));
+            editLeft = keyRepeatFire("legacy.left", (boolean) isKeyDown.invoke(null, keyLeftCode));
+            editRight = keyRepeatFire("legacy.right", (boolean) isKeyDown.invoke(null, keyRightCode));
         } catch (Exception e) {
             LauncherLog.err("[UiInputPollerLegacy] pollTextEdit: " + e);
         }

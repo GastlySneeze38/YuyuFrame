@@ -68,6 +68,15 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
     private volatile boolean busy;
     private volatile String statusText = "";
     private volatile List<ModrinthJson.Hit> pendingResults;
+    // Recherche live débouncée — barre de recherche moderne : recherche
+    // automatique après une pause de frappe, pas besoin d'un clic explicite
+    // sur "Chercher" (qui reste utilisable pour forcer une relance immédiate,
+    // voir buildLayout). volatile : écrit depuis pollContinuous (thread de
+    // rendu), lu chaque frame dans uiDraw — même thread en pratique ici, mais
+    // gardé cohérent avec le reste des champs d'état partagés de cette classe.
+    private static final long SEARCH_DEBOUNCE_MS = 450L;
+    private volatile long lastEditAtMs;
+    private volatile boolean searchPending;
     private List<ModrinthJson.Hit> shownResults = Collections.emptyList();
     // projectId en cours de téléchargement — piloté par le thread d'install,
     // lu par ResultCard.draw() (thread de rendu) pour animer le spinner. Un
@@ -113,6 +122,11 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
         if (results0 != null) {
             pendingResults = null;
             showResults(results0);
+        }
+        // Débounce de la recherche live — voir onSearchTextChanged/SEARCH_DEBOUNCE_MS.
+        if (searchPending && System.currentTimeMillis() - lastEditAtMs >= SEARCH_DEBOUNCE_MS) {
+            searchPending = false;
+            triggerSearch();
         }
 
         super.uiDraw(mouseX, mouseY);
@@ -163,7 +177,9 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
         // marge, statut ~20px, MARGE GÉNÉREUSE avant le haut de la liste.
         float searchY = screenHeight - 120 - SEARCH_H;
         float searchW = Math.min(520f, screenWidth - MARGIN * 2 - SEARCH_BTN_W - 16f);
-        searchField = new UiTextField(MARGIN, searchY, searchW, SEARCH_H, searchPlaceholder, null);
+        searchField = new UiTextField(MARGIN, searchY, searchW, SEARCH_H, searchPlaceholder, this::onSearchTextChanged)
+            .searchIcon()
+            .onSubmit(this::triggerSearch);
         widgets.add(searchField);
         widgets.add(new UiButton(MARGIN + searchW + 16f, searchY, SEARCH_BTN_W, SEARCH_H, "Chercher", this::triggerSearch));
 
@@ -173,7 +189,14 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
 
     // ── Recherche ──────────────────────────────────────────────────────────────
 
+    /** Callback {@code onChange} du champ de recherche — arme le débounce (voir uiDraw), n'appelle jamais triggerSearch() directement (évite une requête réseau par frappe). */
+    private void onSearchTextChanged(String newText) {
+        lastEditAtMs = System.currentTimeMillis();
+        searchPending = true;
+    }
+
     private void triggerSearch() {
+        searchPending = false; // une recherche manuelle (Entrée/bouton) rend le débounce en cours obsolète
         if (busy) return;
         String query = searchField != null ? searchField.text().trim() : "";
         busy = true;
