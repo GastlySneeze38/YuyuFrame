@@ -47,8 +47,17 @@ public final class ContentBridge {
 
     // ── Fonctions JNI — implémentées dans content-core/src/jni/content.rs ────
 
-    /** Recherche Modrinth (resource packs). Retourne le JSON brut, parsé côté Java. */
-    public static native String searchModrinth(String query, String projectType);
+    /**
+     * Recherche Modrinth (resource packs/shaders). Retourne le JSON brut,
+     * parsé côté Java (voir ModrinthJson).
+     *
+     * @param categoriesCsv catégories sélectionnées, jointes par des virgules
+     *                      (ET entre elles côté Rust — voir search_modrinth) —
+     *                      chaîne vide = aucun filtre de catégorie.
+     * @param version       version Minecraft à filtrer (ex: "1.21.11") — vide = toutes versions.
+     * @param sort          index de tri Modrinth ("downloads"/"newest"/"updated"/"follows") — vide = défaut (pertinence/popularité).
+     */
+    public static native String searchModrinth(String query, String projectType, String categoriesCsv, String version, String sort);
 
     /**
      * Résout le fichier de la dernière version d'un projet Modrinth.

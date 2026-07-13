@@ -5,6 +5,11 @@ use jni::JNIEnv;
 use crate::{download_file, get_latest_file, search_modrinth};
 
 /// Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_searchModrinth
+///
+/// `categories` : liste jointe par des virgules côté Java (voir
+/// ContentBridge.searchModrinth) — évite de marshaler un `String[]` via JNI
+/// pour un besoin aussi simple ; splittée ici. `version`/`sort` vides =
+/// aucun filtre/tri par défaut (voir search_modrinth).
 #[no_mangle]
 pub extern "system" fn Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_searchModrinth<
     'local,
@@ -13,11 +18,22 @@ pub extern "system" fn Java_com_yuyuframe_launcheragent_runtime_content_ContentB
     _class: JClass<'local>,
     query: JString<'local>,
     project_type: JString<'local>,
+    categories_csv: JString<'local>,
+    version: JString<'local>,
+    sort: JString<'local>,
 ) -> JString<'local> {
     let query: String = env.get_string(&query).unwrap().into();
     let project_type: String = env.get_string(&project_type).unwrap().into();
+    let categories_csv: String = env.get_string(&categories_csv).unwrap().into();
+    let version: String = env.get_string(&version).unwrap().into();
+    let sort: String = env.get_string(&sort).unwrap().into();
+    let categories: Vec<String> = categories_csv
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
 
-    let result = search_modrinth(&query, &project_type).unwrap_or_else(|e| {
+    let result = search_modrinth(&query, &project_type, &categories, &version, &sort).unwrap_or_else(|e| {
         format!("{{\"error\":\"{}\"}}", e.replace('"', "'"))
     });
 

@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
 import com.yuyuframe.launcheragent.runtime.content.ModrinthJson;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -30,9 +31,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Base commune recherche/installation de contenu Modrinth (resource packs,
- * shader packs — voir sous-classes {@link ModrinthResourcePackScreen}/
- * {@link ModrinthShaderPackScreen}) — dessinée avec NOTRE pipeline graphique
+ * Recherche/installation de contenu Modrinth (resource packs ET shader
+ * packs, bascule via des onglets en haut de l'écran — voir {@link ContentKind}
+ * et {@link #switchKind}, fusionnés en un seul écran depuis les anciennes
+ * classes séparées {@code ModrinthResourcePackScreen}/
+ * {@code ModrinthShaderPackScreen}) — dessiné avec NOTRE pipeline graphique
  * (UiScreenBase/UiRenderer/UiWidget), PAS l'ancien système
  * {@code screen.ResourcePackSearchScreen}/{@code ShaderPackSearchScreen}
  * (compilait contre les stubs Screen/Text vanilla + {@code ScreenHelper}, qui
@@ -51,15 +54,75 @@ import java.util.concurrent.ConcurrentHashMap;
  * Téléchargement/décodage sur un thread daemon séparé, jamais bloquant pour
  * le rendu — voir {@link #ensureIconLoaded}.
  */
-public abstract class ModrinthContentScreen extends UiScreenBase {
+public final class ModrinthContentScreen extends UiScreenBase {
 
     private static final int MAX_RESULTS = 24;
 
+    /**
+     * Un onglet = un {@code project_type} Modrinth + son dossier d'install +
+     * ses textes — remplace les anciennes sous-classes
+     * {@code ModrinthResourcePackScreen}/{@code ModrinthShaderPackScreen}
+     * (mêmes valeurs, mais comme DONNÉES commutables au lieu de deux CLASSES
+     * distinctes, pour permettre une bascule en place dans le même écran).
+     */
+    public enum ContentKind {
+        // Catégories Modrinth réelles (voir api.modrinth.com/v2/tag/category)
+        // — sous-ensemble curaté des plus utiles pour chaque type plutôt que
+        // la liste complète (une vingtaine chacune) : un panneau de filtres
+        // avec TOUTES les catégories serait plus encombrant qu'utile.
+        RESOURCE_PACK("resourcepack", "resourcepacks", "Rechercher un resource pack...", "Resource Packs", "Modrinth · Resource Packs",
+            new String[]{"16x", "32x", "64x", "128x", "256x", "realistic", "vanilla-like", "themed", "simplistic", "modded"}),
+        SHADER("shader", "shaderpacks", "Rechercher un shader pack...", "Shaders", "Modrinth · Shaders",
+            new String[]{"realistic", "vanilla-like", "fantasy", "cinematic", "colored-lighting", "shadows", "low", "high"});
+
+        final String searchType, installDirName, searchPlaceholder, tabLabel, headerTitle;
+        final String[] categories;
+
+        ContentKind(String searchType, String installDirName, String searchPlaceholder, String tabLabel, String headerTitle, String[] categories) {
+            this.searchType = searchType;
+            this.installDirName = installDirName;
+            this.searchPlaceholder = searchPlaceholder;
+            this.tabLabel = tabLabel;
+            this.headerTitle = headerTitle;
+            this.categories = categories;
+        }
+    }
+
+    /** Index de tri Modrinth (voir search_modrinth côté Rust) — DEFAULT laisse le serveur choisir (pertinence si texte tapé, sinon popularité). */
+    private enum SortOrder {
+        DEFAULT("", "Pertinence"),
+        DOWNLOADS("downloads", "Téléchargements"),
+        NEWEST("newest", "Plus récent"),
+        UPDATED("updated", "Mis à jour");
+
+        final String apiValue, label;
+
+        SortOrder(String apiValue, String label) {
+            this.apiValue = apiValue;
+            this.label = label;
+        }
+    }
+
     protected final Object lastScreen;
-    private final Path installDir;
-    private final String searchType;
-    private final String searchPlaceholder;
-    private final String headerTitle;
+    // Onglet actif — RESOURCE_PACK par défaut à l'ouverture (voir carte
+    // "Modrinth" unique dans UiMainMenuScreen, remplace les deux anciennes
+    // cartes séparées). Shaders reste soumis à ShaderLoaderDetector (voir
+    // buildLayout) : l'onglet n'apparaît que si un loader de shaders est présent.
+    private ContentKind kind = ContentKind.RESOURCE_PACK;
+
+    // ── Filtres (écran/panneau dédié, voir buildFilterPanel) ────────────────
+    private boolean filtersOpen;
+    private SortOrder sort = SortOrder.DEFAULT;
+    // Version MC COURANTE (celle réellement lancée, voir launcheragent.mcVersion
+    // posé par LauncherAgent.premain0) plutôt qu'une liste déroulante de
+    // versions à maintenir/peupler — répond directement au vrai besoin
+    // ("est-ce compatible avec CE que je joue"), pas à un besoin générique de
+    // parcourir toutes les versions Modrinth.
+    private boolean currentVersionOnly;
+    // Catégories propres au TYPE actif (voir ContentKind.categories) — vidées
+    // au changement d'onglet (switchKind), une catégorie "16x" n'a aucun sens
+    // côté shaders et inversement.
+    private final Set<String> selectedCategories = new HashSet<>();
 
     private UiTextField searchField;
     private UiScrollContainer results;
@@ -84,24 +147,38 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
     // pendant qu'une install est en cours, voir triggerInstall).
     private volatile String installingProjectId;
 
-    /**
-     * @param title             titre de {@link UiScreenBase} (pas affiché tel quel, voir headerTitle)
-     * @param installDirName    "resourcepacks" ou "shaderpacks", relatif au dossier de l'instance (user.dir)
-     * @param searchType        project_type Modrinth ("resourcepack"/"shader")
-     * @param searchPlaceholder texte du champ de recherche vide
-     * @param headerTitle       titre affiché en haut de l'écran ("Modrinth — Resource Packs"/"— Shaders")
-     */
-    protected ModrinthContentScreen(String title, Object lastScreen, String installDirName,
-                                     String searchType, String searchPlaceholder, String headerTitle) {
-        super(title);
+    public ModrinthContentScreen(Object lastScreen) {
+        super("Modrinth");
         this.lastScreen = lastScreen;
-        // Même convention que HudConfigStore/launcher.rs (user.dir = dossier
-        // de travail du process Java = dossier de l'instance) — pas besoin de
-        // lire un champ Path sur un écran vanilla qui n'existe pas ici.
-        this.installDir = Paths.get(System.getProperty("user.dir", "."), installDirName);
-        this.searchType = searchType;
-        this.searchPlaceholder = searchPlaceholder;
-        this.headerTitle = headerTitle;
+    }
+
+    /** Même convention que HudConfigStore/launcher.rs (user.dir = dossier de travail du process Java = dossier de l'instance) — recalculé à chaque appel plutôt que mis en cache, la bascule d'onglet change le dossier. */
+    private Path installDir() {
+        return Paths.get(System.getProperty("user.dir", "."), kind.installDirName);
+    }
+
+    /**
+     * Change d'onglet et relance immédiatement la recherche AVEC LE MÊME
+     * TEXTE (une bascule Resource Packs→Shaders en pleine recherche "faithful"
+     * doit chercher "faithful" côté shaders, pas repartir d'un champ vide) —
+     * état d'install/résultats précédents jetés (appartiennent à l'AUTRE
+     * project_type, plus pertinents ici).
+     */
+    private void switchKind(ContentKind newKind) {
+        if (newKind == kind || busy) return;
+        kind = newKind;
+        installingProjectId = null;
+        shownResults = Collections.emptyList();
+        selectedCategories.clear(); // catégories propres au type précédent, sans rapport ici
+        if (searchField != null) searchField.setPlaceholder(kind.searchPlaceholder);
+        if (results != null) results.clear();
+        buildLayout(); // le panneau de filtres (catégories) dépend du type actif — reconstruit ses chips
+        triggerSearch();
+    }
+
+    private void toggleFilters() {
+        filtersOpen = !filtersOpen;
+        buildLayout(); // repositionne tout (le panneau change la hauteur disponible pour la liste) SANS relancer de recherche réseau
     }
 
     @Override
@@ -115,6 +192,7 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
         if (!layoutBuilt && screenWidth > 0 && screenHeight > 0) {
             buildLayout();
             layoutBuilt = true;
+            triggerSearch(); // recherche initiale — buildLayout() lui-même ne recherche plus (voir toggleFilters/switchKind, qui l'appellent sans vouloir relancer le réseau à chaque fois)
         }
         // Consommé UNE SEULE FOIS par le thread de rendu — jamais muté
         // directement depuis le thread de recherche (voir javadoc de la classe).
@@ -132,15 +210,15 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            renderer.drawText(UiFont.BOLD, headerTitle, MARGIN, screenHeight - 48,
+            renderer.drawText(UiFont.BOLD, kind.headerTitle, MARGIN, screenHeight - 48,
                 UiTheme.TEXT_PRIMARY, 0.8f, screenWidth, screenHeight);
             String status = statusText;
             if (!status.isEmpty()) {
-                // 40px sous la barre de recherche (searchY = screenHeight-120-SEARCH_H),
-                // encore 40px au-dessus du haut de la liste (screenHeight-HEADER_H) —
-                // marge généreuse des deux côtés (voir HEADER_H, revu suite au
+                // 40px sous la barre de recherche/le panneau de filtres,
+                // encore 40px au-dessus du haut de la liste — marge généreuse
+                // des deux côtés (voir statusYGap()/headerH(), revu suite au
                 // chevauchement statut/1re carte confirmé en jeu).
-                renderer.drawText(status, MARGIN, screenHeight - 190, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
+                renderer.drawText(status, MARGIN, screenHeight - statusYGap(), UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
             }
             if (results != null) results.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             // Voir UiModConfigScreen — ré-appliqué pour couvrir le titre/la liste ci-dessus.
@@ -155,16 +233,36 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
     // Retour/recherche qui se chevauchaient, texte minuscule sur un écran
     // entier vide) : tout est maintenant nettement plus grand et espacé.
     private static final float MARGIN = 28f;
-    // Titre / barre de recherche / statut, réservé au-dessus de la liste — vu en
-    // jeu que 168 était trop juste une fois les textes agrandis (chevauchement
-    // statut/1re carte), largement augmenté avec des bandes bien séparées.
-    private static final float HEADER_H = 230f;
     private static final float BACK_W = 110f, BACK_H = 34f;
+    private static final float TAB_H = 34f, TAB_W = 160f;
+    // Distances depuis le HAUT de l'écran (screenHeight - X) — décalées de
+    // +52px (hauteur d'onglet + marge) par rapport à l'ancien agencement sans
+    // onglets, pour faire de la place à la ligne Resource Packs/Shaders.
+    private static final float TAB_TOP_GAP = 96f;
+    private static final float SEARCH_TOP_GAP = 172f;
     private static final float SEARCH_H = 40f;
     private static final float SEARCH_BTN_W = 130f;
+    private static final float FILTER_BTN_W = 100f;
+    // Hauteur RÉSERVÉE au panneau de filtres quand ouvert (voir
+    // buildFilterPanel) : ligne de tri + ligne version + jusqu'à 2 lignes de
+    // catégories, toujours la même réservation que le panneau tienne sur 1 ou
+    // 2 lignes de catégories (évite un recalcul dynamique compliqué pour un
+    // gain visuel marginal — au pire un peu de vide sous les chips).
+    private static final float FILTER_PANEL_H = 132f;
+    private static final float CHIP_H = 28f, CHIP_GAP = 8f;
     // Largeur de la scrollbar (6) + sa marge (4, voir UiScrollContainer) +
     // marge supplémentaire pour ne pas la coller au bord de la carte.
     private static final float SCROLLBAR_CLEARANCE = 24f;
+
+    /** Distance écran→texte de statut — dépend de FILTER_PANEL_H (voir buildFilterPanel), donc plus une constante figée depuis l'ajout du panneau de filtres. */
+    private float statusYGap() {
+        return SEARCH_TOP_GAP + SEARCH_H + 30f + (filtersOpen ? FILTER_PANEL_H : 0f);
+    }
+
+    /** Espace total réservé au-dessus de la liste — voir statusYGap(). */
+    private float headerH() {
+        return statusYGap() + 40f;
+    }
 
     private void buildLayout() {
         widgets.clear();
@@ -173,18 +271,161 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
         widgets.add(new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
             "Retour", () -> closeTo(lastScreen)));
 
-        // Bandes clairement séparées : titre ~60px, marge, recherche ~40px,
-        // marge, statut ~20px, MARGE GÉNÉREUSE avant le haut de la liste.
-        float searchY = screenHeight - 120 - SEARCH_H;
-        float searchW = Math.min(520f, screenWidth - MARGIN * 2 - SEARCH_BTN_W - 16f);
-        searchField = new UiTextField(MARGIN, searchY, searchW, SEARCH_H, searchPlaceholder, this::onSearchTextChanged)
-            .searchIcon()
-            .onSubmit(this::triggerSearch);
+        // Onglets Resource Packs / Shaders — Shaders SEULEMENT si un loader de
+        // shaders compatible est détecté (même garde que l'ancien bouton
+        // "Shaders..." de GameMenuScreenMixin, supprimé : un shaderpack
+        // installé sans loader ne sert à rien). Repli sur Resource Packs si
+        // l'onglet Shaders était actif mais le loader a disparu entre-temps
+        // (peu probable en pratique — mods rechargés seulement au lancement —
+        // mais évite un écran bloqué sur un onglet qui n'existe plus).
+        boolean shadersAvailable = com.yuyuframe.launcheragent.runtime.fabric.ShaderLoaderDetector.isPresent(getClass().getClassLoader());
+        if (!shadersAvailable && kind == ContentKind.SHADER) kind = ContentKind.RESOURCE_PACK;
+        float tabY = screenHeight - TAB_TOP_GAP - TAB_H;
+        widgets.add(new TabButton(MARGIN, tabY, TAB_W, TAB_H, ContentKind.RESOURCE_PACK));
+        if (shadersAvailable) {
+            widgets.add(new TabButton(MARGIN + TAB_W + 10f, tabY, TAB_W, TAB_H, ContentKind.SHADER));
+        }
+
+        float searchY = screenHeight - SEARCH_TOP_GAP - SEARCH_H;
+        float searchW = Math.min(460f, screenWidth - MARGIN * 2 - SEARCH_BTN_W - FILTER_BTN_W - 32f);
+        // Même instance de champ réutilisée d'un rebuild à l'autre (toggleFilters/
+        // switchKind rappellent buildLayout()) — recréer un UiTextField à
+        // chaque fois effacerait ce que l'utilisateur est en train de taper.
+        if (searchField == null) {
+            searchField = new UiTextField(0, 0, 0, 0, kind.searchPlaceholder, this::onSearchTextChanged)
+                .searchIcon()
+                .onSubmit(this::triggerSearch);
+        }
+        searchField.x = MARGIN;
+        searchField.y = searchY;
+        searchField.w = searchW;
+        searchField.h = SEARCH_H;
         widgets.add(searchField);
         widgets.add(new UiButton(MARGIN + searchW + 16f, searchY, SEARCH_BTN_W, SEARCH_H, "Chercher", this::triggerSearch));
+        boolean anyFilterActive = filtersOpen || sort != SortOrder.DEFAULT || currentVersionOnly || !selectedCategories.isEmpty();
+        widgets.add(new UiButton(MARGIN + searchW + 16f + SEARCH_BTN_W + 10f, searchY, FILTER_BTN_W, SEARCH_H,
+            "Filtres" + (anyFilterActive ? " •" : ""), this::toggleFilters));
 
-        results = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
-        triggerSearch();
+        if (filtersOpen) buildFilterPanel(searchY - 12f);
+
+        float headerH = headerH();
+        results = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - headerH);
+        // Ré-affiche les résultats DÉJÀ reçus à la nouvelle géométrie (le
+        // panneau de filtres change la hauteur de liste disponible) — PAS un
+        // nouvel appel réseau, showResults() est purement local. Vide au tout
+        // premier appel (avant la toute première recherche) : rien à réafficher.
+        if (!shownResults.isEmpty()) showResults(shownResults);
+    }
+
+    /**
+     * Panneau de filtres — tri, version MC courante, catégories (propres au
+     * type actif, voir ContentKind.categories) — sous forme de "chips"
+     * cliquables, PAS une nouvelle fenêtre modale séparée (le framework
+     * UiScreenBase n'a qu'une seule liste de widgets par écran, voir sa
+     * javadoc — ajouter un système de modale dédié pour ce seul panneau
+     * n'était pas justifié). {@code topY} = juste sous la barre de recherche.
+     */
+    private void buildFilterPanel(float topY) {
+        UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
+        float chipScale = 0.4f;
+        float y = topY - CHIP_H;
+
+        // Ligne 1 — tri.
+        float x = MARGIN;
+        for (SortOrder s : SortOrder.values()) {
+            float w = renderer.textWidth(s.label, chipScale) + 24f;
+            widgets.add(new FilterChip(x, y, w, CHIP_H, s.label, () -> sort == s, () -> {
+                sort = s;
+                triggerSearch();
+            }));
+            x += w + CHIP_GAP;
+        }
+        y -= CHIP_H + CHIP_GAP;
+
+        // Ligne 2 — version MC courante.
+        String mcVersion = System.getProperty("launcheragent.mcVersion", "");
+        if (!mcVersion.isEmpty() && !"unknown".equals(mcVersion)) {
+            String versionLabel = "Version " + mcVersion + " uniquement";
+            float vw = renderer.textWidth(versionLabel, chipScale) + 24f;
+            widgets.add(new FilterChip(MARGIN, y, vw, CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
+                currentVersionOnly = !currentVersionOnly;
+                triggerSearch();
+            }));
+            y -= CHIP_H + CHIP_GAP;
+        }
+
+        // Lignes 3+ — catégories (propres au type actif), passent à la ligne
+        // suivante si elles débordent la largeur disponible.
+        x = MARGIN;
+        float maxX = screenWidth - MARGIN - SCROLLBAR_CLEARANCE;
+        for (String cat : kind.categories) {
+            float w = renderer.textWidth(cat, chipScale) + 24f;
+            if (x + w > maxX) {
+                x = MARGIN;
+                y -= CHIP_H + CHIP_GAP;
+            }
+            widgets.add(new FilterChip(x, y, w, CHIP_H, cat, () -> selectedCategories.contains(cat), () -> {
+                if (!selectedCategories.remove(cat)) selectedCategories.add(cat);
+                triggerSearch();
+            }));
+            x += w + CHIP_GAP;
+        }
+    }
+
+    /** "Pastille" de filtre cliquable (tri/version/catégorie) — plein ACCENT si actif, léger survol sinon. Même esprit visuel que TabButton, en plus petit/compact. */
+    private final class FilterChip extends UiWidget {
+        private final String label;
+        private final java.util.function.BooleanSupplier active;
+        private final Runnable onToggle;
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+
+        FilterChip(float x, float y, float w, float h, String label, java.util.function.BooleanSupplier active, Runnable onToggle) {
+            super(x, y, w, h);
+            this.label = label;
+            this.active = active;
+            this.onToggle = onToggle;
+        }
+
+        @Override
+        public void onClick() { onToggle.run(); }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            boolean isActive = active.getAsBoolean();
+            hoverAnim.setTarget(!isActive && contains(mouseX, mouseY) ? 1f : 0f);
+            UiColor bg = isActive ? UiTheme.ACCENT : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            float scale = 0.4f;
+            float tw = renderer.textWidth(label, scale);
+            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 4f,
+                isActive ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+        }
+    }
+
+    /** Bouton d'onglet Resource Packs/Shaders — fond plein (ACCENT) quand actif, léger survol sinon. Voir switchKind. */
+    private final class TabButton extends UiWidget {
+        private final ContentKind target;
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+
+        TabButton(float x, float y, float w, float h, ContentKind target) {
+            super(x, y, w, h);
+            this.target = target;
+        }
+
+        @Override
+        public void onClick() { switchKind(target); }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            boolean active = kind == target;
+            hoverAnim.setTarget(!active && contains(mouseX, mouseY) ? 1f : 0f);
+            UiColor bg = active ? UiTheme.ACCENT : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            float scale = 0.46f;
+            float tw = renderer.textWidth(target.tabLabel, scale);
+            renderer.drawText(target.tabLabel, x + (w - tw) / 2f, y + h / 2f - 5f,
+                active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+        }
     }
 
     // ── Recherche ──────────────────────────────────────────────────────────────
@@ -199,21 +440,35 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
         searchPending = false; // une recherche manuelle (Entrée/bouton) rend le débounce en cours obsolète
         if (busy) return;
         String query = searchField != null ? searchField.text().trim() : "";
+        // Capturés ICI, sur le thread de rendu, AVANT de démarrer le thread de
+        // recherche — selectedCategories/sort/currentVersionOnly ne sont PAS
+        // volatile et peuvent continuer à être mutés par un clic sur une chip
+        // de filtre pendant qu'une recherche est déjà en cours (busy ne
+        // bloque QUE triggerSearch() lui-même, pas onToggle) : lire
+        // selectedCategories DIRECTEMENT depuis le thread de recherche
+        // risquerait une ConcurrentModificationException sur ce HashSet muté
+        // en parallèle par un clic. Un snapshot immuable ici, transmis en
+        // paramètre, élimine ce risque (même motif que "query" déjà capturé
+        // de la même façon juste au-dessus).
+        String categoriesCsv = String.join(",", selectedCategories);
+        String version = currentVersionOnly ? System.getProperty("launcheragent.mcVersion", "") : "";
+        String searchType = kind.searchType;
+        String sortValue = sort.apiValue;
         busy = true;
         statusText = query.isEmpty() ? "Recommandations en cours..." : "Recherche en cours...";
 
-        Thread t = new Thread(() -> doSearch(query), "LauncherAgent-ModrinthSearch");
+        Thread t = new Thread(() -> doSearch(query, searchType, categoriesCsv, version, sortValue), "LauncherAgent-ModrinthSearch");
         t.setDaemon(true);
         t.start();
     }
 
-    private void doSearch(String query) {
+    private void doSearch(String query, String searchType, String categoriesCsv, String version, String sortValue) {
         try {
             if (!ContentBridge.ensureLoaded()) {
                 statusText = "content_core.dll indisponible";
                 return;
             }
-            String json = ContentBridge.searchModrinth(query, searchType);
+            String json = ContentBridge.searchModrinth(query, searchType, categoriesCsv, version, sortValue);
             String error = ModrinthJson.jsonString(json, "error");
             if (error != null) {
                 statusText = "Erreur Modrinth : " + error;
@@ -470,11 +725,12 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
                 return;
             }
 
+            Path installDir = installDir();
             Path dest = installDir.resolve(filename);
             Files.createDirectories(installDir);
             boolean ok = ContentBridge.downloadFile(url, dest.toString());
             statusText = ok
-                ? hit.title + " installé — visible dans la liste \"Disponibles\""
+                ? hit.title + " installé · visible dans la liste \"Disponibles\""
                 : "Échec du téléchargement de " + hit.title;
             // Réaffiche les mêmes résultats pour rafraîchir le badge Installé/Installer,
             // sans relancer une recherche réseau (showResults() ne fait que du local).
@@ -493,6 +749,7 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
     private Set<String> scanInstalledNormalizedNames() {
         Set<String> names = new HashSet<>();
         try {
+            Path installDir = installDir();
             if (Files.isDirectory(installDir)) {
                 try (java.util.stream.Stream<Path> stream = Files.list(installDir)) {
                     stream.forEach(p -> names.add(normalize(p.getFileName().toString())));

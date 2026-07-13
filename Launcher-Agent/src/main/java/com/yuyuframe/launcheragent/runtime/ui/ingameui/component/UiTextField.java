@@ -38,7 +38,7 @@ import java.util.function.Consumer;
 public class UiTextField extends UiWidget {
 
     private final StringBuilder text = new StringBuilder();
-    private final String placeholder;
+    private String placeholder;
     private final Consumer<String> onChange;
     private boolean focused;
     private boolean prevLeftDown;
@@ -80,6 +80,9 @@ public class UiTextField extends UiWidget {
         this.focused = focused;
         UiInputPoller.textInputActive = focused;
     }
+
+    /** Change le texte indicatif affiché quand le champ est vide et non focus (ex: bascule d'onglet Resource Packs/Shaders, voir ModrinthContentScreen). */
+    public void setPlaceholder(String placeholder) { this.placeholder = placeholder; }
 
     /** Remplace le contenu SANS déclencher onChange (utilisé pour resynchroniser l'affichage depuis une autre source, ex: sliders du color picker — évite une boucle de rappel). */
     public void setText(String value) {
