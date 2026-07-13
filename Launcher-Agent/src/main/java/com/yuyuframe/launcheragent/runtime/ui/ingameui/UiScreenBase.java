@@ -110,6 +110,26 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      */
     private UiInputPoller lastInput;
 
+    /**
+     * Widgets EXCLUSIFS pendant qu'un modal est actif (voir tiroir de filtres,
+     * {@code ModrinthContentScreen}) — quand non-null, {@link #dispatchClick}
+     * et {@link #uiPollInput} n'utilisent QUE cette liste (widgets normaux du
+     * fond ignorés pour le clic/le survol continu), pour qu'un clic sur un
+     * bouton d'arrière-plan ne traverse jamais le voile du modal. Nécessaire
+     * car {@code widgets} est une seule liste PLATE testée dans l'ORDRE
+     * D'INSERTION pour le clic ET le dessin (voir dispatchClick/uiDraw) — les
+     * deux ordres ne peuvent pas être satisfaits simultanément pour un calque
+     * qui doit être "dessiné en dernier" (par-dessus) mais "testé en premier"
+     * (prioritaire au clic) si tout partage la même liste. Le DESSIN, lui,
+     * N'EST PAS concerné par ce hook (widgets du fond toujours dessinés
+     * normalement ci-dessous, dimés par le voile du modal que la sous-classe
+     * dessine ELLE-MÊME par-dessus, après son propre contenu — voir
+     * ModrinthContentScreen.uiDraw) : seule la découpe clic/survol est
+     * générique ici, le z-order visuel reste piloté par la sous-classe.
+     * {@code null} par défaut = comportement normal (widgets standards).
+     */
+    protected List<UiWidget> modalWidgets() { return null; }
+
     @Override
     public void uiPollInput(UiInputPoller input) {
         lastInput = input;
@@ -120,7 +140,8 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // de slider, capture de touche en cours...). Le clic lui-même est
         // géré par le VRAI mouseClicked() ci-dessous, plus ici — voir sa
         // javadoc et celle de la classe.
-        for (UiWidget w : widgets) {
+        List<UiWidget> active = modalWidgets();
+        for (UiWidget w : (active != null ? active : widgets)) {
             try {
                 w.pollContinuous(input);
             } catch (Throwable t) {
@@ -177,8 +198,10 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     private boolean dispatchClick(int button) {
         if (button != 0 || lastInput == null) return false;
+        List<UiWidget> active = modalWidgets();
+        List<UiWidget> targets = active != null ? active : widgets;
         UiWidget clicked = null;
-        for (UiWidget w : widgets) {
+        for (UiWidget w : targets) {
             if (w.contains(lastInput.mouseX, lastInput.mouseY)) {
                 clicked = w;
                 break;
@@ -188,7 +211,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // champ texte reste focus indéfiniment sinon (pas de mécanisme
         // d'exclusivité ailleurs), curseur clignotant en fond même après avoir
         // cliqué sur un bouton/une carte à côté.
-        for (UiWidget w : widgets) {
+        for (UiWidget w : targets) {
             if (w instanceof UiTextField && w != clicked) ((UiTextField) w).setFocused(false);
         }
         if (clicked != null) {
@@ -244,6 +267,15 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * vers {@link #escapeTarget}.
      */
     private void handleEscape() {
+        // Modal actif (voir modalWidgets()) : Échap le ferme, RIEN d'autre —
+        // ne doit ni faire perdre le focus d'un champ de l'écran DERRIÈRE le
+        // modal (inaccessible tant qu'il est ouvert) ni fermer l'écran entier
+        // d'un coup (surprise pour l'utilisateur qui voulait juste fermer le
+        // tiroir de filtres).
+        if (modalWidgets() != null) {
+            onModalEscape();
+            return;
+        }
         for (UiWidget w : widgets) {
             if (w instanceof UiTextField && ((UiTextField) w).focused()) {
                 ((UiTextField) w).setFocused(false);
@@ -252,6 +284,9 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         }
         closeTo(escapeTarget);
     }
+
+    /** Appelé par Échap quand {@link #modalWidgets()} est actif — la sous-classe ferme SON modal ici (voir ModrinthContentScreen.toggleFilters). No-op par défaut. */
+    protected void onModalEscape() {}
 
     /**
      * Équivalent 1.8.9 (LWJGL2/pré-refonte-Element) de {@link #mouseClicked}

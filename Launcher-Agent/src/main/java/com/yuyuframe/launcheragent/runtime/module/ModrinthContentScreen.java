@@ -22,6 +22,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -172,19 +173,38 @@ public final class ModrinthContentScreen extends UiScreenBase {
         selectedCategories.clear(); // catégories propres au type précédent, sans rapport ici
         if (searchField != null) searchField.setPlaceholder(kind.searchPlaceholder);
         if (results != null) results.clear();
-        buildLayout(); // le panneau de filtres (catégories) dépend du type actif — reconstruit ses chips
+        buildLayout();
+        if (filtersOpen) buildDrawer(); // les chips de catégories dépendent du type actif
         triggerSearch();
     }
 
     private void toggleFilters() {
         filtersOpen = !filtersOpen;
-        buildLayout(); // repositionne tout (le panneau change la hauteur disponible pour la liste) SANS relancer de recherche réseau
+        if (filtersOpen) buildDrawer();
+        buildLayout(); // met à jour le "•" du bouton Filtres — pas de recherche réseau relancée
+    }
+
+    @Override
+    protected List<UiWidget> modalWidgets() {
+        return filtersOpen ? drawerAllWidgets : null;
+    }
+
+    @Override
+    protected void onModalEscape() {
+        toggleFilters();
     }
 
     @Override
     public void uiPollInput(UiInputPoller input) {
+        updateDrawerLayout();
         super.uiPollInput(input);
-        if (results != null) results.pollInput(input);
+        // Écran DERRIÈRE le tiroir totalement inerte pendant qu'il est ouvert
+        // (voir modalWidgets()) — la liste de résultats a son PROPRE dispatch
+        // de clic indépendant (UiScrollContainer.pollInput lit input.leftClicked
+        // directement, pas via UiScreenBase.dispatchClick), donc pas couverte
+        // par modalWidgets() : sans cette garde, une "Installer" sous le
+        // voile resterait cliquable à travers le tiroir.
+        if (!filtersOpen && results != null) results.pollInput(input);
     }
 
     @Override
@@ -207,6 +227,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
             triggerSearch();
         }
 
+        updateDrawerLayout();
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -214,13 +235,20 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 UiTheme.TEXT_PRIMARY, 0.8f, screenWidth, screenHeight);
             String status = statusText;
             if (!status.isEmpty()) {
-                // 40px sous la barre de recherche/le panneau de filtres,
-                // encore 40px au-dessus du haut de la liste — marge généreuse
-                // des deux côtés (voir statusYGap()/headerH(), revu suite au
-                // chevauchement statut/1re carte confirmé en jeu).
-                renderer.drawText(status, MARGIN, screenHeight - statusYGap(), UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
+                // 40px sous la barre de recherche, encore 40px au-dessus du
+                // haut de la liste — marge généreuse des deux côtés (voir
+                // STATUS_Y_GAP/HEADER_H, revu suite au chevauchement statut/
+                // 1re carte confirmé en jeu). Le tiroir de filtres FLOTTE
+                // par-dessus (voir drawDrawer ci-dessous) — ne pousse plus ce
+                // gabarit vers le bas comme l'ancien panneau inline.
+                renderer.drawText(status, MARGIN, screenHeight - STATUS_Y_GAP, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
             }
             if (results != null) results.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            // Tiroir de filtres DESSINÉ EN DERNIER (par-dessus la liste) — voir
+            // modalWidgets() pour pourquoi le dessin ne peut pas passer par la
+            // liste widgets générique de UiScreenBase (ordre de dessin vs.
+            // ordre de priorité au clic contradictoires sur une liste plate).
+            drawDrawer(renderer, mouseX, mouseY);
             // Voir UiModConfigScreen — ré-appliqué pour couvrir le titre/la liste ci-dessus.
             drawRevealVeil(renderer);
         } catch (Throwable t) {
@@ -243,26 +271,12 @@ public final class ModrinthContentScreen extends UiScreenBase {
     private static final float SEARCH_H = 40f;
     private static final float SEARCH_BTN_W = 130f;
     private static final float FILTER_BTN_W = 100f;
-    // Hauteur RÉSERVÉE au panneau de filtres quand ouvert (voir
-    // buildFilterPanel) : ligne de tri + ligne version + jusqu'à 2 lignes de
-    // catégories, toujours la même réservation que le panneau tienne sur 1 ou
-    // 2 lignes de catégories (évite un recalcul dynamique compliqué pour un
-    // gain visuel marginal — au pire un peu de vide sous les chips).
-    private static final float FILTER_PANEL_H = 132f;
+    private static final float STATUS_Y_GAP = 242f;
+    private static final float HEADER_H = 282f;
     private static final float CHIP_H = 28f, CHIP_GAP = 8f;
     // Largeur de la scrollbar (6) + sa marge (4, voir UiScrollContainer) +
     // marge supplémentaire pour ne pas la coller au bord de la carte.
     private static final float SCROLLBAR_CLEARANCE = 24f;
-
-    /** Distance écran→texte de statut — dépend de FILTER_PANEL_H (voir buildFilterPanel), donc plus une constante figée depuis l'ajout du panneau de filtres. */
-    private float statusYGap() {
-        return SEARCH_TOP_GAP + SEARCH_H + 30f + (filtersOpen ? FILTER_PANEL_H : 0f);
-    }
-
-    /** Espace total réservé au-dessus de la liste — voir statusYGap(). */
-    private float headerH() {
-        return statusYGap() + 40f;
-    }
 
     private void buildLayout() {
         widgets.clear();
@@ -302,74 +316,200 @@ public final class ModrinthContentScreen extends UiScreenBase {
         searchField.h = SEARCH_H;
         widgets.add(searchField);
         widgets.add(new UiButton(MARGIN + searchW + 16f, searchY, SEARCH_BTN_W, SEARCH_H, "Chercher", this::triggerSearch));
-        boolean anyFilterActive = filtersOpen || sort != SortOrder.DEFAULT || currentVersionOnly || !selectedCategories.isEmpty();
+        boolean anyFilterActive = sort != SortOrder.DEFAULT || currentVersionOnly || !selectedCategories.isEmpty();
         widgets.add(new UiButton(MARGIN + searchW + 16f + SEARCH_BTN_W + 10f, searchY, FILTER_BTN_W, SEARCH_H,
             "Filtres" + (anyFilterActive ? " •" : ""), this::toggleFilters));
 
-        if (filtersOpen) buildFilterPanel(searchY - 12f);
-
-        float headerH = headerH();
-        results = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - headerH);
-        // Ré-affiche les résultats DÉJÀ reçus à la nouvelle géométrie (le
-        // panneau de filtres change la hauteur de liste disponible) — PAS un
+        results = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
+        // Ré-affiche les résultats DÉJÀ reçus à la nouvelle géométrie — PAS un
         // nouvel appel réseau, showResults() est purement local. Vide au tout
         // premier appel (avant la toute première recherche) : rien à réafficher.
         if (!shownResults.isEmpty()) showResults(shownResults);
     }
 
+    // ── Tiroir de filtres (modal) ────────────────────────────────────────────
+    //
+    // PREMIER modal de ce moteur UI — voir UiScreenBase.modalWidgets() pour le
+    // mécanisme générique posé pour lui (et réutilisable par de futurs
+    // modaux). Glisse depuis la droite, pleine hauteur, fond assombri sur le
+    // reste de l'écran (liste de résultats visible en dégradé derrière, pas
+    // repoussée vers le bas comme l'ancien panneau inline — qui pouvait la
+    // chevaucher, voir historique de session).
+    //
+    // Les chips (drawerContent) sont des widgets PERSISTANTS pendant que le
+    // tiroir reste ouvert (jamais recréés frame après frame, seulement
+    // REPOSITIONNÉS via updateDrawerLayout — même motif que
+    // UiScrollContainer.baseY/applyOffsets) : les recréer à chaque frame
+    // remettrait leur UiAnimatedFloat de survol à zéro en permanence, cassant
+    // l'animation de survol.
+    private static final float DRAWER_W = 380f;
+    private static final float DRAWER_MARGIN = 20f;
+    private final UiAnimatedFloat drawerAnim = new UiAnimatedFloat(0f, 12f);
+    private final UiWidget drawerBackdrop = new DrawerBackdrop();
+    private final List<UiWidget> drawerContent = new ArrayList<>();
+    private final List<Float> drawerContentBaseX = new ArrayList<>(); // offset LOCAL (0 = bord gauche du tiroir)
+    private final List<UiWidget> drawerAllWidgets = new ArrayList<>(); // backdrop + drawerContent, recombiné à chaque buildDrawer()
+    private float drawerSortLabelY, drawerVersionLabelY, drawerCatLabelY;
+    private boolean drawerHasVersionChip;
+
+    /** Repositionne le tiroir/son fond à l'état d'animation COURANT — appelé chaque frame (poll ET dessin), indépendamment de buildDrawer() (qui, lui, ne (re)construit les widgets qu'à l'ouverture/au changement de type). */
+    private void updateDrawerLayout() {
+        drawerAnim.setTarget(filtersOpen ? 1f : 0f);
+        float t = drawerAnim.get();
+        float drawerX = screenWidth - DRAWER_W * t;
+        drawerBackdrop.x = 0;
+        drawerBackdrop.y = 0;
+        drawerBackdrop.w = Math.max(0f, drawerX);
+        drawerBackdrop.h = screenHeight;
+        for (int i = 0; i < drawerContent.size(); i++) {
+            drawerContent.get(i).x = drawerX + drawerContentBaseX.get(i);
+        }
+    }
+
+    private void drawDrawer(UiRenderer renderer, double mouseX, double mouseY) {
+        float t = drawerAnim.get();
+        if (t <= 0.001f) return;
+        drawerBackdrop.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+        float drawerX = screenWidth - DRAWER_W * t;
+        renderer.drawRoundedRect(drawerX, 0, screenWidth, screenHeight, 0, UiTheme.PANEL_BG, screenWidth, screenHeight);
+        // Liseré ACCENT au bord gauche — sépare visuellement le tiroir du
+        // reste (drawShadow existe mais compose TOUJOURS après Blaze3D sur
+        // era E, voir sa javadoc — un vrai risque de retomber sur le même bug
+        // de z-order déjà rencontré plusieurs fois cette session ; un simple
+        // liseré plein via drawRoundedRect, lui, passe par le même chemin
+        // Blaze3D que le reste, aucun risque de composition).
+        renderer.drawRoundedRect(drawerX, 0, drawerX + 3f, screenHeight, 0, UiTheme.ACCENT, screenWidth, screenHeight);
+
+        renderer.drawText(UiFont.BOLD, "Filtres", drawerX + DRAWER_MARGIN, screenHeight - 40f, UiTheme.TEXT_PRIMARY, 0.56f, screenWidth, screenHeight);
+        renderer.drawText("Trier par", drawerX + DRAWER_MARGIN, drawerSortLabelY, UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+        if (drawerHasVersionChip) {
+            renderer.drawText("Version", drawerX + DRAWER_MARGIN, drawerVersionLabelY, UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+        }
+        renderer.drawText("Catégories", drawerX + DRAWER_MARGIN, drawerCatLabelY, UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+
+        for (UiWidget w : drawerContent) w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+    }
+
+    /** Fond assombri derrière le tiroir — clic dessus = fermer (comme une modale classique). Largeur mise à jour chaque frame par updateDrawerLayout(). */
+    private final class DrawerBackdrop extends UiWidget {
+        DrawerBackdrop() { super(0, 0, 0, 0); }
+
+        @Override
+        public void onClick() { toggleFilters(); }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            renderer.drawRoundedRect(x, y, x + w, y + h, 0,
+                new UiColor(8, 8, 12, 255).multiplyAlpha(0.55f * drawerAnim.get()), vpWidth, vpHeight);
+        }
+    }
+
+    /** Bouton fermer (×) du tiroir — coin haut-droite. */
+    private final class DrawerCloseButton extends UiWidget {
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+
+        DrawerCloseButton(float w, float h) { super(0, 0, w, h); }
+
+        @Override
+        public void onClick() { toggleFilters(); }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            UiColor bg = UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            float scale = 0.5f;
+            float tw = renderer.textWidth("×", scale); // × (multiplication, U+00D7 — Latin-1 Supplement, supporté par UiFont)
+            renderer.drawText("×", x + (w - tw) / 2f, y + h / 2f - 6f, UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+        }
+    }
+
+    /** Enregistre un widget de tiroir à sa position LOCALE (x relatif au bord gauche, y absolu — le tiroir ne défile pas verticalement) — voir updateDrawerLayout(). */
+    private void addDrawerWidget(UiWidget w, float localX, float y) {
+        w.y = y;
+        drawerContent.add(w);
+        drawerContentBaseX.add(localX);
+    }
+
     /**
-     * Panneau de filtres — tri, version MC courante, catégories (propres au
-     * type actif, voir ContentKind.categories) — sous forme de "chips"
-     * cliquables, PAS une nouvelle fenêtre modale séparée (le framework
-     * UiScreenBase n'a qu'une seule liste de widgets par écran, voir sa
-     * javadoc — ajouter un système de modale dédié pour ce seul panneau
-     * n'était pas justifié). {@code topY} = juste sous la barre de recherche.
+     * (Re)construit le CONTENU du tiroir (fermer, tri, version, catégories,
+     * réinitialiser) — appelé à l'ouverture et au changement d'onglet (les
+     * catégories dépendent du type actif, voir switchKind). Positions
+     * calculées en LOCAL (0 = bord gauche du tiroir) via addDrawerWidget,
+     * décalées vers l'écran chaque frame par updateDrawerLayout().
      */
-    private void buildFilterPanel(float topY) {
+    private void buildDrawer() {
+        drawerContent.clear();
+        drawerContentBaseX.clear();
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         float chipScale = 0.4f;
-        float y = topY - CHIP_H;
+        float maxLocalX = DRAWER_W - DRAWER_MARGIN;
 
-        // Ligne 1 — tri.
-        float x = MARGIN;
+        float closeSize = 28f;
+        addDrawerWidget(new DrawerCloseButton(closeSize, closeSize), DRAWER_W - DRAWER_MARGIN - closeSize, screenHeight - 54f);
+
+        float y = screenHeight - 96f;
+        drawerSortLabelY = y;
+        y -= 26f;
+        float x = DRAWER_MARGIN;
         for (SortOrder s : SortOrder.values()) {
             float w = renderer.textWidth(s.label, chipScale) + 24f;
-            widgets.add(new FilterChip(x, y, w, CHIP_H, s.label, () -> sort == s, () -> {
-                sort = s;
-                triggerSearch();
-            }));
-            x += w + CHIP_GAP;
-        }
-        y -= CHIP_H + CHIP_GAP;
-
-        // Ligne 2 — version MC courante.
-        String mcVersion = System.getProperty("launcheragent.mcVersion", "");
-        if (!mcVersion.isEmpty() && !"unknown".equals(mcVersion)) {
-            String versionLabel = "Version " + mcVersion + " uniquement";
-            float vw = renderer.textWidth(versionLabel, chipScale) + 24f;
-            widgets.add(new FilterChip(MARGIN, y, vw, CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
-                currentVersionOnly = !currentVersionOnly;
-                triggerSearch();
-            }));
-            y -= CHIP_H + CHIP_GAP;
-        }
-
-        // Lignes 3+ — catégories (propres au type actif), passent à la ligne
-        // suivante si elles débordent la largeur disponible.
-        x = MARGIN;
-        float maxX = screenWidth - MARGIN - SCROLLBAR_CLEARANCE;
-        for (String cat : kind.categories) {
-            float w = renderer.textWidth(cat, chipScale) + 24f;
-            if (x + w > maxX) {
-                x = MARGIN;
+            if (x + w > maxLocalX) {
+                x = DRAWER_MARGIN;
                 y -= CHIP_H + CHIP_GAP;
             }
-            widgets.add(new FilterChip(x, y, w, CHIP_H, cat, () -> selectedCategories.contains(cat), () -> {
-                if (!selectedCategories.remove(cat)) selectedCategories.add(cat);
+            addDrawerWidget(new FilterChip(0, 0, w, CHIP_H, s.label, () -> sort == s, () -> {
+                sort = s;
                 triggerSearch();
-            }));
+            }), x, y);
             x += w + CHIP_GAP;
         }
+        y -= CHIP_H + CHIP_GAP + 14f;
+
+        String mcVersion = System.getProperty("launcheragent.mcVersion", "");
+        drawerHasVersionChip = !mcVersion.isEmpty() && !"unknown".equals(mcVersion);
+        if (drawerHasVersionChip) {
+            drawerVersionLabelY = y;
+            y -= 26f;
+            String versionLabel = "Version " + mcVersion + " uniquement";
+            float vw = renderer.textWidth(versionLabel, chipScale) + 24f;
+            addDrawerWidget(new FilterChip(0, 0, vw, CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
+                currentVersionOnly = !currentVersionOnly;
+                triggerSearch();
+            }), DRAWER_MARGIN, y);
+            y -= CHIP_H + CHIP_GAP + 14f;
+        }
+
+        drawerCatLabelY = y;
+        y -= 26f;
+        x = DRAWER_MARGIN;
+        for (String cat : kind.categories) {
+            float w = renderer.textWidth(cat, chipScale) + 24f;
+            if (x + w > maxLocalX) {
+                x = DRAWER_MARGIN;
+                y -= CHIP_H + CHIP_GAP;
+            }
+            addDrawerWidget(new FilterChip(0, 0, w, CHIP_H, cat, () -> selectedCategories.contains(cat), () -> {
+                if (!selectedCategories.remove(cat)) selectedCategories.add(cat);
+                triggerSearch();
+            }), x, y);
+            x += w + CHIP_GAP;
+        }
+        y -= CHIP_H + CHIP_GAP + 24f;
+
+        addDrawerWidget(new UiButton(0, 0, DRAWER_W - DRAWER_MARGIN * 2, 34f, "Réinitialiser les filtres", this::resetFilters),
+            DRAWER_MARGIN, y - 34f);
+
+        drawerAllWidgets.clear();
+        drawerAllWidgets.add(drawerBackdrop);
+        drawerAllWidgets.addAll(drawerContent);
+    }
+
+    private void resetFilters() {
+        selectedCategories.clear();
+        sort = SortOrder.DEFAULT;
+        currentVersionOnly = false;
+        triggerSearch();
     }
 
     /** "Pastille" de filtre cliquable (tri/version/catégorie) — plein ACCENT si actif, léger survol sinon. Même esprit visuel que TabButton, en plus petit/compact. */
