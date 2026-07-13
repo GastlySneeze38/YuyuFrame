@@ -2,7 +2,7 @@ use jni::objects::{JByteArray, JClass, JString};
 use jni::sys::{jboolean, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
-use crate::{download_file, fetch_image_rgba, get_latest_file, search_modrinth};
+use crate::{download_file, fetch_image_rgba, get_latest_file, get_project, search_modrinth};
 
 /// Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_searchModrinth
 ///
@@ -54,6 +54,26 @@ pub extern "system" fn Java_com_yuyuframe_launcheragent_runtime_content_ContentB
     let project_id: String = env.get_string(&project_id).unwrap().into();
 
     let result = get_latest_file(&project_id).unwrap_or_else(|e| {
+        format!("{{\"error\":\"{}\"}}", e.replace('"', "'"))
+    });
+
+    env.new_string(result).unwrap_or_else(|_| {
+        env.new_string("{\"error\":\"encodage résultat échoué\"}").unwrap()
+    })
+}
+
+/// Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_getProject
+#[no_mangle]
+pub extern "system" fn Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_getProject<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    project_id: JString<'local>,
+) -> JString<'local> {
+    let project_id: String = env.get_string(&project_id).unwrap().into();
+
+    let result = get_project(&project_id).unwrap_or_else(|e| {
         format!("{{\"error\":\"{}\"}}", e.replace('"', "'"))
     });
 

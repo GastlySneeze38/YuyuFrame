@@ -86,6 +86,8 @@ export const api = {
       invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta }),
     reloadAgent: () =>
       invoke<void>('reload_agent'),
+    cancel: (instanceId: string) =>
+      invoke<void>('cancel_launch', { instanceId }),
   },
 
   sync: {

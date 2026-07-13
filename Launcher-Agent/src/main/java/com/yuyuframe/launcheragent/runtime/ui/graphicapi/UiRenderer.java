@@ -779,9 +779,23 @@ public final class UiRenderer {
      *                 on reste dans NOTRE pipeline, version-générique).
      */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
+        drawIcon(cacheKey, img, x, y, size, size, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante RECTANGULAIRE (largeur/hauteur indépendantes) — ajoutée pour
+     * la page de détail Modrinth (bannières/galerie devant garder leur
+     * ratio d'aspect d'origine, voir ModrinthProjectDetailScreen) : la
+     * version carrée ci-dessus délègue simplement ici avec {@code w=h=size},
+     * aucun appelant existant à modifier. Le chemin Blaze3D (era E) acceptait
+     * DÉJÀ un rectangle arbitraire ({@code UiTextBlaze3D.queueIcon(x0,y0,x1,y1)}
+     * — seule cette méthode, et les deux branches GL brut ci-dessous,
+     * forçaient artificiellement un carré via un unique paramètre {@code size}.
+     */
+    public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h, int vpWidth, int vpHeight) {
         if (img == null) return;
         if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueIcon(cacheKey, img, x, y, x + size, y + size, vpWidth, vpHeight);
+            UiTextBlaze3D.queueIcon(cacheKey, img, x, y, x + w, y + h, vpWidth, vpHeight);
             return;
         }
         int texId = ensureIconTexture(cacheKey, img);
@@ -810,16 +824,16 @@ public final class UiRenderer {
                 glUniform1i(uTexIconModern, 0);
                 uploadProjectionModern(uProjectionIconModern, vpWidth, vpHeight);
 
-                // UV : (x,y+size)=visuel HAUT-gauche (Y-up) ↔ (0,0)=image
+                // UV : (x,y+h)=visuel HAUT-gauche (Y-up) ↔ (0,0)=image
                 // haut-gauche (convention image standard) — même
                 // correspondance que UiTextBlaze3D.drawIcon (voir sa javadoc).
                 ensureModernBuffersInit();
                 if (!modernBuffersInitFailed) {
                     FloatBuffer verts = floatBuffer(4 * 4);
-                    putVertex(verts, x, y + size, 0f, 0f);
+                    putVertex(verts, x, y + h, 0f, 0f);
                     putVertex(verts, x, y, 0f, 1f);
-                    putVertex(verts, x + size, y, 1f, 1f);
-                    putVertex(verts, x + size, y + size, 1f, 0f);
+                    putVertex(verts, x + w, y, 1f, 1f);
+                    putVertex(verts, x + w, y + h, 1f, 0f);
                     verts.flip();
                     uploadAndDraw(verts, 6, 4); // GL_TRIANGLE_FAN
                 }
@@ -862,10 +876,10 @@ public final class UiRenderer {
 
             glColor4f(1f, 1f, 1f, 1f);
             glBegin(7); // GL_QUADS
-            glTexCoord2f(0f, 0f); glVertex2f(x, y + size);
+            glTexCoord2f(0f, 0f); glVertex2f(x, y + h);
             glTexCoord2f(0f, 1f); glVertex2f(x, y);
-            glTexCoord2f(1f, 1f); glVertex2f(x + size, y);
-            glTexCoord2f(1f, 0f); glVertex2f(x + size, y + size);
+            glTexCoord2f(1f, 1f); glVertex2f(x + w, y);
+            glTexCoord2f(1f, 0f); glVertex2f(x + w, y + h);
             glEnd();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawIcon (legacy): " + t);

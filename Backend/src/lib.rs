@@ -103,6 +103,7 @@ pub fn run() {
                 session: mc_session,
                 download_progress: None,
                 running_instances: std::collections::HashSet::new(),
+                launch_cancel: std::collections::HashMap::new(),
                 auth_device_code: None,
             }));
 
@@ -141,6 +142,7 @@ pub fn run() {
             commands::mc::mc_delete,
             commands::versions::list_versions,
             commands::launch::launch_game,
+            commands::launch::cancel_launch,
             commands::launch::reload_agent,
             commands::launch::console_ready,
             commands::mods::mods_list,

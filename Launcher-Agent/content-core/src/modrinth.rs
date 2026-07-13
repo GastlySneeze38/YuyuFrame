@@ -56,6 +56,28 @@ pub fn search_modrinth(
         .map_err(|e| format!("lecture réponse Modrinth échouée : {e}"))
 }
 
+/// Détail complet d'un projet Modrinth (page "comme sur Modrinth" côté Java —
+/// voir ModrinthProjectDetailScreen) — contient notamment `body` (description
+/// longue, markdown) et `gallery` (captures d'écran) qu'AUCUN des deux
+/// endpoints déjà utilisés (recherche, dernière version) ne renvoie. JSON
+/// brut renvoyé tel quel, parsé côté Java (voir ModrinthJson) — même
+/// convention que search_modrinth, pas de modèle de données dupliqué ici.
+pub fn get_project(project_id: &str) -> Result<String, String> {
+    let url = format!(
+        "https://api.modrinth.com/v2/project/{}",
+        urlencoding(project_id)
+    );
+
+    let response = ureq::get(&url)
+        .set("User-Agent", "YuyuFrame-LauncherAgent/0.1")
+        .call()
+        .map_err(|e| format!("requête détail projet échouée : {e}"))?;
+
+    response
+        .into_string()
+        .map_err(|e| format!("lecture réponse détail projet échouée : {e}"))
+}
+
 /// Résout le fichier de la dernière version publiée d'un projet Modrinth.
 /// Retourne un JSON simplifié `{"url":"...","filename":"..."}` — évite à Java
 /// de parser la structure complète des versions (fichiers multiples,

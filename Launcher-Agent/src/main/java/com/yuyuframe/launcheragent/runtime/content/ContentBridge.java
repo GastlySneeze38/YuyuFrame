@@ -65,6 +65,15 @@ public final class ContentBridge {
      */
     public static native String getLatestFile(String projectId);
 
+    /**
+     * Détail complet d'un projet Modrinth — voir
+     * {@code ModrinthProjectDetailScreen} : contient notamment {@code body}
+     * (description longue, markdown) et {@code gallery} (captures d'écran),
+     * qu'AUCUN autre appel ici ne renvoie. JSON brut, parsé côté Java (voir
+     * ModrinthJson).
+     */
+    public static native String getProject(String projectId);
+
     /** Télécharge un fichier vers destPath. */
     public static native boolean downloadFile(String url, String destPath);
 

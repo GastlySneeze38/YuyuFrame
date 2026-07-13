@@ -163,6 +163,13 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiPresentMixin",
             "net/minecraft/client/gl/Framebuffer",
             "blitToScreen", "()V", null),
+        // InGameHud.renderCrosshair(DrawContext, RenderTickCounter) — voir
+        // CrosshairMixin, même signature que le bracket 1.21.4
+        // (MixinCrosshair1214), vérifiée indépendamment dans
+        // mappings/yarn-1.21.11-mergedv2.jar (cache local).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CrosshairMixin",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
 
         // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
         // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.

@@ -7,8 +7,11 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiEasing;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiStagger;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
@@ -271,7 +274,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
     private static final float FILTER_BTN_W = 100f;
     private static final float STATUS_Y_GAP = 242f;
     private static final float HEADER_H = 282f;
-    private static final float CHIP_H = 28f, CHIP_GAP = 8f;
+    private static final float CHIP_H = 40f, CHIP_GAP = 14f;
     // Largeur de la scrollbar (6) + sa marge (4, voir UiScrollContainer) +
     // marge supplémentaire pour ne pas la coller au bord de la carte.
     private static final float SCROLLBAR_CLEARANCE = 24f;
@@ -340,8 +343,8 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // UiScrollContainer.baseY/applyOffsets) : les recréer à chaque frame
     // remettrait leur UiAnimatedFloat de survol à zéro en permanence, cassant
     // l'animation de survol.
-    private static final float DRAWER_W = 380f;
-    private static final float DRAWER_MARGIN = 20f;
+    private static final float DRAWER_W = 460f;
+    private static final float DRAWER_MARGIN = 30f;
     private final UiAnimatedFloat drawerAnim = new UiAnimatedFloat(0f, 12f);
     private final UiWidget drawerBackdrop = new DrawerBackdrop();
     private final List<UiWidget> drawerContent = new ArrayList<>();
@@ -378,12 +381,17 @@ public final class ModrinthContentScreen extends UiScreenBase {
         // Blaze3D que le reste, aucun risque de composition).
         renderer.drawRoundedRect(drawerX, 0, drawerX + 3f, screenHeight, 0, UiTheme.ACCENT, screenWidth, screenHeight);
 
-        renderer.drawText(UiFont.BOLD, "Filtres", drawerX + DRAWER_MARGIN, screenHeight - 40f, UiTheme.TEXT_PRIMARY, 0.56f, screenWidth, screenHeight);
-        renderer.drawText("Trier par", drawerX + DRAWER_MARGIN, drawerSortLabelY, UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+        // Libellés fondus en synchro avec le glissement du tiroir (même valeur
+        // "t" que le fond/le liseré ci-dessus) — pas de UiTransition dédiée
+        // pour un simple texte statique, cette synchronisation suffit.
+        UiColor labelColor = UiTheme.TEXT_MUTED.multiplyAlpha(t);
+        renderer.drawText(UiFont.BOLD, "Filtres", drawerX + DRAWER_MARGIN, screenHeight - 52f,
+            UiTheme.TEXT_PRIMARY.multiplyAlpha(t), 0.72f, screenWidth, screenHeight);
+        renderer.drawText("Trier par", drawerX + DRAWER_MARGIN, drawerSortLabelY, labelColor, 0.46f, screenWidth, screenHeight);
         if (drawerHasVersionChip) {
-            renderer.drawText("Version", drawerX + DRAWER_MARGIN, drawerVersionLabelY, UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+            renderer.drawText("Version", drawerX + DRAWER_MARGIN, drawerVersionLabelY, labelColor, 0.46f, screenWidth, screenHeight);
         }
-        renderer.drawText("Catégories", drawerX + DRAWER_MARGIN, drawerCatLabelY, UiTheme.TEXT_MUTED, 0.4f, screenWidth, screenHeight);
+        renderer.drawText("Catégories", drawerX + DRAWER_MARGIN, drawerCatLabelY, labelColor, 0.46f, screenWidth, screenHeight);
 
         for (UiWidget w : drawerContent) w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
     }
@@ -405,20 +413,26 @@ public final class ModrinthContentScreen extends UiScreenBase {
     /** Bouton fermer (×) du tiroir — coin haut-droite. */
     private final class DrawerCloseButton extends UiWidget {
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+        private final UiTransition entrance;
 
-        DrawerCloseButton(float w, float h) { super(0, 0, w, h); }
+        DrawerCloseButton(float w, float h, float entranceDelay) {
+            super(0, 0, w, h);
+            entrance = new UiTransition(0.24f, entranceDelay, UiEasing.EASE_OUT_CUBIC);
+            entrance.show();
+        }
 
         @Override
         public void onClick() { toggleFilters(); }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            float e = entrance.eased();
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
+            UiColor bg = UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get()).multiplyAlpha(e);
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
-            float scale = 0.5f;
+            float scale = 0.56f;
             float tw = renderer.textWidth("×", scale); // × (multiplication, U+00D7 — Latin-1 Supplement, supporté par UiFont)
-            renderer.drawText("×", x + (w - tw) / 2f, y + h / 2f - 6f, UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+            renderer.drawText("×", x + (w - tw) / 2f, y + h / 2f - 7f, UiTheme.TEXT_SECONDARY.multiplyAlpha(e), scale, vpWidth, vpHeight);
         }
     }
 
@@ -436,22 +450,41 @@ public final class ModrinthContentScreen extends UiScreenBase {
      * calculées en LOCAL (0 = bord gauche du tiroir) via addDrawerWidget,
      * décalées vers l'écran chaque frame par updateDrawerLayout().
      */
+    // Cascade d'entrée (voir UiStagger/UiTransition, moteur déjà présent mais
+    // encore jamais câblé en prod avant ce tiroir) — chaque chip apparaît
+    // légèrement après la précédente plutôt que toutes d'un coup. Plafonné
+    // (ENTRANCE_MAX_DELAY) : une longue liste de catégories n'attend plus
+    // indéfiniment avant que ses derniers éléments n'apparaissent.
+    private static final float ENTRANCE_PER_ITEM_DELAY = 0.028f;
+    private static final float ENTRANCE_MAX_DELAY = 0.32f;
+
+    // BUG TROUVÉ (utilisateur : "les titres sont beaucoup trop serrés au
+    // sélection") : l'espace réservé entre un libellé de section et sa
+    // rangée de chips valait EXACTEMENT CHIP_H (40f), donc le HAUT de la
+    // première chip tombait pile sur la ligne de BASE du texte (drawText
+    // dessine au-dessus de "y", jamais en dessous) — zéro espace visuel
+    // entre les lettres et la chip. Un vrai espacement doit ajouter une
+    // marge EN PLUS de CHIP_H, pas s'y substituer.
+    private static final float LABEL_TO_CHIP_GAP = CHIP_H + 20f;
+
     private void buildDrawer() {
         drawerContent.clear();
         drawerContentBaseX.clear();
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-        float chipScale = 0.4f;
+        float chipScale = 0.46f;
         float maxLocalX = DRAWER_W - DRAWER_MARGIN;
+        int[] entranceIndex = {0}; // tableau 1-case = compteur mutable capturable par les lambdas ci-dessous
 
-        float closeSize = 28f;
-        addDrawerWidget(new DrawerCloseButton(closeSize, closeSize), DRAWER_W - DRAWER_MARGIN - closeSize, screenHeight - 54f);
+        float closeSize = 34f;
+        addDrawerWidget(new DrawerCloseButton(closeSize, closeSize, nextEntranceDelay(entranceIndex)),
+            DRAWER_W - DRAWER_MARGIN - closeSize, screenHeight - 62f);
 
-        float y = screenHeight - 96f;
+        float y = screenHeight - 128f;
         drawerSortLabelY = y;
-        y -= 26f;
+        y -= LABEL_TO_CHIP_GAP;
         float x = DRAWER_MARGIN;
         for (SortOrder s : SortOrder.values()) {
-            float w = renderer.textWidth(s.label, chipScale) + 24f;
+            float w = renderer.textWidth(s.label, chipScale) + 34f;
             if (x + w > maxLocalX) {
                 x = DRAWER_MARGIN;
                 y -= CHIP_H + CHIP_GAP;
@@ -459,30 +492,30 @@ public final class ModrinthContentScreen extends UiScreenBase {
             addDrawerWidget(new FilterChip(0, 0, w, CHIP_H, s.label, () -> sort == s, () -> {
                 sort = s;
                 triggerSearch();
-            }), x, y);
+            }, nextEntranceDelay(entranceIndex)), x, y);
             x += w + CHIP_GAP;
         }
-        y -= CHIP_H + CHIP_GAP + 14f;
+        y -= CHIP_H + CHIP_GAP + 32f;
 
         String mcVersion = System.getProperty("launcheragent.mcVersion", "");
         drawerHasVersionChip = !mcVersion.isEmpty() && !"unknown".equals(mcVersion);
         if (drawerHasVersionChip) {
             drawerVersionLabelY = y;
-            y -= 26f;
+            y -= LABEL_TO_CHIP_GAP;
             String versionLabel = "Version " + mcVersion + " uniquement";
-            float vw = renderer.textWidth(versionLabel, chipScale) + 24f;
+            float vw = renderer.textWidth(versionLabel, chipScale) + 34f;
             addDrawerWidget(new FilterChip(0, 0, vw, CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
                 currentVersionOnly = !currentVersionOnly;
                 triggerSearch();
-            }), DRAWER_MARGIN, y);
-            y -= CHIP_H + CHIP_GAP + 14f;
+            }, nextEntranceDelay(entranceIndex)), DRAWER_MARGIN, y);
+            y -= CHIP_H + CHIP_GAP + 32f;
         }
 
         drawerCatLabelY = y;
-        y -= 26f;
+        y -= LABEL_TO_CHIP_GAP;
         x = DRAWER_MARGIN;
         for (String cat : kind.categories) {
-            float w = renderer.textWidth(cat, chipScale) + 24f;
+            float w = renderer.textWidth(cat, chipScale) + 34f;
             if (x + w > maxLocalX) {
                 x = DRAWER_MARGIN;
                 y -= CHIP_H + CHIP_GAP;
@@ -490,17 +523,22 @@ public final class ModrinthContentScreen extends UiScreenBase {
             addDrawerWidget(new FilterChip(0, 0, w, CHIP_H, cat, () -> selectedCategories.contains(cat), () -> {
                 if (!selectedCategories.remove(cat)) selectedCategories.add(cat);
                 triggerSearch();
-            }), x, y);
+            }, nextEntranceDelay(entranceIndex)), x, y);
             x += w + CHIP_GAP;
         }
-        y -= CHIP_H + CHIP_GAP + 24f;
+        y -= CHIP_H + CHIP_GAP + 44f;
 
-        addDrawerWidget(new UiButton(0, 0, DRAWER_W - DRAWER_MARGIN * 2, 34f, "Réinitialiser les filtres", this::resetFilters),
-            DRAWER_MARGIN, y - 34f);
+        addDrawerWidget(new UiButton(0, 0, DRAWER_W - DRAWER_MARGIN * 2, 46f, "Réinitialiser les filtres", this::resetFilters),
+            DRAWER_MARGIN, y - 46f);
 
         drawerAllWidgets.clear();
         drawerAllWidgets.add(drawerBackdrop);
         drawerAllWidgets.addAll(drawerContent);
+    }
+
+    /** Délai d'entrée du PROCHAIN élément de la cascade, incrémente le compteur au passage — voir ENTRANCE_PER_ITEM_DELAY/UiStagger. */
+    private static float nextEntranceDelay(int[] counter) {
+        return UiStagger.delayFor(counter[0]++, ENTRANCE_PER_ITEM_DELAY, ENTRANCE_MAX_DELAY);
     }
 
     private void resetFilters() {
@@ -510,18 +548,32 @@ public final class ModrinthContentScreen extends UiScreenBase {
         triggerSearch();
     }
 
-    /** "Pastille" de filtre cliquable (tri/version/catégorie) — plein ACCENT si actif, léger survol sinon. Même esprit visuel que TabButton, en plus petit/compact. */
+    /**
+     * "Pastille" de filtre cliquable (tri/version/catégorie) — plein ACCENT
+     * si actif, léger survol sinon. Même esprit visuel que TabButton, en
+     * plus compact. Fondu + léger glissement vertical à l'apparition
+     * ({@code entrance}, voir buildDrawer/nextEntranceDelay) — jamais
+     * recréée pendant que le tiroir reste ouvert (voir javadoc de la section
+     * "Tiroir de filtres"), donc l'animation ne se rejoue QUE quand le
+     * tiroir se rouvre (buildDrawer() reconstruit tout depuis zéro).
+     */
     private final class FilterChip extends UiWidget {
+        private static final float ENTRANCE_SLIDE_PX = 12f;
+
         private final String label;
         private final java.util.function.BooleanSupplier active;
         private final Runnable onToggle;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+        private final UiTransition entrance;
 
-        FilterChip(float x, float y, float w, float h, String label, java.util.function.BooleanSupplier active, Runnable onToggle) {
+        FilterChip(float x, float y, float w, float h, String label, java.util.function.BooleanSupplier active,
+                   Runnable onToggle, float entranceDelay) {
             super(x, y, w, h);
             this.label = label;
             this.active = active;
             this.onToggle = onToggle;
+            entrance = new UiTransition(0.26f, entranceDelay, UiEasing.EASE_OUT_CUBIC);
+            entrance.show();
         }
 
         @Override
@@ -529,14 +581,23 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            float e = entrance.eased();
+            // Glisse légèrement vers le HAUT en apparaissant (Y-up : "monte
+            // vers sa position finale" = y DÉCROÎT depuis un point de départ
+            // plus bas) — décalage purement visuel, contains() (hit-test)
+            // reste sur la position finale (this.y), pas sur cette position
+            // dessinée : un clic pendant les ~280ms d'animation reste fiable.
+            float sy = y + (1f - e) * -ENTRANCE_SLIDE_PX; // "y" décalé pour cette frame (voir commentaire ci-dessus)
+
             boolean isActive = active.getAsBoolean();
             hoverAnim.setTarget(!isActive && contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = isActive ? UiTheme.ACCENT : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get());
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
-            float scale = 0.4f;
+            UiColor bg = (isActive ? UiTheme.ACCENT : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get()))
+                .multiplyAlpha(e);
+            renderer.drawRoundedRect(x, sy, x + w, sy + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            float scale = 0.46f;
             float tw = renderer.textWidth(label, scale);
-            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 4f,
-                isActive ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+            UiColor textColor = (isActive ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY).multiplyAlpha(e);
+            renderer.drawText(label, x + (w - tw) / 2f, sy + h / 2f - 5f, textColor, scale, vpWidth, vpHeight);
         }
     }
 
@@ -681,14 +742,43 @@ public final class ModrinthContentScreen extends UiScreenBase {
         return resized;
     }
 
-    private static String formatDownloads(long n) {
+    // ── Délégations pour ModrinthProjectDetailScreen — garde TOUTE la logique
+    // d'installation/recherche centralisée ici (une seule source de vérité
+    // pour installingProjectId/busy/statusText), l'écran de détail ne fait
+    // que déclencher/lire, jamais dupliquer cette logique.
+
+    /** Délègue l'installation à cette recherche (voir triggerInstall) — même pipeline que le bouton "Installer" d'une carte de résultat. */
+    void installFromDetail(ModrinthJson.Hit hit) {
+        triggerInstall(hit);
+    }
+
+    boolean isInstalling(String projectId) {
+        return projectId.equals(installingProjectId);
+    }
+
+    boolean isBusy() {
+        return busy;
+    }
+
+    String statusTextSnapshot() {
+        return statusText;
+    }
+
+    /** Re-scan du dossier d'install — utilisé par l'écran de détail juste après la fin d'une installation déclenchée depuis lui, pour rafraîchir son propre badge Installé/Installer (scanné une fois à l'ouverture de la liste, pas mis à jour en direct autrement). */
+    boolean isNowInstalled(ModrinthJson.Hit hit) {
+        return isInstalled(hit, scanInstalledNormalizedNames());
+    }
+
+    // Package-private (pas private) : réutilisées telles quelles par
+    // ModrinthProjectDetailScreen (même package) — pas de duplication.
+    static String formatDownloads(long n) {
         if (n >= 1_000_000L) return String.format(Locale.ROOT, "%.1fM", n / 1_000_000.0);
         if (n >= 1_000L) return String.format(Locale.ROOT, "%.1fk", n / 1_000.0);
         return String.valueOf(n);
     }
 
     /** Tronque {@code text} (avec "...") pour tenir dans {@code maxWidth} pixels à l'échelle donnée — sinon un titre/description long déborde par-dessus le bouton Installer. */
-    private static String truncate(UiRenderer renderer, String text, float scale, float maxWidth) {
+    static String truncate(UiRenderer renderer, String text, float scale, float maxWidth) {
         if (text == null) return "";
         if (maxWidth <= 0 || renderer.textWidth(text, scale) <= maxWidth) return text;
         String ellipsis = "...";
@@ -709,6 +799,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
         private static final float BTN_W = 130f, BTN_H = 34f;
         private final ModrinthJson.Hit hit;
         private final boolean alreadyInstalled;
+        private boolean prevLeftDown;
 
         ResultCard(float x, float y, float w, float h, ModrinthJson.Hit hit, boolean alreadyInstalled) {
             super(x, y, w, h);
@@ -720,16 +811,42 @@ public final class ModrinthContentScreen extends UiScreenBase {
         private float btnY() { return y + (h - BTN_H) / 2f; }
         private boolean installing() { return hit.projectId.equals(installingProjectId); }
 
-        @Override
-        public boolean contains(double mx, double my) {
-            if (alreadyInstalled || installing()) return false;
+        /** Zone géométrique du bouton, INDÉPENDANTE de l'état (contrairement à contains()) — sert à EXCLURE cette zone du clic "ouvrir la page de détail" sur le reste de la carte, voir pollContinuous(). */
+        private boolean overButtonRect(double mx, double my) {
             float bx = btnX(), by = btnY();
             return mx >= bx && mx <= bx + BTN_W && my >= by && my <= by + BTN_H;
         }
 
         @Override
+        public boolean contains(double mx, double my) {
+            if (alreadyInstalled || installing()) return false;
+            return overButtonRect(mx, my);
+        }
+
+        @Override
         public void onClick() {
             if (!alreadyInstalled && !installing()) triggerInstall(hit);
+        }
+
+        /**
+         * Clic sur le CORPS de la carte (hors bouton Installer) = ouvre la
+         * page de détail — géré ici plutôt que via onClick()/contains() (qui
+         * restent dédiés au bouton, voir leur javadoc) car onClick() ne
+         * reçoit AUCUNE coordonnée : impossible d'y distinguer "clic sur le
+         * bouton" de "clic ailleurs sur la carte" sans changer la signature
+         * de UiWidget.onClick() pour TOUS les widgets existants. Même motif
+         * que UiTextField (bouton × vs. reste du champ) : pollContinuous()
+         * reçoit input.mouseX/mouseY/leftDown en continu, largement suffisant.
+         */
+        @Override
+        public void pollContinuous(UiInputPoller input) {
+            boolean justPressed = input.leftDown && !prevLeftDown;
+            prevLeftDown = input.leftDown;
+            if (!justPressed) return;
+            boolean overCard = input.mouseX >= x && input.mouseX <= x + w && input.mouseY >= y && input.mouseY <= y + h;
+            if (overCard && !overButtonRect(input.mouseX, input.mouseY)) {
+                closeTo(new ModrinthProjectDetailScreen(ModrinthContentScreen.this, hit, alreadyInstalled));
+            }
         }
 
         @Override
@@ -805,8 +922,8 @@ public final class ModrinthContentScreen extends UiScreenBase {
         }
     }
 
-    /** Frame de spinner ASCII (rotation continue, ~120ms/frame) — pas de dépendance à une police à glyphes étendus. */
-    private static String spinnerFrame() {
+    /** Frame de spinner ASCII (rotation continue, ~120ms/frame) — pas de dépendance à une police à glyphes étendus. Package-private, réutilisée par ModrinthProjectDetailScreen. */
+    static String spinnerFrame() {
         char[] frames = {'|', '/', '-', '\\'};
         return String.valueOf(frames[(int) ((System.currentTimeMillis() / 120L) % frames.length)]);
     }

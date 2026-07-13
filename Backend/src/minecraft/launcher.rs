@@ -6,7 +6,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
-use tokio::sync::{Notify, Semaphore};
+use tokio::sync::{watch, Notify, Semaphore};
 use tokio::task::JoinSet;
 
 use tauri::Manager;
@@ -18,6 +18,15 @@ use super::p2p;
 use super::versions::{
     fetch_version_list, AssetIndexFile, Artifact, Library, VersionDetails,
 };
+
+/// Message d'erreur sentinelle renvoyé par `download_and_launch` quand l'arrêt
+/// vient d'une annulation demandée par l'utilisateur (`cancel_launch`), pour
+/// que `launch_game` émette `launch_cancelled` plutôt que `launch_error`.
+pub const LAUNCH_CANCELLED_MSG: &str = "Lancement annulé";
+
+fn cancelled(cancel: &watch::Receiver<bool>) -> bool {
+    *cancel.borrow()
+}
 
 pub fn minecraft_dir() -> PathBuf {
     dirs::data_dir()
@@ -162,6 +171,7 @@ pub async fn download_and_launch(
     p2p: bool,
     avoid_beta: bool,
     console_label: &str,
+    cancel: watch::Receiver<bool>,
 ) -> Result<()> {
     let mc_dir = minecraft_dir();
     tokio::fs::create_dir_all(game_dir).await?;
@@ -214,6 +224,7 @@ pub async fn download_and_launch(
         let app = app.clone();
         let assets_dir = assets_dir.clone();
         let asset_index = details.asset_index.clone();
+        let cancel = cancel.clone();
         tokio::spawn(async move {
             let asset_index_path = assets_dir
                 .join("indexes")
@@ -258,6 +269,9 @@ pub async fn download_and_launch(
             let mut done = 0u64;
             while let Some(r) = tasks.join_next().await {
                 r??;
+                if cancelled(&cancel) {
+                    return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+                }
                 done += 1;
                 if done % 200 == 0 || done == total_assets {
                     set_progress(
@@ -356,6 +370,10 @@ pub async fn download_and_launch(
     let mut libs_done = 0u64;
     while let Some(result) = lib_tasks.join_next().await {
         let (cp_entry, native_paths) = result??;
+        if cancelled(&cancel) {
+            assets_task.abort();
+            return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+        }
         if let Some(cp) = cp_entry { classpath.push(cp); }
         natives_to_extract.extend(native_paths);
         libs_done += 1;
@@ -635,6 +653,10 @@ pub async fn download_and_launch(
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         java_cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    if cancelled(&cancel) {
+        return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+    }
+
     tracing::info!("[MC launch] {} {}", java, args.join(" "));
     let mut child = java_cmd.spawn()?;
 
@@ -725,8 +747,19 @@ pub async fn download_and_launch(
 
     // Clear progress — game is now running
     state.write().await.download_progress = None;
-    let status = child.wait().await?;
-    tracing::info!("Minecraft terminé — code de sortie : {}", status);
+
+    let mut cancel_wait = cancel;
+    let cancelled_while_running = tokio::select! {
+        status = child.wait() => {
+            tracing::info!("Minecraft terminé — code de sortie : {}", status?);
+            false
+        }
+        _ = cancel_wait.changed() => {
+            tracing::info!("Lancement annulé — arrêt de la JVM");
+            let _ = child.kill().await;
+            true
+        }
+    };
 
     // Arrêter le tailer et attendre qu'il finisse de vider les dernières lignes
     stop_flag.store(true, Ordering::Relaxed);
@@ -735,6 +768,10 @@ pub async fn download_and_launch(
     // Restaure la résolution du timer Windows
     #[cfg(target_os = "windows")]
     unsafe { timeEndPeriod(1); }
+
+    if cancelled_while_running {
+        return Err(anyhow!(LAUNCH_CANCELLED_MSG));
+    }
 
     Ok(())
 }
