@@ -217,6 +217,15 @@ public class UiMainMenuScreen extends UiScreenBase {
         ActionCard resourcePacks = new ActionCard("Resource Packs (Modrinth)", "Rechercher et installer un resource pack",
             () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthResourcePackScreen(UiMainMenuScreen.this)));
         if (filter.isEmpty() || resourcePacks.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(resourcePacks);
+        // Même gating que l'ancien bouton "Shaders..." de GameMenuScreenMixin
+        // (supprimé) : n'affiche la carte que si un mod de shaders (Iris/
+        // OptiFine via Iris) est présent — installer un shader pack sans
+        // loader de shaders ne servirait à rien.
+        if (com.yuyuframe.launcheragent.runtime.fabric.ShaderLoaderDetector.isPresent(getClass().getClassLoader())) {
+            ActionCard shaderPacks = new ActionCard("Shaders (Modrinth)", "Rechercher et installer un shader pack",
+                () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthShaderPackScreen(UiMainMenuScreen.this)));
+            if (filter.isEmpty() || shaderPacks.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(shaderPacks);
+        }
         for (ModuleGroup g : ModuleRegistry.groups()) {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
         }

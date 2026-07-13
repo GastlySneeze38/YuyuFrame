@@ -143,13 +143,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/TitleScreenMixin",
             "net/minecraft/client/gui/screen/TitleScreen",
             "init", "()V", "net/minecraft/client/gui/screen/Screen"),
-        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/PackScreenMixin",
-            "net/minecraft/client/gui/screen/pack/PackScreen",
-            "init", "()V", "net/minecraft/client/gui/screen/Screen"),
-        // initWidgets() déclaré directement sur GameMenuScreen — pas de repli.
-        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GameMenuScreenMixin",
-            "net/minecraft/client/gui/screen/GameMenuScreen",
-            "initWidgets", "()V", null),
         // "<init>" n'a jamais de nom à traduire, mais le descripteur contient des
         // types Yarn named (Screen, GameOptions) → traduits en official+intermediary
         // par runtimeDesc() via la lookup Yarn.

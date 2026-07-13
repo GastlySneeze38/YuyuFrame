@@ -8,7 +8,8 @@ import org.objectweb.asm.*;
 import java.util.Map;
 
 /**
- * Transforme ResourcePackSearchScreen pour remplacer les stubs de compilation
+ * Transforme nos écrans custom (voir STUB_PATCHED_SCREENS dans
+ * LauncherMixinTransformerWrapper) pour remplacer les stubs de compilation
  * par les classes réelles obfusquées résolues via Yarn.
  *
  * Copie indépendante de com.p2pminecraft.mixin.service.transformer.ScreenStubPatcher

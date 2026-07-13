@@ -358,6 +358,36 @@ public final class UiRenderer {
     private int uTexModern = -1, uColorTextModern = -1, uProjectionTextModern = -1;
     private boolean textInitFailedModern = false;
 
+    // ── Icône RGBA quelconque (pastille de mod/pack téléchargée) — simple
+    // passthrough texture (PAS le shader SDF du texte : une icône a ses
+    // propres couleurs réelles, rien à seuiller/teinter). Utilisé UNIQUEMENT
+    // sur les brackets pré-era-E (le dispatcher drawIcon route era E vers
+    // UiTextBlaze3D, qui a son propre chemin Blaze3D complet).
+    private static final String ICON_FRAGMENT_SRC =
+        "uniform sampler2D u_Tex;\n" +
+        "void main() {\n" +
+        "    gl_FragColor = texture2D(u_Tex, gl_TexCoord[0].xy);\n" +
+        "}\n";
+
+    private static final String ICON_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform sampler2D u_Tex;\n" +
+        "in vec2 vTexCoord;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    fragColor = texture(u_Tex, vTexCoord);\n" +
+        "}\n";
+
+    private int iconProgram = -1;
+    private int uTexIcon = -1;
+    private boolean iconInitFailed = false;
+
+    private int iconProgramModern = -1;
+    private int uTexIconModern = -1, uProjectionIconModern = -1;
+    private boolean iconInitFailedModern = false;
+
+    private final Map<String, Integer> iconTextures = new HashMap<>();
+
     private int modernVao = -1, modernVbo = -1;
     private boolean modernBuffersInitFailed = false;
     // Capacité courante du VBO en sommets (redimensionné au besoin — drawText
@@ -693,6 +723,190 @@ public final class UiRenderer {
         } catch (Throwable t) {
             textInitFailedModern = true;
             LauncherLog.err("[UiRenderer] échec compilation shader texte SDF moderne — texte non affiché : " + t);
+        }
+    }
+
+    private void ensureIconShaderInit() {
+        if (iconProgram != -1 || iconInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, TEXT_VERTEX_SRC); // générique (ftransform + texcoord passthrough) — pas besoin d'un vertex shader dédié
+            glCompileShader(vsh);
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, ICON_FRAGMENT_SRC);
+            glCompileShader(fsh);
+            iconProgram = glCreateProgram();
+            glAttachShader(iconProgram, vsh);
+            glAttachShader(iconProgram, fsh);
+            glLinkProgram(iconProgram);
+            uTexIcon = glGetUniformLocation(iconProgram, "u_Tex");
+            LauncherLog.ui(1, "[UiRenderer] shader icône compilé, program=" + iconProgram);
+        } catch (Throwable t) {
+            iconInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader icône — icône non affichée : " + t);
+        }
+    }
+
+    private void ensureIconShaderInitModern() {
+        if (iconProgramModern != -1 || iconInitFailedModern) return;
+        try {
+            iconProgramModern = compileModernProgram(VERTEX_SRC_MODERN, ICON_FRAGMENT_SRC_MODERN);
+            uTexIconModern = glGetUniformLocation(iconProgramModern, "u_Tex");
+            uProjectionIconModern = glGetUniformLocation(iconProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader icône moderne compilé, program=" + iconProgramModern);
+        } catch (Throwable t) {
+            iconInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader icône moderne — icône non affichée : " + t);
+        }
+    }
+
+    /**
+     * Charge (si pas déjà en cache pour {@code cacheKey}) et dessine une
+     * icône RGBA quelconque (pastille de mod/pack téléchargée) — PAS un
+     * ItemStack vanilla (voir {@link #drawVanillaItemIcon} pour ça,
+     * désactivé sur era E). {@code x,y} = coin BAS-GAUCHE (origine bas-
+     * gauche écran, comme drawRoundedRect/drawText — Y croissant vers le
+     * haut), {@code size} = largeur ET hauteur (icône toujours carrée).
+     *
+     * @param cacheKey identifie la TEXTURE GPU déjà uploadée (jamais
+     *                 ré-uploadée tant que la clé ne change pas) — PAS
+     *                 l'image elle-même, qui peut être re-décodée par
+     *                 l'appelant sans repayer le coût GPU si la clé est stable.
+     * @param img      image DÉJÀ décodée/redimensionnée par l'appelant (pur
+     *                 java.awt, ImageIO — AUCUNE dépendance à NativeImage/
+     *                 TextureManager vanilla, contrairement à IconWidgets
+     *                 qui, lui, pilote un vrai widget d'écran vanilla — ici
+     *                 on reste dans NOTRE pipeline, version-générique).
+     */
+    public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
+        if (img == null) return;
+        if (UiTextBlaze3D.isAvailable()) {
+            UiTextBlaze3D.queueIcon(cacheKey, img, x, y, x + size, y + size, vpWidth, vpHeight);
+            return;
+        }
+        int texId = ensureIconTexture(cacheKey, img);
+        if (texId < 0) return;
+
+        if (modern) {
+            ensureIconShaderInitModern();
+            if (iconInitFailedModern) return;
+            try {
+                glDisable(0x0B71); // GL_DEPTH_TEST
+                glDisable(0x0B44); // GL_CULL_FACE
+                glDisable(0x0C11); // GL_SCISSOR_TEST
+                glEnable(0x0BE2);  // GL_BLEND
+                glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+                glActiveTexture(0x84C0); // GL_TEXTURE0
+                glBindTexture(0x0DE1, texId);
+                glUseProgram(iconProgramModern);
+                glUniform1i(uTexIconModern, 0);
+                uploadProjectionModern(uProjectionIconModern, vpWidth, vpHeight);
+
+                // UV : (x,y+size)=visuel HAUT-gauche (Y-up) ↔ (0,0)=image
+                // haut-gauche (convention image standard) — même
+                // correspondance que UiTextBlaze3D.drawIcon (voir sa javadoc).
+                ensureModernBuffersInit();
+                if (!modernBuffersInitFailed) {
+                    FloatBuffer verts = floatBuffer(4 * 4);
+                    putVertex(verts, x, y + size, 0f, 0f);
+                    putVertex(verts, x, y, 0f, 1f);
+                    putVertex(verts, x + size, y, 1f, 1f);
+                    putVertex(verts, x + size, y + size, 1f, 0f);
+                    verts.flip();
+                    uploadAndDraw(verts, 6, 4); // GL_TRIANGLE_FAN
+                }
+            } catch (Throwable t) {
+                LauncherLog.err("[UiRenderer] drawIcon (moderne): " + t);
+            } finally {
+                try { glUseProgram(0); } catch (Throwable ignored) {}
+            }
+            return;
+        }
+
+        ensureIconShaderInit();
+        if (iconInitFailed) return;
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
+        try {
+            savedGlState = captureLegacyGlState();
+            glEnable(0x0DE1);  // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0BC0); // GL_ALPHA_TEST
+            glDisable(0x0C11); // GL_SCISSOR_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303);
+            glBindTexture(0x0DE1, texId);
+            glUseProgram(iconProgram);
+            glUniform1i(uTexIcon, 0);
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+
+            glColor4f(1f, 1f, 1f, 1f);
+            glBegin(7); // GL_QUADS
+            glTexCoord2f(0f, 0f); glVertex2f(x, y + size);
+            glTexCoord2f(0f, 1f); glVertex2f(x, y);
+            glTexCoord2f(1f, 1f); glVertex2f(x + size, y);
+            glTexCoord2f(1f, 0f); glVertex2f(x + size, y + size);
+            glEnd();
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawIcon (legacy): " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            if (modelPushed) { try { matrixMode(0x1700); popMatrix(); } catch (Throwable ignored) {} }
+            if (projPushed) { try { matrixMode(0x1701); popMatrix(); } catch (Throwable ignored) {} }
+            if (savedGlState != null) restoreLegacyGlState(savedGlState);
+        }
+    }
+
+    /** Upload GL brut (glTexImage2D), mis en cache par cacheKey — voir createFontTextureRaw pour le même motif appliqué aux polices. */
+    private int ensureIconTexture(String cacheKey, java.awt.image.BufferedImage img) {
+        Integer cached = iconTextures.get(cacheKey);
+        if (cached != null) return cached;
+        try {
+            int w = img.getWidth(), h = img.getHeight();
+            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
+            int[] row = new int[w];
+            for (int y = 0; y < h; y++) {
+                img.getRGB(0, y, w, 1, row, 0, w);
+                for (int x = 0; x < w; x++) {
+                    int argb = row[x];
+                    buf.put((byte) ((argb >> 16) & 0xFF)); // R
+                    buf.put((byte) ((argb >> 8) & 0xFF));  // G
+                    buf.put((byte) (argb & 0xFF));         // B
+                    buf.put((byte) ((argb >> 24) & 0xFF)); // A
+                }
+            }
+            buf.flip();
+
+            int texId = glGenTextures();
+            glBindTexture(0x0DE1, texId);
+            glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+            glTexParameteri(0x0DE1, 0x2801, 0x2601); // GL_TEXTURE_MIN_FILTER, GL_LINEAR (pas de mipmap — icônes rarement minifiées fortement)
+            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+            glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+            glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+            // Même précaution ZGC que createFontTextureRaw (voir son
+            // commentaire pour le pourquoi) — coût négligeable ici (upload
+            // UNE SEULE FOIS par icône, jamais par frame).
+            glFinish();
+            reachabilityFence(buf);
+
+            iconTextures.put(cacheKey, texId);
+            LauncherLog.ui(1, "[UiRenderer] icône '" + cacheKey + "' uploadée (glTexImage2D), texId=" + texId + " w=" + w + " h=" + h);
+            return texId;
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] ensureIconTexture(" + cacheKey + "): " + t);
+            iconTextures.put(cacheKey, -1);
+            return -1;
         }
     }
 

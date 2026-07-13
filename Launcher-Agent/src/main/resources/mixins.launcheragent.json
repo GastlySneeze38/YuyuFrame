@@ -9,8 +9,6 @@
   "mixins": [],
   "client": [
     "client.TitleScreenMixin",
-    "client.PackScreenMixin",
-    "client.GameMenuScreenMixin",
     "client.KeybindsScreenMixin",
     "client.GlobalUiRenderMixin",
     "client.GlobalUiPresentMixin"
