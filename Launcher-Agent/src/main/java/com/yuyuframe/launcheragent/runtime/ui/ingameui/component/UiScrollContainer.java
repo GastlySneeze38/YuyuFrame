@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
@@ -20,6 +21,36 @@ import java.util.List;
  * calcul de la barre) ; le défilement RENDU/testé au clic passe par
  * {@code scrollAnim} (UiAnimatedFloat) pour une décélération douce plutôt
  * qu'un saut instantané par cran de molette.
+ *
+ * BUG TROUVÉ (utilisateur : "il faut que toute la card passe à travers pour
+ * qu'elle disparaisse, ce qui cause un chevauchement") : {@code
+ * beginScissor()/endScissor()} (voir UiRenderer) sont EFFECTIVEMENT sans
+ * effet dans les deux pipelines :
+ *   - Legacy/Modern (GL immédiat, pré-1.21.6) — CHAQUE primitive de dessin
+ *     (drawRoundedRect/drawText/drawFx) désactive inconditionnellement
+ *     GL_SCISSOR_TEST au tout début de son propre setup (glDisable copié-collé
+ *     du garde-fou légitime de drawEdgeVignette, qui LUI doit ignorer tout
+ *     scissor actif car c'est un effet plein écran — mais ce garde-fou n'a
+ *     RIEN à faire dans les primitives générales utilisées À L'INTÉRIEUR d'un
+ *     scroll). Corrigé séparément dans UiRenderer (voir son historique).
+ *   - Blaze3D (era E, 1.21.6+) — les dessins sont EMPILÉS (UiTextBlaze3D.queued)
+ *     et exécutés en différé, une frame plus tard, à un tout autre moment que
+ *     beginScissor()/endScissor() (synchrones, immédiats) : le scissor est
+ *     déjà retombé bien avant que le dessin réel ne s'exécute. Ajouter un vrai
+ *     scissor GPU dans ce pipeline nécessiterait de faire traverser un
+ *     rectangle de clip à travers CHAQUE lambda empilée jusqu'à un RenderPass
+ *     Blaze3D — trop risqué à l'aveugle (aucun moyen de tester en jeu depuis
+ *     cet environnement) sur un pipeline déjà extrêmement fragile (voir
+ *     l'historique de bugs de UiTextBlaze3D).
+ * Plutôt que du clipping pixel réel côté Blaze3D, {@link UiWidget#clipFade}
+ * (0..1) est calculé ICI selon le chevauchement avec les bords du viewport et
+ * appliqué par les widgets qui le lisent (voir ResultCard.draw() dans
+ * ModrinthContentScreen) — un widget s'estompe PROGRESSIVEMENT en sortant du
+ * viewport au lieu d'apparaître/disparaître d'un coup sec en le franchissant.
+ * Fonctionne IDENTIQUEMENT sur les trois pipelines (implémenté en pur Java,
+ * aucune dépendance GL) — et reste un filet de sécurité utile même une fois
+ * le vrai scissor GL corrigé côté Legacy/Modern (l'effet visuel "disparaît en
+ * douceur" est de toute façon plus agréable qu'un cut-off nette).
  */
 public class UiScrollContainer {
 
@@ -34,9 +65,34 @@ public class UiScrollContainer {
     // scissor en position de scroll extrême.
     private final float EDGE_PADDING = UiTheme.scaled(14f);
 
+    // Distance (pixels écran) sur laquelle un widget s'estompe en chevauchant
+    // un bord du viewport — voir clipFade dans la javadoc de classe.
+    private final float EDGE_FADE_ZONE = UiTheme.scaled(46f);
+
     private final float SCROLLBAR_W = UiTheme.scaled(6f);
     private final float SCROLLBAR_MARGIN = UiTheme.scaled(4f);
     private final float SCROLLBAR_MIN_H = UiTheme.scaled(24f);
+
+    // Accélération molette — deux crans consécutifs dans la MÊME direction en
+    // moins de ACCEL_WINDOW_MS augmentent le pas effectif, jusqu'à un
+    // plafond — motif "scroll qui accélère" d'un vrai trackpad/souris moderne
+    // (ex: Windows/macOS), pas un simple pas fixe par cran.
+    private static final long ACCEL_WINDOW_MS = 220L;
+    private static final float ACCEL_STEP = 0.4f;
+    private static final float ACCEL_MAX = 3.2f;
+    private long lastScrollAtMs;
+    private int lastScrollSign;
+    private float scrollVelocity = 1f;
+
+    // Fondu d'activité de la scrollbar (façon overlay scrollbar macOS/Win11) —
+    // pleine opacité pendant/juste après une interaction, sinon estompée sans
+    // jamais disparaître complètement (reste repérable).
+    private static final long IDLE_FADE_DELAY_MS = 900L;
+    private static final float IDLE_ALPHA = 0.35f;
+    private final UiAnimatedFloat scrollbarAlpha = new UiAnimatedFloat(1f, 6f);
+    private long lastActivityAtMs;
+
+    private final UiAnimatedFloat thumbHoverAnim = new UiAnimatedFloat(0f, 14f);
 
     private final float vx, vy, vw, vh; // viewport en espace écran, (vx,vy) = coin bas-gauche
     private final List<UiWidget> content = new ArrayList<>();
@@ -90,8 +146,19 @@ public class UiScrollContainer {
         for (int i = 0; i < content.size(); i++) content.get(i).y = baseY.get(i) + off;
     }
 
+    /** Élargi de EDGE_FADE_ZONE au-delà du viewport — un widget doit rester "vivant" (dessiné, avec clipFade qui tend déjà vers 0) jusqu'à la fin de son fondu, pas disparaître d'un coup sec juste avant qu'il n'ait fini de s'estomper. */
     private boolean visible(UiWidget w) {
-        return w.y + w.h >= vy && w.y <= vy + vh;
+        return w.y + w.h >= vy - EDGE_FADE_ZONE && w.y <= vy + vh + EDGE_FADE_ZONE;
+    }
+
+    /** Voir {@link UiWidget#clipFade} — 1 = pleinement opaque (entièrement dans le viewport), dégressif vers 0 en chevauchant un bord, sur EDGE_FADE_ZONE pixels. */
+    private float edgeFade(UiWidget w) {
+        float topOverflow = (w.y + w.h) - (vy + vh);
+        float bottomOverflow = vy - w.y;
+        float fade = 1f;
+        if (topOverflow > 0f) fade = Math.min(fade, Math.max(0f, 1f - topOverflow / EDGE_FADE_ZONE));
+        if (bottomOverflow > 0f) fade = Math.min(fade, Math.max(0f, 1f - bottomOverflow / EDGE_FADE_ZONE));
+        return fade;
     }
 
     private boolean hasScrollbar() { return maxScroll() > 0.5f; }
@@ -110,26 +177,64 @@ public class UiScrollContainer {
         return vy + vh - th - t * travel;
     }
 
+    private void markActivity() {
+        lastActivityAtMs = System.currentTimeMillis();
+    }
+
     public void pollInput(UiInputPoller input) {
         boolean overViewport = input.mouseX >= vx && input.mouseX <= vx + vw
             && input.mouseY >= vy && input.mouseY <= vy + vh;
         if (overViewport && input.scrollDelta != 0) {
+            // Accélération : crans consécutifs dans la même direction, assez
+            // rapprochés dans le temps, augmentent le pas effectif — voir
+            // ACCEL_STEP/ACCEL_MAX. Un changement de sens ou une pause reset
+            // immédiatement à la vitesse de base (pas d'accélération résiduelle
+            // surprenante après avoir changé d'avis).
+            long now = System.currentTimeMillis();
+            int sign = Integer.signum(input.scrollDelta);
+            if (sign == lastScrollSign && now - lastScrollAtMs < ACCEL_WINDOW_MS) {
+                scrollVelocity = Math.min(ACCEL_MAX, scrollVelocity + ACCEL_STEP);
+            } else {
+                scrollVelocity = 1f;
+            }
+            lastScrollSign = sign;
+            lastScrollAtMs = now;
+
             // Molette positive ("vers le haut") = veut voir le début du contenu -> scrollTarget diminue.
-            scrollTarget = clampScroll(scrollTarget - input.scrollDelta * SCROLL_STEP_PX);
+            scrollTarget = clampScroll(scrollTarget - input.scrollDelta * SCROLL_STEP_PX * scrollVelocity);
             scrollAnim.setTarget(scrollTarget);
+            markActivity();
         }
 
+        boolean overScrollbarArea = false;
         if (hasScrollbar()) {
             float th = thumbHeight();
             float tx = vx + vw - SCROLLBAR_W - SCROLLBAR_MARGIN;
+            float hitPad = UiTheme.scaled(3f);
+            overScrollbarArea = input.mouseX >= tx - hitPad && input.mouseX <= tx + SCROLLBAR_W + hitPad
+                && input.mouseY >= vy && input.mouseY <= vy + vh;
+
             if (!thumbDragging) {
                 float ty = thumbY(lastAnimatedScroll);
-                float hitPad = UiTheme.scaled(3f);
-                boolean overThumb = input.mouseX >= tx - hitPad && input.mouseX <= tx + SCROLLBAR_W + hitPad
-                    && input.mouseY >= ty && input.mouseY <= ty + th;
+                boolean overThumb = overScrollbarArea && input.mouseY >= ty && input.mouseY <= ty + th;
+                thumbHoverAnim.setTarget(overThumb ? 1f : 0f);
+
                 if (input.leftClicked && overThumb) {
                     thumbDragging = true;
                     lastDragMouseY = (float) input.mouseY;
+                    markActivity();
+                } else if (input.leftClicked && overScrollbarArea) {
+                    // Clic sur la piste HORS du thumb — saut d'une page vers le
+                    // point cliqué (au-dessus du thumb = page précédente, en
+                    // dessous = page suivante), comme une scrollbar OS classique.
+                    float pageAmount = vh * 0.9f;
+                    if (input.mouseY > ty + th) {
+                        scrollTarget = clampScroll(scrollTarget - pageAmount);
+                    } else if (input.mouseY < ty) {
+                        scrollTarget = clampScroll(scrollTarget + pageAmount);
+                    }
+                    scrollAnim.setTarget(scrollTarget);
+                    markActivity();
                 }
             } else if (!input.leftDown) {
                 thumbDragging = false;
@@ -141,15 +246,22 @@ public class UiScrollContainer {
                     scrollAnim.setTarget(scrollTarget);
                 }
                 lastDragMouseY = (float) input.mouseY;
+                markActivity();
             }
         } else {
             thumbDragging = false;
+            thumbHoverAnim.setTarget(0f);
         }
+
+        if (overScrollbarArea || thumbDragging) markActivity();
+        boolean idle = System.currentTimeMillis() - lastActivityAtMs > IDLE_FADE_DELAY_MS;
+        scrollbarAlpha.setTarget(idle ? IDLE_ALPHA : 1f);
 
         applyOffsets();
 
         for (UiWidget w : content) {
             if (!visible(w)) continue;
+            w.clipFade = edgeFade(w);
             w.pollContinuous(input);
         }
         if (input.leftClicked) {
@@ -176,6 +288,7 @@ public class UiScrollContainer {
         try {
             for (UiWidget w : content) {
                 if (!visible(w)) continue;
+                w.clipFade = edgeFade(w);
                 w.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
                 if (w.tooltip != null && w.contains(mouseX, mouseY)) hoveredTooltip = w.tooltip;
             }
@@ -189,11 +302,15 @@ public class UiScrollContainer {
 
     private void drawScrollbar(UiRenderer renderer, int vpWidth, int vpHeight) {
         if (!hasScrollbar()) return;
+        float alpha = scrollbarAlpha.get();
         float th = thumbHeight();
         float tx = vx + vw - SCROLLBAR_W - SCROLLBAR_MARGIN;
         float ty = thumbY(lastAnimatedScroll);
-        renderer.drawRoundedRect(tx, vy, tx + SCROLLBAR_W, vy + vh, SCROLLBAR_W / 2f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
+        renderer.drawRoundedRect(tx, vy, tx + SCROLLBAR_W, vy + vh, SCROLLBAR_W / 2f,
+            UiTheme.TRACK_OFF.multiplyAlpha(alpha), vpWidth, vpHeight);
+        UiColor thumbColor = thumbDragging ? UiTheme.ACCENT
+            : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_SECONDARY, thumbHoverAnim.get());
         renderer.drawRoundedRect(tx, ty, tx + SCROLLBAR_W, ty + th, SCROLLBAR_W / 2f,
-            thumbDragging ? UiTheme.ACCENT : UiTheme.TEXT_MUTED, vpWidth, vpHeight);
+            thumbColor.multiplyAlpha(alpha), vpWidth, vpHeight);
     }
 }

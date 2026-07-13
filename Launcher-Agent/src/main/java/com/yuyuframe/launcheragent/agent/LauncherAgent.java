@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-13-v425";
+    private static final String BUILD_VERSION = "2026-07-13-v426";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {

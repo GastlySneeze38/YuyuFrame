@@ -365,7 +365,16 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.CARD_BG, vpWidth, vpHeight);
+            // clipFade (voir UiScrollContainer/UiWidget) : 1 = carte
+            // pleinement dans le viewport, dégressif vers 0 en chevauchant le
+            // bord haut/bas — remplace le "pop" opaque d'avant (toute la carte
+            // devait sortir du viewport pour disparaître, chevauchant le
+            // titre/statut au-dessus) par une disparition progressive. PAS de
+            // vrai clip pixel ici (Blaze3D era E n'a pas de scissor fiable
+            // pour ce pipeline de dessin différé, voir UiScrollContainer) —
+            // juste l'opacité de chaque élément de la carte.
+            float fade = clipFade;
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
 
             // Icône plafonnée (pas juste h-24) — sinon elle grossit à l'infini
             // avec la hauteur de carte et écrase visuellement le texte.
@@ -374,17 +383,22 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
             // Vraie icône du pack (téléchargée, voir ensureIconLoaded) une
             // fois disponible ; pastille-lettre en attendant (état "en cours
             // de chargement", jamais un blocage) — remplace l'ancien
-            // placeholder permanent.
-            BufferedImage icon = ICON_CACHE.get(hit.projectId);
-            if (icon != null) {
-                renderer.drawIcon(hit.projectId, icon, x + 14, iconY, iconSize, vpWidth, vpHeight);
-            } else {
-                renderer.drawRoundedRect(x + 14, iconY, x + 14 + iconSize, iconY + iconSize,
-                    UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM, vpWidth, vpHeight);
-                String initial = (hit.title == null || hit.title.isEmpty()) ? "?" : hit.title.substring(0, 1).toUpperCase(Locale.ROOT);
-                float iw = renderer.textWidth(initial, 0.75f);
-                renderer.drawText(initial, x + 14 + (iconSize - iw) / 2f, iconY + iconSize / 2f - 9f,
-                    UiTheme.ACCENT, 0.75f, vpWidth, vpHeight);
+            // placeholder permanent. drawIcon ne supporte pas de teinte
+            // (dessine la texture telle quelle, voir sa javadoc) — masquée
+            // une fois quasiment invisible plutôt que de rester à pleine
+            // opacité alors que le reste de la carte s'est déjà estompé.
+            if (fade > 0.05f) {
+                BufferedImage icon = ICON_CACHE.get(hit.projectId);
+                if (icon != null) {
+                    renderer.drawIcon(hit.projectId, icon, x + 14, iconY, iconSize, vpWidth, vpHeight);
+                } else {
+                    renderer.drawRoundedRect(x + 14, iconY, x + 14 + iconSize, iconY + iconSize,
+                        UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM.multiplyAlpha(fade), vpWidth, vpHeight);
+                    String initial = (hit.title == null || hit.title.isEmpty()) ? "?" : hit.title.substring(0, 1).toUpperCase(Locale.ROOT);
+                    float iw = renderer.textWidth(initial, 0.75f);
+                    renderer.drawText(initial, x + 14 + (iconSize - iw) / 2f, iconY + iconSize / 2f - 9f,
+                        UiTheme.ACCENT.multiplyAlpha(fade), 0.75f, vpWidth, vpHeight);
+                }
             }
 
             float textX = x + 14 + iconSize + 18;
@@ -396,16 +410,16 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
             // hauteur désormais disponible (rowH=128) plutôt que tassés en
             // haut/bas de la carte.
             renderer.drawText(truncate(renderer, hit.title, 0.56f, textMaxW), textX, y + h - 34,
-                UiTheme.TEXT_PRIMARY, 0.56f, vpWidth, vpHeight);
+                UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.56f, vpWidth, vpHeight);
 
             String meta = (hit.author != null && !hit.author.isEmpty() ? hit.author + "  ·  " : "")
                 + formatDownloads(hit.downloads) + " téléchargements";
             renderer.drawText(truncate(renderer, meta, 0.42f, textMaxW), textX, y + h - 62,
-                UiTheme.TEXT_SECONDARY, 0.42f, vpWidth, vpHeight);
+                UiTheme.TEXT_SECONDARY.multiplyAlpha(fade), 0.42f, vpWidth, vpHeight);
 
             if (hit.description != null && !hit.description.isEmpty()) {
                 renderer.drawText(truncate(renderer, hit.description, 0.4f, textMaxW), textX, y + 22,
-                    UiTheme.TEXT_MUTED, 0.4f, vpWidth, vpHeight);
+                    UiTheme.TEXT_MUTED.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
             }
 
             boolean installing = installing();
@@ -414,11 +428,11 @@ public abstract class ModrinthContentScreen extends UiScreenBase {
                 : alreadyInstalled ? UiTheme.PANEL_BG_ALT
                 : (hoverBtn ? UiTheme.ACCENT : UiTheme.CARD_HOVER);
             renderer.drawRoundedRect(btnX(), btnY(), btnX() + BTN_W, btnY() + BTN_H,
-                UiTheme.RADIUS_SM, btnColor, vpWidth, vpHeight);
+                UiTheme.RADIUS_SM, btnColor.multiplyAlpha(fade), vpWidth, vpHeight);
             String label = installing ? spinnerFrame() + " Installation" : (alreadyInstalled ? "Installé" : "Installer");
             float lw = renderer.textWidth(label, 0.48f);
             renderer.drawText(label, btnX() + (BTN_W - lw) / 2f, btnY() + BTN_H / 2f - 6f,
-                (alreadyInstalled && !installing) ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_PRIMARY, 0.48f, vpWidth, vpHeight);
+                (alreadyInstalled && !installing) ? UiTheme.TEXT_SECONDARY.multiplyAlpha(fade) : UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.48f, vpWidth, vpHeight);
         }
     }
 

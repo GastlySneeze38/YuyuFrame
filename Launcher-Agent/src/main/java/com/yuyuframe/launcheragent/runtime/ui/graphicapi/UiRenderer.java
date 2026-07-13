@@ -793,7 +793,15 @@ public final class UiRenderer {
             try {
                 glDisable(0x0B71); // GL_DEPTH_TEST
                 glDisable(0x0B44); // GL_CULL_FACE
-                glDisable(0x0C11); // GL_SCISSOR_TEST
+                // PAS de glDisable(GL_SCISSOR_TEST) ici (contrairement à
+                // drawEdgeVignette*, effet plein écran qui doit légitimement
+                // l'ignorer) — BUG TROUVÉ (utilisateur : "il faut que toute la
+                // card passe à travers pour disparaître", voir UiScrollContainer)
+                // : ce disable, copié-collé du garde-fou de drawEdgeVignette,
+                // défaisait silencieusement le clip actif de UiScrollContainer
+                // pour CHAQUE icône dessinée à l'intérieur — un scissor actif
+                // (posé par UiScrollContainer.beginScissor) doit au contraire
+                // continuer à s'appliquer ici.
                 glEnable(0x0BE2);  // GL_BLEND
                 glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
                 glActiveTexture(0x84C0); // GL_TEXTURE0
@@ -833,7 +841,9 @@ public final class UiRenderer {
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
             glDisable(0x0BC0); // GL_ALPHA_TEST
-            glDisable(0x0C11); // GL_SCISSOR_TEST
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir le commentaire équivalent
+            // dans la branche moderne juste au-dessus pour le pourquoi (BUG
+            // TROUVÉ, UiScrollContainer).
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303);
             glBindTexture(0x0DE1, texId);
@@ -1048,9 +1058,14 @@ public final class UiRenderer {
         try {
             // Voir drawEdgeVignetteModern : GL_TEXTURE_2D/GL_ALPHA_TEST retirés
             // (GL_INVALID_ENUM en Core Profile, concepts fixed-function inexistants ici).
+            // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
+            // UiScrollContainer, javadoc de classe) : ce disable, copié-collé
+            // du garde-fou légitime de drawEdgeVignette (effet plein écran),
+            // défaisait silencieusement TOUT clip actif de UiScrollContainer —
+            // une carte devait entièrement sortir du viewport pour disparaître
+            // au lieu d'être proprement clippée au bord.
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0C11); // GL_SCISSOR_TEST
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
@@ -1113,7 +1128,9 @@ public final class UiRenderer {
                                 // le rendu 3D du monde a laissé actif peut être silencieusement éliminé,
                                 // sans erreur : dessin "réussi" en apparence, rien de visible en jeu.
             glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
-            glDisable(0x0C11); // GL_SCISSOR_TEST — voir drawEdgeVignette pour le pourquoi
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
+            // (javadoc de classe) : ce disable défaisait le clip actif d'un
+            // scroll container pour CHAQUE rect dessiné à l'intérieur.
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
@@ -1165,7 +1182,9 @@ public final class UiRenderer {
         try {
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0C11); // GL_SCISSOR_TEST
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
+            // (javadoc de classe) : défaisait le clip actif d'un scroll
+            // container pour chaque ombre/bordure/dégradé dessiné à l'intérieur.
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
@@ -1210,7 +1229,8 @@ public final class UiRenderer {
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
             glDisable(0x0BC0); // GL_ALPHA_TEST
-            glDisable(0x0C11); // GL_SCISSOR_TEST
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
+            // (javadoc de classe).
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
@@ -1595,7 +1615,8 @@ public final class UiRenderer {
             // n'était pas null ("seule la première icône s'affiche").
             glClear(0x00000100); // GL_DEPTH_BUFFER_BIT
             glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0C11); // GL_SCISSOR_TEST — voir drawEdgeVignette pour le pourquoi
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
+            // (javadoc de classe).
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             // Unité de texture 0 explicitement — l'overlay (glint d'enchant,
@@ -1715,7 +1736,9 @@ public final class UiRenderer {
             // fixed-function, ces deux usages du même enum sont indépendants.
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0C11); // GL_SCISSOR_TEST
+            // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
+            // UiScrollContainer, javadoc de classe) : défaisait le clip actif
+            // d'un scroll container pour CHAQUE texte dessiné à l'intérieur.
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             // BUG TROUVÉ (era E, 1.21.11 — texte corrompu/glyphes illisibles,
@@ -1786,7 +1809,9 @@ public final class UiRenderer {
             glDisable(0x0B71); // GL_DEPTH_TEST
             glDisable(0x0B44); // GL_CULL_FACE
             glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
-            glDisable(0x0C11); // GL_SCISSOR_TEST — voir drawEdgeVignette pour le pourquoi
+            // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
+            // UiScrollContainer, javadoc de classe) : défaisait le clip actif
+            // d'un scroll container pour CHAQUE texte dessiné à l'intérieur.
             glEnable(0x0BE2);  // GL_BLEND
             glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             glBindTexture(0x0DE1, texId);
