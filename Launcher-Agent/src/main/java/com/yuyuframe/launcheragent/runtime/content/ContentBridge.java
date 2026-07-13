@@ -67,4 +67,20 @@ public final class ContentBridge {
 
     /** Télécharge un fichier vers destPath. */
     public static native boolean downloadFile(String url, String destPath);
+
+    /**
+     * Charge une image depuis N'IMPORTE QUELLE URL HTTPS et la décode en
+     * pixels RGBA bruts côté Rust (crate {@code image} — PNG/JPEG/GIF/WebP/
+     * BMP/ICO/TIFF, AUCUNE écriture disque) — voir
+     * {@link com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage},
+     * seul appelant prévu (ne PAS appeler directement depuis un écran, cette
+     * méthode est SYNCHRONE et bloquante sur le réseau — toujours depuis un
+     * thread daemon dédié, jamais le thread de rendu).
+     *
+     * @return {@code byte[8+largeur*hauteur*4]} : 8 octets d'en-tête
+     * (largeur/hauteur, int32 BIG-ENDIAN chacun) puis les pixels RGBA8 bruts
+     * — voir {@code UiRemoteImage.decode()} pour le parsing. Tableau VIDE
+     * (jamais {@code null}) en cas d'échec réseau/décodage/URL non-HTTPS.
+     */
+    public static native byte[] fetchImageRgba(String url);
 }

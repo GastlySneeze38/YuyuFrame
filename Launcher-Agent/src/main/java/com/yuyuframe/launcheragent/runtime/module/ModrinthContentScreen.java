@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -18,7 +19,6 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -48,12 +48,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * Mixins PackScreenMixin/GameMenuScreenMixin qui les ouvraient) a été
  * SUPPRIMÉ, ce chemin-ci est désormais la SEULE voie d'accès.
  *
- * Icônes : backend déplacé depuis l'ancien {@code screen.IconWidgets} (qui
- * pilotait un vrai widget d'écran vanilla, {@code IconWidget} — incompatible
- * avec notre pipeline de rendu maison) vers {@link UiRenderer#drawIcon},
- * version-générique lui aussi (Blaze3D sur era E, GL classique ailleurs).
- * Téléchargement/décodage sur un thread daemon séparé, jamais bloquant pour
- * le rendu — voir {@link #ensureIconLoaded}.
+ * Icônes : chargées EN MÉMOIRE UNIQUEMENT depuis leur URL Modrinth (voir
+ * {@link UiRemoteImage}, fetch HTTPS direct + décodage côté Rust incl. WebP,
+ * aucune écriture disque) puis affichées via {@link UiRenderer#drawIcon},
+ * version-générique (Blaze3D sur era E, GL classique ailleurs).
  */
 public final class ModrinthContentScreen extends UiScreenBase {
 
@@ -649,62 +647,38 @@ public final class ModrinthContentScreen extends UiScreenBase {
             float rowY = top - i * (rowH + rowGap) - rowH;
             boolean already = isInstalled(hit, installed);
             results.add(new ResultCard(MARGIN, rowY, rowW, rowH, hit, already));
-            ensureIconLoaded(hit);
         }
     }
 
-    // ── Icônes (backend déplacé depuis l'ancien screen.IconWidgets, qui
-    // pilotait un vrai widget d'écran vanilla — incompatible avec NOTRE
-    // pipeline de rendu maison, voir UiRenderer.drawIcon) ──────────────────
+    // ── Icônes — voir UiRemoteImage (fetch HTTPS direct en mémoire, décodage
+    // côté Rust incl. WebP, AUCUNE écriture disque) pour le chargement brut.
+    // Ce cache-ci ne garde que la version REDIMENSIONNÉE 84px pour l'affichage
+    // (UiRemoteImage.CACHE garde, lui, l'image source telle que décodée) —
+    // deux caches séparés pour ne pas re-redimensionner à chaque frame.
 
     // STATIQUE et PARTAGÉE entre resource packs ET shaders (projectId
-    // Modrinth globalement unique, aucun risque de collision) — même esprit
-    // que l'ancien IconWidgets.CACHE.
-    private static final Map<String, BufferedImage> ICON_CACHE = new ConcurrentHashMap<>();
-    private static final Set<String> ICON_FETCHING = ConcurrentHashMap.newKeySet();
+    // Modrinth globalement unique, aucun risque de collision).
+    private static final Map<String, BufferedImage> RESIZED_ICON_CACHE = new ConcurrentHashMap<>();
     private static final int ICON_SIZE = 84; // doit correspondre à iconSize plafonné dans ResultCard.draw()
 
-    /** Déclenche le téléchargement/décodage EN ARRIÈRE-PLAN si pas déjà en cache/en cours — jamais bloquant pour le thread de rendu. */
-    private static void ensureIconLoaded(ModrinthJson.Hit hit) {
-        if (hit.iconUrl == null || hit.iconUrl.isEmpty()) return;
-        String key = hit.projectId;
-        if (ICON_CACHE.containsKey(key) || !ICON_FETCHING.add(key)) return;
+    /** Version 84px de l'icône d'un projet, ou {@code null} si pas encore chargée (voir UiRemoteImage.get, non-bloquant) — redimensionne UNE SEULE FOIS (pas à chaque frame) dès que la source devient disponible. */
+    private static BufferedImage resizedIcon(String projectId, String iconUrl) {
+        BufferedImage cached = RESIZED_ICON_CACHE.get(projectId);
+        if (cached != null) return cached;
+        BufferedImage raw = UiRemoteImage.get(iconUrl);
+        if (raw == null) return null; // pas encore chargé — pastille-lettre en attendant, voir ResultCard.draw()
 
-        Thread t = new Thread(() -> {
-            try {
-                Path cacheFile = com.yuyuframe.launcheragent.runtime.screen.IconWidgets.cacheFile(key);
-                byte[] bytes;
-                if (Files.isRegularFile(cacheFile)) {
-                    bytes = Files.readAllBytes(cacheFile);
-                } else {
-                    if (!ContentBridge.downloadFile(hit.iconUrl, cacheFile.toString())) return;
-                    bytes = Files.readAllBytes(cacheFile);
-                }
-                BufferedImage decoded;
-                try (ByteArrayInputStream in = new ByteArrayInputStream(bytes)) {
-                    decoded = javax.imageio.ImageIO.read(in);
-                }
-                if (decoded == null) return; // format illisible (rare, ex: WebP non supporté par ImageIO) — reste sur la pastille-lettre
-                // Redimensionné UNE FOIS ici (pas à chaque frame) — même
-                // résolution que ICON_SIZE utilisé par ResultCard.draw().
-                BufferedImage resized = new BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g = resized.createGraphics();
-                try {
-                    g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                    g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-                    g.drawImage(decoded, 0, 0, ICON_SIZE, ICON_SIZE, null);
-                } finally {
-                    g.dispose();
-                }
-                ICON_CACHE.put(key, resized);
-            } catch (Throwable t2) {
-                LauncherLog.warn("[ModrinthContentScreen] ensureIconLoaded(" + key + "): " + t2);
-            } finally {
-                ICON_FETCHING.remove(key);
-            }
-        }, "LauncherAgent-IconFetch-" + key);
-        t.setDaemon(true);
-        t.start();
+        BufferedImage resized = new BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = resized.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(raw, 0, 0, ICON_SIZE, ICON_SIZE, null);
+        } finally {
+            g.dispose();
+        }
+        RESIZED_ICON_CACHE.put(projectId, resized);
+        return resized;
     }
 
     private static String formatDownloads(long n) {
@@ -775,7 +749,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // avec la hauteur de carte et écrase visuellement le texte.
             float iconSize = Math.min(h - 32f, 84f);
             float iconY = y + (h - iconSize) / 2f;
-            // Vraie icône du pack (téléchargée, voir ensureIconLoaded) une
+            // Vraie icône du pack (voir resizedIcon/UiRemoteImage) une
             // fois disponible ; pastille-lettre en attendant (état "en cours
             // de chargement", jamais un blocage) — remplace l'ancien
             // placeholder permanent. drawIcon ne supporte pas de teinte
@@ -783,7 +757,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // une fois quasiment invisible plutôt que de rester à pleine
             // opacité alors que le reste de la carte s'est déjà estompé.
             if (fade > 0.05f) {
-                BufferedImage icon = ICON_CACHE.get(hit.projectId);
+                BufferedImage icon = resizedIcon(hit.projectId, hit.iconUrl);
                 if (icon != null) {
                     renderer.drawIcon(hit.projectId, icon, x + 14, iconY, iconSize, vpWidth, vpHeight);
                 } else {
