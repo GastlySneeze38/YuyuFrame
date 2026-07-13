@@ -536,8 +536,28 @@ pub async fn download_and_launch(
             // si déjà téléchargées pour cette version, donc pas de double téléchargement.
             // Sans ce remapper, Mixin tente de résoudre les noms Yarn littéralement
             // et échoue (ClassNotFoundException) puisque le JAR client est obfusqué.
-            match p2p::ensure_yarn_mappings(version_id, &client, &app).await {
-                Ok(yarn_path) => {
+            //
+            // EXCEPTION (bracket 26.1.2, voir mixin/client/v26_1 côté Java) : à
+            // partir de la ligne 26.1.x, Mojang ne publie PLUS AUCUNE mapping —
+            // ni officielle, ni Yarn, ni intermediary Fabric (is_unobfuscated_version,
+            // voir sa javadoc pour les sources) — le jeu contient déjà ses VRAIS
+            // noms. Appeler ensure_yarn_mappings pour une telle version échouerait
+            // TOUJOURS (rien à télécharger nulle part) ; on saute directement à
+            // "pas de chemin Yarn", exactement l'état déjà validé pour un
+            // lancement vanilla classique sans Fabric (MappingsRegistry reste en
+            // scheme OFFICIAL, YarnMappings jamais chargé — voir AgentConfig/
+            // MappingsRegistry côté Java).
+            let yarn_result: Result<Option<PathBuf>> = if p2p::is_unobfuscated_version(version_id) {
+                log_to_console(&app, &console_label, &format!(
+                    "[LauncherAgent] MC {} non obfusqué (schéma ≥26.1, voir FabricMC/fabric-loom#1585) — mappings Yarn ignorées",
+                    version_id), "out");
+                Ok(None)
+            } else {
+                p2p::ensure_yarn_mappings(version_id, &client, &app).await.map(Some)
+            };
+
+            match yarn_result {
+                Ok(yarn_path_opt) => {
                     // Même contrainte que pour le p2p-agent : ne pas ajouter notre
                     // copie d'ASM si Fabric en apporte déjà une (conflit "duplicate
                     // ASM classes" sinon — voir docs/LauncherAgent/index.md).
@@ -572,11 +592,21 @@ pub async fn download_and_launch(
                     // vanilla, et LauncherAgent charge par erreur la config Mixin 1.21+
                     // contre un jeu 1.8.9 (mismatch fatal). Rust connaît déjà version_id
                     // avec certitude, pas besoin de deviner côté agent.
+                    //
+                    // yarn=... OMIS quand yarn_path_opt est None (26.1+) — AgentConfig
+                    // (Java) laisse alors yarnPath=null, MappingsRegistry reste en
+                    // scheme OFFICIAL sans jamais tenter de charger de jar Yarn.
                     let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
-                    let agent_arg = format!(
-                        "-javaagent:{}=yarn={},version={}",
-                        agent_jar.display(), yarn_path.display(), version_id,
-                    );
+                    let agent_arg = match &yarn_path_opt {
+                        Some(yarn_path) => format!(
+                            "-javaagent:{}=yarn={},version={}",
+                            agent_jar.display(), yarn_path.display(), version_id,
+                        ),
+                        None => format!(
+                            "-javaagent:{}=version={}",
+                            agent_jar.display(), version_id,
+                        ),
+                    };
                     log_to_console(&app, &console_label, &format!("[LauncherAgent] Mixin : {}", mixin_arg), "out");
                     log_to_console(&app, &console_label, &format!("[LauncherAgent] Agent : {}", agent_arg), "out");
                     (vec![mixin_arg, agent_arg], extra_cp)

@@ -95,6 +95,31 @@ public final class VersionBracketRegistry {
             "mixins.launcheragent-1.21.4.json",
             "1.21.4",
             version -> "1.21.4".equals(version)));
+
+        // Bracket "E" — 26.1.2 : MC N'EST PLUS OBFUSQUÉ à partir de la ligne
+        // 26.1.x (Mojang a arrêté de publier des mappings d'obfuscation,
+        // confirmé absent à la fois du manifeste officiel ET de Yarn/Quilt/
+        // intermediary Fabric — voir FabricMC/fabric-loom#1585 et le guide de
+        // portage officiel https://docs.fabricmc.net/develop/porting/, "The
+        // 26.1 version of Minecraft is unobfuscated"). Les Mixins de ce
+        // bracket (mixin/client/v26_1/) utilisent donc les VRAIS noms Mojang
+        // directement en dur (ex: "net.minecraft.client.renderer.GameRenderer",
+        // pas de résolution Yarn) — chaque classe/méthode/champ vérifié
+        // individuellement via javap sur le jar client 26.1.2 réel (pas deviné
+        // par simple renommage de convention). AUCUN jar Yarn n'est chargé
+        // pour ce bracket : MappingsRegistry reste en scheme OFFICIAL avec
+        // YarnMappings.isLoaded()==false, un état déjà validé sans régression
+        // pour le lancement vanilla classique (voir MappingsRegistry). Resserré
+        // à la version exacte 26.1.2 (seule version vérifiée au moment de
+        // l'écriture) — MÊME PRUDENCE que les autres brackets : une version
+        // non testée peut échouer silencieusement. NON VÉRIFIÉ EN JEU (aucun
+        // moyen de lancer Minecraft depuis l'environnement où ce portage a été
+        // écrit) — à valider en jeu avant tout usage en production.
+        BRACKETS.add(new VersionBracket(
+            "26_1_2",
+            "mixins.launcheragent-26.1.json",
+            "26.1.2",
+            version -> "26.1.2".equals(version)));
     }
 
     /** Résout la tranche correspondant à la version détectée, ou {@code null} si aucune ne correspond. */
