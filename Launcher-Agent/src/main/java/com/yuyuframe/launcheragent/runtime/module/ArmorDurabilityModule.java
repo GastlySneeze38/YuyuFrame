@@ -34,6 +34,36 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         category = "Réglages", options = { "Verticale", "Horizontale" })
     public int layout = 0;
 
+    // Défaut = main secondaire (0) : demandé explicitement par l'utilisateur
+    // ("à partir des versions où on a une deuxième main, afficher la
+    // deuxième main par défaut") — ignoré sur 1.8.9, qui n'a pas de main
+    // secondaire (voir currentStacks(), handClass reste null sur ce bracket,
+    // repli silencieux sur la main principale).
+    @ConfigDropdown(name = "Main affichée", description = "Quelle main afficher pour l'objet en main (1.9+ uniquement — ignoré sur 1.8.9, qui n'a pas de main secondaire).",
+        category = "Réglages", options = { "Main secondaire", "Main principale" })
+    public int hand = 0;
+
+    // "Vanilla" : VRAI sprite de case (assets/minecraft/textures/gui/sprites/
+    // container/slot.png, 18x18 — trouvé via recherche GitHub/wiki Minecraft
+    // à la demande explicite de l'utilisateur, confirmé présent tel quel dans
+    // le vrai jar 26.1.2, PAS recréé) + VRAIE barre de durabilité vanilla
+    // (DrawContext.drawItemBar/GuiGraphicsExtractor.itemBar), sans texte
+    // custom — voir UiRenderer.drawVanillaItemIcon. Barre/case absentes sur
+    // le bracket 1.20.4 (API différente, voir UiRenderer) — icône seule s'y
+    // affiche quand même.
+    //
+    // Dans ce style, la position est FIXE (accolée à gauche de la vraie
+    // hotbar, comme sur la capture fournie par l'utilisateur) et le HUD est
+    // VERROUILLÉ (HudElement.locked=true, voir UiHudBox — plus de drag dans
+    // l'éditeur) — demandé explicitement ("je ne veux plus que ça soit
+    // considéré comme un HUD déplaçable dans ce mode"). x/y/w/h fournis par
+    // le framework HUD sont donc IGNORÉS dans Renderer.draw() quand ce style
+    // est actif (voir son code) ; anchor/offset repris tels quels au retour
+    // au style "Personnalisé" (locked=false dérouille le drag normalement).
+    @ConfigDropdown(name = "Style", description = "\"Personnalisé\" = position/taille libres, icône + texte de durabilité (défaut). \"Vanilla\" = position fixe façon hotbar, VRAIE case + barre de durabilité vanilla, HUD verrouillé (non déplaçable).",
+        category = "Réglages", options = { "Personnalisé", "Vanilla" })
+    public int style = 0;
+
     public ArmorDurabilityModule() {
         super("armor-durability", "Armure/Durabilité", "Durabilité de l'armure et de l'objet en main", false,
             new HudElement("armor-durability", "Armure/Durabilité", HudAnchor.BOTTOM_RIGHT, 8f, 8f,
@@ -43,6 +73,9 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     @Override
     public void onConfigChanged() {
         RENDERER.horizontal = layout == 1;
+        RENDERER.mainHand = hand == 1;
+        RENDERER.vanillaStyle = style == 1;
+        hudElement().locked = RENDERER.vanillaStyle;
     }
 
     /** Rendu personnalisé (voir HudElement.CustomRenderer) : une icône à côté d'un texte, par ligne, ne rentre pas dans le modèle "une ligne de texte" de ContentSource. */
@@ -63,6 +96,34 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
         /** Mutable directement par ArmorDurabilityModule.onConfigChanged() — false = verticale (défaut). */
         volatile boolean horizontal = false;
+        /** Mutable directement par ArmorDurabilityModule.onConfigChanged() — false = main secondaire (défaut), voir currentStacks(). */
+        volatile boolean mainHand = false;
+        /** Mutable directement par ArmorDurabilityModule.onConfigChanged() — false = style "Personnalisé" (défaut), voir draw()/drawRow(). */
+        volatile boolean vanillaStyle = false;
+
+        // ── Positionnement style "Vanilla" (voir draw()) ──────────────────
+        // Dimensions de la VRAIE hotbar vanilla — stables depuis toujours,
+        // pas de résolution dynamique nécessaire (182x22 GUI-pixels, case de
+        // 18x18 avec 1px de marge/item, valeurs universellement connues du
+        // modding Minecraft). Notre rangée de 5 cases (4 armure contiguës +
+        // petit espace + main) est accolée à GAUCHE de cette hotbar, centrée
+        // verticalement dessus — reproduit la disposition de la capture
+        // utilisateur.
+        private static final float HOTBAR_W_GUI = 182f;
+        private static final float HOTBAR_H_GUI = 22f;
+        private static final float VANILLA_SLOT_GUI = 18f;
+        private static final float VANILLA_ICON_GUI = 16f;
+        /** Espace (GUI-pixels) entre notre rangée et le bord gauche de la hotbar. */
+        private static final float VANILLA_ROW_GAP_GUI = 4f;
+        /** Espace (GUI-pixels) entre le groupe armure (4 cases contiguës) et la case main. */
+        private static final float VANILLA_HAND_GAP_GUI = 6f;
+        /** Décalage X (GUI-pixels, depuis le bord gauche de notre rangée) de chaque case — helmet/chest/legs/boots contiguës, puis main après l'espace. */
+        private static final float[] VANILLA_SLOT_OFFSETS_GUI = {
+            0f, VANILLA_SLOT_GUI, 2 * VANILLA_SLOT_GUI, 3 * VANILLA_SLOT_GUI,
+            4 * VANILLA_SLOT_GUI + VANILLA_HAND_GAP_GUI
+        };
+        private static final float VANILLA_ROW_W_GUI =
+            4 * VANILLA_SLOT_GUI + VANILLA_HAND_GAP_GUI + VANILLA_SLOT_GUI;
 
         @Override
         public float[] naturalSize() {
@@ -109,13 +170,23 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                         // net.minecraft.util vers net.minecraft.world, constante
                         // MAIN_HAND inchangée), getStackInHand→getItemInHand
                         // (vérifiés par javap sur le jar client 26.1.2 réel).
+                        //
+                        // Choix de main (voir champ mainHand, piloté par
+                        // ArmorDurabilityModule.hand) : main secondaire par
+                        // défaut, demandé explicitement par l'utilisateur.
+                        // handClass reste null sur 1.8.9 (pas de Hand du tout
+                        // avant 1.9) — cette branche entière est silencieusement
+                        // sautée, "hand"/OFF_HAND n'existent nulle part pour ce
+                        // bracket, cohérent avec "à partir des versions où on a
+                        // une deuxième main".
                         Class<?> handClass = McReflect.yarnClass("net/minecraft/util/Hand", "net.minecraft.world.InteractionHand");
                         Method getStackInHand = handClass != null
                             ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand", "getItemInHand", handClass)
                             : null;
                         if (getStackInHand != null && handClass != null) {
-                            Object mainHand = McReflect.field(handClass, "net/minecraft/util/Hand", "MAIN_HAND").get(null);
-                            held = getStackInHand.invoke(player, mainHand);
+                            String constantName = mainHand ? "MAIN_HAND" : "OFF_HAND";
+                            Object handConstant = McReflect.field(handClass, "net/minecraft/util/Hand", constantName).get(null);
+                            held = getStackInHand.invoke(player, handConstant);
                         }
 
                         Method getArmorSlot = McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getArmorSlot", int.class);
@@ -151,8 +222,14 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
-            float icon = ICON * scale;
             Object[] stacks = currentStacks();
+
+            if (vanillaStyle) {
+                drawVanillaHotbarRow(renderer, stacks, vpWidth, vpHeight);
+                return;
+            }
+
+            float icon = ICON * scale;
 
             if (horizontal) {
                 float itemW = itemWidth(stacks) * scale, itemGap = ITEM_GAP * scale;
@@ -173,10 +250,47 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             }
         }
 
-        private void drawRow(UiRenderer renderer, float x, float y, float iconSize, Object stack, float scale, int vpWidth, int vpHeight) {
-            if (stack != null) {
-                renderer.drawVanillaItemIcon(stack, x, y, iconSize, vpWidth, vpHeight);
+        /**
+         * Style "Vanilla" — position FIXE, ignore x/y/w/h fournis par le
+         * framework HUD (HudElement.locked=true empêche de toute façon le
+         * drag, voir ArmorDurabilityModule.onConfigChanged()). Calculée en
+         * "GUI-pixels" (comme vanilla) puis convertie en pixels framebuffer
+         * via {@link UiRenderer#guiScale} — accolée à gauche de la vraie
+         * hotbar, centrée verticalement dessus, reproduisant la disposition
+         * de la capture utilisateur (4 cases d'armure contiguës, petit
+         * espace, case main).
+         */
+        private void drawVanillaHotbarRow(UiRenderer renderer, Object[] stacks, int vpWidth, int vpHeight) {
+            float guiScale = UiRenderer.guiScale(vpWidth);
+            float guiWidth = vpWidth / guiScale;
+
+            float hotbarLeftGui = (guiWidth - HOTBAR_W_GUI) / 2f;
+            float rowLeftGui = hotbarLeftGui - VANILLA_ROW_GAP_GUI - VANILLA_ROW_W_GUI;
+            // Centré verticalement sur la hauteur de la hotbar (22 GUI-px),
+            // case 18x18 → 2 GUI-px de marge en haut ET en bas.
+            float slotTopGui = (HOTBAR_H_GUI - VANILLA_SLOT_GUI) / 2f;
+            float iconTopGui = slotTopGui + (VANILLA_SLOT_GUI - VANILLA_ICON_GUI) / 2f;
+            // guiHeight - iconTopGui - taille = bord BAS de l'icône en
+            // GUI-space (origine haut) ; converti en framebuffer (origine
+            // bas, voir UiRenderer.drawVanillaItemIcon) : hotbar flush en
+            // bas d'écran (y_gui=guiHeight au bord bas de la hotbar), donc
+            // le calcul se simplifie à une distance FIXE depuis le bas de
+            // l'écran, indépendante de guiHeight — voir dérivation dans
+            // l'historique de session.
+            float iconBottomFb = (HOTBAR_H_GUI - iconTopGui - VANILLA_ICON_GUI) * guiScale;
+
+            for (int i = 0; i < stacks.length && i < VANILLA_SLOT_OFFSETS_GUI.length; i++) {
+                Object stack = stacks[i];
+                if (stack == null) continue;
+                float iconLeftGui = rowLeftGui + VANILLA_SLOT_OFFSETS_GUI[i] + (VANILLA_SLOT_GUI - VANILLA_ICON_GUI) / 2f;
+                float iconLeftFb = iconLeftGui * guiScale;
+                renderer.drawVanillaItemIcon(stack, iconLeftFb, iconBottomFb, VANILLA_ICON_GUI * guiScale, vpWidth, vpHeight, true);
             }
+        }
+
+        private void drawRow(UiRenderer renderer, float x, float y, float iconSize, Object stack, float scale, int vpWidth, int vpHeight) {
+            if (stack == null) return;
+            renderer.drawVanillaItemIcon(stack, x, y, iconSize, vpWidth, vpHeight);
             String text = durabilityText(stack);
             if (text != null) {
                 float textScale = TEXT_SCALE * scale;
