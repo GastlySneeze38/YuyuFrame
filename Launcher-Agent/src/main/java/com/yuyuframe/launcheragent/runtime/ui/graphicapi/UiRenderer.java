@@ -1542,21 +1542,7 @@ public final class UiRenderer {
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
         if (itemStack == null) return;
         if (modern) {
-            // Pas encore réécrit pour le pipeline moderne (voir javadoc de la
-            // classe) : cette méthode pose SA PROPRE pile de matrices legacy
-            // (glMatrixMode/glOrtho/glTranslatef/glScalef, confirmées cassées
-            // en 1.21.11) pour établir la convention de coordonnées GUI
-            // vanilla attendue par renderInGuiWithOverrides — jamais exercée
-            // par aucun test de crash de cette session (seul
-            // ArmorDurabilityModule l'appelle, désactivé par défaut), donc pas
-            // de preuve directe qu'il faille la réécrire, mais l'appeler
-            // telle quelle risquerait le même crash natif que le reste de ce
-            // fichier avant correctif. Skip volontaire plutôt que deviner —
-            // à traiter si/quand un module l'utilisant est activé en 1.21+.
-            if (!modernItemIconWarned) {
-                modernItemIconWarned = true;
-                LauncherLog.warn("[UiRenderer] drawVanillaItemIcon: pas encore supporté sur le pipeline moderne (1.21+) — icône non dessinée");
-            }
+            drawVanillaItemIconModern(itemStack, x, y, size, vpWidth, vpHeight);
             return;
         }
         LegacyGlState savedGlState = null;
@@ -1686,6 +1672,394 @@ public final class UiRenderer {
             } catch (Throwable ignored) {}
             restoreLegacyGlState(savedGlState);
         }
+    }
+
+    // ── Icône d'objet vanilla — pipeline MODERNE (1.21.11+, 26.1+) ───────────
+    //
+    // ANCIENNE APPROCHE ABANDONNÉE (voir historique de session) : construire
+    // notre PROPRE instance indépendante de GuiRenderState/DrawContext et
+    // appeler une méthode "flush" dessus. Invalidée par désassemblage complet
+    // du VRAI GuiRenderState (classe non obfusquée en 26.1.2, javap direct) :
+    // c'est une PURE STRUCTURE DE DONNÉES (add*/forEach*/traverse/reset — pas
+    // de méthode "flush vers le GPU"). Le flush réel exige de participer au
+    // GuiRenderState PARTAGÉ que vanilla envoie lui-même au GPU chaque frame
+    // via GuiRenderer.render(GpuBufferSlice), appelé DEPUIS
+    // GameRenderer.render(...) — tracé bytecode complet (javap 1.21.11 +
+    // classdump maison sur 26.1.2, class file version 69 illisible par javap)
+    // confirmant la chaîne : GameRenderer.guiRenderer (champ, type
+    // GuiRenderer) → GuiRenderer.state/renderState (champ, type
+    // GuiRenderState, "state" en Yarn 1.21.11 / "renderState" en 26.1.2 réel)
+    // → GuiRenderer.render(GpuBufferSlice) consomme CET état précis.
+    //
+    // Conséquence : dessiner dans NOTRE PROPRE instance ne sert à rien (jamais
+    // consommée par aucun flush) — il faut ajouter nos commandes DANS l'état
+    // VIVANT que GameRenderer.guiRenderer va lui-même vider ce frame-ci.
+    //
+    // Fenêtre de timing (confirmée par trace bytecode complète de
+    // GameRenderer.render(DeltaTracker,boolean) réel en 26.1.2, aucun appel
+    // reset()/clear() sur guiRenderState nulle part dans cette méthode —
+    // l'extraction/peuplement du HUD vanilla dans l'état se fait dans une
+    // passe "extract" SÉPARÉE, appelée AVANT que GameRenderer.render() ne
+    // soit invoqué) : n'importe quel point de cette méthode AVANT l'appel à
+    // guiRenderer.render(GpuBufferSlice) convient — HEAD est le plus simple
+    // et le plus sûr (pas de dépendance à un point d'injection au milieu
+    // d'une méthode). NON REVÉRIFIÉ bytecode par bytecode pour 1.21.11 lui-
+    // même (javap, pas le classdump maison) mais même famille d'architecture
+    // (GuiRenderer/GuiRenderState identiques dans les deux versions) — voir
+    // GuiFlushMixin (1.21.11) / GuiFlushMixin261 (26.1.2), point d'accroche
+    // qui appelle {@link #flushPendingModernItemIcons}.
+    //
+    // D'où la FILE D'ATTENTE ci-dessous : ArmorDurabilityModule (et tout
+    // futur appelant) tourne dans la passe de dessin DU MOD (GlobalUiPresentMixin,
+    // APRÈS le blit — voir sa javadoc), donc APRÈS que GameRenderer.render()
+    // ait déjà fini d'envoyer l'état au GPU pour CE frame-ci. drawVanillaItemIconModern
+    // ne fait donc que METTRE EN FILE la demande (ItemStack + position déjà
+    // convertie en coordonnées GUI-scaled) ; elle n'est réellement soumise à
+    // l'état vivant qu'au TOUT DÉBUT du frame SUIVANT, par flushPendingModernItemIcons
+    // — décalage d'une frame (~8-16ms), imperceptible, technique standard pour
+    // participer à une passe de rendu qui s'est déjà terminée pour ce frame.
+    //
+    // NON VÉRIFIÉ EN JEU (pas d'accès à un client Minecraft depuis cet
+    // environnement) : voir les logs "[UiRenderer] itemIconModern" en cas
+    // d'icône toujours invisible.
+    private static final class PendingItemIcon {
+        final Object itemStack; final int guiX; final int guiY;
+        PendingItemIcon(Object itemStack, int guiX, int guiY) {
+            this.itemStack = itemStack; this.guiX = guiX; this.guiY = guiY;
+        }
+    }
+
+    private static final java.util.List<PendingItemIcon> pendingModernItemIcons = new java.util.ArrayList<>();
+
+    private static java.lang.reflect.Field guiRendererFieldModern;
+    private static java.lang.reflect.Field guiStateFieldModern;
+    private static java.lang.reflect.Constructor<?> drawContextCtorModern;
+    private static Method drawItemMethodModern;
+    private static boolean modernItemIconResolveFailed = false;
+    private static boolean modernItemIconDiagLogged = false;
+
+    // GuiRenderer/GuiRenderState (voir ci-dessus) N'EXISTENT PAS en 1.20.4 ni
+    // 1.21.4 (confirmé absent des deux mappings Yarn correspondants,
+    // grep -c ==0 sur les deux) — architecture introduite entre la 1.21.4 et
+    // la 1.21.11. Sur ces deux brackets, DrawContext.drawItem dessine dans un
+    // VertexConsumerProvider.Immediate CLASSIQUE, avec sa PROPRE méthode
+    // draw()V (method_51452 en 1.20.4, method_51452 aussi en 1.21.4 — même ID
+    // intermediary stable) qui flush IMMÉDIATEMENT, en autonomie — pas besoin
+    // de participer à un état partagé ni d'un second point d'accroche Mixin.
+    // Détection automatique (essai de résolution de GuiRenderer) plutôt que
+    // par bracket en dur : suffisant et se généralise tout seul si une future
+    // version régresse ou avance cette bascule d'architecture.
+    private static Boolean modernUsesDeferredGuiRenderer;
+
+    private static boolean modernUsesDeferredGuiRenderer() {
+        if (modernUsesDeferredGuiRenderer == null) {
+            modernUsesDeferredGuiRenderer = McReflect.yarnClass(
+                "net/minecraft/client/gui/render/GuiRenderer",
+                "net.minecraft.client.gui.render.GuiRenderer") != null;
+        }
+        return modernUsesDeferredGuiRenderer;
+    }
+
+    private void drawVanillaItemIconModern(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
+        if (modernUsesDeferredGuiRenderer()) {
+            drawVanillaItemIconModernDeferred(itemStack, x, y, vpWidth, vpHeight);
+        } else {
+            drawVanillaItemIconModernImmediate(itemStack, x, y, vpWidth, vpHeight);
+        }
+    }
+
+    private void drawVanillaItemIconModernDeferred(Object itemStack, float x, float y, int vpWidth, int vpHeight) {
+        try {
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+
+            // DrawContext/GuiGraphicsExtractor attend des coordonnées
+            // GUI-SCALED (comme tout le rendu vanilla), PAS les pixels
+            // framebuffer bruts que le reste de notre pipeline utilise
+            // partout ailleurs — conversion via le ratio framebuffer/
+            // scaledWidth de la fenêtre courante.
+            Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow", "getWindow").invoke(mc);
+            int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth", "getGuiScaledWidth").invoke(window);
+            float guiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            int guiX = Math.round(x / guiScale);
+            int guiY = Math.round(y / guiScale);
+
+            synchronized (pendingModernItemIcons) {
+                pendingModernItemIcons.add(new PendingItemIcon(itemStack, guiX, guiY));
+            }
+        } catch (Throwable t) {
+            if (!modernItemIconWarned) {
+                modernItemIconWarned = true;
+                LauncherLog.err("[UiRenderer] drawVanillaItemIconModernDeferred: " + t);
+            }
+        }
+    }
+
+    private static java.lang.reflect.Constructor<?> drawContextImmediateCtorModern;
+    private static Method getBufferBuildersMethodModern;
+    private static Method getEntityVertexConsumersMethodModern;
+    private static Method drawItemMethodImmediateModern;
+    private static Method drawFlushMethodImmediateModern;
+    private static boolean modernImmediateResolveFailed = false;
+    private static boolean modernImmediateDiagLogged = false;
+
+    /**
+     * Bracket 1.20.4 / 1.21.4 (voir détection ci-dessus) : DrawContext gère
+     * son propre buffer immédiat, auto-suffisant — construit avec le
+     * VertexConsumerProvider.Immediate PARTAGÉ de vanilla
+     * (MinecraftClient.getBufferBuilders().getEntityVertexConsumers(), déjà
+     * lié au bon contexte GL/render target à cet instant) plutôt qu'une
+     * instance isolée, puis vidé immédiatement via son propre draw()V — pas
+     * de file d'attente ni de second point d'accroche Mixin nécessaires ici
+     * (contrairement au bracket 1.21.11+/26.1+, voir drawVanillaItemIconModernDeferred).
+     */
+    private void drawVanillaItemIconModernImmediate(Object itemStack, float x, float y, int vpWidth, int vpHeight) {
+        try {
+            if (!ensureModernImmediateResolved(itemStack)) {
+                if (!modernItemIconWarned) {
+                    modernItemIconWarned = true;
+                    LauncherLog.warn("[UiRenderer] drawVanillaItemIconModernImmediate: résolution réflexion échouée — icône non dessinée (voir logs diag)");
+                }
+                return;
+            }
+
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+
+            Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow").invoke(mc);
+            int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth").invoke(window);
+            float guiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            int guiX = Math.round(x / guiScale);
+            int guiY = Math.round(y / guiScale);
+
+            Object bufferBuilders = getBufferBuildersMethodModern.invoke(mc);
+            Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
+            Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
+
+            if (!modernImmediateDiagLogged) {
+                modernImmediateDiagLogged = true;
+                LauncherLog.info("[UiRenderer] itemIconModernImmediate diag: drawContext=" + drawContext
+                    + " guiScale=" + guiScale + " guiX=" + guiX + " guiY=" + guiY);
+            }
+
+            drawItemMethodImmediateModern.invoke(drawContext, itemStack, guiX, guiY);
+            drawFlushMethodImmediateModern.invoke(drawContext);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawVanillaItemIconModernImmediate: " + t);
+        }
+    }
+
+    private boolean ensureModernImmediateResolved(Object itemStack) {
+        if (drawItemMethodImmediateModern != null) return true;
+        if (modernImmediateResolveFailed) return false;
+        try {
+            Class<?> mcClass = McReflect.yarnClass("net/minecraft/client/MinecraftClient");
+            getBufferBuildersMethodModern = McReflect.noArgMethod(mcClass,
+                "net/minecraft/client/MinecraftClient", "getBufferBuilders");
+
+            Class<?> bufferBuilderStorageClass = McReflect.yarnClass("net/minecraft/client/render/BufferBuilderStorage");
+            getEntityVertexConsumersMethodModern = McReflect.noArgMethod(bufferBuilderStorageClass,
+                "net/minecraft/client/render/BufferBuilderStorage", "getEntityVertexConsumers");
+
+            Class<?> drawContextClass = McReflect.yarnClass("net/minecraft/client/gui/DrawContext");
+            Class<?> vcpImmediateClass = getEntityVertexConsumersMethodModern.getReturnType();
+            drawContextImmediateCtorModern = drawContextClass.getDeclaredConstructor(mcClass, vcpImmediateClass);
+            drawContextImmediateCtorModern.setAccessible(true);
+
+            drawItemMethodImmediateModern = McReflect.method(drawContextClass, "net/minecraft/client/gui/DrawContext",
+                "drawItem", itemStack.getClass(), int.class, int.class);
+            drawFlushMethodImmediateModern = McReflect.noArgMethod(drawContextClass,
+                "net/minecraft/client/gui/DrawContext", "draw");
+
+            LauncherLog.info("[UiRenderer] itemIconModernImmediate diag: résolution OK — drawContextCtor="
+                + drawContextImmediateCtorModern + " drawItem=" + drawItemMethodImmediateModern
+                + " draw=" + drawFlushMethodImmediateModern);
+            return drawItemMethodImmediateModern != null && drawFlushMethodImmediateModern != null;
+        } catch (Throwable t) {
+            modernImmediateResolveFailed = true;
+            LauncherLog.err("[UiRenderer] itemIconModernImmediate: résolution échouée : " + t);
+            return false;
+        }
+    }
+
+    /**
+     * Appelé depuis GuiFlushMixin/GuiFlushMixin261 (HEAD de GameRenderer.render,
+     * bien AVANT l'appel vanilla à guiRenderer.render(GpuBufferSlice) plus loin
+     * dans la même méthode — voir javadoc de section ci-dessus) avec {@code
+     * gameRenderer == this} (l'instance VIVANTE, fusionnée par Mixin). Vide la
+     * file et soumet chaque icône dans le VRAI DrawContext/GuiGraphicsExtractor
+     * wrappant l'état PARTAGÉ (gameRenderer.guiRenderer.state), pas une
+     * instance isolée — condition nécessaire pour que le flush EXISTANT de
+     * vanilla, plus loin dans ce même appel, inclue nos icônes dans CE frame.
+     */
+    public static void flushPendingModernItemIcons(Object gameRenderer) {
+        if (pendingModernItemIcons.isEmpty()) return;
+        java.util.List<PendingItemIcon> batch;
+        synchronized (pendingModernItemIcons) {
+            if (pendingModernItemIcons.isEmpty()) return;
+            batch = new java.util.ArrayList<>(pendingModernItemIcons);
+            pendingModernItemIcons.clear();
+        }
+        if (modernItemIconResolveFailed) return;
+        try {
+            // BUG TROUVÉ (test utilisateur, 26.1.2) : résoudre GameRenderer
+            // par NOM (McReflect.yarnClass/Class.forName + classloader du
+            // thread courant) échouait silencieusement (guiRendererFieldModern
+            // restait null) alors que GuiRenderer, résolu par le MÊME patron
+            // de code juste après, réussissait — le thread de rendu n'a
+            // apparemment pas de façon fiable Knot comme
+            // Thread.currentThread().getContextClassLoader() à ce point
+            // précis de l'exécution (contrairement au chemin interne de
+            // MappingsRegistry.loadClass, qui retombe sur le classloader de
+            // l'APPELANT — Knot, puisque MappingsRegistry est une de NOS
+            // classes — quand le premier essai échoue, ce qui explique
+            // pourquoi GuiRenderer "marchait par coïncidence"). Fix : on a
+            // déjà l'instance VIVANTE de GameRenderer ici (paramètre) — on
+            // résout ses champs directement sur SA classe réelle
+            // (gameRenderer.getClass()), zéro ambiguïté de classloader
+            // possible, plutôt que de deviner un nom qualifié + un
+            // classloader séparément.
+            if (guiRendererFieldModern == null) {
+                guiRendererFieldModern = findFieldByNameInHierarchy(gameRenderer.getClass(),
+                    MappingsRegistry.getObfFieldName("net/minecraft/client/render/GameRenderer", "guiRenderer"),
+                    "guiRenderer");
+                if (guiRendererFieldModern == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: champ guiRenderer introuvable sur "
+                        + gameRenderer.getClass());
+                    return;
+                }
+            }
+
+            Object guiRenderer = guiRendererFieldModern.get(gameRenderer);
+            if (guiRenderer == null) return;
+
+            // Même logique : champ GuiRenderState résolu sur la classe réelle
+            // de l'instance guiRenderer VIVANTE qu'on vient d'obtenir — nommé
+            // "state" par Yarn (1.21.11) mais "renderState" en vrai nom
+            // Mojang (26.1.2, confirmé par javap).
+            if (guiStateFieldModern == null) {
+                guiStateFieldModern = findFieldByNameInHierarchy(guiRenderer.getClass(),
+                    MappingsRegistry.getObfFieldName("net/minecraft/client/gui/render/GuiRenderer", "state"),
+                    "state", "renderState");
+                if (guiStateFieldModern == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: champ state/renderState introuvable sur "
+                        + guiRenderer.getClass());
+                    return;
+                }
+            }
+
+            Object guiState = guiStateFieldModern.get(guiRenderer);
+            if (guiState == null) return;
+
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+
+            if (drawContextCtorModern == null) {
+                // Classloader EXPLICITE de guiRenderer (instance vivante,
+                // forcément Knot) plutôt que le classloader ambiant du
+                // thread — même correctif que ci-dessus, pour la même raison.
+                ClassLoader cl = guiRenderer.getClass().getClassLoader();
+                // DrawContext (Yarn 1.21.11) == GuiGraphicsExtractor (vrai
+                // nom Mojang 26.1.2, confirmé par javap — PAS "GuiGraphics" :
+                // la classe a été repositionnée en "extracteur" d'état vers
+                // GuiRenderState dans la nouvelle architecture de rendu différé).
+                Class<?> drawContextClass = resolveClassByLoader(cl,
+                    MappingsRegistry.getObfClassDot("net/minecraft/client/gui/DrawContext"),
+                    "net.minecraft.client.gui.GuiGraphicsExtractor");
+                if (drawContextClass == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: classe DrawContext/GuiGraphicsExtractor introuvable");
+                    return;
+                }
+                drawContextCtorModern = drawContextClass.getDeclaredConstructor(
+                    mc.getClass(), guiStateFieldModern.getType(), int.class, int.class);
+                drawContextCtorModern.setAccessible(true);
+
+                // "drawItem" (Yarn 1.21.11) == "item" (vrai nom Mojang
+                // 26.1.2, confirmé par javap).
+                drawItemMethodModern = findMethodByNameInHierarchy(drawContextClass,
+                    batch.get(0).itemStack.getClass(), "drawItem", "item");
+                if (drawItemMethodModern == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: méthode drawItem/item introuvable sur " + drawContextClass);
+                    return;
+                }
+                LauncherLog.info("[UiRenderer] itemIconModern diag: résolution OK — guiRendererField=" + guiRendererFieldModern
+                    + " guiStateField=" + guiStateFieldModern + " drawContextCtor=" + drawContextCtorModern
+                    + " drawItem=" + drawItemMethodModern);
+            }
+
+            Object drawContext = drawContextCtorModern.newInstance(mc, guiState, 0, 0);
+
+            if (!modernItemIconDiagLogged) {
+                modernItemIconDiagLogged = true;
+                LauncherLog.info("[UiRenderer] itemIconModern diag: guiRenderer=" + guiRenderer
+                    + " guiState=" + guiState + " drawContext=" + drawContext + " batch=" + batch.size());
+            }
+
+            // Taille NATIVE (16x16 GUI-pixels, comme vanilla) — pas de mise à
+            // l'échelle ici (pas de manipulation du Matrix3x2fStack de
+            // DrawContext pour l'instant, contrairement au glScalef legacy) :
+            // simplification volontaire pour cette première passe, voir
+            // ArmorDurabilityModule pour l'effet (icônes affichées à leur
+            // taille vanilla plutôt qu'au "size" demandé).
+            for (PendingItemIcon icon : batch) {
+                drawItemMethodModern.invoke(drawContext, icon.itemStack, icon.guiX, icon.guiY);
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingModernItemIcons: " + t);
+        }
+    }
+
+    /** Cherche {@code candidateNames} (dans l'ordre) comme nom de champ déclaré, en remontant la hiérarchie de {@code owner}. */
+    private static java.lang.reflect.Field findFieldByNameInHierarchy(Class<?> owner, String... candidateNames) {
+        for (String name : candidateNames) {
+            if (name == null) continue;
+            Class<?> c = owner;
+            while (c != null) {
+                try {
+                    java.lang.reflect.Field f = c.getDeclaredField(name);
+                    f.setAccessible(true);
+                    return f;
+                } catch (NoSuchFieldException e) {
+                    c = c.getSuperclass();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Cherche {@code candidateNames} (dans l'ordre) comme méthode déclarée à 1 argument (assignable depuis {@code argType}) + (int,int), en remontant la hiérarchie de {@code owner}. */
+    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String... candidateNames) {
+        for (String name : candidateNames) {
+            if (name == null) continue;
+            Class<?> c = owner;
+            while (c != null) {
+                for (Method m : c.getDeclaredMethods()) {
+                    if (!m.getName().equals(name) || m.getParameterCount() != 3) continue;
+                    Class<?>[] p = m.getParameterTypes();
+                    if (p[0].isAssignableFrom(argType) && p[1] == int.class && p[2] == int.class) {
+                        m.setAccessible(true);
+                        return m;
+                    }
+                }
+                c = c.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    /** Essaie chaque nom de classe (dans l'ordre) via {@code Class.forName} avec le classloader EXPLICITE donné — jamais le classloader ambiant du thread courant, voir flushPendingModernItemIcons pour le pourquoi. */
+    private static Class<?> resolveClassByLoader(ClassLoader cl, String... candidateNames) {
+        for (String name : candidateNames) {
+            if (name == null) continue;
+            try {
+                return Class.forName(name, false, cl);
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
     // ── Texte (police bitmap UiFont) ──────────────────────────────────────────

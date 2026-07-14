@@ -177,6 +177,16 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CrosshairMixin",
             "net/minecraft/client/gui/hud/InGameHud",
             "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        // Même méthode que GlobalUiRenderMixin ci-dessus (render() déclaré
+        // directement sur GameRenderer) — entrée de refmap indépendante car
+        // scopée par mixin (byMixin, voir buildRefmapJson()), pas de collision
+        // avec l'entrée de GlobalUiRenderMixin même si la clé JSON est identique.
+        // Voir GuiFlushMixin : soumet les icônes d'objet vanilla en attente
+        // (ArmorDurabilityModule) dans le GuiRenderState partagé, en HEAD —
+        // AVANT que ce même render() n'envoie cet état au GPU.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GuiFlushMixin",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
 
         // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
         // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.

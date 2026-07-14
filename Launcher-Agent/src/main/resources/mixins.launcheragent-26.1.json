@@ -12,7 +12,8 @@
     "client.v26_1.KeybindsScreenMixin261",
     "client.v26_1.GlobalUiRenderMixin261",
     "client.v26_1.GlobalUiPresentMixin261",
-    "client.v26_1.CrosshairMixin261"
+    "client.v26_1.CrosshairMixin261",
+    "client.v26_1.GuiFlushMixin261"
   ],
   "injectors": {
     "defaultRequire": 1

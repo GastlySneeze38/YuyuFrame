@@ -104,17 +104,34 @@ public final class YarnMappings {
                     currentOfficialClass = null;
                     if (line.startsWith("c\t")) {
                         String[] p = line.substring(2).split("\t");
-                        int maxCol = Math.max(colOfficial, Math.max(colIntermediary, colNamed));
-                        if (p.length > maxCol) {
-                            String namedCls    = p[colNamed];
+                        // BUG TROUVÉ (audit ArmorDurabilityModule/pipeline
+                        // moderne 1.21.11) : exigeait les 3 colonnes (official
+                        // ET intermediary ET named) pour indexer QUOI QUE CE
+                        // SOIT — une classe interne récente sans nom Yarn
+                        // "named" (ex: GuiRenderState, "gqg" en 1.21.11, ligne
+                        // tiny à seulement 2 colonnes) voyait donc TOUTE la
+                        // ligne ignorée, y compris son mapping
+                        // official→intermediary qui, lui, n'a besoin QUE des
+                        // 2 premières colonnes — ClassNotFoundException("gqg")
+                        // silencieuse au runtime sous Fabric malgré une entrée
+                        // bel et bien présente dans le fichier tiny. official/
+                        // intermediary sont maintenant indexés dès que
+                        // présents, "named" reste optionnel (populé seulement
+                        // s'il existe, comme avant pour les classes qui l'ont).
+                        int minCol = Math.max(colOfficial, colIntermediary);
+                        if (p.length > minCol) {
                             String officialCls = p[colOfficial];
                             String interCls    = p[colIntermediary];
-                            classes.put(namedCls, officialCls);
-                            reverse.put(officialCls, namedCls);
                             classOffToInter.put(officialCls, interCls);
-                            classInterToNamed.put(interCls, namedCls);
-                            currentNamedClass = namedCls;
                             currentOfficialClass = officialCls;
+
+                            if (p.length > colNamed) {
+                                String namedCls = p[colNamed];
+                                classes.put(namedCls, officialCls);
+                                reverse.put(officialCls, namedCls);
+                                classInterToNamed.put(interCls, namedCls);
+                                currentNamedClass = namedCls;
+                            }
                         }
                     }
 
