@@ -78,6 +78,26 @@ public final class McReflect {
     }
 
     /**
+     * Comme {@link #yarnClass(String)} mais avec repli sur un nom RÉEL Mojang
+     * explicite si la résolution Yarn échoue — nécessaire sur 26.1+ (Yarn
+     * jamais chargé, {@link MappingsRegistry#loadClass} essaie le nom Yarn TEL
+     * QUEL comme s'il s'agissait déjà du nom réel, ce qui échoue silencieusement
+     * dès qu'une classe a été RENOMMÉE, ex: {@code GameOptions}→{@code Options},
+     * {@code DynamicRegistryManager}→{@code RegistryAccess} — voir historique
+     * de session, même piège déjà rencontré et corrigé pour {@code
+     * McReflect.minecraftClient()}).
+     */
+    public static Class<?> yarnClass(String yarnClass, String realNameFallback) {
+        Class<?> c = yarnClass(yarnClass);
+        if (c != null) return c;
+        try {
+            return Class.forName(realNameFallback, false, Thread.currentThread().getContextClassLoader());
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
      * Classe NON obfusquée (ex: {@code org.lwjgl.input.Keyboard}) — jamais
      * traduite par Yarn, mais toujours chargée via le classloader du jeu
      * (notre agent compile contre des stubs, pas le vrai jar LWJGL/Minecraft,
@@ -115,20 +135,39 @@ public final class McReflect {
     /** Champ (cherché dans toute la hiérarchie), résolu + mis en cache par (classe réelle, nom Yarn). */
     public static Field field(Class<?> owner, String yarnClass, String yarnField) {
         String key = owner.getName() + "#" + yarnField;
+        return FIELD_CACHE.computeIfAbsent(key, k -> findFieldInHierarchy(owner, MappingsRegistry.getObfFieldName(yarnClass, yarnField)));
+    }
+
+    /**
+     * Comme {@link #field(Class, String, String)} mais avec repli sur un nom
+     * de champ RÉEL Mojang si la recherche par nom Yarn (inchangé sur 26.1+,
+     * Yarn jamais chargé) ne trouve rien dans la hiérarchie — ex: {@code
+     * KeyBinding.pressed}→{@code KeyMapping.isDown}, {@code
+     * KeyBinding.boundKey}→{@code KeyMapping.key}, vérifiés par javap sur le
+     * jar client 26.1.2 réel. Sur les brackets antérieurs (Yarn chargé), le
+     * premier essai trouve toujours le bon champ — le repli n'est jamais
+     * atteint, sans conséquence.
+     */
+    public static Field field(Class<?> owner, String yarnClass, String yarnField, String realFieldFallback) {
+        String key = owner.getName() + "#" + yarnField + "|" + realFieldFallback;
         return FIELD_CACHE.computeIfAbsent(key, k -> {
-            String obfName = MappingsRegistry.getObfFieldName(yarnClass, yarnField);
-            Class<?> c = owner;
-            while (c != null) {
-                try {
-                    Field f = c.getDeclaredField(obfName);
-                    f.setAccessible(true);
-                    return f;
-                } catch (NoSuchFieldException e) {
-                    c = c.getSuperclass();
-                }
-            }
-            return null;
+            Field f = findFieldInHierarchy(owner, MappingsRegistry.getObfFieldName(yarnClass, yarnField));
+            return f != null ? f : findFieldInHierarchy(owner, realFieldFallback);
         });
+    }
+
+    private static Field findFieldInHierarchy(Class<?> owner, String fieldName) {
+        Class<?> c = owner;
+        while (c != null) {
+            try {
+                Field f = c.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            }
+        }
+        return null;
     }
 
     /**
@@ -154,7 +193,14 @@ public final class McReflect {
     public static Field fieldOnClass(String yarnDeclaringClass, String yarnField) {
         String key = "decl:" + yarnDeclaringClass + "#" + yarnField;
         return FIELD_CACHE.computeIfAbsent(key, k -> {
-            if (!MappingsRegistry.hasFieldMapping(yarnDeclaringClass, yarnField)) return null;
+            // BUG TROUVÉ (26.1+) : hasFieldMapping() renvoie isLoaded() && ... —
+            // TOUJOURS false quand Yarn n'est pas chargé (bracket 26.1+, voir
+            // historique de session), donc cette méthode retournait TOUJOURS
+            // null sur ce bracket, indépendamment de tout le reste (même si le
+            // nom Yarn était par ailleurs le bon nom réel). Le garde ne doit
+            // s'appliquer QUE quand Yarn est effectivement chargé — sur un
+            // bracket non mappé, on tente directement la résolution.
+            if (MappingsRegistry.isLoaded() && !MappingsRegistry.hasFieldMapping(yarnDeclaringClass, yarnField)) return null;
             try {
                 Class<?> owner = yarnClass(yarnDeclaringClass);
                 if (owner == null) return null;
@@ -162,6 +208,26 @@ public final class McReflect {
                 Field f = owner.getDeclaredField(obfName);
                 f.setAccessible(true);
                 return f;
+            } catch (Throwable t) {
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Comme {@link #fieldOnClass(String, String)} mais avec repli sur un nom
+     * de classe déclarante ET un nom de champ RÉELS Mojang si la résolution
+     * Yarn échoue (26.1+) — ex: {@code Entity.world}→{@code Entity.level},
+     * vérifié par javap sur le jar client 26.1.2 réel.
+     */
+    public static Field fieldOnClass(String yarnDeclaringClass, String realDeclaringClassFallback, String yarnField, String realFieldFallback) {
+        String key = "decl:" + yarnDeclaringClass + "#" + yarnField + "|" + realDeclaringClassFallback + "#" + realFieldFallback;
+        return FIELD_CACHE.computeIfAbsent(key, k -> {
+            try {
+                Class<?> owner = yarnClass(yarnDeclaringClass, realDeclaringClassFallback);
+                if (owner == null) return null;
+                Field f = findFieldInHierarchy(owner, MappingsRegistry.getObfFieldName(yarnDeclaringClass, yarnField));
+                return f != null ? f : findFieldInHierarchy(owner, realFieldFallback);
             } catch (Throwable t) {
                 return null;
             }
@@ -216,22 +282,38 @@ public final class McReflect {
         return resolveNoArg(owner, yarnClass, yarnMethod);
     }
 
+    /**
+     * Comme {@link #noArgMethod(Class, String, String)} mais avec repli sur un
+     * nom de méthode RÉEL Mojang si la recherche par nom Yarn ne trouve rien
+     * (26.1+, mêmes garanties que {@link #field(Class, String, String, String)}) —
+     * ex: {@code getStatusEffectInstances}→{@code getActiveEffects}, {@code
+     * getUuid}→{@code getUUID}, vérifiés par javap sur le jar client 26.1.2 réel.
+     */
+    public static Method noArgMethod(Class<?> owner, String yarnClass, String yarnMethod, String realMethodFallback) {
+        String key = owner.getName() + "#" + yarnMethod + "()|" + realMethodFallback;
+        return METHOD_CACHE.computeIfAbsent(key, k -> {
+            Method m = findNoArgInHierarchy(owner, MappingsRegistry.getObfMethodName(yarnClass, yarnMethod));
+            return m != null ? m : findNoArgInHierarchy(owner, realMethodFallback);
+        });
+    }
+
     private static Method resolveNoArg(Class<?> owner, String yarnClass, String yarnMethod) {
         String key = owner.getName() + "#" + yarnMethod + "()";
-        return METHOD_CACHE.computeIfAbsent(key, k -> {
-            String obfName = MappingsRegistry.getObfMethodName(yarnClass, yarnMethod);
-            Class<?> c = owner;
-            while (c != null) {
-                for (Method m : c.getDeclaredMethods()) {
-                    if (m.getName().equals(obfName) && m.getParameterCount() == 0) {
-                        m.setAccessible(true);
-                        return m;
-                    }
+        return METHOD_CACHE.computeIfAbsent(key, k -> findNoArgInHierarchy(owner, MappingsRegistry.getObfMethodName(yarnClass, yarnMethod)));
+    }
+
+    private static Method findNoArgInHierarchy(Class<?> owner, String methodName) {
+        Class<?> c = owner;
+        while (c != null) {
+            for (Method m : c.getDeclaredMethods()) {
+                if (m.getName().equals(methodName) && m.getParameterCount() == 0) {
+                    m.setAccessible(true);
+                    return m;
                 }
-                c = c.getSuperclass();
             }
-            return null;
-        });
+            c = c.getSuperclass();
+        }
+        return null;
     }
 
     /**
@@ -248,6 +330,11 @@ public final class McReflect {
         return method(owner, yarnClass, yarnMethod, paramType);
     }
 
+    /** Comme {@link #oneArgMethod} mais avec repli sur un nom de méthode RÉEL Mojang — voir {@link #method(Class, String, String, String, Class[])}. */
+    public static Method oneArgMethod(Class<?> owner, String yarnClass, String yarnMethod, String realMethodFallback, Class<?> paramType) {
+        return method(owner, yarnClass, yarnMethod, realMethodFallback, paramType);
+    }
+
     /**
      * Méthode à N paramètres (N ≥ 0), désambiguïsée par type exact —
      * généralisation de {@link #oneArgMethod}/{@link #noArgMethod} pour les
@@ -256,26 +343,42 @@ public final class McReflect {
      */
     public static Method method(Class<?> owner, String yarnClass, String yarnMethod, Class<?>... paramTypes) {
         String key = owner.getName() + "#" + yarnMethod + "(" + java.util.Arrays.toString(paramTypes) + ")";
+        return METHOD_CACHE.computeIfAbsent(key, k -> findMethodInHierarchy(owner, MappingsRegistry.getObfMethodName(yarnClass, yarnMethod), paramTypes));
+    }
+
+    /**
+     * Comme {@link #method(Class, String, String, Class[])} mais avec repli sur
+     * un nom de méthode RÉEL Mojang si la recherche par nom Yarn ne trouve rien
+     * (26.1+) — ex: {@code getStackInHand}→{@code getItemInHand}, {@code
+     * getEquippedStack}→{@code getItemBySlot}, vérifiés par javap sur le jar
+     * client 26.1.2 réel.
+     */
+    public static Method method(Class<?> owner, String yarnClass, String yarnMethod, String realMethodFallback, Class<?>... paramTypes) {
+        String key = owner.getName() + "#" + yarnMethod + "(" + java.util.Arrays.toString(paramTypes) + ")|" + realMethodFallback;
         return METHOD_CACHE.computeIfAbsent(key, k -> {
-            String obfName = MappingsRegistry.getObfMethodName(yarnClass, yarnMethod);
-            Class<?> c = owner;
-            while (c != null) {
-                for (Method m : c.getDeclaredMethods()) {
-                    if (!m.getName().equals(obfName) || m.getParameterCount() != paramTypes.length) continue;
-                    Class<?>[] actual = m.getParameterTypes();
-                    boolean match = true;
-                    for (int i = 0; i < paramTypes.length; i++) {
-                        if (!actual[i].isAssignableFrom(paramTypes[i])) { match = false; break; }
-                    }
-                    if (match) {
-                        m.setAccessible(true);
-                        return m;
-                    }
-                }
-                c = c.getSuperclass();
-            }
-            return null;
+            Method m = findMethodInHierarchy(owner, MappingsRegistry.getObfMethodName(yarnClass, yarnMethod), paramTypes);
+            return m != null ? m : findMethodInHierarchy(owner, realMethodFallback, paramTypes);
         });
+    }
+
+    private static Method findMethodInHierarchy(Class<?> owner, String methodName, Class<?>[] paramTypes) {
+        Class<?> c = owner;
+        while (c != null) {
+            for (Method m : c.getDeclaredMethods()) {
+                if (!m.getName().equals(methodName) || m.getParameterCount() != paramTypes.length) continue;
+                Class<?>[] actual = m.getParameterTypes();
+                boolean match = true;
+                for (int i = 0; i < paramTypes.length; i++) {
+                    if (!actual[i].isAssignableFrom(paramTypes[i])) { match = false; break; }
+                }
+                if (match) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+            c = c.getSuperclass();
+        }
+        return null;
     }
 
     private static Method cachedSimpleOptionGetValue;

@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 
@@ -102,11 +103,15 @@ public final class KeystrokesModule extends SingleHudModule {
                 // BUG TROUVÉ (audit modules, voir historique de session) :
                 // noms de champ "forwardKey"/"leftKey"/etc. (1.8.9) inversés
                 // en 1.16.5 — "keyForward"/"keyLeft"/etc. Essaie les deux.
-                Object forward = optionsFieldEither(options, "forwardKey", "keyForward");
-                Object left    = optionsFieldEither(options, "leftKey", "keyLeft");
-                Object back    = optionsFieldEither(options, "backKey", "keyBack");
-                Object right   = optionsFieldEither(options, "rightKey", "keyRight");
-                Object jump    = optionsFieldEither(options, "jumpKey", "keyJump");
+                // 26.1+ : "keyForward"/"keyBack" (Yarn 1.16.5+) sont eux-mêmes
+                // RENOMMÉS "keyUp"/"keyDown" côté Mojang réel (vérifié par javap
+                // sur Options.class du jar client 26.1.2) — "keyLeft"/"keyRight"/
+                // "keyJump" coïncident déjà, aucun repli nécessaire pour ceux-là.
+                Object forward = optionsFieldEither(options, "forwardKey", "keyForward", "keyUp");
+                Object left    = optionsFieldEither(options, "leftKey", "keyLeft", null);
+                Object back    = optionsFieldEither(options, "backKey", "keyBack", "keyDown");
+                Object right   = optionsFieldEither(options, "rightKey", "keyRight", null);
+                Object jump    = optionsFieldEither(options, "jumpKey", "keyJump", null);
 
                 trackClicks();
 
@@ -159,27 +164,38 @@ public final class KeystrokesModule extends SingleHudModule {
             } catch (Throwable ignored) {}
         }
 
-        private Object optionsField(Object options, String yarnField) {
+        private Object optionsField(Object options, String yarnField, String realFieldFallback) {
             try {
-                return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField).get(options);
+                Field f = realFieldFallback != null
+                    ? McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField, realFieldFallback)
+                    : McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField);
+                return f == null ? null : f.get(options);
             } catch (Throwable t) {
                 return null;
             }
         }
 
-        /** Essaie {@code oldName} (1.8.9) puis {@code newName} (1.13+) — voir historique de session. */
-        private Object optionsFieldEither(Object options, String oldName, String newName) {
+        /**
+         * Essaie {@code oldName} (1.8.9) puis {@code newName} (1.13+, souvent
+         * inchangé jusqu'en 26.1.2 aussi) puis, si fourni, {@code
+         * realFieldFallback} (nom réel Mojang, requis quand 26.1.2 a ENCORE
+         * renommé le champ par rapport au nom Yarn "named" — ex: {@code
+         * keyForward}→{@code keyUp}, {@code keyBack}→{@code keyDown}, vérifiés
+         * par javap sur le jar client 26.1.2 réel).
+         */
+        private Object optionsFieldEither(Object options, String oldName, String newName, String realFieldFallback) {
             if (com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/GameOptions", oldName)) {
-                Object v = optionsField(options, oldName);
+                Object v = optionsField(options, oldName, null);
                 if (v != null) return v;
             }
-            return optionsField(options, newName);
+            return optionsField(options, newName, realFieldFallback);
         }
 
         private boolean isDown(Object keyBinding) {
             if (keyBinding == null) return false;
             try {
-                return McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed").getBoolean(keyBinding);
+                // 26.1+ : KeyBinding→KeyMapping, champ "pressed"→"isDown" (vérifié javap).
+                return McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed", "isDown").getBoolean(keyBinding);
             } catch (Throwable t) {
                 return false;
             }
@@ -211,9 +227,13 @@ public final class KeystrokesModule extends SingleHudModule {
                     return name == null || name.isEmpty() ? "?" : name;
                 }
 
-                Object boundKey = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "boundKey").get(keyBinding);
+                // 26.1+ : champ "boundKey"→"key" (type déplacé vers
+                // com.mojang.blaze3d.platform.InputConstants$Key), méthode
+                // "getCode"→"getValue" (vérifiés par javap — InputConstants$Key
+                // n'a PLUS de getCode() du tout, seulement getValue()).
+                Object boundKey = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "boundKey", "key").get(keyBinding);
                 if (boundKey == null) return "?";
-                Method getCode = McReflect.noArgMethod(boundKey.getClass(), "net/minecraft/client/util/InputUtil$Key", "getCode");
+                Method getCode = McReflect.noArgMethod(boundKey.getClass(), "net/minecraft/client/util/InputUtil$Key", "getCode", "getValue");
                 if (getCode == null) return "?";
                 int code = (int) getCode.invoke(boundKey);
                 String name = com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());

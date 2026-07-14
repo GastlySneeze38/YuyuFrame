@@ -31,11 +31,13 @@ public final class PingModule extends SingleHudModule {
                 Object uuid = playerUuid(player);
                 if (uuid == null) return new String[]{ "-- ms" };
 
-                Object handler = McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "getNetworkHandler").invoke(mc);
+                // 26.1+ : getNetworkHandler()→getConnection(), getPlayerListEntry()→
+                // getPlayerInfo() — vérifiés par javap sur le jar client 26.1.2 réel.
+                Object handler = McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "getNetworkHandler", "getConnection").invoke(mc);
                 if (handler == null) return new String[]{ "-- ms" };
 
                 Object entry = McReflect.oneArgMethod(handler.getClass(),
-                        "net/minecraft/client/network/ClientPlayNetworkHandler", "getPlayerListEntry", UUID.class)
+                        "net/minecraft/client/network/ClientPlayNetworkHandler", "getPlayerListEntry", "getPlayerInfo", UUID.class)
                         .invoke(handler, uuid);
                 if (entry == null) return new String[]{ "-- ms" };
 
@@ -70,7 +72,8 @@ public final class PingModule extends SingleHudModule {
             Method m = cachedGetUuid;
             if (m == null && !getUuidResolveAttempted) {
                 getUuidResolveAttempted = true;
-                m = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getUuid");
+                // 26.1+ : getUuid()→getUUID() (casse différente), vérifié par javap.
+                m = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getUuid", "getUUID");
                 cachedGetUuid = m;
             }
             if (m != null) return m.invoke(player);

@@ -58,12 +58,34 @@ public final class ChatEnhancementsModule extends LauncherModule {
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
-            Object inGameHud = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "inGameHud").get(mc);
+            // 26.1+ : InGameHud→Gui, champ "inGameHud"→"gui" ; ChatHud→ChatComponent,
+            // champ "chatHud"→"chat" (vérifiés par javap sur le jar client 26.1.2
+            // réel). BUG TROUVÉ (confirmé par l'utilisateur, NullPointerException en
+            // boucle sur onTick) : ces deux lignes appelaient .get(...) directement
+            // sur le retour de field() SANS vérifier null d'abord — dès que le nom
+            // ne résolvait plus (comme ici avant ce fix), NullPointerException
+            // immédiate à CHAQUE tick, jamais avalée par le catch générique
+            // puisqu'elle survient hors du bloc protégé... en fait si, avalée par
+            // le catch du bas, mais reloggée sans relâche vu qu'onTick() est
+            // rappelé en boucle — d'où le spam.
+            Field inGameHudField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "inGameHud", "gui");
+            if (inGameHudField == null) return;
+            Object inGameHud = inGameHudField.get(mc);
             if (inGameHud == null) return;
-            Object chatHud = McReflect.field(inGameHud.getClass(), "net/minecraft/client/gui/hud/InGameHud", "chatHud").get(inGameHud);
+            Field chatHudField = McReflect.field(inGameHud.getClass(), "net/minecraft/client/gui/hud/InGameHud", "chatHud", "chat");
+            if (chatHudField == null) return;
+            Object chatHud = chatHudField.get(inGameHud);
             if (chatHud == null) return;
 
-            Field messagesField = McReflect.field(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "messages");
+            // 26.1+ : ChatHud.messages n'existe plus (remplacé par un modèle à
+            // deux listes, allMessages/trimmedMessages, avec addMessage() devenu
+            // PRIVÉ et à 4 paramètres) — repli en LECTURE SEULE sur "allMessages"
+            // pour le ping/détection de répétition ; la fusion visuelle des
+            // messages répétés (suppression + réinsertion) ne peut plus
+            // fonctionner sur cette version (addMessage(Text) à 1 argument
+            // n'existe plus du tout) — dégrade proprement plus bas (aucun crash,
+            // juste la fusion visuelle qui ne s'applique pas sur 26.1+).
+            Field messagesField = McReflect.field(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "messages", "allMessages");
             if (messagesField == null) return;
             Object messagesObj = messagesField.get(chatHud);
             if (!(messagesObj instanceof List)) return;
@@ -72,11 +94,14 @@ public final class ChatEnhancementsModule extends LauncherModule {
             if (messages.isEmpty()) return;
 
             Object headLine = messages.get(0);
-            Method getText = McReflect.noArgMethod(headLine.getClass(), "net/minecraft/client/gui/hud/ChatHudLine", "getText");
+            // 26.1+ : ChatHudLine.getText()→GuiMessage.content() (accesseur de
+            // record), Text.asUnformattedString()→Component.getString() (vérifiés
+            // par javap).
+            Method getText = McReflect.noArgMethod(headLine.getClass(), "net/minecraft/client/gui/hud/ChatHudLine", "getText", "content");
             if (getText == null) return;
             Object textObj = getText.invoke(headLine);
             if (textObj == null) return;
-            Method asUnformatted = McReflect.noArgMethod(textObj.getClass(), "net/minecraft/text/Text", "asUnformattedString");
+            Method asUnformatted = McReflect.noArgMethod(textObj.getClass(), "net/minecraft/text/Text", "asUnformattedString", "getString");
             if (asUnformatted == null) return;
             String plain = (String) asUnformatted.invoke(textObj);
             if (plain == null) return;
@@ -85,14 +110,25 @@ public final class ChatEnhancementsModule extends LauncherModule {
             la$lastProcessedText = plain;
 
             if (pingOnMention) {
-                Object session = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "session").get(mc);
+                // 26.1+ : champ "session"→"user" (type Session→User), méthode
+                // "getUsername"→"getName" (vérifiés par javap).
+                Field sessionField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "session", "user");
+                Object session = sessionField != null ? sessionField.get(mc) : null;
                 if (session != null) {
-                    Method getUsername = McReflect.noArgMethod(session.getClass(), "net/minecraft/client/util/Session", "getUsername");
+                    Method getUsername = McReflect.noArgMethod(session.getClass(), "net/minecraft/client/util/Session", "getUsername", "getName");
                     if (getUsername != null) {
                         String username = (String) getUsername.invoke(session);
                         if (username != null && !username.isEmpty() && plain.toLowerCase().contains(username.toLowerCase())) {
-                            Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
+                            Field playerField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player");
+                            Object player = playerField != null ? playerField.get(mc) : null;
                             if (player != null) {
+                                // LIMITATION PRÉ-EXISTANTE (pas spécifique à 26.1+) :
+                                // Entity.playSound() n'a jamais pris de signature
+                                // (String,float,float) — le vrai paramètre est un
+                                // SoundEvent, pas une chaîne — cette recherche ne
+                                // trouve donc jamais rien, sur AUCUN bracket ; le son
+                                // de ping ne joue donc jamais (dégradation propre,
+                                // aucun crash, juste une fonctionnalité inopérante).
                                 Method playSound = McReflect.method(player.getClass(), "net/minecraft/entity/Entity", "playSound",
                                     String.class, float.class, float.class);
                                 if (playSound != null) playSound.invoke(player, "random.orb", 1.0f, 1.0f);
@@ -106,6 +142,22 @@ public final class ChatEnhancementsModule extends LauncherModule {
                 String base = COUNTER_SUFFIX.matcher(plain).replaceAll("");
                 if (base.equals(la$lastDistinctBase)) {
                     la$repeatCount++;
+
+                    // 26.1+ : ChatHud.addMessage(Text) à 1 argument N'EXISTE PLUS
+                    // (devenu privé, 4 paramètres, voir plus haut) et "LiteralText"
+                    // n'existe plus comme classe (remplacé par Component.literal(...),
+                    // une factory statique) — la reconstruction du message combiné
+                    // "xN" est donc IMPOSSIBLE sur cette version avec ce mécanisme.
+                    // BUG ÉVITÉ : vérifier ICI, AVANT toute suppression destructive
+                    // des messages existants — sinon on supprimerait 2 messages du
+                    // tchat SANS JAMAIS les remplacer par le message combiné (la
+                    // vérification était auparavant faite APRÈS la suppression).
+                    Class<?> literalTextClass = McReflect.yarnClass("net/minecraft/text/LiteralText");
+                    Method addMessage = literalTextClass != null
+                        ? McReflect.method(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "addMessage", literalTextClass)
+                        : null;
+                    if (literalTextClass == null || addMessage == null) return;
+
                     Field visibleField = McReflect.field(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "visibleMessages");
                     Object visibleObj = visibleField != null ? visibleField.get(chatHud) : null;
 
@@ -121,16 +173,10 @@ public final class ChatEnhancementsModule extends LauncherModule {
                         if (visible.size() >= 2) { visible.remove(0); visible.remove(0); }
                     }
 
-                    Class<?> literalTextClass = McReflect.yarnClass("net/minecraft/text/LiteralText");
-                    if (literalTextClass != null) {
-                        Constructor<?> ctor = literalTextClass.getConstructor(String.class);
-                        Object combined = ctor.newInstance(base + " (x" + la$repeatCount + ")");
-                        Method addMessage = McReflect.method(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "addMessage", literalTextClass);
-                        if (addMessage != null) {
-                            addMessage.invoke(chatHud, combined);
-                            la$lastProcessedText = base + " (x" + la$repeatCount + ")";
-                        }
-                    }
+                    Constructor<?> ctor = literalTextClass.getConstructor(String.class);
+                    Object combined = ctor.newInstance(base + " (x" + la$repeatCount + ")");
+                    addMessage.invoke(chatHud, combined);
+                    la$lastProcessedText = base + " (x" + la$repeatCount + ")";
                 } else {
                     la$repeatCount = 1;
                     la$lastDistinctBase = base;

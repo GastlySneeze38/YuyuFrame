@@ -86,17 +86,29 @@ public final class ModuleRegistry {
      * sensation, catégorisé à part lors de l'audit) — reste enregistré
      * partout, y compris en 1.16.5.
      *
-     * Élargi aux brackets "C" (1.20.4) et "D" (1.21.4, voir
-     * VersionBracketRegistry) : mêmes réglages vanilla natifs (FOV/Sprint/
-     * Sneak, hurt cam) présents depuis la "Flattening" (~1.13) et toujours là
-     * sur ces brackets, et les mêmes 7 Mixins "animations 1.7" restent
-     * 1.8.9-only — donc les mêmes exclusions s'appliquent partout. Le nom
-     * {@code IS_1_16} n'a pas été renommé (trop de commentaires y
-     * référeraient encore) mais couvre bien TOUS ces brackets malgré son nom.
+     * Élargi aux brackets "C" (1.20.4), "D" (1.21.4), et maintenant "1.21.11"
+     * et "E" (26.1.2, voir VersionBracketRegistry) : mêmes réglages vanilla
+     * natifs (FOV/Sprint/Sneak, hurt cam) présents depuis la "Flattening"
+     * (~1.13) et toujours là sur ces brackets, et les mêmes 7 Mixins
+     * "animations 1.7" restent 1.8.9-only — donc les mêmes exclusions
+     * s'appliquent partout. Le nom {@code IS_1_16} n'a pas été renommé (trop
+     * de commentaires y référeraient encore) mais couvre bien TOUS ces
+     * brackets malgré son nom.
+     *
+     * Demande explicite de l'utilisateur (audit avant publication) : 1.21.11
+     * et 26.1.2 ajoutés à cette liste — jusque-là ABSENTS, alors que le même
+     * raisonnement (réglages vanilla déjà natifs) s'y applique tout autant ;
+     * gap probablement jamais comblé faute d'y avoir pensé lors des ajouts
+     * successifs de brackets. Seul effet notable pour le groupe "Confort
+     * visuel" : {@code ZoomModule} n'est PAS dans cette liste d'exclusion
+     * (aucun équivalent vanilla, jamais concerné) — reste donc le SEUL membre
+     * actif du groupe sur ces deux brackets.
      */
     private static final boolean IS_1_16 = System.getProperty("launcheragent.mcVersion", "").startsWith("1.16")
         || "1.20.4".equals(System.getProperty("launcheragent.mcVersion", ""))
-        || "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""));
+        || "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""))
+        || "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""))
+        || "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     static {
         register(new FpsModule());
@@ -134,16 +146,30 @@ public final class ModuleRegistry {
         register(new FullbrightModule());
         register(new WorldTimeModule());
         register(new ChatEnhancementsModule());
-        register(new UnstackedItemsModule());
-        register(new PlayerBackfaceCullingModule());
-        register(new EntityBackfaceCullingModule());
-        register(new LowAnimationTickModule());
-        register(new TileEntityRenderDistanceModule());
-        register(new ChunkBuilderThreadsModule());
-        register(new CachedFancyCloudsModule());
-        register(new LabelRenderDistanceModule());
-        register(new ParticleRenderDistanceModule());
-        register(new BorderlessWindowModule());
+        // Modules "Optimisations" — leur implémentation réelle vit
+        // ENTIÈREMENT dans des Mixins *189 (1.8.9 uniquement, voir
+        // mixin/client/v1_8/optimodule et le mémo project-optimodule-fps-status) :
+        // jamais portés vers aucun autre bracket. Étaient enregistrés
+        // INCONDITIONNELLEMENT jusqu'ici (contrairement à Fov/ToggleSprint/etc.
+        // ci-dessus, déjà protégés par IS_1_16) — cartes cliquables qui ne
+        // faisaient RIEN sur 1.16.5+/1.20.4/1.21.4/1.21.11/26.1.2 (aucune
+        // classe Mixin *189 ne se charge en dehors du bracket 1.8.9, voir
+        // VersionBracketRegistry). Gaté sur demande explicite de l'utilisateur
+        // (audit avant publication) avec le MÊME flag IS_1_16 — pas un nouveau
+        // flag séparé, il n'y a aucune raison que le critère diffère de celui
+        // déjà établi pour les autres modules 1.8.9-only.
+        if (!IS_1_16) {
+            register(new UnstackedItemsModule());
+            register(new PlayerBackfaceCullingModule());
+            register(new EntityBackfaceCullingModule());
+            register(new LowAnimationTickModule());
+            register(new TileEntityRenderDistanceModule());
+            register(new ChunkBuilderThreadsModule());
+            register(new CachedFancyCloudsModule());
+            register(new LabelRenderDistanceModule());
+            register(new ParticleRenderDistanceModule());
+            register(new BorderlessWindowModule());
+        }
         register(new MumbleLinkModule());
 
         // Regroupement demandé — voir ModuleGroup : purement de la
@@ -169,31 +195,39 @@ public final class ModuleRegistry {
         // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
         // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),
         // pas de dépendance sur PolyPatcher lui-même, juste la même idée en Mixin natif.
-        List<LauncherModule> optimisationMembers = Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
-            get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
-            get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"),
-            get("particle-render-distance"), get("borderless-window"));
-        // Onglets regroupés — demandé explicitement pour réduire le nombre
-        // d'onglets ET la longueur de leurs noms dans la sous-sidebar (les
-        // noms complets des modules débordaient de la largeur des onglets,
-        // voir UiModGroupConfigScreen) : les 2 modules de culling face
-        // arrière (joueur/entités) et les 3 modules de distance de rendu
-        // (tile entities/labels/particules) partagent maintenant chacun un
-        // seul onglet au lieu d'un par module — chaque module GARDE son
-        // propre toggle d'activation et ses réglages annotés, juste empilés
-        // à la suite les uns des autres dans le même onglet (voir
-        // UiModGroupConfigScreen.buildLayout()). Les modules restants gardent
-        // un onglet dédié (Tab à un seul membre).
-        GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés", optimisationMembers,
-            Arrays.asList(
-                new ModuleGroup.Tab("Items non empilés", Collections.singletonList(get("unstacked-items"))),
-                new ModuleGroup.Tab("Culling face arrière", Arrays.asList(get("player-backface-culling"), get("entity-backface-culling"))),
-                new ModuleGroup.Tab("Animations réduites", Collections.singletonList(get("low-animation-tick"))),
-                new ModuleGroup.Tab("Distance de rendu", Arrays.asList(get("tile-entity-render-distance"), get("label-render-distance"), get("particle-render-distance"))),
-                new ModuleGroup.Tab("Threads de construction", Collections.singletonList(get("chunk-builder-threads"))),
-                new ModuleGroup.Tab("Nuages Fancy en cache", Collections.singletonList(get("cached-fancy-clouds"))),
-                new ModuleGroup.Tab("Fenêtre sans bordure", Collections.singletonList(get("borderless-window")))
-            )));
+        // Groupe entier gaté par IS_1_16 (comme les modules eux-mêmes juste
+        // au-dessus, voir leur commentaire) — plutôt que de filtrer les
+        // membres un par un ici (les Tab ci-dessous en contiennent aussi,
+        // il aurait fallu les filtrer séparément), tout le bloc est sauté
+        // d'un coup : sur les brackets exclus, aucun des 10 modules n'est
+        // enregistré de toute façon (get(id) renverrait null partout).
+        if (!IS_1_16) {
+            List<LauncherModule> optimisationMembers = Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
+                get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
+                get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"),
+                get("particle-render-distance"), get("borderless-window"));
+            // Onglets regroupés — demandé explicitement pour réduire le nombre
+            // d'onglets ET la longueur de leurs noms dans la sous-sidebar (les
+            // noms complets des modules débordaient de la largeur des onglets,
+            // voir UiModGroupConfigScreen) : les 2 modules de culling face
+            // arrière (joueur/entités) et les 3 modules de distance de rendu
+            // (tile entities/labels/particules) partagent maintenant chacun un
+            // seul onglet au lieu d'un par module — chaque module GARDE son
+            // propre toggle d'activation et ses réglages annotés, juste empilés
+            // à la suite les uns des autres dans le même onglet (voir
+            // UiModGroupConfigScreen.buildLayout()). Les modules restants gardent
+            // un onglet dédié (Tab à un seul membre).
+            GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés", optimisationMembers,
+                Arrays.asList(
+                    new ModuleGroup.Tab("Items non empilés", Collections.singletonList(get("unstacked-items"))),
+                    new ModuleGroup.Tab("Culling face arrière", Arrays.asList(get("player-backface-culling"), get("entity-backface-culling"))),
+                    new ModuleGroup.Tab("Animations réduites", Collections.singletonList(get("low-animation-tick"))),
+                    new ModuleGroup.Tab("Distance de rendu", Arrays.asList(get("tile-entity-render-distance"), get("label-render-distance"), get("particle-render-distance"))),
+                    new ModuleGroup.Tab("Threads de construction", Collections.singletonList(get("chunk-builder-threads"))),
+                    new ModuleGroup.Tab("Nuages Fancy en cache", Collections.singletonList(get("cached-fancy-clouds"))),
+                    new ModuleGroup.Tab("Fenêtre sans bordure", Collections.singletonList(get("borderless-window")))
+                )));
+        }
     }
 
     public static void register(LauncherModule module) {

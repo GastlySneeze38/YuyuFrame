@@ -155,7 +155,8 @@ public final class CoordsModule extends SingleHudModule {
             if (yf != null) return yf.getFloat(player);
             if (!yawResolveAttempted) {
                 yawResolveAttempted = true;
-                cachedGetYaw = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getYaw");
+                // 26.1+ : getYaw→getYRot (vérifié par javap sur le jar client 26.1.2 réel).
+                cachedGetYaw = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getYaw", "getYRot");
             }
             return cachedGetYaw != null ? (float) cachedGetYaw.invoke(player) : 0f;
         }
@@ -195,6 +196,39 @@ public final class CoordsModule extends SingleHudModule {
             if (normalized < 135f) return "O";
             if (normalized < 225f) return "N";
             return "E";
+        }
+
+        private static boolean modernGetBiomeAttempted;
+        private static Method cachedGetBiomeManager, cachedModernGetBiome;
+
+        /**
+         * 26.1+ : {@code World.getBiome(BlockPos)} n'existe plus DU TOUT sur
+         * {@code Level} (vérifié par javap sur le jar client 26.1.2 réel,
+         * aucune méthode de cette forme) — remplacé par {@code
+         * Level.getBiomeManager()} → {@code BiomeManager.getBiome(BlockPos)},
+         * qui renvoie directement un {@code Holder<Biome>}. Tenté ICI en
+         * premier ; {@code null} proprement si absent (repli sur {@link
+         * #resolveGetBiome} pour les brackets antérieurs à 26.1).
+         */
+        private Object modernGetBiome(Object world, Class<?> blockPosClass, Object pos) {
+            try {
+                if (!modernGetBiomeAttempted) {
+                    modernGetBiomeAttempted = true;
+                    cachedGetBiomeManager = McReflect.noArgMethod(world.getClass(), "net/minecraft/world/World", "getBiomeManager");
+                    if (cachedGetBiomeManager != null) {
+                        Object biomeManager = cachedGetBiomeManager.invoke(world);
+                        if (biomeManager != null) {
+                            cachedModernGetBiome = McReflect.oneArgMethod(biomeManager.getClass(),
+                                "net/minecraft/world/biome/source/BiomeManager", "getBiome", blockPosClass);
+                        }
+                    }
+                }
+                if (cachedGetBiomeManager == null || cachedModernGetBiome == null) return null;
+                Object biomeManager = cachedGetBiomeManager.invoke(world);
+                return biomeManager != null ? cachedModernGetBiome.invoke(biomeManager, pos) : null;
+            } catch (Throwable t) {
+                return null;
+            }
         }
 
         private static boolean DIAG_LOGGED = false;
@@ -289,22 +323,32 @@ public final class CoordsModule extends SingleHudModule {
                 // hiérarchie — d'où "world class=class agm" dans les logs.
                 // fieldOnClass résout directement sur Entity, jamais en
                 // remontant depuis la classe runtime du joueur.
-                Field worldField = McReflect.fieldOnClass("net/minecraft/entity/Entity", "world");
+                // 26.1+ : Entity déplacé vers net.minecraft.world.entity.Entity,
+                // champ "world"→"level" (vérifiés par javap sur le jar client
+                // 26.1.2 réel).
+                Field worldField = McReflect.fieldOnClass("net/minecraft/entity/Entity", "net.minecraft.world.entity.Entity", "world", "level");
                 if (worldField == null) { diagBiome("worldField == null"); return null; }
                 Object world = worldField.get(player);
                 if (world == null) { diagBiome("world == null"); return null; }
 
-                Class<?> blockPosClass = McReflect.yarnClass("net/minecraft/util/math/BlockPos");
+                Class<?> blockPosClass = McReflect.yarnClass("net/minecraft/util/math/BlockPos", "net.minecraft.core.BlockPos");
                 if (blockPosClass == null) { diagBiome("blockPosClass == null"); return null; }
-                Class<?> biomeClass = McReflect.yarnClass("net/minecraft/world/biome/Biome");
+                Class<?> biomeClass = McReflect.yarnClass("net/minecraft/world/biome/Biome", "net.minecraft.world.level.biome.Biome");
                 if (biomeClass == null) { diagBiome("biomeClass == null"); return null; }
-                Class<?> registryEntryClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry");
+                Class<?> registryEntryClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry", "net.minecraft.core.Holder");
                 Constructor<?> ctor = blockPosClass.getConstructor(int.class, int.class, int.class);
                 Object pos = ctor.newInstance(bx, by, bz);
 
-                Method getBiome = resolveGetBiome(world, blockPosClass, biomeClass, registryEntryClass);
-                if (getBiome == null) { diagBiome("resolveGetBiome a renvoyé null"); return null; }
-                Object biome = getBiome.invoke(world, pos);
+                // 26.1+ : World.getBiome(BlockPos) N'EXISTE PLUS DU TOUT (vérifié
+                // par javap) — remplacé par Level.getBiomeManager().getBiome(pos),
+                // renvoyant directement un Holder<Biome>. Tenté EN PREMIER (répond
+                // null proprement si absent, repli sur resolveGetBiome pour <26.1).
+                Object biome = modernGetBiome(world, blockPosClass, pos);
+                if (biome == null) {
+                    Method getBiome = resolveGetBiome(world, blockPosClass, biomeClass, registryEntryClass);
+                    if (getBiome == null) { diagBiome("resolveGetBiome a renvoyé null"); return null; }
+                    biome = getBiome.invoke(world, pos);
+                }
                 if (biome == null) { diagBiome("biome == null"); return null; }
 
                 // BUG TROUVÉ (1.20.4, log confirmé après le fix world) :
@@ -393,7 +437,62 @@ public final class CoordsModule extends SingleHudModule {
          * Registry.getId(biome)} (Identifier) → {@code getPath()} ("plains",
          * "frozen_ocean"...), mis en forme ("Plains", "Frozen Ocean").
          */
+        /**
+         * 26.1+ : chemin complètement redessiné par rapport à {@link
+         * #registryBiomeName} (vérifié par javap sur le jar client 26.1.2 réel) :
+         * {@code World.getRegistryManager()}→{@code Level.registryAccess()}
+         * (renvoie {@code RegistryAccess}, plus {@code DynamicRegistryManager}) ;
+         * le champ statique {@code Registry.BIOME_KEY} a été DÉPLACÉ vers une
+         * classe séparée {@code net.minecraft.core.registries.Registries.BIOME}
+         * (jamais eu d'équivalent Yarn, résolu en dur via {@code rawClass}) ;
+         * {@code DynamicRegistryManager.get(key)}→{@code RegistryAccess.
+         * lookup(key)} (renvoie désormais {@code Optional<Registry<T>>} au lieu
+         * du registre directement) ; et SURTOUT {@code Registry.getId(T)} ne
+         * renvoie PLUS un {@code Identifier} mais un ENTIER — le comportement
+         * historique de "getId" s'appelle maintenant {@code getKey(T)}. Gardé
+         * par la présence de la classe {@code Registries} (n'existe QUE sur
+         * 26.1+), donc jamais tenté par erreur sur un bracket antérieur.
+         */
+        private String modernRegistryBiomeName(Object world, Object biome) {
+            try {
+                Class<?> registriesClass = McReflect.rawClass("net.minecraft.core.registries.Registries");
+                if (registriesClass == null) return null; // <26.1 : classe inexistante, repli sur l'ancien chemin
+
+                Method registryAccess = McReflect.noArgMethod(world.getClass(), "net/minecraft/world/World", "getRegistryManager", "registryAccess");
+                if (registryAccess == null) { diag2("registryAccess introuvable (26.1+)"); return null; }
+                Object access = registryAccess.invoke(world);
+                if (access == null) { diag2("registryAccess == null"); return null; }
+
+                Object biomeKey = registriesClass.getField("BIOME").get(null);
+                if (biomeKey == null) { diag2("Registries.BIOME == null"); return null; }
+
+                Method lookup = McReflect.oneArgMethod(access.getClass(), "net/minecraft/core/RegistryAccess", "lookup", biomeKey.getClass());
+                if (lookup == null) { diag2("RegistryAccess.lookup introuvable"); return null; }
+                Object optionalRegistry = lookup.invoke(access, biomeKey);
+                if (!(optionalRegistry instanceof java.util.Optional) || !((java.util.Optional<?>) optionalRegistry).isPresent()) {
+                    diag2("RegistryAccess.lookup(BIOME) vide"); return null;
+                }
+                Object biomeRegistry = ((java.util.Optional<?>) optionalRegistry).get();
+
+                Method getKey = McReflect.oneArgMethod(biomeRegistry.getClass(), "net/minecraft/core/Registry", "getKey", Object.class);
+                if (getKey == null) { diag2("Registry.getKey introuvable"); return null; }
+                Object identifier = getKey.invoke(biomeRegistry, biome);
+                if (identifier == null) { diag2("Registry.getKey(biome) == null"); return null; }
+
+                Method getPath = McReflect.noArgMethod(identifier.getClass(), "net/minecraft/util/Identifier", "getPath");
+                if (getPath == null) { diag2("Identifier.getPath introuvable (26.1+)"); return null; }
+                String path = (String) getPath.invoke(identifier);
+                diag2("OK (chemin moderne 26.1+), path=" + path);
+                return prettifyBiomePath(path);
+            } catch (Throwable t) {
+                diag2("modernRegistryBiomeName exception: " + t);
+                return null;
+            }
+        }
+
         private String registryBiomeName(Object world, Object biome) {
+            String modern = modernRegistryBiomeName(world, biome);
+            if (modern != null) return modern;
             try {
                 Method getRegistryManager = McReflect.noArgMethod(world.getClass(), "net/minecraft/world/RegistryWorldView", "getRegistryManager");
                 if (getRegistryManager == null) { diag2("getRegistryManager introuvable, world=" + world.getClass()); return null; }

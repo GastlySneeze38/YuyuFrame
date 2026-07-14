@@ -105,9 +105,13 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                         // Hand (mappings 1.16.5 : (Laot;)Lbmb; b method_5998
                         // getStackInHand) — la recherche no-arg ne le trouvait
                         // donc jamais, "première main" toujours vide.
-                        Class<?> handClass = McReflect.yarnClass("net/minecraft/util/Hand");
+                        // 26.1+ : Hand→InteractionHand (package déplacé de
+                        // net.minecraft.util vers net.minecraft.world, constante
+                        // MAIN_HAND inchangée), getStackInHand→getItemInHand
+                        // (vérifiés par javap sur le jar client 26.1.2 réel).
+                        Class<?> handClass = McReflect.yarnClass("net/minecraft/util/Hand", "net.minecraft.world.InteractionHand");
                         Method getStackInHand = handClass != null
-                            ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand", handClass)
+                            ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand", "getItemInHand", handClass)
                             : null;
                         if (getStackInHand != null && handClass != null) {
                             Object mainHand = McReflect.field(handClass, "net/minecraft/util/Hand", "MAIN_HAND").get(null);
@@ -121,9 +125,12 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                             legs = getArmorSlot.invoke(player, 1);
                             boots = getArmorSlot.invoke(player, 0);
                         } else {
-                            Class<?> slotClass = McReflect.yarnClass("net/minecraft/entity/EquipmentSlot");
+                            // 26.1+ : EquipmentSlot déplacé de net.minecraft.entity
+                            // vers net.minecraft.world.entity (constantes HEAD/CHEST/
+                            // LEGS/FEET inchangées), getEquippedStack→getItemBySlot.
+                            Class<?> slotClass = McReflect.yarnClass("net/minecraft/entity/EquipmentSlot", "net.minecraft.world.entity.EquipmentSlot");
                             Method getEquippedStack = slotClass != null
-                                ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getEquippedStack", slotClass)
+                                ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getEquippedStack", "getItemBySlot", slotClass)
                                 : null;
                             if (slotClass != null && getEquippedStack != null) {
                                 helmet = getEquippedStack.invoke(player, equipmentSlot(slotClass, "HEAD"));
@@ -180,10 +187,12 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         private String durabilityText(Object stack) {
             if (stack == null) return null;
             try {
-                Method isDamageable = McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "isDamageable");
+                // 26.1+ : isDamageable→isDamageableItem, getDamage→getDamageValue
+                // (vérifiés par javap sur le jar client 26.1.2 réel) ; getMaxDamage inchangé.
+                Method isDamageable = McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "isDamageable", "isDamageableItem");
                 if (isDamageable == null || !(boolean) isDamageable.invoke(stack)) return null;
                 int max = (int) McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "getMaxDamage").invoke(stack);
-                int dmg = (int) McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "getDamage").invoke(stack);
+                int dmg = (int) McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "getDamage", "getDamageValue").invoke(stack);
                 return (max - dmg) + "/" + max;
             } catch (Throwable t) {
                 return null;

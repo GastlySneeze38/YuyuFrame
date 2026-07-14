@@ -82,6 +82,11 @@ public final class PotionEffectsModule extends SingleHudModule {
                 if (getInstances == null) {
                     getInstances = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStatusEffects");
                 }
+                if (getInstances == null) {
+                    // 26.1+ : renommé une 3e fois — "getActiveEffects" (vérifié
+                    // par javap sur le jar client 26.1.2 réel, LivingEntity).
+                    getInstances = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getActiveEffects");
+                }
                 if (getInstances == null) return rows;
                 Collection<?> effects = (Collection<?>) getInstances.invoke(player);
                 if (effects == null || effects.isEmpty()) return rows;
@@ -145,7 +150,9 @@ public final class PotionEffectsModule extends SingleHudModule {
          */
         private Object resolveEffect(Class<?> instanceClass, Object instance) {
             try {
-                Method getEffectType = McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectType");
+                // 26.1+ : getEffectType→getEffect (StatusEffectInstance→MobEffectInstance,
+                // vérifié par javap) — renvoie toujours un Holder à déballer.
+                Method getEffectType = McReflect.noArgMethod(instanceClass, "net/minecraft/entity/effect/StatusEffectInstance", "getEffectType", "getEffect");
                 if (getEffectType != null) {
                     Object effect = getEffectType.invoke(instance);
                     return unwrapRegistryEntry(effect);
@@ -174,7 +181,9 @@ public final class PotionEffectsModule extends SingleHudModule {
             if (obj == null) return null;
             if (!registryEntryResolveAttempted) {
                 registryEntryResolveAttempted = true;
-                registryEntryClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry");
+                // 26.1+ : RegistryEntry→Holder (net.minecraft.core.Holder,
+                // vérifié par javap) — méthode value() inchangée.
+                registryEntryClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry", "net.minecraft.core.Holder");
                 if (registryEntryClass != null) {
                     registryEntryValueMethod = McReflect.noArgMethod(registryEntryClass, "net/minecraft/registry/entry/RegistryEntry", "value");
                 }
@@ -192,7 +201,8 @@ public final class PotionEffectsModule extends SingleHudModule {
         private String effectName(Object effect) {
             if (effect == null) return "?";
             try {
-                Method getKey = McReflect.noArgMethod(effect.getClass(), "net/minecraft/entity/effect/StatusEffect", "getTranslationKey");
+                // 26.1+ : getTranslationKey→getDescriptionId (StatusEffect→MobEffect, vérifié javap).
+                Method getKey = McReflect.noArgMethod(effect.getClass(), "net/minecraft/entity/effect/StatusEffect", "getTranslationKey", "getDescriptionId");
                 return prettify((String) getKey.invoke(effect));
             } catch (Throwable t) {
                 return "?";
