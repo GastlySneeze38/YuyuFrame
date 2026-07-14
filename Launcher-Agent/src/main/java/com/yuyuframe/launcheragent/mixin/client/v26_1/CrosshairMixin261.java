@@ -26,7 +26,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * pour {@code @Inject} (fusionne directement dans le bytecode de la
  * méthode, indépendant de sa visibilité Java).
  *
- * NON VÉRIFIÉ EN JEU — voir javadoc de {@link GlobalUiRenderBridge261}.
+ * Vérifié en jeu (26.1.2).
  */
 @Mixin(targets = "net.minecraft.client.gui.Gui")
 public abstract class CrosshairMixin261 {

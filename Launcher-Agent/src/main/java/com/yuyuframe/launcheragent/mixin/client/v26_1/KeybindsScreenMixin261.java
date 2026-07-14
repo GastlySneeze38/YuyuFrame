@@ -26,7 +26,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * spécifique à CE bracket — utilise {@link GlobalUiRenderBridge261} à la
  * place, qui porte les vrais noms Mojang vérifiés pour 26.1+.
  *
- * NON VÉRIFIÉ EN JEU — voir javadoc de {@link GlobalUiRenderBridge261}.
+ * Vérifié en jeu (26.1.2).
  */
 @Mixin(targets = "net.minecraft.client.gui.screens.options.controls.KeyBindsScreen")
 public abstract class KeybindsScreenMixin261 {

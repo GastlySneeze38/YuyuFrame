@@ -24,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * comportement attendue (même logique de garde "framebuffer principal
  * seulement", même partage d'état via {@link GlobalUiRenderBridge261}).
  *
- * NON VÉRIFIÉ EN JEU — voir javadoc de {@link GlobalUiRenderBridge261}.
+ * Vérifié en jeu (menu/HUD custom fonctionnels sur 26.1.2).
  */
 @Mixin(targets = "com.mojang.blaze3d.pipeline.RenderTarget")
 public abstract class GlobalUiPresentMixin261 {

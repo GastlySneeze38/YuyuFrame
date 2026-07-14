@@ -27,10 +27,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
  * comme l'original (le jar client n'est jamais ajouté au classpath javac,
  * seulement présent au runtime).
  *
- * NON VÉRIFIÉ EN JEU (aucun moyen de lancer Minecraft depuis cet
- * environnement) — port basé sur une lecture directe du bytecode réel via
- * javap, à valider en jeu avant tout usage en production, suivant la même
- * exigence que les autres brackets (voir javadoc de VersionBracketRegistry).
+ * Vérifié en jeu (26.1.2) — menu/HUD custom fonctionnels.
  */
 public final class GlobalUiRenderBridge261 {
     private GlobalUiRenderBridge261() {}

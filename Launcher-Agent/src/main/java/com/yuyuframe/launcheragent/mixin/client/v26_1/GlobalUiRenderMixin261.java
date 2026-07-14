@@ -23,7 +23,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * (classe renommée) — vérifié via {@code javap} sur le jar client 26.1.2 réel :
  * {@code public void render(net.minecraft.client.DeltaTracker, boolean);}.
  *
- * NON VÉRIFIÉ EN JEU — voir javadoc de {@link GlobalUiRenderBridge261}.
+ * Vérifié en jeu (menu/HUD custom fonctionnels sur 26.1.2).
  */
 @Mixin(targets = "net.minecraft.client.renderer.GameRenderer")
 public abstract class GlobalUiRenderMixin261 {

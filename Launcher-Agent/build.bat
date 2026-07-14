@@ -70,34 +70,51 @@ echo.
 
 if not exist "%LIB%" mkdir "%LIB%"
 
+:: BUG TROUVE (utilisateur, MC 26.1.2/Java 25 : "aucun Mixin ne s'applique,
+:: ClassFormatError/Unsupported class file major version 69 partout") —
+:: repo.spongepowered.org/.../org/spongepowered/mixin/0.8.7 est le projet
+:: SpongePowered D'ORIGINE, non maintenu pour les JDK recents (son
+:: MixinEnvironment.CompatibilityLevel s'arrete a JAVA_21, verifie par javap).
+:: net.fabricmc:sponge-mixin est LE FORK maintenu par Fabric (utilise par
+:: Fabric Loader lui-meme, meme version "0.17.3+mixin.0.8.7" mais contenu
+:: different — 1.54 Mo contre 1.13 Mo pour l'ancien, JAVA_25 confirme present
+:: par javap) — c'est CETTE version qu'il faut utiliser, jamais l'originale.
 if not exist "%LIB%\mixin.jar" (
-    echo [Deps] Telechargement Mixin 0.8.7...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo.spongepowered.org/maven/org/spongepowered/mixin/0.8.7/mixin-0.8.7.jar' -OutFile '%LIB%\mixin.jar' -UseBasicParsing"
+    echo [Deps] Telechargement Mixin 0.8.7 ^(fork Fabric, compat Java 25^)...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://maven.fabricmc.net/net/fabricmc/sponge-mixin/0.17.3+mixin.0.8.7/sponge-mixin-0.17.3+mixin.0.8.7.jar' -OutFile '%LIB%\mixin.jar' -UseBasicParsing"
     if errorlevel 1 ( echo [ERREUR] Telechargement Mixin echoue & goto :error )
 )
+:: Meme raison : asm 9.5 (Maven Central) ne connait pas les class files
+:: Java 22+ (V22..V25 absents d'Opcodes.class) — notre propre lecture ASM
+:: (IsolatedBootstrap.discoverMixinTargets, ScreenStubPatcher) y serait
+:: exposee au meme risque. 9.10.1 = derniere version stable, verifiee
+:: (javap sur Opcodes.class) porter V25=69 explicitement. Nom de fichier
+:: local INCHANGE ("asm-9.5.jar" etc., pas renomme partout) pour ne pas
+:: casser les references de classpath ailleurs (launcher.rs) — seul le
+:: CONTENU telecharge change.
 if not exist "%LIB%\asm-9.5.jar" (
-    echo [Deps] Telechargement ASM 9.5...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm/9.5/asm-9.5.jar' -OutFile '%LIB%\asm-9.5.jar' -UseBasicParsing"
+    echo [Deps] Telechargement ASM 9.10.1 ^(compat Java 25^)...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm/9.10.1/asm-9.10.1.jar' -OutFile '%LIB%\asm-9.5.jar' -UseBasicParsing"
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM echoue & goto :error )
 )
 if not exist "%LIB%\asm-tree-9.5.jar" (
-    echo [Deps] Telechargement ASM-Tree 9.5...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-tree/9.5/asm-tree-9.5.jar' -OutFile '%LIB%\asm-tree-9.5.jar' -UseBasicParsing"
+    echo [Deps] Telechargement ASM-Tree 9.10.1 ^(compat Java 25^)...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-tree/9.10.1/asm-tree-9.10.1.jar' -OutFile '%LIB%\asm-tree-9.5.jar' -UseBasicParsing"
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM-Tree echoue & goto :error )
 )
 if not exist "%LIB%\asm-util-9.5.jar" (
-    echo [Deps] Telechargement ASM-Util 9.5...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-util/9.5/asm-util-9.5.jar' -OutFile '%LIB%\asm-util-9.5.jar' -UseBasicParsing"
+    echo [Deps] Telechargement ASM-Util 9.10.1 ^(compat Java 25^)...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-util/9.10.1/asm-util-9.10.1.jar' -OutFile '%LIB%\asm-util-9.5.jar' -UseBasicParsing"
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM-Util echoue & goto :error )
 )
 if not exist "%LIB%\asm-analysis-9.5.jar" (
-    echo [Deps] Telechargement ASM-Analysis 9.5...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-analysis/9.5/asm-analysis-9.5.jar' -OutFile '%LIB%\asm-analysis-9.5.jar' -UseBasicParsing"
+    echo [Deps] Telechargement ASM-Analysis 9.10.1 ^(compat Java 25^)...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-analysis/9.10.1/asm-analysis-9.10.1.jar' -OutFile '%LIB%\asm-analysis-9.5.jar' -UseBasicParsing"
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM-Analysis echoue & goto :error )
 )
 if not exist "%LIB%\asm-commons-9.5.jar" (
-    echo [Deps] Telechargement ASM-Commons 9.5...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-commons/9.5/asm-commons-9.5.jar' -OutFile '%LIB%\asm-commons-9.5.jar' -UseBasicParsing"
+    echo [Deps] Telechargement ASM-Commons 9.10.1 ^(compat Java 25^)...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/ow2/asm/asm-commons/9.10.1/asm-commons-9.10.1.jar' -OutFile '%LIB%\asm-commons-9.5.jar' -UseBasicParsing"
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM-Commons echoue & goto :error )
 )
 

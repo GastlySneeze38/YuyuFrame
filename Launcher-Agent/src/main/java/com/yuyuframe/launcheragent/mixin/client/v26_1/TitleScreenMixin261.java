@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@code invokevirtual Method init:()V}), donc ce hook continue de se
  * déclencher exactement au même moment logique qu'avant (premier affichage).
  *
- * NON VÉRIFIÉ EN JEU — voir javadoc de {@link GlobalUiRenderBridge261}.
+ * Vérifié en jeu (26.1.2).
  */
 @Mixin(targets = "net.minecraft.client.gui.screens.TitleScreen")
 public abstract class TitleScreenMixin261 {

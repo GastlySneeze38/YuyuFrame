@@ -196,6 +196,25 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         return dispatchClick(click.button());
     }
 
+    /**
+     * Équivalent 26.1+ de {@link #mouseClicked(net.minecraft.client.gui.Click, boolean)}
+     * ci-dessus — MÊME symptôme ("boutons pas cliquables"), MÊME cause,
+     * nouvelle version : sur 26.1.2, l'interface {@code Element} a été
+     * RENOMMÉE {@code GuiEventListener} (déplacée dans {@code gui.components.
+     * events}) ET son {@code mouseClicked} prend désormais un type record
+     * {@code MouseButtonEvent} (package {@code net.minecraft.client.input},
+     * pas {@code gui}) au lieu de {@code Click} — vérifié par javap sur le
+     * jar client 26.1.2 réel : {@code mouseClicked(MouseButtonEvent, boolean)}.
+     * Coordonnées : {@link #lastInput} comme partout ailleurs (voir javadoc
+     * de {@link #mouseClicked(double, double, int)}), pas {@code event.x()}/
+     * {@code event.y()}.
+     */
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+        LauncherLog.info("[LauncherAgent] DIAG-261: mouseClicked(MouseButtonEvent) appelé sur " + getClass().getSimpleName()
+            + " button=" + event.button() + " widgets=" + widgets.size());
+        return dispatchClick(event.button());
+    }
+
     private boolean dispatchClick(int button) {
         if (button != 0 || lastInput == null) return false;
         List<UiWidget> active = modalWidgets();
@@ -248,6 +267,18 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
         LauncherLog.info("[LauncherAgent] DIAG-E11: keyPressed(KeyInput) appelé sur " + getClass().getSimpleName() + " key=" + input.key());
         return dispatchKeyPressed(input.key());
+    }
+
+    /**
+     * Équivalent 26.1+ de {@link #keyPressed(net.minecraft.client.input.KeyInput)}
+     * ci-dessus — même cause que {@link #mouseClicked(net.minecraft.client.input.MouseButtonEvent, boolean)} :
+     * {@code GuiEventListener.keyPressed} prend désormais un type record
+     * {@code KeyEvent} (un seul paramètre) — vérifié par javap sur le jar
+     * client 26.1.2 réel.
+     */
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        LauncherLog.info("[LauncherAgent] DIAG-261: keyPressed(KeyEvent) appelé sur " + getClass().getSimpleName() + " key=" + event.key());
+        return dispatchKeyPressed(event.key());
     }
 
     private boolean dispatchKeyPressed(int keyCode) {

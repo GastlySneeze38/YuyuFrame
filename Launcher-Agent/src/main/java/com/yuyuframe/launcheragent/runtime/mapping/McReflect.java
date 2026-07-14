@@ -30,13 +30,41 @@ public final class McReflect {
     private static final Map<String, Class<?>> RAW_CLASS_CACHE = new ConcurrentHashMap<>();
     private static volatile Object mcInstance;
 
+    private static boolean minecraftClientErrorLogged;
+
     public static Object minecraftClient() {
         if (mcInstance != null) return mcInstance;
         try {
-            Class<?> mcClass = MappingsRegistry.loadClass("net/minecraft/client/MinecraftClient");
+            // BUG TROUVÉ (26.1+) : MappingsRegistry.loadClass() ne retombe
+            // JAMAIS sur le vrai nom Mojang quand Yarn n'est pas chargé — il
+            // essaie juste le nom Yarn "net/minecraft/client/MinecraftClient"
+            // TEL QUEL comme s'il s'agissait déjà du nom réel (fonctionne pour
+            // les brackets obfusqués où le nom obf est bien ce qu'on
+            // reconstruit, mais PAS pour 26.1+ où la classe a été RENOMMÉE en
+            // "net.minecraft.client.Minecraft", vérifié par javap). Ce catch
+            // avalait l'échec SANS LOGGER — mcInstance restait null pour
+            // TOUJOURS, faisant échouer silencieusement drawText/drawRect/
+            // drawIcon (UiTextBlaze3D) ET tous les modules HUD listés dans la
+            // javadoc de cette classe (d'où leurs placeholders "--" jamais
+            // remplacés par de vraies valeurs).
+            Class<?> mcClass;
+            try {
+                mcClass = MappingsRegistry.loadClass("net/minecraft/client/MinecraftClient");
+            } catch (ClassNotFoundException notFound) {
+                mcClass = Class.forName("net.minecraft.client.Minecraft", false,
+                    Thread.currentThread().getContextClassLoader());
+            }
             Method getInstance = resolveNoArg(mcClass, "net/minecraft/client/MinecraftClient", "getInstance");
             if (getInstance != null) mcInstance = getInstance.invoke(null);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            if (!minecraftClientErrorLogged) {
+                minecraftClientErrorLogged = true;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+                    "[LauncherAgent] McReflect.minecraftClient(): échec : " + t + " | cause réelle : " + cause);
+            }
+        }
         return mcInstance;
     }
 

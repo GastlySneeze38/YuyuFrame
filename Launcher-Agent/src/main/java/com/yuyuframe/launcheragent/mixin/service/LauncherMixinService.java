@@ -86,6 +86,13 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
     @Override public ITransformerProvider getTransformerProvider() { return null; }
     @Override public IClassTracker getClassTracker()        { return null; }
     @Override public IMixinAuditTrail getAuditTrail()       { return null; }
+    // BUG DE COMPILATION CORRIGE (mise à jour mixin.jar vers le fork Fabric,
+    // compat Java 25 — voir build.bat) : IMixinService a gagné ces deux
+    // méthodes dans une version plus récente de Sponge Mixin — mêmes
+    // fonctionnalités avancées optionnelles que getClassTracker/getAuditTrail
+    // ci-dessus, jamais utilisées par ce service standalone minimal.
+    @Override public IFeatureValidator getFeatureValidator() { return null; }
+    @Override public IAdviceProvider getAdviceProvider()     { return null; }
 
     @Override
     public Collection<String> getPlatformAgents() { return Collections.emptyList(); }
