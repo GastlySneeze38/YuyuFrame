@@ -66,6 +66,27 @@ public final class UiFont {
      */
     private static final float SDF_SPREAD = 8f;
 
+    /**
+     * Marge (en pixels RASTER_PX) entre glyphes adjacents dans l'atlas —
+     * PUBLIQUE : consommée aussi par {@code UiTextBlaze3D} (era E) pour
+     * calculer combien de niveaux de mipmap peuvent être générés SANS faire
+     * fuiter un glyphe sur son voisin (le padding rétrécit proportionnellement
+     * à chaque niveau ; au-delà d'un certain nombre de niveaux, un
+     * échantillonnage bilinéaire sur un mip grossier finit par mélanger deux
+     * glyphes différents — jamais dupliquer cette valeur ailleurs).
+     */
+    // BUG TROUVÉ (utilisateur, après plafonnement des mips à un niveau sûr :
+    // "toujours pareil, peut-être une micro amélioration") : avec 16px, seuls
+    // 3 niveaux de mip passent le seuil de sécurité (÷4 max), mais le besoin
+    // RÉEL de minification pour la plupart du texte de l'UI va jusqu'à ~5x
+    // (RASTER_PX=64 → ~13px à l'écran, échelle ~0.42) — le LOD idéal (~log2(5)
+    // ≈2.3) dépasse le dernier niveau disponible (2), le GPU plafonne donc
+    // juste EN DESSOUS de l'optimal. Doublé à 32px : permet un niveau de mip
+    // de plus (jusqu'à ÷8 en sécurité), couvrant le besoin réel avec marge —
+    // coût : atlas un peu plus grand (espace inter-glyphes accru), négligeable
+    // pour un atlas construit une seule fois au démarrage.
+    public static final int ATLAS_PADDING = 32;
+
     public static final UiFont REGULAR = new UiFont(Font.PLAIN);
     public static final UiFont BOLD = new UiFont(Font.BOLD);
 
@@ -82,6 +103,7 @@ public final class UiFont {
 
     private final Map<Character, Glyph> glyphs = new HashMap<>();
     private final BufferedImage atlasImage;
+    private final BufferedImage atlasImagePlain;
     public final int ascent, descent, cellHeight;
     private final Glyph fallback;
 
@@ -109,8 +131,12 @@ public final class UiFont {
         // Marge >= 2x SDF_SPREAD : le champ de distance signée doit avoir
         // pleinement saturé (0 ou 255) avant d'atteindre la cellule voisine,
         // sinon un mipmap ou un échantillonnage bilinéaire au bord pourrait
-        // mélanger deux glyphes différents.
-        int padding = 16;
+        // mélanger deux glyphes différents — exactement le bug rencontré
+        // plus tard par UiTextBlaze3D (mipmaps de l'atlas ENTIER, era E) : ce
+        // padding est PARTAGÉ (voir ATLAS_PADDING), pour que le nombre de
+        // niveaux de mip générés reste calé sur la VRAIE valeur, jamais
+        // dupliqué/deviné ailleurs.
+        int padding = ATLAS_PADDING;
         int atlasW = 1024;
         int cursorX = padding, cursorY = padding;
         Map<Character, int[]> placement = new HashMap<>();
@@ -149,9 +175,62 @@ public final class UiFont {
         }
         g.dispose();
 
+        // Construit le SDF EN PREMIER (mute atlasImage en place) — voir plus
+        // bas pour pourquoi atlasImagePlain en dérive maintenant, au lieu
+        // d'être une copie de la couverture antialiasée brute AVANT ce calcul.
         buildSignedDistanceField(atlasImage);
 
+        // BUG TROUVÉ #1 (texte era E quasi invisible, voir historique) : le
+        // pipeline Blaze3D natif (UiTextBlaze3D) utilise le shader vanilla
+        // RenderPipelines.GUI_TEXT (core/rendertype_text), un simple
+        // texture×couleur — AUCUN seuillage SDF. Donner l'atlas SDF brut (ci-
+        // dessus) produisait un rendu quasi invisible. Première solution :
+        // capturer une copie AVANT ce calcul (couverture antialiasée
+        // classique). Fonctionnait, mais laissait une seconde faiblesse :
+        //
+        // BUG TROUVÉ #2 (utilisateur, après coup : "la lettre est bien au
+        // milieu mais elle est moins opaque sur les bords, le O n'est pas
+        // lisse — regarde comment le pipeline 1.8.9 traite le texte
+        // proprement") — le pipeline 1.8.9 utilise justement le SDF (avec un
+        // VRAI seuillage, via son propre shader dédié) : la couverture
+        // antialiasée BRUTE (utilisée par la première solution) a une zone de
+        // transition qui devient énorme une fois minifiée (RASTER_PX=64 →
+        // ~13px à l'écran, ~5x) — la plupart des pixels finissent à opacité
+        // intermédiaire, aspect "délavé". Un simple contraste ad-hoc sur cette
+        // couverture (testé, léger mieux) reste un hack SANS fondement
+        // géométrique — le SDF, lui, encode une VRAIE distance sous-pixel au
+        // bord, permettant un seuillage MATHÉMATIQUEMENT correct, indépendant
+        // de l'échelle (exactement la technique déjà utilisée par 1.8.9).
+        //
+        // Fix définitif : atlasImagePlain dérive maintenant du SDF (calculé
+        // juste au-dessus) via un RE-SEUILLAGE resserré autour de 128 (le
+        // bord), PAS une copie pré-SDF. Largeur de bande (0.35-0.65, en
+        // fraction 0-1 du canal alpha SDF) choisie par comparaison visuelle
+        // hors-jeu (plusieurs largeurs testées côte à côte, simulation fidèle
+        // du pipeline complet atlas→mips→LOD, validée pixel-pour-pixel contre
+        // le rendu réel en jeu) — nettement plus net que le contraste ad-hoc
+        // sur couverture brute. atlasImage() (SDF, alpha=128 sur le bord)
+        // reste 100% INCHANGÉ pour le pipeline SDF existant (brackets
+        // 1.8.9→1.21.4) — jamais muté après ce point, seulement LU ici.
+        atlasImagePlain = sdfToCoverage(atlasImage, 0.35f, 0.65f);
+
         fallback = glyphs.get('?');
+    }
+
+    /** Reseuille (smoothstep) un atlas SDF (128=bord) en couverture classique nette — voir le commentaire du constructeur pour le pourquoi. Ne mute PAS {@code sdf} (nouvelle image). */
+    private static BufferedImage sdfToCoverage(BufferedImage sdf, float edge0, float edge1) {
+        int w = sdf.getWidth(), h = sdf.getHeight();
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        int[] argb = sdf.getRGB(0, 0, w, h, null, 0, w);
+        for (int i = 0; i < argb.length; i++) {
+            int a = (argb[i] >>> 24) & 0xFF;
+            float t = Math.max(0f, Math.min(1f, (a / 255f - edge0) / (edge1 - edge0)));
+            float sharpened = t * t * (3f - 2f * t); // smoothstep
+            int newA = Math.round(sharpened * 255f);
+            argb[i] = (newA << 24) | 0x00FFFFFF; // blanc opaque + alpha calculé
+        }
+        out.setRGB(0, 0, w, h, argb, 0, w);
+        return out;
     }
 
     /**
@@ -229,6 +308,9 @@ public final class UiFont {
     }
 
     public BufferedImage atlasImage() { return atlasImage; }
+
+    /** Atlas AVANT transformation SDF (couverture antialiasée classique) — voir UiTextBlaze3D, seul consommateur. */
+    public BufferedImage atlasImagePlain() { return atlasImagePlain; }
 
     public Glyph glyph(char c) {
         Glyph g = glyphs.get(c);

@@ -50,13 +50,45 @@ public final class UiInputPollerModern extends UiInputPoller {
     // événements caractère.
     private final StringBuilder pendingChars = new StringBuilder();
     private final Object[] previousCharCb = new Object[1];
-    private boolean prevBackspaceDown;
+    private boolean prevEnterCombinedDown;
+    private boolean prevCtrlADown, prevCtrlCDown, prevCtrlVDown, prevCtrlXDown;
+
+    /**
+     * Instance active — voir historique de session : {@code ZoomModule}
+     * (et tout futur module ayant besoin d'une touche configurable pollée
+     * "à la demande", pas via {@link #pollAnyKeyJustPressed()} qui consomme
+     * un état de front montant partagé) utilisait auparavant {@code
+     * org.lwjgl.input.Keyboard} (LWJGL2) inconditionnellement — inexistant
+     * sous LWJGL3/GLFW (1.13+), donc toujours en échec silencieux sur ce
+     * bracket. Exposée ici pour qu'un module puisse vérifier une touche par
+     * NOM sans dépendre de LWJGL2.
+     */
+    public static volatile UiInputPollerModern ACTIVE;
 
     public UiInputPollerModern(long windowHandle, ClassLoader gameClassLoader) {
         this.windowHandle = windowHandle;
         this.gameClassLoader = gameClassLoader;
         registerScrollCallback();
         registerCharCallback();
+        ACTIVE = this;
+    }
+
+    /**
+     * État courant (maintenue ou non) d'une touche nommée arbitraire — même
+     * table/format que {@link #menuKeyCode} (pas limité au champ statique
+     * {@code menuKeyName}). Contrairement à {@link #pollAnyKeyJustPressed()},
+     * ne consomme AUCUN état partagé (pas de front montant, juste l'état brut
+     * GLFW instantané) — donc appelable librement par plusieurs consommateurs
+     * indépendants (un module de touche configurable, etc.) sans interférence.
+     */
+    public boolean isKeyDownByName(String name) {
+        try {
+            int code = menuKeyCode(name);
+            if (code < 0) return false;
+            return glfwGetKey(windowHandle, code) == 1;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static Object[][] buildCapturableKeys() {
@@ -130,7 +162,26 @@ public final class UiInputPollerModern extends UiInputPoller {
         }
     }
 
-    /** Même principe de chaînage ET du même correctif (wrapping via la fabrique officielle) que registerScrollCallback() — ne casse jamais la saisie de texte vanilla (chat, champs d'écrans). */
+    /**
+     * Même principe de chaînage ET du même correctif (wrapping via la fabrique
+     * officielle) que registerScrollCallback() — ne casse jamais la saisie de
+     * texte vanilla (chat, champs d'écrans).
+     *
+     * BUG TROUVÉ (confirmé en jeu — "des touches tapées en jeu (hors menu)
+     * réapparaissent d'un coup dans la barre de recherche à la prochaine
+     * ouverture") : ce callback est enregistré UNE FOIS, dès la toute première
+     * frame du jeu (voir GlobalUiRenderMixin, bien avant l'ouverture du moindre
+     * écran custom), et reste actif tout le reste de la session — SANS le
+     * filtre {@link UiInputPoller#textInputActive} ci-dessous, il bufferisait
+     * INCONDITIONNELLEMENT tout caractère tapé n'importe quand (chat vanilla,
+     * renommage d'objet, etc.), même quand AUCUN de nos champs de texte n'était
+     * focus. {@link UiTextField#pollTextEdit} ne draine {@code pendingChars}
+     * QUE quand un champ a le focus — tout ce qui s'accumulait entre-temps
+     * ressortait d'un coup, en bloc, à la frappe suivante. Fix : ne bufferiser
+     * QUE si {@code textInputActive} est vrai (mis à jour par
+     * {@code UiTextField.setFocused}) — le chaînage vers le callback vanilla
+     * PRÉCÉDENT, lui, reste inconditionnel (ne doit jamais casser le chat/etc.).
+     */
     private void registerCharCallback() {
         try {
             Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
@@ -139,9 +190,11 @@ public final class UiInputPollerModern extends UiInputPoller {
             Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
                 if (method.isDefault()) return invokeDefault(p, method, args);
                 if (args != null && args.length == 2 && "invoke".equals(method.getName())) {
-                    int codepoint = (Integer) args[1];
-                    synchronized (pendingChars) {
-                        pendingChars.append(Character.toChars(codepoint));
+                    if (UiInputPoller.textInputActive) {
+                        int codepoint = (Integer) args[1];
+                        synchronized (pendingChars) {
+                            pendingChars.append(Character.toChars(codepoint));
+                        }
                     }
                     Object prev = previousCharCb[0];
                     if (prev != null) {
@@ -222,8 +275,15 @@ public final class UiInputPollerModern extends UiInputPoller {
 
         mouseX = cx[0] * scaleX;
         mouseY = fbH[0] - (cy[0] * scaleY); // flip après mise à l'échelle, sur la hauteur framebuffer
-        fbWidth = fbW[0];
-        fbHeight = fbH[0];
+
+        // BUG TROUVÉ : glfwGetFramebufferSize renvoie (0,0) quand la fenêtre
+        // est minimisée (iconifiée) — fbWidth/fbHeight à 0 se propagent
+        // jusqu'à glOrtho(0, vpWidth, 0, vpHeight, -1, 1) dans UiRenderer,
+        // où (right-left) ou (top-bottom) devient nul, d'où le spam
+        // GL_INVALID_VALUE "View frustum must not have a zero values".
+        // On garde la dernière taille connue plutôt que d'écraser avec 0.
+        if (fbW[0] > 0) fbWidth = fbW[0];
+        if (fbH[0] > 0) fbHeight = fbH[0];
 
         leftDown = glfwGetMouseButton(windowHandle, 0) == 1;  // GLFW_MOUSE_BUTTON_LEFT
         rightDown = glfwGetMouseButton(windowHandle, 1) == 1; // GLFW_MOUSE_BUTTON_RIGHT
@@ -242,6 +302,32 @@ public final class UiInputPollerModern extends UiInputPoller {
             if (entry[1].equals(name)) return (Integer) entry[0];
         }
         return -1;
+    }
+
+    /**
+     * Sens INVERSE de {@link #menuKeyCode} — nom lisible d'un code GLFW —
+     * utilisé par {@code KeystrokesModule} (voir historique de session,
+     * audit des modules) : {@code KeyBinding.code} (int direct) a disparu en
+     * 1.13+, remplacé par {@code KeyBinding.boundKey} (objet {@code
+     * InputUtil.Key}), dont {@code getCode()} renvoie un code GLFW — plus de
+     * {@code org.lwjgl.input.Keyboard.getKeyName(int)} (LWJGL2) pour le
+     * traduire en texte. Cherche d'abord dans {@link #CAPTURABLE_KEYS} (F1-F12,
+     * flèches, modificateurs — sans représentation imprimable, {@code
+     * glfwGetKeyName} renvoie {@code null} pour eux), sinon retombe sur
+     * {@code glfwGetKeyName} (touches imprimables A-Z/0-9/ponctuation).
+     */
+    public static String nameForKeyCode(int code, ClassLoader gameClassLoader) {
+        for (Object[] entry : CAPTURABLE_KEYS) {
+            if (((Integer) entry[0]) == code) return (String) entry[1];
+        }
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Method m = glfwClass.getMethod("glfwGetKeyName", int.class, int.class);
+            String name = (String) m.invoke(null, code, 0);
+            return name == null ? null : name.toUpperCase(java.util.Locale.ROOT);
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     @Override
@@ -267,18 +353,58 @@ public final class UiInputPollerModern extends UiInputPoller {
         return null;
     }
 
+    /**
+     * Contrairement à LWJGL2 (Legacy), GLFW expose CHAQUE touche comme un
+     * état indépendant pollable ({@code glfwGetKey}) — pas de file
+     * d'événements partagée à se disputer, donc toutes les intentions
+     * (Backspace/Suppr/flèches/Origine/Fin/Ctrl+A/C/X/V/Entrée) sont lues en
+     * simple scan ici, chacune avec son propre suivi de front montant (ou
+     * {@link UiInputPoller#keyRepeatFire} pour celles qui doivent se répéter
+     * en maintenant la touche).
+     */
     @Override
-    public void pollTextEdit(StringBuilder buffer) {
+    public void pollTextEdit() {
+        editTyped = "";
         synchronized (pendingChars) {
             if (pendingChars.length() > 0) {
-                buffer.append(pendingChars);
+                editTyped = pendingChars.toString();
                 pendingChars.setLength(0);
             }
         }
         try {
-            boolean down = glfwGetKey(windowHandle, 259) == 1; // GLFW_KEY_BACKSPACE
-            if (down && !prevBackspaceDown && buffer.length() > 0) buffer.deleteCharAt(buffer.length() - 1);
-            prevBackspaceDown = down;
+            boolean ctrl = glfwGetKey(windowHandle, 341) == 1 || glfwGetKey(windowHandle, 345) == 1;   // GLFW_KEY_LEFT/RIGHT_CONTROL
+            editShiftHeld = glfwGetKey(windowHandle, 340) == 1 || glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_LEFT/RIGHT_SHIFT
+
+            editBackspace = keyRepeatFire("modern.backspace", glfwGetKey(windowHandle, 259) == 1); // GLFW_KEY_BACKSPACE
+            editDelete    = keyRepeatFire("modern.delete",    glfwGetKey(windowHandle, 261) == 1); // GLFW_KEY_DELETE
+            editLeft      = keyRepeatFire("modern.left",      glfwGetKey(windowHandle, 263) == 1); // GLFW_KEY_LEFT
+            editRight     = keyRepeatFire("modern.right",     glfwGetKey(windowHandle, 262) == 1); // GLFW_KEY_RIGHT
+            editHome      = keyRepeatFire("modern.home",      glfwGetKey(windowHandle, 268) == 1); // GLFW_KEY_HOME
+            editEnd       = keyRepeatFire("modern.end",       glfwGetKey(windowHandle, 269) == 1); // GLFW_KEY_END
+
+            // Entrée / pavé numérique Entrée — un seul déclenchement par appui,
+            // jamais de répétition (soumission, pas édition continue).
+            boolean enterDown = glfwGetKey(windowHandle, 257) == 1 || glfwGetKey(windowHandle, 335) == 1; // GLFW_KEY_ENTER / KP_ENTER
+            editEnter = enterDown && !prevEnterCombinedDown;
+            prevEnterCombinedDown = enterDown;
+
+            if (ctrl) {
+                boolean aDown = glfwGetKey(windowHandle, physicalKeyForLetter('a')) == 1;
+                editSelectAll = aDown && !prevCtrlADown;
+                prevCtrlADown = aDown;
+                boolean cDown = glfwGetKey(windowHandle, physicalKeyForLetter('c')) == 1;
+                editCopy = cDown && !prevCtrlCDown;
+                prevCtrlCDown = cDown;
+                boolean vDown = glfwGetKey(windowHandle, physicalKeyForLetter('v')) == 1;
+                editPaste = vDown && !prevCtrlVDown;
+                prevCtrlVDown = vDown;
+                boolean xDown = glfwGetKey(windowHandle, physicalKeyForLetter('x')) == 1;
+                editCut = xDown && !prevCtrlXDown;
+                prevCtrlXDown = xDown;
+            } else {
+                editSelectAll = editCopy = editPaste = editCut = false;
+                prevCtrlADown = prevCtrlCDown = prevCtrlVDown = prevCtrlXDown = false;
+            }
         } catch (Exception e) {
             LauncherLog.err("[UiInputPollerModern] pollTextEdit: " + e);
         }
@@ -286,6 +412,41 @@ public final class UiInputPollerModern extends UiInputPoller {
 
     private int glfwGetKey(long handle, int key) throws Exception {
         return (int) glfw("glfwGetKey", long.class, int.class).invoke(null, handle, key);
+    }
+
+    // Codes physiques A-Z (65-90) résolus une fois pour la lettre voulue —
+    // BUG TROUVÉ (confirmé : "Ctrl+A ne marche pas", clavier AZERTY français) :
+    // les constantes GLFW_KEY_A..Z sont des positions PHYSIQUES calées sur un
+    // clavier US QWERTY, PAS la lettre réellement produite. Sur AZERTY, la
+    // touche physique portant le label "A" occupe la position QWERTY de "Q" —
+    // glfwGetKey(handle, 65 /*GLFW_KEY_A*/) ne devenait donc JAMAIS vrai quand
+    // l'utilisateur pressait sa touche "A". Fix : {@code glfwGetKeyName(code,
+    // 0)} renvoie le label RÉELLEMENT affiché sur le clavier de l'utilisateur
+    // pour un code physique donné (déjà utilisé ailleurs dans ce fichier, voir
+    // {@link #nameForKeyCode}) — on scanne les 26 positions A-Z une seule fois
+    // et on garde celle dont le label correspond à la lettre voulue. Repli sur
+    // le mapping US direct (A=65 etc.) si glfwGetKeyName échoue/renvoie null
+    // (layout sans labels imprimables résolus, très rare).
+    private final Map<Character, Integer> letterKeyCache = new HashMap<>();
+
+    private int physicalKeyForLetter(char lower) {
+        Integer cached = letterKeyCache.get(lower);
+        if (cached != null) return cached;
+        int resolved = 65 + (lower - 'a'); // repli US QWERTY
+        try {
+            Method getKeyName = glfw("glfwGetKeyName", int.class, int.class);
+            for (int code = 65; code <= 90; code++) {
+                String name = (String) getKeyName.invoke(null, code, 0);
+                if (name != null && name.length() == 1 && Character.toLowerCase(name.charAt(0)) == lower) {
+                    resolved = code;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            LauncherLog.err("[UiInputPollerModern] physicalKeyForLetter('" + lower + "'): " + e);
+        }
+        letterKeyCache.put(lower, resolved);
+        return resolved;
     }
 
     // ── GLFW via réflexion (org.lwjgl.glfw.GLFW — API publique, pas obfusquée) ──

@@ -71,7 +71,12 @@ pub async fn launch_game(
     .decorations(false)
     .build();
 
-    state.write().await.running_instances.insert(instance_id.clone());
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    {
+        let mut s = state.write().await;
+        s.running_instances.insert(instance_id.clone());
+        s.launch_cancel.insert(instance_id.clone(), cancel_tx);
+    }
     let _ = app.emit("game_state", serde_json::json!({
         "running": true,
         "instance_id": &instance_id,
@@ -117,11 +122,16 @@ pub async fn launch_game(
             p2p.unwrap_or(false),
             avoid_beta.unwrap_or(true),
             &window_label,
+            cancel_rx,
         )
         .await
         {
-            tracing::error!("Erreur de lancement: {}", e);
-            let _ = app.emit("launch_error", e.to_string());
+            if e.to_string() == launcher::LAUNCH_CANCELLED_MSG {
+                let _ = app.emit("launch_cancelled", &instance_id);
+            } else {
+                tracing::error!("Erreur de lancement: {}", e);
+                let _ = app.emit("launch_error", e.to_string());
+            }
         }
 
         if let Some(sid) = session_id {
@@ -131,13 +141,35 @@ pub async fn launch_game(
             let _ = db::session_end(&db, sid, duration);
         }
 
-        state_clone.write().await.running_instances.remove(&instance_id);
+        {
+            let mut s = state_clone.write().await;
+            s.running_instances.remove(&instance_id);
+            s.launch_cancel.remove(&instance_id);
+        }
         let _ = app.emit("game_state", serde_json::json!({
             "running": false,
             "instance_id": &instance_id,
         }));
     });
 
+    Ok(())
+}
+
+/// Demande l'annulation d'un lancement en cours — best-effort : coupe le
+/// téléchargement au prochain point de contrôle s'il est encore en cours, ou
+/// tue la JVM si elle a déjà démarré (voir les points de contrôle dans
+/// `download_and_launch` et le `tokio::select!` autour de `child.wait()`).
+#[tauri::command]
+pub async fn cancel_launch(
+    state: tauri::State<'_, SharedState>,
+    instance_id: String,
+) -> Result<(), String> {
+    let s = state.read().await;
+    let tx = s
+        .launch_cancel
+        .get(&instance_id)
+        .ok_or("Aucun lancement en cours pour cette instance")?;
+    let _ = tx.send(true);
     Ok(())
 }
 

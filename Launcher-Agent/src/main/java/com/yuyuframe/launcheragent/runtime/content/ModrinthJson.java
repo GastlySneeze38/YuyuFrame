@@ -67,7 +67,22 @@ public final class ModrinthJson {
         return hits;
     }
 
-    /** Extrait une valeur chaîne simple {@code "key":"value"} (pas d'échappement complexe). */
+    /**
+     * Extrait une valeur chaîne simple {@code "key":"value"}.
+     *
+     * BUG TROUVÉ (utilisateur : page de détail avec galerie/description —
+     * "body", la description longue d'un projet, contient des retours à la
+     * ligne) : l'échappement JSON n'était PAS vraiment décodé jusqu'ici,
+     * juste "un backslash = ignorer le backslash, garder le caractère
+     * suivant tel quel" — {@code \n} devenait le caractère LETTRE "n" (pas
+     * un retour à la ligne), {@code \t} devenait "t", etc. Invisible tant
+     * que seuls des champs COURTS et SANS retour à la ligne (titre, auteur,
+     * description courte des résultats de recherche) étaient parsés — "body"
+     * (multi-paragraphes) l'aurait rendu evident (toute la description sur
+     * une seule ligne, avec des "n"/"t" parasites à la place des sauts de
+     * ligne). Fix : vrai décodage des échappements JSON standards
+     * (\n/\t/\r/\b/\f/\"/\\/\/) + \\uXXXX (unicode).
+     */
     public static String jsonString(String json, String key) {
         if (json == null) return null;
         int i = json.indexOf("\"" + key + "\"");
@@ -79,14 +94,73 @@ public final class ModrinthJson {
         while (end < json.length() && json.charAt(end) != '"') {
             char c = json.charAt(end);
             if (c == '\\' && end + 1 < json.length()) {
-                sb.append(json.charAt(end + 1));
-                end += 2;
+                char esc = json.charAt(end + 1);
+                switch (esc) {
+                    case 'n': sb.append('\n'); end += 2; break;
+                    case 't': sb.append('\t'); end += 2; break;
+                    case 'r': sb.append('\r'); end += 2; break;
+                    case 'b': sb.append('\b'); end += 2; break;
+                    case 'f': sb.append('\f'); end += 2; break;
+                    case '"': sb.append('"'); end += 2; break;
+                    case '\\': sb.append('\\'); end += 2; break;
+                    case '/': sb.append('/'); end += 2; break;
+                    case 'u':
+                        if (end + 6 <= json.length()) {
+                            try {
+                                sb.append((char) Integer.parseInt(json.substring(end + 2, end + 6), 16));
+                                end += 6;
+                            } catch (NumberFormatException nfe) {
+                                sb.append(esc);
+                                end += 2;
+                            }
+                        } else {
+                            sb.append(esc);
+                            end += 2;
+                        }
+                        break;
+                    default:
+                        sb.append(esc);
+                        end += 2;
+                }
             } else {
                 sb.append(c);
                 end++;
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Extrait jusqu'à {@code max} URLs d'images depuis {@code "gallery":
+     * [...]} (détail complet d'un projet — voir
+     * ContentBridge.getProject/ModrinthProjectDetailScreen ; absent des
+     * résultats de recherche). Ordre du tableau Modrinth conservé tel quel
+     * (l'image "featured" est déjà généralement en premier côté serveur).
+     */
+    public static List<String> parseGalleryUrls(String json, int max) {
+        List<String> urls = new ArrayList<>();
+        if (json == null) return urls;
+
+        int galleryIdx = json.indexOf("\"gallery\"");
+        if (galleryIdx < 0) return urls;
+        int arrStart = json.indexOf('[', galleryIdx);
+        if (arrStart < 0) return urls;
+        int arrEnd = matchingBracket(json, arrStart, '[', ']');
+        if (arrEnd < 0) return urls;
+
+        int pos = arrStart + 1;
+        while (pos < arrEnd && urls.size() < max) {
+            int objStart = json.indexOf('{', pos);
+            if (objStart < 0 || objStart >= arrEnd) break;
+            int objEnd = matchingBracket(json, objStart, '{', '}');
+            if (objEnd < 0) break;
+
+            String obj = json.substring(objStart, objEnd + 1);
+            String url = jsonString(obj, "url");
+            if (url != null && !url.isEmpty()) urls.add(url);
+            pos = objEnd + 1;
+        }
+        return urls;
     }
 
     /** Extrait une valeur numérique simple {@code "key":1234} (pas de guillemets). */

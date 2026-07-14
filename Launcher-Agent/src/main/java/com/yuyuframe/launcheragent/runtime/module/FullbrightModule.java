@@ -29,8 +29,8 @@ public final class FullbrightModule extends LauncherModule {
             Field gammaField = gammaField();
             if (gammaField == null) return;
             Object options = optionsInstance();
-            if (Float.isNaN(savedVanillaGamma)) savedVanillaGamma = gammaField.getFloat(options);
-            gammaField.setFloat(options, GAMMA_VALUE);
+            if (Float.isNaN(savedVanillaGamma)) savedVanillaGamma = readGamma(gammaField, options);
+            writeGamma(gammaField, options, GAMMA_VALUE);
         } catch (Throwable ignored) {}
     }
 
@@ -40,11 +40,36 @@ public final class FullbrightModule extends LauncherModule {
         try {
             if (Float.isNaN(savedVanillaGamma)) return;
             Field gammaField = gammaField();
-            if (gammaField != null) gammaField.setFloat(optionsInstance(), savedVanillaGamma);
+            if (gammaField != null) writeGamma(gammaField, optionsInstance(), savedVanillaGamma);
         } catch (Throwable ignored) {
         } finally {
             savedVanillaGamma = Float.NaN;
         }
+    }
+
+    /**
+     * BUG TROUVÉ (audit modules, voir historique de session) : {@code
+     * GameOptions.gamma} est un {@code float} en 1.8.9 mais un {@code double}
+     * en 1.13-1.16.5 (mappings 1.16.5 : {@code f D aR field_1840 gamma}) —
+     * {@code getFloat}/{@code setFloat} levait {@code IllegalArgumentException}
+     * sur ce dernier, avalée silencieusement, fullbright totalement
+     * inopérant. Lit le VRAI type du champ au lieu de supposer.
+     *
+     * BUG TROUVÉ #2 (1.20.4, même refonte "SimpleOption" que ZoomModule.fov) :
+     * {@code gamma} n'est plus un float/double DU TOUT ici — objet {@code
+     * SimpleOption} FINAL (vérifié : {@code f Levl; cb field_1840 gamma}) —
+     * voir {@link McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue}.
+     */
+    private float readGamma(Field gammaField, Object options) throws Exception {
+        if (gammaField.getType() == double.class) return (float) gammaField.getDouble(options);
+        if (gammaField.getType() == float.class) return gammaField.getFloat(options);
+        return (float) McReflect.simpleOptionGetValue(gammaField.get(options));
+    }
+
+    private void writeGamma(Field gammaField, Object options, float value) throws Exception {
+        if (gammaField.getType() == double.class) { gammaField.setDouble(options, value); return; }
+        if (gammaField.getType() == float.class) { gammaField.setFloat(options, value); return; }
+        McReflect.simpleOptionSetValue(gammaField.get(options), value);
     }
 
     private Object optionsInstance() throws Exception {

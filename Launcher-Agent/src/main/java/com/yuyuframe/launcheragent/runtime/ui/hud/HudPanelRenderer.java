@@ -48,7 +48,9 @@ public final class HudPanelRenderer {
     static final float TEXT_SCALE = 0.55f;
 
     public static void draw(UiRenderer renderer, HudElement element, float x, float y, float w, float h, int vpWidth, int vpHeight) {
-        renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
+        // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
+        // avec le texte différé d'une frame sur era E — voir sa javadoc.
+        renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
 
         // Marge = base (PADDING, commune à TOUS les HUD) + extra optionnel du
         // module (element.paddingX/Y, façon OneConfig, 0 par défaut) — SEUL

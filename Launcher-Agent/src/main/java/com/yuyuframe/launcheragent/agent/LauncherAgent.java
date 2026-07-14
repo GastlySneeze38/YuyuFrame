@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-04-v296";
+    private static final String BUILD_VERSION = "2026-07-14-v466";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -76,6 +76,12 @@ public class LauncherAgent {
         // principal, bien avant qu'un quelconque shutdown ne puisse démarrer,
         // toute réutilisation ultérieure (rendu HUD normal OU shutdown hook)
         // retombe sur un Toolkit déjà chaud, donc instantanée et sans risque.
+        // HYPOTHÈSE "warm-up AWT jetable" (era E) INFIRMÉE : testée en v360,
+        // le texte du corps (UiFont.REGULAR) reste corrompu à CHAQUE
+        // lancement (pas juste ~1 sur 2 comme observé avant ce fix) — la
+        // cause n'est donc PAS une instabilité ponctuelle du tout premier
+        // contact AWT. Retiré. Voir UiFont.java pour le diagnostic PNG ajouté
+        // à la place (dump direct de l'atlas, preuve plutôt qu'hypothèse).
         try {
             com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth("YuyuFrame", 1f);
         } catch (Throwable t) {
@@ -109,7 +115,7 @@ public class LauncherAgent {
         boolean fabric = isFabricPresent();
 
         // Sous Fabric, le code tissé par Mixin dans les classes du jeu (la$onInit
-        // de TitleScreenMixin/PackScreenMixin) est résolu par KnotClassLoader,
+        // de TitleScreenMixin/KeybindsScreenMixin) est résolu par KnotClassLoader,
         // PAS par notre classloader isolé — donc MappingsRegistry/YarnMappings y
         // existent comme une COPIE STATIQUE SÉPARÉE, jamais initialisée par
         // IsolatedBootstrap (qui tourne sur le classloader isolé). Une System

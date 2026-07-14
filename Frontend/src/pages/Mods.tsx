@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { open } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance, Mod, ModpackMeta } from '@/types'
 import { searchModrinthModpacks, resolveModpackFile, formatRelativeDate, type ModpackHit } from '@/lib/modrinthModpacks'
+import ImportSourceModal from '@/components/ImportSourceModal'
 
 // ── Types internes ───────────────────────────────────────────────────────────
 
@@ -297,7 +299,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [updatingMods, setUpdatingMods] = useState<Set<string>>(new Set())
   const [updatingAll, setUpdatingAll] = useState(false)
   const [updatingPackAll, setUpdatingPackAll] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importNotice, setImportNotice] = useState('')
+  const [showImportFolder, setShowImportFolder] = useState(false)
 
   const mergeVersions = (fetched: Record<string, ModrinthInfo>) =>
     setVersionMap((prev) => ({ ...prev, ...fetched }))
@@ -532,23 +535,33 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setUpdatingPackAll(false)
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handlePickJars = async () => {
+    if (uploading) return
+    const picked = await open({ multiple: true, filters: [{ name: 'Mod', extensions: ['jar'] }] })
+    if (!picked) return
+    const paths = Array.isArray(picked) ? picked : [picked]
+    if (paths.length === 0) return
+
     setUploading(true)
+    setImportNotice('')
     try {
-      const newMod = await api.mods.upload(instanceId, file)
-      setMods((prev) =>
-        [...prev.filter((m) => m.name !== newMod.name), newMod]
-          .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-      )
-      fetchVersionsByHash([newMod.sha1]).then(mergeVersions)
-      delete _modrinthCache[instanceId]
+      const result = await api.mods.importPaths(instanceId, paths)
+      if (result.imported.length > 0) {
+        setMods((prev) => {
+          const byName = new Map(prev.map((m) => [m.name, m]))
+          for (const m of result.imported) byName.set(m.name, m)
+          return Array.from(byName.values()).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+        })
+        fetchVersionsByHash(result.imported.map((m) => m.sha1)).then(mergeVersions)
+        delete _modrinthCache[instanceId]
+      }
+      if (result.skipped.length > 0) {
+        setImportNotice(`${result.skipped.length} mod(s) déjà présent(s) ignoré(s)`)
+      }
     } catch {
       setModsError("Erreur lors de l'import")
     } finally {
       setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -678,11 +691,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
             {modpackMeta ? 'Remplacer le modpack' : 'Installer un modpack'}
           </button>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handlePickJars}
             disabled={uploading}
             className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95"
             style={{
               height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
+              borderRight: '1px solid rgba(75,63,207,0.35)',
               background: uploading ? 'rgba(40,38,65,0.7)' : 'rgba(75,63,207,0.3)',
               color: uploading ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
               cursor: uploading ? 'not-allowed' : 'pointer',
@@ -695,16 +709,43 @@ export function ModsContent({ instance }: { instance: Instance }) {
             </svg>
             {uploading ? 'Import...' : isPlugin ? 'Importer un plugin' : 'Importer un mod'}
           </button>
+          <button
+            onClick={() => setShowImportFolder(true)}
+            className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95"
+            style={{
+              height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
+              background: 'rgba(75,63,207,0.15)',
+              color: 'rgba(255,255,255,0.7)',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.3)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.15)' }}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            Importer un dossier
+          </button>
         </div>
-        <input ref={fileInputRef} type="file" accept=".jar" className="hidden" onChange={handleFileChange} />
 
         {/* Droite : informations de l'instance */}
-        <div className="flex flex-1 justify-end">
+        <div className="flex flex-1 items-center justify-end gap-3">
+          {importNotice && (
+            <span style={{ fontSize: 10.5, color: 'rgba(179,163,255,0.9)' }}>{importNotice}</span>
+          )}
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
             {instance.name} · {mcVersion} · {loader}
           </span>
         </div>
       </div>
+
+      {showImportFolder && (
+        <ImportSourceModal
+          fixedInstanceId={instanceId}
+          onClose={() => setShowImportFolder(false)}
+          onImported={() => loadMods()}
+        />
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-3">
@@ -743,7 +784,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onDelete={handleDelete}
             onUpdateMod={handleUpdateMod}
             onBrowseExtra={() => setTab('modpack')}
-            onUploadExtra={() => fileInputRef.current?.click()}
+            onUploadExtra={handlePickJars}
           />
         ) : tab === 'browse' ? (
           <BrowseTab

@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern;
 
 import java.lang.reflect.Field;
 
@@ -34,7 +35,7 @@ public final class ZoomModule extends LauncherModule {
     private String cachedKeyName;
     private int cachedKeyCode = -1;
     private boolean zooming;
-    private float savedFov = -1f;
+    private double savedFov = -1;
 
     public ZoomModule() {
         super("zoom", "Zoom", "Maintenir une touche réduit temporairement le FOV (façon OptiFine)", false);
@@ -50,15 +51,15 @@ public final class ZoomModule extends LauncherModule {
 
             if (down && !zooming) {
                 zooming = true;
-                savedFov = fovField.getFloat(options);
+                savedFov = readFov(fovField, options);
             } else if (!down && zooming) {
                 zooming = false;
-                fovField.setFloat(options, savedFov);
-                savedFov = -1f;
+                writeFov(fovField, options, savedFov);
+                savedFov = -1;
                 return;
             }
 
-            if (zooming) fovField.setFloat(options, zoomFov);
+            if (zooming) writeFov(fovField, options, zoomFov);
         } catch (Throwable t) {
             LauncherLog.err("[ZoomModule] onTick: " + t);
         }
@@ -67,18 +68,56 @@ public final class ZoomModule extends LauncherModule {
     @Override
     protected void onEnabledChanged(boolean enabled) {
         if (enabled) return;
-        if (zooming && savedFov >= 0f) {
+        if (zooming && savedFov >= 0) {
             try {
                 Field fovField = fovField();
-                if (fovField != null) fovField.setFloat(optionsInstance(), savedFov);
+                if (fovField != null) writeFov(fovField, optionsInstance(), savedFov);
             } catch (Throwable ignored) {
             }
         }
         zooming = false;
-        savedFov = -1f;
+        savedFov = -1;
     }
 
+    /**
+     * BUG TROUVÉ (audit modules, voir historique de session) : {@code
+     * GameOptions.fov} est un {@code float} en 1.8.9 mais un {@code double}
+     * en 1.13-1.16.5 (vérifié dans les mappings 1.16.5 : {@code f D aO
+     * field_1826 fov}) — {@code getFloat}/{@code setFloat} lève {@code
+     * IllegalArgumentException} sur ce dernier, avalée silencieusement,
+     * zoom totalement inopérant. Lit le VRAI type du champ au lieu de
+     * supposer, fonctionne sur les deux.
+     *
+     * BUG TROUVÉ #2 (1.20.4, test utilisateur) : depuis la refonte
+     * "SimpleOption" (~1.19-1.20), {@code fov} n'est même plus un float/double
+     * DU TOUT — c'est un objet {@code SimpleOption} FINAL (vérifié : {@code f
+     * Levl; bM field_1826 fov}) — voir {@link McReflect#simpleOptionGetValue}/
+     * {@link McReflect#simpleOptionSetValue} pour le repli.
+     */
+    private double readFov(Field fovField, Object options) throws Exception {
+        if (fovField.getType() == double.class) return fovField.getDouble(options);
+        if (fovField.getType() == float.class) return fovField.getFloat(options);
+        return McReflect.simpleOptionGetValue(fovField.get(options));
+    }
+
+    private void writeFov(Field fovField, Object options, double value) throws Exception {
+        if (fovField.getType() == double.class) { fovField.setDouble(options, value); return; }
+        if (fovField.getType() == float.class) { fovField.setFloat(options, (float) value); return; }
+        McReflect.simpleOptionSetValue(fovField.get(options), value);
+    }
+
+    /**
+     * BUG TROUVÉ (audit modules) : passait TOUJOURS par {@code
+     * org.lwjgl.input.Keyboard} (LWJGL2) — inexistant sous LWJGL3/GLFW
+     * (1.13+), échec silencieux total sur ces versions. Utilise désormais
+     * l'instance {@code UiInputPollerModern} active (créée par le Mixin de
+     * rendu global de son bracket) quand disponible, sinon retombe sur
+     * LWJGL2 (1.8.9, comportement d'origine inchangé).
+     */
     private boolean isZoomKeyDown() throws Exception {
+        UiInputPollerModern modern = UiInputPollerModern.ACTIVE;
+        if (modern != null) return modern.isKeyDownByName(zoomKey);
+
         Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
         if (!zoomKey.equals(cachedKeyName)) {
             cachedKeyName = zoomKey;

@@ -65,6 +65,8 @@ export default function Home() {
 
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [launchMsg, setLaunchMsg] = useState('')
+  const [cancelNotice, setCancelNotice] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
   const [bannerAnimating, setBannerAnimating] = useState(false)
 
@@ -83,6 +85,7 @@ export default function Home() {
     let unlistenProgress: (() => void) | null = null
     let unlistenState: (() => void) | null = null
     let unlistenError: (() => void) | null = null
+    let unlistenCancelled: (() => void) | null = null
 
     listen<DownloadProgress>('download_progress', (event) => {
       setProgress(event.payload)
@@ -93,6 +96,7 @@ export default function Home() {
       setInstanceRunning(instance_id, running)
       if (!running) {
         setProgress(null)
+        setCancelling(false)
         getCurrentWindow().show()
       }
     }).then((fn) => { unlistenState = fn })
@@ -101,14 +105,33 @@ export default function Home() {
       setLaunchMsg(event.payload)
       if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
       setProgress(null)
+      setCancelling(false)
     }).then((fn) => { unlistenError = fn })
+
+    listen<string>('launch_cancelled', () => {
+      setCancelNotice('Lancement annulé')
+      setProgress(null)
+      setCancelling(false)
+      setTimeout(() => setCancelNotice(''), 4000)
+    }).then((fn) => { unlistenCancelled = fn })
 
     return () => {
       unlistenProgress?.()
       unlistenState?.()
       unlistenError?.()
+      unlistenCancelled?.()
     }
   }, [])
+
+  const handleCancelLaunch = async () => {
+    if (!selectedInstanceId || cancelling) return
+    setCancelling(true)
+    try {
+      await api.launch.cancel(selectedInstanceId)
+    } catch {
+      setCancelling(false)
+    }
+  }
 
   const handleLogout = async () => {
     await api.auth.logout()
@@ -125,6 +148,7 @@ export default function Home() {
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
     setLaunchMsg('')
+    setCancelNotice('')
     try {
       if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies)
       else await api.launch.start(selectedInstanceId, avoidBetaDependencies)
@@ -389,33 +413,68 @@ export default function Home() {
             )}
           </div>
 
-          {/* Launch button */}
-          <button
-            onClick={username ? handleLaunch : () => navigate('/login')}
-            disabled={gameRunning || (!!username && !selectedInstanceId)}
-            className="w-full font-bold text-white transition-all duration-200 active:scale-95"
-            style={{
-              height: 60, borderRadius: 16, fontSize: 14, letterSpacing: '0.04em',
-              background: canLaunch ? '#4B3FCF' : !username ? 'rgba(75,63,207,0.45)' : 'rgba(40,38,65,0.7)',
-              boxShadow: canLaunch ? '0 4px 28px rgba(75,63,207,0.42)' : 'none',
-              cursor: (gameRunning || (!!username && !selectedInstanceId)) ? 'not-allowed' : 'pointer',
-            }}
-            onMouseEnter={(e) => { if (canLaunch) { e.currentTarget.style.background = '#6155e8'; e.currentTarget.style.boxShadow = '0 6px 32px rgba(75,63,207,0.62)' } else if (!username) { e.currentTarget.style.background = 'rgba(75,63,207,0.65)' } }}
-            onMouseLeave={(e) => { if (canLaunch) { e.currentTarget.style.background = '#4B3FCF'; e.currentTarget.style.boxShadow = '0 4px 28px rgba(75,63,207,0.42)' } else if (!username) { e.currentTarget.style.background = 'rgba(75,63,207,0.45)' } }}
-          >
-            {gameRunning ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="h-4 w-4 animate-spin-slow rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
-                EN JEU...
-              </span>
-            ) : !username ? 'SE CONNECTER'
-              : !selectedInstanceId ? 'AUCUNE INSTANCE'
-              : `LANCER ${instance?.name ?? ''}`}
-          </button>
+          {/* Launch button (+ bouton d'annulation pendant le lancement) */}
+          <div className="flex w-full gap-2">
+            <button
+              onClick={username ? handleLaunch : () => navigate('/login')}
+              disabled={gameRunning || (!!username && !selectedInstanceId)}
+              className="font-bold text-white transition-all duration-200 active:scale-95"
+              style={{
+                flex: gameRunning ? 3 : 1,
+                height: 60, borderRadius: 16, fontSize: 14, letterSpacing: '0.04em',
+                background: canLaunch ? '#4B3FCF' : !username ? 'rgba(75,63,207,0.45)' : 'rgba(40,38,65,0.7)',
+                boxShadow: canLaunch ? '0 4px 28px rgba(75,63,207,0.42)' : 'none',
+                cursor: (gameRunning || (!!username && !selectedInstanceId)) ? 'not-allowed' : 'pointer',
+              }}
+              onMouseEnter={(e) => { if (canLaunch) { e.currentTarget.style.background = '#6155e8'; e.currentTarget.style.boxShadow = '0 6px 32px rgba(75,63,207,0.62)' } else if (!username) { e.currentTarget.style.background = 'rgba(75,63,207,0.65)' } }}
+              onMouseLeave={(e) => { if (canLaunch) { e.currentTarget.style.background = '#4B3FCF'; e.currentTarget.style.boxShadow = '0 4px 28px rgba(75,63,207,0.42)' } else if (!username) { e.currentTarget.style.background = 'rgba(75,63,207,0.45)' } }}
+            >
+              {gameRunning ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                  EN JEU...
+                </span>
+              ) : !username ? 'SE CONNECTER'
+                : !selectedInstanceId ? 'AUCUNE INSTANCE'
+                : `LANCER ${instance?.name ?? ''}`}
+            </button>
+
+            {gameRunning && (
+              <button
+                onClick={handleCancelLaunch}
+                disabled={cancelling}
+                title="Annuler le lancement"
+                className="flex items-center justify-center font-bold text-white transition-all duration-200 active:scale-95"
+                style={{
+                  flex: 1, height: 60, borderRadius: 16, fontSize: 12,
+                  background: cancelling ? 'rgba(200,50,50,0.15)' : 'rgba(200,50,50,0.18)',
+                  border: '1px solid rgba(248,113,113,0.35)',
+                  color: cancelling ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.85)',
+                  cursor: cancelling ? 'not-allowed' : 'pointer',
+                }}
+                onMouseEnter={(e) => { if (!cancelling) e.currentTarget.style.background = 'rgba(200,50,50,0.3)' }}
+                onMouseLeave={(e) => { if (!cancelling) e.currentTarget.style.background = 'rgba(200,50,50,0.18)' }}
+              >
+                {cancelling ? (
+                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="currentColor" width={16} height={16}>
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                )}
+              </button>
+            )}
+          </div>
 
           {launchMsg && (
             <p className="w-full rounded-lg px-3 py-2 text-center text-xs text-red-300" style={{ background: 'rgba(200,50,50,0.12)' }}>
               {launchMsg}
+            </p>
+          )}
+
+          {cancelNotice && (
+            <p className="w-full rounded-lg px-3 py-2 text-center text-xs" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' }}>
+              {cancelNotice}
             </p>
           )}
 

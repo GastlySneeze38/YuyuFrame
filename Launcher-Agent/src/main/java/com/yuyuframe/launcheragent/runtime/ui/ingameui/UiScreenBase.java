@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -17,15 +18,28 @@ import java.util.List;
 
 /**
  * Base pour tout écran custom 100% dessiné à la main (voir UiDrawable pour le
- * "pourquoi" — pas de Screen.render/mouseClicked/keyPressed surchargés, types
- * record sans stub compilable en 1.21+).
+ * "pourquoi" — pas de Screen.render() surchargé, types record sans stub
+ * compilable en 1.21+ ; le dessin reste entièrement piloté par
+ * GlobalUiRenderMixin, jamais par render()).
  *
  * Compile contre le stub Screen/Component comme les autres écrans custom
  * (ResourcePackSearchScreen etc.) — patché au chargement par ScreenStubPatcher
  * (voir LauncherMixinTransformerWrapper.STUB_PATCHED_SCREENS, y ajouter cette
- * classe). N'override AUCUNE méthode Screen à risque : sert uniquement de
- * marqueur "un écran est ouvert" pour les effets de bord vanilla normaux
- * (pause, curseur libéré) — tout le reste passe par GlobalUiRenderMixin.
+ * classe).
+ *
+ * {@code mouseClicked}/{@code keyPressed} SONT overridés (voir plus bas) —
+ * ce sont des méthodes "feuille" de {@code Element} (stables depuis 1.13,
+ * mêmes signatures jusqu'en 1.21+), contrairement à des points d'entrée de
+ * CYCLE DE VIE comme {@code onClose()}/{@code init()}/{@code tick()} : un
+ * override de {@code onClose()} a été tenté puis abandonné (voir son
+ * historique) après avoir provoqué un crash, du fait que d'autres chemins
+ * internes du jeu peuvent en attendre un effet synchrone. Les méthodes
+ * d'entrée utilisateur pure (clic, touche) n'ont pas ce risque : elles ne
+ * sont appelées QUE par le dispatch d'input, jamais par un autre système
+ * interne — les overrider laisse Minecraft nous notifier directement au lieu
+ * qu'on sonde nous-mêmes l'état brut GLFW/LWJGL2 en parallèle (ce qui causait
+ * un double traitement du même clic/de la même touche, source de plusieurs
+ * bugs de cette session).
  */
 public abstract class UiScreenBase extends Screen implements UiDrawable {
 
@@ -34,6 +48,15 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     private boolean navigationRequested;
     private Object navigationTarget;
+
+    /**
+     * Cible de retour pour une fermeture par la touche Échap — même valeur que
+     * celle utilisée par le bouton "Retour"/"Fermer" de chaque écran (voir
+     * constructeurs des sous-classes). Renseignée par la sous-classe, {@code
+     * null} par défaut (Échap ferme complètement, comme au niveau racine du
+     * menu).
+     */
+    protected Object escapeTarget;
 
     /**
      * "Rideau" qui se lève à l'apparition de CET écran — pas une vraie
@@ -75,33 +98,245 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         enterAnim.show();
     }
 
+    /**
+     * Dernier {@code UiInputPoller} vu — mis à jour à CHAQUE frame par
+     * {@link #uiPollInput}, lu par {@link #mouseClicked} (appelé par le VRAI
+     * dispatch d'input de Minecraft, PAS par notre propre boucle, donc sans
+     * accès direct à l'input de cette frame autrement). Un décalage d'au plus
+     * une frame entre la position mémorisée ici et la position réelle au
+     * moment du clic est sans conséquence pratique (la souris ne "téléporte"
+     * pas d'une frame à l'autre) — voir javadoc de {@link #mouseClicked} pour
+     * pourquoi on n'utilise JAMAIS les coordonnées passées par Minecraft lui-même.
+     */
+    private UiInputPoller lastInput;
+
+    /**
+     * Widgets EXCLUSIFS pendant qu'un modal est actif (voir tiroir de filtres,
+     * {@code ModrinthContentScreen}) — quand non-null, {@link #dispatchClick}
+     * et {@link #uiPollInput} n'utilisent QUE cette liste (widgets normaux du
+     * fond ignorés pour le clic/le survol continu), pour qu'un clic sur un
+     * bouton d'arrière-plan ne traverse jamais le voile du modal. Nécessaire
+     * car {@code widgets} est une seule liste PLATE testée dans l'ORDRE
+     * D'INSERTION pour le clic ET le dessin (voir dispatchClick/uiDraw) — les
+     * deux ordres ne peuvent pas être satisfaits simultanément pour un calque
+     * qui doit être "dessiné en dernier" (par-dessus) mais "testé en premier"
+     * (prioritaire au clic) si tout partage la même liste. Le DESSIN, lui,
+     * N'EST PAS concerné par ce hook (widgets du fond toujours dessinés
+     * normalement ci-dessous, dimés par le voile du modal que la sous-classe
+     * dessine ELLE-MÊME par-dessus, après son propre contenu — voir
+     * ModrinthContentScreen.uiDraw) : seule la découpe clic/survol est
+     * générique ici, le z-order visuel reste piloté par la sous-classe.
+     * {@code null} par défaut = comportement normal (widgets standards).
+     */
+    protected List<UiWidget> modalWidgets() { return null; }
+
     @Override
     public void uiPollInput(UiInputPoller input) {
+        lastInput = input;
         screenWidth = input.fbWidth;
         screenHeight = input.fbHeight;
 
         // Continu — CHAQUE widget, chaque frame, indépendamment du clic (drag
-        // de slider, capture de touche en cours...). Séparé du dispatch de
-        // clic ci-dessous : pollContinuous ne référence jamais onClick.
-        for (UiWidget w : widgets) {
+        // de slider, capture de touche en cours...). Le clic lui-même est
+        // géré par le VRAI mouseClicked() ci-dessous, plus ici — voir sa
+        // javadoc et celle de la classe.
+        List<UiWidget> active = modalWidgets();
+        for (UiWidget w : (active != null ? active : widgets)) {
             try {
                 w.pollContinuous(input);
             } catch (Throwable t) {
                 LauncherLog.err("[UiScreenBase] pollContinuous: " + t);
             }
         }
+    }
 
-        if (!input.leftClicked) return;
-        for (UiWidget w : widgets) {
-            if (w.contains(input.mouseX, input.mouseY)) {
-                try {
-                    w.onClick();
-                } catch (Throwable t) {
-                    LauncherLog.err("[UiScreenBase] onClick: " + t);
-                }
-                return; // un seul widget cliqué par frame, le premier trouvé
+    /**
+     * PAS de {@code @Override} : le stub de compilation {@code Screen}
+     * (src/stubs) ne déclare pas cette méthode (déclarée sur l'interface
+     * {@code Element} du vrai jeu) — la JVM la reconnaît quand même comme un
+     * override réel une fois la superclasse patchée par bytecode (voir
+     * javadoc de classe et historique de session — même motif que partout
+     * ailleurs dans ce module pour les méthodes héritées du vrai jeu).
+     *
+     * N'utilise JAMAIS {@code mouseX}/{@code mouseY} passés en paramètre par
+     * Minecraft : cette méthode réelle les fournit dans l'espace "GUI scaled"
+     * (Screen.width/height), alors que TOUT notre système de widgets travaille
+     * en pixels FRAMEBUFFER bruts (voir UiInputPollerModern/Legacy, mêmes
+     * unités que gl_FragCoord) — les deux espaces ne coïncident qu'à un
+     * facteur d'échelle GUI de 1. Utilise {@link #lastInput} à la place
+     * (mêmes coordonnées que le hover/dessin, cohérence garantie).
+     */
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        LauncherLog.info("[LauncherAgent] DIAG-116: mouseClicked() appelé sur " + getClass().getSimpleName()
+            + " button=" + button + " param=(" + mouseX + "," + mouseY + ") lastInput="
+            + (lastInput == null ? "null" : "(" + lastInput.mouseX + "," + lastInput.mouseY + ")")
+            + " widgets=" + widgets.size());
+        return dispatchClick(button);
+    }
+
+    /**
+     * Équivalent 1.21.11+ (Blaze3D) de {@link #mouseClicked(double, double, int)}
+     * ci-dessus — sur cette version, {@code Element.mouseClicked} ne prend
+     * plus {@code (double, double, int)} mais un type record {@code Click}
+     * (voir stub {@code net.minecraft.client.gui.Click}, patché par
+     * ScreenStubPatcher comme {@code Screen}/{@code Component}) : notre
+     * ancienne surcharge ne correspond alors plus à AUCUN override réel côté
+     * JVM (nom+descripteur exacts requis) et reste une méthode inerte — EXACT
+     * même symptôme ("boutons pas cliquables") déjà rencontré et réglé pour
+     * le bracket 1.13-1.16.x, mais cette fois-ci le changement porte sur le
+     * DESCRIPTEUR entier de la méthode, pas juste son nom obfusqué. Ignore le
+     * 2e paramètre ({@code boolean}, "focused"/dispatch interne vanilla —
+     * jamais eu besoin de le lire). Coordonnées : {@link #lastInput} comme
+     * partout ailleurs, pas {@code click.x()}/{@code click.y()} (même espace
+     * "GUI scaled" que l'ancien mouseX/mouseY, voir javadoc ci-dessus).
+     */
+    public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubleClick) {
+        LauncherLog.info("[LauncherAgent] DIAG-E11: mouseClicked(Click) appelé sur " + getClass().getSimpleName()
+            + " button=" + click.button() + " widgets=" + widgets.size());
+        return dispatchClick(click.button());
+    }
+
+    /**
+     * Équivalent 26.1+ de {@link #mouseClicked(net.minecraft.client.gui.Click, boolean)}
+     * ci-dessus — MÊME symptôme ("boutons pas cliquables"), MÊME cause,
+     * nouvelle version : sur 26.1.2, l'interface {@code Element} a été
+     * RENOMMÉE {@code GuiEventListener} (déplacée dans {@code gui.components.
+     * events}) ET son {@code mouseClicked} prend désormais un type record
+     * {@code MouseButtonEvent} (package {@code net.minecraft.client.input},
+     * pas {@code gui}) au lieu de {@code Click} — vérifié par javap sur le
+     * jar client 26.1.2 réel : {@code mouseClicked(MouseButtonEvent, boolean)}.
+     * Coordonnées : {@link #lastInput} comme partout ailleurs (voir javadoc
+     * de {@link #mouseClicked(double, double, int)}), pas {@code event.x()}/
+     * {@code event.y()}.
+     */
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+        LauncherLog.info("[LauncherAgent] DIAG-261: mouseClicked(MouseButtonEvent) appelé sur " + getClass().getSimpleName()
+            + " button=" + event.button() + " widgets=" + widgets.size());
+        return dispatchClick(event.button());
+    }
+
+    private boolean dispatchClick(int button) {
+        if (button != 0 || lastInput == null) return false;
+        List<UiWidget> active = modalWidgets();
+        List<UiWidget> targets = active != null ? active : widgets;
+        UiWidget clicked = null;
+        for (UiWidget w : targets) {
+            if (w.contains(lastInput.mouseX, lastInput.mouseY)) {
+                clicked = w;
+                break;
             }
         }
+        // Perte de focus au clic EXTÉRIEUR — barre de recherche moderne : un
+        // champ texte reste focus indéfiniment sinon (pas de mécanisme
+        // d'exclusivité ailleurs), curseur clignotant en fond même après avoir
+        // cliqué sur un bouton/une carte à côté.
+        for (UiWidget w : targets) {
+            if (w instanceof UiTextField && w != clicked) ((UiTextField) w).setFocused(false);
+        }
+        if (clicked != null) {
+            try {
+                clicked.onClick();
+            } catch (Throwable t) {
+                LauncherLog.err("[UiScreenBase] onClick: " + t);
+            }
+            return true; // un seul widget cliqué, "handled" — pas de double dispatch vanilla derrière
+        }
+        return false;
+    }
+
+    /**
+     * PAS de {@code @Override} — même raison que {@link #mouseClicked(double, double, int)}.
+     * Échap ferme désormais via ce VRAI callback (routé vers l'exact même
+     * {@link #closeTo} que le bouton "Retour"/"Fermer"), et non plus via un
+     * sondage GLFW en parallèle (voir historique de session — un ancien
+     * sondage d'Échap, `escapeKeyPressed`, a été essayé puis retiré pour la
+     * même raison qu'expliquée dans la javadoc de classe : éviter le double
+     * traitement d'une même touche).
+     */
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        LauncherLog.info("[LauncherAgent] DIAG-116: keyPressed() appelé sur " + getClass().getSimpleName() + " keyCode=" + keyCode);
+        return dispatchKeyPressed(keyCode);
+    }
+
+    /**
+     * Équivalent 1.21.11+ de {@link #keyPressed(int, int, int)} — même
+     * raison que {@link #mouseClicked(net.minecraft.client.gui.Click, boolean)} :
+     * {@code Element.keyPressed} prend désormais un type record
+     * {@code KeyInput} (stub {@code net.minecraft.client.input.KeyInput}).
+     */
+    public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
+        LauncherLog.info("[LauncherAgent] DIAG-E11: keyPressed(KeyInput) appelé sur " + getClass().getSimpleName() + " key=" + input.key());
+        return dispatchKeyPressed(input.key());
+    }
+
+    /**
+     * Équivalent 26.1+ de {@link #keyPressed(net.minecraft.client.input.KeyInput)}
+     * ci-dessus — même cause que {@link #mouseClicked(net.minecraft.client.input.MouseButtonEvent, boolean)} :
+     * {@code GuiEventListener.keyPressed} prend désormais un type record
+     * {@code KeyEvent} (un seul paramètre) — vérifié par javap sur le jar
+     * client 26.1.2 réel.
+     */
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        LauncherLog.info("[LauncherAgent] DIAG-261: keyPressed(KeyEvent) appelé sur " + getClass().getSimpleName() + " key=" + event.key());
+        return dispatchKeyPressed(event.key());
+    }
+
+    private boolean dispatchKeyPressed(int keyCode) {
+        if (keyCode == 256) { // GLFW_KEY_ESCAPE — constante GLFW publique stable, pas d'obfuscation
+            handleEscape();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Premier Échap = juste retirer le focus d'un champ texte en cours de
+     * saisie (n'importe où sur l'écran), SANS fermer l'écran — comportement
+     * barre de recherche moderne (ex: GitHub) : Échap ne doit pas surprendre
+     * l'utilisateur en train de taper en fermant tout d'un coup. Deuxième
+     * Échap (aucun champ focus) : comportement historique inchangé, ferme
+     * vers {@link #escapeTarget}.
+     */
+    private void handleEscape() {
+        // Modal actif (voir modalWidgets()) : Échap le ferme, RIEN d'autre —
+        // ne doit ni faire perdre le focus d'un champ de l'écran DERRIÈRE le
+        // modal (inaccessible tant qu'il est ouvert) ni fermer l'écran entier
+        // d'un coup (surprise pour l'utilisateur qui voulait juste fermer le
+        // tiroir de filtres).
+        if (modalWidgets() != null) {
+            onModalEscape();
+            return;
+        }
+        for (UiWidget w : widgets) {
+            if (w instanceof UiTextField && ((UiTextField) w).focused()) {
+                ((UiTextField) w).setFocused(false);
+                return;
+            }
+        }
+        closeTo(escapeTarget);
+    }
+
+    /** Appelé par Échap quand {@link #modalWidgets()} est actif — la sous-classe ferme SON modal ici (voir ModrinthContentScreen.toggleFilters). No-op par défaut. */
+    protected void onModalEscape() {}
+
+    /**
+     * Équivalent 1.8.9 (LWJGL2/pré-refonte-Element) de {@link #mouseClicked}
+     * ci-dessus — signature RÉELLE historique de {@code GuiScreen} (int, pas
+     * double ; pas de valeur de retour ; jamais renommée depuis, mappings MCP
+     * publics stables). Coexiste sans conflit avec la version "moderne" :
+     * chaque version n'active RÉELLEMENT que celle dont la signature
+     * correspond à son vrai Screen (l'autre reste une méthode inerte, jamais
+     * appelée par le jeu). Voir javadoc de {@link #mouseClicked} pour pourquoi
+     * on ignore les coordonnées passées en paramètre au profit de
+     * {@link #lastInput}.
+     */
+    public void mouseClicked(int mouseX, int mouseY, int mouseButton) {
+        dispatchClick(mouseButton);
+    }
+
+    /** Équivalent 1.8.9 de {@link #keyPressed} — GuiScreen.keyTyped(char,int), keyCode 1 = Keyboard.KEY_ESCAPE (LWJGL2). */
+    public void keyTyped(char typedChar, int keyCode) {
+        if (keyCode == 1) handleEscape();
     }
 
     @Override
@@ -180,6 +415,15 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * réellement, juste après avoir appelé uiDraw() cette frame.
      */
     protected void closeTo(Object lastScreen) {
+        // Filet de sécurité : si un champ de texte était encore focus au
+        // moment de la fermeture (ex: clic sur "Retour" en pleine frappe,
+        // sans passer par Échap qui, lui, retire déjà le focus le premier
+        // coup — voir handleEscape), UiInputPoller.textInputActive resterait
+        // sinon bloqué à true pour toute la session, et le callback caractère
+        // GLFW continuerait à bufferiser les touches tapées en jeu (voir sa
+        // javadoc) — remis à false ICI, inconditionnellement, à CHAQUE
+        // fermeture d'écran custom, quel que soit l'état de focus au moment.
+        UiInputPoller.textInputActive = false;
         navigationTarget = lastScreen;
         navigationRequested = true;
     }
@@ -192,4 +436,5 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         navigationRequested = false;
         return navigationTarget;
     }
+
 }

@@ -86,6 +86,13 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
     @Override public ITransformerProvider getTransformerProvider() { return null; }
     @Override public IClassTracker getClassTracker()        { return null; }
     @Override public IMixinAuditTrail getAuditTrail()       { return null; }
+    // BUG DE COMPILATION CORRIGE (mise à jour mixin.jar vers le fork Fabric,
+    // compat Java 25 — voir build.bat) : IMixinService a gagné ces deux
+    // méthodes dans une version plus récente de Sponge Mixin — mêmes
+    // fonctionnalités avancées optionnelles que getClassTracker/getAuditTrail
+    // ci-dessus, jamais utilisées par ce service standalone minimal.
+    @Override public IFeatureValidator getFeatureValidator() { return null; }
+    @Override public IAdviceProvider getAdviceProvider()     { return null; }
 
     @Override
     public Collection<String> getPlatformAgents() { return Collections.emptyList(); }
@@ -143,13 +150,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/TitleScreenMixin",
             "net/minecraft/client/gui/screen/TitleScreen",
             "init", "()V", "net/minecraft/client/gui/screen/Screen"),
-        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/PackScreenMixin",
-            "net/minecraft/client/gui/screen/pack/PackScreen",
-            "init", "()V", "net/minecraft/client/gui/screen/Screen"),
-        // initWidgets() déclaré directement sur GameMenuScreen — pas de repli.
-        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GameMenuScreenMixin",
-            "net/minecraft/client/gui/screen/GameMenuScreen",
-            "initWidgets", "()V", null),
         // "<init>" n'a jamais de nom à traduire, mais le descripteur contient des
         // types Yarn named (Screen, GameOptions) → traduits en official+intermediary
         // par runtimeDesc() via la lookup Yarn.
@@ -159,10 +159,24 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/client/gui/screen/Screen;Lnet/minecraft/client/option/GameOptions;)V",
             null),
         // render() déclaré directement sur GameRenderer — pas de repli. Point
-        // d'accroche global du moteur UI custom, voir GlobalUiRenderMixin.
+        // d'accroche de la LOGIQUE du moteur UI custom (input/tick/ouverture
+        // du menu), voir GlobalUiRenderMixin. Le DESSIN, lui, est sur
+        // Framebuffer.blitToScreen() — voir GlobalUiPresentMixin juste après
+        // (era E, bug de composition Blaze3D, voir javadoc des deux classes).
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiRenderMixin",
             "net/minecraft/client/render/GameRenderer",
             "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+        // blitToScreen() déclaré directement sur Framebuffer — pas de repli.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GlobalUiPresentMixin",
+            "net/minecraft/client/gl/Framebuffer",
+            "blitToScreen", "()V", null),
+        // InGameHud.renderCrosshair(DrawContext, RenderTickCounter) — voir
+        // CrosshairMixin, même signature que le bracket 1.21.4
+        // (MixinCrosshair1214), vérifiée indépendamment dans
+        // mappings/yarn-1.21.11-mergedv2.jar (cache local).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CrosshairMixin",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
 
         // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
         // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.
@@ -176,6 +190,67 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/GlobalUiRenderMixin189",
             "net/minecraft/client/render/GameRenderer",
             "render", "(FJ)V", null),
+
+        // ── Branche 1.13-1.16.x (mixin.client.v1_16.*) — bracket "B" : LWJGL3/
+        // GLFW comme le pipeline moderne, mais dessin encore possible en
+        // immédiat (GL en dessous du Core Profile 3.2 imposé depuis la 1.17).
+        // render(FJZ)V — 3 paramètres primitifs, signature partagée avec
+        // 1.17-1.20.4 (voir doc Yarn), DIFFÉRENTE de la 1.8.9 (FJ)V (pas de
+        // booléen "tick") et de la 1.21.11 (RenderTickCounter au lieu de F,J).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/GlobalUiRenderMixin116",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(FJZ)V", null),
+        // tick() déclaré directement sur MinecraftClient — pas de repli. Voir
+        // GlobalTickMixin116 pour le pourquoi (ouverture/fermeture de Screen
+        // déplacée ici depuis le render-tail, comme un vrai mod Fabric).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/GlobalTickMixin116",
+            "net/minecraft/client/MinecraftClient",
+            "tick", "()V", null),
+        // InGameHud.renderCrosshair(MatrixStack) — déclaré directement, pas de repli.
+        // Voir MixinCrosshair116 (audit modules — crosshair vanilla jamais masqué sur ce bracket).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/MixinCrosshair116",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/util/math/MatrixStack;)V", null),
+        // MixinWorldTime116 RETIRÉ (voir historique de session) : ciblait
+        // net.minecraft.world.LunarWorldView, une INTERFACE — Sponge Mixin
+        // 0.8.7 rejette @Inject sur une interface (InvalidMixinException:
+        // "@Mixin target type mismatch ... is an interface"), a fait planter
+        // TOUTE la config Mixin en cascade (jeu arrêté). Nécessite une autre
+        // approche (cibler une classe concrète qui APPELLE getSkyAngle, pas
+        // l'interface elle-même) — non résolu pour l'instant.
+
+        // ── Branche 1.17-1.20.4 (mixin.client.v1_20_4.*) — bracket "C" : Core
+        // Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé), mais
+        // render(FJZ)V/tick()V gardent la même signature que le bracket "B"
+        // (1.16.5) — voir VersionBracketRegistry.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/GlobalUiRenderMixin1204",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(FJZ)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/GlobalTickMixin1204",
+            "net/minecraft/client/MinecraftClient",
+            "tick", "()V", null),
+        // InGameHud.renderCrosshair(DrawContext) — DIFFÉRENT de 1.16.5
+        // (MatrixStack) : voir MixinCrosshair1204 pour le détail vérifié via
+        // mappings/yarn-1.20.4-mergedv2.jar.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/MixinCrosshair1204",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;)V", null),
+
+        // ── Branche ~1.21-1.21.5 (mixin.client.v1_21_4.*) — bracket "D" :
+        // même profil GL Core que "C", mais render(RenderTickCounter,Z)V
+        // (RenderTickCounter introduit entre la 1.20.4 et la 1.21) — voir
+        // VersionBracketRegistry.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/GlobalUiRenderMixin1214",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/GlobalTickMixin1214",
+            "net/minecraft/client/MinecraftClient",
+            "tick", "()V", null),
+        // InGameHud.renderCrosshair(DrawContext, RenderTickCounter) — un
+        // paramètre de plus que 1.20.4, voir MixinCrosshair1214.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MixinCrosshair1214",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
     };
 
     /**

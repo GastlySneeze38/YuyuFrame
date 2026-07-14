@@ -294,6 +294,27 @@ fn transform_for_local_clients(json: &str) -> String {
 
 // ── Yarn Mappings (Fabric) ────────────────────────────────────────────────────
 
+/// Vrai pour toute version Minecraft à partir de la ligne 26.1.x — Mojang a
+/// arrêté de publier des mappings d'obfuscation pour ce nouveau schéma de
+/// version (confirmé absent du manifeste officiel — pas de clé
+/// "client_mappings"/"server_mappings" — ET de Yarn/Quilt/intermediary
+/// Fabric, voir FabricMC/fabric-loom#1585 et le guide de portage officiel
+/// https://docs.fabricmc.net/develop/porting/ : "The 26.1 version of
+/// Minecraft is unobfuscated"). Appeler `ensure_yarn_mappings` pour une
+/// telle version échoue TOUJOURS (aucun jar Yarn n'existe nulle part à
+/// télécharger) — les appelants doivent court-circuiter cet appel entièrement
+/// plutôt que de le laisser échouer, voir `launcher.rs`.
+///
+/// Heuristique : toute version qui ne commence PAS par "1." (l'ancien schéma
+/// va de 1.0 à 1.21.11 inclus, dernière version encore obfusquée confirmée).
+/// Ne couvre PAS d'éventuels codenames de snapshot antérieurs au changement
+/// de schéma (ex: "24w14a") qui ne commenceraient pas non plus par "1." —
+/// non rencontré en pratique à ce jour, la bascule complète vers le nouveau
+/// schéma de nommage ("26.1", "26.2"...) semble s'être faite d'un coup.
+pub fn is_unobfuscated_version(version: &str) -> bool {
+    !version.starts_with("1.")
+}
+
 /// Télécharge (si absent) et retourne le chemin vers le JAR Yarn mergedv2.
 /// Essaie la version MC exacte, puis des variantes simplifiées en fallback.
 pub async fn ensure_yarn_mappings(

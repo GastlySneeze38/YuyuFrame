@@ -47,8 +47,17 @@ public final class ContentBridge {
 
     // ── Fonctions JNI — implémentées dans content-core/src/jni/content.rs ────
 
-    /** Recherche Modrinth (resource packs). Retourne le JSON brut, parsé côté Java. */
-    public static native String searchModrinth(String query, String projectType);
+    /**
+     * Recherche Modrinth (resource packs/shaders). Retourne le JSON brut,
+     * parsé côté Java (voir ModrinthJson).
+     *
+     * @param categoriesCsv catégories sélectionnées, jointes par des virgules
+     *                      (ET entre elles côté Rust — voir search_modrinth) —
+     *                      chaîne vide = aucun filtre de catégorie.
+     * @param version       version Minecraft à filtrer (ex: "1.21.11") — vide = toutes versions.
+     * @param sort          index de tri Modrinth ("downloads"/"newest"/"updated"/"follows") — vide = défaut (pertinence/popularité).
+     */
+    public static native String searchModrinth(String query, String projectType, String categoriesCsv, String version, String sort);
 
     /**
      * Résout le fichier de la dernière version d'un projet Modrinth.
@@ -56,6 +65,31 @@ public final class ContentBridge {
      */
     public static native String getLatestFile(String projectId);
 
+    /**
+     * Détail complet d'un projet Modrinth — voir
+     * {@code ModrinthProjectDetailScreen} : contient notamment {@code body}
+     * (description longue, markdown) et {@code gallery} (captures d'écran),
+     * qu'AUCUN autre appel ici ne renvoie. JSON brut, parsé côté Java (voir
+     * ModrinthJson).
+     */
+    public static native String getProject(String projectId);
+
     /** Télécharge un fichier vers destPath. */
     public static native boolean downloadFile(String url, String destPath);
+
+    /**
+     * Charge une image depuis N'IMPORTE QUELLE URL HTTPS et la décode en
+     * pixels RGBA bruts côté Rust (crate {@code image} — PNG/JPEG/GIF/WebP/
+     * BMP/ICO/TIFF, AUCUNE écriture disque) — voir
+     * {@link com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage},
+     * seul appelant prévu (ne PAS appeler directement depuis un écran, cette
+     * méthode est SYNCHRONE et bloquante sur le réseau — toujours depuis un
+     * thread daemon dédié, jamais le thread de rendu).
+     *
+     * @return {@code byte[8+largeur*hauteur*4]} : 8 octets d'en-tête
+     * (largeur/hauteur, int32 BIG-ENDIAN chacun) puis les pixels RGBA8 bruts
+     * — voir {@code UiRemoteImage.decode()} pour le parsing. Tableau VIDE
+     * (jamais {@code null}) en cas d'échec réseau/décodage/URL non-HTTPS.
+     */
+    public static native byte[] fetchImageRgba(String url);
 }

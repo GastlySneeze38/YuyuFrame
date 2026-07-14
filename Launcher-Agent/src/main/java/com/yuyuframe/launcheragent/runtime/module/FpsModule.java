@@ -29,7 +29,10 @@ public final class FpsModule extends SingleHudModule {
             try {
                 Object mc = McReflect.minecraftClient();
                 if (mc == null) return new String[]{ "-- FPS" };
-                Field fpsField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "currentFps");
+                // 26.1+ : champ RENOMMÉ "currentFps"→"fps" (STATIC désormais,
+                // vérifié par javap sur le jar client 26.1.2 réel) — Field.getInt(Object)
+                // reste valide sur un champ static quel que soit l'objet passé.
+                Field fpsField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "currentFps", "fps");
                 if (fpsField == null) return new String[]{ "-- FPS" };
                 return new String[]{ fpsField.getInt(mc) + " FPS" };
             } catch (Throwable t) {

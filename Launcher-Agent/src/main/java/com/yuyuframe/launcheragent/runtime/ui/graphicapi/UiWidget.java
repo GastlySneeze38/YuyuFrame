@@ -12,6 +12,25 @@ public abstract class UiWidget {
     /** Texte affiché dans une bulle près du curseur au survol — null = pas de tooltip. Voir UiTooltip (ingameui.component). */
     public String tooltip;
 
+    /**
+     * Multiplicateur d'opacité (0..1) appliqué par un conteneur défilant
+     * (voir {@code UiScrollContainer}) pour un widget qui chevauche un bord
+     * du viewport — {@code 1f} par défaut (aucun effet, comportement
+     * inchangé pour tout widget hors scroll). PAS un vrai clip pixel (aucune
+     * primitive de scissor fiable sur le pipeline Blaze3D era E, voir
+     * UiScrollContainer pour le détail) : une carte qui dépasse un bord
+     * s'estompe PROGRESSIVEMENT au lieu d'apparaître/disparaître d'un coup
+     * sec en franchissant la limite — suffisant pour éviter le chevauchement
+     * visuel avec le contenu au-dessus/en-dessous du viewport, sans risquer
+     * de casser le rendu de texte Blaze3D (historiquement très fragile, voir
+     * UiTextBlaze3D) en y ajoutant un vrai scissor GPU. Un widget doit LIRE
+     * ce champ lui-même et l'appliquer à ses propres couleurs (voir
+     * ResultCard.draw() dans ModrinthContentScreen) — ignoré silencieusement
+     * par tout widget qui ne le fait pas (juste le cut-off classique au bord
+     * du viewport, comportement d'avant).
+     */
+    public float clipFade = 1f;
+
     public UiWidget(float x, float y, float w, float h) {
         this.x = x; this.y = y; this.w = w; this.h = h;
     }

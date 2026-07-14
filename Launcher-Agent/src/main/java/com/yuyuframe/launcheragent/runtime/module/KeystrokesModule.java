@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 
@@ -99,11 +100,18 @@ public final class KeystrokesModule extends SingleHudModule {
                 Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
                 if (options == null) return;
 
-                Object forward = optionsField(options, "forwardKey");
-                Object left    = optionsField(options, "leftKey");
-                Object back    = optionsField(options, "backKey");
-                Object right   = optionsField(options, "rightKey");
-                Object jump    = optionsField(options, "jumpKey");
+                // BUG TROUVÉ (audit modules, voir historique de session) :
+                // noms de champ "forwardKey"/"leftKey"/etc. (1.8.9) inversés
+                // en 1.16.5 — "keyForward"/"keyLeft"/etc. Essaie les deux.
+                // 26.1+ : "keyForward"/"keyBack" (Yarn 1.16.5+) sont eux-mêmes
+                // RENOMMÉS "keyUp"/"keyDown" côté Mojang réel (vérifié par javap
+                // sur Options.class du jar client 26.1.2) — "keyLeft"/"keyRight"/
+                // "keyJump" coïncident déjà, aucun repli nécessaire pour ceux-là.
+                Object forward = optionsFieldEither(options, "forwardKey", "keyForward", "keyUp");
+                Object left    = optionsFieldEither(options, "leftKey", "keyLeft", null);
+                Object back    = optionsFieldEither(options, "backKey", "keyBack", "keyDown");
+                Object right   = optionsFieldEither(options, "rightKey", "keyRight", null);
+                Object jump    = optionsFieldEither(options, "jumpKey", "keyJump", null);
 
                 trackClicks();
 
@@ -125,6 +133,17 @@ public final class KeystrokesModule extends SingleHudModule {
                 float wasdX0 = x + (availableW - wasdRowW) / 2f;
                 float cpsX0 = x + (availableW - cpsRowW) / 2f;
 
+                // FIX v402 ANNULÉ (mauvais diagnostic) : à l'époque, le texte
+                // era E souffrait d'un bug d'axe Y (voir UiTextBlaze3D,
+                // ensureProjectionBuffer) qui le faisait apparaître en miroir
+                // par rapport aux rectangles (lesquels utilisent
+                // drawRoundedRect, Y-UP, JAMAIS buggé) — l'ordre visuel
+                // "compteurs en haut, W en bas" observé alors venait du TEXTE
+                // mal positionné, pas des rectangles. Cet ordre-ci (row1 /
+                // avance-W près de y+h = HAUT en Y-up, empilement DESCENDANT
+                // jusqu'aux boîtes CPS près de y = BAS) était déjà correct
+                // depuis le début. Restauré maintenant que le vrai bug (axe Y
+                // du texte) est corrigé.
                 float row1Y = y + h - box;
                 float row2Y = row1Y - gap - box;
 
@@ -145,49 +164,135 @@ public final class KeystrokesModule extends SingleHudModule {
             } catch (Throwable ignored) {}
         }
 
-        private Object optionsField(Object options, String yarnField) {
+        private Object optionsField(Object options, String yarnField, String realFieldFallback) {
             try {
-                return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField).get(options);
+                Field f = realFieldFallback != null
+                    ? McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField, realFieldFallback)
+                    : McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField);
+                return f == null ? null : f.get(options);
             } catch (Throwable t) {
                 return null;
             }
         }
 
+        /**
+         * Essaie {@code oldName} (1.8.9) puis {@code newName} (1.13+, souvent
+         * inchangé jusqu'en 26.1.2 aussi) puis, si fourni, {@code
+         * realFieldFallback} (nom réel Mojang, requis quand 26.1.2 a ENCORE
+         * renommé le champ par rapport au nom Yarn "named" — ex: {@code
+         * keyForward}→{@code keyUp}, {@code keyBack}→{@code keyDown}, vérifiés
+         * par javap sur le jar client 26.1.2 réel).
+         */
+        private Object optionsFieldEither(Object options, String oldName, String newName, String realFieldFallback) {
+            if (com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/GameOptions", oldName)) {
+                Object v = optionsField(options, oldName, null);
+                if (v != null) return v;
+            }
+            return optionsField(options, newName, realFieldFallback);
+        }
+
         private boolean isDown(Object keyBinding) {
             if (keyBinding == null) return false;
             try {
-                return McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed").getBoolean(keyBinding);
+                // 26.1+ : KeyBinding→KeyMapping, champ "pressed"→"isDown" (vérifié javap).
+                return McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed", "isDown").getBoolean(keyBinding);
             } catch (Throwable t) {
                 return false;
             }
         }
 
+        /**
+         * BUG TROUVÉ (audit modules, voir historique de session) : {@code
+         * KeyBinding.code} (int direct) n'existe plus en 1.13+ — remplacé par
+         * {@code KeyBinding.boundKey} (objet {@code InputUtil.Key}, voir
+         * mappings 1.16.5 : champ {@code c I field_1665 code} appartient en
+         * fait à {@code InputUtil.Key}, PAS à {@code KeyBinding} lui-même,
+         * qui n'a que {@code Ldeo$a; f field_1654 boundKey}). Essaie d'abord
+         * l'ancien champ direct (1.8.9, inchangé), sinon lit {@code
+         * boundKey.getCode()}. Nommage : {@code org.lwjgl.input.Keyboard}
+         * (LWJGL2) n'existe pas sous LWJGL3/GLFW — voir
+         * {@code UiInputPollerModern#nameForKeyCode}.
+         */
         private String keyLabel(Object keyBinding) {
             if (keyBinding == null) return "?";
             try {
-                int code = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "code").getInt(keyBinding);
-                if (code < 0) return "M" + (-code - 100);
-                Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
-                Method getKeyName = McReflect.rawMethod(keyboard, "getKeyName", int.class);
-                if (getKeyName == null) return "?";
-                String name = (String) getKeyName.invoke(null, code);
+                Integer directCode = tryGetInt(keyBinding, "code");
+                if (directCode != null) {
+                    int code = directCode;
+                    if (code < 0) return "M" + (-code - 100);
+                    Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
+                    Method getKeyName = McReflect.rawMethod(keyboard, "getKeyName", int.class);
+                    if (getKeyName == null) return "?";
+                    String name = (String) getKeyName.invoke(null, code);
+                    return name == null || name.isEmpty() ? "?" : name;
+                }
+
+                // 26.1+ : champ "boundKey"→"key" (type déplacé vers
+                // com.mojang.blaze3d.platform.InputConstants$Key), méthode
+                // "getCode"→"getValue" (vérifiés par javap — InputConstants$Key
+                // n'a PLUS de getCode() du tout, seulement getValue()).
+                Object boundKey = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "boundKey", "key").get(keyBinding);
+                if (boundKey == null) return "?";
+                Method getCode = McReflect.noArgMethod(boundKey.getClass(), "net/minecraft/client/util/InputUtil$Key", "getCode", "getValue");
+                if (getCode == null) return "?";
+                int code = (int) getCode.invoke(boundKey);
+                String name = com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
                 return name == null || name.isEmpty() ? "?" : name;
             } catch (Throwable t) {
                 return "?";
             }
         }
 
+        /**
+         * {@code null} si le champ n'existe pas du tout (pas juste une
+         * valeur négative) — distingue "pas ce champ" de "valeur -1".
+         * Vérifie D'ABORD que le mapping Yarn existe vraiment (voir
+         * historique de session, même piège que CoordsModule.tryField) :
+         * sinon getObfFieldName retombe sur "code" tel quel, qui peut par
+         * coïncidence matcher un vrai champ obfusqué sans rapport (1-2
+         * lettres, faux positif silencieux).
+         */
+        private Integer tryGetInt(Object keyBinding, String yarnField) {
+            if (!com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/KeyBinding", yarnField)) {
+                return null;
+            }
+            try {
+                java.lang.reflect.Field f = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", yarnField);
+                if (f == null) return null;
+                return f.getInt(keyBinding);
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+
+        /**
+         * BUG TROUVÉ (audit modules) : passait TOUJOURS par {@code
+         * org.lwjgl.input.Mouse} (LWJGL2) — inexistant sous LWJGL3/GLFW
+         * (1.13+), CPS toujours à 0 sur ces versions. Utilise désormais
+         * l'état déjà pollé chaque frame par l'instance {@code
+         * UiInputPollerModern} active (champs {@code leftDown}/{@code
+         * rightDown} de la classe de base {@code UiInputPoller}) quand
+         * disponible, sinon retombe sur LWJGL2 (1.8.9, inchangé).
+         */
         private void trackClicks() {
             try {
-                Class<?> mouse = McReflect.rawClass("org.lwjgl.input.Mouse");
-                Method isButtonDown = McReflect.rawMethod(mouse, "isButtonDown", int.class);
-                if (isButtonDown == null) return;
+                com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern modern =
+                    com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.ACTIVE;
+                boolean leftDown, rightDown;
+                if (modern != null) {
+                    leftDown = modern.leftDown;
+                    rightDown = modern.rightDown;
+                } else {
+                    Class<?> mouse = McReflect.rawClass("org.lwjgl.input.Mouse");
+                    Method isButtonDown = McReflect.rawMethod(mouse, "isButtonDown", int.class);
+                    if (isButtonDown == null) return;
+                    leftDown = (boolean) isButtonDown.invoke(null, 0);
+                    rightDown = (boolean) isButtonDown.invoke(null, 1);
+                }
 
-                boolean leftDown = (boolean) isButtonDown.invoke(null, 0);
                 if (leftDown && !prevLeftDown) leftClicks.addLast(System.currentTimeMillis());
                 prevLeftDown = leftDown;
 
-                boolean rightDown = (boolean) isButtonDown.invoke(null, 1);
                 if (rightDown && !prevRightDown) rightClicks.addLast(System.currentTimeMillis());
                 prevRightDown = rightDown;
             } catch (Throwable ignored) {}
@@ -202,7 +307,9 @@ public final class KeystrokesModule extends SingleHudModule {
         }
 
         private void drawKey(UiRenderer renderer, float x, float y, float w, float h, String label, boolean pressed, float scale, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, 3f, pressed ? PRESSED_BG : IDLE_BG, vpWidth, vpHeight);
+            // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
+            // avec le texte différé d'une frame sur era E — voir sa javadoc.
+            renderer.drawRoundedRectHud(x, y, x + w, y + h, 3f, pressed ? PRESSED_BG : IDLE_BG, vpWidth, vpHeight);
             float textScale = 0.32f * scale;
             float tw = renderer.textWidth(label, textScale);
             UiColor textColor = pressed ? new UiColor(10, 10, 10, 255) : UiTheme.TEXT_PRIMARY;
@@ -211,7 +318,7 @@ public final class KeystrokesModule extends SingleHudModule {
 
         /** Libellé (LMB/RMB) + compteur SUR 2 LIGNES SÉPARÉES — évite tout risque de débordement du texte hors de sa propre boîte. */
         private void drawCpsBox(UiRenderer renderer, float x, float y, float w, float h, String label, int cps, float scale, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, 3f, IDLE_BG, vpWidth, vpHeight);
+            renderer.drawRoundedRectHud(x, y, x + w, y + h, 3f, IDLE_BG, vpWidth, vpHeight);
 
             float labelScale = 0.28f * scale;
             float lw = renderer.textWidth(label, labelScale);

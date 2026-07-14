@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod import;
 pub mod instances;
 pub mod launch;
 pub mod mc;

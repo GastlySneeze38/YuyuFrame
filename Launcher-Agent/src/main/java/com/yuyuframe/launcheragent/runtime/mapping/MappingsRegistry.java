@@ -225,6 +225,56 @@ public final class MappingsRegistry implements IRemapper {
         return entry.officialName;
     }
 
+    /**
+     * Variante par NOM + DESCRIPTEUR OFFICIEL — indispensable dès qu'une
+     * classe a plusieurs méthodes du même nom Yarn (surcharges) — la
+     * résolution par nom seul ci-dessus retombe alors sur UNE des surcharges,
+     * potentiellement la mauvaise. Cas concret trouvé (1.16.5, historique de
+     * session) : {@code MinecraftClient} a DEUX méthodes nommées "setScreen"
+     * (une prenant {@code Screen}, une prenant un autre type) — la résolution
+     * par nom seul est ambiguë ; pire, une résolution par FORME côté appelant
+     * ({@code (Screen):void}) retombe AUSSI sur {@code disconnect(Screen)}
+     * (même forme exacte, méthode complètement différente) selon l'ordre non
+     * garanti de {@code Class.getMethods()} — non déterministe d'une
+     * exécution JVM à l'autre. Le descripteur OFFICIEL (types déjà
+     * obfusqués, ex: {@code "(Ldot;)V"}) lève l'ambiguïté des DEUX côtés à la
+     * fois : plus besoin de deviner par forme après coup.
+     *
+     * @param officialDesc descripteur JVM utilisant les noms de classes DÉJÀ
+     *                      obfusqués (ex: obtenu via {@code
+     *                      nativeClass.getName().replace('.','/')}), PAS les
+     *                      noms Yarn named.
+     */
+    public static String getObfMethodName(String yarnClass, String yarnMethod, String officialDesc) {
+        if (!isLoaded()) return yarnMethod;
+        YarnMappings.MethodEntry entry = YarnMappings.getOfficialMethod(yarnClass, yarnMethod, officialDesc);
+        if (entry == null) return yarnMethod;
+        if (scheme == Scheme.INTERMEDIARY) {
+            String officialOwner = YarnMappings.getOfficialClass(yarnClass);
+            if (officialOwner != null) {
+                String inter = YarnMappings.getIntermediaryMethod(officialOwner, entry.officialName, entry.officialDesc);
+                if (inter != null) return inter;
+            }
+        }
+        return entry.officialName;
+    }
+
+    /**
+     * {@code true} SEULEMENT si ce champ Yarn named existe réellement dans
+     * les mappings chargées pour cette classe — PAS une simple absence
+     * d'exception. Indispensable avant de tenter une résolution "ancien
+     * chemin vs nouveau chemin" (voir historique de session, audit modules) :
+     * {@link #getObfFieldName} retombe sur le nom Yarn INCHANGÉ quand
+     * l'entrée est introuvable — un appelant qui utilise ensuite ce nom tel
+     * quel en réflexion brute peut retomber, PAR COÏNCIDENCE, sur un VRAI
+     * champ obfusqué portant ce même nom court (1-2 lettres, très probable
+     * vu l'alphabet réduit des noms obfusqués) — un faux positif silencieux,
+     * pas juste un échec propre.
+     */
+    public static boolean hasFieldMapping(String yarnClass, String yarnField) {
+        return isLoaded() && YarnMappings.getOfficialField(yarnClass, yarnField) != null;
+    }
+
     public static String getObfFieldName(String yarnClass, String yarnField) {
         if (!isLoaded()) return yarnField;
         YarnMappings.FieldEntry entry = YarnMappings.getOfficialField(yarnClass, yarnField);

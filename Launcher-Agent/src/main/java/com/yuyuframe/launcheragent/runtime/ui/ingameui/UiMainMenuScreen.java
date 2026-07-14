@@ -64,6 +64,7 @@ public class UiMainMenuScreen extends UiScreenBase {
     public UiMainMenuScreen(Object lastScreen) {
         super("YuyuFrame");
         this.lastScreen = lastScreen;
+        this.escapeTarget = lastScreen;
     }
 
     @Override
@@ -189,7 +190,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         if (searchField == null) {
             // Recréé la grille (pas tout l'écran) à chaque frappe — même
             // instance de champ conservée, voir javadoc de la classe.
-            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll());
+            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll()).searchIcon();
         }
         searchField.x = contentX;
         searchField.y = screenHeight - UiTheme.scaled(64f) - SEARCH_H;
@@ -209,13 +210,17 @@ public class UiMainMenuScreen extends UiScreenBase {
         // (pas un effet continu à activer/désactiver, juste un outil ponctuel,
         // voir ActionCard). Seul autre précédent d'une action hors toggle :
         // "Modifier le HUD" dans la sidebar, câblé en dur de la même façon.
-        // Ouvre ModrinthResourcePackScreen (notre propre pipeline graphique,
+        // Ouvre ModrinthContentScreen (notre propre pipeline graphique,
         // version-générique) — PAS l'ancien screen.ResourcePackSearchScreen
         // (compile contre les stubs vanilla + ScreenHelper, cassé sur 1.8.9,
-        // voir la javadoc de ModrinthResourcePackScreen pour le détail).
-        ActionCard resourcePacks = new ActionCard("Resource Packs (Modrinth)", "Rechercher et installer un resource pack",
-            () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthResourcePackScreen(UiMainMenuScreen.this)));
-        if (filter.isEmpty() || resourcePacks.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(resourcePacks);
+        // voir sa javadoc pour le détail). UNE SEULE carte pour resource packs
+        // ET shaders (avant : deux cartes séparées) — l'écran s'ouvre sur
+        // l'onglet Resource Packs, l'onglet Shaders y est proposé EN PLUS
+        // (gating ShaderLoaderDetector appliqué DANS l'écran, voir
+        // ModrinthContentScreen.buildLayout, pas ici).
+        ActionCard modrinthCard = new ActionCard("Modrinth (Resource Packs & Shaders)", "Rechercher et installer un resource pack ou un shader pack",
+            () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthContentScreen(UiMainMenuScreen.this)));
+        if (filter.isEmpty() || modrinthCard.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(modrinthCard);
         for (ModuleGroup g : ModuleRegistry.groups()) {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
         }

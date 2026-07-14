@@ -42,6 +42,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let db_path = if cfg!(dev) {
                 // Dev : garde la DB dans Backend/ à côté du code source
@@ -102,6 +103,7 @@ pub fn run() {
                 session: mc_session,
                 download_progress: None,
                 running_instances: std::collections::HashSet::new(),
+                launch_cancel: std::collections::HashMap::new(),
                 auth_device_code: None,
             }));
 
@@ -140,6 +142,7 @@ pub fn run() {
             commands::mc::mc_delete,
             commands::versions::list_versions,
             commands::launch::launch_game,
+            commands::launch::cancel_launch,
             commands::launch::reload_agent,
             commands::launch::console_ready,
             commands::mods::mods_list,
@@ -149,6 +152,9 @@ pub fn run() {
             commands::mods::mods_upload,
             commands::mods::mod_icon,
             commands::mods::mods_check_update_safety,
+            commands::import::import_scan_folder,
+            commands::import::import_apply,
+            commands::import::mods_import_paths,
             commands::modpack::modpack_fetch_index,
             commands::modpack::modpack_install,
             commands::modpack::modpack_remove,
