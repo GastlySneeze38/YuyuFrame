@@ -401,7 +401,7 @@ public final class McReflect {
     public static double simpleOptionGetValue(Object simpleOption) throws Exception {
         if (cachedSimpleOptionGetValue == null) {
             cachedSimpleOptionGetValue = noArgMethod(simpleOption.getClass(),
-                "net/minecraft/client/option/SimpleOption", "getValue");
+                "net/minecraft/client/option/SimpleOption", "getValue", "get");
         }
         return ((Number) cachedSimpleOptionGetValue.invoke(simpleOption)).doubleValue();
     }
@@ -429,7 +429,7 @@ public final class McReflect {
     public static void simpleOptionSetValue(Object simpleOption, double value) throws Exception {
         if (cachedSimpleOptionGetValue == null) {
             cachedSimpleOptionGetValue = noArgMethod(simpleOption.getClass(),
-                "net/minecraft/client/option/SimpleOption", "getValue");
+                "net/minecraft/client/option/SimpleOption", "getValue", "get");
         }
         if (cachedSimpleOptionValueField == null) {
             cachedSimpleOptionValueField = field(simpleOption.getClass(),
