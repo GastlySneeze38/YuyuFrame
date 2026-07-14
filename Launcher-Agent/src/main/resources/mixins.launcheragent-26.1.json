@@ -15,7 +15,6 @@
     "client.v26_1.CrosshairMixin261",
     "client.v26_1.GuiFlushMixin261",
     "client.v26_1.ClearOverlaysMixin261",
-    "client.v26_1.NoConfusionOverlayMixin261",
     "client.v26_1.WaterFogEnvironmentMixin261",
     "client.v26_1.LavaFogEnvironmentMixin261",
     "client.v26_1.PowderedSnowFogEnvironmentMixin261"

@@ -641,6 +641,40 @@ public final class UiTextBlaze3D {
     private static Object vertexBuffer;
     private static long vertexBufferCapacity;
 
+    // ── Buffer de sommets CÔTÉ CPU (staging) PERSISTANT — même esprit que
+    // ensureVertexBuffer juste en dessous (côté GPU), pour le buffer côté
+    // CPU qu'on remplit AVANT de l'y copier. AUDIT PERF (demandé
+    // explicitement par l'utilisateur, "gratter des fps 26.1.2") :
+    // ByteBuffer.allocateDirect(...) était appelé À CHAQUE drawText/drawRect/
+    // drawIcon/drawGradientRect — CHAQUE chaîne de texte ET CHAQUE rectangle
+    // dessinés CHAQUE FRAME (tout le HUD, même menu fermé) allouaient un
+    // NOUVEAU buffer direct (mémoire native hors-tas, PAS un objet Java
+    // ordinaire) — pas aussi grave que le bug déjà corrigé plus haut (VBO GPU
+    // recréé/détruit à chaque appel, 12 FPS constatés), mais même famille de
+    // problème à plus petite échelle : de l'ordre de 10-30+ allocations
+    // natives par frame rien que pour le HUD (une par ligne de texte, une par
+    // fond de panneau...), strictement inutiles puisque le contenu est
+    // entièrement RÉÉCRIT (jamais lu entre deux appels) et la taille needed
+    // ne dépasse quasiment jamais celle de l'appel précédent. Un seul buffer
+    // direct partagé, agrandi seulement quand nécessaire (jamais réduit,
+    // jamais libéré entre deux appels), vidé (clear()) avant chaque
+    // réécriture — élimine ces allocations sans changer le contenu écrit.
+    private static ByteBuffer stagingBuffer;
+    private static int stagingBufferCapacity;
+
+    private static ByteBuffer ensureStagingBuffer(int neededBytes) {
+        if (stagingBuffer != null && neededBytes <= stagingBufferCapacity) {
+            stagingBuffer.clear();
+            return stagingBuffer;
+        }
+        // Même croissance généreuse (x2 + marge) que ensureVertexBuffer —
+        // évite de réallouer à chaque légère variation de longueur de texte.
+        int newCapacity = Math.max(4096, Math.max(neededBytes, stagingBufferCapacity * 2));
+        stagingBuffer = ByteBuffer.allocateDirect(newCapacity).order(java.nio.ByteOrder.nativeOrder());
+        stagingBufferCapacity = newCapacity;
+        return stagingBuffer;
+    }
+
     private static Object ensureVertexBuffer(Object device, int neededBytes) throws Exception {
         if (vertexBuffer != null && neededBytes <= vertexBufferCapacity) return vertexBuffer;
         if (vertexBuffer != null) {
@@ -884,7 +918,7 @@ public final class UiTextBlaze3D {
             // texelFetch hors-limites → vertexColor totalement transparent).
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ByteBuffer.allocateDirect(text.length() * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(text.length() * 4 * 28);
             int vertexCount = 0;
             for (int i = 0; i < text.length(); i++) {
                 UiFont.Glyph g = font.glyph(text.charAt(i));
@@ -1100,7 +1134,7 @@ public final class UiTextBlaze3D {
             int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator, comme le texte
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ByteBuffer.allocateDirect(9 * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
             int vertexCount;
             if (r < 0.5f) {
                 putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
@@ -1219,7 +1253,7 @@ public final class UiTextBlaze3D {
 
             int rgba = 0xFFFFFFFF;
             short light0 = 0, light1 = 0;
-            ByteBuffer verts = ByteBuffer.allocateDirect(4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
             // UV pleine image (0,0)-(1,1) — même correspondance top/bottom↔v0/v1
             // que le texte (yTop↔v0 haut de l'image, yBottom↔v1 bas), voir
             // putVertexPCTL/putRectQuad pour la convention Y-UP déjà établie.
@@ -1325,7 +1359,7 @@ public final class UiTextBlaze3D {
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ByteBuffer.allocateDirect(9 * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
             int vertexCount;
             if (r < 0.5f) {
                 putSolidQuadGradient(verts, x0, x1, y0, y1, colorBottom, colorTop, y0, y1, light0, light1);

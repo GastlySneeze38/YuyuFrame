@@ -15,7 +15,6 @@ import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
 import com.yuyuframe.launcheragent.runtime.module.MumbleLinkModule;
 import com.yuyuframe.launcheragent.runtime.module.NoDarknessModule;
 import com.yuyuframe.launcheragent.runtime.module.NoFogModule;
-import com.yuyuframe.launcheragent.runtime.module.NoMotionBlurModule;
 import com.yuyuframe.launcheragent.runtime.module.NoPumpkinOverlayModule;
 import com.yuyuframe.launcheragent.runtime.module.OldBowModule;
 import com.yuyuframe.launcheragent.runtime.module.OldConsumeModule;
@@ -156,7 +155,6 @@ public final class ModuleRegistry {
         if (IS_26_1) {
             register(new NoPumpkinOverlayModule());
             register(new ClearVisionModule());
-            register(new NoMotionBlurModule());
         }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
@@ -217,9 +215,9 @@ public final class ModuleRegistry {
         // cassée dans l'UI).
         List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
             get("saturation"), get("no-darkness"), get("no-fog"),
-            get("no-pumpkin-overlay"), get("clear-vision"), get("no-motion-blur"));
+            get("no-pumpkin-overlay"), get("clear-vision"));
         if (!comfortMembers.isEmpty()) {
-            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire, Flou", comfortMembers));
+            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire", comfortMembers));
         }
         // Groupe entièrement exclu sur 1.16.5 (les 7 membres y sont tous
         // exclus, voir IS_1_16) — pas de carte vide affichée dans ce cas.

@@ -102,7 +102,7 @@ public abstract class GlobalUiRenderMixin116 {
 
             if (!(currentScreen instanceof UiDrawable)) {
                 HudOverlayRenderer.renderPersistent(
-                    UiRenderer.get(this.getClass().getClassLoader()), inputPoller.fbWidth, inputPoller.fbHeight);
+                    UiRenderer.get(this.getClass().getClassLoader()), currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
             UiDrawable ui = (UiDrawable) currentScreen;

@@ -68,7 +68,7 @@ public abstract class GlobalUiPresentMixin261 {
             }
 
             if (!(currentScreen instanceof UiDrawable)) {
-                HudOverlayRenderer.renderPersistent(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
 

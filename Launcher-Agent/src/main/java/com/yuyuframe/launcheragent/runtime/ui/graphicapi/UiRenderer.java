@@ -1539,6 +1539,23 @@ public final class UiRenderer {
      */
     private static boolean modernItemIconWarned = false;
 
+    // AUDIT PERF (demandé explicitement par l'utilisateur, "gratter des fps
+    // 26.1.2") : guiScale() fait 2 invocations de réflexion (getWindow +
+    // getScaledWidth) — appelé plusieurs fois PAR FRAME (ArmorDurabilityModule
+    // style "Vanilla" : une fois pour drawVanillaHotbarRow, puis une fois DE
+    // PLUS par icône dans drawVanillaItemIconModern*, jusqu'à 5x/frame pour ce
+    // seul module). La valeur ne dépend QUE de vpWidth ET du réglage "GUI
+    // Scale" vanilla — quasi-constante frame à frame (change seulement au
+    // resize de fenêtre ou changement du réglage, pas en continu) : cache
+    // court (200ms) plutôt qu'un cache infini keyed sur vpWidth seul — un
+    // changement du réglage "GUI Scale" SANS resize de fenêtre (vpWidth
+    // inchangé) doit rester détecté, juste avec un délai borné au lieu
+    // d'être invisible indéfiniment.
+    private static float cachedGuiScale = 1f;
+    private static int cachedGuiScaleVpWidth = -1;
+    private static long cachedGuiScaleAtNanos;
+    private static final long GUI_SCALE_CACHE_NANOS = 200_000_000L; // 200 ms
+
     /**
      * Ratio pixels FRAMEBUFFER / pixels GUI-SCALED de vanilla (voir "GUI
      * Scale" dans les options vidéo) — même calcul que celui dupliqué en
@@ -1551,12 +1568,19 @@ public final class UiRenderer {
      * {@code framebufferPx / guiScale(vpWidth)}.
      */
     public static float guiScale(int vpWidth) {
+        long now = System.nanoTime();
+        if (vpWidth == cachedGuiScaleVpWidth && (now - cachedGuiScaleAtNanos) < GUI_SCALE_CACHE_NANOS) {
+            return cachedGuiScale;
+        }
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return 1f;
             Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow", "getWindow").invoke(mc);
             int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth", "getGuiScaledWidth").invoke(window);
-            return scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            cachedGuiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            cachedGuiScaleVpWidth = vpWidth;
+            cachedGuiScaleAtNanos = now;
+            return cachedGuiScale;
         } catch (Throwable t) {
             return 1f;
         }
@@ -1773,17 +1797,32 @@ public final class UiRenderer {
     private static Method drawItemMethodModern;
     /** Résolu UNE FOIS dans le même bloc que drawContextCtorModern (voir plus bas) — reste {@code null} pour de bon si introuvable (1.20.4 : pas de drawItemBar dans ses mappings Yarn), voir drawVanillaItemIcon(withDurabilityBar). */
     private static Method drawItemBarMethodModern;
-    // Fond de case VANILLA — sprite réel container/slot.png (18x18, confirmé
-    // présent tel quel dans le jar 26.1.2 réel ET listé dans les assets
-    // vanilla depuis la 1.20 modulaire des sprites GUI), pas une case
-    // recréée. Recherché sur GitHub à la demande explicite de l'utilisateur
-    // (mods de référence consultés : aucun n'expose de fond de case isolé
-    // réutilisable en Java — la texture EST la source, trouvée directement
-    // via le wiki Minecraft "GUI textures" § Slot puis confirmée présente
-    // dans le vrai jar 26.1.2). Dessiné via
-    // DrawContext.drawGuiTexture(RenderPipeline,Identifier,x,y,w,h)V (Yarn
-    // 1.21.11, method_52706) / GuiGraphicsExtractor.blitSprite (vrai nom
-    // 26.1.2, même descripteur) — DISPONIBLE UNIQUEMENT sur les brackets
+    // Fond de case VANILLA — sprite réel "hud/hotbar_offhand_left.png"
+    // (29x24, confirmé présent tel quel dans le jar 26.1.2 réel), PAS une
+    // case recréée. Recherché sur GitHub à la demande explicite de
+    // l'utilisateur (mods de référence consultés : aucun n'expose de fond de
+    // case isolé réutilisable en Java). PREMIER essai avec
+    // "container/slot.png" (18x18) — ABANDONNÉ : présent dans le jar et
+    // référencé par AbstractContainerScreen (donc pas un fichier mort), mais
+    // test utilisateur avec un vrai resource pack (custom UI) confirmé sans
+    // effet visuel — la plupart des resource packs de type "clean UI" ne
+    // personnalisent QUE les sprites de la famille "hud/hotbar_*" (déjà
+    // utilisés nativement pour LA VRAIE case de main secondaire à côté de la
+    // hotbar, exactement le même contexte visuel que nos cases d'armure), pas
+    // "container/slot.png" (utilisé seulement dans certains écrans
+    // d'inventaire spécifiques). Décodage manuel du PNG réel (RGBA8, pas de
+    // lib PIL disponible dans l'environnement — parseur zlib+filtres de
+    // scanline écrit à la main) : case visible = coin arrondi occupant grosso
+    // modo x=[0,22] y=[1,23] du canvas 29x24 (le reste, x>22, est
+    // transparent — laissé tel quel, PAS recadré, pour rester au plus près
+    // du sprite vanilla réel), zone intérieure (alpha faible/dégradé,
+    // destinée à l'icône) = EXACTEMENT 16x16 à l'offset (3,4) depuis le
+    // coin haut-gauche du sprite — coïncide pile avec la taille native
+    // 16x16 de nos icônes, aucune supposition nécessaire.
+    //
+    // Dessiné via DrawContext.drawGuiTexture(RenderPipeline,Identifier,x,y,w,h)V
+    // (Yarn 1.21.11, method_52706) / GuiGraphicsExtractor.blitSprite (vrai
+    // nom 26.1.2, même descripteur) — DISPONIBLE UNIQUEMENT sur les brackets
     // "Deferred" (1.21.11/26.1.2, voir modernUsesDeferredGuiRenderer) : sur
     // 1.20.4/1.21.4 (chemin Immediate), method_52706 existe MAIS avec un
     // descripteur DIFFÉRENT par bracket (1.20.4 : pas de RenderPipeline du
@@ -1792,6 +1831,11 @@ public final class UiRenderer {
     // intermediary selon la version, vérifié dans les 3 jeux de mappings
     // Yarn correspondants) — non implémenté pour ces deux brackets (barre de
     // durabilité seule pour 1.21.4, ni case ni barre pour 1.20.4).
+    private static final int SLOT_SPRITE_W = 29;
+    private static final int SLOT_SPRITE_H = 24;
+    /** Décalage (icône 16x16 depuis le coin haut-gauche du sprite 29x24) — voir javadoc ci-dessus. */
+    private static final int SLOT_SPRITE_ICON_DX = 3;
+    private static final int SLOT_SPRITE_ICON_DY = 4;
     private static Method drawGuiTextureMethodModern;
     private static Object renderPipelineGuiTexturedModern;
     private static Object slotSpriteIdentifierModern;
@@ -1845,17 +1889,14 @@ public final class UiRenderer {
      */
     private void drawVanillaItemIconModernDeferred(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
         try {
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-
             // DrawContext/GuiGraphicsExtractor attend des coordonnées
             // GUI-SCALED (comme tout le rendu vanilla), PAS les pixels
             // framebuffer bruts que le reste de notre pipeline utilise
             // partout ailleurs — conversion via le ratio framebuffer/
             // scaledWidth de la fenêtre courante, ET flip d'axe Y (voir javadoc).
-            Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow", "getWindow").invoke(mc);
-            int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth", "getGuiScaledWidth").invoke(window);
-            float guiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            // guiScale() met en cache ce ratio en interne (audit perf — voir
+            // sa javadoc) : plus besoin de résoudre mc/window ici nous-mêmes.
+            float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - size) / guiScale);
 
@@ -1901,10 +1942,10 @@ public final class UiRenderer {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
 
-            // Flip d'axe Y — voir javadoc de drawVanillaItemIconModernDeferred (même bug, même correctif).
-            Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow").invoke(mc);
-            int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth").invoke(window);
-            float guiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            // Flip d'axe Y — voir javadoc de drawVanillaItemIconModernDeferred
+            // (même bug, même correctif). guiScale() met en cache ce ratio en
+            // interne (audit perf — voir sa javadoc).
+            float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - size) / guiScale);
 
@@ -2108,11 +2149,12 @@ public final class UiRenderer {
             // taille vanilla plutôt qu'au "size" demandé).
             for (PendingItemIcon icon : batch) {
                 if (icon.vanillaExtras && drawGuiTextureMethodModern != null) {
-                    // Case 18x18 (taille native vanilla), icône 16x16 centrée
-                    // dedans (1px de marge de chaque côté, comme vanilla) —
-                    // AVANT l'icône, sinon elle la recouvrirait.
+                    // Sprite 29x24, icône 16x16 à l'offset (3,4) en son sein
+                    // (voir javadoc du champ) — AVANT l'icône, sinon elle la
+                    // recouvrirait.
                     drawGuiTextureMethodModern.invoke(drawContext, renderPipelineGuiTexturedModern,
-                        slotSpriteIdentifierModern, icon.guiX - 1, icon.guiY - 1, 18, 18);
+                        slotSpriteIdentifierModern, icon.guiX - SLOT_SPRITE_ICON_DX, icon.guiY - SLOT_SPRITE_ICON_DY,
+                        SLOT_SPRITE_W, SLOT_SPRITE_H);
                 }
                 drawItemMethodModern.invoke(drawContext, icon.itemStack, icon.guiX, icon.guiY);
                 if (icon.vanillaExtras && drawItemBarMethodModern != null) {
@@ -2126,9 +2168,9 @@ public final class UiRenderer {
 
     /**
      * Résout drawGuiTexture/blitSprite + le pipeline GUI_TEXTURED + l'Identifier
-     * du sprite "container/slot" (18x18, vrai sprite vanilla — voir javadoc du
-     * champ) — best-effort, ne lève jamais (appelant continue avec le reste
-     * même en cas d'échec ici, juste pas de fond de case).
+     * du sprite "hud/hotbar_offhand_left" (29x24, vrai sprite vanilla — voir
+     * javadoc du champ) — best-effort, ne lève jamais (appelant continue
+     * avec le reste même en cas d'échec ici, juste pas de fond de case).
      */
     private static void resolveSlotSpriteModern(ClassLoader cl, Class<?> drawContextClass) {
         if (drawGuiTextureMethodModern != null || slotSpriteResolveFailed) return;
@@ -2153,7 +2195,7 @@ public final class UiRenderer {
             // chemin, namespace "minecraft" implicite.
             java.lang.reflect.Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
             if (ofVanilla == null) { slotSpriteResolveFailed = true; return; }
-            slotSpriteIdentifierModern = ofVanilla.invoke(null, "container/slot");
+            slotSpriteIdentifierModern = ofVanilla.invoke(null, "hud/hotbar_offhand_left");
 
             // "drawGuiTexture" (Yarn 1.21.11/1.21.4/1.20.4, method_52706) ==
             // "blitSprite" (vrai nom Mojang 26.1.2, confirmé par désassemblage

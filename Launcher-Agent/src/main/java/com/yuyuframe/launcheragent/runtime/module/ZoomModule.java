@@ -10,12 +10,15 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern;
 import java.lang.reflect.Field;
 
 /**
- * Zoom façon OptiFine — touche maintenue réduit temporairement le FOV, relâchée
- * restaure la valeur d'avant. Vanilla 1.8.9 n'a pas de KeyBinding "zoom" dédié
- * (contrairement à sneak/sprint, voir MixinToggleSneak189/MixinToggleSprint189)
- * donc pas de champ GameOptions à rediriger — la touche est pollée directement
- * via org.lwjgl.input.Keyboard (API publique LWJGL2, pas obfusquée), même
- * mécanisme que UiInputPollerLegacy.readMenuKeyDown pour une touche configurable.
+ * Zoom façon Essential Mod — touche maintenue réduit immédiatement le FOV à un
+ * niveau de BASE, PUIS la molette (tant que la touche reste maintenue) zoome
+ * ENCORE PLUS (jamais moins que la base — relâcher la touche est le seul moyen
+ * de dézoomer complètement), relâchée restaure la valeur d'avant. Vanilla
+ * 1.8.9 n'a pas de KeyBinding "zoom" dédié (contrairement à sneak/sprint, voir
+ * MixinToggleSneak189/MixinToggleSprint189) donc pas de champ GameOptions à
+ * rediriger — la touche est pollée directement via org.lwjgl.input.Keyboard
+ * (API publique LWJGL2, pas obfusquée), même mécanisme que
+ * UiInputPollerLegacy.readMenuKeyDown pour une touche configurable.
  *
  * Coopère avec FovModule (voir ModuleRegistry, enregistré JUSTE APRÈS lui pour
  * que tickAll() applique le zoom EN DERNIER) : {@code savedFov} capture la
@@ -29,16 +32,33 @@ public final class ZoomModule extends LauncherModule {
     @ConfigKeybind(name = "Touche de zoom", category = "Réglages")
     public String zoomKey = "C";
 
-    @ConfigSlider(name = "FOV en zoom", category = "Réglages", min = 5f, max = 60f, step = 1f)
+    @ConfigSlider(name = "FOV en zoom (base)", description = "Niveau de zoom appliqué immédiatement à l'appui sur la touche — voir \"FOV en zoom max\" pour la limite atteignable en scrollant.",
+        category = "Réglages", min = 5f, max = 60f, step = 1f)
     public float zoomFov = 20f;
+
+    // Essential-style : scroller PENDANT le zoom va encore plus loin que la
+    // base (jamais en-deçà, voir javadoc de classe) — demandé explicitement
+    // par l'utilisateur. scrollOffsetFov REMIS À ZÉRO à chaque NOUVEL appui
+    // sur la touche (pas conservé d'une session de zoom à l'autre) : plus
+    // simple à comprendre ("toujours pareil au prochain appui") qu'un état
+    // caché qui persiste silencieusement.
+    @ConfigSlider(name = "FOV en zoom max", description = "Limite la plus zoomée atteignable en scrollant pendant le zoom (molette vers le haut = zoome plus).",
+        category = "Réglages", min = 1f, max = 60f, step = 1f)
+    public float zoomFovMin = 5f;
+
+    @ConfigSlider(name = "Pas de zoom (molette)", description = "Variation de FOV par cran de molette pendant le zoom.",
+        category = "Réglages", min = 0.5f, max = 10f, step = 0.5f)
+    public float zoomScrollStep = 2f;
 
     private String cachedKeyName;
     private int cachedKeyCode = -1;
     private boolean zooming;
     private double savedFov = -1;
+    /** >= 0 — combien on a scrollé AU-DELÀ de la base cette session de zoom (voir javadoc de classe). Remis à 0 à chaque nouvel appui. */
+    private double scrollOffsetFov = 0;
 
     public ZoomModule() {
-        super("zoom", "Zoom", "Maintenir une touche réduit temporairement le FOV (façon OptiFine)", false);
+        super("zoom", "Zoom", "Maintenir une touche réduit temporairement le FOV, scroller pendant le zoom pour aller plus loin (façon Essential)", false);
     }
 
     @Override
@@ -52,14 +72,29 @@ public final class ZoomModule extends LauncherModule {
             if (down && !zooming) {
                 zooming = true;
                 savedFov = readFov(fovField, options);
+                scrollOffsetFov = 0;
             } else if (!down && zooming) {
                 zooming = false;
                 writeFov(fovField, options, savedFov);
                 savedFov = -1;
+                scrollOffsetFov = 0;
                 return;
             }
 
-            if (zooming) writeFov(fovField, options, zoomFov);
+            if (zooming) {
+                // Molette vers le haut (delta > 0, convention déjà établie
+                // par UiInputPoller.scrollDelta) = zoome PLUS = FOV plus
+                // petit — scrollOffsetFov reste >= 0, jamais négatif (la
+                // base zoomFov est le plancher "le moins zoomé" tant que la
+                // touche est maintenue, voir javadoc de classe).
+                int scroll = readScrollDelta();
+                if (scroll != 0) {
+                    scrollOffsetFov = Math.max(0, scrollOffsetFov + scroll * zoomScrollStep);
+                }
+                double maxOffset = Math.max(0, zoomFov - zoomFovMin);
+                double effectiveFov = zoomFov - Math.min(scrollOffsetFov, maxOffset);
+                writeFov(fovField, options, effectiveFov);
+            }
         } catch (Throwable t) {
             LauncherLog.err("[ZoomModule] onTick: " + t);
         }
@@ -77,6 +112,29 @@ public final class ZoomModule extends LauncherModule {
         }
         zooming = false;
         savedFov = -1;
+        scrollOffsetFov = 0;
+    }
+
+    /**
+     * Modern : UiInputPollerModern.ACTIVE.scrollDelta (déjà câblé sur le
+     * callback GLFW réel, voir sa javadoc — consommé une fois par frame par
+     * poll(), donc lu ICI directement en champ, pas re-consommé). Legacy
+     * (1.8.9, LWJGL2, pas de UiInputPoller pour ce bracket dans ce module —
+     * voir isZoomKeyDown) : org.lwjgl.input.Mouse.getDWheel(), l'équivalent
+     * LWJGL2 — retourne un delta déjà cru (typiquement multiples de 120 par
+     * cran), divisé pour retomber sur "un cran = un pas" comme le modern.
+     */
+    private int readScrollDelta() {
+        try {
+            UiInputPollerModern modern = UiInputPollerModern.ACTIVE;
+            if (modern != null) return modern.scrollDelta;
+
+            Class<?> mouse = McReflect.rawClass("org.lwjgl.input.Mouse");
+            int raw = (int) McReflect.rawMethod(mouse, "getDWheel").invoke(null);
+            return raw / 120;
+        } catch (Throwable t) {
+            return 0;
+        }
     }
 
     /**
