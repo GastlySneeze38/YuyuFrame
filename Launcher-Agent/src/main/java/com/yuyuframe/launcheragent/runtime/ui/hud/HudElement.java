@@ -64,12 +64,15 @@ public class HudElement {
      * empilement de lignes de texte (grille de touches, pastilles colorées
      * d'effets de potion...) — voir runtime.module.KeystrokesModule/
      * PotionEffectsModule (leur Renderer niché).
-     * {@link HudPanelRenderer} dessine TOUJOURS le panneau de fond (même
-     * style que les éléments texte, pour rester cohérent dans l'éditeur comme
-     * en jeu), PUIS calcule lui-même la marge (padding de base + padding
-     * extra du module, voir {@link HudElement#paddingX}/{@link HudElement#paddingY})
-     * et ne délègue que la zone déjà rétrécie à ce renderer — {@code x/y/w/h}
-     * reçus ici sont donc DÉJÀ la zone de contenu utile, PAS la boîte totale.
+     * {@link HudPanelRenderer} dessine le panneau de fond PUIS calcule
+     * lui-même la marge (padding de base + padding extra du module, voir
+     * {@link HudElement#paddingX}/{@link HudElement#paddingY}) et ne délègue
+     * que la zone déjà rétrécie à ce renderer — {@code x/y/w/h} reçus ici
+     * sont donc DÉJÀ la zone de contenu utile, PAS la boîte totale — SAUF si
+     * {@link #hasContent()} renvoie faux (rien dessiné du tout, ni fond ni
+     * contenu) ou {@link #skipBackground()} renvoie vrai (fond sauté, ce
+     * renderer gère alors LUI-MÊME sa propre position/apparence — voir
+     * ArmorDurabilityModule, style "Vanilla").
      * {@link #naturalSize()} doit donc renvoyer une taille CONTENU SEUL, sans
      * ajouter sa propre marge (le moteur s'en charge, une seule fois, au même
      * endroit pour tous les modules — c'était auparavant dupliqué dans chaque
@@ -83,6 +86,25 @@ public class HudElement {
 
         /** Taille "naturelle" du CONTENU SEUL à scale=1 (sans marge — le moteur l'ajoute), {@code {largeur, hauteur}}. */
         float[] naturalSize();
+
+        /**
+         * Faux = rien à afficher CE frame (ex: aucune pièce d'armure
+         * équipée) — {@link HudPanelRenderer} ne dessine ALORS ni fond ni
+         * contenu, {@link #draw} n'est même pas appelé. Défaut vrai (aucun
+         * changement de comportement pour les renderers existants qui ne
+         * l'implémentent pas).
+         */
+        default boolean hasContent() { return true; }
+
+        /**
+         * Vrai = ce renderer gère ENTIÈREMENT son propre fond/position (voir
+         * ArmorDurabilityModule, style "Vanilla" — case+sprite vanilla à un
+         * endroit fixe, pas la carte HUD générique) — {@link HudPanelRenderer}
+         * saute alors SON PROPRE panneau de fond mais appelle quand même
+         * {@link #draw} normalement (avec le padding générique déjà
+         * soustrait, comme d'habitude). Défaut faux.
+         */
+        default boolean skipBackground() { return false; }
     }
 
     public final String id;

@@ -210,8 +210,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * {@code event.y()}.
      */
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
-        LauncherLog.info("[LauncherAgent] DIAG-261: mouseClicked(MouseButtonEvent) appelé sur " + getClass().getSimpleName()
-            + " button=" + event.button() + " widgets=" + widgets.size());
         return dispatchClick(event.button());
     }
 
@@ -254,7 +252,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * traitement d'une même touche).
      */
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        LauncherLog.info("[LauncherAgent] DIAG-116: keyPressed() appelé sur " + getClass().getSimpleName() + " keyCode=" + keyCode);
         return dispatchKeyPressed(keyCode);
     }
 
@@ -265,7 +262,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * {@code KeyInput} (stub {@code net.minecraft.client.input.KeyInput}).
      */
     public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
-        LauncherLog.info("[LauncherAgent] DIAG-E11: keyPressed(KeyInput) appelé sur " + getClass().getSimpleName() + " key=" + input.key());
         return dispatchKeyPressed(input.key());
     }
 
@@ -277,7 +273,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * client 26.1.2 réel.
      */
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        LauncherLog.info("[LauncherAgent] DIAG-261: keyPressed(KeyEvent) appelé sur " + getClass().getSimpleName() + " key=" + event.key());
         return dispatchKeyPressed(event.key());
     }
 

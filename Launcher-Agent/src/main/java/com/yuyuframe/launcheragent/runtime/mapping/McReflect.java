@@ -311,7 +311,33 @@ public final class McReflect {
                     return m;
                 }
             }
+            Method fromIface = findNoArgInInterfaces(c, methodName);
+            if (fromIface != null) return fromIface;
             c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    /**
+     * Parcourt les interfaces implémentées (récursivement) — indispensable pour
+     * les méthodes {@code default} déclarées sur l'interface mais jamais
+     * redéclarées par la classe concrète (ex: {@code Component.getString()} sur
+     * {@code MutableComponent} en 26.1+, confirmé par javap : {@code
+     * getDeclaredMethods()} ne remonte QUE les superclasses, jamais les
+     * interfaces, donc une résolution qui s'arrêtait à {@code getSuperclass()}
+     * échouait silencieusement — pas d'exception, juste un {@code null} qui
+     * faisait avorter l'appelant sans aucun log).
+     */
+    private static Method findNoArgInInterfaces(Class<?> c, String methodName) {
+        for (Class<?> iface : c.getInterfaces()) {
+            for (Method m : iface.getDeclaredMethods()) {
+                if (m.getName().equals(methodName) && m.getParameterCount() == 0) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+            Method nested = findNoArgInInterfaces(iface, methodName);
+            if (nested != null) return nested;
         }
         return null;
     }
@@ -364,19 +390,38 @@ public final class McReflect {
     private static Method findMethodInHierarchy(Class<?> owner, String methodName, Class<?>[] paramTypes) {
         Class<?> c = owner;
         while (c != null) {
-            for (Method m : c.getDeclaredMethods()) {
-                if (!m.getName().equals(methodName) || m.getParameterCount() != paramTypes.length) continue;
-                Class<?>[] actual = m.getParameterTypes();
-                boolean match = true;
-                for (int i = 0; i < paramTypes.length; i++) {
-                    if (!actual[i].isAssignableFrom(paramTypes[i])) { match = false; break; }
-                }
-                if (match) {
-                    m.setAccessible(true);
-                    return m;
-                }
-            }
+            Method direct = findMethodInDeclared(c.getDeclaredMethods(), methodName, paramTypes);
+            if (direct != null) return direct;
+            Method fromIface = findMethodInInterfaces(c, methodName, paramTypes);
+            if (fromIface != null) return fromIface;
             c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    /** Voir {@link #findNoArgInInterfaces} — même piège pour les méthodes à paramètres. */
+    private static Method findMethodInInterfaces(Class<?> c, String methodName, Class<?>[] paramTypes) {
+        for (Class<?> iface : c.getInterfaces()) {
+            Method direct = findMethodInDeclared(iface.getDeclaredMethods(), methodName, paramTypes);
+            if (direct != null) return direct;
+            Method nested = findMethodInInterfaces(iface, methodName, paramTypes);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
+
+    private static Method findMethodInDeclared(Method[] candidates, String methodName, Class<?>[] paramTypes) {
+        for (Method m : candidates) {
+            if (!m.getName().equals(methodName) || m.getParameterCount() != paramTypes.length) continue;
+            Class<?>[] actual = m.getParameterTypes();
+            boolean match = true;
+            for (int i = 0; i < paramTypes.length; i++) {
+                if (!actual[i].isAssignableFrom(paramTypes[i])) { match = false; break; }
+            }
+            if (match) {
+                m.setAccessible(true);
+                return m;
+            }
         }
         return null;
     }

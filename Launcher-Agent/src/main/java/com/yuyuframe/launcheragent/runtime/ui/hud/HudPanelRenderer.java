@@ -48,9 +48,24 @@ public final class HudPanelRenderer {
     static final float TEXT_SCALE = 0.55f;
 
     public static void draw(UiRenderer renderer, HudElement element, float x, float y, float w, float h, int vpWidth, int vpHeight) {
-        // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
-        // avec le texte différé d'une frame sur era E — voir sa javadoc.
-        renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
+        // Rien à afficher CE frame (ex: ArmorDurabilityModule sans aucune
+        // pièce d'armure équipée) — ni fond ni contenu, voir javadoc de
+        // HudElement.CustomRenderer.hasContent(). Demandé explicitement par
+        // l'utilisateur ("quand il y a rien à afficher... le background ne
+        // s'affiche pas").
+        if (element.customRenderer != null && !element.customRenderer.hasContent()) return;
+
+        // skipBackground() : le renderer gère ENTIÈREMENT sa propre
+        // apparence/position (voir ArmorDurabilityModule, style "Vanilla") —
+        // demandé explicitement ("même si on choisit le rendu vanilla il y a
+        // le background du rendu personnalisé qui reste"). drawRoundedRectHud
+        // sauté, mais draw() reste appelé normalement plus bas.
+        boolean skipBg = element.customRenderer != null && element.customRenderer.skipBackground();
+        if (!skipBg) {
+            // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
+            // avec le texte différé d'une frame sur era E — voir sa javadoc.
+            renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
+        }
 
         // Marge = base (PADDING, commune à TOUS les HUD) + extra optionnel du
         // module (element.paddingX/Y, façon OneConfig, 0 par défaut) — SEUL

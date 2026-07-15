@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.module.ArmorDurabilityModule;
 import com.yuyuframe.launcheragent.runtime.module.ChatEnhancementsModule;
+import com.yuyuframe.launcheragent.runtime.module.ClearVisionModule;
 import com.yuyuframe.launcheragent.runtime.module.CoordsModule;
 import com.yuyuframe.launcheragent.runtime.module.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.module.DiagonalSwordModule;
@@ -12,11 +13,16 @@ import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
 import com.yuyuframe.launcheragent.runtime.module.LowHealthTintModule;
 import com.yuyuframe.launcheragent.runtime.module.MumbleLinkModule;
+import com.yuyuframe.launcheragent.runtime.module.NoDarknessModule;
+import com.yuyuframe.launcheragent.runtime.module.NoFogModule;
+import com.yuyuframe.launcheragent.runtime.module.NoPumpkinOverlayModule;
 import com.yuyuframe.launcheragent.runtime.module.OldBowModule;
 import com.yuyuframe.launcheragent.runtime.module.OldConsumeModule;
 import com.yuyuframe.launcheragent.runtime.module.OldItemRotationsModule;
 import com.yuyuframe.launcheragent.runtime.module.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.PotionEffectsModule;
+import com.yuyuframe.launcheragent.runtime.module.SaturationModule;
+import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.module.SneakRampModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingSpeedModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingWhileBlockingModule;
@@ -65,6 +71,12 @@ public final class ModuleRegistry {
 
     private static final List<LauncherModule> MODULES = new ArrayList<>();
     private static final List<ModuleGroup> GROUPS = new ArrayList<>();
+    // AUDIT PERF (demandé explicitement par l'utilisateur) : get(id) faisait
+    // un scan linéaire de MODULES (~30-40 entrées) à CHAQUE appel — utilisé
+    // depuis plusieurs Mixins déclenchés CHAQUE FRAME (ex: CrosshairMixin/261,
+    // extractCrosshair — coût individuel négligeable en absolu, mais gratuit
+    // à éliminer). O(1) via cette table, tenue à jour par register().
+    private static final java.util.Map<String, LauncherModule> BY_ID = new java.util.HashMap<>();
 
     /**
      * 1.16.5 (et plus largement le bracket "B", voir VersionBracketRegistry —
@@ -110,6 +122,17 @@ public final class ModuleRegistry {
         || "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""))
         || "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
 
+    /**
+     * Sans citrouille / Vision claire / Sans flou de mouvement : implémentés
+     * via des Mixins qui n'existent QUE pour le bracket 26.1 pour l'instant
+     * (voir {@code mixin/client/v26_1} et leur javadoc respective) — cartes
+     * gatées pour ne pas afficher 3 toggles sans le moindre effet sur les
+     * autres brackets (même principe que le masquage du groupe
+     * "Optimisations", demande explicite de l'utilisateur lors de cet
+     * audit-là).
+     */
+    private static final boolean IS_26_1 = "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
+
     static {
         register(new FpsModule());
         register(new PingModule());
@@ -124,6 +147,27 @@ public final class ModuleRegistry {
         // s'applique EN DERNIER chaque frame et n'est jamais écrasé par le
         // FOV permanent de FovModule (voir ZoomModule pour le détail).
         register(new ZoomModule());
+        // Saturation (équivalent AppleSkin) / Sans Ténèbres / Sans brouillard —
+        // aucun équivalent vanilla, aucune restriction 1.8.9 (contrairement aux
+        // modules ci-dessous) : enregistrés inconditionnellement, comme Zoom.
+        // Chacun dégrade proprement (no-op) sur les brackets où sa mécanique
+        // sous-jacente n'existe pas encore (Ténèbres = 1.19+, voir leurs javadoc).
+        register(new SaturationModule());
+        register(new NoDarknessModule());
+        register(new NoFogModule());
+        // 26.1.2 UNIQUEMENT pour l'instant (voir IS_26_1 plus haut + javadoc
+        // de ces 3 modules) — implémentés via des Mixins qui n'existent pas
+        // encore pour 1.8.9/1.16.5/1.20.4/1.21.4, contrairement aux 3
+        // modules ci-dessus qui fonctionnent partout via McReflect seul.
+        if (IS_26_1) {
+            register(new NoPumpkinOverlayModule());
+            register(new ClearVisionModule());
+            // Contenu stocké via DataComponents.CONTAINER (refonte "Data
+            // Components", ~1.20.5) et lu par réflexion à noms RÉELS directs
+            // (voir sa javadoc) — même gate que les deux modules ci-dessus,
+            // aucun équivalent 1.8.9/1.20.4 pour l'instant.
+            register(new ShulkerPreviewModule());
+        }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
         // désormais natif en vanilla à partir de ce bracket — carte redondante sinon.
@@ -181,9 +225,11 @@ public final class ModuleRegistry {
         // 1.16.5 (voir IS_1_16 plus haut) : get(id) renvoie alors null, qu'il
         // faut filtrer avant de construire le groupe (sinon carte "vide"
         // cassée dans l'UI).
-        List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"));
+        List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
+            get("saturation"), get("no-darkness"), get("no-fog"),
+            get("no-pumpkin-overlay"), get("clear-vision"));
         if (!comfortMembers.isEmpty()) {
-            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak", comfortMembers));
+            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire", comfortMembers));
         }
         // Groupe entièrement exclu sur 1.16.5 (les 7 membres y sont tous
         // exclus, voir IS_1_16) — pas de carte vide affichée dans ce cas.
@@ -232,6 +278,7 @@ public final class ModuleRegistry {
 
     public static void register(LauncherModule module) {
         MODULES.add(module);
+        BY_ID.put(module.id, module);
         // Écrase les valeurs par défaut (fixées dans le constructeur du
         // module, juste avant ce point) avec la config persistée — voir
         // HudConfigStore. Placé ICI (pas dans le bloc static{}) pour que tout
@@ -266,8 +313,7 @@ public final class ModuleRegistry {
     }
 
     public static LauncherModule get(String id) {
-        for (LauncherModule m : MODULES) if (m.id.equals(id)) return m;
-        return null;
+        return BY_ID.get(id);
     }
 
     /** Filtre les {@code null} — voir IS_1_16, certains {@code get(id)} n'ont pas de résultat selon le bracket. */

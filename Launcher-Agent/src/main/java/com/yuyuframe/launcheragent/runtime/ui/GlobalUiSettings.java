@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
@@ -58,6 +59,21 @@ public final class GlobalUiSettings extends LauncherModule {
 
     @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;
+
+    // Visibilité du HUD à travers les écrans vanilla/mod — réglage GLOBAL
+    // (tous les modules HUD), demandé explicitement par l'utilisateur suite
+    // à "le HUD disparaît à la moindre interface". Par défaut : visible dans
+    // Inventaire/Conteneurs/Tchat (choix explicite de l'utilisateur), PAS le
+    // menu pause (jamais demandé, comportement vanilla-like conservé — voir
+    // HudOverlayRenderer.renderPersistent/HudScreenKind).
+    @ConfigToggle(name = "Afficher dans l'inventaire", description = "Garde le HUD visible quand l'inventaire du joueur (touche E, sans conteneur ouvert) est ouvert.", category = "HUD en jeu")
+    public boolean showHudInInventory = true;
+
+    @ConfigToggle(name = "Afficher dans les conteneurs", description = "Garde le HUD visible dans les écrans de conteneur (coffre, four, table de craft...).", category = "HUD en jeu")
+    public boolean showHudInContainers = true;
+
+    @ConfigToggle(name = "Afficher dans le tchat", description = "Garde le HUD visible quand la zone de saisie du tchat est ouverte.", category = "HUD en jeu")
+    public boolean showHudInChat = true;
 
     private GlobalUiSettings() {
         super("ui-settings", "Paramètres", "Réglages généraux de l'interface", true);

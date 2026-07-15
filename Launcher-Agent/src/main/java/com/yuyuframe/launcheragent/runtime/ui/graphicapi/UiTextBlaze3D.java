@@ -395,7 +395,6 @@ public final class UiTextBlaze3D {
             mMatrixGetFloatArray = clsMatrix4f.getMethod("get", float[].class);
 
             resolveOk = true;
-            LauncherLog.info("[LauncherAgent] UiTextBlaze3D: résolution OK, pipeline GUI_TEXT natif prêt");
         } catch (Throwable t) {
             resolveOk = false;
             LauncherLog.err("[LauncherAgent] UiTextBlaze3D: résolution échouée, repli sur le pipeline SDF existant : " + t);
@@ -641,6 +640,40 @@ public final class UiTextBlaze3D {
     private static Object vertexBuffer;
     private static long vertexBufferCapacity;
 
+    // ── Buffer de sommets CÔTÉ CPU (staging) PERSISTANT — même esprit que
+    // ensureVertexBuffer juste en dessous (côté GPU), pour le buffer côté
+    // CPU qu'on remplit AVANT de l'y copier. AUDIT PERF (demandé
+    // explicitement par l'utilisateur, "gratter des fps 26.1.2") :
+    // ByteBuffer.allocateDirect(...) était appelé À CHAQUE drawText/drawRect/
+    // drawIcon/drawGradientRect — CHAQUE chaîne de texte ET CHAQUE rectangle
+    // dessinés CHAQUE FRAME (tout le HUD, même menu fermé) allouaient un
+    // NOUVEAU buffer direct (mémoire native hors-tas, PAS un objet Java
+    // ordinaire) — pas aussi grave que le bug déjà corrigé plus haut (VBO GPU
+    // recréé/détruit à chaque appel, 12 FPS constatés), mais même famille de
+    // problème à plus petite échelle : de l'ordre de 10-30+ allocations
+    // natives par frame rien que pour le HUD (une par ligne de texte, une par
+    // fond de panneau...), strictement inutiles puisque le contenu est
+    // entièrement RÉÉCRIT (jamais lu entre deux appels) et la taille needed
+    // ne dépasse quasiment jamais celle de l'appel précédent. Un seul buffer
+    // direct partagé, agrandi seulement quand nécessaire (jamais réduit,
+    // jamais libéré entre deux appels), vidé (clear()) avant chaque
+    // réécriture — élimine ces allocations sans changer le contenu écrit.
+    private static ByteBuffer stagingBuffer;
+    private static int stagingBufferCapacity;
+
+    private static ByteBuffer ensureStagingBuffer(int neededBytes) {
+        if (stagingBuffer != null && neededBytes <= stagingBufferCapacity) {
+            stagingBuffer.clear();
+            return stagingBuffer;
+        }
+        // Même croissance généreuse (x2 + marge) que ensureVertexBuffer —
+        // évite de réallouer à chaque légère variation de longueur de texte.
+        int newCapacity = Math.max(4096, Math.max(neededBytes, stagingBufferCapacity * 2));
+        stagingBuffer = ByteBuffer.allocateDirect(newCapacity).order(java.nio.ByteOrder.nativeOrder());
+        stagingBufferCapacity = newCapacity;
+        return stagingBuffer;
+    }
+
     private static Object ensureVertexBuffer(Object device, int neededBytes) throws Exception {
         if (vertexBuffer != null && neededBytes <= vertexBufferCapacity) return vertexBuffer;
         if (vertexBuffer != null) {
@@ -725,7 +758,6 @@ public final class UiTextBlaze3D {
     // seul le PREMIER échec est loggé (jamais par frame — coût I/O disque
     // synchrone déjà identifié comme anti-pattern ailleurs dans ce projet).
     private static int failureLogCount;
-    private static boolean projLogged;
 
     // DIAGNOSTIC (IllegalStateException "Close the existing render pass" —
     // jamais localisé précisément QUEL appel la lève, tout est capturé par un
@@ -817,19 +849,9 @@ public final class UiTextBlaze3D {
         queued.add(() -> drawGradientRect(x0, y0, x1, y1, radius, colorBottom, colorTop, vpWidth, vpHeight));
     }
 
-    private static int flushLogCount;
-
     /** Appelé depuis {@code GlobalUiPresentMixin} à la HEAD de blitToScreen (avant presentTexture) — dessine tout ce qui a été empilé la frame précédente. */
     public static void flushQueued() {
         if (queued.isEmpty()) return;
-        // DIAGNOSTIC : confirme que flushQueued() tourne bien EN CONTINU
-        // (chaque frame tant qu'un écran custom est ouvert), pas juste une
-        // fois au premier frame — les logs de création (atlas/buffer) sont
-        // mis en cache après le premier appel et ne le prouvent pas.
-        if (flushLogCount < 10) {
-            flushLogCount++;
-            LauncherLog.info("[LauncherAgent] DIAG-FLUSH #" + flushLogCount + ": " + queued.size() + " dessin(s) en attente");
-        }
         // Copie + clear immédiat : si un dessin relance une exception, on ne
         // rejoue jamais indéfiniment le même lot en boucle.
         QueuedDraw[] batch = queued.toArray(new QueuedDraw[0]);
@@ -884,7 +906,7 @@ public final class UiTextBlaze3D {
             // texelFetch hors-limites → vertexColor totalement transparent).
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ByteBuffer.allocateDirect(text.length() * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(text.length() * 4 * 28);
             int vertexCount = 0;
             for (int i = 0; i < text.length(); i++) {
                 UiFont.Glyph g = font.glyph(text.charAt(i));
@@ -971,11 +993,6 @@ public final class UiTextBlaze3D {
                 mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms";
-                Object projBuf = mGetProjectionMatrixBuffer.invoke(null);
-                if (!projLogged) {
-                    projLogged = true;
-                    LauncherLog.info("[LauncherAgent] DIAG-PROJ: RenderSystem.getProjectionMatrixBuffer() = " + projBuf);
-                }
                 mBindDefaultUniforms.invoke(null, pass);
 
                 // Écrase le "Projection" ambiant repris par bindDefaultUniforms
@@ -1100,7 +1117,7 @@ public final class UiTextBlaze3D {
             int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator, comme le texte
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ByteBuffer.allocateDirect(9 * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
             int vertexCount;
             if (r < 0.5f) {
                 putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
@@ -1219,7 +1236,7 @@ public final class UiTextBlaze3D {
 
             int rgba = 0xFFFFFFFF;
             short light0 = 0, light1 = 0;
-            ByteBuffer verts = ByteBuffer.allocateDirect(4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
             // UV pleine image (0,0)-(1,1) — même correspondance top/bottom↔v0/v1
             // que le texte (yTop↔v0 haut de l'image, yBottom↔v1 bas), voir
             // putVertexPCTL/putRectQuad pour la convention Y-UP déjà établie.
@@ -1325,7 +1342,7 @@ public final class UiTextBlaze3D {
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ByteBuffer.allocateDirect(9 * 4 * 28).order(java.nio.ByteOrder.nativeOrder());
+            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
             int vertexCount;
             if (r < 0.5f) {
                 putSolidQuadGradient(verts, x0, x1, y0, y1, colorBottom, colorTop, y0, y1, light0, light1);

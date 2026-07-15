@@ -231,7 +231,6 @@ public final class CoordsModule extends SingleHudModule {
             }
         }
 
-        private static boolean DIAG_LOGGED = false;
         private static Method cachedGetBiome;
         private static boolean getBiomeResolveAttempted;
 
@@ -527,12 +526,10 @@ public final class CoordsModule extends SingleHudModule {
             }
         }
 
-        private static boolean DIAG2_LOGGED = false;
-
         private void diag2(String msg) {
-            if (DIAG2_LOGGED) return;
-            DIAG2_LOGGED = true;
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.info("[CoordsModule] registryBiomeName diag: " + msg);
+            // Diagnostics de résolution retirés du log (bruit, voir historique
+            // de session) — la chaîne de repli elle-même reste inchangée,
+            // seul l'affichage de sa progression est coupé.
         }
 
         private String prettifyBiomePath(String path) {
@@ -547,25 +544,11 @@ public final class CoordsModule extends SingleHudModule {
         }
 
         private void diag(String msg) {
-            if (DIAG_LOGGED) return;
-            DIAG_LOGGED = true;
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.info("[CoordsModule] biomeName diag: " + msg);
+            // Diagnostics retirés du log (bruit, voir historique de session).
         }
 
-        private static boolean BIOME_DIAG_LOGGED = false;
-
-        /**
-         * BUG TROUVÉ : ce message et celui de resolveGetBiome() (diag() ci-dessus)
-         * partageaient le MÊME flag one-shot (DIAG_LOGGED) — dès que
-         * resolveGetBiome loggait son message (1ère frame), plus AUCUN message
-         * de biomeName() (dont "OK, name=..." ou "exception: ...") ne pouvait
-         * jamais s'afficher pour le reste de la session. Flag séparé ici pour
-         * voir le résultat final indépendamment du message de résolution.
-         */
         private void diagBiome(String msg) {
-            if (BIOME_DIAG_LOGGED) return;
-            BIOME_DIAG_LOGGED = true;
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.info("[CoordsModule] biomeName result: " + msg);
+            // Diagnostics retirés du log (bruit, voir historique de session).
         }
     }
 }

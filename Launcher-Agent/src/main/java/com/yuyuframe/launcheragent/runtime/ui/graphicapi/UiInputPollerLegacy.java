@@ -40,6 +40,10 @@ public final class UiInputPollerLegacy extends UiInputPoller {
         fbHeight = getDisplayHeight();
         leftDown = isButtonDown(0);
         rightDown = isButtonDown(1);
+
+        // Keyboard.KEY_LSHIFT=42, KEY_RSHIFT=54 (constantes LWJGL2, stables, jamais obfusquées).
+        shiftDown = (boolean) keyboardClass().getMethod("isKeyDown", int.class).invoke(null, 42)
+            || (boolean) keyboardClass().getMethod("isKeyDown", int.class).invoke(null, 54);
     }
 
     // ── org.lwjgl.input.Mouse via réflexion (API publique, pas obfusquée) ──

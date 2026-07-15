@@ -287,6 +287,8 @@ public final class UiInputPollerModern extends UiInputPoller {
 
         leftDown = glfwGetMouseButton(windowHandle, 0) == 1;  // GLFW_MOUSE_BUTTON_LEFT
         rightDown = glfwGetMouseButton(windowHandle, 1) == 1; // GLFW_MOUSE_BUTTON_RIGHT
+
+        shiftDown = glfwGetKey(windowHandle, 340) == 1 || glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_LEFT/RIGHT_SHIFT
     }
 
     @Override

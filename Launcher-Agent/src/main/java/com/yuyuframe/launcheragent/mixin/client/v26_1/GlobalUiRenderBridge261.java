@@ -35,8 +35,6 @@ public final class GlobalUiRenderBridge261 {
     private static final String CLS_MC = "net.minecraft.client.Minecraft";
 
     public static volatile UiInputPoller inputPoller;
-    public static final java.util.Set<Class<?>> DIAG_LOGGED_CLASSES =
-        java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
 
     private static volatile Object mcInstanceCache;
     private static volatile java.lang.reflect.Method getInstanceMethod;

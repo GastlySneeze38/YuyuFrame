@@ -37,6 +37,8 @@ public abstract class UiInputPoller {
     public boolean leftDown, rightDown;
     protected boolean prevLeftDown, prevRightDown;
     public boolean leftClicked, rightClicked; // "juste pressé cette frame"
+    /** État brut Maj (gauche OU droite), renseigné par {@link #readState()} à chaque frame — voir ShulkerPreviewModule (Shift+survol). PAS le même champ que editShiftHeld (celui-ci ne se met à jour que quand pollTextEdit() est appelé, c-à-d un UiTextField focus). */
+    public boolean shiftDown;
 
     /**
      * Nom de la touche d'ouverture du menu — même format que
@@ -73,9 +75,20 @@ public abstract class UiInputPoller {
     /** Delta de molette de cette frame (positif = vers le haut) — voir readScrollDelta(). */
     public int scrollDelta;
 
+    /**
+     * Implémentation actuellement active (Legacy ou Modern selon le
+     * bracket) — n'importe quel module peut y accéder sans savoir lequel
+     * des deux tourne, voir {@link #drainTickScroll()} pour le cas d'usage
+     * qui a motivé son ajout.
+     */
+    public static volatile UiInputPoller ACTIVE;
+
+    private int tickScrollAccum;
+
     /** À appeler une fois par frame, avant de lire mouseX/mouseY/leftClicked/etc. */
     public final void poll() {
         try {
+            ACTIVE = this;
             prevLeftDown = leftDown;
             prevRightDown = rightDown;
             prevMenuKeyDown = menuKeyDown;
@@ -85,9 +98,33 @@ public abstract class UiInputPoller {
             menuKeyDown = readMenuKeyDown();
             menuKeyPressed = menuKeyDown && !prevMenuKeyDown;
             scrollDelta = readScrollDelta();
+            tickScrollAccum += scrollDelta;
         } catch (Throwable t) {
             LauncherLog.err("[UiInputPoller] poll: " + t);
         }
+    }
+
+    /**
+     * BUG TROUVÉ (ZoomModule — "la molette ne marche pas") : {@link #poll()}
+     * tourne une fois par FRAME (accroché sur le rendu, voir
+     * GlobalUiRenderMixin261/189/etc.), donc {@link #scrollDelta} y est
+     * remis à zéro à CHAQUE frame. Un module cadencé au TICK JEU (20/s,
+     * largement moins fréquent que les frames dès que le FPS dépasse ~20)
+     * qui lit directement ce champ arrive presque toujours APRÈS qu'une
+     * frame ultérieure ait déjà écrasé la vraie valeur à 0 — un cran de
+     * molette donné entre deux ticks était donc perdu la quasi-totalité du
+     * temps (c'est exactement ce qui rendait le zoom à la molette
+     * inopérant). {@link #tickScrollAccum} accumule au contraire CHAQUE
+     * frame sans jamais se remettre à zéro tout seul — cette méthode le lit
+     * ET le vide en une seule opération, à appeler UNE FOIS PAR TICK par un
+     * consommateur cadencé au tick plutôt que de lire {@link #scrollDelta}
+     * (réservé aux consommateurs cadencés à la frame, ex: un écran custom
+     * ouvert).
+     */
+    public final int drainTickScroll() {
+        int v = tickScrollAccum;
+        tickScrollAccum = 0;
+        return v;
     }
 
     /** Doit renseigner mouseX/mouseY/fbWidth/fbHeight/leftDown/rightDown pour la frame courante. */

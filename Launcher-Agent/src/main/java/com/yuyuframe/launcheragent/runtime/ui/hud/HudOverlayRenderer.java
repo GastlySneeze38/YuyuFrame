@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.hud;
 
+import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
 /**
@@ -32,13 +33,31 @@ public final class HudOverlayRenderer {
     /**
      * Variante appelée quand un écran NON custom (chat, inventaire, tout
      * autre GUI vanilla/mod) est ouvert — voir le Mixin global, branché juste
-     * avant son propre "return" pour ce cas. Ne dessine QUE les éléments
-     * ayant explicitement demandé à rester visibles (voir
-     * HudElement.showWhenScreenOpen, réglage générique façon OneConfig).
+     * avant son propre "return" pour ce cas. Ne dessine que les éléments
+     * dont {@link HudElement#showWhenScreenOpen} est vrai (opt-in par
+     * élément, pas utilisé actuellement par aucun module) OU dont le réglage
+     * GLOBAL correspondant au TYPE d'écran ouvert (voir {@link HudScreenKind},
+     * {@link GlobalUiSettings#showHudInInventory}/InContainers/InChat) est
+     * activé — demandé explicitement par l'utilisateur ("le HUD disparaît à
+     * la moindre interface"), réglage GLOBAL (tous les modules HUD),
+     * granularité PAR TYPE d'écran, visible par défaut dans
+     * Inventaire/Conteneurs/Tchat (PAS le menu pause).
+     *
+     * @param currentScreen l'écran vanilla/mod actuellement ouvert (jamais
+     *     {@code null} ici — {@link #render} couvre déjà le cas
+     *     currentScreen == null) — classifié via {@link HudScreenKind}.
      */
-    public static void renderPersistent(UiRenderer renderer, int vpWidth, int vpHeight) {
+    public static void renderPersistent(UiRenderer renderer, Object currentScreen, int vpWidth, int vpHeight) {
+        HudScreenKind kind = HudScreenKind.classify(currentScreen);
+        boolean globalShow;
+        switch (kind) {
+            case INVENTORY: globalShow = GlobalUiSettings.INSTANCE.showHudInInventory; break;
+            case CONTAINER: globalShow = GlobalUiSettings.INSTANCE.showHudInContainers; break;
+            case CHAT:      globalShow = GlobalUiSettings.INSTANCE.showHudInChat; break;
+            default:        globalShow = false; break;
+        }
         for (HudElement element : HudRegistry.elements()) {
-            if (!element.showWhenScreenOpen) continue;
+            if (!globalShow && !element.showWhenScreenOpen) continue;
             element.refreshSize();
             float x = element.screenX(vpWidth);
             float y = element.screenY(vpHeight);

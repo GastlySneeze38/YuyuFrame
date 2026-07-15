@@ -75,12 +75,20 @@ async fn scan_installed(mods_dir: &PathBuf) -> HashMap<String, InstalledMod> {
     installed
 }
 
+/// Une contrainte de version déclarée par un mod dépendant, gardée avec son nom
+/// pour pouvoir signaler quel mod bloque quoi.
+struct DepConstraint {
+    declaring_mod: String,
+    depends_groups: Vec<Vec<String>>,
+    breaks_groups: Vec<Vec<String>>,
+}
+
 struct MissingDep {
     id: String,
-    /// Plages requises (`depends`) — au moins un groupe OR doit être satisfait.
-    depends_groups: Vec<Vec<String>>,
-    /// Versions explicitement cassées (`breaks`) — aucun groupe ne doit matcher.
-    breaks_groups: Vec<Vec<String>>,
+    /// Contraintes de TOUS les mods installés qui dépendent de `id` — une version
+    /// candidate doit satisfaire chacune d'entre elles, pas seulement la première
+    /// trouvée (sinon on peut réinstaller une version qui casse un autre mod).
+    constraints: Vec<DepConstraint>,
     /// Jar existant mais incompatible, à supprimer avant réinstallation.
     replace_path: Option<PathBuf>,
 }
@@ -92,8 +100,8 @@ async fn collect_missing_deps(
     mc_version: &str,
     loader: &str,
 ) -> Vec<MissingDep> {
-    let mut missing: Vec<MissingDep> = Vec::new();
-    let mut seen_ids: HashSet<String> = HashSet::new();
+    // 1) Rassemble, pour chaque dep_id, la contrainte de CHAQUE mod installé qui en dépend.
+    let mut constraints_by_id: HashMap<String, Vec<DepConstraint>> = HashMap::new();
 
     if let Ok(mut entries) = tokio::fs::read_dir(mods_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
@@ -104,52 +112,44 @@ async fn collect_missing_deps(
             }
             let Some(meta) = read_fabric_mod_json(&path) else { continue };
             for (dep_id, predicate_value) in &meta.depends {
-                if BUILTIN_IDS.contains(&dep_id.as_str()) {
+                if BUILTIN_IDS.contains(&dep_id.as_str()) || already_tried.contains(dep_id) {
                     continue;
                 }
-                if already_tried.contains(dep_id) || seen_ids.contains(dep_id) {
-                    continue;
-                }
-
                 let depends_groups = parse_predicate_groups(predicate_value);
                 let breaks_groups = meta
                     .breaks
                     .get(dep_id)
                     .map(parse_predicate_groups)
                     .unwrap_or_default();
+                constraints_by_id.entry(dep_id.clone()).or_default().push(DepConstraint {
+                    declaring_mod: name.clone(),
+                    depends_groups,
+                    breaks_groups,
+                });
+            }
+        }
+    }
 
-                match installed.get(dep_id) {
-                    Some(found) if found.version.is_empty() => {
-                        // fabric-api : pas de version suivie, on suppose compatible
-                        continue;
-                    }
-                    Some(found) if version_allowed(
-                        &normalize_version(&found.version, mc_version, loader),
-                        &depends_groups,
-                        &breaks_groups,
-                    ) => {
-                        continue;
-                    }
-                    Some(found) => {
-                        // Présent mais version incompatible : à remplacer
-                        seen_ids.insert(dep_id.clone());
-                        missing.push(MissingDep {
-                            id: dep_id.clone(),
-                            depends_groups,
-                            breaks_groups,
-                            replace_path: Some(found.path.clone()),
-                        });
-                    }
-                    None => {
-                        seen_ids.insert(dep_id.clone());
-                        missing.push(MissingDep {
-                            id: dep_id.clone(),
-                            depends_groups,
-                            breaks_groups,
-                            replace_path: None,
-                        });
-                    }
+    // 2) Pour chaque dep_id, vérifie si la version installée satisfait TOUTES les contraintes.
+    let mut missing: Vec<MissingDep> = Vec::new();
+    for (dep_id, constraints) in constraints_by_id {
+        match installed.get(&dep_id) {
+            Some(found) if found.version.is_empty() => {
+                // fabric-api : pas de version suivie, on suppose compatible
+                continue;
+            }
+            Some(found) => {
+                let normalized = normalize_version(&found.version, mc_version, loader);
+                let all_satisfied = constraints
+                    .iter()
+                    .all(|c| version_allowed(&normalized, &c.depends_groups, &c.breaks_groups));
+                if all_satisfied {
+                    continue;
                 }
+                missing.push(MissingDep { id: dep_id, constraints, replace_path: Some(found.path.clone()) });
+            }
+            None => {
+                missing.push(MissingDep { id: dep_id, constraints, replace_path: None });
             }
         }
     }
@@ -227,14 +227,18 @@ async fn install_dep(
     };
 
     // Modrinth renvoie les versions du plus récent au plus ancien : on prend la
-    // première qui satisfait réellement la contrainte déclarée par le mod
-    // dépendant (`depends`) sans tomber dans une version explicitement cassée
-    // (`breaks`), plutôt que de prendre la plus récente sans vérification.
+    // première qui satisfait réellement TOUTES les contraintes déclarées par
+    // TOUS les mods dépendants (`depends`) sans tomber dans une version
+    // explicitement cassée par l'un d'eux (`breaks`) — sinon on risque de
+    // satisfaire un seul mod en cassant un autre (ex: Voxy exige Sodium <0.8.13
+    // alors qu'un autre mod accepterait n'importe quelle 0.8.x/0.9.x).
     let compatible: Vec<ModrinthVersion> = versions
         .into_iter()
         .filter(|v| {
             let normalized = normalize_version(&v.version_number, mc_version, loader);
-            version_allowed(&normalized, &dep.depends_groups, &dep.breaks_groups)
+            dep.constraints
+                .iter()
+                .all(|c| version_allowed(&normalized, &c.depends_groups, &c.breaks_groups))
         })
         .collect();
 
@@ -250,10 +254,11 @@ async fn install_dep(
         compatible.into_iter().next()
     }
     .ok_or_else(|| {
+        let declaring_mods: Vec<&str> = dep.constraints.iter().map(|c| c.declaring_mod.as_str()).collect();
         anyhow!(
-            "Aucune version {}compatible pour «{}» (MC {}, {}, depends {:?}, breaks {:?})",
+            "Aucune version {}compatible pour «{}» (MC {}, {}) satisfaisant à la fois : {:?}",
             if avoid_beta { "stable " } else { "" },
-            dep_id, mc_version, loader, dep.depends_groups, dep.breaks_groups
+            dep_id, mc_version, loader, declaring_mods
         )
     })?;
 

@@ -1539,24 +1539,107 @@ public final class UiRenderer {
      */
     private static boolean modernItemIconWarned = false;
 
+    // AUDIT PERF (demandé explicitement par l'utilisateur, "gratter des fps
+    // 26.1.2") : guiScale() fait 2 invocations de réflexion (getWindow +
+    // getScaledWidth) — appelé plusieurs fois PAR FRAME (ArmorDurabilityModule
+    // style "Vanilla" : une fois pour drawVanillaHotbarRow, puis une fois DE
+    // PLUS par icône dans drawVanillaItemIconModern*, jusqu'à 5x/frame pour ce
+    // seul module). La valeur ne dépend QUE de vpWidth ET du réglage "GUI
+    // Scale" vanilla — quasi-constante frame à frame (change seulement au
+    // resize de fenêtre ou changement du réglage, pas en continu) : cache
+    // court (200ms) plutôt qu'un cache infini keyed sur vpWidth seul — un
+    // changement du réglage "GUI Scale" SANS resize de fenêtre (vpWidth
+    // inchangé) doit rester détecté, juste avec un délai borné au lieu
+    // d'être invisible indéfiniment.
+    private static float cachedGuiScale = 1f;
+    private static int cachedGuiScaleVpWidth = -1;
+    private static long cachedGuiScaleAtNanos;
+    private static final long GUI_SCALE_CACHE_NANOS = 200_000_000L; // 200 ms
+
+    /**
+     * Ratio pixels FRAMEBUFFER / pixels GUI-SCALED de vanilla (voir "GUI
+     * Scale" dans les options vidéo) — même calcul que celui dupliqué en
+     * interne par drawVanillaItemIconModern* (voir plus bas), exposé ici pour
+     * les modules qui doivent positionner du contenu en coordonnées relatives
+     * au HUD vanilla (ex: ArmorDurabilityModule, style "Vanilla" — aligné sur
+     * la vraie hotbar, 182x22 GUI-pixels, largeur/hauteur bien connues et
+     * stables depuis toujours). {@code 1f} si non résolvable (aucune fenêtre
+     * trouvée) — mieux qu'une exception pour un appelant qui ferait juste
+     * {@code framebufferPx / guiScale(vpWidth)}.
+     */
+    public static float guiScale(int vpWidth) {
+        long now = System.nanoTime();
+        if (vpWidth == cachedGuiScaleVpWidth && (now - cachedGuiScaleAtNanos) < GUI_SCALE_CACHE_NANOS) {
+            return cachedGuiScale;
+        }
+        try {
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return 1f;
+            Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow", "getWindow").invoke(mc);
+            int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth", "getGuiScaledWidth").invoke(window);
+            cachedGuiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            cachedGuiScaleVpWidth = vpWidth;
+            cachedGuiScaleAtNanos = now;
+            return cachedGuiScale;
+        } catch (Throwable t) {
+            return 1f;
+        }
+    }
+
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
+        drawVanillaItemIcon(itemStack, x, y, size, vpWidth, vpHeight, false);
+    }
+
+    /**
+     * Blit BRUT (pas via l'atlas de sprites, contrairement au fond de case
+     * "hud/hotbar_offhand_left" utilisé par {@link #drawVanillaItemIcon}
+     * withDurabilityBar) d'une texture GUI vanilla ARBITRAIRE — ex: fond de
+     * fenêtre de conteneur ({@code "textures/gui/container/shulker_box.png"},
+     * 256x256, région visible 176x166 dans son coin haut-gauche) — pour
+     * {@code ShulkerPreviewModule}, qui veut le VRAI fond vanilla (donc
+     * personnalisable par resource pack) plutôt qu'un panneau recréé.
+     *
+     * @param texturePath chemin RELATIF (sans "assets/minecraft/", avec
+     *     l'extension ".png") — ex: {@code "textures/gui/container/shulker_box.png"}.
+     * @param x,y,w,h position/taille d'affichage à l'ÉCRAN, en pixels
+     *     framebuffer (repère bas-gauche de ce projet — voir javadoc de
+     *     classe), PAS en GUI-pixels — même convention que drawVanillaItemIcon.
+     * @param u,v,texW,texH région source dans la texture ET dimensions
+     *     RÉELLES du fichier PNG (256x256 pour shulker_box.png, PAS
+     *     176x166 — c'est un atlas, voir javadoc de ShulkerPreviewModule).
+     *
+     * Bracket 26.1.2 UNIQUEMENT pour l'instant (chemin "Deferred", voir
+     * modernUsesDeferredGuiRenderer) — no-op silencieux ailleurs (1.8.9/
+     * 1.20.4/1.21.4/1.21.11), aucun appelant actuel ne les cible.
+     */
+    public void drawVanillaContainerTexture(String texturePath, float x, float y, float w, float h,
+                                             float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
+        if (!modern || !modernUsesDeferredGuiRenderer()) return;
+        try {
+            float guiScale = guiScale(vpWidth);
+            int guiX = Math.round(x / guiScale);
+            int guiY = Math.round((vpHeight - y - h) / guiScale);
+            int guiW = Math.round(w / guiScale);
+            int guiH = Math.round(h / guiScale);
+            synchronized (pendingModernGuiBlits) {
+                pendingModernGuiBlits.add(new PendingGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * @param withDurabilityBar en plus de l'icône, dessine la VRAIE barre de
+     *     durabilité vanilla (DrawContext.drawItemBar / GuiGraphicsExtractor.itemBar,
+     *     vérifié par mappings Yarn 1.21.4/1.21.11 et javap 26.1.2 réel) — pour
+     *     le style "Vanilla" d'ArmorDurabilityModule, voir sa javadoc. PAS
+     *     supporté sur le pipeline legacy (1.8.9, ignoré silencieusement) ni
+     *     sur le bracket 1.20.4 (pas de drawItemBar dans ses mappings Yarn —
+     *     résolution échoue proprement, aucune barre dessinée, pas d'erreur).
+     */
+    public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
         if (itemStack == null) return;
         if (modern) {
-            // Pas encore réécrit pour le pipeline moderne (voir javadoc de la
-            // classe) : cette méthode pose SA PROPRE pile de matrices legacy
-            // (glMatrixMode/glOrtho/glTranslatef/glScalef, confirmées cassées
-            // en 1.21.11) pour établir la convention de coordonnées GUI
-            // vanilla attendue par renderInGuiWithOverrides — jamais exercée
-            // par aucun test de crash de cette session (seul
-            // ArmorDurabilityModule l'appelle, désactivé par défaut), donc pas
-            // de preuve directe qu'il faille la réécrire, mais l'appeler
-            // telle quelle risquerait le même crash natif que le reste de ce
-            // fichier avant correctif. Skip volontaire plutôt que deviner —
-            // à traiter si/quand un module l'utilisant est activé en 1.21+.
-            if (!modernItemIconWarned) {
-                modernItemIconWarned = true;
-                LauncherLog.warn("[UiRenderer] drawVanillaItemIcon: pas encore supporté sur le pipeline moderne (1.21+) — icône non dessinée");
-            }
+            drawVanillaItemIconModern(itemStack, x, y, size, vpWidth, vpHeight, withDurabilityBar);
             return;
         }
         LegacyGlState savedGlState = null;
@@ -1686,6 +1769,654 @@ public final class UiRenderer {
             } catch (Throwable ignored) {}
             restoreLegacyGlState(savedGlState);
         }
+    }
+
+    // ── Icône d'objet vanilla — pipeline MODERNE (1.21.11+, 26.1+) ───────────
+    //
+    // ANCIENNE APPROCHE ABANDONNÉE (voir historique de session) : construire
+    // notre PROPRE instance indépendante de GuiRenderState/DrawContext et
+    // appeler une méthode "flush" dessus. Invalidée par désassemblage complet
+    // du VRAI GuiRenderState (classe non obfusquée en 26.1.2, javap direct) :
+    // c'est une PURE STRUCTURE DE DONNÉES (add*/forEach*/traverse/reset — pas
+    // de méthode "flush vers le GPU"). Le flush réel exige de participer au
+    // GuiRenderState PARTAGÉ que vanilla envoie lui-même au GPU chaque frame
+    // via GuiRenderer.render(GpuBufferSlice), appelé DEPUIS
+    // GameRenderer.render(...) — tracé bytecode complet (javap 1.21.11 +
+    // classdump maison sur 26.1.2, class file version 69 illisible par javap)
+    // confirmant la chaîne : GameRenderer.guiRenderer (champ, type
+    // GuiRenderer) → GuiRenderer.state/renderState (champ, type
+    // GuiRenderState, "state" en Yarn 1.21.11 / "renderState" en 26.1.2 réel)
+    // → GuiRenderer.render(GpuBufferSlice) consomme CET état précis.
+    //
+    // Conséquence : dessiner dans NOTRE PROPRE instance ne sert à rien (jamais
+    // consommée par aucun flush) — il faut ajouter nos commandes DANS l'état
+    // VIVANT que GameRenderer.guiRenderer va lui-même vider ce frame-ci.
+    //
+    // Fenêtre de timing (confirmée par trace bytecode complète de
+    // GameRenderer.render(DeltaTracker,boolean) réel en 26.1.2, aucun appel
+    // reset()/clear() sur guiRenderState nulle part dans cette méthode —
+    // l'extraction/peuplement du HUD vanilla dans l'état se fait dans une
+    // passe "extract" SÉPARÉE, appelée AVANT que GameRenderer.render() ne
+    // soit invoqué) : n'importe quel point de cette méthode AVANT l'appel à
+    // guiRenderer.render(GpuBufferSlice) convient — HEAD est le plus simple
+    // et le plus sûr (pas de dépendance à un point d'injection au milieu
+    // d'une méthode). NON REVÉRIFIÉ bytecode par bytecode pour 1.21.11 lui-
+    // même (javap, pas le classdump maison) mais même famille d'architecture
+    // (GuiRenderer/GuiRenderState identiques dans les deux versions) — voir
+    // GuiFlushMixin (1.21.11) / GuiFlushMixin261 (26.1.2), point d'accroche
+    // qui appelle {@link #flushPendingModernItemIcons}.
+    //
+    // D'où la FILE D'ATTENTE ci-dessous : ArmorDurabilityModule (et tout
+    // futur appelant) tourne dans la passe de dessin DU MOD (GlobalUiPresentMixin,
+    // APRÈS le blit — voir sa javadoc), donc APRÈS que GameRenderer.render()
+    // ait déjà fini d'envoyer l'état au GPU pour CE frame-ci. drawVanillaItemIconModern
+    // ne fait donc que METTRE EN FILE la demande (ItemStack + position déjà
+    // convertie en coordonnées GUI-scaled) ; elle n'est réellement soumise à
+    // l'état vivant qu'au TOUT DÉBUT du frame SUIVANT, par flushPendingModernItemIcons
+    // — décalage d'une frame (~8-16ms), imperceptible, technique standard pour
+    // participer à une passe de rendu qui s'est déjà terminée pour ce frame.
+    //
+    // NON VÉRIFIÉ EN JEU (pas d'accès à un client Minecraft depuis cet
+    // environnement) : voir les logs "[UiRenderer] itemIconModern" en cas
+    // d'icône toujours invisible.
+    private static final class PendingItemIcon {
+        final Object itemStack; final int guiX; final int guiY; final boolean vanillaExtras;
+        PendingItemIcon(Object itemStack, int guiX, int guiY, boolean vanillaExtras) {
+            this.itemStack = itemStack; this.guiX = guiX; this.guiY = guiY; this.vanillaExtras = vanillaExtras;
+        }
+    }
+
+    private static final java.util.List<PendingItemIcon> pendingModernItemIcons = new java.util.ArrayList<>();
+
+    /**
+     * File d'attente jumelle de {@link PendingItemIcon} mais pour un blit de
+     * texture vanilla BRUTE (pas via l'atlas de sprites — voir
+     * {@link #drawVanillaContainerTexture}) : fond de fenêtre de conteneur
+     * (ex: {@code textures/gui/container/shulker_box.png}), PAS un sprite
+     * "hud/*" comme {@link #slotSpriteIdentifierModern}. Même décalage d'une
+     * frame, même point de vidage ({@link #flushPendingModernItemIcons}).
+     */
+    private static final class PendingGuiBlit {
+        final String texturePath; final int guiX, guiY, guiW, guiH; final float u, v, texW, texH;
+        PendingGuiBlit(String texturePath, int guiX, int guiY, int guiW, int guiH, float u, float v, float texW, float texH) {
+            this.texturePath = texturePath; this.guiX = guiX; this.guiY = guiY; this.guiW = guiW; this.guiH = guiH;
+            this.u = u; this.v = v; this.texW = texW; this.texH = texH;
+        }
+    }
+
+    private static final java.util.List<PendingGuiBlit> pendingModernGuiBlits = new java.util.ArrayList<>();
+    private static Method blitMethodModern;
+    private static boolean blitResolveFailed = false;
+    private static final java.util.Map<String, Object> containerTextureIdentifierCache = new java.util.HashMap<>();
+
+    private static java.lang.reflect.Field guiRendererFieldModern;
+    private static java.lang.reflect.Field guiStateFieldModern;
+    private static java.lang.reflect.Constructor<?> drawContextCtorModern;
+    private static Method drawItemMethodModern;
+    /** Résolu UNE FOIS dans le même bloc que drawContextCtorModern (voir plus bas) — reste {@code null} pour de bon si introuvable (1.20.4 : pas de drawItemBar dans ses mappings Yarn), voir drawVanillaItemIcon(withDurabilityBar). */
+    private static Method drawItemBarMethodModern;
+    // Fond de case VANILLA — sprite réel "hud/hotbar_offhand_left.png"
+    // (29x24, confirmé présent tel quel dans le jar 26.1.2 réel), PAS une
+    // case recréée. Recherché sur GitHub à la demande explicite de
+    // l'utilisateur (mods de référence consultés : aucun n'expose de fond de
+    // case isolé réutilisable en Java). PREMIER essai avec
+    // "container/slot.png" (18x18) — ABANDONNÉ : présent dans le jar et
+    // référencé par AbstractContainerScreen (donc pas un fichier mort), mais
+    // test utilisateur avec un vrai resource pack (custom UI) confirmé sans
+    // effet visuel — la plupart des resource packs de type "clean UI" ne
+    // personnalisent QUE les sprites de la famille "hud/hotbar_*" (déjà
+    // utilisés nativement pour LA VRAIE case de main secondaire à côté de la
+    // hotbar, exactement le même contexte visuel que nos cases d'armure), pas
+    // "container/slot.png" (utilisé seulement dans certains écrans
+    // d'inventaire spécifiques). Décodage manuel du PNG réel (RGBA8, pas de
+    // lib PIL disponible dans l'environnement — parseur zlib+filtres de
+    // scanline écrit à la main) : case visible = coin arrondi occupant grosso
+    // modo x=[0,22] y=[1,23] du canvas 29x24 (le reste, x>22, est
+    // transparent — laissé tel quel, PAS recadré, pour rester au plus près
+    // du sprite vanilla réel), zone intérieure (alpha faible/dégradé,
+    // destinée à l'icône) = EXACTEMENT 16x16 à l'offset (3,4) depuis le
+    // coin haut-gauche du sprite — coïncide pile avec la taille native
+    // 16x16 de nos icônes, aucune supposition nécessaire.
+    //
+    // Dessiné via DrawContext.drawGuiTexture(RenderPipeline,Identifier,x,y,w,h)V
+    // (Yarn 1.21.11, method_52706) / GuiGraphicsExtractor.blitSprite (vrai
+    // nom 26.1.2, même descripteur) — DISPONIBLE UNIQUEMENT sur les brackets
+    // "Deferred" (1.21.11/26.1.2, voir modernUsesDeferredGuiRenderer) : sur
+    // 1.20.4/1.21.4 (chemin Immediate), method_52706 existe MAIS avec un
+    // descripteur DIFFÉRENT par bracket (1.20.4 : pas de RenderPipeline du
+    // tout ; 1.21.4 : un Function<Identifier,RenderPipeline> au lieu d'un
+    // RenderPipeline direct — 3 signatures différentes pour le même ID
+    // intermediary selon la version, vérifié dans les 3 jeux de mappings
+    // Yarn correspondants) — non implémenté pour ces deux brackets (barre de
+    // durabilité seule pour 1.21.4, ni case ni barre pour 1.20.4).
+    private static final int SLOT_SPRITE_W = 29;
+    private static final int SLOT_SPRITE_H = 24;
+    /** Décalage (icône 16x16 depuis le coin haut-gauche du sprite 29x24) — voir javadoc ci-dessus. */
+    private static final int SLOT_SPRITE_ICON_DX = 3;
+    private static final int SLOT_SPRITE_ICON_DY = 4;
+    private static Method drawGuiTextureMethodModern;
+    private static Object renderPipelineGuiTexturedModern;
+    private static Object slotSpriteIdentifierModern;
+    private static boolean slotSpriteResolveFailed = false;
+    private static boolean modernItemIconResolveFailed = false;
+
+    // GuiRenderer/GuiRenderState (voir ci-dessus) N'EXISTENT PAS en 1.20.4 ni
+    // 1.21.4 (confirmé absent des deux mappings Yarn correspondants,
+    // grep -c ==0 sur les deux) — architecture introduite entre la 1.21.4 et
+    // la 1.21.11. Sur ces deux brackets, DrawContext.drawItem dessine dans un
+    // VertexConsumerProvider.Immediate CLASSIQUE, avec sa PROPRE méthode
+    // draw()V (method_51452 en 1.20.4, method_51452 aussi en 1.21.4 — même ID
+    // intermediary stable) qui flush IMMÉDIATEMENT, en autonomie — pas besoin
+    // de participer à un état partagé ni d'un second point d'accroche Mixin.
+    // Détection automatique (essai de résolution de GuiRenderer) plutôt que
+    // par bracket en dur : suffisant et se généralise tout seul si une future
+    // version régresse ou avance cette bascule d'architecture.
+    private static Boolean modernUsesDeferredGuiRenderer;
+
+    private static boolean modernUsesDeferredGuiRenderer() {
+        if (modernUsesDeferredGuiRenderer == null) {
+            modernUsesDeferredGuiRenderer = McReflect.yarnClass(
+                "net/minecraft/client/gui/render/GuiRenderer",
+                "net.minecraft.client.gui.render.GuiRenderer") != null;
+        }
+        return modernUsesDeferredGuiRenderer;
+    }
+
+    private void drawVanillaItemIconModern(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
+        if (modernUsesDeferredGuiRenderer()) {
+            drawVanillaItemIconModernDeferred(itemStack, x, y, size, vpWidth, vpHeight, withDurabilityBar);
+        } else {
+            drawVanillaItemIconModernImmediate(itemStack, x, y, size, vpWidth, vpHeight, withDurabilityBar);
+        }
+    }
+
+    /**
+     * BUG TROUVÉ (test utilisateur : icônes dans le "mauvais ordre" par
+     * rapport au texte de durabilité) : {@code guiY = y / guiScale} traitait
+     * {@code y} (convention de CE projet, origine BAS-gauche — voir javadoc
+     * de classe et drawIcon) comme si c'était DÉJÀ une coordonnée GUI vanilla
+     * (origine HAUT-gauche) — un simple ratio, JAMAIS de flip. Le pipeline
+     * LEGACY (1.8.9, drawVanillaItemIcon ci-dessus, ligne ~1649) fait ce flip
+     * correctement depuis le début : {@code vpHeight - y - size}, oublié ici
+     * lors de l'écriture initiale du chemin moderne. Sans lui, la position
+     * verticale de CHAQUE icône est mal calculée de façon cohérente dans la
+     * MÊME direction — visuellement, la pile entière d'icônes apparaît dans
+     * l'ordre inverse par rapport au texte (qui, lui, utilise le pipeline de
+     * texte custom de ce projet, PAS DrawContext, donc jamais concerné).
+     */
+    private void drawVanillaItemIconModernDeferred(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
+        try {
+            // DrawContext/GuiGraphicsExtractor attend des coordonnées
+            // GUI-SCALED (comme tout le rendu vanilla), PAS les pixels
+            // framebuffer bruts que le reste de notre pipeline utilise
+            // partout ailleurs — conversion via le ratio framebuffer/
+            // scaledWidth de la fenêtre courante, ET flip d'axe Y (voir javadoc).
+            // guiScale() met en cache ce ratio en interne (audit perf — voir
+            // sa javadoc) : plus besoin de résoudre mc/window ici nous-mêmes.
+            float guiScale = guiScale(vpWidth);
+            int guiX = Math.round(x / guiScale);
+            int guiY = Math.round((vpHeight - y - size) / guiScale);
+
+            synchronized (pendingModernItemIcons) {
+                pendingModernItemIcons.add(new PendingItemIcon(itemStack, guiX, guiY, withDurabilityBar));
+            }
+        } catch (Throwable t) {
+            if (!modernItemIconWarned) {
+                modernItemIconWarned = true;
+                LauncherLog.err("[UiRenderer] drawVanillaItemIconModernDeferred: " + t);
+            }
+        }
+    }
+
+    private static java.lang.reflect.Constructor<?> drawContextImmediateCtorModern;
+    private static Method getBufferBuildersMethodModern;
+    private static Method getEntityVertexConsumersMethodModern;
+    private static Method drawItemMethodImmediateModern;
+    private static Method drawFlushMethodImmediateModern;
+    private static boolean modernImmediateResolveFailed = false;
+    private static boolean modernImmediateDiagLogged = false;
+
+    /**
+     * Bracket 1.20.4 / 1.21.4 (voir détection ci-dessus) : DrawContext gère
+     * son propre buffer immédiat, auto-suffisant — construit avec le
+     * VertexConsumerProvider.Immediate PARTAGÉ de vanilla
+     * (MinecraftClient.getBufferBuilders().getEntityVertexConsumers(), déjà
+     * lié au bon contexte GL/render target à cet instant) plutôt qu'une
+     * instance isolée, puis vidé immédiatement via son propre draw()V — pas
+     * de file d'attente ni de second point d'accroche Mixin nécessaires ici
+     * (contrairement au bracket 1.21.11+/26.1+, voir drawVanillaItemIconModernDeferred).
+     */
+    private void drawVanillaItemIconModernImmediate(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
+        try {
+            if (!ensureModernImmediateResolved(itemStack)) {
+                if (!modernItemIconWarned) {
+                    modernItemIconWarned = true;
+                    LauncherLog.warn("[UiRenderer] drawVanillaItemIconModernImmediate: résolution réflexion échouée — icône non dessinée (voir logs diag)");
+                }
+                return;
+            }
+
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+
+            // Flip d'axe Y — voir javadoc de drawVanillaItemIconModernDeferred
+            // (même bug, même correctif). guiScale() met en cache ce ratio en
+            // interne (audit perf — voir sa javadoc).
+            float guiScale = guiScale(vpWidth);
+            int guiX = Math.round(x / guiScale);
+            int guiY = Math.round((vpHeight - y - size) / guiScale);
+
+            Object bufferBuilders = getBufferBuildersMethodModern.invoke(mc);
+            Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
+            Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
+
+            if (!modernImmediateDiagLogged) {
+                modernImmediateDiagLogged = true;
+                LauncherLog.info("[UiRenderer] itemIconModernImmediate diag: drawContext=" + drawContext
+                    + " guiScale=" + guiScale + " guiX=" + guiX + " guiY=" + guiY);
+            }
+
+            drawItemMethodImmediateModern.invoke(drawContext, itemStack, guiX, guiY);
+            // drawItemBar absent sur 1.20.4 (pas de mapping Yarn pour ce
+            // bracket, voir ensureModernImmediateResolved) — résolution à
+            // null, ignoré silencieusement (pas de barre, pas d'erreur).
+            if (withDurabilityBar && drawItemBarMethodModernImmediate != null) {
+                drawItemBarMethodModernImmediate.invoke(drawContext, itemStack, guiX, guiY);
+            }
+            drawFlushMethodImmediateModern.invoke(drawContext);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawVanillaItemIconModernImmediate: " + t);
+        }
+    }
+
+    private static Method drawItemBarMethodModernImmediate;
+
+    private boolean ensureModernImmediateResolved(Object itemStack) {
+        if (drawItemMethodImmediateModern != null) return true;
+        if (modernImmediateResolveFailed) return false;
+        try {
+            Class<?> mcClass = McReflect.yarnClass("net/minecraft/client/MinecraftClient");
+            getBufferBuildersMethodModern = McReflect.noArgMethod(mcClass,
+                "net/minecraft/client/MinecraftClient", "getBufferBuilders");
+
+            Class<?> bufferBuilderStorageClass = McReflect.yarnClass("net/minecraft/client/render/BufferBuilderStorage");
+            getEntityVertexConsumersMethodModern = McReflect.noArgMethod(bufferBuilderStorageClass,
+                "net/minecraft/client/render/BufferBuilderStorage", "getEntityVertexConsumers");
+
+            Class<?> drawContextClass = McReflect.yarnClass("net/minecraft/client/gui/DrawContext");
+            Class<?> vcpImmediateClass = getEntityVertexConsumersMethodModern.getReturnType();
+            drawContextImmediateCtorModern = drawContextClass.getDeclaredConstructor(mcClass, vcpImmediateClass);
+            drawContextImmediateCtorModern.setAccessible(true);
+
+            drawItemMethodImmediateModern = McReflect.method(drawContextClass, "net/minecraft/client/gui/DrawContext",
+                "drawItem", itemStack.getClass(), int.class, int.class);
+            drawFlushMethodImmediateModern = McReflect.noArgMethod(drawContextClass,
+                "net/minecraft/client/gui/DrawContext", "draw");
+            // Absent des mappings Yarn 1.20.4 (introduit en 1.21.4) —
+            // McReflect.method() ne lève pas d'exception dans ce cas, retourne
+            // simplement null (voir javadoc drawVanillaItemIconModernImmediate).
+            drawItemBarMethodModernImmediate = McReflect.method(drawContextClass, "net/minecraft/client/gui/DrawContext",
+                "drawItemBar", itemStack.getClass(), int.class, int.class);
+
+            LauncherLog.info("[UiRenderer] itemIconModernImmediate diag: résolution OK — drawContextCtor="
+                + drawContextImmediateCtorModern + " drawItem=" + drawItemMethodImmediateModern
+                + " draw=" + drawFlushMethodImmediateModern + " drawItemBar=" + drawItemBarMethodModernImmediate);
+            return drawItemMethodImmediateModern != null && drawFlushMethodImmediateModern != null;
+        } catch (Throwable t) {
+            modernImmediateResolveFailed = true;
+            LauncherLog.err("[UiRenderer] itemIconModernImmediate: résolution échouée : " + t);
+            return false;
+        }
+    }
+
+    /**
+     * Appelé depuis GuiFlushMixin/GuiFlushMixin261 (HEAD de GameRenderer.render,
+     * bien AVANT l'appel vanilla à guiRenderer.render(GpuBufferSlice) plus loin
+     * dans la même méthode — voir javadoc de section ci-dessus) avec {@code
+     * gameRenderer == this} (l'instance VIVANTE, fusionnée par Mixin). Vide la
+     * file et soumet chaque icône dans le VRAI DrawContext/GuiGraphicsExtractor
+     * wrappant l'état PARTAGÉ (gameRenderer.guiRenderer.state), pas une
+     * instance isolée — condition nécessaire pour que le flush EXISTANT de
+     * vanilla, plus loin dans ce même appel, inclue nos icônes dans CE frame.
+     */
+    public static void flushPendingModernItemIcons(Object gameRenderer) {
+        java.util.List<PendingItemIcon> batch;
+        synchronized (pendingModernItemIcons) {
+            batch = pendingModernItemIcons.isEmpty() ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(pendingModernItemIcons);
+            pendingModernItemIcons.clear();
+        }
+        java.util.List<PendingGuiBlit> batchBlits;
+        synchronized (pendingModernGuiBlits) {
+            batchBlits = pendingModernGuiBlits.isEmpty() ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(pendingModernGuiBlits);
+            pendingModernGuiBlits.clear();
+        }
+        if (batch.isEmpty() && batchBlits.isEmpty()) return;
+        if (modernItemIconResolveFailed) return;
+        try {
+            // BUG TROUVÉ (test utilisateur, 26.1.2) : résoudre GameRenderer
+            // par NOM (McReflect.yarnClass/Class.forName + classloader du
+            // thread courant) échouait silencieusement (guiRendererFieldModern
+            // restait null) alors que GuiRenderer, résolu par le MÊME patron
+            // de code juste après, réussissait — le thread de rendu n'a
+            // apparemment pas de façon fiable Knot comme
+            // Thread.currentThread().getContextClassLoader() à ce point
+            // précis de l'exécution (contrairement au chemin interne de
+            // MappingsRegistry.loadClass, qui retombe sur le classloader de
+            // l'APPELANT — Knot, puisque MappingsRegistry est une de NOS
+            // classes — quand le premier essai échoue, ce qui explique
+            // pourquoi GuiRenderer "marchait par coïncidence"). Fix : on a
+            // déjà l'instance VIVANTE de GameRenderer ici (paramètre) — on
+            // résout ses champs directement sur SA classe réelle
+            // (gameRenderer.getClass()), zéro ambiguïté de classloader
+            // possible, plutôt que de deviner un nom qualifié + un
+            // classloader séparément.
+            if (guiRendererFieldModern == null) {
+                guiRendererFieldModern = findFieldByNameInHierarchy(gameRenderer.getClass(),
+                    MappingsRegistry.getObfFieldName("net/minecraft/client/render/GameRenderer", "guiRenderer"),
+                    "guiRenderer");
+                if (guiRendererFieldModern == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: champ guiRenderer introuvable sur "
+                        + gameRenderer.getClass());
+                    return;
+                }
+            }
+
+            Object guiRenderer = guiRendererFieldModern.get(gameRenderer);
+            if (guiRenderer == null) return;
+
+            // Même logique : champ GuiRenderState résolu sur la classe réelle
+            // de l'instance guiRenderer VIVANTE qu'on vient d'obtenir — nommé
+            // "state" par Yarn (1.21.11) mais "renderState" en vrai nom
+            // Mojang (26.1.2, confirmé par javap).
+            if (guiStateFieldModern == null) {
+                guiStateFieldModern = findFieldByNameInHierarchy(guiRenderer.getClass(),
+                    MappingsRegistry.getObfFieldName("net/minecraft/client/gui/render/GuiRenderer", "state"),
+                    "state", "renderState");
+                if (guiStateFieldModern == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: champ state/renderState introuvable sur "
+                        + guiRenderer.getClass());
+                    return;
+                }
+            }
+
+            Object guiState = guiStateFieldModern.get(guiRenderer);
+            if (guiState == null) return;
+
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+
+            // Classloader EXPLICITE de guiRenderer (instance vivante,
+            // forcément Knot) plutôt que le classloader ambiant du thread —
+            // même correctif que ci-dessus, pour la même raison. Nécessaire
+            // pour icônes ET blits de fond (voir batchBlits plus bas), donc
+            // calculé ici, hors du bloc drawContextCtorModern==null.
+            ClassLoader cl = guiRenderer.getClass().getClassLoader();
+
+            if (drawContextCtorModern == null) {
+                // DrawContext (Yarn 1.21.11) == GuiGraphicsExtractor (vrai
+                // nom Mojang 26.1.2, confirmé par javap — PAS "GuiGraphics" :
+                // la classe a été repositionnée en "extracteur" d'état vers
+                // GuiRenderState dans la nouvelle architecture de rendu différé).
+                Class<?> drawContextClass = resolveClassByLoader(cl,
+                    MappingsRegistry.getObfClassDot("net/minecraft/client/gui/DrawContext"),
+                    "net.minecraft.client.gui.GuiGraphicsExtractor");
+                if (drawContextClass == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: classe DrawContext/GuiGraphicsExtractor introuvable");
+                    return;
+                }
+                drawContextCtorModern = drawContextClass.getDeclaredConstructor(
+                    mc.getClass(), guiStateFieldModern.getType(), int.class, int.class);
+                drawContextCtorModern.setAccessible(true);
+            }
+            Class<?> drawContextClass = drawContextCtorModern.getDeclaringClass();
+
+            // "drawItem"/"drawItemBar" (Yarn) nécessitent une classe
+            // ItemStack CONCRÈTE pour se résoudre (voir findMethodByNameInHierarchy) —
+            // reportés ici, guardés par batch non-vide, plutôt que dans le
+            // bloc drawContextCtorModern==null ci-dessus : un fond de
+            // conteneur (batchBlits) peut arriver SEUL, sans la moindre
+            // icône, sur une shulker box entièrement vide (voir
+            // ShulkerPreviewModule) — resterait bloqué pour toujours si cette
+            // résolution dépendait de batch.get(0).
+            if (!batch.isEmpty() && drawItemMethodModern == null) {
+                // "drawItem" (Yarn 1.21.11) == "item" (vrai nom Mojang
+                // 26.1.2, confirmé par javap).
+                drawItemMethodModern = findMethodByNameInHierarchy(drawContextClass,
+                    batch.get(0).itemStack.getClass(), "drawItem", "item");
+                if (drawItemMethodModern == null) {
+                    modernItemIconResolveFailed = true;
+                    LauncherLog.err("[UiRenderer] itemIconModern: méthode drawItem/item introuvable sur " + drawContextClass);
+                    return;
+                }
+                // "drawItemBar" (Yarn 1.21.11) == "itemBar" (vrai nom Mojang
+                // 26.1.2, confirmé par javap) — best-effort, jamais fatal si
+                // introuvable (reste null, barre juste pas dessinée).
+                drawItemBarMethodModern = findMethodByNameInHierarchy(drawContextClass,
+                    batch.get(0).itemStack.getClass(), "drawItemBar", "itemBar");
+
+                // Fond de case vanilla (voir javadoc du champ) — best-effort,
+                // ne fait jamais échouer la résolution du reste (icône/barre
+                // continuent de fonctionner même si CETTE partie échoue).
+                resolveSlotSpriteModern(cl, drawContextClass);
+            }
+
+            Object drawContext = drawContextCtorModern.newInstance(mc, guiState, 0, 0);
+
+            // Fond de fenêtre de conteneur (ShulkerPreviewModule) — dessiné
+            // AVANT les icônes (sinon il les recouvrirait), voir
+            // drawVanillaContainerTexture.
+            if (!batchBlits.isEmpty()) {
+                resolveSlotSpriteModern(cl, drawContextClass); // pipeline GUI_TEXTURED partagée (voir javadoc du champ)
+                resolveContainerBlitModern(cl, drawContextClass);
+                if (blitMethodModern != null && renderPipelineGuiTexturedModern != null) {
+                    for (PendingGuiBlit blit : batchBlits) {
+                        Object identifier = resolveTextureIdentifier(cl, blit.texturePath);
+                        if (identifier == null) continue;
+                        blitMethodModern.invoke(drawContext, renderPipelineGuiTexturedModern, identifier,
+                            blit.guiX, blit.guiY, blit.u, blit.v, blit.guiW, blit.guiH,
+                            Math.round(blit.texW), Math.round(blit.texH));
+                    }
+                }
+            }
+
+            // Taille NATIVE (16x16 GUI-pixels, comme vanilla) — pas de mise à
+            // l'échelle ici (pas de manipulation du Matrix3x2fStack de
+            // DrawContext pour l'instant, contrairement au glScalef legacy) :
+            // simplification volontaire pour cette première passe, voir
+            // ArmorDurabilityModule pour l'effet (icônes affichées à leur
+            // taille vanilla plutôt qu'au "size" demandé).
+            for (PendingItemIcon icon : batch) {
+                if (icon.vanillaExtras && drawGuiTextureMethodModern != null) {
+                    // Sprite 29x24, icône 16x16 à l'offset (3,4) en son sein
+                    // (voir javadoc du champ) — AVANT l'icône, sinon elle la
+                    // recouvrirait.
+                    drawGuiTextureMethodModern.invoke(drawContext, renderPipelineGuiTexturedModern,
+                        slotSpriteIdentifierModern, icon.guiX - SLOT_SPRITE_ICON_DX, icon.guiY - SLOT_SPRITE_ICON_DY,
+                        SLOT_SPRITE_W, SLOT_SPRITE_H);
+                }
+                drawItemMethodModern.invoke(drawContext, icon.itemStack, icon.guiX, icon.guiY);
+                if (icon.vanillaExtras && drawItemBarMethodModern != null) {
+                    drawItemBarMethodModern.invoke(drawContext, icon.itemStack, icon.guiX, icon.guiY);
+                }
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingModernItemIcons: " + t);
+        }
+    }
+
+    /**
+     * Résout {@code GuiGraphicsExtractor.blit(RenderPipeline,Identifier,I,I,F,F,I,I,I,I)V}
+     * (vérifié par désassemblage bytecode de {@code ShulkerBoxScreen.extractBackground}
+     * dans le vrai jar 26.1.2 — appel BRUT, pas via l'atlas de sprites,
+     * utilisé par TOUS les fonds de fenêtre de conteneur vanilla) — best-effort,
+     * ne fait jamais échouer la résolution des icônes même en cas d'échec ici.
+     */
+    private static void resolveContainerBlitModern(ClassLoader cl, Class<?> drawContextClass) {
+        if (blitMethodModern != null || blitResolveFailed) return;
+        try {
+            Class<?> identifierClass = resolveClassByLoader(cl,
+                MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
+                "net.minecraft.resources.Identifier");
+            if (identifierClass == null) { blitResolveFailed = true; return; }
+            for (Method m : drawContextClass.getDeclaredMethods()) {
+                if (!m.getName().equals("blit")) continue;
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length != 10) continue;
+                if (!identifierClass.isAssignableFrom(p[1])) continue;
+                if (p[2] != int.class || p[3] != int.class) continue;
+                if (p[4] != float.class || p[5] != float.class) continue;
+                if (p[6] != int.class || p[7] != int.class || p[8] != int.class || p[9] != int.class) continue;
+                m.setAccessible(true);
+                blitMethodModern = m;
+                break;
+            }
+            if (blitMethodModern == null) blitResolveFailed = true;
+        } catch (Throwable t) {
+            blitResolveFailed = true;
+            LauncherLog.warn("[UiRenderer] containerBlitModern: résolution échouée : " + t);
+        }
+    }
+
+    /** {@code Identifier.withDefaultNamespace(path)}, mis en cache par chemin — voir resolveSlotSpriteModern pour "ofVanilla"/"withDefaultNamespace". */
+    private static Object resolveTextureIdentifier(ClassLoader cl, String path) {
+        Object cached = containerTextureIdentifierCache.get(path);
+        if (cached != null) return cached;
+        try {
+            Class<?> identifierClass = resolveClassByLoader(cl,
+                MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
+                "net.minecraft.resources.Identifier");
+            if (identifierClass == null) return null;
+            Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
+            if (ofVanilla == null) return null;
+            Object id = ofVanilla.invoke(null, path);
+            containerTextureIdentifierCache.put(path, id);
+            return id;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * Résout drawGuiTexture/blitSprite + le pipeline GUI_TEXTURED + l'Identifier
+     * du sprite "hud/hotbar_offhand_left" (29x24, vrai sprite vanilla — voir
+     * javadoc du champ) — best-effort, ne lève jamais (appelant continue
+     * avec le reste même en cas d'échec ici, juste pas de fond de case).
+     */
+    private static void resolveSlotSpriteModern(ClassLoader cl, Class<?> drawContextClass) {
+        if (drawGuiTextureMethodModern != null || slotSpriteResolveFailed) return;
+        try {
+            Class<?> renderPipelinesClass = resolveClassByLoader(cl,
+                MappingsRegistry.getObfClassDot("net/minecraft/client/gl/RenderPipelines"),
+                "net.minecraft.client.renderer.RenderPipelines");
+            Class<?> identifierClass = resolveClassByLoader(cl,
+                MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
+                "net.minecraft.resources.Identifier");
+            if (renderPipelinesClass == null || identifierClass == null) {
+                slotSpriteResolveFailed = true;
+                return;
+            }
+
+            java.lang.reflect.Field guiTexturedField = findFieldByNameInHierarchy(renderPipelinesClass, "GUI_TEXTURED");
+            if (guiTexturedField == null) { slotSpriteResolveFailed = true; return; }
+            renderPipelineGuiTexturedModern = guiTexturedField.get(null);
+
+            // "ofVanilla" (Yarn 1.21.11) == "withDefaultNamespace" (vrai nom
+            // Mojang 26.1.2, confirmé par javap) — les deux prennent juste le
+            // chemin, namespace "minecraft" implicite.
+            java.lang.reflect.Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
+            if (ofVanilla == null) { slotSpriteResolveFailed = true; return; }
+            slotSpriteIdentifierModern = ofVanilla.invoke(null, "hud/hotbar_offhand_left");
+
+            // "drawGuiTexture" (Yarn 1.21.11/1.21.4/1.20.4, method_52706) ==
+            // "blitSprite" (vrai nom Mojang 26.1.2, confirmé par désassemblage
+            // GameRenderer/Gui réels) — descripteur (RenderPipeline,Identifier,I,I,I,I)V
+            // vérifié IDENTIQUE sur 1.21.11 et 26.1.2 (les deux seuls brackets
+            // couverts par le chemin "Deferred", voir javadoc du champ — 1.20.4/
+            // 1.21.4 ont un descripteur différent, non géré ici).
+            Class<?> renderPipelineType = guiTexturedField.getType();
+            for (Method m : drawContextClass.getDeclaredMethods()) {
+                if ((m.getName().equals("drawGuiTexture") || m.getName().equals("blitSprite"))
+                        && m.getParameterCount() == 6
+                        && renderPipelineType.isAssignableFrom(m.getParameterTypes()[0])
+                        && identifierClass.isAssignableFrom(m.getParameterTypes()[1])
+                        && m.getParameterTypes()[2] == int.class && m.getParameterTypes()[3] == int.class
+                        && m.getParameterTypes()[4] == int.class && m.getParameterTypes()[5] == int.class) {
+                    m.setAccessible(true);
+                    drawGuiTextureMethodModern = m;
+                    break;
+                }
+            }
+            if (drawGuiTextureMethodModern == null) slotSpriteResolveFailed = true;
+        } catch (Throwable t) {
+            slotSpriteResolveFailed = true;
+            LauncherLog.warn("[UiRenderer] itemIconModern: fond de case vanilla indisponible : " + t);
+        }
+    }
+
+    private static java.lang.reflect.Method findStaticStringMethod(Class<?> owner, String... candidateNames) {
+        for (String name : candidateNames) {
+            for (Method m : owner.getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == 1 && m.getParameterTypes()[0] == String.class) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Cherche {@code candidateNames} (dans l'ordre) comme nom de champ déclaré, en remontant la hiérarchie de {@code owner}. */
+    private static java.lang.reflect.Field findFieldByNameInHierarchy(Class<?> owner, String... candidateNames) {
+        for (String name : candidateNames) {
+            if (name == null) continue;
+            Class<?> c = owner;
+            while (c != null) {
+                try {
+                    java.lang.reflect.Field f = c.getDeclaredField(name);
+                    f.setAccessible(true);
+                    return f;
+                } catch (NoSuchFieldException e) {
+                    c = c.getSuperclass();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Cherche {@code candidateNames} (dans l'ordre) comme méthode déclarée à 1 argument (assignable depuis {@code argType}) + (int,int), en remontant la hiérarchie de {@code owner}. */
+    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String... candidateNames) {
+        for (String name : candidateNames) {
+            if (name == null) continue;
+            Class<?> c = owner;
+            while (c != null) {
+                for (Method m : c.getDeclaredMethods()) {
+                    if (!m.getName().equals(name) || m.getParameterCount() != 3) continue;
+                    Class<?>[] p = m.getParameterTypes();
+                    if (p[0].isAssignableFrom(argType) && p[1] == int.class && p[2] == int.class) {
+                        m.setAccessible(true);
+                        return m;
+                    }
+                }
+                c = c.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    /** Essaie chaque nom de classe (dans l'ordre) via {@code Class.forName} avec le classloader EXPLICITE donné — jamais le classloader ambiant du thread courant, voir flushPendingModernItemIcons pour le pourquoi. */
+    private static Class<?> resolveClassByLoader(ClassLoader cl, String... candidateNames) {
+        for (String name : candidateNames) {
+            if (name == null) continue;
+            try {
+                return Class.forName(name, false, cl);
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
     // ── Texte (police bitmap UiFont) ──────────────────────────────────────────

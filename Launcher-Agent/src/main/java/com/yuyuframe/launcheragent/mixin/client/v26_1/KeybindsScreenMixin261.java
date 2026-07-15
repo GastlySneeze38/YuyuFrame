@@ -1,8 +1,5 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
-import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.screen.CustomKeybindsScreen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,13 +17,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Constructeur vérifié via {@code javap} sur le jar client 26.1.2 réel :
  * {@code public KeyBindsScreen(Screen, Options);}.
  *
- * N'utilise PAS {@code ScreenHelper.getMc}/{@code getField}/{@code navigate}
- * (contrairement à l'original) : ces méthodes portent en dur le nom
- * obfusqué 1.21.11 {@code "gfj"} (voir {@code ScreenHelper.CLS_MINECRAFT_CLIENT})
- * spécifique à CE bracket — utilise {@link GlobalUiRenderBridge261} à la
- * place, qui porte les vrais noms Mojang vérifiés pour 26.1+.
+ * BUG TROUVÉ (crash rapporté par un beta-testeur, 26.1.2) : {@code
+ * CustomKeybindsScreen} (construit ci-dessous jusqu'à ce correctif) dépend
+ * ENTIÈREMENT de {@code ScreenHelper}/{@code KeybindReflect} — l'ANCIEN
+ * système (voir la javadoc de {@code ModrinthContentScreen}, qui documente
+ * exactement le même piège déjà rencontré et abandonné pour 1.8.9 :
+ * "ClassNotFoundException('yh') dans ScreenHelper.literal()") qui code en
+ * DUR les lettres obfusquées OFFICIELLES du bracket 1.21.11 (ex: {@code
+ * CLS_TEXT="yh"}, {@code CLS_MINECRAFT_CLIENT="gfj"}) SANS repli vers les
+ * vrais noms Mojang — cassé sur TOUT bracket où le jeu n'est pas obfusqué
+ * de cette façon précise, dont 26.1.2 (non obfusqué du tout, voir
+ * VersionBracketRegistry § bracket "E"). Résultat en jeu : {@code
+ * ClassNotFoundException} en cascade ("yh"/"gfj"/"gfh"/"gfh$a"), écran des
+ * touches vide (0 catégorie, 0 touche) voire blocage selon le moment où
+ * l'exception survient dans le cycle de vie de l'écran (certains appels ne
+ * sont PAS protégés par le try/catch ci-dessous, notamment {@code init()}
+ * appelé PLUS TARD par vanilla, hors de ce hook). Le seul autre bracket qui
+ * atteint ce code (1.21.11, via {@code KeybindsScreenMixin} — voir sa
+ * javadoc) reste inchangé : {@code ScreenHelper} y fonctionne bel et bien,
+ * ses lettres correspondent EXACTEMENT à cette version. La javadoc "Vérifié
+ * en jeu (26.1.2)" ci-dessus était donc soit obsolète soit basée sur une
+ * version antérieure de {@code CustomKeybindsScreen} pas encore couplée à
+ * {@code ScreenHelper} de cette façon.
  *
- * Vérifié en jeu (26.1.2).
+ * Fix IMMÉDIAT (pas une réécriture complète de CustomKeybindsScreen vers le
+ * pipeline UiScreenBase/UiWidget — hors scope d'un correctif de crash,
+ * voir ModrinthContentScreen pour cette migration déjà faite ailleurs) :
+ * ce hook ne fait PLUS RIEN sur ce bracket — l'écran Contrôles VANILLA
+ * (jamais cassé, juste moins personnalisé) reste affiché tel quel au lieu
+ * d'un remplacement qui plantait.
  */
 @Mixin(targets = "net.minecraft.client.gui.screens.options.controls.KeyBindsScreen")
 public abstract class KeybindsScreenMixin261 {
@@ -36,18 +55,7 @@ public abstract class KeybindsScreenMixin261 {
         at = @At("TAIL")
     )
     private void la$onInit(CallbackInfo ci) {
-        try {
-            FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
-
-            Object mc = GlobalUiRenderBridge261.getMcInstance();
-            Object parentScreen = mc != null ? GlobalUiRenderBridge261.getCurrentScreen(mc) : null;
-
-            LauncherLog.ui(3, "[LauncherAgent] KeybindsScreenMixin261: remplacement par CustomKeybindsScreen (parent="
-                + parentScreen + ")");
-            if (mc != null) GlobalUiRenderBridge261.setScreen(mc, new CustomKeybindsScreen(parentScreen));
-        } catch (Throwable t) {
-            LauncherLog.err("[LauncherAgent] KeybindsScreenMixin261 onInit: " + t);
-            t.printStackTrace(System.err);
-        }
+        // Désactivé — voir javadoc de classe (ScreenHelper/KeybindReflect
+        // non portés pour ce bracket, CustomKeybindsScreen cassé sur 26.1.2).
     }
 }
