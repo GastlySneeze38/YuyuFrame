@@ -17,7 +17,8 @@
     "client.v26_1.ClearOverlaysMixin261",
     "client.v26_1.WaterFogEnvironmentMixin261",
     "client.v26_1.LavaFogEnvironmentMixin261",
-    "client.v26_1.PowderedSnowFogEnvironmentMixin261"
+    "client.v26_1.PowderedSnowFogEnvironmentMixin261",
+    "client.v26_1.ChatListenerMixin261"
   ],
   "injectors": {
     "defaultRequire": 1

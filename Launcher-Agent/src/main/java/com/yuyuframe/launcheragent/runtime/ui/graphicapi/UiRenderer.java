@@ -1841,7 +1841,6 @@ public final class UiRenderer {
     private static Object slotSpriteIdentifierModern;
     private static boolean slotSpriteResolveFailed = false;
     private static boolean modernItemIconResolveFailed = false;
-    private static boolean modernItemIconDiagLogged = false;
 
     // GuiRenderer/GuiRenderState (voir ci-dessus) N'EXISTENT PAS en 1.20.4 ni
     // 1.21.4 (confirmé absent des deux mappings Yarn correspondants,
@@ -2126,20 +2125,9 @@ public final class UiRenderer {
                 // ne fait jamais échouer la résolution du reste (icône/barre
                 // continuent de fonctionner même si CETTE partie échoue).
                 resolveSlotSpriteModern(cl, drawContextClass);
-
-                LauncherLog.info("[UiRenderer] itemIconModern diag: résolution OK — guiRendererField=" + guiRendererFieldModern
-                    + " guiStateField=" + guiStateFieldModern + " drawContextCtor=" + drawContextCtorModern
-                    + " drawItem=" + drawItemMethodModern + " drawItemBar=" + drawItemBarMethodModern
-                    + " drawGuiTexture=" + drawGuiTextureMethodModern);
             }
 
             Object drawContext = drawContextCtorModern.newInstance(mc, guiState, 0, 0);
-
-            if (!modernItemIconDiagLogged) {
-                modernItemIconDiagLogged = true;
-                LauncherLog.info("[UiRenderer] itemIconModern diag: guiRenderer=" + guiRenderer
-                    + " guiState=" + guiState + " drawContext=" + drawContext + " batch=" + batch.size());
-            }
 
             // Taille NATIVE (16x16 GUI-pixels, comme vanilla) — pas de mise à
             // l'échelle ici (pas de manipulation du Matrix3x2fStack de

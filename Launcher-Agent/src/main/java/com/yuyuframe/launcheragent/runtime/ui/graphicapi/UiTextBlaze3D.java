@@ -395,7 +395,6 @@ public final class UiTextBlaze3D {
             mMatrixGetFloatArray = clsMatrix4f.getMethod("get", float[].class);
 
             resolveOk = true;
-            LauncherLog.info("[LauncherAgent] UiTextBlaze3D: résolution OK, pipeline GUI_TEXT natif prêt");
         } catch (Throwable t) {
             resolveOk = false;
             LauncherLog.err("[LauncherAgent] UiTextBlaze3D: résolution échouée, repli sur le pipeline SDF existant : " + t);
@@ -759,7 +758,6 @@ public final class UiTextBlaze3D {
     // seul le PREMIER échec est loggé (jamais par frame — coût I/O disque
     // synchrone déjà identifié comme anti-pattern ailleurs dans ce projet).
     private static int failureLogCount;
-    private static boolean projLogged;
 
     // DIAGNOSTIC (IllegalStateException "Close the existing render pass" —
     // jamais localisé précisément QUEL appel la lève, tout est capturé par un
@@ -851,19 +849,9 @@ public final class UiTextBlaze3D {
         queued.add(() -> drawGradientRect(x0, y0, x1, y1, radius, colorBottom, colorTop, vpWidth, vpHeight));
     }
 
-    private static int flushLogCount;
-
     /** Appelé depuis {@code GlobalUiPresentMixin} à la HEAD de blitToScreen (avant presentTexture) — dessine tout ce qui a été empilé la frame précédente. */
     public static void flushQueued() {
         if (queued.isEmpty()) return;
-        // DIAGNOSTIC : confirme que flushQueued() tourne bien EN CONTINU
-        // (chaque frame tant qu'un écran custom est ouvert), pas juste une
-        // fois au premier frame — les logs de création (atlas/buffer) sont
-        // mis en cache après le premier appel et ne le prouvent pas.
-        if (flushLogCount < 10) {
-            flushLogCount++;
-            LauncherLog.info("[LauncherAgent] DIAG-FLUSH #" + flushLogCount + ": " + queued.size() + " dessin(s) en attente");
-        }
         // Copie + clear immédiat : si un dessin relance une exception, on ne
         // rejoue jamais indéfiniment le même lot en boucle.
         QueuedDraw[] batch = queued.toArray(new QueuedDraw[0]);
@@ -1005,11 +993,6 @@ public final class UiTextBlaze3D {
                 mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms";
-                Object projBuf = mGetProjectionMatrixBuffer.invoke(null);
-                if (!projLogged) {
-                    projLogged = true;
-                    LauncherLog.info("[LauncherAgent] DIAG-PROJ: RenderSystem.getProjectionMatrixBuffer() = " + projBuf);
-                }
                 mBindDefaultUniforms.invoke(null, pass);
 
                 // Écrase le "Projection" ambiant repris par bindDefaultUniforms

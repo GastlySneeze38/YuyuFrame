@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -62,13 +63,10 @@ public abstract class GlobalUiPresentMixin261 {
                 return;
             }
 
-            if (GlobalUiRenderBridge261.DIAG_LOGGED_CLASSES.add(currentScreen.getClass())) {
-                LauncherLog.info("[LauncherAgent] DIAG4 (26.1): currentScreen=" + currentScreen
-                    + " class=" + currentScreen.getClass() + " isUiDrawable=" + (currentScreen instanceof UiDrawable));
-            }
 
             if (!(currentScreen instanceof UiDrawable)) {
                 HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
 

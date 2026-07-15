@@ -37,6 +37,8 @@ public abstract class UiInputPoller {
     public boolean leftDown, rightDown;
     protected boolean prevLeftDown, prevRightDown;
     public boolean leftClicked, rightClicked; // "juste pressé cette frame"
+    /** État brut Maj (gauche OU droite), renseigné par {@link #readState()} à chaque frame — voir ShulkerPreviewModule (Shift+survol). PAS le même champ que editShiftHeld (celui-ci ne se met à jour que quand pollTextEdit() est appelé, c-à-d un UiTextField focus). */
+    public boolean shiftDown;
 
     /**
      * Nom de la touche d'ouverture du menu — même format que

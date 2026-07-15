@@ -33,6 +33,27 @@ import java.util.regex.Pattern;
  * "h", {@code List<ChatHudLine>}, INSÉRÉ EN TÊTE — le plus récent message est
  * toujours à l'index 0, vérifié par javap) → {@code ChatHudLine.getText()}
  * (lettre "a") → {@code Text.asUnformattedString()} (lettre "c").
+ *
+ * BUG TROUVÉ (build v503, log Minecraft complet fourni par l'utilisateur) :
+ * lire {@code messages.get(0)} depuis {@link #onTick()} (appelé une fois par
+ * TICK client, ~20/s) est intrinsèquement RACE-Y sur un salon très actif
+ * (lobby Hypixel : plusieurs messages "a rejoint le lobby" par seconde) —
+ * si DEUX messages arrivent entre deux ticks, seul le PLUS RÉCENT est
+ * jamais lu comme "index 0" ; celui contenant la mention du joueur peut
+ * être écrasé avant même d'être inspecté une seule fois. Confirmé en
+ * étudiant un mod réel équivalent qui supporte déjà 26.1.2
+ * (github.com/TerminalMC/ChatNotify, branche mc26.1) : il n'interroge
+ * JAMAIS la liste d'affichage par polling — il MIXIN directement
+ * {@code ChatListener.handleSystemMessage}/{@code handlePlayerChatMessage}
+ * (méthodes appelées PAR LE JEU exactement une fois par message REÇU, avant
+ * même l'affichage) pour être notifié de CHAQUE message sans exception,
+ * quel que soit le débit. Fix : {@code ChatListenerMixin261} appelle
+ * {@link #onChatMessageObserved()} en TAIL de ces deux méthodes — {@link
+ * #checkChatState()} (le corps de l'ancien {@code onTick()}) tourne alors
+ * de façon fiable, DÉCLENCHÉE PAR L'ÉVÉNEMENT plutôt qu'en espérant
+ * l'attraper au bon tick. {@link #onTick()} continue de l'appeler aussi
+ * (filet de sécurité redondant, sans risque — la dédup déjà en place
+ * empêche tout double traitement).
  */
 public final class ChatEnhancementsModule extends LauncherModule {
 
@@ -43,8 +64,10 @@ public final class ChatEnhancementsModule extends LauncherModule {
     public boolean stackRepeats = true;
 
     private static final Pattern COUNTER_SUFFIX = Pattern.compile("\\s*\\(x\\d+\\)$");
+    /** Tag d'expéditeur en tête de ligne (ex: "{@code <Nom> }") — voir le fix du ping sur soi-même plus bas. */
+    private static final Pattern SENDER_TAG_PREFIX = Pattern.compile("^<[^>]+>\\s*");
 
-    private String la$lastProcessedText;
+    private Object la$lastProcessedMessage;
     private String la$lastDistinctBase;
     private int la$repeatCount = 1;
 
@@ -52,10 +75,46 @@ public final class ChatEnhancementsModule extends LauncherModule {
         super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false);
     }
 
+    private static boolean mixinDiagLogged;
+
+    /** Appelé par {@code ChatListenerMixin261} — voir javadoc de tête pour le pourquoi (fiabilité face au polling par tick). */
+    public static void onChatMessageObserved() {
+        try {
+            com.yuyuframe.launcheragent.runtime.ui.LauncherModule module =
+                com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry.get("chat-enhancements");
+            // Diag une seule fois, INCONDITIONNEL (même si désactivé) : sans ça,
+            // impossible de savoir si le Mixin appelle même bien cette méthode,
+            // et si la résolution du module/son état "activé" est correcte.
+            if (!mixinDiagLogged) {
+                mixinDiagLogged = true;
+                LauncherLog.info("[ChatEnhancementsModule] onChatMessageObserved diag: module=" + module
+                    + " isChatEnhancementsModule=" + (module instanceof ChatEnhancementsModule)
+                    + " enabled=" + (module != null ? module.isEnabled() : "n/a"));
+            }
+            if (module instanceof ChatEnhancementsModule && module.isEnabled()) {
+                ((ChatEnhancementsModule) module).checkChatState();
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[ChatEnhancementsModule] onChatMessageObserved: " + t);
+        }
+    }
+
     @Override
     public void onTick() {
+        checkChatState();
+    }
+
+    private static boolean checkChatStateEntryLogged;
+    private static boolean chainDiagLogged;
+
+    private void checkChatState() {
         try {
             Object mc = McReflect.minecraftClient();
+            // Diag une seule fois, INCONDITIONNEL — voir onChatMessageObserved().
+            if (!checkChatStateEntryLogged) {
+                checkChatStateEntryLogged = true;
+                LauncherLog.info("[ChatEnhancementsModule] checkChatState diag: mc=" + mc);
+            }
             if (mc == null) return;
             // 26.1+ : InGameHud→Gui, champ "inGameHud"→"gui" ; ChatHud→ChatComponent,
             // champ "chatHud"→"chat" (vérifiés par javap sur le jar client 26.1.2
@@ -85,6 +144,11 @@ public final class ChatEnhancementsModule extends LauncherModule {
             // n'existe plus du tout) — dégrade proprement plus bas (aucun crash,
             // juste la fusion visuelle qui ne s'applique pas sur 26.1+).
             Field messagesField = McReflect.field(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "messages", "allMessages");
+            if (!chainDiagLogged) {
+                chainDiagLogged = true;
+                LauncherLog.info("[ChatEnhancementsModule] checkChatState chain diag: inGameHudField=" + inGameHudField
+                    + " chatHud=" + chatHud + " messagesField=" + messagesField);
+            }
             if (messagesField == null) return;
             Object messagesObj = messagesField.get(chatHud);
             if (!(messagesObj instanceof List)) return;
@@ -105,8 +169,22 @@ public final class ChatEnhancementsModule extends LauncherModule {
             String plain = (String) asUnformatted.invoke(textObj);
             if (plain == null) return;
 
-            if (plain.equals(la$lastProcessedText)) return; // déjà traité, rien de nouveau
-            la$lastProcessedText = plain;
+            // BUG SIGNALÉ PAR L'UTILISATEUR (le regroupement ne se
+            // déclenchait JAMAIS) : cette dédup comparait le TEXTE, pas
+            // l'objet — or un message envoyé deux fois d'affilée produit
+            // un texte STRICTEMENT IDENTIQUE au premier. Résultat : la 2e
+            // occurrence (le vrai cas que stackRepeats doit détecter) était
+            // silencieusement prise pour "même message encore en tête,
+            // rien de neuf depuis le dernier passage d'onTick()" et on
+            // sortait AVANT MÊME d'atteindre le bloc stackRepeats plus bas
+            // — mergeRepeatedMessage() n'était donc jamais appelée. Fix :
+            // dédupliquer sur l'IDENTITÉ de l'objet GuiMessage lui-même
+            // (headLine) — un nouveau message reçu est TOUJOURS une
+            // nouvelle instance, même si son texte est identique au
+            // précédent, alors que le même message encore en tête (re-poll
+            // redondant par onTick()) reste la MÊME instance.
+            if (headLine == la$lastProcessedMessage) return;
+            la$lastProcessedMessage = headLine;
 
             if (pingOnMention) {
                 // 26.1+ : champ "session"→"user" (type Session→User), méthode
@@ -117,7 +195,19 @@ public final class ChatEnhancementsModule extends LauncherModule {
                     ? McReflect.noArgMethod(session.getClass(), "net/minecraft/client/util/Session", "getUsername", "getName")
                     : null;
                 String username = getUsername != null ? (String) getUsername.invoke(session) : null;
-                boolean matched = username != null && !username.isEmpty() && plain.toLowerCase().contains(username.toLowerCase());
+                // BUG SIGNALÉ PAR L'UTILISATEUR : chaque message ENVOYÉ PAR
+                // LUI-MÊME le pingait, car le tag d'expéditeur affiché en tête
+                // de ligne ("<GhastlySneeze38> t") contient déjà son propre
+                // pseudo — confirmé par les logs (matched=true sur "<Ghastly
+                // Sneeze38> t" ET "<GhastlySneeze38> tt", alors qu'aucun des
+                // deux messages ne mentionne réellement quelqu'un dans son
+                // CONTENU). Fix : on retire le tag d'expéditeur en tête de
+                // ligne ("<Nom> ") avant de chercher le pseudo — la recherche
+                // ne porte alors que sur le CORPS du message, plus jamais sur
+                // le nom de celui qui parle (que ce soit soi-même ou un
+                // autre joueur).
+                String body = SENDER_TAG_PREFIX.matcher(plain).replaceFirst("");
+                boolean matched = username != null && !username.isEmpty() && body.toLowerCase().contains(username.toLowerCase());
 
                 // Diag pour CHAQUE nouveau message (pas juste une fois) — borné
                 // par la dédup déjà en place plus haut (une ligne par message
@@ -140,7 +230,15 @@ public final class ChatEnhancementsModule extends LauncherModule {
                     la$repeatCount++;
                     String combinedText = base + " (x" + la$repeatCount + ")";
                     if (mergeRepeatedMessage(chatHud, messages, headLine, getText, combinedText)) {
-                        la$lastProcessedText = combinedText;
+                        // Le message combiné qu'on vient d'insérer est
+                        // maintenant en tête (addMessage4 fait un
+                        // addFirst) — le retenir comme "déjà traité" pour
+                        // qu'un re-poll redondant (onTick()) juste après
+                        // ne le retraite pas une 2e fois (ce qui aurait
+                        // renvoyé le son de ping en boucle et fait
+                        // incrémenter le compteur "(xN)" indéfiniment sans
+                        // nouveau message réel).
+                        if (!messages.isEmpty()) la$lastProcessedMessage = messages.get(0);
                     }
                 } else {
                     la$repeatCount = 1;
@@ -148,7 +246,7 @@ public final class ChatEnhancementsModule extends LauncherModule {
                 }
             }
         } catch (Throwable t) {
-            LauncherLog.err("[ChatEnhancementsModule] onTick: " + t);
+            LauncherLog.err("[ChatEnhancementsModule] checkChatState: " + t);
         }
     }
 
@@ -272,6 +370,22 @@ public final class ChatEnhancementsModule extends LauncherModule {
                 ? McReflect.method(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "addMessage",
                     getText.getReturnType(), signatureMethod.getReturnType(), sourceMethod.getReturnType(), tagMethod.getReturnType())
                 : null;
+            // BUG SIGNALÉ PAR L'UTILISATEUR (le regroupement "ne marche pas") :
+            // "trimmedMessages" (les lignes RÉELLEMENT affichées à l'écran,
+            // dérivées de "allMessages" mais PAS synchronisées automatiquement)
+            // n'était jamais reconstruit après notre suppression manuelle des
+            // deux doublons dans "allMessages" — les deux anciennes lignes
+            // restaient donc physiquement affichées à l'écran, en plus de la
+            // nouvelle ligne combinée ajoutée par addMessage4 (qui ne fait
+            // qu'AJOUTER à trimmedMessages, jamais retirer les anciennes
+            // entrées correspondant aux messages qu'on vient de retirer de
+            // "allMessages"). Fix : {@code ChatHud.rescaleChat()} (public,
+            // vérifié par javap) vide "trimmedMessages" et le reconstruit
+            // entièrement depuis "allMessages" — appelé après addMessage4,
+            // une fois "allMessages" dans son état final correct (dédoublonné
+            // + message combiné), il fait disparaître les anciennes lignes en
+            // trop.
+            Method rescaleChat = McReflect.noArgMethod(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "rescaleChat");
 
             // Diag une seule fois — voir playPingSound() pour le pourquoi (échec
             // silencieux sinon, aucune trace en cas de "return false" plus bas).
@@ -279,7 +393,7 @@ public final class ChatEnhancementsModule extends LauncherModule {
                 mergeResolveDiagLogged = true;
                 LauncherLog.info("[ChatEnhancementsModule] mergeRepeatedMessage diag: source=" + sourceMethod
                     + " tag=" + tagMethod + " signature=" + signatureMethod + " textClass=" + textClass
-                    + " literal=" + literalMethod + " addMessage4=" + addMessage4);
+                    + " literal=" + literalMethod + " addMessage4=" + addMessage4 + " rescaleChat=" + rescaleChat);
             }
 
             if (sourceMethod == null || tagMethod == null || signatureMethod == null) return false;
@@ -290,15 +404,14 @@ public final class ChatEnhancementsModule extends LauncherModule {
             // combiné ou seul) — cas courant : message court tenant sur une
             // seule ligne. Les messages plus longs (repliés sur plusieurs
             // lignes visibles) ne sont pas nettoyés parfaitement, limitation
-            // acceptée pour ce cas d'usage. "trimmedMessages" (les lignes
-            // affichées, dérivées de "messages") n'a PAS besoin d'être touché
-            // séparément : addMessage() le régénère lui-même en interne.
+            // acceptée pour ce cas d'usage.
             Object sourceValue = sourceMethod.invoke(headLine);
             Object tagValue = tagMethod.invoke(headLine);
             if (messages.size() >= 2) { messages.remove(0); messages.remove(0); }
 
             Object combined = literalMethod.invoke(null, combinedText);
             addMessage4.invoke(chatHud, combined, null, sourceValue, tagValue);
+            if (rescaleChat != null) rescaleChat.invoke(chatHud);
             return true;
         } catch (Throwable t) {
             if (!mergeErrorLogged) {

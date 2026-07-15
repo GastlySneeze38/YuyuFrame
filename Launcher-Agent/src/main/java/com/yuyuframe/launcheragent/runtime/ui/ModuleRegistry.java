@@ -22,6 +22,7 @@ import com.yuyuframe.launcheragent.runtime.module.OldItemRotationsModule;
 import com.yuyuframe.launcheragent.runtime.module.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.PotionEffectsModule;
 import com.yuyuframe.launcheragent.runtime.module.SaturationModule;
+import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.module.SneakRampModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingSpeedModule;
 import com.yuyuframe.launcheragent.runtime.module.SwingWhileBlockingModule;
@@ -70,6 +71,12 @@ public final class ModuleRegistry {
 
     private static final List<LauncherModule> MODULES = new ArrayList<>();
     private static final List<ModuleGroup> GROUPS = new ArrayList<>();
+    // AUDIT PERF (demandé explicitement par l'utilisateur) : get(id) faisait
+    // un scan linéaire de MODULES (~30-40 entrées) à CHAQUE appel — utilisé
+    // depuis plusieurs Mixins déclenchés CHAQUE FRAME (ex: CrosshairMixin/261,
+    // extractCrosshair — coût individuel négligeable en absolu, mais gratuit
+    // à éliminer). O(1) via cette table, tenue à jour par register().
+    private static final java.util.Map<String, LauncherModule> BY_ID = new java.util.HashMap<>();
 
     /**
      * 1.16.5 (et plus largement le bracket "B", voir VersionBracketRegistry —
@@ -155,6 +162,11 @@ public final class ModuleRegistry {
         if (IS_26_1) {
             register(new NoPumpkinOverlayModule());
             register(new ClearVisionModule());
+            // Contenu stocké via DataComponents.CONTAINER (refonte "Data
+            // Components", ~1.20.5) et lu par réflexion à noms RÉELS directs
+            // (voir sa javadoc) — même gate que les deux modules ci-dessus,
+            // aucun équivalent 1.8.9/1.20.4 pour l'instant.
+            register(new ShulkerPreviewModule());
         }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
@@ -266,6 +278,7 @@ public final class ModuleRegistry {
 
     public static void register(LauncherModule module) {
         MODULES.add(module);
+        BY_ID.put(module.id, module);
         // Écrase les valeurs par défaut (fixées dans le constructeur du
         // module, juste avant ce point) avec la config persistée — voir
         // HudConfigStore. Placé ICI (pas dans le bloc static{}) pour que tout
@@ -300,8 +313,7 @@ public final class ModuleRegistry {
     }
 
     public static LauncherModule get(String id) {
-        for (LauncherModule m : MODULES) if (m.id.equals(id)) return m;
-        return null;
+        return BY_ID.get(id);
     }
 
     /** Filtre les {@code null} — voir IS_1_16, certains {@code get(id)} n'ont pas de résultat selon le bracket. */
