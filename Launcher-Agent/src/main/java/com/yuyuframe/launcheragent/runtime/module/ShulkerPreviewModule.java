@@ -1,10 +1,10 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -22,8 +22,41 @@ import java.util.List;
  * CHAQUE frame près du curseur, en dehors de tout pipeline de tooltip
  * vanilla — voir {@link #renderIfApplicable}, appelé directement depuis
  * GlobalUiPresentMixin261 (branche "écran vanilla ouvert"), aucun Mixin
- * supplémentaire nécessaire. Icônes via {@link UiRenderer#drawVanillaItemIcon},
- * déjà utilisé par {@link ArmorDurabilityModule}.
+ * supplémentaire nécessaire.
+ *
+ * BUG TROUVÉ (retour utilisateur) : un premier essai ajoutait un Mixin
+ * {@code @Inject} sur {@code Screen.extractRenderStateWithTooltipAndSubtitles}
+ * (pour annuler le tooltip vanilla quand notre panneau se chevauchait avec
+ * lui) — ciblant la classe {@code Screen} elle-même (superclasse commune de
+ * TOUS les écrans, y compris nos propres écrans custom comme
+ * {@code UiMainMenuScreen}), Mixin devait reconstruire la hiérarchie de
+ * classes pour chaque sous-type au chargement, et ça CASSAIT le chargement
+ * de nos propres écrans (`RuntimeException: Failed to load class file for
+ * UiMainMenuScreen`, HUD custom entier inaccessible). Retiré entièrement —
+ * le panneau est de toute façon maintenant ancré sur la case survolée (voir
+ * drawGrid), pas sur le curseur brut ni sur la fenêtre entière, ce qui
+ * réduit déjà fortement le risque de chevauchement sans avoir besoin d'y
+ * toucher.
+ *
+ * FOND DE FENÊTRE : la VRAIE texture vanilla
+ * ({@code textures/gui/container/shulker_box.png}, 256x256, région visible
+ * 176x166 dans son coin haut-gauche — confirmé par désassemblage bytecode de
+ * {@code ShulkerBoxScreen.extractBackground} dans le vrai jar 26.1.2, PAS
+ * recréée), demandé explicitement par l'utilisateur (resource-pack-personnalisable,
+ * même exigence que le sprite "hud/hotbar_offhand_left" utilisé par
+ * ArmorDurabilityModule) — voir {@link UiRenderer#drawVanillaContainerTexture}.
+ * Recadrée à la zone de stockage UNIQUEMENT (sans l'inventaire du joueur, non
+ * pertinent ici) : u=0,v=0, 176x78 GUI-pixels (bord plat en bas, pas de coins
+ * arrondis à cette hauteur — seuls présents tout en bas de l'image complète,
+ * après l'inventaire joueur — compromis accepté pour rester compact).
+ *
+ * Icônes via {@link UiRenderer#drawVanillaItemIcon}, déjà utilisé par
+ * {@link ArmorDurabilityModule}. Origine des cases dans l'image (7,17),
+ * pas de 18 GUI-px — valeurs standard vanilla pour la famille "coffre" (27
+ * emplacements de stockage, chest/barrel/shulker box partagent la même mise
+ * en page), PAS mesurées empiriquement ici mais réutilisées telles quelles :
+ * cohérent avec l'image réelle blitée, donc les icônes tombent exactement
+ * dans les cases dessinées par la texture, sans recalage manuel.
  *
  * SCOPE : bracket 26.1.2 UNIQUEMENT (voir IS_26_1/register dans
  * ModuleRegistry, même gate que NoPumpkinOverlayModule/ClearVisionModule).
@@ -53,19 +86,35 @@ import java.util.List;
  */
 public final class ShulkerPreviewModule extends LauncherModule {
 
-    private static final String SCREEN_CLASS = "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen";
     private static final String BLOCK_ITEM_CLASS = "net.minecraft.world.item.BlockItem";
     private static final String SHULKER_BLOCK_CLASS = "net.minecraft.world.level.block.ShulkerBoxBlock";
     private static final String DATA_COMPONENTS_CLASS = "net.minecraft.core.component.DataComponents";
+    private static final String CONTAINER_TEXTURE_PATH = "textures/gui/container/shulker_box.png";
 
     private static final int COLS = 9, ROWS = 3;
-    private static final float SLOT_GUI = 18f;
+    // Origine/pas RÉELS vanilla pour la famille "coffre" (27 slots de
+    // stockage) — voir javadoc de classe : les icônes tombent directement
+    // dans les cases peintes par CONTAINER_TEXTURE, pas de recalage manuel.
+    private static final float SLOT_ORIGIN_X_GUI = 7f;
+    private static final float SLOT_ORIGIN_Y_GUI = 17f;
+    private static final float SLOT_PITCH_GUI = 18f;
     private static final float ICON_GUI = 16f;
-    private static final float PADDING_GUI = 6f;
-    private static final float CURSOR_GAP_GUI = 12f;
+    private static final float ICON_INSET_GUI = (SLOT_PITCH_GUI - ICON_GUI) / 2f;
+    // Texture réelle 256x256 (atlas), région utile 176x166 — recadrée ici à
+    // la zone de stockage seule (voir javadoc de classe : bord plat en bas,
+    // compromis accepté).
+    private static final float TEX_W = 256f, TEX_H = 256f;
+    private static final float IMG_W_GUI = 176f;
+    private static final float IMG_CROP_H_GUI = 78f;
+    /** Écart (GUI-pixels) entre le bord de la case survolée et notre panneau — voir drawGrid, même ordre de grandeur que l'offset du tooltip vanilla. */
+    private static final float SLOT_GAP_GUI = 12f;
+    /** Taille d'une case vanilla (18x18) — pour placer le panneau juste APRÈS le bord droit de la case survolée. */
+    private static final float HOVERED_SLOT_SIZE_GUI = 18f;
 
     // ── Résolution paresseuse, mise en cache (comme GlobalUiRenderBridge261) ──
     private static volatile Field fHoveredSlot;
+    private static volatile Field fLeftPos, fTopPos;
+    private static volatile Field fSlotX, fSlotY;
     private static volatile Method mGetItem;
     private static volatile Method mItemStackGetItem;
     private static volatile Method mItemStackIsEmpty;
@@ -75,6 +124,8 @@ public final class ShulkerPreviewModule extends LauncherModule {
     private static volatile Field fContainerComponent;
     private static volatile Class<?> clsBlockItem;
     private static volatile Class<?> clsShulkerBoxBlock;
+
+    private static volatile boolean diagLogged;
 
     public ShulkerPreviewModule() {
         super("shulker-preview", "Aperçu shulker (Maj)", "Survole une shulker box dans un inventaire en maintenant Maj pour voir son contenu.", true);
@@ -89,21 +140,37 @@ public final class ShulkerPreviewModule extends LauncherModule {
      */
     public static void renderIfApplicable(UiRenderer renderer, Object currentScreen, UiInputPoller poller, int vpWidth, int vpHeight) {
         try {
-            LauncherModule self = ModuleRegistry.get("shulker-preview");
-            if (self == null || !self.isEnabled()) return;
-            if (currentScreen == null || poller == null || !poller.shiftDown) return;
-
-            Object hoveredSlot = hoveredSlot(currentScreen);
-            if (hoveredSlot == null) return;
-            Object stack = slotItem(hoveredSlot);
-            if (stack == null || isEmptyStack(stack)) return;
-            if (!isShulkerBox(stack)) return;
+            Object slot = hoveredShulkerSlot(currentScreen, poller);
+            if (slot == null) return;
+            Object stack = slotItem(slot);
 
             Object[] items = readContents(stack);
-            if (items == null) return;
 
-            drawGrid(renderer, items, poller, vpWidth, vpHeight);
+            if (!diagLogged) {
+                diagLogged = true;
+                int nonEmpty = 0;
+                if (items != null) for (Object it : items) if (it != null) nonEmpty++;
+                LauncherLog.info("[ShulkerPreviewModule] diag: stack=" + stack
+                    + " items=" + (items == null ? "null (composant CONTAINER absent)" : items.length + " slots, " + nonEmpty + " non vides"));
+            }
+
+            if (items == null) return;
+            drawGrid(renderer, currentScreen, slot, items, vpWidth, vpHeight);
         } catch (Throwable ignored) {}
+    }
+
+    /** @return la case (Slot) survolée si elle contient une shulker box non vide et que les conditions sont réunies (module actif, Maj maintenu) — sinon {@code null}. */
+    private static Object hoveredShulkerSlot(Object screen, UiInputPoller poller) throws Exception {
+        LauncherModule self = ModuleRegistry.get("shulker-preview");
+        if (self == null || !self.isEnabled()) return null;
+        if (screen == null || poller == null || !poller.shiftDown) return null;
+
+        Object hoveredSlot = hoveredSlot(screen);
+        if (hoveredSlot == null) return null;
+        Object stack = slotItem(hoveredSlot);
+        if (stack == null || isEmptyStack(stack)) return null;
+        if (!isShulkerBox(stack)) return null;
+        return hoveredSlot;
     }
 
     private static Object hoveredSlot(Object screen) throws Exception {
@@ -122,6 +189,44 @@ public final class ShulkerPreviewModule extends LauncherModule {
             fHoveredSlot = found;
         }
         return fHoveredSlot.get(screen);
+    }
+
+    /**
+     * Position ÉCRAN (GUI-pixels, repère haut-gauche) de la case survolée —
+     * {@code leftPos}/{@code topPos} (protected, déclarés sur
+     * AbstractContainerScreen) + {@code Slot.x}/{@code Slot.y} (public,
+     * déclarés directement sur Slot, RELATIFS à leftPos/topPos — voir
+     * javadoc de classe) — tous vérifiés par désassemblage bytecode du vrai
+     * jar 26.1.2. Sert à ancrer le panneau juste À CÔTÉ de l'objet survolé
+     * (même repère que le tooltip vanilla), PAS sur le curseur ni sur la
+     * fenêtre entière — voir drawGrid.
+     */
+    private static int[] hoveredSlotScreenPosGui(Object screen, Object slot) throws Exception {
+        if (fLeftPos == null) {
+            fLeftPos = declaredFieldInHierarchy(screen.getClass(), "leftPos");
+            fTopPos = declaredFieldInHierarchy(screen.getClass(), "topPos");
+            if (fLeftPos == null || fTopPos == null) return null;
+        }
+        if (fSlotX == null) {
+            fSlotX = slot.getClass().getField("x");
+            fSlotY = slot.getClass().getField("y");
+        }
+        int leftPos = fLeftPos.getInt(screen), topPos = fTopPos.getInt(screen);
+        return new int[]{ leftPos + fSlotX.getInt(slot), topPos + fSlotY.getInt(slot) };
+    }
+
+    private static Field declaredFieldInHierarchy(Class<?> owner, String name) {
+        Class<?> c = owner;
+        while (c != null) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            }
+        }
+        return null;
     }
 
     private static Object slotItem(Object slot) throws Exception {
@@ -177,47 +282,65 @@ public final class ShulkerPreviewModule extends LauncherModule {
     }
 
     /**
-     * Panneau flottant (fond sombre arrondi, style OneConfig — voir UiTheme)
-     * ancré en haut-à-droite du curseur, grille 9x3 (taille fixe d'une
-     * shulker box vanilla), cases vides simplement omises. Coordonnées en
-     * "GUI-pixels" multipliées par {@link UiRenderer#guiScale} avant tout
-     * appel de dessin — même convention que ArmorDurabilityModule.drawVanillaHotbarRow.
-     * {@code poller.mouseX/mouseY} sont déjà en pixels framebuffer origine
-     * bas-gauche (voir UiInputPoller), donc directement utilisables tels quels.
+     * Panneau ancré JUSTE À CÔTÉ de la case survolée (voir
+     * {@link #hoveredSlotScreenPosGui}) — même repère que le tooltip vanilla
+     * (nom de l'objet), demandé explicitement par l'utilisateur ("à côté de
+     * l'item, au même endroit que le texte du nom de l'item"). PAS sur le
+     * curseur brut (bougeait avec le moindre tremblement de souris à
+     * l'intérieur de la case) NI sur la fenêtre de conteneur entière (un
+     * premier essai recouvrait l'inventaire) : ancré sur la case ELLE-MÊME,
+     * donc stable tant que la souris reste dans la même case, et se
+     * repositionne proprement d'une case à l'autre en survolant plusieurs
+     * shulker box Maj maintenu. Par défaut à DROITE de la case ; repli à
+     * GAUCHE si ça déborderait de l'écran.
+     *
+     * Fond = VRAIE texture vanilla recadrée (voir javadoc de classe), grille
+     * 9x3 (taille fixe d'une shulker box vanilla), cases vides simplement
+     * omises. Coordonnées en "GUI-pixels" multipliées par
+     * {@link UiRenderer#guiScale} avant tout appel de dessin — même
+     * convention que ArmorDurabilityModule.drawVanillaHotbarRow.
      */
-    private static void drawGrid(UiRenderer renderer, Object[] items, UiInputPoller poller, int vpWidth, int vpHeight) {
+    private static void drawGrid(UiRenderer renderer, Object currentScreen, Object slot, Object[] items, int vpWidth, int vpHeight) throws Exception {
+        int[] slotPos = hoveredSlotScreenPosGui(currentScreen, slot);
+        if (slotPos == null) return;
+        int slotLeftGui = slotPos[0], slotTopGui = slotPos[1];
+
         float guiScale = UiRenderer.guiScale(vpWidth);
+        float guiWidth = vpWidth / guiScale;
 
-        float panelWGui = COLS * SLOT_GUI + 2 * PADDING_GUI;
-        float panelHGui = ROWS * SLOT_GUI + 2 * PADDING_GUI;
-        float panelW = panelWGui * guiScale;
-        float panelH = panelHGui * guiScale;
+        float panelWGui = IMG_W_GUI;
+        float panelHGui = IMG_CROP_H_GUI;
 
-        float gap = CURSOR_GAP_GUI * guiScale;
-        float left = (float) poller.mouseX + gap;
-        float top = (float) poller.mouseY + gap;
+        float leftGui = slotLeftGui + HOVERED_SLOT_SIZE_GUI + SLOT_GAP_GUI;
+        if (leftGui + panelWGui > guiWidth) leftGui = slotLeftGui - panelWGui - SLOT_GAP_GUI;
+        if (leftGui < 0) leftGui = 0;
+        // Aligné verticalement sur le HAUT de la case survolée (même ancre que le tooltip vanilla).
+        float guiHeight = vpHeight / guiScale;
+        float topGui = slotTopGui;
+        if (topGui + panelHGui > guiHeight) topGui = guiHeight - panelHGui;
+        if (topGui < 0) topGui = 0;
 
-        // Recale dans l'écran si le panneau déborderait (coin haut-droit du curseur par défaut).
-        if (left + panelW > vpWidth) left = vpWidth - panelW;
-        if (left < 0) left = 0;
-        if (top > vpHeight) top = vpHeight;
-        float bottom = top - panelH;
-        if (bottom < 0) { bottom = 0; top = panelH; }
+        float left = leftGui * guiScale;
+        // Conversion vers notre repère bas-gauche (framebuffer) — voir
+        // drawVanillaItemIcon/drawVanillaContainerTexture, qui attendent le
+        // bord BAS en y (topGui = origine haut vanilla, guiHeight - topGui -
+        // hauteur = bord bas en GUI-space, puis mise à l'échelle framebuffer).
+        float bottom = (guiHeight - topGui - panelHGui) * guiScale;
+        float top = bottom + panelHGui * guiScale;
 
-        renderer.drawRoundedRect(left, bottom, left + panelW, top, UiTheme.RADIUS_MD, UiTheme.PANEL_BG, vpWidth, vpHeight);
-
-        float paddingPx = PADDING_GUI * guiScale;
-        float slotPx = SLOT_GUI * guiScale;
-        float iconPx = ICON_GUI * guiScale;
-        float iconInset = (SLOT_GUI - ICON_GUI) / 2f * guiScale;
+        renderer.drawVanillaContainerTexture(CONTAINER_TEXTURE_PATH, left, bottom, panelWGui * guiScale, panelHGui * guiScale,
+            0f, 0f, TEX_W, TEX_H, vpWidth, vpHeight);
 
         for (int i = 0; i < items.length && i < COLS * ROWS; i++) {
             Object stack = items[i];
             if (stack == null) continue;
             int col = i % COLS, row = i / COLS;
-            float cellTop = top - paddingPx - row * slotPx;
-            float cellLeft = left + paddingPx + col * slotPx;
-            renderer.drawVanillaItemIcon(stack, cellLeft + iconInset, cellTop - slotPx + iconInset, iconPx, vpWidth, vpHeight);
+            float cellLeftGui = SLOT_ORIGIN_X_GUI + col * SLOT_PITCH_GUI + ICON_INSET_GUI;
+            float cellTopGui = SLOT_ORIGIN_Y_GUI + row * SLOT_PITCH_GUI + ICON_INSET_GUI;
+            float iconLeftFb = left + cellLeftGui * guiScale;
+            // top = origine HAUT (image), notre repère est bas-gauche (framebuffer) — bord BAS de l'icône = top du panneau moins (cellTopGui+ICON_GUI) converti.
+            float iconBottomFb = top - (cellTopGui + ICON_GUI) * guiScale;
+            renderer.drawVanillaItemIcon(stack, iconLeftFb, iconBottomFb, ICON_GUI * guiScale, vpWidth, vpHeight);
         }
     }
 }
