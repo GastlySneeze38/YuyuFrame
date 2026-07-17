@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
@@ -84,8 +85,9 @@ public abstract class GlobalUiRenderMixin1214 {
             }
 
             if (!(currentScreen instanceof UiDrawable)) {
-                HudOverlayRenderer.renderPersistent(
-                    UiRenderer.get(this.getClass().getClassLoader()), currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+                HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
             UiDrawable ui = (UiDrawable) currentScreen;

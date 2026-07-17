@@ -1746,23 +1746,139 @@ public final class UiRenderer {
      *     RÉELLES du fichier PNG (256x256 pour shulker_box.png, PAS
      *     176x166 — c'est un atlas, voir javadoc de ShulkerPreviewModule).
      *
-     * Bracket 26.1.2 UNIQUEMENT pour l'instant (chemin "Deferred", voir
-     * modernUsesDeferredGuiRenderer) — no-op silencieux ailleurs (1.8.9/
-     * 1.20.4/1.21.4/1.21.11), aucun appelant actuel ne les cible.
+     * Bracket 26.1.2/1.21.11 (chemin "Deferred", voir
+     * modernUsesDeferredGuiRenderer) — mise en file, flush différé (voir
+     * GuiFlushMixin). 1.20.4/1.21.4 (chemin "Immediate") : voir {@link
+     * #drawVanillaContainerTextureModernImmediate} — dessin synchrone, pas de
+     * file d'attente. 1.8.9 : no-op silencieux, aucun appelant actuel ne le cible.
      */
     public void drawVanillaContainerTexture(String texturePath, float x, float y, float w, float h,
                                              float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
-        if (!modern || !modernUsesDeferredGuiRenderer()) return;
+        if (!modern) return;
+        if (modernUsesDeferredGuiRenderer()) {
+            try {
+                float guiScale = guiScale(vpWidth);
+                int guiX = Math.round(x / guiScale);
+                int guiY = Math.round((vpHeight - y - h) / guiScale);
+                int guiW = Math.round(w / guiScale);
+                int guiH = Math.round(h / guiScale);
+                synchronized (pendingModernGuiBlits) {
+                    pendingModernGuiBlits.add(new PendingGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
+                }
+            } catch (Throwable ignored) {}
+        } else {
+            drawVanillaContainerTextureModernImmediate(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
+        }
+    }
+
+    private static Method drawTextureMethodImmediate;
+    private static Method getGuiTexturedMethodImmediate;
+    private static Object guiTexturedFunctionProxyImmediate;
+    private static boolean containerBlitImmediateResolveFailed;
+
+    /**
+     * Bracket 1.20.4/1.21.4 (pipeline "Immediate", pas de {@code
+     * RenderPipeline}/{@code GuiRenderState} — voir {@link
+     * #drawVanillaItemIconModernImmediate}) — {@code DrawContext.drawTexture}
+     * y prend un {@code java.util.function.Function<Identifier,RenderLayer>}
+     * en premier paramètre (PAS un {@code RenderPipeline} direct comme sur
+     * 1.21.11/26.1.2 — {@code RenderPipeline}/{@code RenderLayer} sont deux
+     * abstractions DIFFÉRENTES, la seconde antérieure à la première, voir
+     * l'audit modules pour le contexte), résolu à la compilation vanilla via
+     * une référence de méthode statique ({@code RenderLayer::getGuiTextured})
+     * — vérifié par désassemblage bytecode de {@code HandledScreen} (jar
+     * 1.21.4 réel, table BootstrapMethods : {@code REF_invokeStatic
+     * gmj.H:(Lakv;)Lgmj;}, où {@code gmj}=RenderLayer, confirmé Yarn named
+     * "getGuiTextured"). Comme {@code java.util.function.Function} est une
+     * interface JDK standard (jamais obfusquée), on peut construire nous-
+     * mêmes un {@link java.lang.reflect.Proxy} qui délègue {@code apply()} à
+     * cette méthode statique — pas besoin de reproduire le lambda vanilla.
+     */
+    private void drawVanillaContainerTextureModernImmediate(String texturePath, float x, float y, float w, float h,
+                                                              float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
         try {
+            if (!ensureContainerBlitImmediateResolved()) return;
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - h) / guiScale);
             int guiW = Math.round(w / guiScale);
             int guiH = Math.round(h / guiScale);
-            synchronized (pendingModernGuiBlits) {
-                pendingModernGuiBlits.add(new PendingGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
+
+            ClassLoader cl = mc.getClass().getClassLoader();
+            Object identifier = resolveTextureIdentifier(cl, texturePath);
+            if (identifier == null) return;
+
+            Object bufferBuilders = getBufferBuildersMethodModern.invoke(mc);
+            Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
+            Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
+
+            drawTextureMethodImmediate.invoke(drawContext, guiTexturedFunctionProxyImmediate, identifier,
+                guiX, guiY, u, v, guiW, guiH, Math.round(texW), Math.round(texH));
+            drawFlushMethodImmediateModern.invoke(drawContext);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawVanillaContainerTextureModernImmediate: " + t);
+        }
+    }
+
+    private boolean ensureContainerBlitImmediateResolved() {
+        if (drawTextureMethodImmediate != null) return true;
+        if (containerBlitImmediateResolveFailed) return false;
+        try {
+            // Réutilise les résolutions partagées du chemin item-icon (ctor
+            // DrawContext(mc, VertexConsumerProvider.Immediate), buffer
+            // builders) — indépendantes du type d'ItemStack, sûres à
+            // partager. On force leur résolution ici si l'icône n'a encore
+            // jamais été dessinée cette session (ordre d'appel non garanti).
+            if (drawContextImmediateCtorModern == null) {
+                Class<?> mcClass = McReflect.yarnClass("net/minecraft/client/MinecraftClient");
+                getBufferBuildersMethodModern = McReflect.noArgMethod(mcClass,
+                    "net/minecraft/client/MinecraftClient", "getBufferBuilders");
+                Class<?> bufferBuilderStorageClass = McReflect.yarnClass("net/minecraft/client/render/BufferBuilderStorage");
+                getEntityVertexConsumersMethodModern = McReflect.noArgMethod(bufferBuilderStorageClass,
+                    "net/minecraft/client/render/BufferBuilderStorage", "getEntityVertexConsumers");
+                Class<?> drawContextClass0 = McReflect.yarnClass("net/minecraft/client/gui/DrawContext");
+                Class<?> vcpImmediateClass = getEntityVertexConsumersMethodModern.getReturnType();
+                drawContextImmediateCtorModern = drawContextClass0.getDeclaredConstructor(mcClass, vcpImmediateClass);
+                drawContextImmediateCtorModern.setAccessible(true);
+                drawFlushMethodImmediateModern = McReflect.noArgMethod(drawContextClass0,
+                    "net/minecraft/client/gui/DrawContext", "draw");
             }
-        } catch (Throwable ignored) {}
+            Class<?> drawContextClass = drawContextImmediateCtorModern.getDeclaringClass();
+            Class<?> identifierClass = McReflect.yarnClass("net/minecraft/util/Identifier", "net.minecraft.resources.Identifier");
+            if (identifierClass == null) { containerBlitImmediateResolveFailed = true; return false; }
+
+            Class<?> renderLayerClass = McReflect.yarnClass("net/minecraft/client/render/RenderLayer");
+            if (renderLayerClass == null) { containerBlitImmediateResolveFailed = true; return false; }
+            getGuiTexturedMethodImmediate = McReflect.methodOnClass(
+                "net/minecraft/client/render/RenderLayer", "getGuiTextured", identifierClass);
+            if (getGuiTexturedMethodImmediate == null) { containerBlitImmediateResolveFailed = true; return false; }
+
+            Class<?> functionClass = java.util.function.Function.class;
+            Method finalMethod = getGuiTexturedMethodImmediate;
+            guiTexturedFunctionProxyImmediate = java.lang.reflect.Proxy.newProxyInstance(
+                drawContextClass.getClassLoader(), new Class<?>[]{ functionClass },
+                (proxy, method, args) -> {
+                    switch (method.getName()) {
+                        case "apply": return finalMethod.invoke(null, args[0]);
+                        case "hashCode": return System.identityHashCode(proxy);
+                        case "equals": return proxy == args[0];
+                        default: return "GuiTexturedFunctionProxy";
+                    }
+                });
+
+            drawTextureMethodImmediate = McReflect.method(drawContextClass, "net/minecraft/client/gui/DrawContext",
+                "drawTexture", functionClass, identifierClass, int.class, int.class,
+                float.class, float.class, int.class, int.class, int.class, int.class);
+            if (drawTextureMethodImmediate == null) { containerBlitImmediateResolveFailed = true; return false; }
+            return true;
+        } catch (Throwable t) {
+            containerBlitImmediateResolveFailed = true;
+            LauncherLog.err("[UiRenderer] ensureContainerBlitImmediateResolved: " + t);
+            return false;
+        }
     }
 
     /**

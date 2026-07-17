@@ -188,8 +188,33 @@ public final class ShulkerPreviewModule extends LauncherModule {
      * QUI DÉCLARE VRAIMENT le champ (jamais en remontant depuis l'instance),
      * élimine structurellement le risque, quelle que soit la sous-classe
      * d'écran ouverte.
+     *
+     * BUG TROUVÉ #2 (test utilisateur, 1.21.4 : {@code IllegalArgumentException:
+     * Can not get cua field fvb.B on fti}) : {@code fieldOnClass} protège
+     * contre les collisions de lettre obfusquée, mais PAS contre un appelant
+     * qui passe un écran qui N'EST TOUT SIMPLEMENT PAS un {@code
+     * HandledScreen} — {@code renderIfApplicable} est appelé pour N'IMPORTE
+     * QUEL écran vanilla non custom ouvert (voir {@code GlobalUiPresentMixin}/
+     * {@code GlobalUiRenderMixin1214}, branche {@code !(currentScreen
+     * instanceof UiDrawable)}), y compris {@code ChatScreen} (obf {@code
+     * fti} sur 1.21.4, confirmé par le message d'erreur) si Maj est tenue
+     * pendant que le chat est ouvert — {@code Field.get()} lève alors
+     * IMMÉDIATEMENT, quelle que soit la façon dont le {@code Field} a été
+     * résolu (comportement JVM standard, pas un défaut de McReflect). Ce
+     * risque latent existait déjà sur 26.1.2/1.21.11 (jamais déclenché,
+     * probablement jamais testé Maj+chat ouvert). Fix : vérifier {@code
+     * handledScreenClass.isInstance(screen)} AVANT tout accès au champ.
      */
+    private static volatile Class<?> clsHandledScreen;
+
     private static Object hoveredSlot(Object screen) throws Exception {
+        if (clsHandledScreen == null) {
+            clsHandledScreen = McReflect.yarnClass(
+                "net/minecraft/client/gui/screen/ingame/HandledScreen",
+                "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen");
+            if (clsHandledScreen == null) return null;
+        }
+        if (!clsHandledScreen.isInstance(screen)) return null;
         if (fHoveredSlot == null) {
             fHoveredSlot = McReflect.fieldOnClass(
                 "net/minecraft/client/gui/screen/ingame/HandledScreen",

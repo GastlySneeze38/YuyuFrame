@@ -22,16 +22,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "net.minecraft.world.World")
 public abstract class WorldTimeMixin1214 {
 
+    private static volatile boolean diagLogged;
+
     @Inject(method = "getTimeOfDay()J", at = @At("HEAD"), cancellable = true, require = 0)
     private void la$fakeDayTime(CallbackInfoReturnable<Long> cir) {
         try {
             LauncherModule moduleBase = ModuleRegistry.get("world-time");
-            if (!(moduleBase instanceof WorldTimeModule) || !moduleBase.isEnabled()) return;
-            WorldTimeModule module = (WorldTimeModule) moduleBase;
+            boolean enabled = moduleBase instanceof WorldTimeModule && moduleBase.isEnabled();
 
             Class<?> clientWorldClass = McReflect.yarnClass("net/minecraft/client/world/ClientWorld", "net.minecraft.client.multiplayer.ClientLevel");
-            if (clientWorldClass == null || !clientWorldClass.isInstance(this)) return;
+            boolean isClientWorld = clientWorldClass != null && clientWorldClass.isInstance(this);
 
+            if (!diagLogged) {
+                diagLogged = true;
+                LauncherLog.info("[WorldTimeMixin1214] diag: moduleBase=" + moduleBase + " enabled=" + enabled
+                    + " clientWorldClass=" + clientWorldClass + " isClientWorld=" + isClientWorld
+                    + " thisClass=" + this.getClass());
+            }
+
+            if (!enabled || !isClientWorld) return;
+            WorldTimeModule module = (WorldTimeModule) moduleBase;
             cir.setReturnValue((long) module.time);
         } catch (Throwable t) {
             LauncherLog.err("[WorldTimeMixin1214] la$fakeDayTime: " + t);

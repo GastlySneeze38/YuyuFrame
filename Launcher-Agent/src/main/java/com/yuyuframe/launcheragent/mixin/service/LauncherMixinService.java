@@ -269,7 +269,20 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MixinCrosshair1214",
             "net/minecraft/client/gui/hud/InGameHud",
             "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
-
+        // Portage 1.21.4 de ClearOverlaysMixin/Freelook (voir leurs javadoc) —
+        // architecture Yarn IDENTIQUE à 1.21.11 pour ces 3 Mixins, vérifiée
+        // indépendamment dans mappings/yarn-1.21.4-mergedv2.jar (mêmes IDs
+        // intermediary method_31977/method_1606/method_19321/method_19324).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/ClearOverlaysMixin1214",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderOverlay", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MouseHandlerFreelookMixin1214",
+            "net/minecraft/client/Mouse", "updateMouse", "(D)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/CameraFreelookMixin1214",
+            "net/minecraft/client/render/Camera", "update",
+            "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/CameraFreelookMixin1214",
+            "net/minecraft/client/render/Camera", "moveBy", "(FFF)V", null),
         // ── CORRECTIF RÉTROACTIF (audit multiversion, bracket 1.21.11 +
         // 1.16.5/1.20.4/1.21.4) : ces @Inject(method="...") utilisaient un nom
         // Yarn named DIRECTEMENT, en supposant (à tort) qu'aucun refmap n'était
@@ -296,6 +309,16 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/world/World", "getTimeOfDay", "()J", null),
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/WorldTimeMixin1214",
             "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        // WorldTimePropertiesMixin1214 : la VRAIE source lue par le rendu du
+        // ciel/lune sur ce bracket (LunarWorldView.getSkyAngle → getLunarTime
+        // → ClientWorld$Properties.getTimeOfDay, voir sa javadoc complète) —
+        // World.getTimeOfDay() ci-dessus n'a aucun effet visuel à lui seul.
+        // "getTimeOfDay" n'a pas d'entrée Yarn propre sur ClientWorld$Properties
+        // (seul "setTimeOfDay" y figure) — repli sur WorldProperties, où le nom
+        // Yarn du getter est réellement déclaré (method_217).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/WorldTimePropertiesMixin1214",
+            "net/minecraft/client/world/ClientWorld$Properties", "getTimeOfDay", "()J",
+            "net/minecraft/world/WorldProperties"),
         // InGameHud.renderOverlay(DrawContext,Identifier,F) — voir
         // ClearOverlaysMixin/NoPumpkinOverlayModule, même correctif que ci-dessus.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/ClearOverlaysMixin",
