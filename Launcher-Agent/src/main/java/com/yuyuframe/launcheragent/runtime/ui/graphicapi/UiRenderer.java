@@ -2320,6 +2320,60 @@ public final class UiRenderer {
     }
 
     /**
+     * BUG TROUVÉ (test utilisateur, 1.21.11) : le panneau shulker s'affichait
+     * enfin (fix `drawTexture` ci-dessus) mais DERRIÈRE l'écran d'inventaire
+     * — mauvais z-order. Cause : {@code GuiFlushMixin} (voir sa javadoc)
+     * accrochait le flush en TAIL de {@code GuiRenderState.clear()V} —
+     * vérifié par désassemblage de {@code GameRenderer.render()V} (jar
+     * 1.21.11 réel, javap) que {@code clear()} est appelé TRÈS TÔT dans la
+     * méthode (juste après la config lumière), AVANT {@code
+     * InGameHud.render(...)V} ET AVANT {@code Screen.render(...)V} (l'écran
+     * d'inventaire lui-même). Nos icônes/fond ajoutés juste après clear()
+     * étaient donc les TOUT PREMIERS éléments de la liste de dessin de
+     * GuiRenderState pour cette frame — dessinés EN PREMIER, donc DERRIÈRE
+     * tout ce qui est ajouté après (HUD, puis l'écran).
+     *
+     * Trace bytecode complète de {@code GameRenderer.render()V} : {@code
+     * clear()V} → {@code new DrawContext(...)} → {@code InGameHud.render(DrawContext,RenderTickCounter)V}
+     * → {@code Screen.render(DrawContext,I,I,F)V} (SI un écran est ouvert) →
+     * toasts/subtitles → {@code GuiRenderer.render(GpuBufferSlice)V} (soumission
+     * GPU réelle, TOUT le contenu accumulé de la frame y compris l'écran est
+     * déjà dans l'état à ce point) → {@code GuiRenderer.incrementFrame()V}.
+     *
+     * Fix : flush déplacé en HEAD de {@code GuiRenderer.render(GpuBufferSlice)V}
+     * (voir {@code GuiFlushMixin}, retargeté) — APRÈS que Screen.render() ait
+     * fini d'ajouter tout le contenu de l'écran ouvert, JUSTE AVANT la
+     * soumission GPU : nos icônes/fond, ajoutés en DERNIER, se retrouvent
+     * dessinés PAR-DESSUS tout le reste, z-order correct. {@code this} dans
+     * le nouveau hook est directement l'instance {@code GuiRenderer} (pas
+     * {@code GuiRenderState}) — cette méthode résout le champ {@code state}
+     * dessus (même résolution que {@link #flushPendingModernItemIcons},
+     * jamais exercée sur ce bracket jusqu'ici puisque 1.21.11 utilisait
+     * {@link #flushPendingModernItemIconsFromState} directement) avant de
+     * déléguer à {@link #flushIntoGuiState}.
+     */
+    public static void flushPendingModernItemIconsFromGuiRenderer(Object guiRenderer) {
+        if (guiRenderer == null) return;
+        try {
+            if (guiStateFieldModern == null) {
+                guiStateFieldModern = findFieldByNameInHierarchy(guiRenderer.getClass(),
+                    MappingsRegistry.getObfFieldName("net/minecraft/client/gui/render/GuiRenderer", "state"),
+                    "state", "renderState");
+                if (guiStateFieldModern == null) {
+                    LauncherLog.err("[UiRenderer] itemIconModern: champ state/renderState introuvable sur "
+                        + guiRenderer.getClass());
+                    return;
+                }
+            }
+            Object guiState = guiStateFieldModern.get(guiRenderer);
+            if (guiState == null) return;
+            flushIntoGuiState(guiState, guiRenderer.getClass().getClassLoader());
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingModernItemIconsFromGuiRenderer: " + t);
+        }
+    }
+
+    /**
      * Vide la file et soumet chaque icône/blit dans le VRAI
      * DrawContext/GuiGraphicsExtractor wrappant l'état PARTAGÉ {@code
      * guiState} (pas une instance isolée) — condition nécessaire pour que le
@@ -2461,8 +2515,28 @@ public final class UiRenderer {
                 MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
                 "net.minecraft.resources.Identifier");
             if (identifierClass == null) { blitResolveFailed = true; return; }
+            // BUG TROUVÉ #1 (test utilisateur, 1.21.11) : "blit" comparé ICI
+            // tel quel, jamais traduit via MappingsRegistry — corrigé une
+            // première fois en traduisant "blit" via getObfMethodName.
+            //
+            // BUG TROUVÉ #2 (test utilisateur suivant, log :
+            // "containerBlitModern: aucune méthode 10-arg trouvée... 96
+            // méthodes déclarées", blitRuntimeName=blit — la traduction avait
+            // ÉCHOUÉ et renvoyé le nom Yarn tel quel, silencieusement) :
+            // "blit" n'est PAS le nom Yarn 1.21.11 de cette méthode — vérifié
+            // directement dans mappings/mappings.tiny (section DrawContext,
+            // classe "gir") : AUCUNE entrée "blit" n'existe. Le nom Yarn
+            // 1.21.11 est en réalité {@code drawTexture} (4 surcharges,
+            // method_25290/91/02/93 — la 10-arg exacte recherchée ici est
+            // method_25291, {@code (RenderPipeline,Identifier,I,I,F,F,I,I,I,I)V}).
+            // Mojang a renommé cette méthode en "blit" seulement PLUS TARD,
+            // entre 1.21.11 et 26.1.2 (confirmé par javap sur 26.1.2, où
+            // "blit" est bien le nom réel) — l'hypothèse "même nom des deux
+            // côtés" n'avait jamais été vérifiée pour CE nom précis,
+            // contrairement à drawItem/drawGuiTexture juste au-dessus.
+            String blitRuntimeName = MappingsRegistry.getObfMethodName("net/minecraft/client/gui/DrawContext", "drawTexture");
             for (Method m : drawContextClass.getDeclaredMethods()) {
-                if (!m.getName().equals("blit")) continue;
+                if (!m.getName().equals(blitRuntimeName) && !m.getName().equals("blit")) continue;
                 Class<?>[] p = m.getParameterTypes();
                 if (p.length != 10) continue;
                 if (!identifierClass.isAssignableFrom(p[1])) continue;
@@ -2473,7 +2547,11 @@ public final class UiRenderer {
                 blitMethodModern = m;
                 break;
             }
-            if (blitMethodModern == null) blitResolveFailed = true;
+            if (blitMethodModern == null) {
+                blitResolveFailed = true;
+                LauncherLog.err("[UiRenderer] containerBlitModern: aucune méthode 10-arg trouvée sur " + drawContextClass
+                    + " (blitRuntimeName=" + blitRuntimeName + ", " + drawContextClass.getDeclaredMethods().length + " méthodes déclarées)");
+            }
         } catch (Throwable t) {
             blitResolveFailed = true;
             LauncherLog.warn("[UiRenderer] containerBlitModern: résolution échouée : " + t);

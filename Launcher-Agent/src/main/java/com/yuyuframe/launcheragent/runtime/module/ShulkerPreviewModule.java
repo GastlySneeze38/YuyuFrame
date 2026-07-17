@@ -109,7 +109,8 @@ public final class ShulkerPreviewModule extends LauncherModule {
     private static volatile Class<?> clsShulkerBoxBlock;
     private static volatile Field fContainerComponent;
 
-    private static volatile boolean diagLogged;
+    /** Garde le log de {@link #hoveredSlotScreenPosGui} à une seule occurrence (sinon spam à chaque frame tant que la résolution échoue, fLeftPos/fSlotX etc. restant null indéfiniment). */
+    private static volatile boolean posResolveErrorLogged;
     /**
      * BUG TROUVÉ (test utilisateur, 1.21.11 : "le shulker ne marche pas",
      * aucun log — {@code renderIfApplicable} avalait TOUTE exception
@@ -139,15 +140,6 @@ public final class ShulkerPreviewModule extends LauncherModule {
             Object stack = slotItem(slot);
 
             Object[] items = readContents(stack);
-
-            if (!diagLogged) {
-                diagLogged = true;
-                int nonEmpty = 0;
-                if (items != null) for (Object it : items) if (it != null) nonEmpty++;
-                LauncherLog.info("[ShulkerPreviewModule] diag: stack=" + stack
-                    + " items=" + (items == null ? "null (composant CONTAINER absent)" : items.length + " slots, " + nonEmpty + " non vides"));
-            }
-
             if (items == null) return;
             drawGrid(renderer, currentScreen, slot, items, vpWidth, vpHeight);
         } catch (Throwable t) {
@@ -231,14 +223,28 @@ public final class ShulkerPreviewModule extends LauncherModule {
                 "net/minecraft/client/gui/screen/ingame/HandledScreen",
                 "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen",
                 "y", "topPos");
-            if (fLeftPos == null || fTopPos == null) return null;
+            if (fLeftPos == null || fTopPos == null) {
+                if (!posResolveErrorLogged) {
+                    posResolveErrorLogged = true;
+                    LauncherLog.err("[ShulkerPreviewModule] hoveredSlotScreenPosGui: résolution HandledScreen.x/y échouée (fLeftPos="
+                        + fLeftPos + " fTopPos=" + fTopPos + ")");
+                }
+                return null;
+            }
         }
         if (fSlotX == null) {
             fSlotX = McReflect.fieldOnClass(
                 "net/minecraft/screen/slot/Slot", "net.minecraft.world.inventory.Slot", "x", "x");
             fSlotY = McReflect.fieldOnClass(
                 "net/minecraft/screen/slot/Slot", "net.minecraft.world.inventory.Slot", "y", "y");
-            if (fSlotX == null || fSlotY == null) return null;
+            if (fSlotX == null || fSlotY == null) {
+                if (!posResolveErrorLogged) {
+                    posResolveErrorLogged = true;
+                    LauncherLog.err("[ShulkerPreviewModule] hoveredSlotScreenPosGui: résolution Slot.x/y échouée (fSlotX="
+                        + fSlotX + " fSlotY=" + fSlotY + ")");
+                }
+                return null;
+            }
         }
         int leftPos = fLeftPos.getInt(screen), topPos = fTopPos.getInt(screen);
         return new int[]{ leftPos + fSlotX.getInt(slot), topPos + fSlotY.getInt(slot) };
@@ -390,7 +396,13 @@ public final class ShulkerPreviewModule extends LauncherModule {
      */
     private static void drawGrid(UiRenderer renderer, Object currentScreen, Object slot, Object[] items, int vpWidth, int vpHeight) throws Exception {
         int[] slotPos = hoveredSlotScreenPosGui(currentScreen, slot);
-        if (slotPos == null) return;
+        if (slotPos == null) {
+            if (!posResolveErrorLogged) {
+                posResolveErrorLogged = true;
+                LauncherLog.err("[ShulkerPreviewModule] drawGrid: hoveredSlotScreenPosGui a renvoyé null (voir logs de résolution ci-dessus) — panneau jamais dessiné");
+            }
+            return;
+        }
         int slotLeftGui = slotPos[0], slotTopGui = slotPos[1];
 
         float guiScale = UiRenderer.guiScale(vpWidth);

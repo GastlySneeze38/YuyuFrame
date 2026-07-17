@@ -183,14 +183,18 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // avec l'entrée de GlobalUiRenderMixin même si la clé JSON est identique.
         // Voir GuiFlushMixin : soumet les icônes d'objet vanilla en attente
         // (ArmorDurabilityModule/ShulkerPreviewModule) dans le GuiRenderState
-        // partagé, en TAIL de clear() lui-même — corrigé cette session (voir
-        // javadoc de GuiFlushMixin) : l'ancienne entrée ciblait
-        // GameRenderer.render() en HEAD, ANTÉRIEUR au clear() qui effaçait
-        // nos icônes avant le flush GPU. Official "e"/named "clear" vérifié
-        // directement dans mappings/mappings.tiny (classe gqg).
+        // partagé. RETARGETÉ une seconde fois cette session (voir javadoc de
+        // GuiFlushMixin) : TAIL de clear()V arrivait trop TÔT dans la frame
+        // (avant InGameHud.render/Screen.render), plaçant nos icônes/fond
+        // DERRIÈRE le HUD et tout écran ouvert (mauvais z-order, confirmé par
+        // test utilisateur : panneau shulker visible mais sous l'inventaire).
+        // Cible maintenant HEAD de GuiRenderer.render(GpuBufferSlice)V — la
+        // soumission GPU réelle, appelée APRÈS tout le contenu de la frame
+        // (HUD, écran, toasts) — vérifié par désassemblage complet de
+        // GameRenderer.render()V (javap, jar 1.21.11 réel).
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GuiFlushMixin",
-            "net/minecraft/client/gui/render/state/GuiRenderState",
-            "clear", "()V", null),
+            "net/minecraft/client/gui/render/GuiRenderer",
+            "render", "(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V", null),
 
         // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
         // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.
