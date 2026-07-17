@@ -148,6 +148,14 @@ public final class ZoomModule extends LauncherModule {
             if (!active) return;
 
             int scroll = readScrollDelta();
+            // Diag TEMPORAIRE (retiré une fois le scroll confirmé fonctionnel
+            // en jeu) : borné aux crans RÉELLEMENT non-nuls, donc jamais
+            // spammé au repos — permet de savoir si le delta arrive jusqu'ici
+            // ne serait-ce qu'une fois, et avec quelle valeur.
+            if (scroll != 0) {
+                LauncherLog.info("[ZoomModule] scroll diag: raw=" + scroll + " zooming=" + zooming
+                    + " scrollOffsetFovAvant=" + scrollOffsetFov);
+            }
             if (zooming && scroll != 0) {
                 // Molette vers le haut (delta > 0) = zoome PLUS = FOV plus
                 // petit — scrollOffsetFov reste >= 0, jamais négatif (la

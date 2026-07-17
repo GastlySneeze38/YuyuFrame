@@ -18,7 +18,10 @@
     "client.v26_1.WaterFogEnvironmentMixin261",
     "client.v26_1.LavaFogEnvironmentMixin261",
     "client.v26_1.PowderedSnowFogEnvironmentMixin261",
-    "client.v26_1.ChatListenerMixin261"
+    "client.v26_1.ChatListenerMixin261",
+    "client.v26_1.MouseHandlerFreelookMixin261",
+    "client.v26_1.CameraFreelookMixin261",
+    "client.v26_1.ClientClockManagerWorldTimeMixin261"
   ],
   "injectors": {
     "defaultRequire": 1

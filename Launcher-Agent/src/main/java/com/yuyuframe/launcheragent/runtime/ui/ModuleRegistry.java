@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.module.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.module.DiagonalSwordModule;
 import com.yuyuframe.launcheragent.runtime.module.FovModule;
 import com.yuyuframe.launcheragent.runtime.module.FpsModule;
+import com.yuyuframe.launcheragent.runtime.module.FreelookModule;
 import com.yuyuframe.launcheragent.runtime.module.FullbrightModule;
 import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
@@ -167,6 +168,10 @@ public final class ModuleRegistry {
             // (voir sa javadoc) — même gate que les deux modules ci-dessus,
             // aucun équivalent 1.8.9/1.20.4 pour l'instant.
             register(new ShulkerPreviewModule());
+            // Annule MouseHandler.turnPlayer + rappelle Camera.setRotation
+            // (voir sa javadoc) — même gate que les modules ci-dessus,
+            // aucun équivalent 1.8.9/1.20.4/1.21.4/1.21.11 pour l'instant.
+            register(new FreelookModule());
         }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
@@ -227,7 +232,7 @@ public final class ModuleRegistry {
         // cassée dans l'UI).
         List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
             get("saturation"), get("no-darkness"), get("no-fog"),
-            get("no-pumpkin-overlay"), get("clear-vision"));
+            get("no-pumpkin-overlay"), get("clear-vision"), get("freelook"));
         if (!comfortMembers.isEmpty()) {
             GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire", comfortMembers));
         }

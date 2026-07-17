@@ -51,7 +51,12 @@ public abstract class GlobalUiRenderMixin261 {
             ModuleRegistry.tickAll();
 
             Object currentScreen = GlobalUiRenderBridge261.getCurrentScreen(mc);
-            if (currentScreen == null && GlobalUiRenderBridge261.inputPoller.menuKeyPressed) {
+            // Voir GlobalUiRenderBridge261.isMouseGrabbed() : empêche notre
+            // menu de s'ouvrir PAR-DESSUS un éditeur en overlay d'un autre
+            // mod (ex: Axiom) qui ne passe pas par Minecraft.setScreen() et
+            // que "currentScreen == null" seul ne peut donc pas détecter.
+            if (currentScreen == null && GlobalUiRenderBridge261.inputPoller.menuKeyPressed
+                    && GlobalUiRenderBridge261.isMouseGrabbed(mc)) {
                 try {
                     GlobalUiRenderBridge261.setScreen(mc, new UiMainMenuScreen(null));
                 } catch (Throwable t) {

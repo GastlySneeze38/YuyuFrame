@@ -31,6 +31,7 @@ public final class UiInputPollerModern extends UiInputPoller {
     // poll(), consommé/remis à zéro par readScrollDelta().
     private volatile double pendingScroll;
     private final Object[] previousScrollCb = new Object[1];
+    private static boolean scrollCallbackFired;
 
     // Touches "capturables" pour UiKeybindButton — codes GLFW standards (API
     // publique stable, pas obfusqués, littéraux sûrs comme les constantes GL
@@ -146,6 +147,15 @@ public final class UiInputPollerModern extends UiInputPoller {
                 if (method.isDefault()) return invokeDefault(p, method, args);
                 if (args != null && args.length == 3 && "invoke".equals(method.getName())) {
                     pendingScroll += (Double) args[2];
+                    // Diag TEMPORAIRE (ZoomModule — "le scroll ne marche pas") :
+                    // une seule fois, confirme que le callback GLFW natif
+                    // arrive bien jusqu'ici (sans ça, impossible de savoir si
+                    // le problème vient de la capture GLFW elle-même ou de la
+                    // consommation côté ZoomModule).
+                    if (!scrollCallbackFired) {
+                        scrollCallbackFired = true;
+                        LauncherLog.info("[UiInputPollerModern] scroll callback diag: premier événement reçu, yoffset=" + args[2]);
+                    }
                     Object prev = previousScrollCb[0];
                     if (prev != null) {
                         try { method.invoke(prev, args); } catch (Throwable ignored) {}

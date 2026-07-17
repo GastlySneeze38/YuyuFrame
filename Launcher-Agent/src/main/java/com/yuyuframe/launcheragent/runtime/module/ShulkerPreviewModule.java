@@ -282,17 +282,23 @@ public final class ShulkerPreviewModule extends LauncherModule {
     }
 
     /**
-     * Panneau ancré JUSTE À CÔTÉ de la case survolée (voir
-     * {@link #hoveredSlotScreenPosGui}) — même repère que le tooltip vanilla
-     * (nom de l'objet), demandé explicitement par l'utilisateur ("à côté de
-     * l'item, au même endroit que le texte du nom de l'item"). PAS sur le
-     * curseur brut (bougeait avec le moindre tremblement de souris à
-     * l'intérieur de la case) NI sur la fenêtre de conteneur entière (un
-     * premier essai recouvrait l'inventaire) : ancré sur la case ELLE-MÊME,
-     * donc stable tant que la souris reste dans la même case, et se
+     * Panneau ancré AU-DESSUS de la case survolée (voir
+     * {@link #hoveredSlotScreenPosGui}), centré horizontalement dessus — PAS
+     * à côté (essai précédent) : vanilla place TOUJOURS son propre tooltip
+     * en bas-à-droite du curseur, jamais au-dessus — ce placement évite donc
+     * pratiquement tout chevauchement avec le nom/lore de l'objet SANS avoir
+     * besoin d'annuler ce tooltip par Mixin (retour utilisateur : un essai
+     * Mixin sur {@code Screen} avait cassé le chargement de nos propres
+     * écrans, voir historique de session — cible bannie, cette classe est la
+     * superclasse commune de TOUT écran, y compris les nôtres).
+     *
+     * PAS sur le curseur brut non plus (bougeait avec le moindre tremblement
+     * de souris à l'intérieur de la case) NI sur la fenêtre de conteneur
+     * entière (un tout premier essai recouvrait l'inventaire) : ancré sur la
+     * case ELLE-MÊME, donc stable tant que la souris reste dessus, et se
      * repositionne proprement d'une case à l'autre en survolant plusieurs
-     * shulker box Maj maintenu. Par défaut à DROITE de la case ; repli à
-     * GAUCHE si ça déborderait de l'écran.
+     * shulker box Maj maintenu. Repli EN DESSOUS de la case si le panneau
+     * déborderait par le haut de l'écran (case tout en haut de la fenêtre).
      *
      * Fond = VRAIE texture vanilla recadrée (voir javadoc de classe), grille
      * 9x3 (taille fixe d'une shulker box vanilla), cases vides simplement
@@ -307,16 +313,19 @@ public final class ShulkerPreviewModule extends LauncherModule {
 
         float guiScale = UiRenderer.guiScale(vpWidth);
         float guiWidth = vpWidth / guiScale;
+        float guiHeight = vpHeight / guiScale;
 
         float panelWGui = IMG_W_GUI;
         float panelHGui = IMG_CROP_H_GUI;
 
-        float leftGui = slotLeftGui + HOVERED_SLOT_SIZE_GUI + SLOT_GAP_GUI;
-        if (leftGui + panelWGui > guiWidth) leftGui = slotLeftGui - panelWGui - SLOT_GAP_GUI;
+        // Centré horizontalement sur la case survolée.
+        float leftGui = slotLeftGui + (HOVERED_SLOT_SIZE_GUI - panelWGui) / 2f;
         if (leftGui < 0) leftGui = 0;
-        // Aligné verticalement sur le HAUT de la case survolée (même ancre que le tooltip vanilla).
-        float guiHeight = vpHeight / guiScale;
-        float topGui = slotTopGui;
+        if (leftGui + panelWGui > guiWidth) leftGui = guiWidth - panelWGui;
+
+        // Bord BAS du panneau juste au-dessus du bord HAUT de la case (repli en dessous si pas la place en haut).
+        float topGui = slotTopGui - SLOT_GAP_GUI - panelHGui;
+        if (topGui < 0) topGui = slotTopGui + HOVERED_SLOT_SIZE_GUI + SLOT_GAP_GUI;
         if (topGui + panelHGui > guiHeight) topGui = guiHeight - panelHGui;
         if (topGui < 0) topGui = 0;
 

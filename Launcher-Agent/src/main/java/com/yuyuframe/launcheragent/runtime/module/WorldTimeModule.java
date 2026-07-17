@@ -4,12 +4,19 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 
 /**
- * Temps du monde (client-only) — force la position soleil/lune/couleur du
- * ciel à une heure choisie, SANS toucher au vrai temps du monde (qui reste
- * géré par le serveur — spawn de mobs, etc. inchangés). Juste un marqueur +
- * le réglage d'heure ici, toute la logique vit dans
- * {@code MixinWorldTime189} (override de {@code World.getSkyAngle(float)},
- * qui pilote uniquement le RENDU).
+ * Temps du monde (client-only) — force l'heure de rendu (soleil/lune,
+ * couleur du ciel, éclairage ambiant) à une valeur choisie, INSTANTANÉMENT,
+ * SANS toucher au vrai temps du monde (qui reste géré par le serveur —
+ * spawn de mobs, etc. inchangés) : demandé explicitement pour pouvoir
+ * tester du rendu (shaders) à n'importe quelle heure sans attendre le vrai
+ * cycle jour/nuit. Juste un marqueur + le réglage d'heure ici, toute la
+ * logique vit dans deux Mixins bracket-spécifiques (architectures du temps
+ * de rendu incompatibles entre versions) :
+ *   - {@code MixinWorldTime189} (1.8.9) — override {@code World.getSkyAngle(float)F}.
+ *   - {@code ClientClockManagerWorldTimeMixin261} (26.1.2) — override
+ *     {@code ClientClockManager.getTotalTicks(Holder)J}, LA SOURCE UNIQUE
+ *     dont dérive tout le nouveau système "EnvironmentAttribute" (sunAngle,
+ *     skyColor, éclairage ambiant...) — voir sa javadoc.
  */
 public final class WorldTimeModule extends LauncherModule {
 
