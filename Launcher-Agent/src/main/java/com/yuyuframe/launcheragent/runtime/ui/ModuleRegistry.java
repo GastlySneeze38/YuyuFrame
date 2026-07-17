@@ -134,6 +134,31 @@ public final class ModuleRegistry {
      */
     private static final boolean IS_26_1 = "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
 
+    /**
+     * Portage multiversion en cours (demande explicite de l'utilisateur,
+     * audit du 2026-07-17 : "je n'ai jamais demandé à ce qu'il soit exclu,
+     * mets-les en multiversion") — {@code NoPumpkinOverlayModule} confirmé
+     * fonctionnel sur 1.21.11 en plus de 26.1.2 (même point d'accroche
+     * {@code InGameHud.renderOverlay}/{@code Gui.renderTextureOverlay},
+     * juste des noms Yarn différents — voir {@code ClearOverlaysMixin}).
+     * {@code ShulkerPreviewModule} ET {@code FreelookModule} portés vers
+     * 1.21.11 également (voir leurs javadoc respectives — McReflect pour le
+     * premier, deux Mixins dédiés {@code MouseHandlerFreelookMixin}/{@code
+     * CameraFreelookMixin} pour le second, architecture Camera.update()
+     * vérifiée par javap, distincte de 26.1.2).
+     * {@code ClearVisionModule} reste 26.1.2-only pour l'instant : son
+     * portage vers 1.21.11 s'est heurté à une architecture de brouillard
+     * {@code FogModifier} (1.21.11) totalement différente de {@code
+     * FogEnvironment} (26.1.2, {@code setupFog(FogData,...)}) — {@code
+     * getFogColor}/{@code shouldApply} au lieu de distances mutables, ET en
+     * grande partie NON MAPPÉE par Yarn à ce jour (méthodes présentes
+     * seulement sous leur ID intermédiaire brut, ex. {@code method_76304}) —
+     * nécessite une recherche bytecode séparée, pas un simple portage de
+     * noms. 1.16.5/1.20.4/1.21.4/1.8.9 pas encore commencés du tout pour ces
+     * 4 modules.
+     */
+    private static final boolean IS_1_21_11 = "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""));
+
     static {
         register(new FpsModule());
         register(new PingModule());
@@ -160,17 +185,24 @@ public final class ModuleRegistry {
         // de ces 3 modules) — implémentés via des Mixins qui n'existent pas
         // encore pour 1.8.9/1.16.5/1.20.4/1.21.4, contrairement aux 3
         // modules ci-dessus qui fonctionnent partout via McReflect seul.
-        if (IS_26_1) {
+        if (IS_26_1 || IS_1_21_11) {
             register(new NoPumpkinOverlayModule());
+        }
+        if (IS_26_1) {
             register(new ClearVisionModule());
-            // Contenu stocké via DataComponents.CONTAINER (refonte "Data
-            // Components", ~1.20.5) et lu par réflexion à noms RÉELS directs
-            // (voir sa javadoc) — même gate que les deux modules ci-dessus,
-            // aucun équivalent 1.8.9/1.20.4 pour l'instant.
+        }
+        // Contenu stocké via DataComponents.CONTAINER (refonte "Data
+        // Components", ~1.20.5) — lu par réflexion à noms RÉELS directs sur
+        // 26.1.2, à noms Yarn + repli réel via McReflect sur 1.21.11 (voir
+        // sa javadoc) — aucun équivalent 1.8.9/1.16.5/1.20.4 pour l'instant
+        // (stockage NBT pré-refonte, lecture entièrement différente).
+        if (IS_26_1 || IS_1_21_11) {
             register(new ShulkerPreviewModule());
-            // Annule MouseHandler.turnPlayer + rappelle Camera.setRotation
-            // (voir sa javadoc) — même gate que les modules ci-dessus,
-            // aucun équivalent 1.8.9/1.20.4/1.21.4/1.21.11 pour l'instant.
+        }
+        // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11) +
+        // rappelle Camera.setRotation (voir sa javadoc) — aucun équivalent
+        // 1.8.9/1.16.5/1.20.4/1.21.4 pour l'instant.
+        if (IS_26_1 || IS_1_21_11) {
             register(new FreelookModule());
         }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de

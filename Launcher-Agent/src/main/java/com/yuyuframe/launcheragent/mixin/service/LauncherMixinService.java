@@ -261,6 +261,49 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MixinCrosshair1214",
             "net/minecraft/client/gui/hud/InGameHud",
             "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+
+        // ── CORRECTIF RÉTROACTIF (audit multiversion, bracket 1.21.11 +
+        // 1.16.5/1.20.4/1.21.4) : ces @Inject(method="...") utilisaient un nom
+        // Yarn named DIRECTEMENT, en supposant (à tort) qu'aucun refmap n'était
+        // nécessaire (voir l'ancienne conclusion "getRefMapperConfig() renvoie
+        // null → pas de refmap" — FAUSSE : chaque mixins.launcheragent*.json
+        // déclare "refmap": "mixins.launcheragent.refmap.json", généré par
+        // buildRefmapJson() UNIQUEMENT à partir de REFMAP_ENTRIES ci-dessus.
+        // Sans entrée ici, Mixin cherche le nom Yarn TEL QUEL dans le
+        // ClassNode obfusqué (getClassNode() ne renomme QUE cn.name, jamais
+        // les méthodes) → aucune correspondance → no-op silencieux (require=0)
+        // sur tous les brackets obfusqués. Confirmé par grep du log réel :
+        // ZÉRO ligne "Mixin initialisé avec succès" pour WorldTimeMixin*/
+        // ClearOverlaysMixin, alors que les entrées v26_1 (noms RÉELS, jamais
+        // besoin de refmap) apparaissent bien. World.getTimeOfDay()J déclarée
+        // DIRECTEMENT sur World (pas une interface), vérifié dans
+        // mappings/mappings.tiny (Yarn 1.21.11) — pas de fallbackNamedOwner
+        // nécessaire ; même nom Yarn stable sur 1.16.5/1.20.4/1.21.4 (déjà
+        // vérifié par désassemblage lors de leur écriture).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/WorldTimeMixin",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/WorldTimeMixin116",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/WorldTimeMixin1204",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/WorldTimeMixin1214",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        // InGameHud.renderOverlay(DrawContext,Identifier,F) — voir
+        // ClearOverlaysMixin/NoPumpkinOverlayModule, même correctif que ci-dessus.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/ClearOverlaysMixin",
+            "net/minecraft/client/gui/hud/InGameHud", "renderOverlay",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
+
+        // ── Freelook 1.21.11 (mixin.client.*, portage — voir FreelookModule) —
+        // mêmes noms Yarn que ceux vérifiés par désassemblage du vrai jar
+        // 1.21.11 (mappings/mappings.tiny + javap sur gfk.class/ger.class).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/MouseHandlerFreelookMixin",
+            "net/minecraft/client/Mouse", "updateMouse", "(D)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
+            "net/minecraft/client/render/Camera", "update",
+            "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
+            "net/minecraft/client/render/Camera", "moveBy", "(FFF)V", null),
     };
 
     /**

@@ -167,8 +167,25 @@ if exist "%OUT_MAIN%" rmdir /s /q "%OUT_MAIN%"
 mkdir "%OUT_MAIN%"
 echo [Build] Compilation principale...
 
+:: BUG TROUVE (test utilisateur, 26.1.2, session portage Freelook/refmap) :
+:: src\stubs etait inclus ICI dans la liste de SOURCES compilees vers
+:: OUT_MAIN (qui finit dans le JAR final, voir Packaging plus bas) — en plus
+:: d'etre deja compile separement vers OUT_STUBS et mis sur le -cp juste en
+:: dessous pour la resolution de types. Resultat : les classes stub
+:: (compile-only par design, voir commentaire "non inclus dans le JAR final"
+:: ci-dessus) finissaient QUAND MEME embarquees dans launcher-agent.jar.
+:: Repere concretement via le stub DrawContext (ajoute cette session pour
+:: ClearOverlaysMixin) : sur 26.1.2, UiRenderer.flushPendingModernItemIcons
+:: cherche par nom "net.minecraft.client.gui.DrawContext" AVANT de retomber
+:: sur le vrai nom Mojang "GuiGraphicsExtractor" — Class.forName trouvait
+:: notre stub vide (embarque par erreur dans le jar, visible par Knot) au
+:: lieu d'echouer proprement, et getDeclaredConstructor() plantait dessus
+:: (NoSuchMethodException, aucun constructeur (Minecraft,GuiRenderState,int,int)
+:: sur un stub sans corps) — icones d'armure invisibles en boucle, 35k+ fois
+:: dans le log. Fix : stubs UNIQUEMENT sur le classpath (-cp ci-dessous),
+:: plus jamais dans la liste de sources de cette compilation.
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $dirs=@('%AGENT_DIR%src\main\java','%AGENT_DIR%src\stubs'); $files=$dirs | ForEach-Object { Get-ChildItem -Recurse -Filter '*.java' $_ } | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $dirs=@('%AGENT_DIR%src\main\java'); $files=$dirs | ForEach-Object { Get-ChildItem -Recurse -Filter '*.java' $_ } | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (

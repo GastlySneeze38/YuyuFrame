@@ -831,8 +831,19 @@ public final class UiTextBlaze3D {
      * regénérée/re-décodée sans repayer le coût GPU si la clé ne change pas.
      */
     public static void queueIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, int vpWidth, int vpHeight) {
+        queueIcon(cacheKey, img, x0, y0, x1, y1, 1f, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante avec opacité — voir {@code UiRenderer#drawIcon(..., alpha, ...)}
+     * pour le pourquoi (fondu d'entrée sur contenu asynchrone). {@code alpha}
+     * remplace le 4ᵉ composant du ColorModulator (voir {@link #drawIcon}),
+     * resté fixe à 1.0 partout ailleurs (couleurs réelles de l'image
+     * inchangées, seule l'opacité globale varie).
+     */
+    public static void queueIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, float alpha, int vpWidth, int vpHeight) {
         if (!isAvailable() || img == null) return;
-        queued.add(() -> drawIcon(cacheKey, img, x0, y0, x1, y1, vpWidth, vpHeight));
+        queued.add(() -> drawIcon(cacheKey, img, x0, y0, x1, y1, alpha, vpWidth, vpHeight));
     }
 
     /**
@@ -1206,11 +1217,12 @@ public final class UiTextBlaze3D {
     // ── Icône RGBA quelconque (pastille de mod/pack) — MÊME structure que
     // drawRect, mais un SEUL quad plein (pas de 9-slice/coins arrondis — une
     // icône rectangulaire simple) échantillonnant la VRAIE texture de
-    // l'icône (Sampler0), pas le masque de coin. ColorModulator reste blanc
-    // opaque (pass-through) : les couleurs réelles de l'image sont
+    // l'icône (Sampler0), pas le masque de coin. ColorModulator reste blanc,
+    // seul son alpha varie (paramètre {@code alpha} — fondu d'entrée sur
+    // contenu asynchrone) : les couleurs RGB réelles de l'image sont
     // préservées telles quelles, comme pour un rect à dégradé (couleur
     // portée par la texture ici, pas par sommet).
-    private static boolean drawIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, int vpWidth, int vpHeight) {
+    private static boolean drawIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, float alpha, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
             currentStage = "minecraftClient(icon)";
@@ -1255,7 +1267,9 @@ public final class UiTextBlaze3D {
 
             currentStage = "dynamicUniformsWrite(icon)";
             Object identity4 = clsMatrix4f.getConstructor().newInstance();
-            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // pass-through — vraies couleurs de l'image
+            // RGB pass-through (vraies couleurs de l'image) — seul le composant
+            // alpha varie (voir queueIcon(..., alpha, ...) / UiRenderer#drawIcon).
+            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, alpha);
             Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);

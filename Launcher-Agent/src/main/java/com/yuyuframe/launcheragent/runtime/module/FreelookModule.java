@@ -23,9 +23,11 @@ import java.lang.reflect.Method;
  * d'avant au désengagement, voir {@link #onTick()}.
  *
  * Ce module lui-même ne fait QUE porter le réglage (touche configurable) et
- * l'état partagé lu/écrit par deux Mixins dédiés (voir
- * {@code MouseHandlerFreelookMixin261}/{@code CameraFreelookMixin261},
- * bracket 26.1.2 UNIQUEMENT — même gate IS_26_1 que ShulkerPreviewModule) :
+ * l'état partagé lu/écrit par deux Mixins dédiés PAR BRACKET (voir
+ * {@code MouseHandlerFreelookMixin261}/{@code CameraFreelookMixin261} pour
+ * 26.1.2, {@code MouseHandlerFreelookMixin}/{@code CameraFreelookMixin} —
+ * package base, sans suffixe — pour 1.21.11, même gate {@code (IS_26_1 ||
+ * IS_1_21_11)} que ShulkerPreviewModule/NoPumpkinOverlayModule) :
  * <pre>
  *   MouseHandlerFreelookMixin261 : annule MouseHandler.turnPlayer(D)V
  *   (@At HEAD, cancellable) quand la touche est maintenue — lit/vide
@@ -47,15 +49,31 @@ import java.lang.reflect.Method;
  *   rotation ET les vecteurs forward/up/left dérivés, qu'un simple champ
  *   écrasé laisserait périmés (caméra visuellement inchangée malgré le
  *   nouveau xRot/yRot).
+ *
+ *   MouseHandlerFreelookMixin (1.21.11) : même principe sur {@code
+ *   Mouse.updateMouse(D)V} (Yarn ; réel {@code MouseHandler.turnPlayer(D)V})
+ *   — champs {@code cursorDeltaX}/{@code cursorDeltaY} (Yarn) au lieu de
+ *   {@code accumulatedDX}/{@code accumulatedDY} (réel 26.1.2).
+ *
+ *   CameraFreelookMixin (1.21.11) : architecture DIFFÉRENTE de 26.1.2 —
+ *   {@code Camera.update(...)V} fait tout en une seule méthode (pas
+ *   d'{@code alignWithEntity} séparée), avec DEUX call sites de {@code
+ *   moveBy(FFF)V} (3e personne / vue rapprochée) au lieu d'un seul — hook
+ *   direct sur {@code moveBy(FFF)V} lui-même (couvre les deux sites d'un
+ *   coup) + TAIL de {@code update()} pour la 1re personne pure (jamais de
+ *   moveBy) — voir sa javadoc de classe pour le détail vérifié par javap.
  * </pre>
  *
  * PAS de Mixin sur {@code LocalPlayer}/{@code Entity} (hiérarchie commune à
  * TOUTE entité du jeu, risque de casse identique à celui rencontré avec
  * {@code Screen} pour ShulkerPreviewModule — voir sa javadoc) : le blocage
  * de la rotation réelle du joueur passe entièrement par l'annulation de
- * {@code MouseHandler.turnPlayer} (classe UTILITAIRE non sous-classée, même
- * profil de risque que GameRenderer/TitleScreen/ChatListener, déjà ciblés
- * sans souci ailleurs dans ce projet), jamais en touchant LocalPlayer lui-même.
+ * {@code MouseHandler.turnPlayer}/{@code Mouse.updateMouse} (classe
+ * UTILITAIRE non sous-classée, même profil de risque que GameRenderer/
+ * TitleScreen/ChatListener, déjà ciblés sans souci ailleurs dans ce projet),
+ * jamais en touchant le joueur lui-même.
+ *
+ * 1.16.5/1.20.4/1.21.4/1.8.9 pas encore portés.
  */
 public final class FreelookModule extends LauncherModule {
 
@@ -92,7 +110,7 @@ public final class FreelookModule extends LauncherModule {
     private Object savedCameraType;
 
     public FreelookModule() {
-        super("freelook", "Freelook", "Maintenir (ou basculer) une touche pour regarder autour de soi sans changer la direction du personnage (façon OptiFine) — bracket 26.1.2 uniquement.", false);
+        super("freelook", "Freelook", "Maintenir (ou basculer) une touche pour regarder autour de soi sans changer la direction du personnage (façon OptiFine).", false);
     }
 
     /**
@@ -144,17 +162,28 @@ public final class FreelookModule extends LauncherModule {
 
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
-            Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+            java.lang.reflect.Field fOptions = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options");
+            if (fOptions == null) return;
+            Object options = fOptions.get(mc);
             if (options == null) return;
 
-            Method getCameraType = options.getClass().getMethod("getCameraType");
-            Method setCameraType = options.getClass().getMethod("setCameraType", getCameraType.getReturnType());
+            Method getCameraType = McReflect.noArgMethod(options.getClass(),
+                "net/minecraft/client/option/GameOptions", "getPerspective", "getCameraType");
+            if (getCameraType == null) return;
+            Method setCameraType = McReflect.method(options.getClass(),
+                "net/minecraft/client/option/GameOptions", "setPerspective", "setCameraType",
+                getCameraType.getReturnType());
+            if (setCameraType == null) return;
 
             if (engaged) {
                 savedCameraType = getCameraType.invoke(options);
-                Class<?> cameraTypeClass = Class.forName("net.minecraft.client.CameraType", false, options.getClass().getClassLoader());
-                Object thirdPersonBack = cameraTypeClass.getField("THIRD_PERSON_BACK").get(null);
-                setCameraType.invoke(options, thirdPersonBack);
+                Class<?> cameraTypeClass = McReflect.yarnClass(
+                    "net/minecraft/client/option/Perspective", "net.minecraft.client.CameraType");
+                if (cameraTypeClass == null) return;
+                java.lang.reflect.Field fThirdPersonBack = McReflect.field(cameraTypeClass,
+                    "net/minecraft/client/option/Perspective", "THIRD_PERSON_BACK");
+                if (fThirdPersonBack == null) return;
+                setCameraType.invoke(options, fThirdPersonBack.get(null));
             } else if (savedCameraType != null) {
                 setCameraType.invoke(options, savedCameraType);
                 savedCameraType = null;
@@ -199,10 +228,13 @@ public final class FreelookModule extends LauncherModule {
                 try {
                     Object mc = McReflect.minecraftClient();
                     if (mc != null) {
-                        Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+                        java.lang.reflect.Field fOptions = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options");
+                        Object options = fOptions != null ? fOptions.get(mc) : null;
                         if (options != null) {
-                            Method setCameraType = options.getClass().getMethod("setCameraType", savedCameraType.getClass());
-                            setCameraType.invoke(options, savedCameraType);
+                            Method setCameraType = McReflect.method(options.getClass(),
+                                "net/minecraft/client/option/GameOptions", "setPerspective", "setCameraType",
+                                savedCameraType.getClass());
+                            if (setCameraType != null) setCameraType.invoke(options, savedCameraType);
                         }
                     }
                 } catch (Throwable ignored) {}

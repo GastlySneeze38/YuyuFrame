@@ -10,7 +10,8 @@
   "client": [
     "client.v1_21_4.GlobalUiRenderMixin1214",
     "client.v1_21_4.GlobalTickMixin1214",
-    "client.v1_21_4.MixinCrosshair1214"
+    "client.v1_21_4.MixinCrosshair1214",
+    "client.v1_21_4.WorldTimeMixin1214"
   ],
   "injectors": {
     "defaultRequire": 1
