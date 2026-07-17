@@ -1815,9 +1815,31 @@ public final class UiRenderer {
             Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
             Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
 
+            // Mêmes correctifs que drawVanillaItemIconModernImmediate (voir sa
+            // javadoc complète) : VAO à rebinder (notre pipeline UI laisse
+            // VAO=0 après son dernier dessin) + cache shader RenderSystem à
+            // sauvegarder/invalider/restaurer (sinon draw silencieusement
+            // invisible avec programme 0, sans toucher à l'état global pour
+            // le reste de la frame).
+            ensureModernBuffersInit();
+            if (modernVao > 0) glBindVertexArray(modernVao);
+
+            Object savedShader = null;
+            boolean shaderReflectionOk = ensureRenderSystemShaderReflectionResolved();
+            if (shaderReflectionOk) {
+                try {
+                    savedShader = getShaderMethodModern.invoke(null);
+                    setShaderMethodModern.invoke(null, (Object) null);
+                } catch (Throwable ignored) { shaderReflectionOk = false; }
+            }
+
             drawTextureMethodImmediate.invoke(drawContext, guiTexturedFunctionProxyImmediate, identifier,
                 guiX, guiY, u, v, guiW, guiH, Math.round(texW), Math.round(texH));
             drawFlushMethodImmediateModern.invoke(drawContext);
+
+            if (shaderReflectionOk) {
+                try { setShaderMethodModern.invoke(null, savedShader); } catch (Throwable ignored) {}
+            }
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawVanillaContainerTextureModernImmediate: " + t);
         }
@@ -2228,7 +2250,6 @@ public final class UiRenderer {
     private static Method drawItemMethodImmediateModern;
     private static Method drawFlushMethodImmediateModern;
     private static boolean modernImmediateResolveFailed = false;
-    private static boolean modernImmediateDiagLogged = false;
 
     /**
      * Bracket 1.20.4 / 1.21.4 (voir détection ci-dessus) : DrawContext gère
@@ -2240,46 +2261,126 @@ public final class UiRenderer {
      * de file d'attente ni de second point d'accroche Mixin nécessaires ici
      * (contrairement au bracket 1.21.11+/26.1+, voir drawVanillaItemIconModernDeferred).
      */
+    /**
+     * BUG TROUVÉ ET CORRIGÉ EN PROFONDEUR (test utilisateur, builds v559-v563,
+     * après recherche externe — "regarde comment d'autres bibliothèques
+     * open-source font") : trois correctifs successifs (rebind VAO, cache
+     * shader RenderSystem invalidé/restauré) ont fait disparaître toute
+     * erreur GL mesurable, mais l'icône restait invisible malgré tout — signe
+     * que le problème n'était PAS une case de GL mal configurée en particulier,
+     * mais l'APPROCHE ELLE-MÊME : construire notre PROPRE {@code DrawContext}
+     * isolé (avec son propre {@code VertexConsumerProvider.Immediate}) APRÈS
+     * que tout le rendu vanilla de la frame (monde, HUD, écran) ait déjà eu
+     * lieu et potentiellement déjà fermé/soumis ses propres batches, plutôt
+     * que de PARTICIPER au rendu vanilla EN COURS.
+     *
+     * Aucun mod Fabric "normal" ne fait ça — {@code HudRenderCallback}
+     * (l'équivalent standard pour dessiner par-dessus le HUD) hooke
+     * directement {@code InGameHud.render(DrawContext, RenderTickCounter)}
+     * et reçoit en paramètre l'instance RÉELLE et VIVANTE de
+     * {@code DrawContext} que vanilla lui-même utilise pour TOUT le HUD de
+     * cette frame — jamais une instance reconstruite à la main après coup.
+     * En participant à CETTE instance (déjà dans le bon état GL/shader/VAO,
+     * puisque c'est litéralement celle que vanilla utilise), aucun des
+     * contournements ci-dessus (VAO, cache shader) n'est nécessaire : c'est
+     * vanilla lui-même qui la construit, la configure ET la vide.
+     *
+     * Correctif : mise en FILE D'ATTENTE (comme le pipeline "Deferred"
+     * 1.21.11/26.1.2, {@link #drawVanillaItemIconModernDeferred}/{@link
+     * #pendingModernItemIcons}) au lieu d'un dessin synchrone isolé — vidée
+     * par {@link #flushPendingImmediateItemIcons(Object)}, appelé depuis un
+     * NOUVEAU point d'accroche Mixin en TAIL de {@code InGameHud.render(...)}
+     * (voir {@code HudItemFlushMixin1214}), avec le VRAI paramètre
+     * {@code DrawContext} de cet appel. Décalage d'une frame comme le
+     * pipeline Deferred (imperceptible, ~8-16ms) : l'icône demandée dans
+     * cette frame-ci est effectivement dessinée au tout début du rendu HUD de
+     * la frame SUIVANTE.
+     */
     private void drawVanillaItemIconModernImmediate(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
         try {
-            if (!ensureModernImmediateResolved(itemStack)) {
-                if (!modernItemIconWarned) {
-                    modernItemIconWarned = true;
-                    LauncherLog.warn("[UiRenderer] drawVanillaItemIconModernImmediate: résolution réflexion échouée — icône non dessinée (voir logs diag)");
-                }
-                return;
-            }
-
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-
-            // Flip d'axe Y — voir javadoc de drawVanillaItemIconModernDeferred
-            // (même bug, même correctif). guiScale() met en cache ce ratio en
-            // interne (audit perf — voir sa javadoc).
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - size) / guiScale);
 
-            Object bufferBuilders = getBufferBuildersMethodModern.invoke(mc);
-            Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
-            Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
-
-            if (!modernImmediateDiagLogged) {
-                modernImmediateDiagLogged = true;
-                LauncherLog.info("[UiRenderer] itemIconModernImmediate diag: drawContext=" + drawContext
-                    + " guiScale=" + guiScale + " guiX=" + guiX + " guiY=" + guiY);
+            synchronized (pendingModernItemIcons) {
+                pendingModernItemIcons.add(new PendingItemIcon(itemStack, guiX, guiY, withDurabilityBar));
             }
-
-            drawItemMethodImmediateModern.invoke(drawContext, itemStack, guiX, guiY);
-            // drawItemBar absent sur 1.20.4 (pas de mapping Yarn pour ce
-            // bracket, voir ensureModernImmediateResolved) — résolution à
-            // null, ignoré silencieusement (pas de barre, pas d'erreur).
-            if (withDurabilityBar && drawItemBarMethodModernImmediate != null) {
-                drawItemBarMethodModernImmediate.invoke(drawContext, itemStack, guiX, guiY);
-            }
-            drawFlushMethodImmediateModern.invoke(drawContext);
         } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] drawVanillaItemIconModernImmediate: " + t);
+            if (!modernItemIconWarned) {
+                modernItemIconWarned = true;
+                LauncherLog.err("[UiRenderer] drawVanillaItemIconModernImmediate: " + t);
+            }
+        }
+    }
+
+    /**
+     * Appelé depuis {@code HudItemFlushMixin1214}, en TAIL de
+     * {@code InGameHud.render(DrawContext, RenderTickCounter)}, avec le VRAI
+     * paramètre {@code DrawContext} de cet appel (l'instance vivante que
+     * vanilla utilise pour tout le HUD de cette frame — jamais une instance
+     * reconstruite). Voir la javadoc de {@link #drawVanillaItemIconModernImmediate}
+     * pour le pourquoi complet. Ni VAO ni cache shader à gérer ici : cette
+     * instance est déjà dans l'état GL correct puisque c'est celle de vanilla
+     * lui-même — on ne fait qu'y AJOUTER nos propres commandes de dessin,
+     * flushées par vanilla via SON PROPRE mécanisme, pas le nôtre.
+     */
+    public void flushPendingImmediateItemIcons(Object realDrawContext) {
+        java.util.List<PendingItemIcon> batch;
+        synchronized (pendingModernItemIcons) {
+            if (pendingModernItemIcons.isEmpty()) return;
+            batch = new java.util.ArrayList<>(pendingModernItemIcons);
+            pendingModernItemIcons.clear();
+        }
+        try {
+            if (!ensureModernImmediateResolved(batch.get(0).itemStack)) {
+                if (!modernItemIconWarned) {
+                    modernItemIconWarned = true;
+                    LauncherLog.warn("[UiRenderer] flushPendingImmediateItemIcons: résolution réflexion échouée — icônes non dessinées (voir logs diag)");
+                }
+                return;
+            }
+            for (PendingItemIcon icon : batch) {
+                drawItemMethodImmediateModern.invoke(realDrawContext, icon.itemStack, icon.guiX, icon.guiY);
+                // drawItemBar absent sur 1.20.4 (pas de mapping Yarn pour ce
+                // bracket, voir ensureModernImmediateResolved) — résolution à
+                // null, ignoré silencieusement (pas de barre, pas d'erreur).
+                if (icon.vanillaExtras && drawItemBarMethodModernImmediate != null) {
+                    drawItemBarMethodModernImmediate.invoke(realDrawContext, icon.itemStack, icon.guiX, icon.guiY);
+                }
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingImmediateItemIcons: " + t);
+        }
+    }
+
+    private static Method getShaderMethodModern;
+    private static Method setShaderMethodModern;
+    private static boolean shaderReflectionResolveFailed;
+
+    /**
+     * Résout {@code RenderSystem.getShader()}/{@code setShader(ShaderProgram)}
+     * — voir la javadoc de {@link #drawVanillaItemIconModernImmediate} pour
+     * le mécanisme complet (sauvegarde/invalidation/restauration du cache
+     * shader de RenderSystem, portée strictement à notre propre appel).
+     * `RenderSystem` reste un nom RÉEL même sur un bracket obfusqué
+     * (com.mojang.*, confirmé dans mappings/mappings.tiny) — seul le type
+     * du paramètre/retour ({@code ShaderProgram}) est obfusqué.
+     */
+    private static boolean ensureRenderSystemShaderReflectionResolved() {
+        if (getShaderMethodModern != null && setShaderMethodModern != null) return true;
+        if (shaderReflectionResolveFailed) return false;
+        try {
+            Class<?> renderSystemClass = Class.forName("com.mojang.blaze3d.systems.RenderSystem");
+            Class<?> shaderProgramClass = McReflect.yarnClass("net/minecraft/client/gl/ShaderProgram");
+            if (shaderProgramClass == null) { shaderReflectionResolveFailed = true; return false; }
+            getShaderMethodModern = renderSystemClass.getDeclaredMethod("getShader");
+            getShaderMethodModern.setAccessible(true);
+            setShaderMethodModern = renderSystemClass.getDeclaredMethod("setShader", shaderProgramClass);
+            setShaderMethodModern.setAccessible(true);
+            return true;
+        } catch (Throwable t) {
+            shaderReflectionResolveFailed = true;
+            return false;
         }
     }
 

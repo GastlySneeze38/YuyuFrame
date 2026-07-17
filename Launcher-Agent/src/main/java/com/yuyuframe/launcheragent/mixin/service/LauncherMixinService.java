@@ -319,6 +319,14 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/WorldTimePropertiesMixin1214",
             "net/minecraft/client/world/ClientWorld$Properties", "getTimeOfDay", "()J",
             "net/minecraft/world/WorldProperties"),
+        // HudItemFlushMixin1214 : vide la file d'icônes d'objet vanilla en
+        // attente (ArmorDurabilityModule) directement dans le VRAI DrawContext
+        // vivant de InGameHud.render() — voir UiRenderer#drawVanillaItemIconModernImmediate
+        // pour le pourquoi (remplace la construction d'un DrawContext isolé,
+        // hors du contexte GL vanilla, qui ne fonctionnait jamais).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/HudItemFlushMixin1214",
+            "net/minecraft/client/gui/hud/InGameHud", "render",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
         // InGameHud.renderOverlay(DrawContext,Identifier,F) — voir
         // ClearOverlaysMixin/NoPumpkinOverlayModule, même correctif que ci-dessus.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/ClearOverlaysMixin",
