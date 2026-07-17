@@ -10,65 +10,73 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Soumet les icônes d'objet vanilla mises en file par {@link UiRenderer}
- * (armure/main de {@code ArmorDurabilityModule}, voir sa javadoc dans
- * UiRenderer "Icône d'objet vanilla — pipeline MODERNE") dans l'état
- * GuiRenderState VIVANT de vanilla — {@code this} ici EST l'instance réelle
- * de GameRenderer (fusionnée par Mixin), donc {@code this.guiRenderer.state}
- * est le MÊME objet que GameRenderer.render() va lui-même envoyer au GPU un
- * peu plus loin dans cette même méthode (GuiRenderer.render(GpuBufferSlice),
- * tracé par désassemblage bytecode — voir historique de session).
+ * (armure/main de {@code ArmorDurabilityModule}, fond de conteneur de
+ * {@code ShulkerPreviewModule} — voir la javadoc de UiRenderer
+ * "Icône d'objet vanilla — pipeline MODERNE") dans l'état GuiRenderState
+ * VIVANT de vanilla — {@code this} ici EST l'instance réelle de
+ * GuiRenderState (fusionnée par Mixin), le MÊME objet que
+ * GameRenderer.render() envoie ensuite au GPU un peu plus loin dans le frame
+ * (GuiRenderer.render(GpuBufferSlice), tracé par désassemblage bytecode —
+ * voir historique de session).
  *
- * HEAD, pas TAIL (contrairement à GlobalUiRenderMixin, qui gère la logique du
- * moteur UI custom et n'a pas cette contrainte) : le flush réel a lieu QUELQUE
- * PART DANS cette méthode, donc TAIL serait TROP TARD.
+ * BUG TROUVÉ ET CORRIGÉ (audit modules, cette session) — remplace l'ancien
+ * hook HEAD sur {@code GameRenderer.render()} (icônes d'armure/durabilité
+ * "probablement invisibles", voir module-bracket-audit.md) : une session
+ * précédente avait tracé par bytecode (javap sur le jar client réel) que
+ * {@code GameRenderer.render()} (obf {@code hob.a(Lgez;Z)V}) appelle {@code
+ * this.F.e()} (champ "F"="guiState", méthode obf "e"), qui vide entièrement
+ * GuiRenderState, JUSTE APRÈS la config lumière — donc APRÈS le point HEAD où
+ * l'ancien hook ajoutait nos icônes. Toute icône mise en file à HEAD était
+ * donc effacée avant le flush GPU réel, plus loin dans la même méthode.
  *
- * Mixin distinct de GlobalUiRenderMixin (même méthode cible, classe séparée)
- * pour ne pas mélanger deux responsabilités sans rapport (logique moteur UI
- * vs participation au pipeline de rendu vanilla) — Sponge Mixin supporte
- * nativement plusieurs @Mixin sur la même méthode cible.
+ * Cette session précédente n'avait pas corrigé le problème car "gqg" (le nom
+ * obfusqué de GuiRenderState) semblait n'avoir aucune entrée Yarn "named"
+ * connue — rendant risqué un {@code @At(INVOKE, target=...)} vers un nom
+ * obfusqué brut (aurait cassé sous Fabric/intermediary, et pu faire échouer
+ * TOUT le tissage de GameRenderer en cascade, voir la leçon ClearOverlaysMixin
+ * dans module-bracket-audit.md). Vérification directe cette session dans
+ * {@code mappings/mappings.tiny} : l'entrée existe bel et bien, juste sous un
+ * chemin de package différent de celui essayé à l'époque —
+ * {@code net/minecraft/client/gui/render/state/GuiRenderState}, méthode
+ * official {@code e()V} == named {@code clear()V}, intermediary {@code
+ * method_70926}. Cibler {@code clear()V} directement via
+ * {@code @Inject(method=...)} se traduit alors normalement pour Fabric via le
+ * refmap (voir REFMAP_ENTRIES dans LauncherMixinService), exactement comme
+ * n'importe quelle autre entrée — plus besoin de deviner un nom obfusqué brut
+ * ni de reproduire la chaîne d'appels imbriqués {@code this.k.i.t().a(...)}
+ * utilisée par le hook équivalent 26.1.2 (voir GuiFlushMixin261).
+ *
+ * TAIL, pas HEAD : nos icônes doivent être ajoutées APRÈS que clear() ait fini
+ * de vider l'état pour ce frame — sinon rien ne change par rapport au bug
+ * ci-dessus. clear() peut être appelée plusieurs fois par frame sans risque :
+ * {@link UiRenderer#flushPendingModernItemIconsFromState} vide la file une
+ * seule fois (elle est déjà vide au second appel, no-op silencieux).
  *
  * BUG TROUVÉ (test utilisateur, 26.1.2) : {@code LinkageError: loader
  * constraint violation ... UiColor ... previously loaded by 'knot'} —
  * exactement le piège de classloader documenté dans la javadoc de
- * GlobalUiRenderMixin (Knot/'app'), mais réintroduit ICI : HEAD s'exécute
- * TOUJOURS avant TAIL dans un même appel de méthode, donc au tout premier
- * frame, ce hook touchait {@link UiRenderer} (et transitivement UiColor)
- * AVANT que {@code FabricKnotExposer.ensureExposed()} n'ait eu la chance de
- * tourner (lui, câblé en TAIL sur GlobalUiRenderMixin) — chargement via 'app'
- * ici, puis via 'knot' plus tard ailleurs, définitions incompatibles de la
- * MÊME classe. Fix : appeler ensureExposed() ICI AUSSI, en tout premier —
- * idempotent, sans coût si déjà fait.
+ * GlobalUiRenderMixin (Knot/'app'), mais réintroduit ICI : ce hook touchait
+ * {@link UiRenderer} (et transitivement UiColor) potentiellement AVANT que
+ * {@code FabricKnotExposer.ensureExposed()} n'ait eu la chance de tourner
+ * (lui, câblé en TAIL sur GlobalUiRenderMixin) — chargement via 'app' ici,
+ * puis via 'knot' plus tard ailleurs, définitions incompatibles de la MÊME
+ * classe. Fix : appeler ensureExposed() ICI AUSSI, en tout premier —
+ * idempotent, sans coût si déjà fait. Toujours nécessaire après le
+ * changement de point d'accroche ci-dessus (même risque, seule la méthode
+ * cible a changé).
  *
- * PROBLÈME CONNU, NON CORRIGÉ ICI (contrairement au bracket 26.1.2, voir
- * {@link com.yuyuframe.launcheragent.mixin.client.v26_1.GuiFlushMixin261}
- * pour le correctif équivalent déjà appliqué là-bas) : trace bytecode
- * complète de {@code hob.a(Lgez;Z)V} (le VRAI render() 1.21.11, javap sur le
- * jar client réel) montre, contrairement à 26.1.2, un appel {@code
- * this.F.e()} (GuiRenderState.reset(), champ "F"="guiState") juste APRÈS la
- * config lumière ({@code this.k.i.t().a(fyd$a.c)}, équivalent de
- * DiffuseLighting.setupFor), donc DANS render() lui-même — HEAD est donc
- * ANTÉRIEUR à ce reset, et toute icône ajoutée ici est VRAISEMBLABLEMENT
- * EFFACÉE avant le flush plus loin dans la méthode. Non corrigé pour l'instant
- * car {@code gqg} (GuiRenderState) N'A AUCUNE entrée Yarn "named" (seulement
- * official/intermediary — voir YarnMappings/le bug de classe "gqg" trouvé
- * plus tôt dans l'historique de session), donc aucun moyen sûr/déjà éprouvé
- * dans ce projet d'écrire un {@code @At(INVOKE, target=...)} vers {@code
- * gqg.e()V} qui fonctionne à la fois en vanilla brut ET sous Fabric
- * (intermediary) sans risquer de faire échouer TOUTE la config Mixin au
- * chargement (voir historique : incident MixinWorldTime116/LunarWorldView).
- * RÉSULTAT ATTENDU ACTUELLEMENT SUR CE BRACKET : icônes probablement TOUJOURS
- * INVISIBLES malgré la file d'attente qui se vide sans erreur — NON VÉRIFIÉ
- * EN JEU (pas d'accès à un client 1.21.11 depuis cet environnement, et
- * l'utilisateur teste sur 26.1.2, déjà corrigé).
+ * NON VÉRIFIÉ EN JEU (pas d'accès à un client 1.21.11 depuis cet
+ * environnement) — voir les logs "[UiRenderer] itemIconModern" en cas
+ * d'icône toujours invisible.
  */
-@Mixin(targets = "net.minecraft.client.render.GameRenderer")
+@Mixin(targets = "net.minecraft.client.gui.render.state.GuiRenderState")
 public abstract class GuiFlushMixin {
 
-    @Inject(method = "render(Lnet/minecraft/client/render/RenderTickCounter;Z)V", at = @At("HEAD"))
+    @Inject(method = "clear()V", at = @At("TAIL"))
     private void la$flushPendingItemIcons(CallbackInfo ci) {
         try {
             FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
-            UiRenderer.flushPendingModernItemIcons(this);
+            UiRenderer.flushPendingModernItemIconsFromState(this);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GuiFlushMixin: " + t);
         }

@@ -321,13 +321,30 @@ public final class ShulkerPreviewModule extends LauncherModule {
         if (componentType == null) return null;
 
         if (mItemStackGet == null) {
-            // "get" déclaré sur ComponentsAccess (Yarn) / DataComponentGetter
-            // (réel) — interfaces DIFFÉRENTES mais MÊME nom de méthode des
-            // deux côtés, donc une résolution Yarn "coïncidence" (repli sur
-            // le nom littéral quand Yarn absent) suffit — la recherche de
-            // hiérarchie McReflect trouve la méthode HÉRITÉE quelle que soit
-            // l'interface qui la déclare réellement.
-            mItemStackGet = McReflect.method(stack.getClass(), "net/minecraft/component/ComponentsAccess", "get", fContainerComponent.getType());
+            // BUG TROUVÉ (test utilisateur, 1.21.11) : ClassCastException
+            // plus loin (bfk$2 → Stream) trahissait que "contents" n'était
+            // PAS une vraie instance de ContainerComponent — la VRAIE cause
+            // était ICI. McReflect.method(stack.getClass(), ...) commence sa
+            // recherche par les méthodes DÉCLARÉES DIRECTEMENT sur ItemStack
+            // lui-même (findMethodInHierarchy vérifie c.getDeclaredMethods()
+            // AVANT ses interfaces) — ItemStack est une classe ÉNORME avec
+            // des DIZAINES de surcharges obfusquées "a" à 1 argument (vérifié
+            // par javap : a(dgz), a(bef<dlp>), a(dlp), a(Predicate<jd<dlp>>),
+            // a(jd<dlp>), a(jh<dlp>), a(int)...), sans AUCUN rapport avec les
+            // composants — largement de quoi coïncider avec un des types
+            // acceptant kh (DataComponentType) via isAssignableFrom AVANT que
+            // la recherche n'atteigne jamais la VRAIE méthode déclarée sur
+            // l'interface ComponentsAccess/kd.
+            // Fix : methodOnClass résout DIRECTEMENT sur l'interface (3
+            // méthodes seulement, kd.a(kh)/a(kh,T)/b(kh) — aucune ambiguïté
+            // possible), jamais en remontant depuis ItemStack. Repli sur
+            // l'ancienne résolution UNIQUEMENT pour 26.1.2 (noms réels
+            // complets, pas de lettres obfusquées courtes — le risque de
+            // collision qui affecte 1.21.11 n'existe pas là-bas).
+            mItemStackGet = McReflect.methodOnClass("net/minecraft/component/ComponentsAccess", "get", fContainerComponent.getType());
+            if (mItemStackGet == null) {
+                mItemStackGet = McReflect.method(stack.getClass(), "net/minecraft/component/ComponentsAccess", "get", fContainerComponent.getType());
+            }
             if (mItemStackGet == null) return null;
         }
         Object contents = mItemStackGet.invoke(stack, componentType);

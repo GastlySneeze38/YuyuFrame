@@ -2208,30 +2208,18 @@ public final class UiRenderer {
     }
 
     /**
-     * Appelé depuis GuiFlushMixin/GuiFlushMixin261 (HEAD de GameRenderer.render,
-     * bien AVANT l'appel vanilla à guiRenderer.render(GpuBufferSlice) plus loin
-     * dans la même méthode — voir javadoc de section ci-dessus) avec {@code
-     * gameRenderer == this} (l'instance VIVANTE, fusionnée par Mixin). Vide la
-     * file et soumet chaque icône dans le VRAI DrawContext/GuiGraphicsExtractor
-     * wrappant l'état PARTAGÉ (gameRenderer.guiRenderer.state), pas une
-     * instance isolée — condition nécessaire pour que le flush EXISTANT de
-     * vanilla, plus loin dans ce même appel, inclue nos icônes dans CE frame.
+     * Appelé depuis GuiFlushMixin261 (26.1.2 — voir sa javadoc) avec {@code
+     * gameRenderer == this} (l'instance VIVANTE, fusionnée par Mixin). Résout
+     * la chaîne {@code gameRenderer.guiRenderer.state} par réflexion puis
+     * délègue à {@link #flushIntoGuiState}.
+     *
+     * Bracket 1.21.11 : voir {@link #flushPendingModernItemIconsFromState},
+     * appelé directement avec le GuiRenderState — PAS ce chemin-ci (voir
+     * javadoc de GuiFlushMixin pour le pourquoi : remonter depuis
+     * GameRenderer.render() en HEAD ajoutait nos icônes AVANT que
+     * GuiRenderState.clear() ne les efface).
      */
     public static void flushPendingModernItemIcons(Object gameRenderer) {
-        java.util.List<PendingItemIcon> batch;
-        synchronized (pendingModernItemIcons) {
-            batch = pendingModernItemIcons.isEmpty() ? java.util.Collections.emptyList()
-                : new java.util.ArrayList<>(pendingModernItemIcons);
-            pendingModernItemIcons.clear();
-        }
-        java.util.List<PendingGuiBlit> batchBlits;
-        synchronized (pendingModernGuiBlits) {
-            batchBlits = pendingModernGuiBlits.isEmpty() ? java.util.Collections.emptyList()
-                : new java.util.ArrayList<>(pendingModernGuiBlits);
-            pendingModernGuiBlits.clear();
-        }
-        if (batch.isEmpty() && batchBlits.isEmpty()) return;
-        if (modernItemIconResolveFailed) return;
         try {
             // BUG TROUVÉ (test utilisateur, 26.1.2) : résoudre GameRenderer
             // par NOM (McReflect.yarnClass/Class.forName + classloader du
@@ -2283,16 +2271,82 @@ public final class UiRenderer {
 
             Object guiState = guiStateFieldModern.get(guiRenderer);
             if (guiState == null) return;
+            flushIntoGuiState(guiState, guiRenderer.getClass().getClassLoader());
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingModernItemIcons: " + t);
+        }
+    }
 
+    /**
+     * Bracket 1.21.11 — appelé depuis GuiFlushMixin, en TAIL de
+     * {@code GuiRenderState.clear()} (Yarn {@code net/minecraft/client/gui/render/state/GuiRenderState},
+     * official {@code gqg}, méthode official {@code e()V} == named {@code
+     * clear()V}, vérifié directement dans {@code mappings/mappings.tiny}),
+     * avec {@code guiState == this} (l'instance VIVANTE fusionnée par Mixin).
+     *
+     * BUG TROUVÉ (audit modules, cette session) — remplace l'ancien hook HEAD
+     * sur {@code GameRenderer.render()} : trace bytecode d'une session
+     * précédente (voir historique) avait déjà repéré que {@code
+     * GuiRenderState.clear()} (alors identifié seulement par son nom obfusqué
+     * "gqg.e()V", sans entrée Yarn named connue à l'époque) est appelé DANS
+     * {@code render()}, APRÈS le point HEAD — toute icône mise en file par
+     * HEAD était donc effacée avant le flush GPU réel. Le nom named "clear"
+     * EXISTE bien dans les mappings (juste sous un chemin différent de celui
+     * cherché à l'époque, {@code .../gui/render/state/...} et pas
+     * {@code .../gui/render/...}) — permet de cibler {@code clear()V}
+     * directement via {@code @Inject(method=...)}, traduit pour Fabric par le
+     * refmap comme n'importe quelle autre entrée de REFMAP_ENTRIES (voir
+     * LauncherMixinService), plutôt que d'improviser un {@code @At(INVOKE,
+     * target=...)} vers un nom obfusqué brut qui aurait cassé sous Fabric
+     * (intermediary) et risqué de faire échouer TOUT le tissage de
+     * GameRenderer en cascade (voir leçon ClearOverlaysMixin dans
+     * module-bracket-audit.md).
+     *
+     * Injecter directement sur GuiRenderState.clear() plutôt que d'imiter le
+     * hook 26.1.2 (INVOKE après Lighting.setupFor dans GameRenderer.render())
+     * évite aussi d'avoir à retrouver le nom obfusqué de l'appel imbriqué
+     * ({@code this.k.i.t().a(...)}) sur ce bracket — on obtient directement
+     * l'instance GuiRenderState vivante en {@code this}, plus besoin de
+     * remonter depuis GameRenderer.guiRenderer.state comme dans
+     * {@link #flushPendingModernItemIcons}.
+     *
+     * NON VÉRIFIÉ EN JEU (pas d'accès à un client 1.21.11 depuis cet
+     * environnement) — voir les logs "[UiRenderer] itemIconModern" en cas
+     * d'icône toujours invisible malgré ce correctif.
+     */
+    public static void flushPendingModernItemIconsFromState(Object guiState) {
+        if (guiState == null) return;
+        flushIntoGuiState(guiState, guiState.getClass().getClassLoader());
+    }
+
+    /**
+     * Vide la file et soumet chaque icône/blit dans le VRAI
+     * DrawContext/GuiGraphicsExtractor wrappant l'état PARTAGÉ {@code
+     * guiState} (pas une instance isolée) — condition nécessaire pour que le
+     * flush EXISTANT de vanilla, plus loin dans le frame, inclue nos icônes.
+     * Partagé par les deux brackets modernes (26.1.2 via {@link
+     * #flushPendingModernItemIcons}, 1.21.11 via {@link
+     * #flushPendingModernItemIconsFromState}) — seule la façon d'OBTENIR
+     * {@code guiState} diffère entre les deux.
+     */
+    private static void flushIntoGuiState(Object guiState, ClassLoader cl) {
+        java.util.List<PendingItemIcon> batch;
+        synchronized (pendingModernItemIcons) {
+            batch = pendingModernItemIcons.isEmpty() ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(pendingModernItemIcons);
+            pendingModernItemIcons.clear();
+        }
+        java.util.List<PendingGuiBlit> batchBlits;
+        synchronized (pendingModernGuiBlits) {
+            batchBlits = pendingModernGuiBlits.isEmpty() ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(pendingModernGuiBlits);
+            pendingModernGuiBlits.clear();
+        }
+        if (batch.isEmpty() && batchBlits.isEmpty()) return;
+        if (modernItemIconResolveFailed) return;
+        try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
-
-            // Classloader EXPLICITE de guiRenderer (instance vivante,
-            // forcément Knot) plutôt que le classloader ambiant du thread —
-            // même correctif que ci-dessus, pour la même raison. Nécessaire
-            // pour icônes ET blits de fond (voir batchBlits plus bas), donc
-            // calculé ici, hors du bloc drawContextCtorModern==null.
-            ClassLoader cl = guiRenderer.getClass().getClassLoader();
 
             if (drawContextCtorModern == null) {
                 // DrawContext (Yarn 1.21.11) == GuiGraphicsExtractor (vrai
@@ -2307,8 +2361,14 @@ public final class UiRenderer {
                     LauncherLog.err("[UiRenderer] itemIconModern: classe DrawContext/GuiGraphicsExtractor introuvable");
                     return;
                 }
+                // guiState.getClass() (type RUNTIME concret) plutôt qu'un
+                // type de champ mis en cache : évite de dépendre de
+                // guiStateFieldModern (jamais résolu sur le chemin 1.21.11,
+                // voir flushPendingModernItemIconsFromState) tout en restant
+                // correct pour le chemin 26.1.2 (guiState y est de toute façon
+                // déjà une instance concrète, jamais une sous-classe).
                 drawContextCtorModern = drawContextClass.getDeclaredConstructor(
-                    mc.getClass(), guiStateFieldModern.getType(), int.class, int.class);
+                    mc.getClass(), guiState.getClass(), int.class, int.class);
                 drawContextCtorModern.setAccessible(true);
             }
             Class<?> drawContextClass = drawContextCtorModern.getDeclaringClass();
@@ -2325,7 +2385,7 @@ public final class UiRenderer {
                 // "drawItem" (Yarn 1.21.11) == "item" (vrai nom Mojang
                 // 26.1.2, confirmé par javap).
                 drawItemMethodModern = findMethodByNameInHierarchy(drawContextClass,
-                    batch.get(0).itemStack.getClass(), "drawItem", "item");
+                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext", "drawItem", "item");
                 if (drawItemMethodModern == null) {
                     modernItemIconResolveFailed = true;
                     LauncherLog.err("[UiRenderer] itemIconModern: méthode drawItem/item introuvable sur " + drawContextClass);
@@ -2335,7 +2395,7 @@ public final class UiRenderer {
                 // 26.1.2, confirmé par javap) — best-effort, jamais fatal si
                 // introuvable (reste null, barre juste pas dessinée).
                 drawItemBarMethodModern = findMethodByNameInHierarchy(drawContextClass,
-                    batch.get(0).itemStack.getClass(), "drawItemBar", "itemBar");
+                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext", "drawItemBar", "itemBar");
 
                 // Fond de case vanilla (voir javadoc du champ) — best-effort,
                 // ne fait jamais échouer la résolution du reste (icône/barre
@@ -2429,7 +2489,7 @@ public final class UiRenderer {
                 MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
                 "net.minecraft.resources.Identifier");
             if (identifierClass == null) return null;
-            Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
+            Method ofVanilla = findStaticStringMethod(identifierClass, "net/minecraft/util/Identifier", "ofVanilla", "withDefaultNamespace");
             if (ofVanilla == null) return null;
             Object id = ofVanilla.invoke(null, path);
             containerTextureIdentifierCache.put(path, id);
@@ -2459,14 +2519,24 @@ public final class UiRenderer {
                 return;
             }
 
-            java.lang.reflect.Field guiTexturedField = findFieldByNameInHierarchy(renderPipelinesClass, "GUI_TEXTURED");
+            // BUG TROUVÉ ET CORRIGÉ (même cause que drawItem/item, voir la
+            // javadoc de findMethodByNameInHierarchy) : "GUI_TEXTURED" est un
+            // nom de CHAMP Yarn, jamais traduit ici avant cette session —
+            // obfusqué en une lettre courte sur 1.21.11 tout comme les noms
+            // de méthode. Pré-traduit ici via MappingsRegistry.getObfFieldName,
+            // même pattern que guiRendererFieldModern/guiStateFieldModern
+            // plus haut dans ce fichier (candidat obfusqué en premier, nom
+            // Yarn en repli — no-op sûr si la traduction échoue).
+            java.lang.reflect.Field guiTexturedField = findFieldByNameInHierarchy(renderPipelinesClass,
+                MappingsRegistry.getObfFieldName("net/minecraft/client/gl/RenderPipelines", "GUI_TEXTURED"),
+                "GUI_TEXTURED");
             if (guiTexturedField == null) { slotSpriteResolveFailed = true; return; }
             renderPipelineGuiTexturedModern = guiTexturedField.get(null);
 
             // "ofVanilla" (Yarn 1.21.11) == "withDefaultNamespace" (vrai nom
             // Mojang 26.1.2, confirmé par javap) — les deux prennent juste le
             // chemin, namespace "minecraft" implicite.
-            java.lang.reflect.Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
+            java.lang.reflect.Method ofVanilla = findStaticStringMethod(identifierClass, "net/minecraft/util/Identifier", "ofVanilla", "withDefaultNamespace");
             if (ofVanilla == null) { slotSpriteResolveFailed = true; return; }
             slotSpriteIdentifierModern = ofVanilla.invoke(null, "hud/hotbar_offhand_left");
 
@@ -2475,10 +2545,14 @@ public final class UiRenderer {
             // GameRenderer/Gui réels) — descripteur (RenderPipeline,Identifier,I,I,I,I)V
             // vérifié IDENTIQUE sur 1.21.11 et 26.1.2 (les deux seuls brackets
             // couverts par le chemin "Deferred", voir javadoc du champ — 1.20.4/
-            // 1.21.4 ont un descripteur différent, non géré ici).
+            // 1.21.4 ont un descripteur différent, non géré ici). Nom traduit
+            // via MappingsRegistry (même correctif que ci-dessus) — "drawGuiTexture"
+            // littéral ne matchait jamais rien sur 1.21.11 (obfusqué).
             Class<?> renderPipelineType = guiTexturedField.getType();
+            String drawGuiTextureRuntimeName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/DrawContext", "drawGuiTexture");
             for (Method m : drawContextClass.getDeclaredMethods()) {
-                if ((m.getName().equals("drawGuiTexture") || m.getName().equals("blitSprite"))
+                if ((m.getName().equals(drawGuiTextureRuntimeName) || m.getName().equals("blitSprite"))
                         && m.getParameterCount() == 6
                         && renderPipelineType.isAssignableFrom(m.getParameterTypes()[0])
                         && identifierClass.isAssignableFrom(m.getParameterTypes()[1])
@@ -2496,10 +2570,12 @@ public final class UiRenderer {
         }
     }
 
-    private static java.lang.reflect.Method findStaticStringMethod(Class<?> owner, String... candidateNames) {
+    /** {@code candidateNames} = noms YARN, traduits via MappingsRegistry avant comparaison — même correctif que {@link #findMethodByNameInHierarchy}. */
+    private static java.lang.reflect.Method findStaticStringMethod(Class<?> owner, String yarnClass, String... candidateNames) {
         for (String name : candidateNames) {
+            String runtimeName = MappingsRegistry.getObfMethodName(yarnClass, name);
             for (Method m : owner.getDeclaredMethods()) {
-                if (m.getName().equals(name) && m.getParameterCount() == 1 && m.getParameterTypes()[0] == String.class) {
+                if (m.getName().equals(runtimeName) && m.getParameterCount() == 1 && m.getParameterTypes()[0] == String.class) {
                     m.setAccessible(true);
                     return m;
                 }
@@ -2526,14 +2602,42 @@ public final class UiRenderer {
         return null;
     }
 
-    /** Cherche {@code candidateNames} (dans l'ordre) comme méthode déclarée à 1 argument (assignable depuis {@code argType}) + (int,int), en remontant la hiérarchie de {@code owner}. */
-    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String... candidateNames) {
+    /**
+     * Cherche {@code candidateNames} (dans l'ordre, noms YARN — ex: "drawItem")
+     * comme méthode déclarée à 1 argument (assignable depuis {@code argType}) +
+     * (int,int), en remontant la hiérarchie de {@code owner}.
+     *
+     * BUG TROUVÉ ET CORRIGÉ (test utilisateur, 1.21.11, "icônes toujours
+     * invisibles" même après le fix GuiFlushMixin) : cette méthode comparait
+     * {@code m.getName()} DIRECTEMENT au nom Yarn littéral ("drawItem"/
+     * "item"), sans AUCUNE traduction — fonctionne par coïncidence sur 26.1.2
+     * (noms Mojang réels, non obfusqués) mais jamais sur un bracket obfusqué
+     * comme 1.21.11, où le nom RUNTIME de `DrawContext.drawItem` est une
+     * simple lettre obfusquée ("a", confirmé dans mappings/mappings.tiny —
+     * 4 surcharges de "drawItem" partagent d'ailleurs TOUTES le même nom
+     * officiel "a", désambiguïsées ensuite par le filtre de type ci-dessous).
+     * Log réel : `[UiRenderer] itemIconModern: méthode drawItem/item
+     * introuvable sur class gir` en boucle, sur CHAQUE frame, alors même que
+     * `drawContextClass` (gir) était correctement résolu — la classe était
+     * bonne, seule la recherche du NOM DE MÉTHODE dedans ne traduisait rien.
+     *
+     * Correctif : {@code yarnClass} ajouté, chaque candidat traduit via
+     * {@link MappingsRegistry#getObfMethodName(String, String)} avant
+     * comparaison — no-op sûr pour les candidats qui ne sont PAS un nom Yarn
+     * connu (ex: "item", repli 26.1.2 : aucune entrée Yarn ne matche, la
+     * traduction renvoie le nom inchangé). Même pattern que
+     * {@code McReflect.method()}, qui fait déjà ça correctement ailleurs dans
+     * ce projet — cette copie locale avait simplement été écrite sans cette
+     * étape.
+     */
+    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String yarnClass, String... candidateNames) {
         for (String name : candidateNames) {
             if (name == null) continue;
+            String runtimeName = MappingsRegistry.getObfMethodName(yarnClass, name);
             Class<?> c = owner;
             while (c != null) {
                 for (Method m : c.getDeclaredMethods()) {
-                    if (!m.getName().equals(name) || m.getParameterCount() != 3) continue;
+                    if (!m.getName().equals(runtimeName) || m.getParameterCount() != 3) continue;
                     Class<?>[] p = m.getParameterTypes();
                     if (p[0].isAssignableFrom(argType) && p[1] == int.class && p[2] == int.class) {
                         m.setAccessible(true);
