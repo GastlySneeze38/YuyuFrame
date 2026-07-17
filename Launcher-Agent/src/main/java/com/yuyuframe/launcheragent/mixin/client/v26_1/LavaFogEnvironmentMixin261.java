@@ -12,7 +12,13 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** "Clear Lava" — même correctif/mêmes explications que {@link WaterFogEnvironmentMixin261} (voir sa javadoc, notamment le crash évité). NON RETESTÉ EN JEU au moment de l'écriture. */
+/**
+ * "Clear Lava" — même correctif/mêmes explications que
+ * {@link WaterFogEnvironmentMixin261} (voir sa javadoc, notamment le crash
+ * évité ET le crash "non-private static method" — copie PRIVÉE du contrôle
+ * clear-vision/no-fog ici plutôt qu'un appel cross-Mixin, qui ne fonctionne
+ * pas). NON RETESTÉ EN JEU au moment de l'écriture.
+ */
 @Mixin(targets = "net.minecraft.client.renderer.fog.environment.LavaFogEnvironment")
 public abstract class LavaFogEnvironmentMixin261 {
 
@@ -22,8 +28,7 @@ public abstract class LavaFogEnvironmentMixin261 {
             at = @At("TAIL"), require = 0)
     private void la$clearFog(FogData fogData, Camera camera, ClientLevel level, float partialTick, DeltaTracker deltaTracker, CallbackInfo ci) {
         try {
-            LauncherModule module = ModuleRegistry.get("clear-vision");
-            if (module == null || !module.isEnabled() || fogData == null) return;
+            if (!clearVisionOrNoFogEnabled() || fogData == null) return;
             fogData.environmentalStart = FAR;
             fogData.environmentalEnd = FAR * 2f;
             fogData.renderDistanceStart = FAR;
@@ -31,5 +36,12 @@ public abstract class LavaFogEnvironmentMixin261 {
         } catch (Throwable t) {
             LauncherLog.err("[LavaFogEnvironmentMixin261] la$clearFog: " + t);
         }
+    }
+
+    private static boolean clearVisionOrNoFogEnabled() {
+        LauncherModule clearVision = ModuleRegistry.get("clear-vision");
+        if (clearVision != null && clearVision.isEnabled()) return true;
+        LauncherModule noFog = ModuleRegistry.get("no-fog");
+        return noFog != null && noFog.isEnabled();
     }
 }

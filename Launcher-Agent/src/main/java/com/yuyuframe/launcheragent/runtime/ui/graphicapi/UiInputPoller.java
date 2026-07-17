@@ -76,6 +76,21 @@ public abstract class UiInputPoller {
     public int scrollDelta;
 
     /**
+     * Retour utilisateur (ZoomModule) : scroller pour zoomer plus loin
+     * changeait AUSSI l'objet en main dans la hotbar en même temps — le
+     * callback GLFW natif rechaîné vers celui de vanilla (voir
+     * {@code UiInputPollerModern.registerScrollCallback}) transmet
+     * TOUJOURS l'événement, donc {@code MouseHandler.onScroll} vanilla le
+     * traite en parallèle de notre propre lecture. Drapeau STATIC (même
+     * motif que {@link #menuKeyName}/{@link #textInputActive}) : un module
+     * qui consomme le scroll pour son propre usage (ex: ZoomModule pendant
+     * qu'on maintient la touche) le met à {@code true} le temps de sa
+     * fenêtre d'usage — {@code false} en permanence sinon, pour ne jamais
+     * casser le scroll vanilla (hotbar, longue-vue...) le reste du temps.
+     */
+    public static volatile boolean suppressVanillaScroll = false;
+
+    /**
      * Implémentation actuellement active (Legacy ou Modern selon le
      * bracket) — n'importe quel module peut y accéder sans savoir lequel
      * des deux tourne, voir {@link #drainTickScroll()} pour le cas d'usage

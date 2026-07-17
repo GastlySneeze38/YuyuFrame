@@ -13,18 +13,21 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * "Clear Powder Snow" — même correctif/mêmes explications que
- * {@link WaterFogEnvironmentMixin261} (voir sa javadoc, notamment le crash
- * évité ET le crash "non-private static method" — copie PRIVÉE du contrôle
- * clear-vision/no-fog ici plutôt qu'un appel cross-Mixin, qui ne fonctionne
- * pas). Le givre à l'écran (overlay séparé, PAS du brouillard) reste
- * traité par {@code ClearOverlaysMixin261}, inchangé — seul le mécanisme
- * de brouillard est concerné par ce fix.
- *
- * NON RETESTÉ EN JEU au moment de l'écriture.
+ * NoFogModule ne faisait qu'écrire {@code FogRenderer.fogEnabled} — champ
+ * hérité de l'ANCIENNE architecture (1.16.5-1.21.11), qui ne gouverne plus
+ * rien sur 26.1+ : le brouillard "normal" (distance de rendu/atmosphérique,
+ * le plus visible/le plus reproché) est en réalité géré par {@code
+ * AtmosphericFogEnvironment}, une des implémentations du NOUVEAU système
+ * {@code FogEnvironment} (voir {@code WaterFogEnvironmentMixin261} pour
+ * l'architecture complète et le crash évité en ne touchant JAMAIS {@code
+ * isApplicable}) — confirmé par désassemblage bytecode du vrai jar 26.1.2 :
+ * c'EST cette classe (pas FogRenderer directement) qui remplit
+ * environmentalStart/End + renderDistanceStart/End pour le brouillard de
+ * distance standard. Même technique : repousse ces 4 distances très loin à
+ * la TAIL de setupFog, jamais de toucher isApplicable.
  */
-@Mixin(targets = "net.minecraft.client.renderer.fog.environment.PowderedSnowFogEnvironment")
-public abstract class PowderedSnowFogEnvironmentMixin261 {
+@Mixin(targets = "net.minecraft.client.renderer.fog.environment.AtmosphericFogEnvironment")
+public abstract class AtmosphericFogEnvironmentMixin261 {
 
     private static final float FAR = 1_000_000f;
 
@@ -32,20 +35,14 @@ public abstract class PowderedSnowFogEnvironmentMixin261 {
             at = @At("TAIL"), require = 0)
     private void la$clearFog(FogData fogData, Camera camera, ClientLevel level, float partialTick, DeltaTracker deltaTracker, CallbackInfo ci) {
         try {
-            if (!clearVisionOrNoFogEnabled() || fogData == null) return;
+            LauncherModule module = ModuleRegistry.get("no-fog");
+            if (module == null || !module.isEnabled() || fogData == null) return;
             fogData.environmentalStart = FAR;
             fogData.environmentalEnd = FAR * 2f;
             fogData.renderDistanceStart = FAR;
             fogData.renderDistanceEnd = FAR * 2f;
         } catch (Throwable t) {
-            LauncherLog.err("[PowderedSnowFogEnvironmentMixin261] la$clearFog: " + t);
+            LauncherLog.err("[AtmosphericFogEnvironmentMixin261] la$clearFog: " + t);
         }
-    }
-
-    private static boolean clearVisionOrNoFogEnabled() {
-        LauncherModule clearVision = ModuleRegistry.get("clear-vision");
-        if (clearVision != null && clearVision.isEnabled()) return true;
-        LauncherModule noFog = ModuleRegistry.get("no-fog");
-        return noFog != null && noFog.isEnabled();
     }
 }

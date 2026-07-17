@@ -125,6 +125,24 @@ public final class ZoomModule extends LauncherModule {
     @Override
     public void onTick() {
         try {
+            // BUG TROUVÉ #4 (log en jeu : raw=-129/-24/5 à l'engagement du
+            // zoom — impossible pour un seul cran physique) : drainé plus
+            // bas, APRÈS "if (!active) return;", ce compteur n'était vidé
+            // QUE pendant qu'on zoomait déjà — tout le scroll du jeu normal
+            // (changement d'objet en main, coffres...) s'accumulait donc
+            // indéfiniment dans UiInputPoller.tickScrollAccum jusqu'à la
+            // PROCHAINE pression de la touche, où tout le backlog tombait
+            // d'un coup dans scrollOffsetFov — pouvant le pousser bien
+            // au-delà de maxOffset de façon invisible (rien n'affiche cette
+            // valeur brute). Une fois saturé ainsi, scroller vers le haut ne
+            // fait plus rien (déjà au max) et scroller vers le bas doit
+            // d'abord rattraper ce surplus invisible avant le moindre effet
+            // visible — d'où "le scroll ne marche pas" alors que le calcul
+            // lui-même (confirmé par le diag ci-dessous) était correct. Fix :
+            // drainer INCONDITIONNELLEMENT à chaque tick, backlog jeté quand
+            // on ne zoome pas encore.
+            int scroll = readScrollDelta();
+
             boolean down = isZoomKeyDown();
             Field fovField = fovField();
             Object options = optionsInstance();
@@ -145,27 +163,28 @@ public final class ZoomModule extends LauncherModule {
                 scrollOffsetFov = 0;
             }
 
+            // Retour utilisateur : scroller pendant le zoom changeait AUSSI
+            // l'objet en main dans la hotbar — voir javadoc de
+            // UiInputPoller#suppressVanillaScroll. Suit directement l'état
+            // "zooming" (pas "active", qui reste vrai pendant la transition
+            // de sortie où on ne veut plus rien supprimer).
+            UiInputPoller.suppressVanillaScroll = zooming;
+
             if (!active) return;
 
-            int scroll = readScrollDelta();
-            // Diag TEMPORAIRE (retiré une fois le scroll confirmé fonctionnel
-            // en jeu) : borné aux crans RÉELLEMENT non-nuls, donc jamais
-            // spammé au repos — permet de savoir si le delta arrive jusqu'ici
-            // ne serait-ce qu'une fois, et avec quelle valeur.
-            if (scroll != 0) {
-                LauncherLog.info("[ZoomModule] scroll diag: raw=" + scroll + " zooming=" + zooming
-                    + " scrollOffsetFovAvant=" + scrollOffsetFov);
-            }
+            double maxOffset = Math.max(0, zoomFov - zoomFovMin);
             if (zooming && scroll != 0) {
                 // Molette vers le haut (delta > 0) = zoome PLUS = FOV plus
-                // petit — scrollOffsetFov reste >= 0, jamais négatif (la
-                // base zoomFov est le plancher "le moins zoomé" tant que la
-                // touche est maintenue, voir javadoc de classe).
-                scrollOffsetFov = Math.max(0, scrollOffsetFov + scroll * zoomScrollStep);
+                // petit — scrollOffsetFov reste dans [0, maxOffset], jamais
+                // négatif ni au-delà du max (voir BUG TROUVÉ #4 plus haut :
+                // le clamp au-delà de maxOffset se faisait avant seulement à
+                // la LECTURE dans targetFov, jamais sur la valeur stockée —
+                // un dépassement restait possible et invisible, nécessitant
+                // plusieurs crans "dans le vide" avant tout effet visible).
+                scrollOffsetFov = Math.max(0, Math.min(maxOffset, scrollOffsetFov + scroll * zoomScrollStep));
             }
 
-            double maxOffset = Math.max(0, zoomFov - zoomFovMin);
-            double targetFov = zooming ? (zoomFov - Math.min(scrollOffsetFov, maxOffset)) : savedFov;
+            double targetFov = zooming ? (zoomFov - scrollOffsetFov) : savedFov;
 
             effectiveFov = stepToward(effectiveFov, targetFov);
             writeOptionValue(fovField, options, effectiveFov);
@@ -223,6 +242,7 @@ public final class ZoomModule extends LauncherModule {
         savedFov = -1;
         effectiveFov = -1;
         scrollOffsetFov = 0;
+        UiInputPoller.suppressVanillaScroll = false;
     }
 
     /**
