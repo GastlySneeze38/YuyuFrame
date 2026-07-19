@@ -15,6 +15,7 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 public final class EntityBackfaceCullingModule extends LauncherModule {
 
     public EntityBackfaceCullingModule() {
-        super("entity-backface-culling", "Culling face arrière (entités)", "Ne rend pas les faces cachées des modèles d'entités vivantes — désactive si un mob/resource pack affiche un trou", false);
+        // Nom raccourci — voir PlayerBackfaceCullingModule pour le pourquoi (même onglet groupé "Culling face arrière").
+        super("entity-backface-culling", "Entités", "Ne rend pas les faces cachées des modèles d'entités vivantes — désactive si un mob/resource pack affiche un trou", false);
     }
 }

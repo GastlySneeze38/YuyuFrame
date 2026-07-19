@@ -277,11 +277,16 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // (44x24) : un clic sur la tranche du toggle hors de cette
                 // zone trop étroite ouvrait la config du mod au lieu de
                 // basculer le toggle).
-                modScroll.add(new ModCard(cx, cy, cardW, mod.name, mod.description, enterDelay,
-                    () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod))));
+                ModCard card = new ModCard(cx, cy, cardW, mod.name, mod.description, enterDelay,
+                    () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
+                modScroll.add(card);
                 float togX = cx + cardW - toggleW() - toggleGapX(), togY = cy + CARD_H - toggleH() - toggleGapY();
-                modScroll.add(new UiToggle(togX, togY, mod.isEnabled(),
-                    v -> { mod.setEnabled(v); HudConfigStore.save(); }));
+                UiToggle toggle = new UiToggle(togX, togY, mod.isEnabled(),
+                    v -> { mod.setEnabled(v); HudConfigStore.save(); });
+                modScroll.add(toggle);
+                // Suit le soulèvement au survol de sa carte (voir ModCard#pairToggle) —
+                // sinon il resterait figé pendant que la carte en dessous bouge.
+                card.pairToggle(toggle);
             }
         }
     }
@@ -402,6 +407,16 @@ public class UiMainMenuScreen extends UiScreenBase {
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
         /** Fondu + léger glissement vers le haut à l'apparition — durée fixe, PAS UiAnimatedFloat (voir sa javadoc). {@code enterDelay} = décalage en cascade, voir UiStagger dans rebuildAll(). */
         private final UiTransition enterAnim;
+        // Léger soulèvement au survol (même demande/traitement que
+        // ResultCard dans ModrinthContentScreen — "que ça soit dynamique").
+        // hoverAnim (déjà existant pour le lerp de couleur du fond) réutilisé
+        // tel quel plutôt qu'un second UiAnimatedFloat dédié — un seul
+        // .get() par frame (voir sa javadoc), stocké dans une locale et
+        // réutilisé pour couleur/ombre/décalage.
+        private static final float HOVER_LIFT_PX = 4f;
+        /** Toggle "activer/désactiver" posé PAR-DESSUS cette carte (voir rebuildAll — widget SÉPARÉ, jamais construit pour ModuleGroup/ActionCard) — sa position Y suit le soulèvement au survol via {@link #pairToggle}, sinon il resterait figé pendant que la carte en dessous bouge. */
+        private UiToggle pairedToggle;
+        private float pairedToggleBaseY;
 
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
         ModCard(float x, float y, float w, String name, String description, float enterDelay, Runnable onOpen) {
@@ -413,17 +428,35 @@ public class UiMainMenuScreen extends UiScreenBase {
             this.enterAnim.show();
         }
 
-        // Exclut la zone du toggle (mêmes coordonnées que celles utilisées
-        // pour le construire dans rebuildAll()) : sinon un clic dessus
-        // ouvrirait la config du mod au lieu de basculer le toggle, la carte
-        // étant vérifiée en PREMIER dans la boucle de dispatch des clics.
+        void pairToggle(UiToggle toggle) {
+            this.pairedToggle = toggle;
+            this.pairedToggleBaseY = toggle.y;
+        }
+
+        // Exclut la zone du toggle — la carte est vérifiée en PREMIER dans
+        // la boucle de dispatch des clics, sinon un clic dessus ouvrirait la
+        // config du mod au lieu de basculer le toggle.
+        //
+        // BUG TROUVÉ (retour utilisateur : "les toggle dans la card de mod
+        // sont chevauchés par les card de mod") : cette zone d'exclusion
+        // était recalculée ICI depuis la position DE BASE (non soulevée) du
+        // toggle (x/y + constantes toggleW/H/GapX/GapY) — mais {@link
+        // #pairToggle} déplace le VRAI toggle de {@code hoverT *
+        // HOVER_LIFT_PX} au survol (voir draw()). Une fois soulevé, la
+        // position RÉELLE du toggle et cette zone d'exclusion recalculée
+        // divergeaient de plusieurs pixels : la bande du haut du toggle
+        // soulevé tombait alors HORS de la zone exclue (toujours calée sur
+        // l'ancienne position), donc DANS la zone cliquable de la carte —
+        // qui, vérifiée avant lui dans la liste, interceptait le clic à sa
+        // place. Fix : interroger directement le VRAI widget
+        // ({@code pairedToggle.contains}) au lieu de dupliquer sa géométrie
+        // — ne peut plus jamais diverger, quel que soit un futur changement
+        // d'animation.
         @Override
         public boolean contains(double mx, double my) {
             if (!super.contains(mx, my)) return false;
-            float togW = toggleW(), togGapX = toggleGapX();
-            float togH = toggleH(), togGapY = toggleGapY();
-            float togX = x + w - togW - togGapX, togY = y + CARD_H - togH - togGapY;
-            return !(mx >= togX && mx <= togX + togW && my >= togY && my <= togY + togH);
+            if (pairedToggle != null && pairedToggle.contains(mx, my)) return false;
+            return true;
         }
 
         @Override
@@ -435,7 +468,10 @@ public class UiMainMenuScreen extends UiScreenBase {
             // vers le haut dans ce repère, voir UiRenderer) : la carte part
             // d'une position plus BASSE (y plus petit) et remonte vers y.
             float t = Math.max(0f, Math.min(1f, enterAnim.eased()));
-            float drawY = y - (1f - t) * UiTheme.scaled(14f);
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float hoverT = hoverAnim.get();
+            float drawY = y - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
+            if (pairedToggle != null) pairedToggle.y = pairedToggleBaseY + hoverT * HOVER_LIFT_PX;
 
             // Ombre portée AVANT le fond de la carte (sinon elle le
             // recouvrirait) — légèrement décalée vers le bas pour un effet
@@ -445,13 +481,16 @@ public class UiMainMenuScreen extends UiScreenBase {
             // bord très adouci du flou dépassait — quasi invisible en jeu.
             // Alpha remonté (90->170) pour la même raison : noir sur noir
             // (CARD_BG est déjà très sombre) a naturellement peu de contraste.
+            // Blur/alpha légèrement accentués au survol (+hoverT) — même
+            // traitement que ResultCard, accentue la sensation de carte qui
+            // se soulève plutôt que de simplement glisser.
             UiColor shadowColor = new UiColor(0, 0, 0, 170).multiplyAlpha(t);
             float shadowOff = UiTheme.scaled(6f);
-            renderer.drawShadow(x, drawY - shadowOff, x + w, drawY + h - shadowOff, UiTheme.RADIUS_MD, UiTheme.scaled(18f), UiTheme.scaled(3f),
+            renderer.drawShadow(x, drawY - shadowOff, x + w, drawY + h - shadowOff, UiTheme.RADIUS_MD,
+                UiTheme.scaled(18f) + hoverT * UiTheme.scaled(6f), UiTheme.scaled(3f),
                 shadowColor, vpWidth, vpHeight);
 
-            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get()).multiplyAlpha(t);
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(t);
             renderer.drawRoundedRect(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
 
             // Pastille icone (initiale du mod) — pas d'image reelle en attendant les icones mods.

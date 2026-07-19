@@ -32,6 +32,7 @@ public final class LabelRenderDistanceModule extends LauncherModule {
     public float simplifyDistance = 16f;
 
     public LabelRenderDistanceModule() {
-        super("label-render-distance", "Distance de rendu (labels)", "Masque/simplifie les pseudos/hologrammes selon la distance — utile en zone bondée ou avec beaucoup d'hologrammes serveur", true);
+        // Nom raccourci — voir TileEntityRenderDistanceModule pour le pourquoi (même onglet groupé "Distance de rendu").
+        super("label-render-distance", "Labels", "Masque/simplifie les pseudos/hologrammes selon la distance — utile en zone bondée ou avec beaucoup d'hologrammes serveur", true);
     }
 }

@@ -136,6 +136,54 @@ public class UiScrollContainer {
         return Math.max(0f, (contentTop - contentBottom) + EDGE_PADDING * 2 - vh);
     }
 
+    /**
+     * Fait défiler pour amener le widget dont le bord HAUT (baseY + hauteur)
+     * vaut {@code anchorTop} juste sous le haut du viewport — même référence
+     * que le tout premier widget à scroll=0 (voir applyOffsets : {@code off
+     * = vy+vh-EDGE_PADDING-contentTop}, donc {@code screenY(w) = baseY(w) +
+     * off}). Résolu en posant {@code screenY(anchor)+h = vy+vh-EDGE_PADDING}
+     * (même position que le début du contenu à scroll=0), d'où
+     * {@code scrollTarget = contentTop - anchorTop}. Utilisé pour la
+     * navigation "catégorie -> section" d'UiModConfigScreen : une seule
+     * liste continue, les onglets ne font que défiler jusqu'au bon endroit
+     * au lieu de basculer entre des pages séparées.
+     */
+    public void scrollToAnchor(float anchorTop) {
+        scrollTarget = clampScroll(contentTop - anchorTop);
+        scrollAnim.setTarget(scrollTarget);
+        markActivity();
+    }
+
+    /**
+     * Progression du scroll en POURCENTAGE (0 = tout en haut, 1 = tout en
+     * bas) — remplace l'ancienne approche par seuil de pixels fixe (voir
+     * historique : {@code visibleTopBaseY() - décalage arbitraire}, retour
+     * utilisateur "le calcul est mal fait"). Demande explicite : "quand on a
+     * scrollé tout en bas on est au dernier module" — un pourcentage garantit
+     * mathématiquement ce résultat (1.0 exactement à scroll max), ce qu'un
+     * seuil de pixels fixe ne garantissait pas (pouvait ne jamais atteindre
+     * la dernière section selon le nombre/la hauteur des sections).
+     */
+    public float scrollProgress() {
+        float max = maxScroll();
+        if (max <= 0.001f) return 0f;
+        return Math.max(0f, Math.min(1f, lastAnimatedScroll / max));
+    }
+
+    /**
+     * Position {@code baseY} convertie en pourcentage du contenu TOTAL (0 =
+     * tout en haut du contenu, 1 = tout en bas) — indépendant de la hauteur
+     * du viewport (contrairement à {@code scrollProgress}, qui elle est
+     * bornée par {@code maxScroll}). Comparer les deux revient à demander
+     * "en pourcentage, ai-je déjà dépassé le début de cette section ?" —
+     * voir UiModConfigScreen#updateActiveCategory pour l'usage.
+     */
+    public float baseYFraction(float baseY) {
+        float span = contentTop - contentBottom;
+        if (span <= 0.001f) return 0f;
+        return Math.max(0f, Math.min(1f, (contentTop - baseY) / span));
+    }
+
     private float clampScroll(float v) {
         return Math.max(0f, Math.min(maxScroll(), v));
     }
@@ -297,6 +345,22 @@ public class UiScrollContainer {
         }
 
         drawScrollbar(renderer, vpWidth, vpHeight);
+
+        // Second passage — voir UiWidget#drawOverlay (BUG TROUVÉ, retour
+        // utilisateur : "la modal [color picker] entière... se fait
+        // chevaucher par tout") : un panneau déroulant dessiné dans le
+        // premier passage ci-dessus reste soumis à l'ordre d'insertion —
+        // n'importe quel widget plus bas dans la liste (donc plus bas à
+        // l'écran) se dessine PAR-DESSUS lui s'ils se chevauchent. Ce
+        // second passage, après TOUT le contenu normal ET la scrollbar,
+        // garantit qu'un tel panneau flotte toujours au-dessus — même motif
+        // que UiTooltip juste en dessous, déjà dessiné en dernier pour la
+        // même raison.
+        for (UiWidget w : content) {
+            if (!visible(w)) continue;
+            w.drawOverlay(renderer, mouseX, mouseY, vpWidth, vpHeight);
+        }
+
         if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, vpWidth, vpHeight);
     }
 

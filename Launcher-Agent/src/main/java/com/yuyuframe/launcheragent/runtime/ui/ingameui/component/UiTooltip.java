@@ -12,8 +12,29 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 public final class UiTooltip {
     private UiTooltip() {}
 
+    // Fondu d'apparition ajouté (voir audit runtime/ui/ : apparition/
+    // disparition d'un coup, seul composant sans AUCUNE animation à part
+    // UiSlider/UiColorPicker). Une seule bulle affichée à la fois dans toute
+    // l'UI (curseur unique) — état STATIQUE partagé légitime, pas un widget
+    // par instance comme UiAnimatedFloat ailleurs. L'horloge repart de zéro
+    // dès que le TEXTE change (nouveau widget survolé) plutôt que de suivre
+    // un widget précis, qui n'existe pas ici (voir signature, appelée avec
+    // juste une chaîne).
+    private static String lastText;
+    private static long shownAtMs = -1L;
+    private static final long FADE_MS = 120L;
+
     public static void draw(UiRenderer renderer, String text, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        if (text == null || text.isEmpty()) return;
+        if (text == null || text.isEmpty()) {
+            lastText = null;
+            shownAtMs = -1L;
+            return;
+        }
+        if (!text.equals(lastText)) {
+            lastText = text;
+            shownAtMs = System.currentTimeMillis();
+        }
+        float alpha = Math.min(1f, (System.currentTimeMillis() - shownAtMs) / (float) FADE_MS);
 
         // Recalculées à chaque appel (pas de champ statique figé) : cette
         // classe est un utilitaire 100% statique, dessinée chaque frame — pas
@@ -41,8 +62,8 @@ public final class UiTooltip {
             yTop = yBottom + boxH;
         }
 
-        renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+        renderer.drawRoundedRect(x, yBottom, x + boxW, yTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT.multiplyAlpha(alpha), vpWidth, vpHeight);
         renderer.drawText(text, x + PAD, yBottom + PAD + UiFont.REGULAR.descent * SCALE * UiFont.SIZE_CORRECTION,
-            UiTheme.TEXT_PRIMARY, SCALE, vpWidth, vpHeight);
+            UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), SCALE, vpWidth, vpHeight);
     }
 }

@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.module.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.module.DiagonalSwordModule;
 import com.yuyuframe.launcheragent.runtime.module.FovModule;
 import com.yuyuframe.launcheragent.runtime.module.FpsModule;
+import com.yuyuframe.launcheragent.runtime.module.FreelookModule;
 import com.yuyuframe.launcheragent.runtime.module.FullbrightModule;
 import com.yuyuframe.launcheragent.runtime.module.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.KeystrokesModule;
@@ -133,6 +134,69 @@ public final class ModuleRegistry {
      */
     private static final boolean IS_26_1 = "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
 
+    /**
+     * Portage multiversion en cours (demande explicite de l'utilisateur,
+     * audit du 2026-07-17 : "je n'ai jamais demandé à ce qu'il soit exclu,
+     * mets-les en multiversion") — {@code NoPumpkinOverlayModule} confirmé
+     * fonctionnel sur 1.21.11 en plus de 26.1.2 (même point d'accroche
+     * {@code InGameHud.renderOverlay}/{@code Gui.renderTextureOverlay},
+     * juste des noms Yarn différents — voir {@code ClearOverlaysMixin}).
+     * {@code ShulkerPreviewModule} ET {@code FreelookModule} portés vers
+     * 1.21.11 également (voir leurs javadoc respectives — McReflect pour le
+     * premier, deux Mixins dédiés {@code MouseHandlerFreelookMixin}/{@code
+     * CameraFreelookMixin} pour le second, architecture Camera.update()
+     * vérifiée par javap, distincte de 26.1.2).
+     * {@code ClearVisionModule} reste 26.1.2-only pour l'instant : son
+     * portage vers 1.21.11 s'est heurté à une architecture de brouillard
+     * {@code FogModifier} (1.21.11) totalement différente de {@code
+     * FogEnvironment} (26.1.2, {@code setupFog(FogData,...)}) — {@code
+     * getFogColor}/{@code shouldApply} au lieu de distances mutables, ET en
+     * grande partie NON MAPPÉE par Yarn à ce jour (méthodes présentes
+     * seulement sous leur ID intermédiaire brut, ex. {@code method_76304}) —
+     * nécessite une recherche bytecode séparée, pas un simple portage de
+     * noms. 1.16.5/1.20.4/1.21.4/1.8.9 pas encore commencés du tout pour ces
+     * 4 modules.
+     */
+    private static final boolean IS_1_21_11 = "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""));
+
+    /**
+     * Portage 1.21.4 (bracket "D", ~1.21-1.21.5, voir VersionBracketRegistry)
+     * — architecture Camera/Mouse/InGameHud.renderOverlay VÉRIFIÉE IDENTIQUE
+     * à 1.21.11 par désassemblage complet (javap sur le vrai jar 1.21.4 :
+     * mêmes IDs intermediary EXACTS pour Camera.update/moveBy/setRotation,
+     * même structure bytecode — deux call sites de moveBy(FFF)V aux offsets
+     * 309/368) — {@code NoPumpkinOverlayModule}/{@code ShulkerPreviewModule}/
+     * {@code FreelookModule} portés en conséquence (voir {@code
+     * ClearOverlaysMixin1214}/{@code MouseHandlerFreelookMixin1214}/{@code
+     * CameraFreelookMixin1214}).
+     *
+     * Différence notable pour {@code ShulkerPreviewModule} : ce bracket n'a
+     * PAS l'architecture "Deferred" (pas de {@code GuiRenderState}/{@code
+     * GuiRenderer}, introduits entre la 1.21.4 et la 1.21.11) — le fond de
+     * fenêtre du panneau (texture vanilla brute) utilise donc un chemin
+     * "Immediate" séparé ({@code UiRenderer.drawVanillaContainerTextureModernImmediate},
+     * nouveau cette session), qui reconstruit le {@code
+     * java.util.function.Function<Identifier,RenderLayer>} attendu par
+     * {@code DrawContext.drawTexture} via un {@link java.lang.reflect.Proxy}
+     * enveloppant {@code RenderLayer.getGuiTextured} (référence de méthode
+     * statique utilisée par vanilla lui-même — retrouvée dans la table
+     * BootstrapMethods de {@code HandledScreen}, désassemblage du vrai jar
+     * 1.21.4) plutôt qu'un {@code RenderPipeline} direct (qui n'existe pas
+     * encore sur ce bracket). Le hook lui-même (contrairement à 1.21.11) n'a
+     * PAS besoin d'un second point d'accroche différé façon {@code
+     * GuiFlushMixin} : le pipeline Immediate dessine de façon SYNCHRONE dès
+     * l'appel, directement depuis {@code GlobalUiRenderMixin1214} (TAIL de
+     * {@code GameRenderer.render()}, donc déjà après {@code Screen.render()}
+     * — bon z-order garanti sans complexité supplémentaire).
+     *
+     * {@code ClearVisionModule}/{@code NoFogModule} (refonte FogEnvironment) :
+     * même statut que 1.21.11 pour Vision claire (jamais tenté, architecture
+     * de brouillard classique pré-refonte toujours active sur ce bracket —
+     * voir {@code NoFogModule}, fonctionne déjà via l'ancien flag sans
+     * portage nécessaire).
+     */
+    private static final boolean IS_1_21_4 = "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""));
+
     static {
         register(new FpsModule());
         register(new PingModule());
@@ -155,18 +219,30 @@ public final class ModuleRegistry {
         register(new SaturationModule());
         register(new NoDarknessModule());
         register(new NoFogModule());
-        // 26.1.2 UNIQUEMENT pour l'instant (voir IS_26_1 plus haut + javadoc
-        // de ces 3 modules) — implémentés via des Mixins qui n'existent pas
-        // encore pour 1.8.9/1.16.5/1.20.4/1.21.4, contrairement aux 3
-        // modules ci-dessus qui fonctionnent partout via McReflect seul.
-        if (IS_26_1) {
+        // 26.1.2/1.21.11/1.21.4 pour l'instant (voir IS_26_1/IS_1_21_11/
+        // IS_1_21_4 plus haut + javadoc de ces 3 modules) — implémentés via
+        // des Mixins qui n'existent pas encore pour 1.8.9/1.16.5/1.20.4,
+        // contrairement aux 3 modules ci-dessus qui fonctionnent partout via
+        // McReflect seul.
+        if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
             register(new NoPumpkinOverlayModule());
+        }
+        if (IS_26_1) {
             register(new ClearVisionModule());
-            // Contenu stocké via DataComponents.CONTAINER (refonte "Data
-            // Components", ~1.20.5) et lu par réflexion à noms RÉELS directs
-            // (voir sa javadoc) — même gate que les deux modules ci-dessus,
-            // aucun équivalent 1.8.9/1.20.4 pour l'instant.
+        }
+        // Contenu stocké via DataComponents.CONTAINER (refonte "Data
+        // Components", ~1.20.5) — lu par réflexion à noms RÉELS directs sur
+        // 26.1.2, à noms Yarn + repli réel via McReflect sur 1.21.11/1.21.4
+        // (voir sa javadoc) — aucun équivalent 1.8.9/1.16.5/1.20.4 pour
+        // l'instant (stockage NBT pré-refonte, lecture entièrement différente).
+        if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
             register(new ShulkerPreviewModule());
+        }
+        // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11/
+        // 1.21.4) + rappelle Camera.setRotation (voir sa javadoc) — aucun
+        // équivalent 1.8.9/1.16.5/1.20.4 pour l'instant.
+        if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
+            register(new FreelookModule());
         }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
@@ -227,7 +303,7 @@ public final class ModuleRegistry {
         // cassée dans l'UI).
         List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
             get("saturation"), get("no-darkness"), get("no-fog"),
-            get("no-pumpkin-overlay"), get("clear-vision"));
+            get("no-pumpkin-overlay"), get("clear-vision"), get("freelook"));
         if (!comfortMembers.isEmpty()) {
             GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire", comfortMembers));
         }

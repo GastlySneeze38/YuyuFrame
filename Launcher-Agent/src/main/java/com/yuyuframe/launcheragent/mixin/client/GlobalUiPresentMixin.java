@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -88,8 +89,12 @@ public abstract class GlobalUiPresentMixin {
                 // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
                 // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
                 // les UiHudBox de cet écran qui dessinent, pas cet appel.
-                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                // Idem F1 (voir HudOverlayRenderer#vanillaHudHidden) : nos
+                // éléments HUD/modules doivent disparaître avec le HUD vanilla.
+                if (!HudOverlayRenderer.vanillaHudHidden()) {
+                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                }
                 return;
             }
 
@@ -103,6 +108,7 @@ public abstract class GlobalUiPresentMixin {
                 // vanilla/mod) — visibilité selon le TYPE d'écran (voir
                 // HudOverlayRenderer.renderPersistent/HudScreenKind/GlobalUiSettings).
                 HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
 

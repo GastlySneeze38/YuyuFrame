@@ -15,6 +15,13 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 public final class PlayerBackfaceCullingModule extends LauncherModule {
 
     public PlayerBackfaceCullingModule() {
-        super("player-backface-culling", "Culling face arrière (joueur)", "Ne rend pas les faces cachées du modèle joueur — gain FPS, désactive si un skin affiche un trou", false);
+        // Nom raccourci (était "Culling face arrière (joueur)") — demande
+        // explicite : trop long pour la sous-sidebar de UiModGroupConfigScreen,
+        // qui affiche déjà "Culling face arrière" comme titre de l'onglet
+        // (voir ModuleRegistry) — le nom du module lui-même n'a plus qu'à
+        // porter la partie DISTINCTIVE ("joueur" vs "entités"), plus jamais
+        // affiché seul ailleurs (voir ModuleGroup, module rattaché
+        // uniquement via ce groupe, jamais sa propre carte).
+        super("player-backface-culling", "Joueur", "Ne rend pas les faces cachées du modèle joueur — gain FPS, désactive si un skin affiche un trou", false);
     }
 }

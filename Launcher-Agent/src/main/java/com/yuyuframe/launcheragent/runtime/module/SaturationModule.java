@@ -26,7 +26,10 @@ import java.util.Locale;
 public final class SaturationModule extends SingleHudModule {
 
     public SaturationModule() {
-        super("saturation", "Saturation (AppleSkin)", "Affiche la saturation et l'exhaustion, cachées par l'UI vanilla", false,
+        // Nom raccourci (était "Saturation (AppleSkin)") — retour utilisateur :
+        // débordait de la sous-sidebar du groupe "Confort visuel" (voir
+        // ModuleRegistry) ; l'attribution AppleSkin reste dans la description.
+        super("saturation", "Saturation", "Affiche la saturation et l'exhaustion, cachées par l'UI vanilla", false,
             new HudElement("saturation", "Saturation", HudAnchor.TOP_LEFT, 8f, 72f, new ContentSource()));
         hudElement().textColor = new UiColor(120, 220, 140, 255);
     }

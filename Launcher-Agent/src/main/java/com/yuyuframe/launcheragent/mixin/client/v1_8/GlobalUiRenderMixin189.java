@@ -75,8 +75,12 @@ public abstract class GlobalUiRenderMixin189 {
                 // (hotbar/vie), qui ne s'affiche pas non plus quand un écran
                 // est ouvert. Pendant l'édition (UiHudEditorScreen), ce sont
                 // les UiHudBox de cet écran qui dessinent, pas cet appel.
-                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                // Idem F1 (voir HudOverlayRenderer#vanillaHudHidden) : nos
+                // éléments HUD/modules doivent disparaître avec le HUD vanilla.
+                if (!HudOverlayRenderer.vanillaHudHidden()) {
+                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                }
                 if (inputPoller.menuKeyPressed) {
                     setScreen(mc, new UiMainMenuScreen(null));
                 }

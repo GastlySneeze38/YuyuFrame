@@ -19,6 +19,18 @@ public class UiButton extends UiWidget {
     private final float RADIUS = UiTheme.scaled(5f);
     private final float LABEL_SCALE = UiTheme.scaled(0.46f);
 
+    // Retour visuel à l'APPUI ajouté (voir audit runtime/ui/ : seul le hover
+    // faisait un lerp de couleur, rien ne se passait à l'appui lui-même).
+    // UiWidget.onClick() ne reçoit aucune coordonnée (voir sa javadoc) — le
+    // ripple part donc du CENTRE du bouton plutôt que du point de clic exact,
+    // simplification délibérée plutôt que de changer la signature partagée
+    // par tous les widgets pour ce seul besoin. Rayon borné au plus petit
+    // des deux côtés : aucun clip GPU fiable (voir UiScrollContainer), un
+    // ripple plus large déborderait visiblement des coins arrondis.
+    private static final long RIPPLE_DURATION_MS = 380L;
+    private static final UiColor RIPPLE_COLOR = new UiColor(255, 255, 255, 255);
+    private long rippleStartMs = -1L;
+
     private final String label;
     private final Runnable action;
     private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, HOVER_ANIM_SPEED);
@@ -34,6 +46,15 @@ public class UiButton extends UiWidget {
         hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
         UiColor color = UiColor.lerp(BASE, HOVER, hoverAnim.get());
         renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, color, vpWidth, vpHeight);
+        if (rippleStartMs >= 0) {
+            float progress = (System.currentTimeMillis() - rippleStartMs) / (float) RIPPLE_DURATION_MS;
+            if (progress >= 1f) {
+                rippleStartMs = -1L;
+            } else {
+                float maxRadius = Math.min(w, h) * 0.9f;
+                renderer.drawRipple(x + w / 2f, y + h / 2f, maxRadius, progress, 0.22f, RIPPLE_COLOR, vpWidth, vpHeight);
+            }
+        }
         if (label != null) {
             float tw = renderer.textWidth(label, LABEL_SCALE);
             renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - UiTheme.scaled(5f), UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
@@ -42,6 +63,7 @@ public class UiButton extends UiWidget {
 
     @Override
     public void onClick() {
+        rippleStartMs = System.currentTimeMillis();
         if (action != null) action.run();
     }
 }

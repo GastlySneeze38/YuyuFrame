@@ -58,8 +58,12 @@ public abstract class GlobalUiPresentMixin261 {
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
 
             if (currentScreen == null) {
-                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                // F1 (voir HudOverlayRenderer#vanillaHudHidden) : nos
+                // éléments HUD/modules doivent disparaître avec le HUD vanilla.
+                if (!HudOverlayRenderer.vanillaHudHidden()) {
+                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                }
                 return;
             }
 

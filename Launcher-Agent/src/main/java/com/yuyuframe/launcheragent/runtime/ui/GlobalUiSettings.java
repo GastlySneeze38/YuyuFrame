@@ -24,31 +24,46 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
  */
 public final class GlobalUiSettings extends LauncherModule {
 
-    // Couleurs de base d'origine (UiTheme littéral) — indépendantes de l'état
-    // COURANT (déjà muté) de UiTheme, pour ne jamais faire dériver la teinte
-    // à chaque rappel de onConfigChanged(). DOIT rester déclaré AVANT INSTANCE
-    // ci-dessous : les initialiseurs statiques s'exécutent dans l'ordre
-    // TEXTUEL, et le constructeur de INSTANCE appelle onConfigChanged() (qui
-    // lit ces champs) — les avoir après aurait laissé BASE_CARD_BG/HOVER à
-    // null au moment de cet appel (NullPointerException → ExceptionInInitializerError,
-    // observé en jeu : le clic sur "Parametres" ne faisait plus jamais rien).
-    private static final UiColor BASE_CARD_BG = new UiColor(31, 31, 39, 255);
-    private static final UiColor BASE_CARD_HOVER = new UiColor(40, 40, 50, 255);
+    // Couleur de base d'origine (littérale, PAS l'état courant de UiTheme,
+    // potentiellement déjà muté) — pour le HUD uniquement (CARD_BG/CARD_HOVER
+    // n'en ont plus besoin, voir onConfigChanged : ils repartent désormais de
+    // la palette posée par UiTheme.applyMode, qui gère déjà dark/light).
+    // DOIT rester déclaré AVANT INSTANCE ci-dessous : les initialiseurs
+    // statiques s'exécutent dans l'ordre TEXTUEL, et le constructeur de
+    // INSTANCE appelle onConfigChanged() (qui lit ce champ) — l'avoir après
+    // aurait laissé BASE_HUD_BG à null au moment de cet appel
+    // (NullPointerException → ExceptionInInitializerError, observé en jeu :
+    // le clic sur "Parametres" ne faisait plus jamais rien).
     private static final UiColor BASE_HUD_BG = new UiColor(10, 10, 14, 120);
 
     public static final GlobalUiSettings INSTANCE = new GlobalUiSettings();
 
-    @ConfigSlider(name = "Opacité des cartes (menu)", description = "Transparence des cartes de mods et panneaux de config du MENU — pas les panneaux HUD affichés en jeu (voir \"Opacité du HUD\" ci-dessous).",
-        category = "Apparence", min = 10f, max = 100f, step = 1f)
-    public float cardOpacity = 100f;
+    // Câblage du toggle dark/light ajouté (voir audit runtime/ui/ :
+    // UiTheme.applyMode existait déjà comme capacité moteur mais n'était
+    // appelé depuis aucun écran) — appliqué en PREMIER dans onConfigChanged()
+    // ci-dessous : applyMode réassigne TOUS les tokens de couleur d'un coup,
+    // les réglages individuels (accent, opacités...) doivent donc s'appliquer
+    // APRÈS, sinon ils seraient écrasés par la palette de base à chaque
+    // changement.
+    @ConfigDropdown(name = "Thème", description = "Palette générale de l'interface — sombre (par défaut) ou claire.",
+        category = "Apparence", options = { "Sombre", "Clair" })
+    public int themeMode = 0;
 
     @ConfigSlider(name = "Opacité du HUD (en jeu)", description = "Transparence des panneaux HUD affichés en jeu (FPS, ping, coordonnées...) — pas les cartes du menu.",
         category = "Apparence", min = 10f, max = 100f, step = 1f)
     public float hudOpacity = BASE_HUD_BG.a * 100f;
 
-    @ConfigSlider(name = "Rayon des coins", description = "Arrondi des coins des cartes de mods.",
+    // BUG TROUVÉ (retour utilisateur : "c'est le rayon des coins des HUD et
+    // pas du menu principal") — pilotait UiTheme.RADIUS_MD, qui n'est
+    // utilisé QUE par les cartes/panneaux du MENU (config, mods...) : les
+    // panneaux HUD, eux, ont TOUJOURS leur propre constante dédiée
+    // (HudPanelRenderer.RADIUS, jamais alignée sur RADIUS_MD par choix
+    // délibéré — voir sa javadoc), donc ce réglage n'avait en réalité AUCUN
+    // effet sur le HUD. Pilote désormais HudPanelRenderer.RADIUS, plus
+    // UiTheme.RADIUS_MD (qui reste fixe à sa valeur par défaut pour le menu).
+    @ConfigSlider(name = "Rayon des coins (HUD)", description = "Arrondi des coins des panneaux HUD affichés en jeu — pas les cartes du menu.",
         category = "Apparence", min = 0f, max = 16f, step = 1f)
-    public float cornerRadius = UiTheme.RADIUS_MD;
+    public float cornerRadius = HudPanelRenderer.RADIUS;
 
     @ConfigColor(name = "Couleur d'accent", description = "Couleur principale utilisée dans tout le menu.", category = "Apparence")
     public UiColor accentColor = UiTheme.ACCENT;
@@ -96,14 +111,15 @@ public final class GlobalUiSettings extends LauncherModule {
 
     @Override
     public void onConfigChanged() {
-        float alpha = Math.max(0f, Math.min(1f, cardOpacity / 100f));
-        UiTheme.CARD_BG = new UiColor(BASE_CARD_BG.r, BASE_CARD_BG.g, BASE_CARD_BG.b, alpha);
-        UiTheme.CARD_HOVER = new UiColor(BASE_CARD_HOVER.r, BASE_CARD_HOVER.g, BASE_CARD_HOVER.b, alpha);
+        UiTheme.applyMode(themeMode == 1 ? UiTheme.Mode.LIGHT : UiTheme.Mode.DARK);
 
         float hudAlpha = Math.max(0f, Math.min(1f, hudOpacity / 100f));
         HudPanelRenderer.PANEL_BG = new UiColor(BASE_HUD_BG.r, BASE_HUD_BG.g, BASE_HUD_BG.b, hudAlpha);
 
-        UiTheme.RADIUS_MD = cornerRadius;
+        // Voir javadoc du champ cornerRadius — HudPanelRenderer.RADIUS
+        // (panneaux HUD), PLUS UiTheme.RADIUS_MD (cartes du menu, reste fixe
+        // à sa valeur par défaut, jamais réassignée par ce réglage).
+        HudPanelRenderer.RADIUS = cornerRadius;
         UiTheme.ACCENT = accentColor;
         UiTheme.ACCENT_DIM = new UiColor(accentColor.r, accentColor.g, accentColor.b, 70f / 255f);
         UiTheme.SIDEBAR_ACTIVE = new UiColor(accentColor.r, accentColor.g, accentColor.b, 34f / 255f);

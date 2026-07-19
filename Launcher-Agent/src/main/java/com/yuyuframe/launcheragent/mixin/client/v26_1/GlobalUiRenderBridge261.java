@@ -102,6 +102,36 @@ public final class GlobalUiRenderBridge261 {
         return getField(mc, "screen");
     }
 
+    /**
+     * BUG SIGNALÉ PAR L'UTILISATEUR : des mods d'édition façon Blender (ex:
+     * Axiom) affichent leur propre éditeur en OVERLAY par-dessus le jeu SANS
+     * passer par {@code Minecraft.setScreen()} (donc {@code currentScreen}
+     * reste {@code null} pendant que cet éditeur est ouvert) — notre menu
+     * s'ouvrait quand même par-dessus à l'appui de sa touche, aucun moyen de
+     * l'empêcher avec la seule vérification {@code currentScreen == null}.
+     * Demande explicite : une solution GÉNÉRIQUE, pas spécifique à Axiom —
+     * n'importe quel mod utilisant ce genre d'éditeur en overlay doit
+     * libérer la souris (curseur visible, cliquable) pour que son interface
+     * fonctionne, exactement comme un vrai Screen vanilla le ferait. {@code
+     * Minecraft.mouseHandler.isMouseGrabbed()} (vérifié par javap sur le jar
+     * client 26.1.2 réel — {@code public boolean isMouseGrabbed()}) est donc
+     * un signal fiable et agnostique du mod : en gameplay normal (aucune UI
+     * ouverte, ni la nôtre ni celle d'un autre mod), la souris est TOUJOURS
+     * grabbed (verrouillée, invisible, pilote la caméra) ; dès qu'UNE
+     * interface la libère pour permettre des clics, ce signal en informe —
+     * qu'il s'agisse d'un vrai Screen ou d'un overlay custom comme Axiom.
+     */
+    public static boolean isMouseGrabbed(Object mc) {
+        try {
+            Object mouseHandler = getField(mc, "mouseHandler");
+            if (mouseHandler == null) return true; // repli permissif : comportement inchangé si introuvable
+            java.lang.reflect.Method m = mouseHandler.getClass().getMethod("isMouseGrabbed");
+            return (boolean) m.invoke(mouseHandler);
+        } catch (Throwable t) {
+            return true; // repli permissif — voir ci-dessus
+        }
+    }
+
     public static Object getMainFramebuffer(Object mc) throws Exception {
         if (getMainRenderTargetMethod == null) {
             getMainRenderTargetMethod = mc.getClass().getMethod("getMainRenderTarget");

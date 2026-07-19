@@ -24,6 +24,7 @@ public final class ParticleRenderDistanceModule extends LauncherModule {
     public float maxDistance = 32f;
 
     public ParticleRenderDistanceModule() {
-        super("particle-render-distance", "Distance de rendu (particules)", "Ne rend pas les particules (fumée, flammes, débris) au-delà d'une distance donnée — gros gain sur explosions/lave en masse", true);
+        // Nom raccourci — voir TileEntityRenderDistanceModule pour le pourquoi (même onglet groupé "Distance de rendu").
+        super("particle-render-distance", "Particules", "Ne rend pas les particules (fumée, flammes, débris) au-delà d'une distance donnée — gros gain sur explosions/lave en masse", true);
     }
 }

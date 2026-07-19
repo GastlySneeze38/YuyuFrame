@@ -33,4 +33,9 @@ public final class UiColor {
     public UiColor multiplyAlpha(float factor) {
         return new UiColor(r, g, b, a * factor);
     }
+
+    /** Même couleur, alpha REMPLACÉ (pas multiplié, contrairement à {@link #multiplyAlpha}) par {@code newAlpha} — pour les primitives qui calculent une opacité absolue par frame (drawGlow/drawRipple/drawSpinner), plus lisible qu'une division par l'alpha courant pour retomber sur la valeur voulue. */
+    public UiColor withAlpha(float newAlpha) {
+        return new UiColor(r, g, b, newAlpha);
+    }
 }

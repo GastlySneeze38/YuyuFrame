@@ -35,6 +35,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * NON RETESTÉ EN JEU au moment de l'écriture (le crash lui-même a été
  * observé en jeu, ce correctif ne l'a pas encore été).
+ *
+ * Déclenché par "clear-vision" OU "no-fog" (retour utilisateur : NoFogModule
+ * promet "eau, lave" dans sa propre description, doit donc AUSSI les
+ * couvrir, indépendamment de clear-vision — voir AtmosphericFogEnvironmentMixin261
+ * pour le vrai morceau manquant de NoFogModule, le brouillard de distance normal).
+ *
+ * BUG TROUVÉ (crash "Mixin apply ... failed... contains non-private static
+ * method clearVisionOrNoFogEnabled()Z" — CRASH EN JEU à la connexion) :
+ * Sponge Mixin interdit toute méthode NON PRIVÉE dans une classe Mixin (une
+ * classe Mixin est "fondue" dans sa cible, jamais un vrai type autonome —
+ * un appel statique cross-Mixin comme {@code WaterFogEnvironmentMixin261.xxx()}
+ * depuis {@code LavaFogEnvironmentMixin261} ne fonctionne PAS comme du Java
+ * normal). Le partage de ce petit contrôle a été abandonné — chaque Mixin
+ * (Water/Lava/PowderedSnow) porte maintenant sa propre copie PRIVÉE
+ * (duplication mineure acceptée, comme {@code FAR} déjà dupliqué partout ici).
  */
 @Mixin(targets = "net.minecraft.client.renderer.fog.environment.WaterFogEnvironment")
 public abstract class WaterFogEnvironmentMixin261 {
@@ -45,8 +60,7 @@ public abstract class WaterFogEnvironmentMixin261 {
             at = @At("TAIL"), require = 0)
     private void la$clearFog(FogData fogData, Camera camera, ClientLevel level, float partialTick, DeltaTracker deltaTracker, CallbackInfo ci) {
         try {
-            LauncherModule module = ModuleRegistry.get("clear-vision");
-            if (module == null || !module.isEnabled() || fogData == null) return;
+            if (!clearVisionOrNoFogEnabled() || fogData == null) return;
             fogData.environmentalStart = FAR;
             fogData.environmentalEnd = FAR * 2f;
             fogData.renderDistanceStart = FAR;
@@ -54,5 +68,12 @@ public abstract class WaterFogEnvironmentMixin261 {
         } catch (Throwable t) {
             LauncherLog.err("[WaterFogEnvironmentMixin261] la$clearFog: " + t);
         }
+    }
+
+    private static boolean clearVisionOrNoFogEnabled() {
+        LauncherModule clearVision = ModuleRegistry.get("clear-vision");
+        if (clearVision != null && clearVision.isEnabled()) return true;
+        LauncherModule noFog = ModuleRegistry.get("no-fog");
+        return noFog != null && noFog.isEnabled();
     }
 }

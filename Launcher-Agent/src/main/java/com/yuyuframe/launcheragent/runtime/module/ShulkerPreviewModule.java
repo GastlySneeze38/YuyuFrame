@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -21,74 +22,58 @@ import java.util.List;
  * l'infrastructure déjà existante de ce projet : panneau flottant dessiné à
  * CHAQUE frame près du curseur, en dehors de tout pipeline de tooltip
  * vanilla — voir {@link #renderIfApplicable}, appelé directement depuis
- * GlobalUiPresentMixin261 (branche "écran vanilla ouvert"), aucun Mixin
- * supplémentaire nécessaire.
+ * GlobalUiPresentMixin261/GlobalUiPresentMixin (branche "écran vanilla
+ * ouvert"), aucun Mixin supplémentaire nécessaire.
  *
  * BUG TROUVÉ (retour utilisateur) : un premier essai ajoutait un Mixin
  * {@code @Inject} sur {@code Screen.extractRenderStateWithTooltipAndSubtitles}
  * (pour annuler le tooltip vanilla quand notre panneau se chevauchait avec
  * lui) — ciblant la classe {@code Screen} elle-même (superclasse commune de
- * TOUS les écrans, y compris nos propres écrans custom comme
- * {@code UiMainMenuScreen}), Mixin devait reconstruire la hiérarchie de
- * classes pour chaque sous-type au chargement, et ça CASSAIT le chargement
- * de nos propres écrans (`RuntimeException: Failed to load class file for
- * UiMainMenuScreen`, HUD custom entier inaccessible). Retiré entièrement —
- * le panneau est de toute façon maintenant ancré sur la case survolée (voir
- * drawGrid), pas sur le curseur brut ni sur la fenêtre entière, ce qui
- * réduit déjà fortement le risque de chevauchement sans avoir besoin d'y
- * toucher.
+ * TOUS les écrans, y compris nos propres écrans custom), Mixin devait
+ * reconstruire la hiérarchie de classes pour chaque sous-type au chargement,
+ * et ça CASSAIT le chargement de nos propres écrans. Retiré entièrement —
+ * le panneau est de toute façon ancré sur la case survolée (voir drawGrid),
+ * pas sur le curseur brut ni sur la fenêtre entière, ce qui réduit déjà
+ * fortement le risque de chevauchement sans avoir besoin d'y toucher.
  *
  * FOND DE FENÊTRE : la VRAIE texture vanilla
  * ({@code textures/gui/container/shulker_box.png}, 256x256, région visible
- * 176x166 dans son coin haut-gauche — confirmé par désassemblage bytecode de
- * {@code ShulkerBoxScreen.extractBackground} dans le vrai jar 26.1.2, PAS
- * recréée), demandé explicitement par l'utilisateur (resource-pack-personnalisable,
- * même exigence que le sprite "hud/hotbar_offhand_left" utilisé par
- * ArmorDurabilityModule) — voir {@link UiRenderer#drawVanillaContainerTexture}.
- * Recadrée à la zone de stockage UNIQUEMENT (sans l'inventaire du joueur, non
- * pertinent ici) : u=0,v=0, 176x78 GUI-pixels (bord plat en bas, pas de coins
- * arrondis à cette hauteur — seuls présents tout en bas de l'image complète,
- * après l'inventaire joueur — compromis accepté pour rester compact).
+ * 176x166 dans son coin haut-gauche — confirmé par désassemblage bytecode du
+ * jar 26.1.2, PAS recréée), demandé explicitement par l'utilisateur — voir
+ * {@link UiRenderer#drawVanillaContainerTexture} (déjà cross-bracket via son
+ * propre repli Yarn/réel interne, rien à changer ici pour ce morceau).
  *
- * Icônes via {@link UiRenderer#drawVanillaItemIcon}, déjà utilisé par
- * {@link ArmorDurabilityModule}. Origine des cases dans l'image (7,17),
- * pas de 18 GUI-px — valeurs standard vanilla pour la famille "coffre" (27
- * emplacements de stockage, chest/barrel/shulker box partagent la même mise
- * en page), PAS mesurées empiriquement ici mais réutilisées telles quelles :
- * cohérent avec l'image réelle blitée, donc les icônes tombent exactement
- * dans les cases dessinées par la texture, sans recalage manuel.
- *
- * SCOPE : bracket 26.1.2 UNIQUEMENT (voir IS_26_1/register dans
- * ModuleRegistry, même gate que NoPumpkinOverlayModule/ClearVisionModule).
- * Le contenu d'une shulker box est stocké via un DataComponent
- * ({@code DataComponents.CONTAINER}, type {@code ItemContainerContents})
- * depuis la refonte "Data Components" (~1.20.5) — sur 1.8.9/1.20.4 (NBT
- * {@code BlockEntityTag}), cette lecture ne s'applique pas du tout. Réflexion
- * à noms RÉELS directs (comme {@code GlobalUiRenderBridge261}, PAS
- * McReflect/MappingsRegistry — ce bracket n'est plus obfusqué) : chaque
- * signature ci-dessous vérifiée par désassemblage bytecode du vrai jar
- * client 26.1.2 (parser maison, {@code javap} ne lit pas le class-file
- * version 69/Java 25 de ce jar) :
+ * SCOPE ACTUEL : 26.1.2 (noms réels directs) ET 1.21.11 (résolution Yarn +
+ * repli réel via {@link McReflect}, TOUT vérifié par mappings officiels
+ * Mojang + fichier Yarn .tiny téléchargés pour CETTE version exacte, pas
+ * deviné — voir chaque résolveur ci-dessous pour le détail par bracket) :
  * <pre>
- *   AbstractContainerScreen.hoveredSlot : Slot (protected, hérité par toute
- *     sous-classe d'écran d'inventaire — InventoryScreen, ShulkerBoxScreen
- *     (générique via GenericContainerScreen), etc.)
- *   Slot.getItem() : ItemStack (public)
- *   ItemStack.getItem() : Item ; ItemStack.isEmpty() : boolean (public)
- *   BlockItem.getBlock() : Block (public) ; ShulkerBoxBlock extends Block
- *   DataComponents.CONTAINER : DataComponentType (champ statique public)
- *   ItemStack.get(DataComponentType) : Object (interface DataComponentHolder,
- *     héritée — renvoie l'ItemContainerContents ou null si le composant est absent)
- *   ItemContainerContents.allItemsCopyStream() : Stream (TOUJOURS un élément
- *     par slot, dans l'ordre, ItemStack.EMPTY pour les cases vides — exactement
- *     ce qu'il faut pour reconstituer fidèlement la grille 9x3 d'une shulker box)
+ *   HandledScreen (Yarn) / AbstractContainerScreen (réel) — champ Slot survolé :
+ *     "focusedSlot" (Yarn) / "hoveredSlot" (réel).
+ *   HandledScreen.x/y (Yarn) / AbstractContainerScreen.leftPos/topPos (réel) —
+ *     coin haut-gauche de la fenêtre en GUI-pixels.
+ *   Slot (même nom Yarn/réel) — getStack() (Yarn) / getItem() (réel) ; x/y
+ *     (mêmes noms côté source, mais TOUJOURS obfusqués à l'exécution sur
+ *     1.21.11, résolution McReflect obligatoire même quand yarn==réel).
+ *   ItemStack (même nom Yarn/réel) — isEmpty()/getItem()/get(ComponentType)
+ *     mêmes noms des deux côtés (get() hérité de ComponentsAccess sur Yarn,
+ *     DataComponentGetter sur réel — interfaces DIFFÉRENTES mais même nom de
+ *     méthode "get", résolu par recherche de hiérarchie McReflect standard).
+ *   BlockItem (même nom Yarn/réel) — getBlock() (même nom des deux côtés).
+ *   ShulkerBoxBlock (même nom Yarn/réel, package différent).
+ *   DataComponentTypes (Yarn) / DataComponents (réel) — champ CONTAINER
+ *     (même nom des deux côtés).
+ *   ContainerComponent (Yarn) / ItemContainerContents (réel) — stream()
+ *     (Yarn) / allItemsCopyStream() (réel), TOUJOURS un élément par slot
+ *     dans l'ordre, ItemStack vide pour les cases vides.
  * </pre>
+ * 1.8.9/1.16.5/1.20.4 pas encore portés — le contenu d'une shulker box y est
+ * stocké via NBT ({@code BlockEntityTag}), pas de DataComponent avant la
+ * refonte "Data Components" (~1.20.5) : lecture entièrement différente à
+ * écrire, pas un simple repli de noms.
  */
 public final class ShulkerPreviewModule extends LauncherModule {
 
-    private static final String BLOCK_ITEM_CLASS = "net.minecraft.world.item.BlockItem";
-    private static final String SHULKER_BLOCK_CLASS = "net.minecraft.world.level.block.ShulkerBoxBlock";
-    private static final String DATA_COMPONENTS_CLASS = "net.minecraft.core.component.DataComponents";
     private static final String CONTAINER_TEXTURE_PATH = "textures/gui/container/shulker_box.png";
 
     private static final int COLS = 9, ROWS = 3;
@@ -101,8 +86,7 @@ public final class ShulkerPreviewModule extends LauncherModule {
     private static final float ICON_GUI = 16f;
     private static final float ICON_INSET_GUI = (SLOT_PITCH_GUI - ICON_GUI) / 2f;
     // Texture réelle 256x256 (atlas), région utile 176x166 — recadrée ici à
-    // la zone de stockage seule (voir javadoc de classe : bord plat en bas,
-    // compromis accepté).
+    // la zone de stockage seule (bord plat en bas, compromis accepté).
     private static final float TEX_W = 256f, TEX_H = 256f;
     private static final float IMG_W_GUI = 176f;
     private static final float IMG_CROP_H_GUI = 78f;
@@ -111,29 +95,40 @@ public final class ShulkerPreviewModule extends LauncherModule {
     /** Taille d'une case vanilla (18x18) — pour placer le panneau juste APRÈS le bord droit de la case survolée. */
     private static final float HOVERED_SLOT_SIZE_GUI = 18f;
 
-    // ── Résolution paresseuse, mise en cache (comme GlobalUiRenderBridge261) ──
+    // ── Résolution paresseuse, mise en cache (McReflect : Yarn + repli réel) ──
     private static volatile Field fHoveredSlot;
     private static volatile Field fLeftPos, fTopPos;
     private static volatile Field fSlotX, fSlotY;
-    private static volatile Method mGetItem;
+    private static volatile Method mSlotGetStack;
     private static volatile Method mItemStackGetItem;
     private static volatile Method mItemStackIsEmpty;
     private static volatile Method mBlockItemGetBlock;
     private static volatile Method mItemStackGet;
-    private static volatile Method mAllItemsCopyStream;
-    private static volatile Field fContainerComponent;
+    private static volatile Method mContentsStream;
     private static volatile Class<?> clsBlockItem;
     private static volatile Class<?> clsShulkerBoxBlock;
+    private static volatile Field fContainerComponent;
 
-    private static volatile boolean diagLogged;
+    /** Garde le log de {@link #hoveredSlotScreenPosGui} à une seule occurrence (sinon spam à chaque frame tant que la résolution échoue, fLeftPos/fSlotX etc. restant null indéfiniment). */
+    private static volatile boolean posResolveErrorLogged;
+    /**
+     * BUG TROUVÉ (test utilisateur, 1.21.11 : "le shulker ne marche pas",
+     * aucun log — {@code renderIfApplicable} avalait TOUTE exception
+     * silencieusement, y compris un vrai échec de résolution McReflect à
+     * n'importe quelle étape de la chaîne). Un seul log (pas par frame) dès
+     * la première exception, pour avoir un signal exploitable au prochain
+     * test au lieu d'un silence total — voir feedback session "jamais
+     * avaler silencieusement un catch(Throwable)".
+     */
+    private static volatile boolean errorLogged;
 
     public ShulkerPreviewModule() {
         super("shulker-preview", "Aperçu shulker (Maj)", "Survole une shulker box dans un inventaire en maintenant Maj pour voir son contenu.", true);
     }
 
     /**
-     * Appelé à CHAQUE frame par GlobalUiPresentMixin261 quand un écran
-     * vanilla (pas un des nôtres) est ouvert — voir sa javadoc. Ne fait rien
+     * Appelé à CHAQUE frame par GlobalUiPresentMixin261/GlobalUiPresentMixin
+     * quand un écran vanilla (pas un des nôtres) est ouvert. Ne fait rien
      * tant que le module est désactivé, qu'aucune touche Maj n'est
      * maintenue, ou que l'écran/la case survolée ne correspond pas à une
      * shulker box non vide.
@@ -145,18 +140,16 @@ public final class ShulkerPreviewModule extends LauncherModule {
             Object stack = slotItem(slot);
 
             Object[] items = readContents(stack);
-
-            if (!diagLogged) {
-                diagLogged = true;
-                int nonEmpty = 0;
-                if (items != null) for (Object it : items) if (it != null) nonEmpty++;
-                LauncherLog.info("[ShulkerPreviewModule] diag: stack=" + stack
-                    + " items=" + (items == null ? "null (composant CONTAINER absent)" : items.length + " slots, " + nonEmpty + " non vides"));
-            }
-
             if (items == null) return;
             drawGrid(renderer, currentScreen, slot, items, vpWidth, vpHeight);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            if (!errorLogged) {
+                errorLogged = true;
+                java.io.StringWriter sw = new java.io.StringWriter();
+                t.printStackTrace(new java.io.PrintWriter(sw));
+                LauncherLog.err("[ShulkerPreviewModule] renderIfApplicable: " + sw);
+            }
+        }
     }
 
     /** @return la case (Slot) survolée si elle contient une shulker box non vide et que les conditions sont réunies (module actif, Maj maintenu) — sinon {@code null}. */
@@ -173,103 +166,226 @@ public final class ShulkerPreviewModule extends LauncherModule {
         return hoveredSlot;
     }
 
+    /**
+     * "focusedSlot" (Yarn) / "hoveredSlot" (réel 26.1.2) — champ protégé
+     * déclaré DIRECTEMENT sur AbstractContainerScreen/HandledScreen (vérifié
+     * par javap sur le vrai jar 26.1.2).
+     *
+     * BUG TROUVÉ (test utilisateur, 1.21.11 : "IllegalArgumentException:
+     * object is not an instance of declaring class" dans slotItem, juste
+     * après cet appel) : {@code McReflect.field(screen.getClass(), ...)}
+     * remonte la hiérarchie RUNTIME de l'écran REND (ex: {@code
+     * ShulkerBoxScreen}, {@code InventoryScreen}, {@code
+     * GenericContainerScreen}...) et s'arrête au PREMIER champ portant la
+     * lettre obfusquée cherchée — si une de ces sous-classes CONCRÈTES a SA
+     * PROPRE variable, sans rapport, sous la MÊME lettre obfusquée courte
+     * (coïncidence quasi inévitable, voir javadoc de {@link
+     * McReflect#field(Class, String, String)}), on récupère un objet qui
+     * N'EST PAS un {@code Slot} — {@code .get()} ne plante pas (le champ
+     * coïncident existe bien sur CETTE sous-classe), mais {@code slotItem}
+     * plante ensuite en essayant d'invoquer {@code getStack()} dessus.
+     * Fix : {@link McReflect#fieldOnClass} résout DIRECTEMENT sur la classe
+     * QUI DÉCLARE VRAIMENT le champ (jamais en remontant depuis l'instance),
+     * élimine structurellement le risque, quelle que soit la sous-classe
+     * d'écran ouverte.
+     *
+     * BUG TROUVÉ #2 (test utilisateur, 1.21.4 : {@code IllegalArgumentException:
+     * Can not get cua field fvb.B on fti}) : {@code fieldOnClass} protège
+     * contre les collisions de lettre obfusquée, mais PAS contre un appelant
+     * qui passe un écran qui N'EST TOUT SIMPLEMENT PAS un {@code
+     * HandledScreen} — {@code renderIfApplicable} est appelé pour N'IMPORTE
+     * QUEL écran vanilla non custom ouvert (voir {@code GlobalUiPresentMixin}/
+     * {@code GlobalUiRenderMixin1214}, branche {@code !(currentScreen
+     * instanceof UiDrawable)}), y compris {@code ChatScreen} (obf {@code
+     * fti} sur 1.21.4, confirmé par le message d'erreur) si Maj est tenue
+     * pendant que le chat est ouvert — {@code Field.get()} lève alors
+     * IMMÉDIATEMENT, quelle que soit la façon dont le {@code Field} a été
+     * résolu (comportement JVM standard, pas un défaut de McReflect). Ce
+     * risque latent existait déjà sur 26.1.2/1.21.11 (jamais déclenché,
+     * probablement jamais testé Maj+chat ouvert). Fix : vérifier {@code
+     * handledScreenClass.isInstance(screen)} AVANT tout accès au champ.
+     */
+    private static volatile Class<?> clsHandledScreen;
+
     private static Object hoveredSlot(Object screen) throws Exception {
+        if (clsHandledScreen == null) {
+            clsHandledScreen = McReflect.yarnClass(
+                "net/minecraft/client/gui/screen/ingame/HandledScreen",
+                "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen");
+            if (clsHandledScreen == null) return null;
+        }
+        if (!clsHandledScreen.isInstance(screen)) return null;
         if (fHoveredSlot == null) {
-            Class<?> c = screen.getClass();
-            Field found = null;
-            while (c != null && found == null) {
-                try {
-                    found = c.getDeclaredField("hoveredSlot");
-                } catch (NoSuchFieldException e) {
-                    c = c.getSuperclass();
-                }
-            }
-            if (found == null) return null;
-            found.setAccessible(true);
-            fHoveredSlot = found;
+            fHoveredSlot = McReflect.fieldOnClass(
+                "net/minecraft/client/gui/screen/ingame/HandledScreen",
+                "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen",
+                "focusedSlot", "hoveredSlot");
+            if (fHoveredSlot == null) return null;
         }
         return fHoveredSlot.get(screen);
     }
 
     /**
      * Position ÉCRAN (GUI-pixels, repère haut-gauche) de la case survolée —
-     * {@code leftPos}/{@code topPos} (protected, déclarés sur
-     * AbstractContainerScreen) + {@code Slot.x}/{@code Slot.y} (public,
-     * déclarés directement sur Slot, RELATIFS à leftPos/topPos — voir
-     * javadoc de classe) — tous vérifiés par désassemblage bytecode du vrai
-     * jar 26.1.2. Sert à ancrer le panneau juste À CÔTÉ de l'objet survolé
-     * (même repère que le tooltip vanilla), PAS sur le curseur ni sur la
-     * fenêtre entière — voir drawGrid.
+     * "x"/"y" (Yarn, sur HandledScreen) / "leftPos"/"topPos" (réel 26.1.2,
+     * sur AbstractContainerScreen) + Slot.x/Slot.y (même nom source des deux
+     * côtés, mais résolution McReflect quand même nécessaire — TOUJOURS
+     * obfusqué à l'exécution sur un bracket Yarn). Sert à ancrer le panneau
+     * juste À CÔTÉ de l'objet survolé (même repère que le tooltip vanilla),
+     * PAS sur le curseur ni sur la fenêtre entière — voir drawGrid.
      */
     private static int[] hoveredSlotScreenPosGui(Object screen, Object slot) throws Exception {
+        // Même correctif que hoveredSlot() (voir sa javadoc) — fieldOnClass
+        // au lieu de field(instance.getClass(), ...) pour éliminer tout
+        // risque de collision de lettre obfusquée avec une sous-classe
+        // d'écran/de Slot concrète.
         if (fLeftPos == null) {
-            fLeftPos = declaredFieldInHierarchy(screen.getClass(), "leftPos");
-            fTopPos = declaredFieldInHierarchy(screen.getClass(), "topPos");
-            if (fLeftPos == null || fTopPos == null) return null;
+            fLeftPos = McReflect.fieldOnClass(
+                "net/minecraft/client/gui/screen/ingame/HandledScreen",
+                "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen",
+                "x", "leftPos");
+            fTopPos = McReflect.fieldOnClass(
+                "net/minecraft/client/gui/screen/ingame/HandledScreen",
+                "net.minecraft.client.gui.screens.inventory.AbstractContainerScreen",
+                "y", "topPos");
+            if (fLeftPos == null || fTopPos == null) {
+                if (!posResolveErrorLogged) {
+                    posResolveErrorLogged = true;
+                    LauncherLog.err("[ShulkerPreviewModule] hoveredSlotScreenPosGui: résolution HandledScreen.x/y échouée (fLeftPos="
+                        + fLeftPos + " fTopPos=" + fTopPos + ")");
+                }
+                return null;
+            }
         }
         if (fSlotX == null) {
-            fSlotX = slot.getClass().getField("x");
-            fSlotY = slot.getClass().getField("y");
+            fSlotX = McReflect.fieldOnClass(
+                "net/minecraft/screen/slot/Slot", "net.minecraft.world.inventory.Slot", "x", "x");
+            fSlotY = McReflect.fieldOnClass(
+                "net/minecraft/screen/slot/Slot", "net.minecraft.world.inventory.Slot", "y", "y");
+            if (fSlotX == null || fSlotY == null) {
+                if (!posResolveErrorLogged) {
+                    posResolveErrorLogged = true;
+                    LauncherLog.err("[ShulkerPreviewModule] hoveredSlotScreenPosGui: résolution Slot.x/y échouée (fSlotX="
+                        + fSlotX + " fSlotY=" + fSlotY + ")");
+                }
+                return null;
+            }
         }
         int leftPos = fLeftPos.getInt(screen), topPos = fTopPos.getInt(screen);
         return new int[]{ leftPos + fSlotX.getInt(slot), topPos + fSlotY.getInt(slot) };
     }
 
-    private static Field declaredFieldInHierarchy(Class<?> owner, String name) {
-        Class<?> c = owner;
-        while (c != null) {
-            try {
-                Field f = c.getDeclaredField(name);
-                f.setAccessible(true);
-                return f;
-            } catch (NoSuchFieldException e) {
-                c = c.getSuperclass();
-            }
-        }
-        return null;
-    }
-
+    /**
+     * "getStack" (Yarn) / "getItem" (réel 26.1.2) — déclarée DIRECTEMENT sur
+     * Slot (vérifié par javap). Résolue via {@link McReflect#methodOnClass}
+     * (jamais {@code noArgMethod(slot.getClass(), ...)}) — même correctif
+     * que {@link #hoveredSlot} : une sous-classe concrète de {@code Slot}
+     * (il en existe plusieurs en vanilla : résultat de craft, sortie de
+     * fourneau...) pourrait sinon faire remonter une méthode sans rapport
+     * partageant la même lettre obfusquée courte.
+     */
     private static Object slotItem(Object slot) throws Exception {
-        if (mGetItem == null) mGetItem = slot.getClass().getMethod("getItem");
-        return mGetItem.invoke(slot);
+        if (mSlotGetStack == null) {
+            mSlotGetStack = McReflect.methodOnClass("net/minecraft/screen/slot/Slot", "getStack");
+            if (mSlotGetStack == null) {
+                mSlotGetStack = McReflect.noArgMethod(slot.getClass(), "net/minecraft/screen/slot/Slot", "getStack", "getItem");
+            }
+            if (mSlotGetStack == null) return null;
+        }
+        return mSlotGetStack.invoke(slot);
     }
 
+    /** "isEmpty" — même nom Yarn/réel. */
     private static boolean isEmptyStack(Object stack) throws Exception {
-        if (mItemStackIsEmpty == null) mItemStackIsEmpty = stack.getClass().getMethod("isEmpty");
+        if (mItemStackIsEmpty == null) {
+            mItemStackIsEmpty = McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "isEmpty");
+            if (mItemStackIsEmpty == null) return false;
+        }
         return (boolean) mItemStackIsEmpty.invoke(stack);
     }
 
     private static boolean isShulkerBox(Object stack) throws Exception {
-        if (mItemStackGetItem == null) mItemStackGetItem = stack.getClass().getMethod("getItem");
+        if (mItemStackGetItem == null) {
+            mItemStackGetItem = McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "getItem");
+            if (mItemStackGetItem == null) return false;
+        }
         Object item = mItemStackGetItem.invoke(stack);
         if (item == null) return false;
 
-        if (clsBlockItem == null) clsBlockItem = Class.forName(BLOCK_ITEM_CLASS, false, item.getClass().getClassLoader());
+        if (clsBlockItem == null) {
+            clsBlockItem = McReflect.yarnClass("net/minecraft/item/BlockItem", "net.minecraft.world.item.BlockItem");
+            if (clsBlockItem == null) return false;
+        }
         if (!clsBlockItem.isInstance(item)) return false;
 
-        if (mBlockItemGetBlock == null) mBlockItemGetBlock = clsBlockItem.getMethod("getBlock");
+        if (mBlockItemGetBlock == null) {
+            mBlockItemGetBlock = McReflect.methodOnClass("net/minecraft/item/BlockItem", "getBlock");
+            if (mBlockItemGetBlock == null) {
+                mBlockItemGetBlock = McReflect.noArgMethod(item.getClass(), "net/minecraft/item/BlockItem", "getBlock");
+            }
+            if (mBlockItemGetBlock == null) return false;
+        }
         Object block = mBlockItemGetBlock.invoke(item);
         if (block == null) return false;
 
-        if (clsShulkerBoxBlock == null) clsShulkerBoxBlock = Class.forName(SHULKER_BLOCK_CLASS, false, block.getClass().getClassLoader());
+        if (clsShulkerBoxBlock == null) {
+            clsShulkerBoxBlock = McReflect.yarnClass("net/minecraft/block/ShulkerBoxBlock", "net.minecraft.world.level.block.ShulkerBoxBlock");
+            if (clsShulkerBoxBlock == null) return false;
+        }
         return clsShulkerBoxBlock.isInstance(block);
     }
 
     /** @return les ItemStack des (jusqu'à) 27 slots, EMPTY filtrés en null pour {@link #drawGrid} — null si le composant CONTAINER est absent. */
     private static Object[] readContents(Object stack) throws Exception {
         if (fContainerComponent == null) {
-            Class<?> dc = Class.forName(DATA_COMPONENTS_CLASS, true, stack.getClass().getClassLoader());
-            fContainerComponent = dc.getField("CONTAINER");
+            Class<?> dc = McReflect.yarnClass("net/minecraft/component/DataComponentTypes", "net.minecraft.core.component.DataComponents");
+            if (dc == null) return null;
+            // Champ statique public "CONTAINER" — même nom Yarn/réel comme
+            // CHAÎNE, mais TOUJOURS obfusqué à l'exécution sur un bracket
+            // Yarn (1.21.11) : getField("CONTAINER") échouerait (aucun champ
+            // littéralement nommé ainsi dans la classe chargée) — McReflect
+            // obligatoire même ici.
+            fContainerComponent = McReflect.field(dc, "net/minecraft/component/DataComponentTypes", "CONTAINER");
+            if (fContainerComponent == null) return null;
         }
         Object componentType = fContainerComponent.get(null);
         if (componentType == null) return null;
 
-        if (mItemStackGet == null) mItemStackGet = stack.getClass().getMethod("get", fContainerComponent.getType());
+        if (mItemStackGet == null) {
+            // BUG TROUVÉ (test utilisateur, 1.21.11) : ClassCastException
+            // plus loin (bfk$2 → Stream) trahissait que "contents" n'était
+            // PAS une vraie instance de ContainerComponent — la VRAIE cause
+            // était ICI. McReflect.method(stack.getClass(), ...) commence sa
+            // recherche par les méthodes DÉCLARÉES DIRECTEMENT sur ItemStack
+            // lui-même (findMethodInHierarchy vérifie c.getDeclaredMethods()
+            // AVANT ses interfaces) — ItemStack est une classe ÉNORME avec
+            // des DIZAINES de surcharges obfusquées "a" à 1 argument (vérifié
+            // par javap : a(dgz), a(bef<dlp>), a(dlp), a(Predicate<jd<dlp>>),
+            // a(jd<dlp>), a(jh<dlp>), a(int)...), sans AUCUN rapport avec les
+            // composants — largement de quoi coïncider avec un des types
+            // acceptant kh (DataComponentType) via isAssignableFrom AVANT que
+            // la recherche n'atteigne jamais la VRAIE méthode déclarée sur
+            // l'interface ComponentsAccess/kd.
+            // Fix : methodOnClass résout DIRECTEMENT sur l'interface (3
+            // méthodes seulement, kd.a(kh)/a(kh,T)/b(kh) — aucune ambiguïté
+            // possible), jamais en remontant depuis ItemStack. Repli sur
+            // l'ancienne résolution UNIQUEMENT pour 26.1.2 (noms réels
+            // complets, pas de lettres obfusquées courtes — le risque de
+            // collision qui affecte 1.21.11 n'existe pas là-bas).
+            mItemStackGet = McReflect.methodOnClass("net/minecraft/component/ComponentsAccess", "get", fContainerComponent.getType());
+            if (mItemStackGet == null) {
+                mItemStackGet = McReflect.method(stack.getClass(), "net/minecraft/component/ComponentsAccess", "get", fContainerComponent.getType());
+            }
+            if (mItemStackGet == null) return null;
+        }
         Object contents = mItemStackGet.invoke(stack, componentType);
         if (contents == null) return null;
 
-        if (mAllItemsCopyStream == null) mAllItemsCopyStream = contents.getClass().getMethod("allItemsCopyStream");
-        java.util.stream.Stream<?> stream = (java.util.stream.Stream<?>) mAllItemsCopyStream.invoke(contents);
+        if (mContentsStream == null) {
+            mContentsStream = McReflect.noArgMethod(contents.getClass(), "net/minecraft/component/type/ContainerComponent", "stream", "allItemsCopyStream");
+            if (mContentsStream == null) return null;
+        }
+        java.util.stream.Stream<?> stream = (java.util.stream.Stream<?>) mContentsStream.invoke(contents);
         List<Object> out = new ArrayList<>();
         stream.forEach(entry -> {
             try {
@@ -282,17 +398,20 @@ public final class ShulkerPreviewModule extends LauncherModule {
     }
 
     /**
-     * Panneau ancré JUSTE À CÔTÉ de la case survolée (voir
-     * {@link #hoveredSlotScreenPosGui}) — même repère que le tooltip vanilla
-     * (nom de l'objet), demandé explicitement par l'utilisateur ("à côté de
-     * l'item, au même endroit que le texte du nom de l'item"). PAS sur le
-     * curseur brut (bougeait avec le moindre tremblement de souris à
-     * l'intérieur de la case) NI sur la fenêtre de conteneur entière (un
-     * premier essai recouvrait l'inventaire) : ancré sur la case ELLE-MÊME,
-     * donc stable tant que la souris reste dans la même case, et se
+     * Panneau ancré AU-DESSUS de la case survolée (voir
+     * {@link #hoveredSlotScreenPosGui}), centré horizontalement dessus — PAS
+     * à côté (essai précédent) : vanilla place TOUJOURS son propre tooltip
+     * en bas-à-droite du curseur, jamais au-dessus — ce placement évite donc
+     * pratiquement tout chevauchement avec le nom/lore de l'objet SANS avoir
+     * besoin d'annuler ce tooltip par Mixin.
+     *
+     * PAS sur le curseur brut non plus (bougeait avec le moindre tremblement
+     * de souris à l'intérieur de la case) NI sur la fenêtre de conteneur
+     * entière (un tout premier essai recouvrait l'inventaire) : ancré sur la
+     * case ELLE-MÊME, donc stable tant que la souris reste dessus, et se
      * repositionne proprement d'une case à l'autre en survolant plusieurs
-     * shulker box Maj maintenu. Par défaut à DROITE de la case ; repli à
-     * GAUCHE si ça déborderait de l'écran.
+     * shulker box Maj maintenu. Repli EN DESSOUS de la case si le panneau
+     * déborderait par le haut de l'écran (case tout en haut de la fenêtre).
      *
      * Fond = VRAIE texture vanilla recadrée (voir javadoc de classe), grille
      * 9x3 (taille fixe d'une shulker box vanilla), cases vides simplement
@@ -302,21 +421,30 @@ public final class ShulkerPreviewModule extends LauncherModule {
      */
     private static void drawGrid(UiRenderer renderer, Object currentScreen, Object slot, Object[] items, int vpWidth, int vpHeight) throws Exception {
         int[] slotPos = hoveredSlotScreenPosGui(currentScreen, slot);
-        if (slotPos == null) return;
+        if (slotPos == null) {
+            if (!posResolveErrorLogged) {
+                posResolveErrorLogged = true;
+                LauncherLog.err("[ShulkerPreviewModule] drawGrid: hoveredSlotScreenPosGui a renvoyé null (voir logs de résolution ci-dessus) — panneau jamais dessiné");
+            }
+            return;
+        }
         int slotLeftGui = slotPos[0], slotTopGui = slotPos[1];
 
         float guiScale = UiRenderer.guiScale(vpWidth);
         float guiWidth = vpWidth / guiScale;
+        float guiHeight = vpHeight / guiScale;
 
         float panelWGui = IMG_W_GUI;
         float panelHGui = IMG_CROP_H_GUI;
 
-        float leftGui = slotLeftGui + HOVERED_SLOT_SIZE_GUI + SLOT_GAP_GUI;
-        if (leftGui + panelWGui > guiWidth) leftGui = slotLeftGui - panelWGui - SLOT_GAP_GUI;
+        // Centré horizontalement sur la case survolée.
+        float leftGui = slotLeftGui + (HOVERED_SLOT_SIZE_GUI - panelWGui) / 2f;
         if (leftGui < 0) leftGui = 0;
-        // Aligné verticalement sur le HAUT de la case survolée (même ancre que le tooltip vanilla).
-        float guiHeight = vpHeight / guiScale;
-        float topGui = slotTopGui;
+        if (leftGui + panelWGui > guiWidth) leftGui = guiWidth - panelWGui;
+
+        // Bord BAS du panneau juste au-dessus du bord HAUT de la case (repli en dessous si pas la place en haut).
+        float topGui = slotTopGui - SLOT_GAP_GUI - panelHGui;
+        if (topGui < 0) topGui = slotTopGui + HOVERED_SLOT_SIZE_GUI + SLOT_GAP_GUI;
         if (topGui + panelHGui > guiHeight) topGui = guiHeight - panelHGui;
         if (topGui < 0) topGui = 0;
 

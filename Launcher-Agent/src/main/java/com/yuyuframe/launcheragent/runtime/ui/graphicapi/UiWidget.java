@@ -64,4 +64,20 @@ public abstract class UiWidget {
      * permet pas. No-op par défaut (boutons/toggles n'en ont pas besoin).
      */
     public void pollContinuous(UiInputPoller input) {}
+
+    /**
+     * Contenu FLOTTANT qui doit toujours passer AU-DESSUS de tout le reste
+     * de la liste (voir {@code UiScrollContainer#draw}, appelé dans un
+     * second passage APRÈS tous les {@link #draw} — même motif que
+     * {@code UiTooltip}, déjà dessiné en dernier pour la même raison) — BUG
+     * TROUVÉ (retour utilisateur : "la modal entière... se fait chevaucher
+     * par tout") : un panneau déroulant (color picker, dropdown...) qui
+     * dessine son contenu flottant DANS {@link #draw} reste soumis à
+     * l'ordre d'insertion de la liste — n'importe quel widget ajouté APRÈS
+     * lui (donc plus bas dans l'écran) se dessine PAR-DESSUS s'il chevauche
+     * spatialement, même si ce panneau doit visuellement flotter au-dessus
+     * de tout. No-op par défaut — seuls les widgets avec un vrai popover
+     * (voir UiColorPicker/UiDropdown) le surchargent.
+     */
+    public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {}
 }

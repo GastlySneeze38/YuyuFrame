@@ -146,9 +146,19 @@ public final class UiInputPollerModern extends UiInputPoller {
                 if (method.isDefault()) return invokeDefault(p, method, args);
                 if (args != null && args.length == 3 && "invoke".equals(method.getName())) {
                     pendingScroll += (Double) args[2];
-                    Object prev = previousScrollCb[0];
-                    if (prev != null) {
-                        try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                    // Retour utilisateur : scroller pour zoomer plus loin
+                    // changeait AUSSI l'objet en main — voir javadoc de
+                    // UiInputPoller#suppressVanillaScroll. Tant qu'un module
+                    // consomme le scroll pour son propre usage, on n'invoque
+                    // PAS le callback vanilla chaîné (donc plus de
+                    // changement de slot hotbar pendant qu'on zoome) ; le
+                    // reste du temps, chaînage inchangé (scroll vanilla
+                    // jamais cassé hors zoom).
+                    if (!UiInputPoller.suppressVanillaScroll) {
+                        Object prev = previousScrollCb[0];
+                        if (prev != null) {
+                            try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                        }
                     }
                 }
                 return null;

@@ -566,18 +566,34 @@ public final class UiTextBlaze3D {
     // ── Texture "masque coin arrondi" (fonds de panneau HUD, voir drawRect) ──
 
     private static Object[] cornerMaskTexture; // [GpuTexture, GpuTextureView, GpuSampler]
-    private static final int CORNER_MASK_SIZE = 32;
+    // BUG TROUVÉ (retour utilisateur : "les arrondis des cards sont
+    // pixelisés") — cette texture représente un coin de rayon N (en
+    // texels), mappée par UV sur le coin RÉELLEMENT dessiné (voir
+    // putRectQuad) dont le rayon écran fait typiquement 2 à 16px (HUD/menu,
+    // voir GlobalUiSettings) — très en-dessous des 32 texels d'origine.
+    // Cette texture est donc systématiquement RÉDUITE d'un facteur ~2 à 16×
+    // au rendu, et la bande de lissage (voir javadoc de méthode ci-dessous)
+    // ne faisait qu'1 SEUL texel de large : réduite dans les mêmes
+    // proportions, elle devenait une fraction de pixel écran — un bord dur/
+    // crénelé plutôt qu'un dégradé lisse. Résolution source augmentée (plus
+    // de marge avant qu'un GROS rayon d'écran ne dépasse la texture et parte
+    // en agrandissement flou) ET bande de lissage élargie PROPORTIONNELLEMENT
+    // (voir FALLOFF_TEXELS) : une fois réduite au rayon écran réel, cette
+    // bande reste large de ~1-2 pixels au lieu d'une fraction de pixel.
+    private static final int CORNER_MASK_SIZE = 128;
+    private static final float FALLOFF_TEXELS = CORNER_MASK_SIZE / 10f;
 
     /**
      * Alpha = 1 (opaque) là où texel(tx,ty) est à distance <= N du point
      * "intérieur" (N,N) (coin bas-droite du carré NxN, voir drawRect pour la
      * correspondance écran) ; alpha = 0 au-delà, avec un lissage
-     * (smoothstep) sur le dernier pixel — MÊME formule que le shader legacy
-     * (drawRoundedRectLegacy, "alpha = 1 - smoothstep(radius-1, radius,
-     * dist)"), pré-calculée dans une texture au lieu d'un shader dédié
-     * (RenderPipelines.GUI_TEXT n'en a pas) : image = "un coin haut-gauche
-     * arrondi" — les 3 autres coins sont obtenus par retournement UV (voir
-     * putRectQuad), pas 4 textures séparées.
+     * (smoothstep) sur une bande de {@link #FALLOFF_TEXELS} texels (voir
+     * BUG TROUVÉ ci-dessus pour le pourquoi de cette largeur, PAS 1 texel
+     * comme le shader legacy équivalent — celui-ci n'est JAMAIS redimensionné
+     * après coup, contrairement à cette texture) — pré-calculée dans une
+     * texture au lieu d'un shader dédié (RenderPipelines.GUI_TEXT n'en a
+     * pas) : image = "un coin haut-gauche arrondi" — les 3 autres coins sont
+     * obtenus par retournement UV (voir putRectQuad), pas 4 textures séparées.
      */
     private static Object[] ensureCornerMaskTexture() throws Exception {
         if (cornerMaskTexture != null) return cornerMaskTexture;
@@ -587,7 +603,7 @@ public final class UiTextBlaze3D {
             for (int tx = 0; tx < n; tx++) {
                 float dx = tx - n, dy = ty - n;
                 float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                float t = Math.max(0f, Math.min(1f, (dist - (n - 1f)) / 1f));
+                float t = Math.max(0f, Math.min(1f, (dist - (n - FALLOFF_TEXELS)) / FALLOFF_TEXELS));
                 float alpha = 1f - (t * t * (3f - 2f * t)); // smoothstep
                 int a = Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f);
                 int nativeColor = (a << 24) | 0x00FFFFFF; // petit-boutiste RGBA — blanc, alpha calculé
@@ -831,8 +847,19 @@ public final class UiTextBlaze3D {
      * regénérée/re-décodée sans repayer le coût GPU si la clé ne change pas.
      */
     public static void queueIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, int vpWidth, int vpHeight) {
+        queueIcon(cacheKey, img, x0, y0, x1, y1, 1f, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante avec opacité — voir {@code UiRenderer#drawIcon(..., alpha, ...)}
+     * pour le pourquoi (fondu d'entrée sur contenu asynchrone). {@code alpha}
+     * remplace le 4ᵉ composant du ColorModulator (voir {@link #drawIcon}),
+     * resté fixe à 1.0 partout ailleurs (couleurs réelles de l'image
+     * inchangées, seule l'opacité globale varie).
+     */
+    public static void queueIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, float alpha, int vpWidth, int vpHeight) {
         if (!isAvailable() || img == null) return;
-        queued.add(() -> drawIcon(cacheKey, img, x0, y0, x1, y1, vpWidth, vpHeight));
+        queued.add(() -> drawIcon(cacheKey, img, x0, y0, x1, y1, alpha, vpWidth, vpHeight));
     }
 
     /**
@@ -847,6 +874,28 @@ public final class UiTextBlaze3D {
                                           UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
         if (!isAvailable()) return;
         queued.add(() -> drawGradientRect(x0, y0, x1, y1, radius, colorBottom, colorTop, vpWidth, vpHeight));
+    }
+
+    /**
+     * Comme {@link #queueGradientRect} mais dégradé BILINÉAIRE à 4 coins
+     * indépendants (voir {@code UiRenderer.drawGradientRect2D}) — appelé
+     * depuis `UiRenderer.drawGradientRect2D` (ex. bandes Luminosité/Opacité
+     * du color picker, voir UiColorPicker). Réutilise EXACTEMENT le même
+     * pipeline vertex-color que {@link #queueGradientRect} (aucun nouveau
+     * shader) : chaque sommet reçoit sa propre couleur RGBA, déjà interpolée
+     * linéairement (voir {@link #lerpRgba2D}) — le rasteriseur GPU fait le
+     * reste (interpolation barycentrique standard entre sommets, comme pour
+     * n'importe quel vertex-color classique). C'est ce qui manquait à la
+     * première tentative de roue Teinte/Saturation (shader GLSL custom
+     * jamais routé sur ce pipeline, voir historique UiColorPicker) : ici,
+     * AUCUN shader custom n'est nécessaire, seulement des couleurs de
+     * sommet — donc ça fonctionne nativement sur Blaze3D era E.
+     */
+    public static void queueGradientRect2D(float x0, float y0, float x1, float y1, float radius,
+                                            UiColor colorBottomLeft, UiColor colorBottomRight,
+                                            UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        queued.add(() -> drawGradientRect2D(x0, y0, x1, y1, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight));
     }
 
     /** Appelé depuis {@code GlobalUiPresentMixin} à la HEAD de blitToScreen (avant presentTexture) — dessine tout ce qui a été empilé la frame précédente. */
@@ -1206,11 +1255,12 @@ public final class UiTextBlaze3D {
     // ── Icône RGBA quelconque (pastille de mod/pack) — MÊME structure que
     // drawRect, mais un SEUL quad plein (pas de 9-slice/coins arrondis — une
     // icône rectangulaire simple) échantillonnant la VRAIE texture de
-    // l'icône (Sampler0), pas le masque de coin. ColorModulator reste blanc
-    // opaque (pass-through) : les couleurs réelles de l'image sont
+    // l'icône (Sampler0), pas le masque de coin. ColorModulator reste blanc,
+    // seul son alpha varie (paramètre {@code alpha} — fondu d'entrée sur
+    // contenu asynchrone) : les couleurs RGB réelles de l'image sont
     // préservées telles quelles, comme pour un rect à dégradé (couleur
     // portée par la texture ici, pas par sommet).
-    private static boolean drawIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, int vpWidth, int vpHeight) {
+    private static boolean drawIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, float alpha, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
             currentStage = "minecraftClient(icon)";
@@ -1255,7 +1305,9 @@ public final class UiTextBlaze3D {
 
             currentStage = "dynamicUniformsWrite(icon)";
             Object identity4 = clsMatrix4f.getConstructor().newInstance();
-            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // pass-through — vraies couleurs de l'image
+            // RGB pass-through (vraies couleurs de l'image) — seul le composant
+            // alpha varie (voir queueIcon(..., alpha, ...) / UiRenderer#drawIcon).
+            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, alpha);
             Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
@@ -1424,6 +1476,117 @@ public final class UiTextBlaze3D {
         }
     }
 
+    /** Comme {@link #drawGradientRect} mais 4 coins indépendants (voir {@link #queueGradientRect2D}) — même pipeline, mêmes textures (masque de coin + blanc), seule la couleur par sommet change (bilinéaire au lieu d'un axe unique). */
+    private static boolean drawGradientRect2D(float x0, float y0, float x1, float y1, float radius,
+                                               UiColor bl, UiColor br, UiColor tl, UiColor tr, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            currentStage = "minecraftClient(gradrect2d)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(gradrect2d)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(gradrect2d)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            currentStage = "ensureCornerMaskTexture(gradrect2d)";
+            Object[] mask = ensureCornerMaskTexture();
+            Object maskView = mask[1], maskSampler = mask[2];
+            currentStage = "ensureWhiteTexture(gradrect2d)";
+            Object[] white = ensureWhiteTexture();
+
+            currentStage = "getDevice(gradrect2d)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(gradrect2d)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+            short light0 = 0, light1 = 0;
+
+            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
+            int vertexCount;
+            if (r < 0.5f) {
+                putSolidQuadGradient2D(verts, x0, x1, y0, y1, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                vertexCount = 4;
+            } else {
+                putRectQuadGradient2D(verts, x0, x0 + r, y0, y0 + r, false, false, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putRectQuadGradient2D(verts, x1 - r, x1, y0, y0 + r, true, false, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putRectQuadGradient2D(verts, x0, x0 + r, y1 - r, y1, false, true, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putRectQuadGradient2D(verts, x1 - r, x1, y1 - r, y1, true, true, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putSolidQuadGradient2D(verts, x0 + r, x1 - r, y0, y0 + r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putSolidQuadGradient2D(verts, x0 + r, x1 - r, y1 - r, y1, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putSolidQuadGradient2D(verts, x0, x0 + r, y0 + r, y1 - r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putSolidQuadGradient2D(verts, x1 - r, x1, y0 + r, y1 - r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                putSolidQuadGradient2D(verts, x0 + r, x1 - r, y0 + r, y1 - r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+                vertexCount = 9 * 4;
+            }
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(gradrect2d)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            currentStage = "bufferSlice(gradrect2d)";
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            currentStage = "writeToBuffer(gradrect2d)";
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(gradrect2d)";
+            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
+            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(gradrect2d)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "createRenderPass(gradrect2d)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_gradrect2d";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                currentStage = "setPipeline(gradrect2d)";
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
+                if (mDisableScissor != null) { currentStage = "disableScissor(gradrect2d)"; mDisableScissor.invoke(pass); }
+                currentStage = "bindDefaultUniforms(gradrect2d)";
+                mBindDefaultUniforms.invoke(null, pass);
+                currentStage = "setUniform(Projection)(gradrect2d)";
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                currentStage = "setUniform(DynamicTransforms)(gradrect2d)";
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                currentStage = "bindTexture(Sampler0)(gradrect2d)";
+                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
+                currentStage = "bindTexture(Sampler2)(gradrect2d)";
+                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setVertexBuffer(gradrect2d)";
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                currentStage = "shapeIndexBuffer(gradrect2d)";
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                int indexCount = (vertexCount / 4) * 6;
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                currentStage = "setIndexBuffer(gradrect2d)";
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                currentStage = "drawIndexed(gradrect2d)";
+                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+            } finally {
+                currentStage = "closePass(gradrect2d)";
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D.drawGradientRect2D a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
     /**
      * Un des 4 coins arrondis : échantillonne {@link #ensureCornerMaskTexture()}
      * avec l'UV retourné selon le coin (flipU pour les coins DROITE, flipV
@@ -1494,6 +1657,54 @@ public final class UiTextBlaze3D {
         putVertexPCTL(buf, xLeft, yBottom, rgbaBottom, u, v, light0, light1);
         putVertexPCTL(buf, xRight, yBottom, rgbaBottom, u, v, light0, light1);
         putVertexPCTL(buf, xRight, yTop, rgbaTop, u, v, light0, light1);
+    }
+
+    /** Couleur bilinéaire (4 coins indépendants) pour une position {@code (x,y)} donnée dans le rectangle global {@code [rectX0,rectX1]×[rectY0,rectY1]} — généralisation de {@link #lerpRgba} à 2 axes (interpolation le long de X pour obtenir les couleurs "basse"/"haute", puis le long de Y entre ces deux résultats, exactement l'algèbre d'un dégradé bilinéaire standard). */
+    private static int lerpRgba2D(UiColor bl, UiColor br, UiColor tl, UiColor tr,
+                                   float x, float y, float rectX0, float rectX1, float rectY0, float rectY1) {
+        float u = (rectX1 - rectX0) < 1e-6f ? 0f : Math.max(0f, Math.min(1f, (x - rectX0) / (rectX1 - rectX0)));
+        float v = (rectY1 - rectY0) < 1e-6f ? 0f : Math.max(0f, Math.min(1f, (y - rectY0) / (rectY1 - rectY0)));
+        float rBot = bl.r + (br.r - bl.r) * u, rTop = tl.r + (tr.r - tl.r) * u;
+        float gBot = bl.g + (br.g - bl.g) * u, gTop = tl.g + (tr.g - tl.g) * u;
+        float bBot = bl.b + (br.b - bl.b) * u, bTop = tl.b + (tr.b - tl.b) * u;
+        float aBot = bl.a + (br.a - bl.a) * u, aTop = tl.a + (tr.a - tl.a) * u;
+        float r = rBot + (rTop - rBot) * v;
+        float g = gBot + (gTop - gBot) * v;
+        float b = bBot + (bTop - bBot) * v;
+        float a = aBot + (aTop - aBot) * v;
+        int ri = Math.round(r * 255f), gi = Math.round(g * 255f), bi = Math.round(b * 255f), ai = Math.round(a * 255f);
+        return (ai << 24) | (bi << 16) | (gi << 8) | ri;
+    }
+
+    /** Comme {@link #putRectQuadGradient}, mais bilinéaire (voir {@link #lerpRgba2D}) — chaque sommet interpole sur SES DEUX coordonnées, pas seulement Y. */
+    private static void putRectQuadGradient2D(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                               boolean flipU, boolean flipV, UiColor bl, UiColor br, UiColor tl, UiColor tr,
+                                               float rectX0, float rectX1, float rectY0, float rectY1, short light0, short light1) {
+        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
+        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
+        int cTL = lerpRgba2D(bl, br, tl, tr, xLeft, yTop, rectX0, rectX1, rectY0, rectY1);
+        int cBL = lerpRgba2D(bl, br, tl, tr, xLeft, yBottom, rectX0, rectX1, rectY0, rectY1);
+        int cBR = lerpRgba2D(bl, br, tl, tr, xRight, yBottom, rectX0, rectX1, rectY0, rectY1);
+        int cTR = lerpRgba2D(bl, br, tl, tr, xRight, yTop, rectX0, rectX1, rectY0, rectY1);
+        putVertexPCTL(buf, xLeft, yTop, cTL, uLeft, vTop, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, cBL, uLeft, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, cBR, uRight, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, cTR, uRight, vTop, light0, light1);
+    }
+
+    /** Comme {@link #putSolidQuad}, mais bilinéaire (voir {@link #putRectQuadGradient2D}). */
+    private static void putSolidQuadGradient2D(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                                UiColor bl, UiColor br, UiColor tl, UiColor tr,
+                                                float rectX0, float rectX1, float rectY0, float rectY1, short light0, short light1) {
+        float u = 0.95f, v = 0.95f;
+        int cTL = lerpRgba2D(bl, br, tl, tr, xLeft, yTop, rectX0, rectX1, rectY0, rectY1);
+        int cBL = lerpRgba2D(bl, br, tl, tr, xLeft, yBottom, rectX0, rectX1, rectY0, rectY1);
+        int cBR = lerpRgba2D(bl, br, tl, tr, xRight, yBottom, rectX0, rectX1, rectY0, rectY1);
+        int cTR = lerpRgba2D(bl, br, tl, tr, xRight, yTop, rectX0, rectX1, rectY0, rectY1);
+        putVertexPCTL(buf, xLeft, yTop, cTL, u, v, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, cBL, u, v, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, cBR, u, v, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, cTR, u, v, light0, light1);
     }
 
     /** POSITION(float×3) + COLOR(ubyte×4) + UV0(float×2) + UV2/light(short×2) — 28 octets, ordre EXACT vérifié par désassemblage de VertexFormats.POSITION_COLOR_TEXTURE_LIGHT. */

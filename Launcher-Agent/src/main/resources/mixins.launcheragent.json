@@ -13,7 +13,11 @@
     "client.GlobalUiRenderMixin",
     "client.GlobalUiPresentMixin",
     "client.CrosshairMixin",
-    "client.GuiFlushMixin"
+    "client.GuiFlushMixin",
+    "client.WorldTimeMixin",
+    "client.ClearOverlaysMixin",
+    "client.MouseHandlerFreelookMixin",
+    "client.CameraFreelookMixin"
   ],
   "injectors": {
     "defaultRequire": 1

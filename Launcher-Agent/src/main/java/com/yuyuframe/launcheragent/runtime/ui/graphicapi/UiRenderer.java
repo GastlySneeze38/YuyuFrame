@@ -169,6 +169,50 @@ public final class UiRenderer {
     private int uFxRect = -1, uFxRadius = -1, uFxBlur = -1, uFxBorderWidth = -1, uFxColorA = -1, uFxColorB = -1, uFxGradient = -1;
     private boolean fxInitFailed = false;
 
+    // ── Shader "Gradient2D" — dégradé BILINÉAIRE entre 4 couleurs de coin,
+    // capacité moteur générique ajoutée sur demande explicite ("fait la
+    // partie du moteur qui fait un dégradé 2D"). Contrairement au shader FX
+    // ci-dessus (dégradé 1D vertical SEULEMENT, u_ColorA/u_ColorB), celui-ci
+    // interpole horizontalement PUIS verticalement entre 4 couleurs
+    // indépendantes — usage typique : un vrai carré Saturation/Luminosité de
+    // color picker (coin bas-gauche ET bas-droite = noir, haut-gauche =
+    // blanc, haut-droite = la teinte pleine à saturation/luminosité
+    // maximales) — un dégradé BILINÉAIRE entre ces 4 coins précis est
+    // mathématiquement IDENTIQUE à la formule HSB->RGB standard à teinte
+    // fixe (pas juste une approximation visuelle : à luminosité v et
+    // saturation s, HSBtoRGB(h,s,v) == v * lerp(blanc, HSBtoRGB(h,1,1), s),
+    // et les deux coins du bas valent 0 dans les deux cas puisque v=0 →
+    // noir quelle que soit la saturation).
+    //
+    // Même masque de coin arrondi (SDF, formule Inigo Quilez) que
+    // drawRoundedRect — bord NET anti-aliasé 1px, PAS de flou (contrairement
+    // au shader FX, pensé lui pour l'ombre portée/le contour).
+    private static final String GRADIENT2D_FRAGMENT_SRC =
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform vec4 u_ColorBL;\n" +
+        "uniform vec4 u_ColorBR;\n" +
+        "uniform vec4 u_ColorTL;\n" +
+        "uniform vec4 u_ColorTR;\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    float u = clamp((gl_FragCoord.x - u_Rect.x) / max(u_Rect.z - u_Rect.x, 1.0), 0.0, 1.0);\n" +
+        "    float v = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
+        "    vec4 bottom = mix(u_ColorBL, u_ColorBR, u);\n" +
+        "    vec4 top = mix(u_ColorTL, u_ColorTR, u);\n" +
+        "    vec4 col = mix(bottom, top, v);\n" +
+        "    gl_FragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "}\n";
+
+    private int gradient2DProgram = -1;
+    private int uG2dRect = -1, uG2dRadius = -1, uG2dColorBL = -1, uG2dColorBR = -1, uG2dColorTL = -1, uG2dColorTR = -1;
+    private boolean gradient2DInitFailed = false;
+
     // ── Shader de texte SDF (distance field) — voir UiFont pour le pourquoi :
     // l'alpha de l'atlas encode une distance signée au bord du glyphe, pas
     // une couverture directe. dFdx/dFdy/fwidth sont cœur GLSL 1.10+ pour un
@@ -340,6 +384,37 @@ public final class UiRenderer {
         uFxColorAModern = -1, uFxColorBModern = -1, uFxGradientModern = -1, uProjectionFxModern = -1;
     private boolean fxInitFailedModern = false;
 
+    // ── Shader "Gradient2D" moderne — même logique que GRADIENT2D_FRAGMENT_SRC
+    // (legacy), voir son commentaire pour le détail/le pourquoi.
+    private static final String GRADIENT2D_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform vec4 u_ColorBL;\n" +
+        "uniform vec4 u_ColorBR;\n" +
+        "uniform vec4 u_ColorTL;\n" +
+        "uniform vec4 u_ColorTR;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    float u = clamp((gl_FragCoord.x - u_Rect.x) / max(u_Rect.z - u_Rect.x, 1.0), 0.0, 1.0);\n" +
+        "    float v = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
+        "    vec4 bottom = mix(u_ColorBL, u_ColorBR, u);\n" +
+        "    vec4 top = mix(u_ColorTL, u_ColorTR, u);\n" +
+        "    vec4 col = mix(bottom, top, v);\n" +
+        "    fragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "}\n";
+
+    private int gradient2DProgramModern = -1;
+    private int uG2dRectModern = -1, uG2dRadiusModern = -1, uG2dColorBLModern = -1, uG2dColorBRModern = -1,
+        uG2dColorTLModern = -1, uG2dColorTRModern = -1, uProjectionGradient2DModern = -1;
+    private boolean gradient2DInitFailedModern = false;
+
     private static final String TEXT_FRAGMENT_SRC_MODERN =
         "#version 150\n" +
         "uniform sampler2D u_Tex;\n" +
@@ -363,27 +438,35 @@ public final class UiRenderer {
     // propres couleurs réelles, rien à seuiller/teinter). Utilisé UNIQUEMENT
     // sur les brackets pré-era-E (le dispatcher drawIcon route era E vers
     // UiTextBlaze3D, qui a son propre chemin Blaze3D complet).
+    // u_Alpha : multiplicateur d'opacité (1.0 = comportement d'origine,
+    // inchangé) — ajouté pour permettre un fondu d'entrée sur du contenu
+    // asynchrone (icônes Modrinth qui arrivent en HTTP, voir UiAsyncFade)
+    // sans dupliquer tout le pipeline icône pour un simple multiplicateur.
     private static final String ICON_FRAGMENT_SRC =
         "uniform sampler2D u_Tex;\n" +
+        "uniform float u_Alpha;\n" +
         "void main() {\n" +
-        "    gl_FragColor = texture2D(u_Tex, gl_TexCoord[0].xy);\n" +
+        "    vec4 c = texture2D(u_Tex, gl_TexCoord[0].xy);\n" +
+        "    gl_FragColor = vec4(c.rgb, c.a * u_Alpha);\n" +
         "}\n";
 
     private static final String ICON_FRAGMENT_SRC_MODERN =
         "#version 150\n" +
         "uniform sampler2D u_Tex;\n" +
+        "uniform float u_Alpha;\n" +
         "in vec2 vTexCoord;\n" +
         "out vec4 fragColor;\n" +
         "void main() {\n" +
-        "    fragColor = texture(u_Tex, vTexCoord);\n" +
+        "    vec4 c = texture(u_Tex, vTexCoord);\n" +
+        "    fragColor = vec4(c.rgb, c.a * u_Alpha);\n" +
         "}\n";
 
     private int iconProgram = -1;
-    private int uTexIcon = -1;
+    private int uTexIcon = -1, uAlphaIcon = -1;
     private boolean iconInitFailed = false;
 
     private int iconProgramModern = -1;
-    private int uTexIconModern = -1, uProjectionIconModern = -1;
+    private int uTexIconModern = -1, uAlphaIconModern = -1, uProjectionIconModern = -1;
     private boolean iconInitFailedModern = false;
 
     private final Map<String, Integer> iconTextures = new HashMap<>();
@@ -571,6 +654,54 @@ public final class UiRenderer {
         }
     }
 
+    private void ensureGradient2DShaderInit() {
+        if (gradient2DProgram != -1 || gradient2DInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, VERTEX_SRC);
+            glCompileShader(vsh);
+
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, GRADIENT2D_FRAGMENT_SRC);
+            glCompileShader(fsh);
+
+            gradient2DProgram = glCreateProgram();
+            glAttachShader(gradient2DProgram, vsh);
+            glAttachShader(gradient2DProgram, fsh);
+            glLinkProgram(gradient2DProgram);
+
+            uG2dRect = glGetUniformLocation(gradient2DProgram, "u_Rect");
+            uG2dRadius = glGetUniformLocation(gradient2DProgram, "u_Radius");
+            uG2dColorBL = glGetUniformLocation(gradient2DProgram, "u_ColorBL");
+            uG2dColorBR = glGetUniformLocation(gradient2DProgram, "u_ColorBR");
+            uG2dColorTL = glGetUniformLocation(gradient2DProgram, "u_ColorTL");
+            uG2dColorTR = glGetUniformLocation(gradient2DProgram, "u_ColorTR");
+
+            LauncherLog.ui(1, "[UiRenderer] shader Gradient2D compilé, program=" + gradient2DProgram);
+        } catch (Throwable t) {
+            gradient2DInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader Gradient2D : " + t);
+        }
+    }
+
+    private void ensureGradient2DShaderInitModern() {
+        if (gradient2DProgramModern != -1 || gradient2DInitFailedModern) return;
+        try {
+            gradient2DProgramModern = compileModernProgram(VERTEX_SRC_MODERN, GRADIENT2D_FRAGMENT_SRC_MODERN);
+            uG2dRectModern = glGetUniformLocation(gradient2DProgramModern, "u_Rect");
+            uG2dRadiusModern = glGetUniformLocation(gradient2DProgramModern, "u_Radius");
+            uG2dColorBLModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorBL");
+            uG2dColorBRModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorBR");
+            uG2dColorTLModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorTL");
+            uG2dColorTRModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorTR");
+            uProjectionGradient2DModern = glGetUniformLocation(gradient2DProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader Gradient2D (moderne) compilé, program=" + gradient2DProgramModern);
+        } catch (Throwable t) {
+            gradient2DInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader Gradient2D moderne : " + t);
+        }
+    }
+
     /** {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se replier sur une approximation par bandes. */
     public boolean isVignetteAvailable() {
         if (modern) {
@@ -740,6 +871,7 @@ public final class UiRenderer {
             glAttachShader(iconProgram, fsh);
             glLinkProgram(iconProgram);
             uTexIcon = glGetUniformLocation(iconProgram, "u_Tex");
+            uAlphaIcon = glGetUniformLocation(iconProgram, "u_Alpha");
             LauncherLog.ui(1, "[UiRenderer] shader icône compilé, program=" + iconProgram);
         } catch (Throwable t) {
             iconInitFailed = true;
@@ -752,6 +884,7 @@ public final class UiRenderer {
         try {
             iconProgramModern = compileModernProgram(VERTEX_SRC_MODERN, ICON_FRAGMENT_SRC_MODERN);
             uTexIconModern = glGetUniformLocation(iconProgramModern, "u_Tex");
+            uAlphaIconModern = glGetUniformLocation(iconProgramModern, "u_Alpha");
             uProjectionIconModern = glGetUniformLocation(iconProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader icône moderne compilé, program=" + iconProgramModern);
         } catch (Throwable t) {
@@ -779,7 +912,7 @@ public final class UiRenderer {
      *                 on reste dans NOTRE pipeline, version-générique).
      */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
-        drawIcon(cacheKey, img, x, y, size, size, vpWidth, vpHeight);
+        drawIcon(cacheKey, img, x, y, size, size, 1f, vpWidth, vpHeight);
     }
 
     /**
@@ -793,9 +926,24 @@ public final class UiRenderer {
      * forçaient artificiellement un carré via un unique paramètre {@code size}.
      */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h, int vpWidth, int vpHeight) {
+        drawIcon(cacheKey, img, x, y, w, h, 1f, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante avec opacité ({@code alpha} 0..1, 1 = comportement d'origine
+     * identique aux deux surcharges ci-dessus) — capacité moteur ajoutée pour
+     * permettre un fondu d'entrée sur du contenu asynchrone (icône Modrinth
+     * qui vient d'arriver en HTTP, voir {@link UiAsyncFade}) sans que
+     * l'appelant ait à dessiner un rect de transition séparé. Threadé sur les
+     * 3 pipelines (GL legacy, GL moderne, Blaze3D era E) via {@code u_Alpha}
+     * (voir ICON_FRAGMENT_SRC/_MODERN) et le 4ᵉ composant du ColorModulator
+     * côté Blaze3D (voir {@code UiTextBlaze3D#queueIcon}).
+     */
+    public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
+                          float alpha, int vpWidth, int vpHeight) {
         if (img == null) return;
         if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueIcon(cacheKey, img, x, y, x + w, y + h, vpWidth, vpHeight);
+            UiTextBlaze3D.queueIcon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
             return;
         }
         int texId = ensureIconTexture(cacheKey, img);
@@ -822,6 +970,7 @@ public final class UiRenderer {
                 glBindTexture(0x0DE1, texId);
                 glUseProgram(iconProgramModern);
                 glUniform1i(uTexIconModern, 0);
+                glUniform1f(uAlphaIconModern, alpha);
                 uploadProjectionModern(uProjectionIconModern, vpWidth, vpHeight);
 
                 // UV : (x,y+h)=visuel HAUT-gauche (Y-up) ↔ (0,0)=image
@@ -863,6 +1012,7 @@ public final class UiRenderer {
             glBindTexture(0x0DE1, texId);
             glUseProgram(iconProgram);
             glUniform1i(uTexIcon, 0);
+            glUniform1f(uAlphaIcon, alpha);
 
             matrixMode(0x1701); // GL_PROJECTION
             pushMatrix();
@@ -1053,6 +1203,224 @@ public final class UiRenderer {
             return;
         }
         drawFx(x1, y1, x2, y2, radius, 0f, 0f, colorBottom, colorTop, true, vpWidth, vpHeight);
+    }
+
+    /**
+     * Dégradé BILINÉAIRE entre 4 couleurs de coin — voir le commentaire du
+     * shader Gradient2D (constantes GRADIENT2D_FRAGMENT_SRC*) pour le détail
+     * mathématique complet (pipelines Legacy/Modern). Coins arrondis
+     * optionnels (radius=0 = rect plein), bord anti-aliasé NET — pas de
+     * flou, contrairement à drawShadow/drawGlow.
+     *
+     * Routé sur Blaze3D era E via {@link UiTextBlaze3D#queueGradientRect2D}
+     * — CONTRAIREMENT à drawShadow/drawGlow (no-op sur ce pipeline), ce
+     * dégradé ne nécessite AUCUN shader custom côté Blaze3D : 4 couleurs de
+     * sommet suffisent (le pipeline vertex-color déjà utilisé par
+     * queueGradientRect les interpole nativement), là où la roue
+     * Teinte/Saturation avait initialement (et à tort) tenté un vrai shader
+     * GLSL — jamais routé sur ce pipeline, voir l'historique dans
+     * UiColorPicker pour ce qui a été corrigé.
+     */
+    public void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
+                                    UiColor colorBottomLeft, UiColor colorBottomRight,
+                                    UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
+        if (UiTextBlaze3D.isAvailable()) {
+            UiTextBlaze3D.queueGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+            return;
+        }
+        if (modern) {
+            drawGradient2DModern(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+            return;
+        }
+        drawGradient2DLegacy(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+    }
+
+    private void drawGradient2DModern(float x1, float y1, float x2, float y2, float radius,
+                                       UiColor bl, UiColor br, UiColor tl, UiColor tr, int vpWidth, int vpHeight) {
+        ensureGradient2DShaderInitModern();
+        if (gradient2DInitFailedModern) return;
+        try {
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer (javadoc de classe).
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            glUseProgram(gradient2DProgramModern);
+            glUniform4f(uG2dRectModern, x1, y1, x2, y2);
+            glUniform1f(uG2dRadiusModern, radius);
+            glUniform4f(uG2dColorBLModern, bl.r, bl.g, bl.b, bl.a);
+            glUniform4f(uG2dColorBRModern, br.r, br.g, br.b, br.a);
+            glUniform4f(uG2dColorTLModern, tl.r, tl.g, tl.b, tl.a);
+            glUniform4f(uG2dColorTRModern, tr.r, tr.g, tr.b, tr.a);
+            uploadProjectionModern(uProjectionGradient2DModern, vpWidth, vpHeight);
+            drawQuadModern(x1, y1, x2, y2);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawGradient2DModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawGradient2DLegacy(float x1, float y1, float x2, float y2, float radius,
+                                       UiColor bl, UiColor br, UiColor tl, UiColor tr, int vpWidth, int vpHeight) {
+        ensureGradient2DShaderInit();
+        if (gradient2DInitFailed) return;
+
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
+        try {
+            savedGlState = captureLegacyGlState();
+            glDisable(0x0DE1); // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0BC0); // GL_ALPHA_TEST
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer (javadoc de classe).
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+
+            glUseProgram(gradient2DProgram);
+            glUniform4f(uG2dRect, x1, y1, x2, y2);
+            glUniform1f(uG2dRadius, radius);
+            glUniform4f(uG2dColorBL, bl.r, bl.g, bl.b, bl.a);
+            glUniform4f(uG2dColorBR, br.r, br.g, br.b, br.a);
+            glUniform4f(uG2dColorTL, tl.r, tl.g, tl.b, tl.a);
+            glUniform4f(uG2dColorTR, tr.r, tr.g, tr.b, tr.a);
+            // gl_Color ignorée par ce shader — appel conservé pour réutiliser drawQuad() tel quel.
+            drawQuad(x1, y1, x2, y2, bl);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawGradient2DLegacy: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
+        }
+    }
+
+    /**
+     * Halo lumineux centré sur {@code (x1,y1)-(x2,y2)} — capacité moteur
+     * dédiée (voir audit runtime/ui/ : "glow" n'existait auparavant que
+     * comme nom de variable locale réutilisant {@link #drawShadow} à un seul
+     * site, UiMainMenuScreen). Empile {@code layers} passes de
+     * {@link #drawFx} à blur croissant/alpha décroissant plutôt qu'un seul
+     * flou plat — un vrai halo s'éteint progressivement, pas en un seul
+     * palier — {@code intensity} (0..1) module l'alpha de départ.
+     *
+     * MÊME LIMITATION que {@link #drawShadow} sur era E (1.21.6+, Blaze3D) :
+     * {@code drawFx} y est un no-op (pas de flou gaussien réalisable dans le
+     * pipeline GUI_TEXT réutilisé, voir sa javadoc) — cette méthode hérite
+     * donc silencieusement de la même absence de rendu sur ce bracket,
+     * jusqu'à ce qu'une solution Blaze3D dédiée existe (hors scope ici).
+     */
+    public void drawGlow(float x1, float y1, float x2, float y2, float radius, float intensity, UiColor color,
+                          int vpWidth, int vpHeight) {
+        int layers = 3;
+        for (int i = 0; i < layers; i++) {
+            float t = (i + 1f) / layers;               // 0.33 / 0.66 / 1.0
+            float blur = radius * 0.6f + 18f * t * t;   // flou croissant, non-linéaire (le halo s'étale plus vite qu'il ne s'assombrit)
+            float alpha = intensity * (1f - t) * 0.55f; // alpha décroissant, jamais 0 pour la couche la plus large
+            if (alpha <= 0.003f) continue;
+            drawFx(x1, y1, x2, y2, radius, blur, 0f, color.withAlpha(alpha), color, false, vpWidth, vpHeight);
+        }
+    }
+
+    /**
+     * Cercle plein qui s'agrandit en s'estompant — retour tactile au clic
+     * (capacité absente du moteur jusqu'ici, voir audit runtime/ui/ : le
+     * hover ne fait qu'un lerp de couleur, rien à l'appui). Stateless comme
+     * le reste de UiRenderer : {@code progress01} (0 au clic, 1 en fin de
+     * ripple) et l'alpha de départ sont calculés par l'appelant (typiquement
+     * via {@link UiAnimatedFloat} ou {@link UiTransition}, déjà existants —
+     * aucune nouvelle classe d'animation nécessaire pour ce primitive).
+     * Construit uniquement sur {@link #drawRoundedRect} (cercle = carré
+     * entièrement arrondi, radius = moitié du côté) — fonctionne donc sur
+     * les 3 pipelines, Blaze3D era E inclus, sans limitation contrairement à
+     * {@link #drawGlow}.
+     */
+    public void drawRipple(float centerX, float centerY, float maxRadius, float progress01, float startAlpha,
+                            UiColor color, int vpWidth, int vpHeight) {
+        float p = Math.max(0f, Math.min(1f, progress01));
+        float r = maxRadius * p;
+        if (r <= 0.5f) return;
+        float alpha = startAlpha * (1f - p);
+        if (alpha <= 0.003f) return;
+        drawRoundedRect(centerX - r, centerY - r, centerX + r, centerY + r, r, color.withAlpha(alpha), vpWidth, vpHeight);
+    }
+
+    /**
+     * Placeholder de chargement (skeleton) + balayage lumineux (shimmer) —
+     * capacités absentes du moteur jusqu'ici (voir audit runtime/ui/ :
+     * UiRemoteImage n'a ni placeholder animé ni transition, apparition
+     * brute dès que le fetch HTTP termine). {@code phase01} (0..1, boucle
+     * en continu) positionne la barre lumineuse de gauche à droite —
+     * calculé par l'appelant, ex. {@code (System.currentTimeMillis() %
+     * periodMs) / (float) periodMs}, même philosophie que {@link UiStagger}
+     * qui laisse déjà le timing au consommateur plutôt que de le cacher
+     * dans une classe d'état supplémentaire.
+     *
+     * Base posée via {@link #drawRoundedRect} (fonctionne partout, era E
+     * inclus) ; barre lumineuse via {@link #drawShadow} (flou) — hérite donc
+     * de la MÊME LIMITATION era E que {@link #drawGlow} : le skeleton reste
+     * visible sur ce bracket (fond plat correct), seul le balayage lumineux
+     * n'apparaît pas tant qu'aucune solution de flou Blaze3D n'existe.
+     */
+    public void drawSkeletonShimmer(float x1, float y1, float x2, float y2, float radius, float phase01,
+                                     UiColor baseColor, UiColor highlightColor, int vpWidth, int vpHeight) {
+        drawRoundedRect(x1, y1, x2, y2, radius, baseColor, vpWidth, vpHeight);
+        float width = x2 - x1;
+        float bandWidth = Math.max(24f, width * 0.28f);
+        float bx = x1 - bandWidth + (width + bandWidth * 2f) * Math.max(0f, Math.min(1f, phase01));
+        drawShadow(bx - bandWidth * 0.15f, y1, bx + bandWidth * 0.15f, y2, radius, bandWidth * 0.5f, 0f,
+            highlightColor, vpWidth, vpHeight);
+    }
+
+    /**
+     * Spinner de chargement rotatif — capacité absente du moteur jusqu'ici
+     * (voir audit runtime/ui/). Choix délibéré : {@code dotCount} points
+     * disposés en cercle avec un dégradé d'alpha façon "comète" plutôt
+     * qu'un véritable arc balayé — un arc angulaire correct demanderait un
+     * 5ᵉ programme GLSL dédié (distance signée + test d'angle atan2, ni
+     * {@link #drawRoundedRect} ni le shader FX existant ne calculent
+     * d'angle) pour un gain visuel marginal à ce stade. Construit
+     * uniquement sur {@link #drawRoundedRect} (cercle plein par point) :
+     * fonctionne sur les 3 pipelines sans limitation, contrairement à
+     * {@link #drawGlow}/{@link #drawSkeletonShimmer}.
+     *
+     * @param rotationDeg angle de la tête de la comète, calculé par
+     *                    l'appelant (ex. {@code (System.currentTimeMillis() %
+     *                    periodMs) / (float) periodMs * 360f}).
+     */
+    public void drawSpinner(float centerX, float centerY, float radius, float dotRadius, float rotationDeg,
+                             UiColor color, int vpWidth, int vpHeight) {
+        int dotCount = 8;
+        for (int i = 0; i < dotCount; i++) {
+            float t = i / (float) dotCount;                 // 0..1 autour du cercle
+            float angleDeg = rotationDeg + t * 360f;
+            double angleRad = Math.toRadians(angleDeg);
+            float dx = centerX + (float) Math.cos(angleRad) * radius;
+            float dy = centerY + (float) Math.sin(angleRad) * radius;
+            // Alpha décroissant depuis la tête (t=0, la plus opaque) vers la
+            // queue de la comète (t proche de 1, quasi invisible).
+            float alpha = color.a * (1f - t) * (1f - t);
+            if (alpha <= 0.02f) continue;
+            drawRoundedRect(dx - dotRadius, dy - dotRadius, dx + dotRadius, dy + dotRadius, dotRadius,
+                color.withAlpha(alpha), vpWidth, vpHeight);
+        }
     }
 
     private void drawFx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
@@ -1608,13 +1976,82 @@ public final class UiRenderer {
      *     RÉELLES du fichier PNG (256x256 pour shulker_box.png, PAS
      *     176x166 — c'est un atlas, voir javadoc de ShulkerPreviewModule).
      *
-     * Bracket 26.1.2 UNIQUEMENT pour l'instant (chemin "Deferred", voir
-     * modernUsesDeferredGuiRenderer) — no-op silencieux ailleurs (1.8.9/
-     * 1.20.4/1.21.4/1.21.11), aucun appelant actuel ne les cible.
+     * Bracket 26.1.2/1.21.11 (chemin "Deferred", voir
+     * modernUsesDeferredGuiRenderer) — mise en file, flush différé (voir
+     * GuiFlushMixin). 1.20.4/1.21.4 (chemin "Immediate") : voir {@link
+     * #drawVanillaContainerTextureModernImmediate} — dessin synchrone, pas de
+     * file d'attente. 1.8.9 : no-op silencieux, aucun appelant actuel ne le cible.
      */
     public void drawVanillaContainerTexture(String texturePath, float x, float y, float w, float h,
                                              float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
-        if (!modern || !modernUsesDeferredGuiRenderer()) return;
+        if (!modern) return;
+        if (modernUsesDeferredGuiRenderer()) {
+            try {
+                float guiScale = guiScale(vpWidth);
+                int guiX = Math.round(x / guiScale);
+                int guiY = Math.round((vpHeight - y - h) / guiScale);
+                int guiW = Math.round(w / guiScale);
+                int guiH = Math.round(h / guiScale);
+                synchronized (pendingModernGuiBlits) {
+                    pendingModernGuiBlits.add(new PendingGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
+                }
+            } catch (Throwable ignored) {}
+        } else {
+            drawVanillaContainerTextureModernImmediate(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
+        }
+    }
+
+    private static Method drawTextureMethodImmediate;
+    private static Method getGuiTexturedMethodImmediate;
+    private static Object guiTexturedFunctionProxyImmediate;
+    private static boolean containerBlitImmediateResolveFailed;
+
+    /**
+     * Bracket 1.20.4/1.21.4 (pipeline "Immediate", pas de {@code
+     * RenderPipeline}/{@code GuiRenderState} — voir {@link
+     * #drawVanillaItemIconModernImmediate}) — {@code DrawContext.drawTexture}
+     * y prend un {@code java.util.function.Function<Identifier,RenderLayer>}
+     * en premier paramètre (PAS un {@code RenderPipeline} direct comme sur
+     * 1.21.11/26.1.2 — {@code RenderPipeline}/{@code RenderLayer} sont deux
+     * abstractions DIFFÉRENTES, la seconde antérieure à la première, voir
+     * l'audit modules pour le contexte), résolu à la compilation vanilla via
+     * une référence de méthode statique ({@code RenderLayer::getGuiTextured})
+     * — vérifié par désassemblage bytecode de {@code HandledScreen} (jar
+     * 1.21.4 réel, table BootstrapMethods : {@code REF_invokeStatic
+     * gmj.H:(Lakv;)Lgmj;}, où {@code gmj}=RenderLayer, confirmé Yarn named
+     * "getGuiTextured"). Comme {@code java.util.function.Function} est une
+     * interface JDK standard (jamais obfusquée), on peut construire nous-
+     * mêmes un {@link java.lang.reflect.Proxy} qui délègue {@code apply()} à
+     * cette méthode statique — pas besoin de reproduire le lambda vanilla.
+     */
+    /**
+     * BUG TROUVÉ ET CORRIGÉ (audit modules, "TODO 1.21.4" point 3) : cette
+     * méthode construisait sa PROPRE instance {@code DrawContext} isolée
+     * (comme {@code drawVanillaItemIconModernImmediate} avant son propre fix,
+     * voir bug "mauvaise APPROCHE" dans module-bracket-audit.md) — même
+     * classe de problème structurel (état GL imprévisible hors du flux de
+     * rendu vivant), jamais porté sur le correctif "file d'attente + point
+     * d'accroche vivant" qui a débloqué l'armure, car ce fond de fenêtre a
+     * une contrainte de z-order DIFFÉRENTE : doit apparaître PAR-DESSUS
+     * l'écran d'inventaire ouvert, donc se dessiner APRÈS
+     * {@code Screen.render()} — {@code InGameHud.render()} (point d'accroche
+     * de l'armure) s'exécute AVANT l'écran, inutilisable ici tel quel.
+     *
+     * Correctif : mise en FILE D'ATTENTE ({@code pendingModernGuiBlits},
+     * partagée avec le chemin "Deferred") au lieu d'un dessin synchrone
+     * isolé — vidée par {@link #flushPendingImmediateGuiBlits(Object)},
+     * appelé depuis un NOUVEAU point d'accroche Mixin en TAIL de {@code
+     * HandledScreen.drawForeground(DrawContext,I,I)V} (voir {@code
+     * HandledScreenBlitFlushMixin1214}) — déclaré DIRECTEMENT sur {@code
+     * HandledScreen} (PAS la classe {@code Screen} partagée par tous les
+     * écrans, y compris nos écrans custom — voir la leçon de
+     * {@code ShulkerPreviewModule} sur ce risque précis), et appelé APRÈS le
+     * fond/les cases/objets du conteneur mais AVANT les tooltips vanilla —
+     * exactement où doit apparaître notre panneau. Décalage d'une frame
+     * comme pour les icônes (imperceptible tant que Maj reste maintenue).
+     */
+    private void drawVanillaContainerTextureModernImmediate(String texturePath, float x, float y, float w, float h,
+                                                              float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
         try {
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
@@ -1625,6 +2062,76 @@ public final class UiRenderer {
                 pendingModernGuiBlits.add(new PendingGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
             }
         } catch (Throwable ignored) {}
+    }
+
+    /**
+     * Appelé depuis {@code HandledScreenBlitFlushMixin1214}, en TAIL de
+     * {@code HandledScreen.drawForeground(DrawContext,I,I)V}, avec le VRAI
+     * paramètre {@code DrawContext} de cet appel (celui que l'écran
+     * d'inventaire ouvert utilise lui-même pour tout son rendu — jamais une
+     * instance reconstruite). Voir la javadoc de
+     * {@link #drawVanillaContainerTextureModernImmediate} pour le pourquoi.
+     */
+    public void flushPendingImmediateGuiBlits(Object realDrawContext) {
+        java.util.List<PendingGuiBlit> batchBlits;
+        synchronized (pendingModernGuiBlits) {
+            if (pendingModernGuiBlits.isEmpty()) return;
+            batchBlits = new java.util.ArrayList<>(pendingModernGuiBlits);
+            pendingModernGuiBlits.clear();
+        }
+        try {
+            if (!ensureContainerBlitImmediateResolved(realDrawContext.getClass())) return;
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+            ClassLoader cl = mc.getClass().getClassLoader();
+            for (PendingGuiBlit blit : batchBlits) {
+                Object identifier = resolveTextureIdentifier(cl, blit.texturePath);
+                if (identifier == null) continue;
+                drawTextureMethodImmediate.invoke(realDrawContext, guiTexturedFunctionProxyImmediate, identifier,
+                    blit.guiX, blit.guiY, blit.u, blit.v, blit.guiW, blit.guiH,
+                    Math.round(blit.texW), Math.round(blit.texH));
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingImmediateGuiBlits: " + t);
+        }
+    }
+
+    private boolean ensureContainerBlitImmediateResolved(Class<?> drawContextClass) {
+        if (drawTextureMethodImmediate != null) return true;
+        if (containerBlitImmediateResolveFailed) return false;
+        try {
+            Class<?> identifierClass = McReflect.yarnClass("net/minecraft/util/Identifier", "net.minecraft.resources.Identifier");
+            if (identifierClass == null) { containerBlitImmediateResolveFailed = true; return false; }
+
+            Class<?> renderLayerClass = McReflect.yarnClass("net/minecraft/client/render/RenderLayer");
+            if (renderLayerClass == null) { containerBlitImmediateResolveFailed = true; return false; }
+            getGuiTexturedMethodImmediate = McReflect.methodOnClass(
+                "net/minecraft/client/render/RenderLayer", "getGuiTextured", identifierClass);
+            if (getGuiTexturedMethodImmediate == null) { containerBlitImmediateResolveFailed = true; return false; }
+
+            Class<?> functionClass = java.util.function.Function.class;
+            Method finalMethod = getGuiTexturedMethodImmediate;
+            guiTexturedFunctionProxyImmediate = java.lang.reflect.Proxy.newProxyInstance(
+                drawContextClass.getClassLoader(), new Class<?>[]{ functionClass },
+                (proxy, method, args) -> {
+                    switch (method.getName()) {
+                        case "apply": return finalMethod.invoke(null, args[0]);
+                        case "hashCode": return System.identityHashCode(proxy);
+                        case "equals": return proxy == args[0];
+                        default: return "GuiTexturedFunctionProxy";
+                    }
+                });
+
+            drawTextureMethodImmediate = McReflect.method(drawContextClass, "net/minecraft/client/gui/DrawContext",
+                "drawTexture", functionClass, identifierClass, int.class, int.class,
+                float.class, float.class, int.class, int.class, int.class, int.class);
+            if (drawTextureMethodImmediate == null) { containerBlitImmediateResolveFailed = true; return false; }
+            return true;
+        } catch (Throwable t) {
+            containerBlitImmediateResolveFailed = true;
+            LauncherLog.err("[UiRenderer] ensureContainerBlitImmediateResolved: " + t);
+            return false;
+        }
     }
 
     /**
@@ -1832,9 +2339,8 @@ public final class UiRenderer {
      * File d'attente jumelle de {@link PendingItemIcon} mais pour un blit de
      * texture vanilla BRUTE (pas via l'atlas de sprites — voir
      * {@link #drawVanillaContainerTexture}) : fond de fenêtre de conteneur
-     * (ex: {@code textures/gui/container/shulker_box.png}), PAS un sprite
-     * "hud/*" comme {@link #slotSpriteIdentifierModern}. Même décalage d'une
-     * frame, même point de vidage ({@link #flushPendingModernItemIcons}).
+     * (ex: {@code textures/gui/container/shulker_box.png}). Même décalage
+     * d'une frame, même point de vidage ({@link #flushPendingModernItemIcons}).
      */
     private static final class PendingGuiBlit {
         final String texturePath; final int guiX, guiY, guiW, guiH; final float u, v, texW, texH;
@@ -1894,6 +2400,9 @@ public final class UiRenderer {
     /** Décalage (icône 16x16 depuis le coin haut-gauche du sprite 29x24) — voir javadoc ci-dessus. */
     private static final int SLOT_SPRITE_ICON_DX = 3;
     private static final int SLOT_SPRITE_ICON_DY = 4;
+    /** Fichier PNG BRUT du sprite (PAS son nom d'atlas "hud/hotbar_offhand_left") — voir bug z-order dans flushIntoGuiState : nécessaire pour un blit "texture brute" avec u/v explicites (crop du cadre uniquement), l'atlas de sprites ne permettant aucun contrôle de région. */
+    /** Fichier PNG BRUT du sprite (PAS son nom d'atlas "hud/hotbar_offhand_left") — utilisé par le chemin Immediate (1.21.4, voir flushPendingImmediateItemIcons), qui a besoin d'un chemin de texture direct (pas d'accès à l'atlas de sprites côté résolution "Immediate"). */
+    private static final String VANILLA_SLOT_SPRITE_PATH = "textures/gui/sprites/hud/hotbar_offhand_left.png";
     private static Method drawGuiTextureMethodModern;
     private static Object renderPipelineGuiTexturedModern;
     private static Object slotSpriteIdentifierModern;
@@ -1974,7 +2483,6 @@ public final class UiRenderer {
     private static Method drawItemMethodImmediateModern;
     private static Method drawFlushMethodImmediateModern;
     private static boolean modernImmediateResolveFailed = false;
-    private static boolean modernImmediateDiagLogged = false;
 
     /**
      * Bracket 1.20.4 / 1.21.4 (voir détection ci-dessus) : DrawContext gère
@@ -1986,46 +2494,148 @@ public final class UiRenderer {
      * de file d'attente ni de second point d'accroche Mixin nécessaires ici
      * (contrairement au bracket 1.21.11+/26.1+, voir drawVanillaItemIconModernDeferred).
      */
+    /**
+     * BUG TROUVÉ ET CORRIGÉ EN PROFONDEUR (test utilisateur, builds v559-v563,
+     * après recherche externe — "regarde comment d'autres bibliothèques
+     * open-source font") : trois correctifs successifs (rebind VAO, cache
+     * shader RenderSystem invalidé/restauré) ont fait disparaître toute
+     * erreur GL mesurable, mais l'icône restait invisible malgré tout — signe
+     * que le problème n'était PAS une case de GL mal configurée en particulier,
+     * mais l'APPROCHE ELLE-MÊME : construire notre PROPRE {@code DrawContext}
+     * isolé (avec son propre {@code VertexConsumerProvider.Immediate}) APRÈS
+     * que tout le rendu vanilla de la frame (monde, HUD, écran) ait déjà eu
+     * lieu et potentiellement déjà fermé/soumis ses propres batches, plutôt
+     * que de PARTICIPER au rendu vanilla EN COURS.
+     *
+     * Aucun mod Fabric "normal" ne fait ça — {@code HudRenderCallback}
+     * (l'équivalent standard pour dessiner par-dessus le HUD) hooke
+     * directement {@code InGameHud.render(DrawContext, RenderTickCounter)}
+     * et reçoit en paramètre l'instance RÉELLE et VIVANTE de
+     * {@code DrawContext} que vanilla lui-même utilise pour TOUT le HUD de
+     * cette frame — jamais une instance reconstruite à la main après coup.
+     * En participant à CETTE instance (déjà dans le bon état GL/shader/VAO,
+     * puisque c'est litéralement celle que vanilla utilise), aucun des
+     * contournements ci-dessus (VAO, cache shader) n'est nécessaire : c'est
+     * vanilla lui-même qui la construit, la configure ET la vide.
+     *
+     * Correctif : mise en FILE D'ATTENTE (comme le pipeline "Deferred"
+     * 1.21.11/26.1.2, {@link #drawVanillaItemIconModernDeferred}/{@link
+     * #pendingModernItemIcons}) au lieu d'un dessin synchrone isolé — vidée
+     * par {@link #flushPendingImmediateItemIcons(Object)}, appelé depuis un
+     * NOUVEAU point d'accroche Mixin en TAIL de {@code InGameHud.render(...)}
+     * (voir {@code HudItemFlushMixin1214}), avec le VRAI paramètre
+     * {@code DrawContext} de cet appel. Décalage d'une frame comme le
+     * pipeline Deferred (imperceptible, ~8-16ms) : l'icône demandée dans
+     * cette frame-ci est effectivement dessinée au tout début du rendu HUD de
+     * la frame SUIVANTE.
+     */
     private void drawVanillaItemIconModernImmediate(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
         try {
-            if (!ensureModernImmediateResolved(itemStack)) {
-                if (!modernItemIconWarned) {
-                    modernItemIconWarned = true;
-                    LauncherLog.warn("[UiRenderer] drawVanillaItemIconModernImmediate: résolution réflexion échouée — icône non dessinée (voir logs diag)");
-                }
-                return;
-            }
-
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-
-            // Flip d'axe Y — voir javadoc de drawVanillaItemIconModernDeferred
-            // (même bug, même correctif). guiScale() met en cache ce ratio en
-            // interne (audit perf — voir sa javadoc).
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - size) / guiScale);
 
-            Object bufferBuilders = getBufferBuildersMethodModern.invoke(mc);
-            Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
-            Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
-
-            if (!modernImmediateDiagLogged) {
-                modernImmediateDiagLogged = true;
-                LauncherLog.info("[UiRenderer] itemIconModernImmediate diag: drawContext=" + drawContext
-                    + " guiScale=" + guiScale + " guiX=" + guiX + " guiY=" + guiY);
+            synchronized (pendingModernItemIcons) {
+                pendingModernItemIcons.add(new PendingItemIcon(itemStack, guiX, guiY, withDurabilityBar));
             }
-
-            drawItemMethodImmediateModern.invoke(drawContext, itemStack, guiX, guiY);
-            // drawItemBar absent sur 1.20.4 (pas de mapping Yarn pour ce
-            // bracket, voir ensureModernImmediateResolved) — résolution à
-            // null, ignoré silencieusement (pas de barre, pas d'erreur).
-            if (withDurabilityBar && drawItemBarMethodModernImmediate != null) {
-                drawItemBarMethodModernImmediate.invoke(drawContext, itemStack, guiX, guiY);
-            }
-            drawFlushMethodImmediateModern.invoke(drawContext);
         } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] drawVanillaItemIconModernImmediate: " + t);
+            if (!modernItemIconWarned) {
+                modernItemIconWarned = true;
+                LauncherLog.err("[UiRenderer] drawVanillaItemIconModernImmediate: " + t);
+            }
+        }
+    }
+
+    /**
+     * Appelé depuis {@code HudItemFlushMixin1214}, en TAIL de
+     * {@code InGameHud.render(DrawContext, RenderTickCounter)}, avec le VRAI
+     * paramètre {@code DrawContext} de cet appel (l'instance vivante que
+     * vanilla utilise pour tout le HUD de cette frame — jamais une instance
+     * reconstruite). Voir la javadoc de {@link #drawVanillaItemIconModernImmediate}
+     * pour le pourquoi complet. Ni VAO ni cache shader à gérer ici : cette
+     * instance est déjà dans l'état GL correct puisque c'est celle de vanilla
+     * lui-même — on ne fait qu'y AJOUTER nos propres commandes de dessin,
+     * flushées par vanilla via SON PROPRE mécanisme, pas le nôtre.
+     */
+    public void flushPendingImmediateItemIcons(Object realDrawContext) {
+        java.util.List<PendingItemIcon> batch;
+        synchronized (pendingModernItemIcons) {
+            if (pendingModernItemIcons.isEmpty()) return;
+            batch = new java.util.ArrayList<>(pendingModernItemIcons);
+            pendingModernItemIcons.clear();
+        }
+        try {
+            if (!ensureModernImmediateResolved(batch.get(0).itemStack)) {
+                if (!modernItemIconWarned) {
+                    modernItemIconWarned = true;
+                    LauncherLog.warn("[UiRenderer] flushPendingImmediateItemIcons: résolution réflexion échouée — icônes non dessinées (voir logs diag)");
+                }
+                return;
+            }
+            // Case vanilla ("TODO 1.21.4" point 1, jamais implémentée sur ce
+            // bracket avant cette session) — best-effort, ne fait jamais
+            // échouer le dessin de l'icône même en cas d'échec ici. Contrairement
+            // au chemin "Deferred" (1.21.11/26.1.2, voir flushIntoGuiState), PAS
+            // besoin de découper en 4 bandes ici : ce chemin est SYNCHRONE
+            // (aucune catégorisation GuiRenderState qui imposerait un ordre de
+            // dessin fixe) — l'ordre d'APPEL détermine directement l'ordre de
+            // dessin, donc le sprite COMPLET dessiné AVANT l'icône suffit.
+            boolean hasVanillaExtras = false;
+            for (PendingItemIcon icon : batch) if (icon.vanillaExtras) { hasVanillaExtras = true; break; }
+            if (hasVanillaExtras) ensureContainerBlitImmediateResolved(realDrawContext.getClass());
+
+            for (PendingItemIcon icon : batch) {
+                if (icon.vanillaExtras && drawTextureMethodImmediate != null) {
+                    Object mc = McReflect.minecraftClient();
+                    Object spriteIdentifier = mc != null
+                        ? resolveTextureIdentifier(mc.getClass().getClassLoader(), VANILLA_SLOT_SPRITE_PATH) : null;
+                    if (spriteIdentifier != null) {
+                        drawTextureMethodImmediate.invoke(realDrawContext, guiTexturedFunctionProxyImmediate, spriteIdentifier,
+                            icon.guiX - SLOT_SPRITE_ICON_DX, icon.guiY - SLOT_SPRITE_ICON_DY, 0f, 0f,
+                            SLOT_SPRITE_W, SLOT_SPRITE_H, SLOT_SPRITE_W, SLOT_SPRITE_H);
+                    }
+                }
+                drawItemMethodImmediateModern.invoke(realDrawContext, icon.itemStack, icon.guiX, icon.guiY);
+                // drawItemBar absent sur 1.20.4 (pas de mapping Yarn pour ce
+                // bracket, voir ensureModernImmediateResolved) — résolution à
+                // null, ignoré silencieusement (pas de barre, pas d'erreur).
+                if (icon.vanillaExtras && drawItemBarMethodModernImmediate != null) {
+                    drawItemBarMethodModernImmediate.invoke(realDrawContext, icon.itemStack, icon.guiX, icon.guiY);
+                }
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingImmediateItemIcons: " + t);
+        }
+    }
+
+    private static Method getShaderMethodModern;
+    private static Method setShaderMethodModern;
+    private static boolean shaderReflectionResolveFailed;
+
+    /**
+     * Résout {@code RenderSystem.getShader()}/{@code setShader(ShaderProgram)}
+     * — voir la javadoc de {@link #drawVanillaItemIconModernImmediate} pour
+     * le mécanisme complet (sauvegarde/invalidation/restauration du cache
+     * shader de RenderSystem, portée strictement à notre propre appel).
+     * `RenderSystem` reste un nom RÉEL même sur un bracket obfusqué
+     * (com.mojang.*, confirmé dans mappings/mappings.tiny) — seul le type
+     * du paramètre/retour ({@code ShaderProgram}) est obfusqué.
+     */
+    private static boolean ensureRenderSystemShaderReflectionResolved() {
+        if (getShaderMethodModern != null && setShaderMethodModern != null) return true;
+        if (shaderReflectionResolveFailed) return false;
+        try {
+            Class<?> renderSystemClass = Class.forName("com.mojang.blaze3d.systems.RenderSystem");
+            Class<?> shaderProgramClass = McReflect.yarnClass("net/minecraft/client/gl/ShaderProgram");
+            if (shaderProgramClass == null) { shaderReflectionResolveFailed = true; return false; }
+            getShaderMethodModern = renderSystemClass.getDeclaredMethod("getShader");
+            getShaderMethodModern.setAccessible(true);
+            setShaderMethodModern = renderSystemClass.getDeclaredMethod("setShader", shaderProgramClass);
+            setShaderMethodModern.setAccessible(true);
+            return true;
+        } catch (Throwable t) {
+            shaderReflectionResolveFailed = true;
+            return false;
         }
     }
 
@@ -2070,30 +2680,18 @@ public final class UiRenderer {
     }
 
     /**
-     * Appelé depuis GuiFlushMixin/GuiFlushMixin261 (HEAD de GameRenderer.render,
-     * bien AVANT l'appel vanilla à guiRenderer.render(GpuBufferSlice) plus loin
-     * dans la même méthode — voir javadoc de section ci-dessus) avec {@code
-     * gameRenderer == this} (l'instance VIVANTE, fusionnée par Mixin). Vide la
-     * file et soumet chaque icône dans le VRAI DrawContext/GuiGraphicsExtractor
-     * wrappant l'état PARTAGÉ (gameRenderer.guiRenderer.state), pas une
-     * instance isolée — condition nécessaire pour que le flush EXISTANT de
-     * vanilla, plus loin dans ce même appel, inclue nos icônes dans CE frame.
+     * Appelé depuis GuiFlushMixin261 (26.1.2 — voir sa javadoc) avec {@code
+     * gameRenderer == this} (l'instance VIVANTE, fusionnée par Mixin). Résout
+     * la chaîne {@code gameRenderer.guiRenderer.state} par réflexion puis
+     * délègue à {@link #flushIntoGuiState}.
+     *
+     * Bracket 1.21.11 : voir {@link #flushPendingModernItemIconsFromState},
+     * appelé directement avec le GuiRenderState — PAS ce chemin-ci (voir
+     * javadoc de GuiFlushMixin pour le pourquoi : remonter depuis
+     * GameRenderer.render() en HEAD ajoutait nos icônes AVANT que
+     * GuiRenderState.clear() ne les efface).
      */
     public static void flushPendingModernItemIcons(Object gameRenderer) {
-        java.util.List<PendingItemIcon> batch;
-        synchronized (pendingModernItemIcons) {
-            batch = pendingModernItemIcons.isEmpty() ? java.util.Collections.emptyList()
-                : new java.util.ArrayList<>(pendingModernItemIcons);
-            pendingModernItemIcons.clear();
-        }
-        java.util.List<PendingGuiBlit> batchBlits;
-        synchronized (pendingModernGuiBlits) {
-            batchBlits = pendingModernGuiBlits.isEmpty() ? java.util.Collections.emptyList()
-                : new java.util.ArrayList<>(pendingModernGuiBlits);
-            pendingModernGuiBlits.clear();
-        }
-        if (batch.isEmpty() && batchBlits.isEmpty()) return;
-        if (modernItemIconResolveFailed) return;
         try {
             // BUG TROUVÉ (test utilisateur, 26.1.2) : résoudre GameRenderer
             // par NOM (McReflect.yarnClass/Class.forName + classloader du
@@ -2145,16 +2743,136 @@ public final class UiRenderer {
 
             Object guiState = guiStateFieldModern.get(guiRenderer);
             if (guiState == null) return;
+            flushIntoGuiState(guiState, guiRenderer.getClass().getClassLoader());
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingModernItemIcons: " + t);
+        }
+    }
 
+    /**
+     * Bracket 1.21.11 — appelé depuis GuiFlushMixin, en TAIL de
+     * {@code GuiRenderState.clear()} (Yarn {@code net/minecraft/client/gui/render/state/GuiRenderState},
+     * official {@code gqg}, méthode official {@code e()V} == named {@code
+     * clear()V}, vérifié directement dans {@code mappings/mappings.tiny}),
+     * avec {@code guiState == this} (l'instance VIVANTE fusionnée par Mixin).
+     *
+     * BUG TROUVÉ (audit modules, cette session) — remplace l'ancien hook HEAD
+     * sur {@code GameRenderer.render()} : trace bytecode d'une session
+     * précédente (voir historique) avait déjà repéré que {@code
+     * GuiRenderState.clear()} (alors identifié seulement par son nom obfusqué
+     * "gqg.e()V", sans entrée Yarn named connue à l'époque) est appelé DANS
+     * {@code render()}, APRÈS le point HEAD — toute icône mise en file par
+     * HEAD était donc effacée avant le flush GPU réel. Le nom named "clear"
+     * EXISTE bien dans les mappings (juste sous un chemin différent de celui
+     * cherché à l'époque, {@code .../gui/render/state/...} et pas
+     * {@code .../gui/render/...}) — permet de cibler {@code clear()V}
+     * directement via {@code @Inject(method=...)}, traduit pour Fabric par le
+     * refmap comme n'importe quelle autre entrée de REFMAP_ENTRIES (voir
+     * LauncherMixinService), plutôt que d'improviser un {@code @At(INVOKE,
+     * target=...)} vers un nom obfusqué brut qui aurait cassé sous Fabric
+     * (intermediary) et risqué de faire échouer TOUT le tissage de
+     * GameRenderer en cascade (voir leçon ClearOverlaysMixin dans
+     * module-bracket-audit.md).
+     *
+     * Injecter directement sur GuiRenderState.clear() plutôt que d'imiter le
+     * hook 26.1.2 (INVOKE après Lighting.setupFor dans GameRenderer.render())
+     * évite aussi d'avoir à retrouver le nom obfusqué de l'appel imbriqué
+     * ({@code this.k.i.t().a(...)}) sur ce bracket — on obtient directement
+     * l'instance GuiRenderState vivante en {@code this}, plus besoin de
+     * remonter depuis GameRenderer.guiRenderer.state comme dans
+     * {@link #flushPendingModernItemIcons}.
+     *
+     * NON VÉRIFIÉ EN JEU (pas d'accès à un client 1.21.11 depuis cet
+     * environnement) — voir les logs "[UiRenderer] itemIconModern" en cas
+     * d'icône toujours invisible malgré ce correctif.
+     */
+    public static void flushPendingModernItemIconsFromState(Object guiState) {
+        if (guiState == null) return;
+        flushIntoGuiState(guiState, guiState.getClass().getClassLoader());
+    }
+
+    /**
+     * BUG TROUVÉ (test utilisateur, 1.21.11) : le panneau shulker s'affichait
+     * enfin (fix `drawTexture` ci-dessus) mais DERRIÈRE l'écran d'inventaire
+     * — mauvais z-order. Cause : {@code GuiFlushMixin} (voir sa javadoc)
+     * accrochait le flush en TAIL de {@code GuiRenderState.clear()V} —
+     * vérifié par désassemblage de {@code GameRenderer.render()V} (jar
+     * 1.21.11 réel, javap) que {@code clear()} est appelé TRÈS TÔT dans la
+     * méthode (juste après la config lumière), AVANT {@code
+     * InGameHud.render(...)V} ET AVANT {@code Screen.render(...)V} (l'écran
+     * d'inventaire lui-même). Nos icônes/fond ajoutés juste après clear()
+     * étaient donc les TOUT PREMIERS éléments de la liste de dessin de
+     * GuiRenderState pour cette frame — dessinés EN PREMIER, donc DERRIÈRE
+     * tout ce qui est ajouté après (HUD, puis l'écran).
+     *
+     * Trace bytecode complète de {@code GameRenderer.render()V} : {@code
+     * clear()V} → {@code new DrawContext(...)} → {@code InGameHud.render(DrawContext,RenderTickCounter)V}
+     * → {@code Screen.render(DrawContext,I,I,F)V} (SI un écran est ouvert) →
+     * toasts/subtitles → {@code GuiRenderer.render(GpuBufferSlice)V} (soumission
+     * GPU réelle, TOUT le contenu accumulé de la frame y compris l'écran est
+     * déjà dans l'état à ce point) → {@code GuiRenderer.incrementFrame()V}.
+     *
+     * Fix : flush déplacé en HEAD de {@code GuiRenderer.render(GpuBufferSlice)V}
+     * (voir {@code GuiFlushMixin}, retargeté) — APRÈS que Screen.render() ait
+     * fini d'ajouter tout le contenu de l'écran ouvert, JUSTE AVANT la
+     * soumission GPU : nos icônes/fond, ajoutés en DERNIER, se retrouvent
+     * dessinés PAR-DESSUS tout le reste, z-order correct. {@code this} dans
+     * le nouveau hook est directement l'instance {@code GuiRenderer} (pas
+     * {@code GuiRenderState}) — cette méthode résout le champ {@code state}
+     * dessus (même résolution que {@link #flushPendingModernItemIcons},
+     * jamais exercée sur ce bracket jusqu'ici puisque 1.21.11 utilisait
+     * {@link #flushPendingModernItemIconsFromState} directement) avant de
+     * déléguer à {@link #flushIntoGuiState}.
+     */
+    public static void flushPendingModernItemIconsFromGuiRenderer(Object guiRenderer) {
+        if (guiRenderer == null) return;
+        try {
+            if (guiStateFieldModern == null) {
+                guiStateFieldModern = findFieldByNameInHierarchy(guiRenderer.getClass(),
+                    MappingsRegistry.getObfFieldName("net/minecraft/client/gui/render/GuiRenderer", "state"),
+                    "state", "renderState");
+                if (guiStateFieldModern == null) {
+                    LauncherLog.err("[UiRenderer] itemIconModern: champ state/renderState introuvable sur "
+                        + guiRenderer.getClass());
+                    return;
+                }
+            }
+            Object guiState = guiStateFieldModern.get(guiRenderer);
+            if (guiState == null) return;
+            flushIntoGuiState(guiState, guiRenderer.getClass().getClassLoader());
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] flushPendingModernItemIconsFromGuiRenderer: " + t);
+        }
+    }
+
+    /**
+     * Vide la file et soumet chaque icône/blit dans le VRAI
+     * DrawContext/GuiGraphicsExtractor wrappant l'état PARTAGÉ {@code
+     * guiState} (pas une instance isolée) — condition nécessaire pour que le
+     * flush EXISTANT de vanilla, plus loin dans le frame, inclue nos icônes.
+     * Partagé par les deux brackets modernes (26.1.2 via {@link
+     * #flushPendingModernItemIcons}, 1.21.11 via {@link
+     * #flushPendingModernItemIconsFromState}) — seule la façon d'OBTENIR
+     * {@code guiState} diffère entre les deux.
+     */
+    private static void flushIntoGuiState(Object guiState, ClassLoader cl) {
+        java.util.List<PendingItemIcon> batch;
+        synchronized (pendingModernItemIcons) {
+            batch = pendingModernItemIcons.isEmpty() ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(pendingModernItemIcons);
+            pendingModernItemIcons.clear();
+        }
+        java.util.List<PendingGuiBlit> batchBlits;
+        synchronized (pendingModernGuiBlits) {
+            batchBlits = pendingModernGuiBlits.isEmpty() ? java.util.Collections.emptyList()
+                : new java.util.ArrayList<>(pendingModernGuiBlits);
+            pendingModernGuiBlits.clear();
+        }
+        if (batch.isEmpty() && batchBlits.isEmpty()) return;
+        if (modernItemIconResolveFailed) return;
+        try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
-
-            // Classloader EXPLICITE de guiRenderer (instance vivante,
-            // forcément Knot) plutôt que le classloader ambiant du thread —
-            // même correctif que ci-dessus, pour la même raison. Nécessaire
-            // pour icônes ET blits de fond (voir batchBlits plus bas), donc
-            // calculé ici, hors du bloc drawContextCtorModern==null.
-            ClassLoader cl = guiRenderer.getClass().getClassLoader();
 
             if (drawContextCtorModern == null) {
                 // DrawContext (Yarn 1.21.11) == GuiGraphicsExtractor (vrai
@@ -2169,8 +2887,14 @@ public final class UiRenderer {
                     LauncherLog.err("[UiRenderer] itemIconModern: classe DrawContext/GuiGraphicsExtractor introuvable");
                     return;
                 }
+                // guiState.getClass() (type RUNTIME concret) plutôt qu'un
+                // type de champ mis en cache : évite de dépendre de
+                // guiStateFieldModern (jamais résolu sur le chemin 1.21.11,
+                // voir flushPendingModernItemIconsFromState) tout en restant
+                // correct pour le chemin 26.1.2 (guiState y est de toute façon
+                // déjà une instance concrète, jamais une sous-classe).
                 drawContextCtorModern = drawContextClass.getDeclaredConstructor(
-                    mc.getClass(), guiStateFieldModern.getType(), int.class, int.class);
+                    mc.getClass(), guiState.getClass(), int.class, int.class);
                 drawContextCtorModern.setAccessible(true);
             }
             Class<?> drawContextClass = drawContextCtorModern.getDeclaringClass();
@@ -2187,7 +2911,7 @@ public final class UiRenderer {
                 // "drawItem" (Yarn 1.21.11) == "item" (vrai nom Mojang
                 // 26.1.2, confirmé par javap).
                 drawItemMethodModern = findMethodByNameInHierarchy(drawContextClass,
-                    batch.get(0).itemStack.getClass(), "drawItem", "item");
+                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext", "drawItem", "item");
                 if (drawItemMethodModern == null) {
                     modernItemIconResolveFailed = true;
                     LauncherLog.err("[UiRenderer] itemIconModern: méthode drawItem/item introuvable sur " + drawContextClass);
@@ -2197,7 +2921,7 @@ public final class UiRenderer {
                 // 26.1.2, confirmé par javap) — best-effort, jamais fatal si
                 // introuvable (reste null, barre juste pas dessinée).
                 drawItemBarMethodModern = findMethodByNameInHierarchy(drawContextClass,
-                    batch.get(0).itemStack.getClass(), "drawItemBar", "itemBar");
+                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext", "drawItemBar", "itemBar");
 
                 // Fond de case vanilla (voir javadoc du champ) — best-effort,
                 // ne fait jamais échouer la résolution du reste (icône/barre
@@ -2263,8 +2987,28 @@ public final class UiRenderer {
                 MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
                 "net.minecraft.resources.Identifier");
             if (identifierClass == null) { blitResolveFailed = true; return; }
+            // BUG TROUVÉ #1 (test utilisateur, 1.21.11) : "blit" comparé ICI
+            // tel quel, jamais traduit via MappingsRegistry — corrigé une
+            // première fois en traduisant "blit" via getObfMethodName.
+            //
+            // BUG TROUVÉ #2 (test utilisateur suivant, log :
+            // "containerBlitModern: aucune méthode 10-arg trouvée... 96
+            // méthodes déclarées", blitRuntimeName=blit — la traduction avait
+            // ÉCHOUÉ et renvoyé le nom Yarn tel quel, silencieusement) :
+            // "blit" n'est PAS le nom Yarn 1.21.11 de cette méthode — vérifié
+            // directement dans mappings/mappings.tiny (section DrawContext,
+            // classe "gir") : AUCUNE entrée "blit" n'existe. Le nom Yarn
+            // 1.21.11 est en réalité {@code drawTexture} (4 surcharges,
+            // method_25290/91/02/93 — la 10-arg exacte recherchée ici est
+            // method_25291, {@code (RenderPipeline,Identifier,I,I,F,F,I,I,I,I)V}).
+            // Mojang a renommé cette méthode en "blit" seulement PLUS TARD,
+            // entre 1.21.11 et 26.1.2 (confirmé par javap sur 26.1.2, où
+            // "blit" est bien le nom réel) — l'hypothèse "même nom des deux
+            // côtés" n'avait jamais été vérifiée pour CE nom précis,
+            // contrairement à drawItem/drawGuiTexture juste au-dessus.
+            String blitRuntimeName = MappingsRegistry.getObfMethodName("net/minecraft/client/gui/DrawContext", "drawTexture");
             for (Method m : drawContextClass.getDeclaredMethods()) {
-                if (!m.getName().equals("blit")) continue;
+                if (!m.getName().equals(blitRuntimeName) && !m.getName().equals("blit")) continue;
                 Class<?>[] p = m.getParameterTypes();
                 if (p.length != 10) continue;
                 if (!identifierClass.isAssignableFrom(p[1])) continue;
@@ -2275,7 +3019,11 @@ public final class UiRenderer {
                 blitMethodModern = m;
                 break;
             }
-            if (blitMethodModern == null) blitResolveFailed = true;
+            if (blitMethodModern == null) {
+                blitResolveFailed = true;
+                LauncherLog.err("[UiRenderer] containerBlitModern: aucune méthode 10-arg trouvée sur " + drawContextClass
+                    + " (blitRuntimeName=" + blitRuntimeName + ", " + drawContextClass.getDeclaredMethods().length + " méthodes déclarées)");
+            }
         } catch (Throwable t) {
             blitResolveFailed = true;
             LauncherLog.warn("[UiRenderer] containerBlitModern: résolution échouée : " + t);
@@ -2291,7 +3039,7 @@ public final class UiRenderer {
                 MappingsRegistry.getObfClassDot("net/minecraft/util/Identifier"),
                 "net.minecraft.resources.Identifier");
             if (identifierClass == null) return null;
-            Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
+            Method ofVanilla = findStaticStringMethod(identifierClass, "net/minecraft/util/Identifier", "ofVanilla", "withDefaultNamespace");
             if (ofVanilla == null) return null;
             Object id = ofVanilla.invoke(null, path);
             containerTextureIdentifierCache.put(path, id);
@@ -2321,14 +3069,24 @@ public final class UiRenderer {
                 return;
             }
 
-            java.lang.reflect.Field guiTexturedField = findFieldByNameInHierarchy(renderPipelinesClass, "GUI_TEXTURED");
+            // BUG TROUVÉ ET CORRIGÉ (même cause que drawItem/item, voir la
+            // javadoc de findMethodByNameInHierarchy) : "GUI_TEXTURED" est un
+            // nom de CHAMP Yarn, jamais traduit ici avant cette session —
+            // obfusqué en une lettre courte sur 1.21.11 tout comme les noms
+            // de méthode. Pré-traduit ici via MappingsRegistry.getObfFieldName,
+            // même pattern que guiRendererFieldModern/guiStateFieldModern
+            // plus haut dans ce fichier (candidat obfusqué en premier, nom
+            // Yarn en repli — no-op sûr si la traduction échoue).
+            java.lang.reflect.Field guiTexturedField = findFieldByNameInHierarchy(renderPipelinesClass,
+                MappingsRegistry.getObfFieldName("net/minecraft/client/gl/RenderPipelines", "GUI_TEXTURED"),
+                "GUI_TEXTURED");
             if (guiTexturedField == null) { slotSpriteResolveFailed = true; return; }
             renderPipelineGuiTexturedModern = guiTexturedField.get(null);
 
             // "ofVanilla" (Yarn 1.21.11) == "withDefaultNamespace" (vrai nom
             // Mojang 26.1.2, confirmé par javap) — les deux prennent juste le
             // chemin, namespace "minecraft" implicite.
-            java.lang.reflect.Method ofVanilla = findStaticStringMethod(identifierClass, "ofVanilla", "withDefaultNamespace");
+            java.lang.reflect.Method ofVanilla = findStaticStringMethod(identifierClass, "net/minecraft/util/Identifier", "ofVanilla", "withDefaultNamespace");
             if (ofVanilla == null) { slotSpriteResolveFailed = true; return; }
             slotSpriteIdentifierModern = ofVanilla.invoke(null, "hud/hotbar_offhand_left");
 
@@ -2337,10 +3095,14 @@ public final class UiRenderer {
             // GameRenderer/Gui réels) — descripteur (RenderPipeline,Identifier,I,I,I,I)V
             // vérifié IDENTIQUE sur 1.21.11 et 26.1.2 (les deux seuls brackets
             // couverts par le chemin "Deferred", voir javadoc du champ — 1.20.4/
-            // 1.21.4 ont un descripteur différent, non géré ici).
+            // 1.21.4 ont un descripteur différent, non géré ici). Nom traduit
+            // via MappingsRegistry (même correctif que ci-dessus) — "drawGuiTexture"
+            // littéral ne matchait jamais rien sur 1.21.11 (obfusqué).
             Class<?> renderPipelineType = guiTexturedField.getType();
+            String drawGuiTextureRuntimeName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/DrawContext", "drawGuiTexture");
             for (Method m : drawContextClass.getDeclaredMethods()) {
-                if ((m.getName().equals("drawGuiTexture") || m.getName().equals("blitSprite"))
+                if ((m.getName().equals(drawGuiTextureRuntimeName) || m.getName().equals("blitSprite"))
                         && m.getParameterCount() == 6
                         && renderPipelineType.isAssignableFrom(m.getParameterTypes()[0])
                         && identifierClass.isAssignableFrom(m.getParameterTypes()[1])
@@ -2358,10 +3120,12 @@ public final class UiRenderer {
         }
     }
 
-    private static java.lang.reflect.Method findStaticStringMethod(Class<?> owner, String... candidateNames) {
+    /** {@code candidateNames} = noms YARN, traduits via MappingsRegistry avant comparaison — même correctif que {@link #findMethodByNameInHierarchy}. */
+    private static java.lang.reflect.Method findStaticStringMethod(Class<?> owner, String yarnClass, String... candidateNames) {
         for (String name : candidateNames) {
+            String runtimeName = MappingsRegistry.getObfMethodName(yarnClass, name);
             for (Method m : owner.getDeclaredMethods()) {
-                if (m.getName().equals(name) && m.getParameterCount() == 1 && m.getParameterTypes()[0] == String.class) {
+                if (m.getName().equals(runtimeName) && m.getParameterCount() == 1 && m.getParameterTypes()[0] == String.class) {
                     m.setAccessible(true);
                     return m;
                 }
@@ -2388,14 +3152,42 @@ public final class UiRenderer {
         return null;
     }
 
-    /** Cherche {@code candidateNames} (dans l'ordre) comme méthode déclarée à 1 argument (assignable depuis {@code argType}) + (int,int), en remontant la hiérarchie de {@code owner}. */
-    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String... candidateNames) {
+    /**
+     * Cherche {@code candidateNames} (dans l'ordre, noms YARN — ex: "drawItem")
+     * comme méthode déclarée à 1 argument (assignable depuis {@code argType}) +
+     * (int,int), en remontant la hiérarchie de {@code owner}.
+     *
+     * BUG TROUVÉ ET CORRIGÉ (test utilisateur, 1.21.11, "icônes toujours
+     * invisibles" même après le fix GuiFlushMixin) : cette méthode comparait
+     * {@code m.getName()} DIRECTEMENT au nom Yarn littéral ("drawItem"/
+     * "item"), sans AUCUNE traduction — fonctionne par coïncidence sur 26.1.2
+     * (noms Mojang réels, non obfusqués) mais jamais sur un bracket obfusqué
+     * comme 1.21.11, où le nom RUNTIME de `DrawContext.drawItem` est une
+     * simple lettre obfusquée ("a", confirmé dans mappings/mappings.tiny —
+     * 4 surcharges de "drawItem" partagent d'ailleurs TOUTES le même nom
+     * officiel "a", désambiguïsées ensuite par le filtre de type ci-dessous).
+     * Log réel : `[UiRenderer] itemIconModern: méthode drawItem/item
+     * introuvable sur class gir` en boucle, sur CHAQUE frame, alors même que
+     * `drawContextClass` (gir) était correctement résolu — la classe était
+     * bonne, seule la recherche du NOM DE MÉTHODE dedans ne traduisait rien.
+     *
+     * Correctif : {@code yarnClass} ajouté, chaque candidat traduit via
+     * {@link MappingsRegistry#getObfMethodName(String, String)} avant
+     * comparaison — no-op sûr pour les candidats qui ne sont PAS un nom Yarn
+     * connu (ex: "item", repli 26.1.2 : aucune entrée Yarn ne matche, la
+     * traduction renvoie le nom inchangé). Même pattern que
+     * {@code McReflect.method()}, qui fait déjà ça correctement ailleurs dans
+     * ce projet — cette copie locale avait simplement été écrite sans cette
+     * étape.
+     */
+    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String yarnClass, String... candidateNames) {
         for (String name : candidateNames) {
             if (name == null) continue;
+            String runtimeName = MappingsRegistry.getObfMethodName(yarnClass, name);
             Class<?> c = owner;
             while (c != null) {
                 for (Method m : c.getDeclaredMethods()) {
-                    if (!m.getName().equals(name) || m.getParameterCount() != 3) continue;
+                    if (!m.getName().equals(runtimeName) || m.getParameterCount() != 3) continue;
                     Class<?>[] p = m.getParameterTypes();
                     if (p[0].isAssignableFrom(argType) && p[1] == int.class && p[2] == int.class) {
                         m.setAccessible(true);
@@ -2446,6 +3238,31 @@ public final class UiRenderer {
             return;
         }
         drawTextLegacy(font, text, x, y, color, scale, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante avec ombre portée — capacité absente du moteur jusqu'ici
+     * (voir audit runtime/ui/ : {@link #drawText} n'a aucun paramètre
+     * shadow, aucun site n'appelait drawText deux fois avec un offset).
+     * Composition pure sur {@link #drawText} (passe ombre décalée PUIS
+     * passe principale) : aucune modification du shader SDF nécessaire,
+     * fonctionne donc identiquement sur les 3 pipelines, era E Blaze3D
+     * inclus (contrairement à drawGlow/drawSkeletonShimmer, qui eux
+     * dépendent de {@link #drawFx}).
+     */
+    public void drawTextShadowed(UiFont font, String text, float x, float y, UiColor color, UiColor shadowColor,
+                                  float shadowOffsetX, float shadowOffsetY, float scale, int vpWidth, int vpHeight) {
+        if (text == null || text.isEmpty()) return;
+        drawText(font, text, x + shadowOffsetX, y + shadowOffsetY, shadowColor, scale, vpWidth, vpHeight);
+        drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
+    }
+
+    public void drawTextShadowed(String text, float x, float y, UiColor color, UiColor shadowColor,
+                                  float scale, int vpWidth, int vpHeight) {
+        // Décalage 1px/1px à l'échelle du texte — convention "drop shadow"
+        // standard (Minecraft vanilla utilise le même décalage relatif pour
+        // son propre texte HUD).
+        drawTextShadowed(UiFont.REGULAR, text, x, y, color, shadowColor, scale, scale, scale, vpWidth, vpHeight);
     }
 
     private void drawTextModern(UiFont font, String text, float x, float y, UiColor color, float scale,

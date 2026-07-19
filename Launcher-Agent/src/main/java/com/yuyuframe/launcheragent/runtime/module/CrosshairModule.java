@@ -74,24 +74,24 @@ public final class CrosshairModule extends LauncherModule {
     @ConfigColor(name = "Couleur", category = "Réglages")
     public UiColor color = new UiColor(255, 255, 255, 255);
 
-    @ConfigToggle(name = "Afficher la barre de rechargement", category = "Barre de rechargement")
+    @ConfigToggle(name = "Afficher la barre de rechargement", category = "Rechargement")
     public boolean showCooldownBar = true;
 
-    @ConfigSlider(name = "Largeur", category = "Barre de rechargement", min = 6f, max = 300f, step = 1f)
+    @ConfigSlider(name = "Largeur", category = "Rechargement", min = 6f, max = 300f, step = 1f)
     public float cooldownWidth = 100f;
 
-    @ConfigSlider(name = "Hauteur", category = "Barre de rechargement", min = 1f, max = 60f, step = 1f)
+    @ConfigSlider(name = "Hauteur", category = "Rechargement", min = 1f, max = 60f, step = 1f)
     public float cooldownHeight = 20f;
 
-    @ConfigSlider(name = "Décalage vertical", category = "Barre de rechargement", min = 0f, max = 60f, step = 1f)
+    @ConfigSlider(name = "Décalage vertical", category = "Rechargement", min = 0f, max = 60f, step = 1f)
     public float cooldownOffset = 14f;
 
     /** #D7D9EA — teinte dominante du sprite vanilla "progress" (voir javadoc de tête). */
-    @ConfigColor(name = "Couleur (rempli)", category = "Barre de rechargement")
+    @ConfigColor(name = "Couleur (rempli)", category = "Rechargement")
     public UiColor cooldownColor = new UiColor(215, 217, 234, 255);
 
     /** #3A3B3C — couleur EXACTE (pixel sampling) du sprite vanilla "background". */
-    @ConfigColor(name = "Couleur (fond)", category = "Barre de rechargement")
+    @ConfigColor(name = "Couleur (fond)", category = "Rechargement")
     public UiColor cooldownBackgroundColor = new UiColor(58, 59, 60, 255);
 
     /** Contour fixe (pas configurable, juste pour détacher la barre de l'arrière-plan du jeu quel qu'il soit — le vrai vanilla n'en a pas besoin, il compte sur son propre alpha, mais notre croix personnalisable peut être posée sur n'importe quel décor). Utilisé UNIQUEMENT par le repli procédural (voir javadoc de tête) — la vraie texture vanilla n'en a pas besoin. */

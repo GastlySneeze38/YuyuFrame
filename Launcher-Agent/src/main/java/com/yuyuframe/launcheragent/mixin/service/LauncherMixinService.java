@@ -182,11 +182,19 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // scopée par mixin (byMixin, voir buildRefmapJson()), pas de collision
         // avec l'entrée de GlobalUiRenderMixin même si la clé JSON est identique.
         // Voir GuiFlushMixin : soumet les icônes d'objet vanilla en attente
-        // (ArmorDurabilityModule) dans le GuiRenderState partagé, en HEAD —
-        // AVANT que ce même render() n'envoie cet état au GPU.
+        // (ArmorDurabilityModule/ShulkerPreviewModule) dans le GuiRenderState
+        // partagé. RETARGETÉ une seconde fois cette session (voir javadoc de
+        // GuiFlushMixin) : TAIL de clear()V arrivait trop TÔT dans la frame
+        // (avant InGameHud.render/Screen.render), plaçant nos icônes/fond
+        // DERRIÈRE le HUD et tout écran ouvert (mauvais z-order, confirmé par
+        // test utilisateur : panneau shulker visible mais sous l'inventaire).
+        // Cible maintenant HEAD de GuiRenderer.render(GpuBufferSlice)V — la
+        // soumission GPU réelle, appelée APRÈS tout le contenu de la frame
+        // (HUD, écran, toasts) — vérifié par désassemblage complet de
+        // GameRenderer.render()V (javap, jar 1.21.11 réel).
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/GuiFlushMixin",
-            "net/minecraft/client/render/GameRenderer",
-            "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+            "net/minecraft/client/gui/render/GuiRenderer",
+            "render", "(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V", null),
 
         // ── Branche 1.8.9 (mixin.client.v1_8.*) — mêmes noms Yarn named que
         // ci-dessus, vérifiés indépendamment dans mappings/mappings-1.8.9.tiny.
@@ -261,6 +269,87 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MixinCrosshair1214",
             "net/minecraft/client/gui/hud/InGameHud",
             "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        // Portage 1.21.4 de ClearOverlaysMixin/Freelook (voir leurs javadoc) —
+        // architecture Yarn IDENTIQUE à 1.21.11 pour ces 3 Mixins, vérifiée
+        // indépendamment dans mappings/yarn-1.21.4-mergedv2.jar (mêmes IDs
+        // intermediary method_31977/method_1606/method_19321/method_19324).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/ClearOverlaysMixin1214",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderOverlay", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/MouseHandlerFreelookMixin1214",
+            "net/minecraft/client/Mouse", "updateMouse", "(D)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/CameraFreelookMixin1214",
+            "net/minecraft/client/render/Camera", "update",
+            "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/CameraFreelookMixin1214",
+            "net/minecraft/client/render/Camera", "moveBy", "(FFF)V", null),
+        // ── CORRECTIF RÉTROACTIF (audit multiversion, bracket 1.21.11 +
+        // 1.16.5/1.20.4/1.21.4) : ces @Inject(method="...") utilisaient un nom
+        // Yarn named DIRECTEMENT, en supposant (à tort) qu'aucun refmap n'était
+        // nécessaire (voir l'ancienne conclusion "getRefMapperConfig() renvoie
+        // null → pas de refmap" — FAUSSE : chaque mixins.launcheragent*.json
+        // déclare "refmap": "mixins.launcheragent.refmap.json", généré par
+        // buildRefmapJson() UNIQUEMENT à partir de REFMAP_ENTRIES ci-dessus.
+        // Sans entrée ici, Mixin cherche le nom Yarn TEL QUEL dans le
+        // ClassNode obfusqué (getClassNode() ne renomme QUE cn.name, jamais
+        // les méthodes) → aucune correspondance → no-op silencieux (require=0)
+        // sur tous les brackets obfusqués. Confirmé par grep du log réel :
+        // ZÉRO ligne "Mixin initialisé avec succès" pour WorldTimeMixin*/
+        // ClearOverlaysMixin, alors que les entrées v26_1 (noms RÉELS, jamais
+        // besoin de refmap) apparaissent bien. World.getTimeOfDay()J déclarée
+        // DIRECTEMENT sur World (pas une interface), vérifié dans
+        // mappings/mappings.tiny (Yarn 1.21.11) — pas de fallbackNamedOwner
+        // nécessaire ; même nom Yarn stable sur 1.16.5/1.20.4/1.21.4 (déjà
+        // vérifié par désassemblage lors de leur écriture).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/WorldTimeMixin",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_16/WorldTimeMixin116",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/WorldTimeMixin1204",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/WorldTimeMixin1214",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        // WorldTimePropertiesMixin1214 : la VRAIE source lue par le rendu du
+        // ciel/lune sur ce bracket (LunarWorldView.getSkyAngle → getLunarTime
+        // → ClientWorld$Properties.getTimeOfDay, voir sa javadoc complète) —
+        // World.getTimeOfDay() ci-dessus n'a aucun effet visuel à lui seul.
+        // "getTimeOfDay" n'a pas d'entrée Yarn propre sur ClientWorld$Properties
+        // (seul "setTimeOfDay" y figure) — repli sur WorldProperties, où le nom
+        // Yarn du getter est réellement déclaré (method_217).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/WorldTimePropertiesMixin1214",
+            "net/minecraft/client/world/ClientWorld$Properties", "getTimeOfDay", "()J",
+            "net/minecraft/world/WorldProperties"),
+        // HudItemFlushMixin1214 : vide la file d'icônes d'objet vanilla en
+        // attente (ArmorDurabilityModule) directement dans le VRAI DrawContext
+        // vivant de InGameHud.render() — voir UiRenderer#drawVanillaItemIconModernImmediate
+        // pour le pourquoi (remplace la construction d'un DrawContext isolé,
+        // hors du contexte GL vanilla, qui ne fonctionnait jamais).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/HudItemFlushMixin1214",
+            "net/minecraft/client/gui/hud/InGameHud", "render",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        // HandledScreenBlitFlushMixin1214 : même correctif que ci-dessus, mais
+        // pour le fond de fenêtre de conteneur (Aperçu shulker) — z-order
+        // différent (doit apparaître par-dessus l'écran, pas juste le HUD),
+        // voir UiRenderer#drawVanillaContainerTextureModernImmediate.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/HandledScreenBlitFlushMixin1214",
+            "net/minecraft/client/gui/screen/ingame/HandledScreen", "render",
+            "(Lnet/minecraft/client/gui/DrawContext;IIF)V", null),
+        // InGameHud.renderOverlay(DrawContext,Identifier,F) — voir
+        // ClearOverlaysMixin/NoPumpkinOverlayModule, même correctif que ci-dessus.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/ClearOverlaysMixin",
+            "net/minecraft/client/gui/hud/InGameHud", "renderOverlay",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
+
+        // ── Freelook 1.21.11 (mixin.client.*, portage — voir FreelookModule) —
+        // mêmes noms Yarn que ceux vérifiés par désassemblage du vrai jar
+        // 1.21.11 (mappings/mappings.tiny + javap sur gfk.class/ger.class).
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/MouseHandlerFreelookMixin",
+            "net/minecraft/client/Mouse", "updateMouse", "(D)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
+            "net/minecraft/client/render/Camera", "update",
+            "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
+            "net/minecraft/client/render/Camera", "moveBy", "(FFF)V", null),
     };
 
     /**

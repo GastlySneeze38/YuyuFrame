@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiDrawable;
@@ -69,8 +70,12 @@ public abstract class GlobalUiRenderMixin1214 {
             Object currentScreen = ScreenBridge1214.getCurrentScreen(mc);
             if (currentScreen == null) {
                 UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
-                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                // F1 (voir HudOverlayRenderer#vanillaHudHidden) : nos
+                // éléments HUD/modules doivent disparaître avec le HUD vanilla.
+                if (!HudOverlayRenderer.vanillaHudHidden()) {
+                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                }
                 if (inputPoller.menuKeyPressed) {
                     LauncherLog.info("[LauncherAgent] DIAG-1214: menuKeyPressed détecté, ouverture demandée (appliquée au tick)");
                     ScreenBridge1214.requestMenuOpen();
@@ -84,8 +89,9 @@ public abstract class GlobalUiRenderMixin1214 {
             }
 
             if (!(currentScreen instanceof UiDrawable)) {
-                HudOverlayRenderer.renderPersistent(
-                    UiRenderer.get(this.getClass().getClassLoader()), currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+                HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
             UiDrawable ui = (UiDrawable) currentScreen;
