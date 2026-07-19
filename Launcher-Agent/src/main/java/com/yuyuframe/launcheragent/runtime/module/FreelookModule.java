@@ -6,6 +6,7 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
+import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern;
 
 import java.lang.reflect.Method;
@@ -84,6 +85,28 @@ public final class FreelookModule extends LauncherModule {
         category = "Réglages", options = { "Maintenir", "Basculer" })
     public int mode = 0;
 
+    // Demandé explicitement ("utilise la sensibilité du jeu normal, et
+    // ajoute le choix entre sensi du jeu ou personnalisée") — le freelook
+    // lisait DÉJÀ Options.sensitivity() par défaut (voir readSensitivity()
+    // dans chaque Mixin MouseHandlerFreelook*), mais sans aucune alternative
+    // configurable. {@link #resolveSensitivity} est le point UNIQUE où ce
+    // choix est tranché, appelé par chaque Mixin après sa propre lecture
+    // réflexive de la sensibilité RÉELLE du jeu (jamais dupliquée ici).
+    @ConfigDropdown(name = "Sensibilité", description = "\"Sensibilité du jeu\" (défaut) : suit le réglage de sensibilité de la souris du jeu, comme le reste du gameplay. \"Personnalisée\" : ignore ce réglage, utilise une valeur dédiée au freelook.",
+        category = "Réglages", options = { "Sensibilité du jeu", "Personnalisée" })
+    public int sensitivityMode = 0;
+
+    // BUG TROUVÉ (retour utilisateur : "vanilla ne va que jusqu'à 100%",
+    // pas 200% comme supposé au départ) — corrigé pour coller EXACTEMENT à
+    // la plage réelle du curseur vanilla (0%-100%, valeur brute×100, PAS
+    // ×200). Stockée en pourcentage — voir resolveSensitivity pour la
+    // conversion vers l'échelle brute au moment de l'appliquer. Défaut 50%
+    // (= 0.5 brut, valeur par défaut vanilla).
+    @ConfigSlider(name = "Sensibilité personnalisée", description = "Utilisée seulement si \"Sensibilité\" ci-dessus est réglée sur \"Personnalisée\" — même unité que le curseur de sensibilité du jeu (pourcentage, 50% = valeur par défaut du jeu).",
+        category = "Réglages", min = 0f, max = 100f, step = 1f,
+        dependsOnField = "sensitivityMode", dependsOnValue = 1)
+    public float customSensitivity = 50f;
+
     // Écrits UNIQUEMENT par MouseHandlerFreelookMixin261 (une fois par
     // frame, avant que CameraFreelookMixin261 ne les lise — les deux Mixins
     // tournent dans la même frame, voir javadoc de classe) — jamais
@@ -138,6 +161,45 @@ public final class FreelookModule extends LauncherModule {
         prevKeyDown = down;
         toggledOn = false;
         return down;
+    }
+
+    /**
+     * Tranche entre sensibilité du jeu et personnalisée (voir {@link
+     * #sensitivityMode}/{@link #customSensitivity}) — appelée par chaque
+     * Mixin MouseHandlerFreelook* APRÈS sa propre lecture réflexive de
+     * {@code gameSensitivity} (la vraie valeur vanilla BRUTE, 0..1, jamais
+     * dupliquée ici). {@code customSensitivity} est stockée en POURCENTAGE
+     * (0..100, même plage RÉELLE que le curseur vanilla — PAS 0..200,
+     * corrigé après retour utilisateur) — reconvertie ici vers l'échelle
+     * brute (÷100) pour rester compatible avec la même formule de courbe
+     * que {@code gameSensitivity} (voir MouseHandlerFreelookMixin*).
+     * Repli sur {@code gameSensitivity} telle quelle si le module n'est,
+     * pour une raison quelconque, pas résolu (ne devrait jamais arriver —
+     * cette méthode n'est appelée que depuis un chemin déjà gardé par
+     * {@link #isFreelookEngaged}).
+     *
+     * BUG TROUVÉ (retour utilisateur : "la sensibilité n'a jamais été la
+     * même que celle du jeu" — mesure précise fournie : "même coup de
+     * souris, 2 tours en freelook contre un demi-tour en F5", soit un ratio
+     * mesuré d'environ 4×, PAS un simple ressenti de perspective) — la
+     * cause n'était PAS la vue 3e personne (tentative de compensation par
+     * un facteur arbitraire, retirée : mauvaise piste, voir historique git).
+     * Vraie cause trouvée par désassemblage complet (javap) de {@code
+     * Entity.turn(double,double)} du vrai jar 26.1.2 — la MÉTHODE que notre
+     * Mixin court-circuite entièrement (voir MouseHandlerFreelookMixin261)
+     * multiplie ENCORE xo/yo par {@code 0.15f} avant de les ajouter à xRot/
+     * yRot ({@code (float)xo * 0.15f}, confirmé bytecode) : notre calcul
+     * reproduisait la courbe de sensibilité vanilla (sens*0.6+0.2, cubée,
+     * ×8) mais s'arrêtait LÀ, sans jamais appliquer ce facteur final —
+     * environ 1/0.15 ≈ 6.7× trop de rotation, cohérent avec la mesure
+     * utilisateur. Voir {@link com.yuyuframe.launcheragent.mixin.client.v26_1.MouseHandlerFreelookMixin261}
+     * pour où ce facteur est désormais appliqué.
+     */
+    public static double resolveSensitivity(double gameSensitivity) {
+        LauncherModule self = ModuleRegistry.get("freelook");
+        if (!(self instanceof FreelookModule)) return gameSensitivity;
+        FreelookModule module = (FreelookModule) self;
+        return module.sensitivityMode == 1 ? module.customSensitivity / 100.0 : gameSensitivity;
     }
 
     /**

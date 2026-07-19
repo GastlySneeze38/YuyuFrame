@@ -416,7 +416,6 @@ public class UiMainMenuScreen extends UiScreenBase {
         private static final float HOVER_LIFT_PX = 4f;
         /** Toggle "activer/désactiver" posé PAR-DESSUS cette carte (voir rebuildAll — widget SÉPARÉ, jamais construit pour ModuleGroup/ActionCard) — sa position Y suit le soulèvement au survol via {@link #pairToggle}, sinon il resterait figé pendant que la carte en dessous bouge. */
         private UiToggle pairedToggle;
-        private float pairedToggleBaseY;
 
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
         ModCard(float x, float y, float w, String name, String description, float enterDelay, Runnable onOpen) {
@@ -430,7 +429,6 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         void pairToggle(UiToggle toggle) {
             this.pairedToggle = toggle;
-            this.pairedToggleBaseY = toggle.y;
         }
 
         // Exclut la zone du toggle — la carte est vérifiée en PREMIER dans
@@ -471,7 +469,23 @@ public class UiMainMenuScreen extends UiScreenBase {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hoverT = hoverAnim.get();
             float drawY = y - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
-            if (pairedToggle != null) pairedToggle.y = pairedToggleBaseY + hoverT * HOVER_LIFT_PX;
+            // BUG TROUVÉ (retour utilisateur, capture d'écran : les toggles
+            // n'apparaissent NULLE PART sur l'écran principal, pas un simple
+            // chevauchement) — cette ligne ÉCRASAIT pairedToggle.y avec une
+            // position figée au moment de #pairToggle (repère LOCAL de la
+            // grille, capturé AVANT que UiScrollContainer.applyOffsets()
+            // n'ait jamais tourné, voir rebuildAll() : "repère LOCAL
+            // arbitraire... UiScrollContainer se charge de replacer ce
+            // contenu dans le viewport réel"). Résultat : à CHAQUE frame, le
+            // vrai offset écran posé par applyOffsets() (juste avant, au
+            // début de ce même draw()) était aussitôt remplacé par cette
+            // valeur non-offsettée — le toggle atterrissait à sa coordonnée
+            // LOCALE brute, jamais convertie en position écran réelle, donc
+            // hors-champ pour absolument tous les modules. Fix : ADDITIONNER
+            // le léger soulèvement de survol à la position COURANTE du
+            // toggle (déjà correctement offsettée par applyOffsets() cette
+            // frame), au lieu de la remplacer par une base figée.
+            if (pairedToggle != null) pairedToggle.y += hoverT * HOVER_LIFT_PX;
 
             // Ombre portée AVANT le fond de la carte (sinon elle le
             // recouvrirait) — légèrement décalée vers le bas pour un effet

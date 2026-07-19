@@ -59,6 +59,35 @@ import java.lang.reflect.Method;
  * {@code update()} ne réapplique PAS l'offset (déjà fait dans moveBy) — sinon
  * (1re personne pure, jamais de moveBy) le hook TAIL l'applique lui-même,
  * seul point où la rotation de base n'est jamais retouchée après coup.
+ *
+ * BUG TROUVÉ (retour utilisateur : "fait en sorte que ça fasse la même
+ * mécanique que vanilla pour s'adapter à la collision avec la cam et
+ * prendre une distance en s'adaptant avec les murs") : la caméra traversait
+ * les murs pendant le freelook en 3e personne. Cause trouvée par
+ * désassemblage complet (javap) du vrai jar 1.21.11 de {@code update()} :
+ * dans la branche 3e personne, l'ordre RÉEL des appels est {@code
+ * setRotation(FF)} PUIS {@code clipToSpace(F)F} (raycast de collision réel,
+ * équivalent Yarn de {@code getMaxZoom} sur 26.1.2/{@code ger.a(F)F} obf)
+ * PUIS {@code moveBy(-clipToSpace(...), 0, 0)}. Le hook {@code la$beforeMoveBy}
+ * (avant cette correction) appliquait l'offset de freelook au TOUT DÉBUT de
+ * {@code moveBy}, donc APRÈS que {@code clipToSpace} ait déjà fait son
+ * raycast avec l'ANCIENNE rotation (avant offset) — la distance de recul ne
+ * correspondait jamais à la VRAIE direction de vue du freelook.
+ *
+ * Corrigé : nouveau hook {@code la$beforeClipToSpace}, injecté juste AVANT
+ * l'appel à {@code clipToSpace(F)F} DANS {@code update()} (confirmé unique
+ * par désassemblage — un seul site d'appel dans toute la méthode, propre à
+ * la branche 3e personne). Comme {@code setRotation} met à jour les champs
+ * dérivés lus par {@code clipToSpace} pour son raycast, le recul est
+ * désormais calculé EXACTEMENT comme vanilla le ferait pour cette direction
+ * de vue. {@code la$offsetAppliedForMove} (remis à faux en HEAD de {@code
+ * update()}, comme {@code la$moveCalledThisUpdate}) évite que {@code
+ * la$beforeMoveBy} ne réapplique l'offset UNE SECONDE FOIS pour CE MÊME
+ * appel à {@code moveBy} (déjà fait avant {@code clipToSpace} quelques
+ * instructions plus tôt) — la branche "vue rapprochée" (spyglass, second
+ * site d'appel de {@code moveBy}, SANS {@code clipToSpace} avant, offset
+ * fixe 0.3f) continue de recevoir l'offset via {@code la$beforeMoveBy}
+ * normalement, ce flag restant à faux pour elle.
  */
 @Mixin(targets = "net.minecraft.client.render.Camera")
 public abstract class CameraFreelookMixin {
@@ -67,11 +96,24 @@ public abstract class CameraFreelookMixin {
     private static volatile Method mSetRotation;
 
     private boolean la$moveCalledThisUpdate;
+    private boolean la$offsetAppliedForMove;
 
     @Inject(method = "update(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V",
         at = @At("HEAD"), require = 0)
     private void la$onUpdateHead(CallbackInfo ci) {
         la$moveCalledThisUpdate = false;
+        la$offsetAppliedForMove = false;
+    }
+
+    @Inject(method = "clipToSpace(F)F", at = @At("HEAD"), require = 0)
+    private void la$beforeClipToSpace(CallbackInfo ci) {
+        try {
+            if (!FreelookModule.isActive()) return;
+            applyOffset();
+            la$offsetAppliedForMove = true;
+        } catch (Throwable t) {
+            LauncherLog.err("[CameraFreelookMixin] la$beforeClipToSpace: " + t);
+        }
     }
 
     @Inject(method = "moveBy(FFF)V", at = @At("HEAD"), require = 0)
@@ -79,6 +121,7 @@ public abstract class CameraFreelookMixin {
         try {
             la$moveCalledThisUpdate = true;
             if (!FreelookModule.isActive()) return;
+            if (la$offsetAppliedForMove) return;
             applyOffset();
         } catch (Throwable t) {
             LauncherLog.err("[CameraFreelookMixin] la$beforeMoveBy: " + t);

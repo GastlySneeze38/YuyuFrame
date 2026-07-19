@@ -283,6 +283,11 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/CameraFreelookMixin1214",
             "net/minecraft/client/render/Camera", "moveBy", "(FFF)V", null),
+        // clipToSpace(F)F : même bug/correctif "traverse les murs" que
+        // CameraFreelookMixin (1.21.11) — IDs intermediary confirmés
+        // identiques par grep de mappings/yarn-1.21.4-mergedv2.jar.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/CameraFreelookMixin1214",
+            "net/minecraft/client/render/Camera", "clipToSpace", "(F)F", null),
         // ── CORRECTIF RÉTROACTIF (audit multiversion, bracket 1.21.11 +
         // 1.16.5/1.20.4/1.21.4) : ces @Inject(method="...") utilisaient un nom
         // Yarn named DIRECTEMENT, en supposant (à tort) qu'aucun refmap n'était
@@ -350,6 +355,11 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
             "net/minecraft/client/render/Camera", "moveBy", "(FFF)V", null),
+        // clipToSpace(F)F : raycast de collision réel (Level.clip via
+        // getMaxZoom sur 26.1.2) — voir bug "traverse les murs" dans la
+        // javadoc de classe de CameraFreelookMixin.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
+            "net/minecraft/client/render/Camera", "clipToSpace", "(F)F", null),
     };
 
     /**
