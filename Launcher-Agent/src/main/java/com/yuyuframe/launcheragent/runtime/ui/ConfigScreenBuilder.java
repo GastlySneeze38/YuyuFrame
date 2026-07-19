@@ -320,13 +320,13 @@ public final class ConfigScreenBuilder {
             element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); HudConfigStore.save(); });
         cursor = sliderRow(rows, x, w, cursor, "Échelle",
             "Taille de toute la boîte (largeur ET hauteur ensemble, jamais l'une sans l'autre).",
-            HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); HudConfigStore.save(); });
+            HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); HudConfigStore.save(); }, null);
         cursor = sliderRow(rows, x, w, cursor, "Marge horizontale",
             "Espace entre le bord de la boîte et le contenu (X).",
-            0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); HudConfigStore.save(); });
+            0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
         cursor = sliderRow(rows, x, w, cursor, "Marge verticale",
             "Espace entre le bord de la boîte et le contenu (Y).",
-            0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); HudConfigStore.save(); });
+            0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
 
         // Réinitialise anchor/offset (voir HudElement.resetPosition) — devait
         // AUSSI persister le résultat, sinon le prochain redémarrage ramenait
@@ -367,7 +367,8 @@ public final class ConfigScreenBuilder {
         if (field.isAnnotationPresent(ConfigSlider.class)) {
             ConfigSlider a = field.getAnnotation(ConfigSlider.class);
             return sliderRow(rows, x, w, cursor, a.name(), a.description(), a.min(), a.max(), a.step(), getFloat(field, module),
-                v -> { setFloat(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
+                v -> { setFloat(field, module, v); module.onConfigChanged(); HudConfigStore.save(); },
+                dependencySupplier(module, a.dependsOnField(), a.dependsOnValue()));
         }
         if (field.isAnnotationPresent(ConfigColor.class)) {
             ConfigColor a = field.getAnnotation(ConfigColor.class);
@@ -450,12 +451,42 @@ public final class ConfigScreenBuilder {
     }
 
     private static float sliderRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
-                                    float min, float max, float step, float initial, Consumer<Float> onChange) {
+                                    float min, float max, float step, float initial, Consumer<Float> onChange,
+                                    java.util.function.BooleanSupplier enabledSupplier) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, w, rowY, label, tooltip);
         float sliderW = UiTheme.scaled(190f);
-        rows.add(new UiSlider(x + w - sliderW - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(20f)) / 2f, sliderW, min, max, step, initial, onChange));
+        rows.add(new UiSlider(x + w - sliderW - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(20f)) / 2f, sliderW, min, max, step, initial, onChange, enabledSupplier));
         return rowY - ROW_GAP;
+    }
+
+    /**
+     * {@code null} si {@code dependsOnField} est vide (pas de dépendance,
+     * curseur toujours actif — comportement inchangé pour tous les curseurs
+     * existants). Sinon résout le champ int nommé UNE FOIS ici (le champ
+     * lui-même ne change pas), mais relit sa VALEUR à chaque appel de
+     * {@code getAsBoolean()} — voir {@link UiSlider#enabledSupplier} pour le
+     * pourquoi (refléter live un dropdown juste au-dessus, ex: "Sensibilité"
+     * du freelook).
+     */
+    private static java.util.function.BooleanSupplier dependencySupplier(LauncherModule module, String dependsOnField, int dependsOnValue) {
+        if (dependsOnField.isEmpty()) return null;
+        Field depField = findFieldInHierarchy(module.getClass(), dependsOnField);
+        if (depField == null) return null;
+        depField.setAccessible(true);
+        return () -> getInt(depField, module) == dependsOnValue;
+    }
+
+    private static Field findFieldInHierarchy(Class<?> owner, String fieldName) {
+        Class<?> c = owner;
+        while (c != null) {
+            try {
+                return c.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            }
+        }
+        return null;
     }
 
     private static float colorRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,

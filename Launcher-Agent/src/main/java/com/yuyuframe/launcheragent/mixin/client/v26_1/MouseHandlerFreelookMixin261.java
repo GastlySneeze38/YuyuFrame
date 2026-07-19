@@ -52,10 +52,25 @@ public abstract class MouseHandlerFreelookMixin261 {
             fAccumulatedDX.setDouble(this, 0.0);
             fAccumulatedDY.setDouble(this, 0.0);
 
-            double sensitivity = readSensitivity();
+            double sensitivity = FreelookModule.resolveSensitivity(readSensitivity());
             double factor = Math.pow(sensitivity * 0.6 + 0.2, 3.0) * 8.0;
 
-            FreelookModule.accumulate(dx * factor, dy * factor);
+            // BUG TROUVÉ (retour utilisateur, mesure précise : "2 tours en
+            // freelook contre un demi-tour en F5 pour le même coup de
+            // souris", ratio ~4×) — court-circuiter player.turn(xo,yo) ici
+            // (voir javadoc de classe) faisait perdre le facteur ×0.15 que
+            // cette méthode applique ENCORE à xo/yo en interne, confirmé par
+            // désassemblage complet (javap) d'Entity.turn(double,double) sur
+            // le vrai jar 26.1.2 : "(float)xo * 0.15f" avant setXRot/setYRot.
+            // Notre courbe de sensibilité (factor ci-dessus) s'arrêtait
+            // juste avant cette étape — ~1/0.15 ≈ 6.7× trop de rotation,
+            // cohérent avec la mesure utilisateur. Appliqué ici pour rester
+            // bit-à-bit fidèle à vanilla, PAS un facteur de compensation
+            // deviné (voir historique FreelookModule.resolveSensitivity).
+            double dYaw = dx * factor * 0.15;
+            double dPitch = dy * factor * 0.15;
+
+            FreelookModule.accumulate(dYaw, dPitch);
             ci.cancel();
         } catch (Throwable t) {
             LauncherLog.err("[MouseHandlerFreelookMixin261] la$onTurnPlayer: " + t);
@@ -67,7 +82,10 @@ public abstract class MouseHandlerFreelookMixin261 {
      * même mécanisme que {@code fov}/{@code sensitivity} déjà lus par
      * ZoomModule via {@link McReflect#simpleOptionGetValue}) — 0.5 (valeur
      * vanilla par défaut) en repli si la résolution échoue, jamais une
-     * exception qui casserait tout mouvement de souris.
+     * exception qui casserait tout mouvement de souris. Valeur RÉELLE du
+     * jeu uniquement — voir {@link FreelookModule#resolveSensitivity}
+     * (appelant) pour le choix final entre celle-ci et une valeur
+     * personnalisée.
      */
     private double readSensitivity() {
         try {

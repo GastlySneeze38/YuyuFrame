@@ -51,17 +51,25 @@ public abstract class MouseHandlerFreelookMixin {
             fCursorDeltaX.setDouble(this, 0.0);
             fCursorDeltaY.setDouble(this, 0.0);
 
-            double sensitivity = readSensitivity();
+            double sensitivity = FreelookModule.resolveSensitivity(readSensitivity());
             double factor = Math.pow(sensitivity * 0.6 + 0.2, 3.0) * 8.0;
 
-            FreelookModule.accumulate(dx * factor, dy * factor);
+            // BUG TROUVÉ (voir MouseHandlerFreelookMixin261 pour le détail
+            // complet, mesure utilisateur + désassemblage d'Entity.turn) —
+            // Entity.changeLookDirection(D,D) (réel Entity.turn) applique
+            // ENCORE ×0.15 à xo/yo en interne ; le court-circuiter ici sans
+            // reproduire ce facteur donnait ~6.7× trop de rotation.
+            double dYaw = dx * factor * 0.15;
+            double dPitch = dy * factor * 0.15;
+
+            FreelookModule.accumulate(dYaw, dPitch);
             ci.cancel();
         } catch (Throwable t) {
             LauncherLog.err("[MouseHandlerFreelookMixin] la$onUpdateMouse: " + t);
         }
     }
 
-    /** Voir {@code MouseHandlerFreelookMixin261#readSensitivity} — même formule vanilla, résolution cross-bracket via McReflect. */
+    /** Voir {@code MouseHandlerFreelookMixin261#readSensitivity} — même formule vanilla, résolution cross-bracket via McReflect. Valeur RÉELLE du jeu uniquement — voir {@link FreelookModule#resolveSensitivity} pour le choix final. */
     private double readSensitivity() {
         try {
             Object mc = McReflect.minecraftClient();
