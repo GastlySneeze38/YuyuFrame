@@ -462,9 +462,17 @@ public final class ConfigScreenBuilder {
                                    UiColor initial, Consumer<UiColor> onChange) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, w, rowY, label, tooltip);
-        rows.add(new UiColorPicker(x + w - UiTheme.scaled(42f) - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(26f)) / 2f, initial, onChange));
-        // Marge supplémentaire : le panneau déroulant du color picker s'ouvre vers le bas.
-        return rowY - ROW_GAP - UiTheme.scaled(115f);
+        UiColorPicker picker = new UiColorPicker(x + w - UiTheme.scaled(42f) - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(26f)) / 2f, initial, onChange);
+        rows.add(picker);
+        // BUG TROUVÉ (retour utilisateur, capture d'écran : le toggle de la
+        // ligne suivante apparaissait à travers le bas du panneau déroulé) :
+        // cette marge était un nombre codé en dur (115, puis 150), recalculé
+        // à la main à chaque changement de la géométrie interne du color
+        // picker — et FAUX les deux fois (de ~130px la seconde fois). Fix :
+        // interroger directement picker.panelBottom() (la vraie position,
+        // publique désormais) au lieu de deviner — ne peut plus jamais
+        // désynchroniser de ce qui est réellement dessiné.
+        return picker.panelBottom() - ROW_GAP;
     }
 
     private static float dropdownRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,

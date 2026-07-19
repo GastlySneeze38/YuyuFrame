@@ -55,7 +55,17 @@ public class UiDropdown extends UiWidget {
         String arrow = expanded ? "^" : "v";
         float aw = renderer.textWidth(arrow, textScale);
         renderer.drawText(arrow, x + w - aw - textPad, y + h / 2f - textVOff, UiTheme.TEXT_SECONDARY, textScale, vpWidth, vpHeight);
+    }
 
+    /**
+     * Liste déroulée ENTIÈRE — voir UiWidget#drawOverlay (même bug/même fix
+     * que UiColorPicker : dessinée dans un second passage APRÈS tout le
+     * reste de la liste par UiScrollContainer, ce panneau flotte désormais
+     * TOUJOURS au-dessus, peu importe ce qui se trouve plus bas dans
+     * l'écran). Seul le bouton d'en-tête reste dans draw().
+     */
+    @Override
+    public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         if (!expanded) return;
 
         float panelTop = y - PANEL_PAD;

@@ -345,6 +345,22 @@ public class UiScrollContainer {
         }
 
         drawScrollbar(renderer, vpWidth, vpHeight);
+
+        // Second passage — voir UiWidget#drawOverlay (BUG TROUVÉ, retour
+        // utilisateur : "la modal [color picker] entière... se fait
+        // chevaucher par tout") : un panneau déroulant dessiné dans le
+        // premier passage ci-dessus reste soumis à l'ordre d'insertion —
+        // n'importe quel widget plus bas dans la liste (donc plus bas à
+        // l'écran) se dessine PAR-DESSUS lui s'ils se chevauchent. Ce
+        // second passage, après TOUT le contenu normal ET la scrollbar,
+        // garantit qu'un tel panneau flotte toujours au-dessus — même motif
+        // que UiTooltip juste en dessous, déjà dessiné en dernier pour la
+        // même raison.
+        for (UiWidget w : content) {
+            if (!visible(w)) continue;
+            w.drawOverlay(renderer, mouseX, mouseY, vpWidth, vpHeight);
+        }
+
         if (hoveredTooltip != null) UiTooltip.draw(renderer, hoveredTooltip, mouseX, mouseY, vpWidth, vpHeight);
     }
 

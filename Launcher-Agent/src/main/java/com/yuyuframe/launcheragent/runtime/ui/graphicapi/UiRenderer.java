@@ -169,6 +169,50 @@ public final class UiRenderer {
     private int uFxRect = -1, uFxRadius = -1, uFxBlur = -1, uFxBorderWidth = -1, uFxColorA = -1, uFxColorB = -1, uFxGradient = -1;
     private boolean fxInitFailed = false;
 
+    // ── Shader "Gradient2D" — dégradé BILINÉAIRE entre 4 couleurs de coin,
+    // capacité moteur générique ajoutée sur demande explicite ("fait la
+    // partie du moteur qui fait un dégradé 2D"). Contrairement au shader FX
+    // ci-dessus (dégradé 1D vertical SEULEMENT, u_ColorA/u_ColorB), celui-ci
+    // interpole horizontalement PUIS verticalement entre 4 couleurs
+    // indépendantes — usage typique : un vrai carré Saturation/Luminosité de
+    // color picker (coin bas-gauche ET bas-droite = noir, haut-gauche =
+    // blanc, haut-droite = la teinte pleine à saturation/luminosité
+    // maximales) — un dégradé BILINÉAIRE entre ces 4 coins précis est
+    // mathématiquement IDENTIQUE à la formule HSB->RGB standard à teinte
+    // fixe (pas juste une approximation visuelle : à luminosité v et
+    // saturation s, HSBtoRGB(h,s,v) == v * lerp(blanc, HSBtoRGB(h,1,1), s),
+    // et les deux coins du bas valent 0 dans les deux cas puisque v=0 →
+    // noir quelle que soit la saturation).
+    //
+    // Même masque de coin arrondi (SDF, formule Inigo Quilez) que
+    // drawRoundedRect — bord NET anti-aliasé 1px, PAS de flou (contrairement
+    // au shader FX, pensé lui pour l'ombre portée/le contour).
+    private static final String GRADIENT2D_FRAGMENT_SRC =
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform vec4 u_ColorBL;\n" +
+        "uniform vec4 u_ColorBR;\n" +
+        "uniform vec4 u_ColorTL;\n" +
+        "uniform vec4 u_ColorTR;\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    float u = clamp((gl_FragCoord.x - u_Rect.x) / max(u_Rect.z - u_Rect.x, 1.0), 0.0, 1.0);\n" +
+        "    float v = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
+        "    vec4 bottom = mix(u_ColorBL, u_ColorBR, u);\n" +
+        "    vec4 top = mix(u_ColorTL, u_ColorTR, u);\n" +
+        "    vec4 col = mix(bottom, top, v);\n" +
+        "    gl_FragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "}\n";
+
+    private int gradient2DProgram = -1;
+    private int uG2dRect = -1, uG2dRadius = -1, uG2dColorBL = -1, uG2dColorBR = -1, uG2dColorTL = -1, uG2dColorTR = -1;
+    private boolean gradient2DInitFailed = false;
+
     // ── Shader de texte SDF (distance field) — voir UiFont pour le pourquoi :
     // l'alpha de l'atlas encode une distance signée au bord du glyphe, pas
     // une couverture directe. dFdx/dFdy/fwidth sont cœur GLSL 1.10+ pour un
@@ -339,6 +383,37 @@ public final class UiRenderer {
     private int uFxRectModern = -1, uFxRadiusModern = -1, uFxBlurModern = -1, uFxBorderWidthModern = -1,
         uFxColorAModern = -1, uFxColorBModern = -1, uFxGradientModern = -1, uProjectionFxModern = -1;
     private boolean fxInitFailedModern = false;
+
+    // ── Shader "Gradient2D" moderne — même logique que GRADIENT2D_FRAGMENT_SRC
+    // (legacy), voir son commentaire pour le détail/le pourquoi.
+    private static final String GRADIENT2D_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform vec4 u_ColorBL;\n" +
+        "uniform vec4 u_ColorBR;\n" +
+        "uniform vec4 u_ColorTL;\n" +
+        "uniform vec4 u_ColorTR;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    float u = clamp((gl_FragCoord.x - u_Rect.x) / max(u_Rect.z - u_Rect.x, 1.0), 0.0, 1.0);\n" +
+        "    float v = clamp((gl_FragCoord.y - u_Rect.y) / max(u_Rect.w - u_Rect.y, 1.0), 0.0, 1.0);\n" +
+        "    vec4 bottom = mix(u_ColorBL, u_ColorBR, u);\n" +
+        "    vec4 top = mix(u_ColorTL, u_ColorTR, u);\n" +
+        "    vec4 col = mix(bottom, top, v);\n" +
+        "    fragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "}\n";
+
+    private int gradient2DProgramModern = -1;
+    private int uG2dRectModern = -1, uG2dRadiusModern = -1, uG2dColorBLModern = -1, uG2dColorBRModern = -1,
+        uG2dColorTLModern = -1, uG2dColorTRModern = -1, uProjectionGradient2DModern = -1;
+    private boolean gradient2DInitFailedModern = false;
 
     private static final String TEXT_FRAGMENT_SRC_MODERN =
         "#version 150\n" +
@@ -576,6 +651,54 @@ public final class UiRenderer {
         } catch (Throwable t) {
             fxInitFailedModern = true;
             LauncherLog.err("[UiRenderer] échec compilation shader FX moderne : " + t);
+        }
+    }
+
+    private void ensureGradient2DShaderInit() {
+        if (gradient2DProgram != -1 || gradient2DInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, VERTEX_SRC);
+            glCompileShader(vsh);
+
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, GRADIENT2D_FRAGMENT_SRC);
+            glCompileShader(fsh);
+
+            gradient2DProgram = glCreateProgram();
+            glAttachShader(gradient2DProgram, vsh);
+            glAttachShader(gradient2DProgram, fsh);
+            glLinkProgram(gradient2DProgram);
+
+            uG2dRect = glGetUniformLocation(gradient2DProgram, "u_Rect");
+            uG2dRadius = glGetUniformLocation(gradient2DProgram, "u_Radius");
+            uG2dColorBL = glGetUniformLocation(gradient2DProgram, "u_ColorBL");
+            uG2dColorBR = glGetUniformLocation(gradient2DProgram, "u_ColorBR");
+            uG2dColorTL = glGetUniformLocation(gradient2DProgram, "u_ColorTL");
+            uG2dColorTR = glGetUniformLocation(gradient2DProgram, "u_ColorTR");
+
+            LauncherLog.ui(1, "[UiRenderer] shader Gradient2D compilé, program=" + gradient2DProgram);
+        } catch (Throwable t) {
+            gradient2DInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader Gradient2D : " + t);
+        }
+    }
+
+    private void ensureGradient2DShaderInitModern() {
+        if (gradient2DProgramModern != -1 || gradient2DInitFailedModern) return;
+        try {
+            gradient2DProgramModern = compileModernProgram(VERTEX_SRC_MODERN, GRADIENT2D_FRAGMENT_SRC_MODERN);
+            uG2dRectModern = glGetUniformLocation(gradient2DProgramModern, "u_Rect");
+            uG2dRadiusModern = glGetUniformLocation(gradient2DProgramModern, "u_Radius");
+            uG2dColorBLModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorBL");
+            uG2dColorBRModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorBR");
+            uG2dColorTLModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorTL");
+            uG2dColorTRModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorTR");
+            uProjectionGradient2DModern = glGetUniformLocation(gradient2DProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader Gradient2D (moderne) compilé, program=" + gradient2DProgramModern);
+        } catch (Throwable t) {
+            gradient2DInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader Gradient2D moderne : " + t);
         }
     }
 
@@ -1080,6 +1203,113 @@ public final class UiRenderer {
             return;
         }
         drawFx(x1, y1, x2, y2, radius, 0f, 0f, colorBottom, colorTop, true, vpWidth, vpHeight);
+    }
+
+    /**
+     * Dégradé BILINÉAIRE entre 4 couleurs de coin — voir le commentaire du
+     * shader Gradient2D (constantes GRADIENT2D_FRAGMENT_SRC*) pour le détail
+     * mathématique complet (pipelines Legacy/Modern). Coins arrondis
+     * optionnels (radius=0 = rect plein), bord anti-aliasé NET — pas de
+     * flou, contrairement à drawShadow/drawGlow.
+     *
+     * Routé sur Blaze3D era E via {@link UiTextBlaze3D#queueGradientRect2D}
+     * — CONTRAIREMENT à drawShadow/drawGlow (no-op sur ce pipeline), ce
+     * dégradé ne nécessite AUCUN shader custom côté Blaze3D : 4 couleurs de
+     * sommet suffisent (le pipeline vertex-color déjà utilisé par
+     * queueGradientRect les interpole nativement), là où la roue
+     * Teinte/Saturation avait initialement (et à tort) tenté un vrai shader
+     * GLSL — jamais routé sur ce pipeline, voir l'historique dans
+     * UiColorPicker pour ce qui a été corrigé.
+     */
+    public void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
+                                    UiColor colorBottomLeft, UiColor colorBottomRight,
+                                    UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
+        if (UiTextBlaze3D.isAvailable()) {
+            UiTextBlaze3D.queueGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+            return;
+        }
+        if (modern) {
+            drawGradient2DModern(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+            return;
+        }
+        drawGradient2DLegacy(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+    }
+
+    private void drawGradient2DModern(float x1, float y1, float x2, float y2, float radius,
+                                       UiColor bl, UiColor br, UiColor tl, UiColor tr, int vpWidth, int vpHeight) {
+        ensureGradient2DShaderInitModern();
+        if (gradient2DInitFailedModern) return;
+        try {
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer (javadoc de classe).
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            glUseProgram(gradient2DProgramModern);
+            glUniform4f(uG2dRectModern, x1, y1, x2, y2);
+            glUniform1f(uG2dRadiusModern, radius);
+            glUniform4f(uG2dColorBLModern, bl.r, bl.g, bl.b, bl.a);
+            glUniform4f(uG2dColorBRModern, br.r, br.g, br.b, br.a);
+            glUniform4f(uG2dColorTLModern, tl.r, tl.g, tl.b, tl.a);
+            glUniform4f(uG2dColorTRModern, tr.r, tr.g, tr.b, tr.a);
+            uploadProjectionModern(uProjectionGradient2DModern, vpWidth, vpHeight);
+            drawQuadModern(x1, y1, x2, y2);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawGradient2DModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawGradient2DLegacy(float x1, float y1, float x2, float y2, float radius,
+                                       UiColor bl, UiColor br, UiColor tl, UiColor tr, int vpWidth, int vpHeight) {
+        ensureGradient2DShaderInit();
+        if (gradient2DInitFailed) return;
+
+        LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
+        try {
+            savedGlState = captureLegacyGlState();
+            glDisable(0x0DE1); // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0BC0); // GL_ALPHA_TEST
+            // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer (javadoc de classe).
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+
+            glUseProgram(gradient2DProgram);
+            glUniform4f(uG2dRect, x1, y1, x2, y2);
+            glUniform1f(uG2dRadius, radius);
+            glUniform4f(uG2dColorBL, bl.r, bl.g, bl.b, bl.a);
+            glUniform4f(uG2dColorBR, br.r, br.g, br.b, br.a);
+            glUniform4f(uG2dColorTL, tl.r, tl.g, tl.b, tl.a);
+            glUniform4f(uG2dColorTR, tr.r, tr.g, tr.b, tr.a);
+            // gl_Color ignorée par ce shader — appel conservé pour réutiliser drawQuad() tel quel.
+            drawQuad(x1, y1, x2, y2, bl);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawGradient2DLegacy: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
+        }
     }
 
     /**
