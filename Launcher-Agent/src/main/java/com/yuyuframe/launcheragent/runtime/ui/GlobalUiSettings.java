@@ -73,6 +73,18 @@ public final class GlobalUiSettings extends LauncherModule {
         category = "Apparence", options = { "Petite", "Normale", "Grande" })
     public int uiSize = 1;
 
+    // Demandé explicitement ("plusieurs agencements comme dans Lunar, choix
+    // via une icône à côté de la barre de recherche") — le champ existe ICI
+    // (persisté comme tout autre réglage @ConfigDropdown, voir HudConfigStore)
+    // uniquement pour la sauvegarde disque ; le changement rapide se fait
+    // depuis UiMainMenuScreen (icône dédiée), pas depuis cet écran Paramètres,
+    // mais rien n'empêche de le faire ici aussi (même champ, même source de
+    // vérité). Lu directement par UiMainMenuScreen.rebuildAll() à chaque
+    // reconstruction de la grille.
+    @ConfigDropdown(name = "Affichage des cartes (menu)", description = "Disposition des cartes de mods dans le menu principal.",
+        category = "Apparence", options = { "Détaillé", "Compacte", "Grille d'icônes" })
+    public int cardLayout = 0;
+
     @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;
 
