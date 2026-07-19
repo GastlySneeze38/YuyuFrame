@@ -194,13 +194,30 @@ public class UiModConfigScreen extends UiScreenBase {
         }
     }
 
-    /** Détermine, parmi les catégories déjà passées en défilant (anchor >= haut de viewport visible), la dernière — celle "active" affichée en surbrillance. Recalculé CHAQUE frame (pas seulement au clic sur un onglet) : un défilement libre à la molette doit aussi mettre à jour la sous-sidebar. */
+    /**
+     * Détermine quelle catégorie est "active" (surbrillance dans la sous-
+     * sidebar) — recalculé CHAQUE frame (pas juste au clic) : un défilement
+     * libre à la molette doit aussi la mettre à jour.
+     *
+     * Reconstruit en POURCENTAGE (retour utilisateur : "il faut le calculer
+     * autrement... quand on a scrollé tout en bas on est au dernier module,
+     * calculer quel pourcentage de la page prend chaque module et appliquer
+     * ce pourcentage au scroll") — l'ancienne version comparait un seuil de
+     * PIXELS fixe (bord du viewport ± un décalage arbitraire), qui ne
+     * garantissait pas mathématiquement d'atteindre la DERNIÈRE catégorie à
+     * scroll max (dépendait du nombre/de la hauteur des sections). Ici :
+     * {@code scroll.scrollProgress()} (0..1, 0=haut, 1=bas) comparé à
+     * {@code scroll.baseYFraction(ancre)} (part du contenu TOTAL avant cette
+     * ancre) — la dernière catégorie dont la fraction est déjà dépassée est
+     * l'active. Par construction, scrollProgress()==1.0 exactement à scroll
+     * max, donc la dernière catégorie devient TOUJOURS active en bas de page.
+     */
     private void updateActiveCategory() {
         if (scroll == null || anchors.isEmpty()) return;
-        float topY = scroll.visibleTopBaseY();
+        float progress = scroll.scrollProgress();
         String best = null;
         for (Map.Entry<String, Float> entry : anchors.entrySet()) {
-            if (entry.getValue() >= topY) best = entry.getKey();
+            if (scroll.baseYFraction(entry.getValue()) <= progress + 0.001f) best = entry.getKey();
         }
         activeCategory = best != null ? best : anchors.keySet().iterator().next();
     }

@@ -275,13 +275,13 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         }
     }
 
-    /** Détermine, parmi les onglets déjà passés en défilant (anchor >= haut de viewport visible), le dernier — voir UiModConfigScreen#updateActiveCategory pour le détail du calcul (identique). */
+    /** Détermine quel onglet est "actif" — calcul en POURCENTAGE, voir UiModConfigScreen#updateActiveCategory pour le détail complet (identique ici). */
     private void updateActiveTab() {
         if (scroll == null || anchors.isEmpty()) return;
-        float topY = scroll.visibleTopBaseY();
+        float progress = scroll.scrollProgress();
         String best = null;
         for (Map.Entry<String, Float> entry : anchors.entrySet()) {
-            if (entry.getValue() >= topY) best = entry.getKey();
+            if (scroll.baseYFraction(entry.getValue()) <= progress + 0.001f) best = entry.getKey();
         }
         activeTab = best != null ? best : anchors.keySet().iterator().next();
     }

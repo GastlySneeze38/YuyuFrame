@@ -154,9 +154,34 @@ public class UiScrollContainer {
         markActivity();
     }
 
-    /** baseY actuellement aligné au haut du viewport (référence inverse de {@link #scrollToAnchor}) — sert à déterminer quelle section est "active" dans la sous-sidebar pendant un défilement libre (pas juste après un clic sur un onglet). */
-    public float visibleTopBaseY() {
-        return contentTop - lastAnimatedScroll;
+    /**
+     * Progression du scroll en POURCENTAGE (0 = tout en haut, 1 = tout en
+     * bas) — remplace l'ancienne approche par seuil de pixels fixe (voir
+     * historique : {@code visibleTopBaseY() - décalage arbitraire}, retour
+     * utilisateur "le calcul est mal fait"). Demande explicite : "quand on a
+     * scrollé tout en bas on est au dernier module" — un pourcentage garantit
+     * mathématiquement ce résultat (1.0 exactement à scroll max), ce qu'un
+     * seuil de pixels fixe ne garantissait pas (pouvait ne jamais atteindre
+     * la dernière section selon le nombre/la hauteur des sections).
+     */
+    public float scrollProgress() {
+        float max = maxScroll();
+        if (max <= 0.001f) return 0f;
+        return Math.max(0f, Math.min(1f, lastAnimatedScroll / max));
+    }
+
+    /**
+     * Position {@code baseY} convertie en pourcentage du contenu TOTAL (0 =
+     * tout en haut du contenu, 1 = tout en bas) — indépendant de la hauteur
+     * du viewport (contrairement à {@code scrollProgress}, qui elle est
+     * bornée par {@code maxScroll}). Comparer les deux revient à demander
+     * "en pourcentage, ai-je déjà dépassé le début de cette section ?" —
+     * voir UiModConfigScreen#updateActiveCategory pour l'usage.
+     */
+    public float baseYFraction(float baseY) {
+        float span = contentTop - contentBottom;
+        if (span <= 0.001f) return 0f;
+        return Math.max(0f, Math.min(1f, (contentTop - baseY) / span));
     }
 
     private float clampScroll(float v) {
