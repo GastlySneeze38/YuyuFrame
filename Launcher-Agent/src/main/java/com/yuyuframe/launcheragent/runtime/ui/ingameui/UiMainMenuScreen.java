@@ -220,6 +220,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         // (gating ShaderLoaderDetector appliqué DANS l'écran, voir
         // ModrinthContentScreen.buildLayout, pas ici).
         ActionCard modrinthCard = new ActionCard("Modrinth (Resource Packs & Shaders)", "Rechercher et installer un resource pack ou un shader pack",
+            "Resource packs et shaders",
             () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthContentScreen(UiMainMenuScreen.this)));
         if (filter.isEmpty() || modrinthCard.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(modrinthCard);
         for (ModuleGroup g : ModuleRegistry.groups()) {
@@ -282,7 +283,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                     () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
             } else if (entry instanceof ActionCard) {
                 ActionCard action = (ActionCard) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, action.name, action.description, null, enterDelay, action.action));
+                modScroll.add(new ModCard(cx, cy, cardW, action.name, action.description, action.shortDescription, enterDelay, action.action));
             } else {
                 LauncherModule mod = (LauncherModule) entry;
                 // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
@@ -333,10 +334,16 @@ public class UiMainMenuScreen extends UiScreenBase {
      */
     private static final class ActionCard {
         final String name, description;
+        /** Voir LauncherModule/ModuleGroup#shortDescription — même principe pour une carte "action". {@code null} = pas de version dédiée. */
+        final String shortDescription;
         final Runnable action;
         ActionCard(String name, String description, Runnable action) {
+            this(name, description, null, action);
+        }
+        ActionCard(String name, String description, String shortDescription, Runnable action) {
             this.name = name;
             this.description = description;
+            this.shortDescription = shortDescription;
             this.action = action;
         }
     }
@@ -453,6 +460,11 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         void pairToggle(UiToggle toggle) {
             this.pairedToggle = toggle;
+            // Voir UiToggle#useExternalAlphaOnly — l'opacité de ce toggle
+            // vient ENTIÈREMENT de externalAlpha (poussé chaque frame dans
+            // draw() ci-dessous), plus jamais de son propre clipFade (calculé
+            // sur SA taille, différente de celle de la carte).
+            toggle.useExternalAlphaOnly();
         }
 
         // Exclut la zone du toggle — la carte est vérifiée en PREMIER dans
@@ -524,7 +536,26 @@ public class UiMainMenuScreen extends UiScreenBase {
             // le léger soulèvement de survol à la position COURANTE du
             // toggle (déjà correctement offsettée par applyOffsets() cette
             // frame), au lieu de la remplacer par une base figée.
-            if (pairedToggle != null) pairedToggle.y += hoverT * HOVER_LIFT_PX;
+            if (pairedToggle != null) {
+                pairedToggle.y += hoverT * HOVER_LIFT_PX;
+                // BUG TROUVÉ (retour utilisateur : "le fade-in marche mais
+                // pas avec la card... vu que sa taille est plus grande [elle]
+                // peut être presque invisible alors que le toggle est bien
+                // visible") — poussait `t` seul, MAIS UiToggle multipliait
+                // ENCORE par SON PROPRE clipFade (posé indépendamment par
+                // UiScrollContainer selon SA PROPRE hauteur, bien plus petite
+                // que celle de la carte) : pour un même défilement, le bord
+                // du viewport "mange" plus de la carte (plus haute) que du
+                // toggle (plus petit, souvent encore loin du bord), donnant
+                // deux valeurs de fondu DIFFÉRENTES pour un seul élément
+                // visuel. Fix : pousse `alpha` (déjà `t * this.clipFade`,
+                // voir plus haut — la valeur COMPLÈTE de CETTE carte) et
+                // {@link UiToggle#useExternalAlphaOnly} (posé une fois dans
+                // pairToggle()) fait qu'il ignore désormais SON PROPRE
+                // clipFade — l'opacité du toggle suit alors EXACTEMENT celle
+                // de sa carte, quelle que soit leur différence de taille.
+                pairedToggle.setExternalAlpha(alpha);
+            }
 
             // Ombre portée AVANT le fond de la carte (sinon elle le
             // recouvrirait) — légèrement décalée vers le bas pour un effet

@@ -19,7 +19,8 @@ import java.lang.reflect.Method;
 public final class MumbleLinkModule extends LauncherModule {
 
     public MumbleLinkModule() {
-        super("mumble-link", "Mumble Link", "Envoie la position/orientation à Mumble pour l'audio positionnel 3D", false);
+        super("mumble-link", "Mumble Link", "Envoie la position/orientation à Mumble pour l'audio positionnel 3D",
+            "Audio positionnel 3D (Mumble)", false);
     }
 
     @Override

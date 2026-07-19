@@ -56,7 +56,8 @@ public final class LowHealthTintModule extends LauncherModule {
     public UiColor color = new UiColor(255, 0, 0, 255);
 
     public LowHealthTintModule() {
-        super("low-health-tint", "Teinte vie basse", "Teinte l'écran quand la vie descend sous un seuil", false);
+        super("low-health-tint", "Teinte vie basse", "Teinte l'écran quand la vie descend sous un seuil",
+            "Teinte l'écran à vie basse", false);
     }
 
     // Diagnostic — un seul log par frame de test, throttlé à 1x/seconde

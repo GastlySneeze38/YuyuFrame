@@ -34,6 +34,7 @@ public final class WorldTimeModule extends LauncherModule {
     public float time = 6000f; // 6000 = midi
 
     public WorldTimeModule() {
-        super("world-time", "Temps du monde", "Force l'heure affichée (soleil/lune/ciel), sans changer le vrai temps serveur", false);
+        super("world-time", "Temps du monde", "Force l'heure affichée (soleil/lune/ciel), sans changer le vrai temps serveur",
+            "Force l'heure affichée", false);
     }
 }
