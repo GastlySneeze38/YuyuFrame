@@ -49,17 +49,21 @@ public final class GlobalUiSettings extends LauncherModule {
         category = "Apparence", options = { "Sombre", "Clair" })
     public int themeMode = 0;
 
-    @ConfigSlider(name = "Opacité des cartes (menu)", description = "Transparence des cartes de mods et panneaux de config du MENU — pas les panneaux HUD affichés en jeu (voir \"Opacité du HUD\" ci-dessous).",
-        category = "Apparence", min = 10f, max = 100f, step = 1f)
-    public float cardOpacity = 100f;
-
     @ConfigSlider(name = "Opacité du HUD (en jeu)", description = "Transparence des panneaux HUD affichés en jeu (FPS, ping, coordonnées...) — pas les cartes du menu.",
         category = "Apparence", min = 10f, max = 100f, step = 1f)
     public float hudOpacity = BASE_HUD_BG.a * 100f;
 
-    @ConfigSlider(name = "Rayon des coins", description = "Arrondi des coins des cartes de mods.",
+    // BUG TROUVÉ (retour utilisateur : "c'est le rayon des coins des HUD et
+    // pas du menu principal") — pilotait UiTheme.RADIUS_MD, qui n'est
+    // utilisé QUE par les cartes/panneaux du MENU (config, mods...) : les
+    // panneaux HUD, eux, ont TOUJOURS leur propre constante dédiée
+    // (HudPanelRenderer.RADIUS, jamais alignée sur RADIUS_MD par choix
+    // délibéré — voir sa javadoc), donc ce réglage n'avait en réalité AUCUN
+    // effet sur le HUD. Pilote désormais HudPanelRenderer.RADIUS, plus
+    // UiTheme.RADIUS_MD (qui reste fixe à sa valeur par défaut pour le menu).
+    @ConfigSlider(name = "Rayon des coins (HUD)", description = "Arrondi des coins des panneaux HUD affichés en jeu — pas les cartes du menu.",
         category = "Apparence", min = 0f, max = 16f, step = 1f)
-    public float cornerRadius = UiTheme.RADIUS_MD;
+    public float cornerRadius = HudPanelRenderer.RADIUS;
 
     @ConfigColor(name = "Couleur d'accent", description = "Couleur principale utilisée dans tout le menu.", category = "Apparence")
     public UiColor accentColor = UiTheme.ACCENT;
@@ -109,19 +113,13 @@ public final class GlobalUiSettings extends LauncherModule {
     public void onConfigChanged() {
         UiTheme.applyMode(themeMode == 1 ? UiTheme.Mode.LIGHT : UiTheme.Mode.DARK);
 
-        // withAlpha (PAS une reconstruction depuis une couleur littérale
-        // figée) : applyMode ci-dessus vient de poser CARD_BG/CARD_HOVER sur
-        // la palette DARK ou LIGHT correcte (alpha=255) — repartir d'une
-        // constante toujours sombre écraserait la teinte claire dès que le
-        // thème LIGHT est actif. On ne touche donc qu'à l'alpha, jamais au RGB.
-        float alpha = Math.max(0f, Math.min(1f, cardOpacity / 100f));
-        UiTheme.CARD_BG = UiTheme.CARD_BG.withAlpha(alpha);
-        UiTheme.CARD_HOVER = UiTheme.CARD_HOVER.withAlpha(alpha);
-
         float hudAlpha = Math.max(0f, Math.min(1f, hudOpacity / 100f));
         HudPanelRenderer.PANEL_BG = new UiColor(BASE_HUD_BG.r, BASE_HUD_BG.g, BASE_HUD_BG.b, hudAlpha);
 
-        UiTheme.RADIUS_MD = cornerRadius;
+        // Voir javadoc du champ cornerRadius — HudPanelRenderer.RADIUS
+        // (panneaux HUD), PLUS UiTheme.RADIUS_MD (cartes du menu, reste fixe
+        // à sa valeur par défaut, jamais réassignée par ce réglage).
+        HudPanelRenderer.RADIUS = cornerRadius;
         UiTheme.ACCENT = accentColor;
         UiTheme.ACCENT_DIM = new UiColor(accentColor.r, accentColor.g, accentColor.b, 70f / 255f);
         UiTheme.SIDEBAR_ACTIVE = new UiColor(accentColor.r, accentColor.g, accentColor.b, 34f / 255f);

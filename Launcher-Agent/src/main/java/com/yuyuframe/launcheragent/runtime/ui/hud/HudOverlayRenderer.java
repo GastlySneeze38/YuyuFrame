@@ -1,7 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.ui.hud;
 
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+
+import java.lang.reflect.Field;
 
 /**
  * Affichage HUD PERMANENT — dessine chaque élément enregistré
@@ -16,6 +20,35 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
  */
 public final class HudOverlayRenderer {
     private HudOverlayRenderer() {}
+
+    /**
+     * {@code true} si le joueur a masqué l'interface vanilla (touche F1,
+     * {@code GameOptions.hudHidden}) — demandé explicitement ("tout nos hud
+     * doivent disparaître en F1") : nos éléments HUD/modules overlay
+     * n'avaient jusqu'ici AUCUNE conscience de cet état vanilla, donc
+     * restaient affichés alors que le HUD du jeu (barre de vie, hotbar...)
+     * disparaissait. Nom Yarn {@code hudHidden} (intermédiaire {@code
+     * field_1842}, {@code field_948} en 1.8.9) — nom RÉEL Mojang {@code
+     * hideGui} sur {@code net.minecraft.client.Options}, vérifié par javap
+     * sur le jar client 26.1.2 réel (Yarn jamais chargé sur ce bracket).
+     * Champ RUNTIME (pas persisté), jamais vu nulle part ailleurs dans ce
+     * moteur avant cet ajout.
+     */
+    public static boolean vanillaHudHidden() {
+        try {
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+            if (options == null) return false;
+            Field hudHiddenField = McReflect.field(options.getClass(),
+                "net/minecraft/client/option/GameOptions", "hudHidden", "hideGui");
+            if (hudHiddenField == null) return false;
+            return hudHiddenField.getBoolean(options);
+        } catch (Throwable t) {
+            LauncherLog.err("[HudOverlayRenderer] vanillaHudHidden: " + t);
+            return false;
+        }
+    }
 
     public static void render(UiRenderer renderer, int vpWidth, int vpHeight) {
         for (HudElement element : HudRegistry.elements()) {

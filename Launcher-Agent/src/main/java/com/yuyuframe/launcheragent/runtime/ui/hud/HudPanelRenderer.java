@@ -24,10 +24,12 @@ public final class HudPanelRenderer {
      * référence, d'où le comparatif demandé.
      */
     public static UiColor PANEL_BG = new UiColor(10, 10, 14, 120);
-    // Rayon 2, valeur OneConfig (BasicHud : cornerRadius=2) — INCHANGÉ (voir
-    // référence explicite ci-dessus, ne pas aligner sur UiTheme.RADIUS_MD :
-    // ce n'est pas un oubli, c'est un choix délibéré de coller à OneConfig).
-    private static final float RADIUS = 2f;
+    // Rayon 2 par défaut, valeur OneConfig (BasicHud : cornerRadius=2) — PAS
+    // aligné sur UiTheme.RADIUS_MD (menu), choix délibéré. Mutable (voir
+    // PANEL_BG ci-dessus, même motif) : piloté par GlobalUiSettings
+    // ("Rayon des coins (HUD)", voir sa javadoc) — CE réglage-là, et lui
+    // seul, doit changer l'arrondi des panneaux HUD.
+    public static float RADIUS = 2f;
     // Ombre légère ajoutée (voir audit runtime/ui/ : le HUD était le seul
     // "panneau" du moteur sans aucune ombre, contrairement à UiPanel/cartes
     // des écrans) — subtile (alpha bas, flou modéré) pour rester discrète en

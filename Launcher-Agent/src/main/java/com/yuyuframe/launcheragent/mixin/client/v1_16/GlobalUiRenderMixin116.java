@@ -86,8 +86,12 @@ public abstract class GlobalUiRenderMixin116 {
             Object currentScreen = ScreenBridge116.getCurrentScreen(mc);
             if (currentScreen == null) {
                 UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
-                HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
-                ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                // F1 (voir HudOverlayRenderer#vanillaHudHidden) : nos
+                // éléments HUD/modules doivent disparaître avec le HUD vanilla.
+                if (!HudOverlayRenderer.vanillaHudHidden()) {
+                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                    ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                }
                 if (inputPoller.menuKeyPressed) {
                     LauncherLog.info("[LauncherAgent] DIAG-116: menuKeyPressed détecté, ouverture demandée (appliquée au tick)");
                     ScreenBridge116.requestMenuOpen();
