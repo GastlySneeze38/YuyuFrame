@@ -485,8 +485,13 @@ public final class ConfigScreenBuilder {
         float dw = UiTheme.scaled(170f);
         float ddH = UiTheme.scaled(26f);
         rows.add(new UiDropdown(x + w - dw - UiTheme.scaled(10f), rowY + (ROW_H - ddH) / 2f, dw, ddH, options, initialIndex, onChange));
-        // Même raison que colorRow : réserve la hauteur du panneau déroulé.
-        return rowY - ROW_GAP - (options.size() * ddH + UiTheme.scaled(10f));
+        // BUG TROUVÉ (retour utilisateur : "les paramètres... sont beaucoup
+        // trop éloignés") — MÊME bug que colorRow (voir son commentaire) :
+        // réservait TOUJOURS la hauteur de la liste déroulée entière, même
+        // fermée, alors que UiDropdown dessine cette liste en overlay (voir
+        // UiWidget#drawOverlay) depuis le même fix de z-order que le color
+        // picker — flotte déjà par-dessus tout, aucune réserve nécessaire.
+        return rowY - ROW_GAP;
     }
 
     private static float keybindRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
