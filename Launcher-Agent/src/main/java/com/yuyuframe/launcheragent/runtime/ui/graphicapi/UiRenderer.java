@@ -1794,81 +1794,82 @@ public final class UiRenderer {
      * mêmes un {@link java.lang.reflect.Proxy} qui délègue {@code apply()} à
      * cette méthode statique — pas besoin de reproduire le lambda vanilla.
      */
+    /**
+     * BUG TROUVÉ ET CORRIGÉ (audit modules, "TODO 1.21.4" point 3) : cette
+     * méthode construisait sa PROPRE instance {@code DrawContext} isolée
+     * (comme {@code drawVanillaItemIconModernImmediate} avant son propre fix,
+     * voir bug "mauvaise APPROCHE" dans module-bracket-audit.md) — même
+     * classe de problème structurel (état GL imprévisible hors du flux de
+     * rendu vivant), jamais porté sur le correctif "file d'attente + point
+     * d'accroche vivant" qui a débloqué l'armure, car ce fond de fenêtre a
+     * une contrainte de z-order DIFFÉRENTE : doit apparaître PAR-DESSUS
+     * l'écran d'inventaire ouvert, donc se dessiner APRÈS
+     * {@code Screen.render()} — {@code InGameHud.render()} (point d'accroche
+     * de l'armure) s'exécute AVANT l'écran, inutilisable ici tel quel.
+     *
+     * Correctif : mise en FILE D'ATTENTE ({@code pendingModernGuiBlits},
+     * partagée avec le chemin "Deferred") au lieu d'un dessin synchrone
+     * isolé — vidée par {@link #flushPendingImmediateGuiBlits(Object)},
+     * appelé depuis un NOUVEAU point d'accroche Mixin en TAIL de {@code
+     * HandledScreen.drawForeground(DrawContext,I,I)V} (voir {@code
+     * HandledScreenBlitFlushMixin1214}) — déclaré DIRECTEMENT sur {@code
+     * HandledScreen} (PAS la classe {@code Screen} partagée par tous les
+     * écrans, y compris nos écrans custom — voir la leçon de
+     * {@code ShulkerPreviewModule} sur ce risque précis), et appelé APRÈS le
+     * fond/les cases/objets du conteneur mais AVANT les tooltips vanilla —
+     * exactement où doit apparaître notre panneau. Décalage d'une frame
+     * comme pour les icônes (imperceptible tant que Maj reste maintenue).
+     */
     private void drawVanillaContainerTextureModernImmediate(String texturePath, float x, float y, float w, float h,
                                                               float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
         try {
-            if (!ensureContainerBlitImmediateResolved()) return;
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - h) / guiScale);
             int guiW = Math.round(w / guiScale);
             int guiH = Math.round(h / guiScale);
-
-            ClassLoader cl = mc.getClass().getClassLoader();
-            Object identifier = resolveTextureIdentifier(cl, texturePath);
-            if (identifier == null) return;
-
-            Object bufferBuilders = getBufferBuildersMethodModern.invoke(mc);
-            Object vcpImmediate = getEntityVertexConsumersMethodModern.invoke(bufferBuilders);
-            Object drawContext = drawContextImmediateCtorModern.newInstance(mc, vcpImmediate);
-
-            // Mêmes correctifs que drawVanillaItemIconModernImmediate (voir sa
-            // javadoc complète) : VAO à rebinder (notre pipeline UI laisse
-            // VAO=0 après son dernier dessin) + cache shader RenderSystem à
-            // sauvegarder/invalider/restaurer (sinon draw silencieusement
-            // invisible avec programme 0, sans toucher à l'état global pour
-            // le reste de la frame).
-            ensureModernBuffersInit();
-            if (modernVao > 0) glBindVertexArray(modernVao);
-
-            Object savedShader = null;
-            boolean shaderReflectionOk = ensureRenderSystemShaderReflectionResolved();
-            if (shaderReflectionOk) {
-                try {
-                    savedShader = getShaderMethodModern.invoke(null);
-                    setShaderMethodModern.invoke(null, (Object) null);
-                } catch (Throwable ignored) { shaderReflectionOk = false; }
+            synchronized (pendingModernGuiBlits) {
+                pendingModernGuiBlits.add(new PendingGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
             }
+        } catch (Throwable ignored) {}
+    }
 
-            drawTextureMethodImmediate.invoke(drawContext, guiTexturedFunctionProxyImmediate, identifier,
-                guiX, guiY, u, v, guiW, guiH, Math.round(texW), Math.round(texH));
-            drawFlushMethodImmediateModern.invoke(drawContext);
-
-            if (shaderReflectionOk) {
-                try { setShaderMethodModern.invoke(null, savedShader); } catch (Throwable ignored) {}
+    /**
+     * Appelé depuis {@code HandledScreenBlitFlushMixin1214}, en TAIL de
+     * {@code HandledScreen.drawForeground(DrawContext,I,I)V}, avec le VRAI
+     * paramètre {@code DrawContext} de cet appel (celui que l'écran
+     * d'inventaire ouvert utilise lui-même pour tout son rendu — jamais une
+     * instance reconstruite). Voir la javadoc de
+     * {@link #drawVanillaContainerTextureModernImmediate} pour le pourquoi.
+     */
+    public void flushPendingImmediateGuiBlits(Object realDrawContext) {
+        java.util.List<PendingGuiBlit> batchBlits;
+        synchronized (pendingModernGuiBlits) {
+            if (pendingModernGuiBlits.isEmpty()) return;
+            batchBlits = new java.util.ArrayList<>(pendingModernGuiBlits);
+            pendingModernGuiBlits.clear();
+        }
+        try {
+            if (!ensureContainerBlitImmediateResolved(realDrawContext.getClass())) return;
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return;
+            ClassLoader cl = mc.getClass().getClassLoader();
+            for (PendingGuiBlit blit : batchBlits) {
+                Object identifier = resolveTextureIdentifier(cl, blit.texturePath);
+                if (identifier == null) continue;
+                drawTextureMethodImmediate.invoke(realDrawContext, guiTexturedFunctionProxyImmediate, identifier,
+                    blit.guiX, blit.guiY, blit.u, blit.v, blit.guiW, blit.guiH,
+                    Math.round(blit.texW), Math.round(blit.texH));
             }
         } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] drawVanillaContainerTextureModernImmediate: " + t);
+            LauncherLog.err("[UiRenderer] flushPendingImmediateGuiBlits: " + t);
         }
     }
 
-    private boolean ensureContainerBlitImmediateResolved() {
+    private boolean ensureContainerBlitImmediateResolved(Class<?> drawContextClass) {
         if (drawTextureMethodImmediate != null) return true;
         if (containerBlitImmediateResolveFailed) return false;
         try {
-            // Réutilise les résolutions partagées du chemin item-icon (ctor
-            // DrawContext(mc, VertexConsumerProvider.Immediate), buffer
-            // builders) — indépendantes du type d'ItemStack, sûres à
-            // partager. On force leur résolution ici si l'icône n'a encore
-            // jamais été dessinée cette session (ordre d'appel non garanti).
-            if (drawContextImmediateCtorModern == null) {
-                Class<?> mcClass = McReflect.yarnClass("net/minecraft/client/MinecraftClient");
-                getBufferBuildersMethodModern = McReflect.noArgMethod(mcClass,
-                    "net/minecraft/client/MinecraftClient", "getBufferBuilders");
-                Class<?> bufferBuilderStorageClass = McReflect.yarnClass("net/minecraft/client/render/BufferBuilderStorage");
-                getEntityVertexConsumersMethodModern = McReflect.noArgMethod(bufferBuilderStorageClass,
-                    "net/minecraft/client/render/BufferBuilderStorage", "getEntityVertexConsumers");
-                Class<?> drawContextClass0 = McReflect.yarnClass("net/minecraft/client/gui/DrawContext");
-                Class<?> vcpImmediateClass = getEntityVertexConsumersMethodModern.getReturnType();
-                drawContextImmediateCtorModern = drawContextClass0.getDeclaredConstructor(mcClass, vcpImmediateClass);
-                drawContextImmediateCtorModern.setAccessible(true);
-                drawFlushMethodImmediateModern = McReflect.noArgMethod(drawContextClass0,
-                    "net/minecraft/client/gui/DrawContext", "draw");
-            }
-            Class<?> drawContextClass = drawContextImmediateCtorModern.getDeclaringClass();
             Class<?> identifierClass = McReflect.yarnClass("net/minecraft/util/Identifier", "net.minecraft.resources.Identifier");
             if (identifierClass == null) { containerBlitImmediateResolveFailed = true; return false; }
 
@@ -2108,9 +2109,8 @@ public final class UiRenderer {
      * File d'attente jumelle de {@link PendingItemIcon} mais pour un blit de
      * texture vanilla BRUTE (pas via l'atlas de sprites — voir
      * {@link #drawVanillaContainerTexture}) : fond de fenêtre de conteneur
-     * (ex: {@code textures/gui/container/shulker_box.png}), PAS un sprite
-     * "hud/*" comme {@link #slotSpriteIdentifierModern}. Même décalage d'une
-     * frame, même point de vidage ({@link #flushPendingModernItemIcons}).
+     * (ex: {@code textures/gui/container/shulker_box.png}). Même décalage
+     * d'une frame, même point de vidage ({@link #flushPendingModernItemIcons}).
      */
     private static final class PendingGuiBlit {
         final String texturePath; final int guiX, guiY, guiW, guiH; final float u, v, texW, texH;
@@ -2170,6 +2170,9 @@ public final class UiRenderer {
     /** Décalage (icône 16x16 depuis le coin haut-gauche du sprite 29x24) — voir javadoc ci-dessus. */
     private static final int SLOT_SPRITE_ICON_DX = 3;
     private static final int SLOT_SPRITE_ICON_DY = 4;
+    /** Fichier PNG BRUT du sprite (PAS son nom d'atlas "hud/hotbar_offhand_left") — voir bug z-order dans flushIntoGuiState : nécessaire pour un blit "texture brute" avec u/v explicites (crop du cadre uniquement), l'atlas de sprites ne permettant aucun contrôle de région. */
+    /** Fichier PNG BRUT du sprite (PAS son nom d'atlas "hud/hotbar_offhand_left") — utilisé par le chemin Immediate (1.21.4, voir flushPendingImmediateItemIcons), qui a besoin d'un chemin de texture direct (pas d'accès à l'atlas de sprites côté résolution "Immediate"). */
+    private static final String VANILLA_SLOT_SPRITE_PATH = "textures/gui/sprites/hud/hotbar_offhand_left.png";
     private static Method drawGuiTextureMethodModern;
     private static Object renderPipelineGuiTexturedModern;
     private static Object slotSpriteIdentifierModern;
@@ -2339,7 +2342,29 @@ public final class UiRenderer {
                 }
                 return;
             }
+            // Case vanilla ("TODO 1.21.4" point 1, jamais implémentée sur ce
+            // bracket avant cette session) — best-effort, ne fait jamais
+            // échouer le dessin de l'icône même en cas d'échec ici. Contrairement
+            // au chemin "Deferred" (1.21.11/26.1.2, voir flushIntoGuiState), PAS
+            // besoin de découper en 4 bandes ici : ce chemin est SYNCHRONE
+            // (aucune catégorisation GuiRenderState qui imposerait un ordre de
+            // dessin fixe) — l'ordre d'APPEL détermine directement l'ordre de
+            // dessin, donc le sprite COMPLET dessiné AVANT l'icône suffit.
+            boolean hasVanillaExtras = false;
+            for (PendingItemIcon icon : batch) if (icon.vanillaExtras) { hasVanillaExtras = true; break; }
+            if (hasVanillaExtras) ensureContainerBlitImmediateResolved(realDrawContext.getClass());
+
             for (PendingItemIcon icon : batch) {
+                if (icon.vanillaExtras && drawTextureMethodImmediate != null) {
+                    Object mc = McReflect.minecraftClient();
+                    Object spriteIdentifier = mc != null
+                        ? resolveTextureIdentifier(mc.getClass().getClassLoader(), VANILLA_SLOT_SPRITE_PATH) : null;
+                    if (spriteIdentifier != null) {
+                        drawTextureMethodImmediate.invoke(realDrawContext, guiTexturedFunctionProxyImmediate, spriteIdentifier,
+                            icon.guiX - SLOT_SPRITE_ICON_DX, icon.guiY - SLOT_SPRITE_ICON_DY, 0f, 0f,
+                            SLOT_SPRITE_W, SLOT_SPRITE_H, SLOT_SPRITE_W, SLOT_SPRITE_H);
+                    }
+                }
                 drawItemMethodImmediateModern.invoke(realDrawContext, icon.itemStack, icon.guiX, icon.guiY);
                 // drawItemBar absent sur 1.20.4 (pas de mapping Yarn pour ce
                 // bracket, voir ensureModernImmediateResolved) — résolution à

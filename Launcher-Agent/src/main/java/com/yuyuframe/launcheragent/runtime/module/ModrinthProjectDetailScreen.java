@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
 import com.yuyuframe.launcheragent.runtime.content.ModrinthJson;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAsyncFade;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -19,7 +20,9 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -599,6 +602,10 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
     private static final class InlineBannerImage extends UiWidget {
         private final String url;
         private final String cacheKey; // précalculé une fois — voir ImgRef.cacheKey pour le même motif
+        // Fondu d'entrée ajouté (voir audit runtime/ui/ : apparition brute
+        // dès que le fetch HTTP termine) — une instance par bannière, markReady()
+        // idempotent, voir javadoc de UiAsyncFade.
+        private final UiAsyncFade fade = new UiAsyncFade();
 
         InlineBannerImage(float x, float y, float w, float h, String url) {
             super(x, y, w, h);
@@ -613,9 +620,11 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
                 renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT.multiplyAlpha(clipFade), vpWidth, vpHeight);
                 return;
             }
+            fade.markReady();
             float scale = Math.min(Math.min(w / img.getWidth(), h / img.getHeight()), 1f);
             float dw = img.getWidth() * scale, dh = img.getHeight() * scale;
-            renderer.drawIcon(cacheKey, img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh, vpWidth, vpHeight);
+            renderer.drawIcon(cacheKey, img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh,
+                fade.alpha() * clipFade, vpWidth, vpHeight);
         }
     }
 
@@ -681,6 +690,17 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         private boolean prevLeftDown;
         private final UiAnimatedFloat leftHover = new UiAnimatedFloat(0f, 14f);
         private final UiAnimatedFloat rightHover = new UiAnimatedFloat(0f, 14f);
+        // Fondu d'entrée ajouté (voir audit runtime/ui/) — une instance PAR
+        // URL (pas un seul champ partagé) : chaque image de la galerie doit
+        // rejouer son propre fondu la première fois qu'elle arrive, y
+        // compris en revenant sur une image déjà vue plus tôt dans la
+        // session (cache déjà chaud, mais le widget ne le sait pas avant que
+        // markReady() soit appelé pour CETTE clé précise).
+        private final Map<String, UiAsyncFade> imageFades = new HashMap<>();
+
+        private UiAsyncFade fadeFor(String cacheKey) {
+            return imageFades.computeIfAbsent(cacheKey, k -> new UiAsyncFade());
+        }
 
         GalleryCarousel(float x, float y, float w, float h, List<String> urls) {
             super(x, y, w, h);
@@ -723,10 +743,13 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             }
 
             if (img != null && img.getWidth() > 0 && img.getHeight() > 0) {
+                UiAsyncFade imgFade = fadeFor(cacheKeys.get(index));
+                imgFade.markReady();
                 float boxW = w - (ARROW_MARGIN + ARROW_D) * 2f - 16f, boxH = h - 16f;
                 float scale = Math.min(Math.min(boxW / img.getWidth(), boxH / img.getHeight()), 4f);
                 float dw = img.getWidth() * scale, dh = img.getHeight() * scale;
-                renderer.drawIcon(cacheKeys.get(index), img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh, vpWidth, vpHeight);
+                renderer.drawIcon(cacheKeys.get(index), img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh,
+                    imgFade.alpha() * fade, vpWidth, vpHeight);
             } else {
                 String label = "Chargement...";
                 float lw = renderer.textWidth(label, 0.42f);

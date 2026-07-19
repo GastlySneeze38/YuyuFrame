@@ -17,6 +17,9 @@ public final class TileEntityRenderDistanceModule extends LauncherModule {
     public float maxDistance = 64f;
 
     public TileEntityRenderDistanceModule() {
-        super("tile-entity-render-distance", "Distance de rendu (tile entities)", "Ne rend pas les coffres/fours/panneaux... au-delà d'une distance donnée", true);
+        // Nom raccourci (était "Distance de rendu (tile entities)") — voir
+        // PlayerBackfaceCullingModule pour le pourquoi (onglet groupé
+        // "Distance de rendu" du même nom, voir ModuleRegistry).
+        super("tile-entity-render-distance", "Tile entities", "Ne rend pas les coffres/fours/panneaux... au-delà d'une distance donnée", true);
     }
 }

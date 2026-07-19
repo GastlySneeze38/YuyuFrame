@@ -16,7 +16,8 @@
     "client.v1_21_4.MouseHandlerFreelookMixin1214",
     "client.v1_21_4.CameraFreelookMixin1214",
     "client.v1_21_4.WorldTimePropertiesMixin1214",
-    "client.v1_21_4.HudItemFlushMixin1214"
+    "client.v1_21_4.HudItemFlushMixin1214",
+    "client.v1_21_4.HandledScreenBlitFlushMixin1214"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -21,6 +21,9 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
  */
 public final class NoPumpkinOverlayModule extends LauncherModule {
     public NoPumpkinOverlayModule() {
-        super("no-pumpkin-overlay", "Sans citrouille (vision)", "Retire l'overlay de vision de la citrouille sculptée portée sur la tête", false);
+        // Nom raccourci (était "Sans citrouille (vision)") — retour
+        // utilisateur : débordait de la sous-sidebar du groupe "Confort
+        // visuel" ; le détail reste dans la description.
+        super("no-pumpkin-overlay", "Sans citrouille", "Retire l'overlay de vision de la citrouille sculptée portée sur la tête", false);
     }
 }

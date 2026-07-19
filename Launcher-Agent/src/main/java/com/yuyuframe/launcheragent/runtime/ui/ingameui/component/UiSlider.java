@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
@@ -32,6 +34,11 @@ public class UiSlider extends UiWidget {
     private float value;
     private final Consumer<Float> onChange;
     private boolean dragging;
+    // Hover animé ajouté (voir audit runtime/ui/ : seul composant de réglage
+    // à n'avoir aucune trace d'animation) — le curseur grossit légèrement et
+    // la piste remplie s'éclaircit au survol/pendant le glissement, même
+    // motif que UiButton/UiDropdown.
+    private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
     public UiSlider(float x, float y, float w, float min, float max, float step, float initial, Consumer<Float> onChange) {
         super(x, y, w, UiTheme.scaled(20f));
@@ -60,12 +67,17 @@ public class UiSlider extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        hoverAnim.setTarget(dragging || contains(mouseX, mouseY) ? 1f : 0f);
+        float hoverT = hoverAnim.get();
+
         float trackW = trackW();
         float cy = y + h / 2f;
         renderer.drawRoundedRect(x, cy - TRACK_H / 2f, x + trackW, cy + TRACK_H / 2f, TRACK_H / 2f, UiTheme.TRACK_OFF, vpWidth, vpHeight);
         float knobX = x + ratio() * trackW;
-        renderer.drawRoundedRect(x, cy - TRACK_H / 2f, knobX, cy + TRACK_H / 2f, TRACK_H / 2f, UiTheme.ACCENT, vpWidth, vpHeight);
-        renderer.drawRoundedRect(knobX - KNOB_R, cy - KNOB_R, knobX + KNOB_R, cy + KNOB_R, KNOB_R, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
+        UiColor fillColor = UiColor.lerp(UiTheme.ACCENT, UiTheme.accentLight(), hoverT);
+        renderer.drawRoundedRect(x, cy - TRACK_H / 2f, knobX, cy + TRACK_H / 2f, TRACK_H / 2f, fillColor, vpWidth, vpHeight);
+        float knobR = KNOB_R * (1f + hoverT * 0.25f);
+        renderer.drawRoundedRect(knobX - knobR, cy - knobR, knobX + knobR, cy + knobR, knobR, UiTheme.TEXT_PRIMARY, vpWidth, vpHeight);
 
         String text = formatValue();
         float tw = renderer.textWidth(text, textScale);

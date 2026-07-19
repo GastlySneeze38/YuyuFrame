@@ -24,8 +24,18 @@ public final class HudPanelRenderer {
      * référence, d'où le comparatif demandé.
      */
     public static UiColor PANEL_BG = new UiColor(10, 10, 14, 120);
-    // Rayon 2, valeur OneConfig (BasicHud : cornerRadius=2).
+    // Rayon 2, valeur OneConfig (BasicHud : cornerRadius=2) — INCHANGÉ (voir
+    // référence explicite ci-dessus, ne pas aligner sur UiTheme.RADIUS_MD :
+    // ce n'est pas un oubli, c'est un choix délibéré de coller à OneConfig).
     private static final float RADIUS = 2f;
+    // Ombre légère ajoutée (voir audit runtime/ui/ : le HUD était le seul
+    // "panneau" du moteur sans aucune ombre, contrairement à UiPanel/cartes
+    // des écrans) — subtile (alpha bas, flou modéré) pour rester discrète en
+    // jeu, jamais un halo qui distrairait pendant le gameplay. Hérite de la
+    // même limitation era E que UiRenderer.drawShadow (no-op sur ce bracket,
+    // voir sa javadoc) — dégradation silencieuse, pas une régression.
+    private static final UiColor SHADOW_COLOR = new UiColor(0, 0, 0, 90);
+    private static final float SHADOW_BLUR = 6f;
     // Visibilité paquet (pas private) : réutilisées par HudElement.naturalSize()
     // pour calculer la taille "naturelle" du contenu à scale=1 (taille par
     // défaut de la boîte + seuil minimal de redimensionnement lisible) — une
@@ -62,6 +72,7 @@ public final class HudPanelRenderer {
         // sauté, mais draw() reste appelé normalement plus bas.
         boolean skipBg = element.customRenderer != null && element.customRenderer.skipBackground();
         if (!skipBg) {
+            renderer.drawShadow(x, y, x + w, y + h, RADIUS, SHADOW_BLUR, 0f, SHADOW_COLOR, vpWidth, vpHeight);
             // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
             // avec le texte différé d'une frame sur era E — voir sa javadoc.
             renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);

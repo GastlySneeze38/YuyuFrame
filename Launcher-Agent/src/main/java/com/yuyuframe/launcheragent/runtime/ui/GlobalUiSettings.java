@@ -24,19 +24,30 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
  */
 public final class GlobalUiSettings extends LauncherModule {
 
-    // Couleurs de base d'origine (UiTheme littéral) — indépendantes de l'état
-    // COURANT (déjà muté) de UiTheme, pour ne jamais faire dériver la teinte
-    // à chaque rappel de onConfigChanged(). DOIT rester déclaré AVANT INSTANCE
-    // ci-dessous : les initialiseurs statiques s'exécutent dans l'ordre
-    // TEXTUEL, et le constructeur de INSTANCE appelle onConfigChanged() (qui
-    // lit ces champs) — les avoir après aurait laissé BASE_CARD_BG/HOVER à
-    // null au moment de cet appel (NullPointerException → ExceptionInInitializerError,
-    // observé en jeu : le clic sur "Parametres" ne faisait plus jamais rien).
-    private static final UiColor BASE_CARD_BG = new UiColor(31, 31, 39, 255);
-    private static final UiColor BASE_CARD_HOVER = new UiColor(40, 40, 50, 255);
+    // Couleur de base d'origine (littérale, PAS l'état courant de UiTheme,
+    // potentiellement déjà muté) — pour le HUD uniquement (CARD_BG/CARD_HOVER
+    // n'en ont plus besoin, voir onConfigChanged : ils repartent désormais de
+    // la palette posée par UiTheme.applyMode, qui gère déjà dark/light).
+    // DOIT rester déclaré AVANT INSTANCE ci-dessous : les initialiseurs
+    // statiques s'exécutent dans l'ordre TEXTUEL, et le constructeur de
+    // INSTANCE appelle onConfigChanged() (qui lit ce champ) — l'avoir après
+    // aurait laissé BASE_HUD_BG à null au moment de cet appel
+    // (NullPointerException → ExceptionInInitializerError, observé en jeu :
+    // le clic sur "Parametres" ne faisait plus jamais rien).
     private static final UiColor BASE_HUD_BG = new UiColor(10, 10, 14, 120);
 
     public static final GlobalUiSettings INSTANCE = new GlobalUiSettings();
+
+    // Câblage du toggle dark/light ajouté (voir audit runtime/ui/ :
+    // UiTheme.applyMode existait déjà comme capacité moteur mais n'était
+    // appelé depuis aucun écran) — appliqué en PREMIER dans onConfigChanged()
+    // ci-dessous : applyMode réassigne TOUS les tokens de couleur d'un coup,
+    // les réglages individuels (accent, opacités...) doivent donc s'appliquer
+    // APRÈS, sinon ils seraient écrasés par la palette de base à chaque
+    // changement.
+    @ConfigDropdown(name = "Thème", description = "Palette générale de l'interface — sombre (par défaut) ou claire.",
+        category = "Apparence", options = { "Sombre", "Clair" })
+    public int themeMode = 0;
 
     @ConfigSlider(name = "Opacité des cartes (menu)", description = "Transparence des cartes de mods et panneaux de config du MENU — pas les panneaux HUD affichés en jeu (voir \"Opacité du HUD\" ci-dessous).",
         category = "Apparence", min = 10f, max = 100f, step = 1f)
@@ -96,9 +107,16 @@ public final class GlobalUiSettings extends LauncherModule {
 
     @Override
     public void onConfigChanged() {
+        UiTheme.applyMode(themeMode == 1 ? UiTheme.Mode.LIGHT : UiTheme.Mode.DARK);
+
+        // withAlpha (PAS une reconstruction depuis une couleur littérale
+        // figée) : applyMode ci-dessus vient de poser CARD_BG/CARD_HOVER sur
+        // la palette DARK ou LIGHT correcte (alpha=255) — repartir d'une
+        // constante toujours sombre écraserait la teinte claire dès que le
+        // thème LIGHT est actif. On ne touche donc qu'à l'alpha, jamais au RGB.
         float alpha = Math.max(0f, Math.min(1f, cardOpacity / 100f));
-        UiTheme.CARD_BG = new UiColor(BASE_CARD_BG.r, BASE_CARD_BG.g, BASE_CARD_BG.b, alpha);
-        UiTheme.CARD_HOVER = new UiColor(BASE_CARD_HOVER.r, BASE_CARD_HOVER.g, BASE_CARD_HOVER.b, alpha);
+        UiTheme.CARD_BG = UiTheme.CARD_BG.withAlpha(alpha);
+        UiTheme.CARD_HOVER = UiTheme.CARD_HOVER.withAlpha(alpha);
 
         float hudAlpha = Math.max(0f, Math.min(1f, hudOpacity / 100f));
         HudPanelRenderer.PANEL_BG = new UiColor(BASE_HUD_BG.r, BASE_HUD_BG.g, BASE_HUD_BG.b, hudAlpha);

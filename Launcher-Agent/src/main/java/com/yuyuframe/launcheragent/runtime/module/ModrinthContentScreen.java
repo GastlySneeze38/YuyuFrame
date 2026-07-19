@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
 import com.yuyuframe.launcheragent.runtime.content.ModrinthJson;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAsyncFade;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
@@ -800,6 +801,18 @@ public final class ModrinthContentScreen extends UiScreenBase {
         private final ModrinthJson.Hit hit;
         private final boolean alreadyInstalled;
         private boolean prevLeftDown;
+        // Fondu d'entrée ajouté (voir audit runtime/ui/ : apparition brute
+        // dès que le fetch HTTP termine) — voir UiAsyncFade.
+        private final UiAsyncFade iconFade = new UiAsyncFade();
+        // Léger soulèvement au survol (demande explicite : "que ça soit
+        // dynamique") — VISUEL UNIQUEMENT : x/y/w/h (donc contains()/
+        // overButtonRect()/pollContinuous(), tous basés sur les champs réels)
+        // restent inchangés, seules les coordonnées de DESSIN sont décalées
+        // (voir dy dans draw()) — sinon la zone cliquable "courrait après"
+        // la carte pendant l'animation, avec un risque de clic manqué juste
+        // après le début du survol.
+        private static final float HOVER_LIFT_PX = 4f;
+        private final UiAnimatedFloat hoverLift = new UiAnimatedFloat(0f, 18f);
 
         ResultCard(float x, float y, float w, float h, ModrinthJson.Hit hit, boolean alreadyInstalled) {
             super(x, y, w, h);
@@ -860,12 +873,31 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // pour ce pipeline de dessin différé, voir UiScrollContainer) —
             // juste l'opacité de chaque élément de la carte.
             float fade = clipFade;
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
+
+            boolean hoveredCard = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+            hoverLift.setTarget(hoveredCard ? 1f : 0f);
+            // UiAnimatedFloat.get() avance son horloge interne à CHAQUE appel
+            // (voir sa javadoc, "une fois par frame") — lu UNE SEULE FOIS ici,
+            // réutilisé partout ci-dessous (dy/ombre/bouton), jamais rappelé.
+            float liftT = hoverLift.get();
+            float dy = y + liftT * HOVER_LIFT_PX; // Y-up : "vers le haut" = y plus grand
+
+            // Ombre discrète ajoutée (voir audit runtime/ui/ : drawShadow
+            // confiné à UiMainMenuScreen) — fade appliqué comme sur le fond
+            // de la carte, pour disparaître en même temps qu'elle au bord du
+            // scroll plutôt que de rester visible un instant après elle.
+            // Légèrement plus prononcée qu'au repos au maximum du survol :
+            // accentue la sensation de carte qui se soulève, pas juste "qui glisse".
+            float shadowBlur = 6f + liftT * 4f;
+            float shadowAlpha = (60 + liftT * 30) * fade / 255f;
+            renderer.drawShadow(x, dy, x + w, dy + h, UiTheme.RADIUS_MD, shadowBlur, 0f,
+                new UiColor(0f, 0f, 0f, shadowAlpha), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x, dy, x + w, dy + h, UiTheme.RADIUS_MD, UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
 
             // Icône plafonnée (pas juste h-24) — sinon elle grossit à l'infini
             // avec la hauteur de carte et écrase visuellement le texte.
             float iconSize = Math.min(h - 32f, 84f);
-            float iconY = y + (h - iconSize) / 2f;
+            float iconY = dy + (h - iconSize) / 2f;
             // Vraie icône du pack (voir resizedIcon/UiRemoteImage) une
             // fois disponible ; pastille-lettre en attendant (état "en cours
             // de chargement", jamais un blocage) — remplace l'ancien
@@ -876,7 +908,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
             if (fade > 0.05f) {
                 BufferedImage icon = resizedIcon(hit.projectId, hit.iconUrl);
                 if (icon != null) {
-                    renderer.drawIcon(hit.projectId, icon, x + 14, iconY, iconSize, vpWidth, vpHeight);
+                    iconFade.markReady();
+                    renderer.drawIcon(hit.projectId, icon, x + 14, iconY, iconSize, iconSize,
+                        iconFade.alpha() * fade, vpWidth, vpHeight);
                 } else {
                     renderer.drawRoundedRect(x + 14, iconY, x + 14 + iconSize, iconY + iconSize,
                         UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM.multiplyAlpha(fade), vpWidth, vpHeight);
@@ -895,16 +929,16 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // les échelles de texte agrandies) — répartis sur toute la
             // hauteur désormais disponible (rowH=128) plutôt que tassés en
             // haut/bas de la carte.
-            renderer.drawText(truncate(renderer, hit.title, 0.56f, textMaxW), textX, y + h - 34,
+            renderer.drawText(truncate(renderer, hit.title, 0.56f, textMaxW), textX, dy + h - 34,
                 UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.56f, vpWidth, vpHeight);
 
             String meta = (hit.author != null && !hit.author.isEmpty() ? hit.author + "  ·  " : "")
                 + formatDownloads(hit.downloads) + " téléchargements";
-            renderer.drawText(truncate(renderer, meta, 0.42f, textMaxW), textX, y + h - 62,
+            renderer.drawText(truncate(renderer, meta, 0.42f, textMaxW), textX, dy + h - 62,
                 UiTheme.TEXT_SECONDARY.multiplyAlpha(fade), 0.42f, vpWidth, vpHeight);
 
             if (hit.description != null && !hit.description.isEmpty()) {
-                renderer.drawText(truncate(renderer, hit.description, 0.4f, textMaxW), textX, y + 22,
+                renderer.drawText(truncate(renderer, hit.description, 0.4f, textMaxW), textX, dy + 22,
                     UiTheme.TEXT_MUTED.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
             }
 
@@ -913,11 +947,16 @@ public final class ModrinthContentScreen extends UiScreenBase {
             UiColor btnColor = installing ? UiTheme.ACCENT_DIM
                 : alreadyInstalled ? UiTheme.PANEL_BG_ALT
                 : (hoverBtn ? UiTheme.ACCENT : UiTheme.CARD_HOVER);
-            renderer.drawRoundedRect(btnX(), btnY(), btnX() + BTN_W, btnY() + BTN_H,
+            // btnY() + lift (PAS btnY() seul) : le bouton suit visuellement le
+            // soulèvement de la carte — sa vraie zone cliquable (btnY(), lue
+            // par contains()/overButtonRect() ci-dessus, jamais modifiée) reste
+            // volontairement à la position non-soulevée, voir javadoc de hoverLift.
+            float liftedBtnY = btnY() + liftT * HOVER_LIFT_PX;
+            renderer.drawRoundedRect(btnX(), liftedBtnY, btnX() + BTN_W, liftedBtnY + BTN_H,
                 UiTheme.RADIUS_SM, btnColor.multiplyAlpha(fade), vpWidth, vpHeight);
             String label = installing ? spinnerFrame() + " Installation" : (alreadyInstalled ? "Installé" : "Installer");
             float lw = renderer.textWidth(label, 0.48f);
-            renderer.drawText(label, btnX() + (BTN_W - lw) / 2f, btnY() + BTN_H / 2f - 6f,
+            renderer.drawText(label, btnX() + (BTN_W - lw) / 2f, liftedBtnY + BTN_H / 2f - 6f,
                 (alreadyInstalled && !installing) ? UiTheme.TEXT_SECONDARY.multiplyAlpha(fade) : UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.48f, vpWidth, vpHeight);
         }
     }

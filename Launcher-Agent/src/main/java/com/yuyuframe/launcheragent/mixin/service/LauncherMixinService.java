@@ -327,6 +327,13 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/HudItemFlushMixin1214",
             "net/minecraft/client/gui/hud/InGameHud", "render",
             "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        // HandledScreenBlitFlushMixin1214 : même correctif que ci-dessus, mais
+        // pour le fond de fenêtre de conteneur (Aperçu shulker) — z-order
+        // différent (doit apparaître par-dessus l'écran, pas juste le HUD),
+        // voir UiRenderer#drawVanillaContainerTextureModernImmediate.
+        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/HandledScreenBlitFlushMixin1214",
+            "net/minecraft/client/gui/screen/ingame/HandledScreen", "render",
+            "(Lnet/minecraft/client/gui/DrawContext;IIF)V", null),
         // InGameHud.renderOverlay(DrawContext,Identifier,F) — voir
         // ClearOverlaysMixin/NoPumpkinOverlayModule, même correctif que ci-dessus.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/ClearOverlaysMixin",

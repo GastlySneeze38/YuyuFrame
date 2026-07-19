@@ -25,6 +25,9 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
  */
 public final class ClearVisionModule extends LauncherModule {
     public ClearVisionModule() {
-        super("clear-vision", "Vision claire (eau/lave/neige)", "Retire le brouillard teinté et le givre de l'eau, la lave et la neige poudreuse", false);
+        // Nom raccourci (était "Vision claire (eau/lave/neige)") — retour
+        // utilisateur : débordait de la sous-sidebar du groupe "Confort
+        // visuel" ; le détail reste dans la description.
+        super("clear-vision", "Vision claire", "Retire le brouillard teinté et le givre de l'eau, la lave et la neige poudreuse", false);
     }
 }

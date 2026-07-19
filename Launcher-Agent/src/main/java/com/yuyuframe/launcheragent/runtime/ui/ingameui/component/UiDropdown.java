@@ -60,6 +60,12 @@ public class UiDropdown extends UiWidget {
 
         float panelTop = y - PANEL_PAD;
         float panelBottom = panelTop - options.size() * ROW_H;
+        // Ombre ajoutée (voir audit runtime/ui/) : ce panneau flotte
+        // au-dessus du contenu de l'écran en dessous (options, texte...) —
+        // sans ombre rien ne le distinguait visuellement de ce qu'il
+        // recouvre, contrairement à un vrai menu déroulant.
+        renderer.drawShadow(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, 8f, 0f,
+            new UiColor(0, 0, 0, 90), vpWidth, vpHeight);
         renderer.drawRoundedRect(x, panelBottom, x + w, panelTop, UiTheme.RADIUS_SM, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
 
         float rowInset = UiTheme.scaled(2f), rowRadius = UiTheme.scaled(2f);

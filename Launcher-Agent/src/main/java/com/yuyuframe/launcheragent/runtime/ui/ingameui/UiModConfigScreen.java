@@ -13,14 +13,28 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContain
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
 import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.Map;
 
 /**
- * Page de config d'un module — bouton retour + titre fixes en haut, sous-
- * sidebar de catégories à gauche (façon OneConfig), carte de contenu
- * scrollable à droite ne montrant QUE la catégorie active.
+ * Page de config d'un module — bouton retour + titre fixes en haut, carte
+ * autour de la sous-sidebar de catégories à gauche, contenu à DROITE posé
+ * directement sur le fond transparent de l'écran (voir {@link #overlayColor}).
  *
- * Cet écran ne connaît plus AUCUN module en particulier : les lignes de
+ * REFONTE (demande explicite de l'utilisateur, deux captures fournies en
+ * référence : notre propre écran + les réglages vidéo façon Sodium) :
+ *  - Fond d'écran nettement plus transparent (voir overlayColor ci-dessous)
+ *    pour voir ce qui se passe en jeu en bougeant un curseur avec effet
+ *    visuel immédiat (ex: WorldTimeModule).
+ *  - La carte entoure désormais la SOUS-SIDEBAR (catégories), plus le
+ *    contenu — inversion délibérée par rapport à l'ancien écran.
+ *  - Les réglages ne sont plus répartis en PAGES séparées par catégorie :
+ *    UNE SEULE liste scrollable continue (voir {@link
+ *    ConfigScreenBuilder#buildContinuous}), avec un en-tête de section bold
+ *    par catégorie — cliquer une catégorie dans la sous-sidebar ne change
+ *    plus le contenu affiché, ça fait juste DÉFILER jusqu'à sa section (voir
+ *    {@code UiScrollContainer#scrollToAnchor}), façon Sodium/Iris.
+ *
+ * Cet écran ne connaît toujours AUCUN module en particulier : les lignes de
  * réglage sont générées par réflexion à partir des champs annotés du module
  * (voir {@link ConfigScreenBuilder}) — un futur module se contente de
  * déclarer ses champs, jamais de code d'écran.
@@ -32,6 +46,15 @@ import java.util.List;
  */
 public class UiModConfigScreen extends UiScreenBase {
 
+    // Fond quasi-transparent (voir UiHudEditorScreen.EDITOR_OVERLAY, même
+    // philosophie déjà établie pour l'éditeur HUD) — le monde (temps,
+    // météo...) reste visible en direct derrière pendant qu'on ajuste un
+    // réglage qui l'affecte, demande explicite de l'utilisateur. Un peu plus
+    // opaque que l'éditeur HUD (70 vs 60) : cet écran a BEAUCOUP plus de
+    // texte dense (lignes de réglage) qu'une poignée de boîtes HUD, un peu
+    // plus de voile aide la lisibilité sans redevenir un mur opaque.
+    private static final UiColor CONFIG_OVERLAY = new UiColor(6, 6, 10, 70);
+
     // Non static/final — recalculées à chaque buildLayout() depuis
     // UiTheme.UI_SCALE (voir GlobalUiSettings, réglage "Taille de
     // l'interface"), même motif que UiMainMenuScreen/UiModGroupConfigScreen.
@@ -42,10 +65,10 @@ public class UiModConfigScreen extends UiScreenBase {
 
     private final Object lastScreen;
     private final LauncherModule module;
-    private LinkedHashMap<String, List<UiWidget>> categoryWidgets = new LinkedHashMap<>();
+    private LinkedHashMap<String, Float> anchors = new LinkedHashMap<>();
     private String activeCategory;
     private UiScrollContainer scroll;
-    private float panelX, panelY, panelW, panelH;
+    private float sidebarX, sidebarY, sidebarW, sidebarH;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
     private float lastUiScale = -1f;
 
@@ -57,6 +80,11 @@ public class UiModConfigScreen extends UiScreenBase {
     }
 
     @Override
+    protected UiColor overlayColor() {
+        return CONFIG_OVERLAY;
+    }
+
+    @Override
     public void uiDraw(double mouseX, double mouseY) {
         if (screenWidth > 0 && screenHeight > 0
                 && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight || UiTheme.UI_SCALE != lastUiScale)) {
@@ -65,12 +93,23 @@ public class UiModConfigScreen extends UiScreenBase {
             lastLayoutHeight = screenHeight;
             lastUiScale = UiTheme.UI_SCALE;
         }
+        // BUG TROUVÉ (retour utilisateur : "la sidebar y'a rien qui va, le
+        // z-order est pas bon") : UiPanel.draw() était appelé ICI, APRÈS
+        // super.uiDraw() — qui a déjà dessiné les CategoryTab (dans
+        // "widgets") À CE moment. Le panneau, positionné exactement sur la
+        // même zone que ces onglets, se retrouvait donc dessiné PAR-DESSUS
+        // eux (dernier dessiné = au-dessus), les recouvrant entièrement.
+        // Fix : le panneau est maintenant un widget à part entière
+        // (SidebarPanel), ajouté EN PREMIER dans "widgets" (voir
+        // buildLayout) — l'ordre d'insertion pilote le z-order de
+        // super.uiDraw(), donc il se dessine AVANT (donc EN DESSOUS) les
+        // onglets, plus besoin de l'appeler séparément ici.
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
             renderer.drawText(UiFont.BOLD, module.name, SIDE_MARGIN + UiTheme.scaled(46f), screenHeight - UiTheme.scaled(44f),
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
-            UiPanel.draw(renderer, panelX, panelY, panelW, panelH, null, screenWidth, screenHeight);
+            updateActiveCategory();
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             // Ré-appliqué ici (déjà dessiné une fois dans super.uiDraw()) — voir
             // sa javadoc : sans ça, le titre/panneau ci-dessus apparaîtrait
@@ -91,48 +130,119 @@ public class UiModConfigScreen extends UiScreenBase {
         SUB_SIDEBAR_W = UiTheme.scaled(180f);
         CONTENT_MAX_W = UiTheme.scaled(620f);
 
-        widgets.clear();
-        widgets.add(new BackButton());
-
-        float panelXLocal = SIDE_MARGIN + SUB_SIDEBAR_W + UiTheme.scaled(16f);
-        float panelWLocal = Math.min(CONTENT_MAX_W, screenWidth - panelXLocal - SIDE_MARGIN);
         float panelTop = screenHeight - HEADER_H;
         float panelBottom = UiTheme.scaled(20f);
-        this.panelX = panelXLocal;
-        this.panelY = panelBottom;
-        this.panelW = panelWLocal;
-        this.panelH = panelTop - panelBottom;
 
-        float rowX = panelX + UiTheme.scaled(16f);
-        float rowW = panelW - UiTheme.scaled(32f);
-        scroll = new UiScrollContainer(rowX, panelY + UiTheme.scaled(16f), rowW, panelH - UiTheme.scaled(32f));
+        float contentX = SIDE_MARGIN + SUB_SIDEBAR_W + UiTheme.scaled(16f);
+        float contentW = Math.min(CONTENT_MAX_W, screenWidth - contentX - SIDE_MARGIN);
 
-        categoryWidgets = ConfigScreenBuilder.build(module, rowX, rowW);
-        if (activeCategory == null || !categoryWidgets.containsKey(activeCategory)) {
-            activeCategory = categoryWidgets.isEmpty() ? null : categoryWidgets.keySet().iterator().next();
+        // Petite marge haut/bas conservée même sans carte englobante (voir
+        // javadoc de classe) — sinon la première/dernière ligne toucherait
+        // pile le bord du viewport de scroll.
+        float contentPad = UiTheme.scaled(12f);
+        // Réserve pour la barre de scroll (retour utilisateur : "la barre de
+        // scroll chevauche les paramètres") — le viewport du scroll garde
+        // TOUTE la largeur de contenu (la barre se dessine à son bord droit
+        // réel), mais les LIGNES elles-mêmes (rowW, passé à
+        // buildContinuous) sont plus étroites : sans cette réserve, les
+        // contrôles alignés à droite (slider/toggle/color picker, insérés à
+        // 10px du bord de leur ligne) tombaient exactement là où la barre de
+        // scroll se dessine (~10px du bord du viewport) — même zone,
+        // chevauchement garanti.
+        float scrollbarReserve = UiTheme.scaled(20f);
+        float rowX = contentX;
+        float rowW = contentW - scrollbarReserve;
+        scroll = new UiScrollContainer(rowX, panelBottom + contentPad, contentW, (panelTop - panelBottom) - contentPad * 2f);
+
+        ConfigScreenBuilder.Result result = ConfigScreenBuilder.buildContinuous(module, rowX, rowW);
+        anchors = result.anchors;
+        for (UiWidget w : result.rows) scroll.add(w);
+
+        if (activeCategory == null || !anchors.containsKey(activeCategory)) {
+            activeCategory = anchors.isEmpty() ? null : anchors.keySet().iterator().next();
         }
 
-        float tabH = UiTheme.scaled(34f), tabGap = UiTheme.scaled(38f), tabTopGap = UiTheme.scaled(24f);
+        // Carte revenue à toute la hauteur disponible (retour utilisateur :
+        // "c'était mieux avant" — l'ajustement au nombre d'onglets, tenté
+        // dans une itération précédente, est annulé). Le vide sous un seul
+        // onglet reste visible mais c'est le choix préféré de l'utilisateur.
+        // tabTopGap remonté (24->44) — retour utilisateur : le bouton
+        // poussait au-dessus du bord haut de la carte, pas la carte à
+        // repositionner/redimensionner (déjà revenue à sa taille d'origine
+        // juste avant), le bouton à descendre.
+        // tabH/tabGap agrandis (retour utilisateur : "c'est trop petit... pas
+        // assez de marge sur les titres") — même ajustement que
+        // UiModGroupConfigScreen, pour rester cohérent visuellement entre les
+        // deux écrans.
+        float tabH = UiTheme.scaled(38f), tabGap = UiTheme.scaled(44f), tabTopGap = UiTheme.scaled(44f);
+        this.sidebarX = SIDE_MARGIN;
+        this.sidebarW = SUB_SIDEBAR_W;
+        this.sidebarY = panelBottom;
+        this.sidebarH = panelTop - panelBottom;
+
+        widgets.clear();
+        // EN PREMIER (voir uiDraw ci-dessus pour le bug de z-order corrigé) —
+        // doit se dessiner AVANT les CategoryTab ajoutés plus bas.
+        widgets.add(new SidebarPanel());
+        widgets.add(new BackButton());
+
         int i = 0;
-        for (String category : categoryWidgets.keySet()) {
-            widgets.add(new CategoryTab(SIDE_MARGIN, panelTop - tabTopGap - i * tabGap, SUB_SIDEBAR_W, tabH, category));
+        for (String category : anchors.keySet()) {
+            widgets.add(new CategoryTab(sidebarX + UiTheme.scaled(10f), panelTop - tabTopGap - i * tabGap,
+                sidebarW - UiTheme.scaled(20f), tabH, category));
             i++;
         }
-
-        switchCategory(activeCategory);
     }
 
-    private void switchCategory(String category) {
-        activeCategory = category;
-        scroll.clear();
-        if (category == null) return;
-        List<UiWidget> rows = categoryWidgets.get(category);
-        if (rows != null) for (UiWidget w : rows) scroll.add(w);
+    /** Détermine, parmi les catégories déjà passées en défilant (anchor >= haut de viewport visible), la dernière — celle "active" affichée en surbrillance. Recalculé CHAQUE frame (pas seulement au clic sur un onglet) : un défilement libre à la molette doit aussi mettre à jour la sous-sidebar. */
+    private void updateActiveCategory() {
+        if (scroll == null || anchors.isEmpty()) return;
+        float topY = scroll.visibleTopBaseY();
+        String best = null;
+        for (Map.Entry<String, Float> entry : anchors.entrySet()) {
+            if (entry.getValue() >= topY) best = entry.getKey();
+        }
+        activeCategory = best != null ? best : anchors.keySet().iterator().next();
+    }
+
+    /** Fond de la sous-sidebar — widget dédié (voir uiDraw pour le pourquoi) plutôt qu'un appel direct à UiPanel.draw() : purement décoratif, jamais cliqué (contains() par défaut suffit, jamais interrogé puisqu'aucun onClick()). */
+    private final class SidebarPanel extends UiWidget {
+        SidebarPanel() { super(sidebarX, sidebarY, sidebarW, sidebarH); }
+
+        /**
+         * BUG TROUVÉ (retour utilisateur : "les boutons de catégorie ne
+         * marchent pas non plus") — MÊME cause que RowBackground
+         * (ConfigScreenBuilder) et l'exclusion de toggle de ModCard
+         * (UiMainMenuScreen) : purement décoratif mais ajouté EN PREMIER
+         * dans "widgets" (voir buildLayout), avec le {@code contains()} PAR
+         * DÉFAUT de UiWidget qui couvre TOUTE la sous-sidebar — exactement
+         * la même zone que les CategoryTab dessinés par-dessus. Le dispatch
+         * de clic ({@code UiScreenBase.dispatchClick}) prend le PREMIER
+         * widget de la liste dont contains() matche : ce panneau
+         * interceptait donc systématiquement le clic à la place de l'onglet
+         * cliqué. Ne doit jamais être cliquable.
+         */
+        @Override
+        public boolean contains(double mx, double my) { return false; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            UiPanel.draw(renderer, sidebarX, sidebarY, sidebarW, sidebarH, null, vpWidth, vpHeight);
+        }
     }
 
     private final class CategoryTab extends UiWidget {
         private final String name;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+        // Transition douce de l'état actif (demande explicite : "quand on
+        // passe à la catégorie suivante... ajoute une belle animation") —
+        // AVANT, "active" changeait de façon binaire d'une frame à l'autre
+        // (fond/liseré d'accent/couleur du texte apparaissaient/
+        // disparaissaient d'un coup) — updateActiveCategory() tourne CHAQUE
+        // frame (pas juste au clic), donc un simple survol continu qui
+        // franchit une frontière de section rejouait déjà ce changement en
+        // continu, mais sans aucun lissage visuel avant cet ajout.
+        private final UiAnimatedFloat activeAnim = new UiAnimatedFloat(0f, 12f);
 
         CategoryTab(float x, float y, float w, float h, String name) {
             super(x, y, w, h);
@@ -142,20 +252,33 @@ public class UiModConfigScreen extends UiScreenBase {
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             boolean active = name.equals(activeCategory);
+            activeAnim.setTarget(active ? 1f : 0f);
+            float activeT = activeAnim.get();
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float hoverT = hoverAnim.get();
+
             float edgeW = UiTheme.scaled(3f), edgeInset = UiTheme.scaled(3f), edgeRadius = UiTheme.scaled(1.5f);
-            if (active) {
-                renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.SIDEBAR_ACTIVE, vpWidth, vpHeight);
-                renderer.drawRoundedRect(x, y + edgeInset, x + edgeW, y + h - edgeInset, edgeRadius, UiTheme.ACCENT, vpWidth, vpHeight);
-            } else {
-                UiColor bg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hoverAnim.get());
-                renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            // Fond : dégradé continu entre le survol (inactif) et l'actif —
+            // jamais un simple if/else qui saute d'un état à l'autre.
+            UiColor inactiveBg = UiColor.lerp(UiColor.TRANSPARENT, UiTheme.SIDEBAR_HOVER, hoverT);
+            UiColor bg = UiColor.lerp(inactiveBg, UiTheme.SIDEBAR_ACTIVE, activeT);
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            // Liseré d'accent : fondu (alpha) plutôt qu'apparition/disparition nette.
+            if (activeT > 0.01f) {
+                renderer.drawRoundedRect(x, y + edgeInset, x + edgeW, y + h - edgeInset, edgeRadius,
+                    UiTheme.ACCENT.multiplyAlpha(activeT), vpWidth, vpHeight);
             }
-            renderer.drawText(name, x + UiTheme.scaled(14f), y + h / 2f - UiTheme.scaled(5f), active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED, UiTheme.scaled(0.48f), vpWidth, vpHeight);
+            UiColor textColor = UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, activeT);
+            // Agrandi/marge augmentée (retour utilisateur : "c'est trop petit... pas assez de marge") — 14px->18px, 0.48->0.5.
+            renderer.drawText(name, x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, UiTheme.scaled(0.5f), vpWidth, vpHeight);
         }
 
+        /** Ne bascule plus l'affichage (liste continue désormais, voir javadoc de classe) — fait défiler jusqu'à la section, la sous-sidebar suit ensuite toute seule au fil du scroll (voir updateActiveCategory). */
         @Override
-        public void onClick() { switchCategory(name); }
+        public void onClick() {
+            Float anchor = anchors.get(name);
+            if (anchor != null && scroll != null) scroll.scrollToAnchor(anchor);
+        }
     }
 
     private final class BackButton extends UiWidget {

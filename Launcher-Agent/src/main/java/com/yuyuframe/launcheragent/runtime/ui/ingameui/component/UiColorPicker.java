@@ -1,8 +1,10 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiEasing;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
 
 import java.awt.Color;
@@ -40,6 +42,16 @@ public class UiColorPicker extends UiWidget {
     private boolean expanded;
     private final Consumer<UiColor> onChange;
     private final UiTextField hexField;
+    // Transition expand/collapse ajoutée (voir audit runtime/ui/ : panneau
+    // qui apparaissait/disparaissait d'un coup). Simplification délibérée :
+    // seul le FOND du panneau est fondu (multiplyAlpha) — les bandes/le
+    // champ hex à l'intérieur restent dessinés à pleine opacité dès que le
+    // fond dépasse un seuil quasi-nul, plutôt que de multiplier l'alpha sur
+    // chaque primitive individuellement (bandes de dégradé, marqueurs, champ
+    // hex...) pour ce premier passage de câblage. `expanded` reste la seule
+    // source de vérité pour l'INTERACTION (pollContinuous) — cette
+    // transition ne pilote QUE le rendu.
+    private final UiTransition panelTransition = new UiTransition(0.14f, 0f, UiEasing.EASE_OUT_CUBIC);
 
     private boolean draggingHue, draggingSat, draggingBri, draggingAlpha;
 
@@ -114,9 +126,11 @@ public class UiColorPicker extends UiWidget {
         renderer.drawRoundedRect(x, y, x + w, y + h, swatchRadius, UiTheme.TRACK_OFF, vpWidth, vpHeight);
         renderer.drawRoundedRect(x + swatchInset, y + swatchInset, x + w - swatchInset, y + h - swatchInset, swatchRadius - 1f, rgbColor(), vpWidth, vpHeight);
 
-        if (!expanded) return;
+        panelTransition.setTarget(expanded);
+        float panelAlpha = panelTransition.eased();
+        if (panelAlpha <= 0.02f) return;
 
-        renderer.drawRoundedRect(x, panelBottom(), x + PANEL_W, panelTop(), UiTheme.RADIUS_MD, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+        renderer.drawRoundedRect(x, panelBottom(), x + PANEL_W, panelTop(), UiTheme.RADIUS_MD, UiTheme.PANEL_BG_ALT.multiplyAlpha(panelAlpha), vpWidth, vpHeight);
 
         float bx = x + PANEL_PAD, bw = PANEL_W - 2 * PANEL_PAD;
 

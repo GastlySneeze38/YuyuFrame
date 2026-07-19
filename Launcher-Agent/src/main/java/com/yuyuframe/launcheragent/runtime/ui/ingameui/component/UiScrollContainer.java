@@ -136,6 +136,29 @@ public class UiScrollContainer {
         return Math.max(0f, (contentTop - contentBottom) + EDGE_PADDING * 2 - vh);
     }
 
+    /**
+     * Fait défiler pour amener le widget dont le bord HAUT (baseY + hauteur)
+     * vaut {@code anchorTop} juste sous le haut du viewport — même référence
+     * que le tout premier widget à scroll=0 (voir applyOffsets : {@code off
+     * = vy+vh-EDGE_PADDING-contentTop}, donc {@code screenY(w) = baseY(w) +
+     * off}). Résolu en posant {@code screenY(anchor)+h = vy+vh-EDGE_PADDING}
+     * (même position que le début du contenu à scroll=0), d'où
+     * {@code scrollTarget = contentTop - anchorTop}. Utilisé pour la
+     * navigation "catégorie -> section" d'UiModConfigScreen : une seule
+     * liste continue, les onglets ne font que défiler jusqu'au bon endroit
+     * au lieu de basculer entre des pages séparées.
+     */
+    public void scrollToAnchor(float anchorTop) {
+        scrollTarget = clampScroll(contentTop - anchorTop);
+        scrollAnim.setTarget(scrollTarget);
+        markActivity();
+    }
+
+    /** baseY actuellement aligné au haut du viewport (référence inverse de {@link #scrollToAnchor}) — sert à déterminer quelle section est "active" dans la sous-sidebar pendant un défilement libre (pas juste après un clic sur un onglet). */
+    public float visibleTopBaseY() {
+        return contentTop - lastAnimatedScroll;
+    }
+
     private float clampScroll(float v) {
         return Math.max(0f, Math.min(maxScroll(), v));
     }
