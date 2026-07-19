@@ -305,14 +305,17 @@ public final class ModuleRegistry {
             get("saturation"), get("no-darkness"), get("no-fog"),
             get("no-pumpkin-overlay"), get("clear-vision"), get("freelook"));
         if (!comfortMembers.isEmpty()) {
-            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire", comfortMembers));
+            GROUPS.add(new ModuleGroup("comfort", "Confort visuel",
+                "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire",
+                "Réglages de confort et d'immersion", comfortMembers));
         }
         // Groupe entièrement exclu sur 1.16.5 (les 7 membres y sont tous
         // exclus, voir IS_1_16) — pas de carte vide affichée dans ce cas.
         List<LauncherModule> legacyMembers = nonNull(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
             get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"));
         if (!legacyMembers.isEmpty()) {
-            GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak", legacyMembers));
+            GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak",
+                "Animations façon 1.7", legacyMembers));
         }
         // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
         // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),

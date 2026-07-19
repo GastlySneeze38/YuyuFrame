@@ -3217,6 +3217,27 @@ public final class UiRenderer {
 
     public float textWidth(UiFont font, String text, float scale) { return font.textWidth(text, scale); }
 
+    /**
+     * Tronque {@code text} (avec "...") pour tenir dans {@code maxWidth}
+     * pixels à l'échelle donnée — sans effet (retourne {@code text} tel
+     * quel) tant qu'il tient déjà dans cette largeur, donc directement
+     * applicable partout SANS condition sur le mode d'échelle : un titre/
+     * sous-titre ne déborde alors que quand il n'y a réellement plus la
+     * place (ex: cartes du menu principal en "Taille de l'interface" =
+     * Grande, voir UiMainMenuScreen.ModCard), jamais de retour à la ligne.
+     * Déplacée ici depuis ModrinthContentScreen (où elle vivait à l'origine,
+     * spécifique à cet écran) — devenue un besoin partagé, pas un utilitaire
+     * propre à Modrinth.
+     */
+    public String truncate(String text, float scale, float maxWidth) {
+        if (text == null) return "";
+        if (maxWidth <= 0 || textWidth(text, scale) <= maxWidth) return text;
+        String ellipsis = "...";
+        int len = text.length();
+        while (len > 0 && textWidth(text.substring(0, len) + ellipsis, scale) > maxWidth) len--;
+        return len <= 0 ? ellipsis : text.substring(0, len) + ellipsis;
+    }
+
     public void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         drawText(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight);
     }

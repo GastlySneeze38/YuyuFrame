@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.ConfigScreenBuilder;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -102,7 +103,7 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            renderer.drawText(UiFont.BOLD, group.name, SIDE_MARGIN + UiTheme.scaled(46f), screenHeight - UiTheme.scaled(44f),
+            renderer.drawText(UiFont.BOLD, Lang.tr(group.name), SIDE_MARGIN + UiTheme.scaled(46f), screenHeight - UiTheme.scaled(44f),
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
             updateActiveTab();
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -188,7 +189,7 @@ public class UiModGroupConfigScreen extends UiScreenBase {
                     // maintenant le rôle d'un vrai titre, pas d'un sous-texte
                     // discret.
                     float rowY = cursor - ROW_H;
-                    rows.add(new UiLabel(rowX, rowY + ROW_H / 2f - UiTheme.scaled(5f), member.name, UiTheme.TEXT_PRIMARY, TAB_LABEL_SCALE_BIG));
+                    rows.add(new UiLabel(rowX, rowY + ROW_H / 2f - UiTheme.scaled(5f), Lang.tr(member.name), UiTheme.TEXT_PRIMARY, TAB_LABEL_SCALE_BIG));
                     rows.add(new UiToggle(rowX + rowW - UiTheme.scaled(44f) - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(24f)) / 2f, member.isEnabled(),
                         v -> { member.setEnabled(v); HudConfigStore.save(); }));
                     cursor = rowY - ROW_GAP;
@@ -328,7 +329,9 @@ public class UiModGroupConfigScreen extends UiScreenBase {
             }
             UiColor textColor = UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, activeT);
             // Marge gauche/texte agrandis (retour utilisateur) — 14->18, scale via TAB_LABEL_SCALE (0.4->0.46, voir buildLayout).
-            renderer.drawText(name, x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, TAB_LABEL_SCALE, vpWidth, vpHeight);
+            // "name" reste le texte source (clé de anchors/activeTab, voir
+            // onClick ci-dessous) — traduit UNIQUEMENT ici, à l'affichage.
+            renderer.drawText(Lang.tr(name), x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, TAB_LABEL_SCALE, vpWidth, vpHeight);
         }
 
         /** Ne bascule plus de page (liste continue désormais, voir javadoc de classe) — fait défiler jusqu'à la section. */

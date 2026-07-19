@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -144,7 +145,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             renderer.drawShadow(glowX1, glowY1, glowX2, glowY2, glowHalfH, glowBlur, 0f,
                 UiTheme.ACCENT.multiplyAlpha(0.28f), screenWidth, screenHeight);
             renderer.drawText(UiFont.BOLD, "YuyuFrame", titleX, titleBaseline, UiTheme.TEXT_PRIMARY, titleScale, screenWidth, screenHeight);
-            renderer.drawText("Mods installes", SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
+            renderer.drawText(Lang.tr("Mods installes"), SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
                 UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.42f), screenWidth, screenHeight);
 
             // (Halo d'ambiance décoratif dans le coin haut-droit RETIRÉ — se
@@ -190,7 +191,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         if (searchField == null) {
             // Recréé la grille (pas tout l'écran) à chaque frappe — même
             // instance de champ conservée, voir javadoc de la classe.
-            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll()).searchIcon();
+            searchField = new UiTextField(0, 0, 0, 0, Lang.tr("Rechercher un mod..."), v -> rebuildAll()).searchIcon();
         }
         searchField.x = contentX;
         searchField.y = screenHeight - UiTheme.scaled(64f) - SEARCH_H;
@@ -228,7 +229,18 @@ public class UiMainMenuScreen extends UiScreenBase {
             if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
         }
 
-        float cardW = (contentW - CARD_GAP) / 2f;
+        // BUG TROUVÉ (retour utilisateur, capture d'écran : "la barre de
+        // scroll est chevauchée" par les toggles) — MÊME cause/même fix que
+        // UiModConfigScreen ("le scroll chevauche les paramètres") : les
+        // cartes/toggles utilisaient TOUTE la largeur de contentW, la même
+        // zone où la barre de scroll se dessine (~20px scaled du bord du
+        // viewport, voir UiScrollContainer.SCROLLBAR_W/MARGIN). Le viewport
+        // de modScroll garde TOUTE la largeur (la barre se dessine à son
+        // bord droit réel, voir modScroll ci-dessous), seule la largeur des
+        // CARTES est réduite par cette réserve.
+        float scrollbarReserve = UiTheme.scaled(20f);
+        float cardAreaW = contentW - scrollbarReserve;
+        float cardW = (cardAreaW - CARD_GAP) / 2f;
         // Grille positionnée dans un repère LOCAL arbitraire (contrairement à
         // avant, où "top" dérivait de searchField.y, un repère ÉCRAN absolu) —
         // UiScrollContainer se charge lui-même de replacer ce contenu dans le
@@ -238,7 +250,16 @@ public class UiMainMenuScreen extends UiScreenBase {
         float top = 0f;
 
         float viewportBottom = MARGIN;
-        float viewportTop = searchField.y - UiTheme.scaled(24f);
+        // BUG TROUVÉ (retour utilisateur : "les cards du haut disparaissent
+        // trop tard et chevauchent la barre de navigation") — UiScrollContainer
+        // continue de dessiner (en s'estompant progressivement, voir clipFade)
+        // un widget jusqu'à EDGE_FADE_ZONE (46 scaled) AU-DELÀ du viewport,
+        // pas juste jusqu'à son bord — cet écart n'était que de 24 scaled ici,
+        // donc une carte pouvait encore être visible (partiellement) jusqu'à
+        // 46-24=22px DANS la zone de la barre de recherche. Porté à 50
+        // (> EDGE_FADE_ZONE) pour que le fondu se termine TOUJOURS avant
+        // d'atteindre la barre.
+        float viewportTop = searchField.y - UiTheme.scaled(50f);
         modScroll = new UiScrollContainer(contentX, viewportBottom, contentW, Math.max(1f, viewportTop - viewportBottom));
 
         for (int i = 0; i < filtered.size(); i++) {
@@ -257,11 +278,11 @@ public class UiMainMenuScreen extends UiScreenBase {
 
             if (entry instanceof ModuleGroup) {
                 ModuleGroup group = (ModuleGroup) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, group.name, group.description, enterDelay,
+                modScroll.add(new ModCard(cx, cy, cardW, group.name, group.description, group.shortDescription, enterDelay,
                     () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
             } else if (entry instanceof ActionCard) {
                 ActionCard action = (ActionCard) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, action.name, action.description, enterDelay, action.action));
+                modScroll.add(new ModCard(cx, cy, cardW, action.name, action.description, null, enterDelay, action.action));
             } else {
                 LauncherModule mod = (LauncherModule) entry;
                 // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
@@ -277,7 +298,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // (44x24) : un clic sur la tranche du toggle hors de cette
                 // zone trop étroite ouvrait la config du mod au lieu de
                 // basculer le toggle).
-                ModCard card = new ModCard(cx, cy, cardW, mod.name, mod.description, enterDelay,
+                ModCard card = new ModCard(cx, cy, cardW, mod.name, mod.description, mod.shortDescription, enterDelay,
                     () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
                 modScroll.add(card);
                 float togX = cx + cardW - toggleW() - toggleGapX(), togY = cy + CARD_H - toggleH() - toggleGapY();
@@ -392,7 +413,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 renderer.drawGradientRect(x, y + edgeInset, x + edgeW, y + h - edgeInset, edgeRadius, edgeBottom, edgeTop, vpWidth, vpHeight);
             }
             UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);
-            renderer.drawText(label, x + UiTheme.scaled(12f), y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
+            renderer.drawText(Lang.tr(label), x + UiTheme.scaled(12f), y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
         }
 
         @Override
@@ -403,6 +424,8 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private final class ModCard extends UiWidget {
         private final String cardName, cardDescription;
+        /** Voir LauncherModule/ModuleGroup#shortDescription — {@code null} = pas de version dédiée, repli sur une troncature de {@link #cardDescription} (voir draw()). */
+        private final String cardShortDescription;
         private final Runnable onOpen;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
         /** Fondu + léger glissement vers le haut à l'apparition — durée fixe, PAS UiAnimatedFloat (voir sa javadoc). {@code enterDelay} = décalage en cascade, voir UiStagger dans rebuildAll(). */
@@ -418,10 +441,11 @@ public class UiMainMenuScreen extends UiScreenBase {
         private UiToggle pairedToggle;
 
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
-        ModCard(float x, float y, float w, String name, String description, float enterDelay, Runnable onOpen) {
+        ModCard(float x, float y, float w, String name, String description, String shortDescription, float enterDelay, Runnable onOpen) {
             super(x, y, w, CARD_H);
             this.cardName = name;
             this.cardDescription = description;
+            this.cardShortDescription = shortDescription;
             this.onOpen = onOpen;
             this.enterAnim = new UiTransition(0.28f, enterDelay, UiEasing.EASE_OUT_CUBIC);
             this.enterAnim.show();
@@ -466,6 +490,21 @@ public class UiMainMenuScreen extends UiScreenBase {
             // vers le haut dans ce repère, voir UiRenderer) : la carte part
             // d'une position plus BASSE (y plus petit) et remonte vers y.
             float t = Math.max(0f, Math.min(1f, enterAnim.eased()));
+            // BUG TROUVÉ (retour utilisateur, comparaison avant/après scroll :
+            // "la barre de recherche disparaît après un scroll") — clipFade
+            // (posé CHAQUE frame par UiScrollContainer selon la proximité du
+            // bord du viewport, voir sa javadoc — 1 = pleinement opaque, vers
+            // 0 en s'approchant/dépassant le bord) n'était JAMAIS lu par
+            // cette carte : elle restait dessinée à PLEINE opacité tant
+            // qu'elle passait le test "visible" (jusqu'à EDGE_FADE_ZONE,
+            // 46 scaled, AU-DELÀ du bord du viewport), au lieu de s'estomper
+            // progressivement. modScroll se dessinant APRÈS la barre de
+            // recherche (voir uiDraw(), z-order — "titres par-dessus TOUT"),
+            // une carte encore opaque juste au-dessus du viewport recouvrait
+            // entièrement la barre. `alpha` combine les deux (PAS `drawY` —
+            // le glissement d'entrée reste piloté par `t` seul, un décalage
+            // de POSITION, pas d'opacité).
+            float alpha = t * clipFade;
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hoverT = hoverAnim.get();
             float drawY = y - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
@@ -498,13 +537,13 @@ public class UiMainMenuScreen extends UiScreenBase {
             // Blur/alpha légèrement accentués au survol (+hoverT) — même
             // traitement que ResultCard, accentue la sensation de carte qui
             // se soulève plutôt que de simplement glisser.
-            UiColor shadowColor = new UiColor(0, 0, 0, 170).multiplyAlpha(t);
+            UiColor shadowColor = new UiColor(0, 0, 0, 170).multiplyAlpha(alpha);
             float shadowOff = UiTheme.scaled(6f);
             renderer.drawShadow(x, drawY - shadowOff, x + w, drawY + h - shadowOff, UiTheme.RADIUS_MD,
                 UiTheme.scaled(18f) + hoverT * UiTheme.scaled(6f), UiTheme.scaled(3f),
                 shadowColor, vpWidth, vpHeight);
 
-            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(t);
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(alpha);
             renderer.drawRoundedRect(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
 
             // Pastille icone (initiale du mod) — pas d'image reelle en attendant les icones mods.
@@ -512,19 +551,53 @@ public class UiMainMenuScreen extends UiScreenBase {
             // plat — même jeu de lumière que le reste de l'appli.
             float iconSize = UiTheme.scaled(36f);
             float pad = UiTheme.scaled(12f);
-            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * t);
-            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(t);
+            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * alpha);
+            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(alpha);
             renderer.drawGradientRect(x + pad, drawY + h - iconSize - pad, x + pad + iconSize, drawY + h - pad,
                 UiTheme.RADIUS_SM, iconBottom, iconTop, vpWidth, vpHeight);
-            String initial = cardName.substring(0, 1).toUpperCase(Locale.ROOT);
+            // Traduit UNE FOIS ici, à l'affichage — "cardName"/"cardDescription"
+            // restent le texte source (français) dans les champs de la
+            // classe (pas de conflit d'usage comme clé ici, contrairement à
+            // SectionHeader/CategoryTab, mais même principe : traduire au
+            // dernier moment permet un changement de langue instantané, sans
+            // attendre le prochain rebuildAll()).
+            String displayName = Lang.tr(cardName);
+            // BUG TROUVÉ (retour utilisateur : "il faut changer le texte
+            // carrément selon la taille de l'interface", PAS juste réduire
+            // l'échelle ou tronquer par défaut) — en mode "Taille de
+            // l'interface" = Grande, utilise la description COURTE dédiée du
+            // module/groupe si une a été fournie (voir LauncherModule/
+            // ModuleGroup#shortDescription — ex: "Confort visuel" y perd son
+            // énumération de tous ses modules membres pour une vraie phrase
+            // courte). Repli sur la description complète (comme avant) si
+            // aucune version courte n'a été déclarée pour cette carte —
+            // renderer.truncate ci-dessous reste alors le filet de sécurité.
+            boolean largeMode = UiTheme.UI_SCALE >= 1.4f;
+            String descriptionSource = (largeMode && cardShortDescription != null) ? cardShortDescription : cardDescription;
+            String displayDescription = Lang.tr(descriptionSource);
+            String initial = displayName.substring(0, 1).toUpperCase(Locale.ROOT);
             float iconTextScale = UiTheme.scaled(0.5f);
             float iw = renderer.textWidth(initial, iconTextScale);
             renderer.drawText(initial, x + pad + (iconSize - iw) / 2f, drawY + h - pad - iconSize / 2f - UiTheme.scaled(6f),
-                UiTheme.ACCENT.multiplyAlpha(t), iconTextScale, vpWidth, vpHeight);
+                UiTheme.ACCENT.multiplyAlpha(alpha), iconTextScale, vpWidth, vpHeight);
 
             float textX = x + pad + iconSize + pad;
-            renderer.drawText(cardName, textX, drawY + h - UiTheme.scaled(26f), UiTheme.TEXT_PRIMARY.multiplyAlpha(t), UiTheme.scaled(0.42f), vpWidth, vpHeight);
-            renderer.drawText(cardDescription, textX, drawY + h - UiTheme.scaled(46f), UiTheme.TEXT_SECONDARY.multiplyAlpha(t), UiTheme.scaled(0.4f), vpWidth, vpHeight);
+            // BUG TROUVÉ (retour utilisateur : "les sous-titres des cards de
+            // mod en mode grand dépassent") — ni le nom ni la description
+            // n'étaient jamais bornés à la largeur réelle de la carte, texte
+            // fixe (pas de retour à la ligne voulu, voir demande explicite).
+            // renderer.truncate (voir UiRenderer, déplacé depuis
+            // ModrinthContentScreen où ce même besoin existait déjà) ne
+            // change RIEN tant que le texte tient déjà dans cette largeur —
+            // donc aucun effet en mode Petite/Normale, tronque avec "..."
+            // seulement quand ça déborde réellement (mode Grande, ou un nom/
+            // description simplement long). Gardé comme filet de sécurité
+            // pour l'instant (retour utilisateur : solution finale encore en
+            // discussion — voir "changer le texte carrément selon la taille
+            // de l'interface").
+            float textMaxW = (x + w) - textX - pad;
+            renderer.drawText(renderer.truncate(displayName, UiTheme.scaled(0.42f), textMaxW), textX, drawY + h - UiTheme.scaled(26f), UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), UiTheme.scaled(0.42f), vpWidth, vpHeight);
+            renderer.drawText(renderer.truncate(displayDescription, UiTheme.scaled(0.4f), textMaxW), textX, drawY + h - UiTheme.scaled(46f), UiTheme.TEXT_SECONDARY.multiplyAlpha(alpha), UiTheme.scaled(0.4f), vpWidth, vpHeight);
         }
 
         @Override

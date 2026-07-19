@@ -153,14 +153,14 @@ public class HudElement {
         this.id = id;
         this.displayName = displayName;
         this.anchor = anchor;
-        this.offsetX = offsetX / REFERENCE_WIDTH;
-        this.offsetY = offsetY / REFERENCE_HEIGHT;
         this.content = content;
         this.customRenderer = null;
+        recomputeSize(); // besoin de w/h AVANT la conversion bord->centre ci-dessous
+        this.offsetX = edgeOffsetToCenterOffsetX(offsetX, anchor, w) / REFERENCE_WIDTH;
+        this.offsetY = edgeOffsetToCenterOffsetY(offsetY, h) / REFERENCE_HEIGHT;
         this.defaultAnchor = anchor;
         this.defaultOffsetX = this.offsetX;
         this.defaultOffsetY = this.offsetY;
-        recomputeSize();
     }
 
     /** Variante rendu personnalisé — voir {@link CustomRenderer}. Mêmes unités "pixels de référence" que l'autre constructeur. */
@@ -168,14 +168,40 @@ public class HudElement {
         this.id = id;
         this.displayName = displayName;
         this.anchor = anchor;
-        this.offsetX = offsetX / REFERENCE_WIDTH;
-        this.offsetY = offsetY / REFERENCE_HEIGHT;
         this.content = null;
         this.customRenderer = customRenderer;
+        recomputeSize(); // besoin de w/h AVANT la conversion bord->centre ci-dessous
+        this.offsetX = edgeOffsetToCenterOffsetX(offsetX, anchor, w) / REFERENCE_WIDTH;
+        this.offsetY = edgeOffsetToCenterOffsetY(offsetY, h) / REFERENCE_HEIGHT;
         this.defaultAnchor = anchor;
         this.defaultOffsetX = this.offsetX;
         this.defaultOffsetY = this.offsetY;
-        recomputeSize();
+    }
+
+    /**
+     * BUG TROUVÉ (retour utilisateur : "l'ancrage du HUD n'est pas bon...
+     * si les FPS passent de 150 à 95 le HUD est plus petit et là il bouge —
+     * si il est fixé par son centre il ne bougera pas") — {@link #offsetX}/
+     * {@link #offsetY} mesuraient jusqu'ici la distance du coin d'écran au
+     * BORD de la boîte (voir {@link #screenX}/{@link #screenY} avant ce
+     * correctif) : un contenu de largeur variable (FPS "150"→"95") gardait
+     * un bord fixe, donc l'autre bord — et le CENTRE visuel du HUD — se
+     * déplaçait à chaque frame où le texte changeait de largeur/hauteur.
+     * {@link #offsetX}/{@link #offsetY} mesurent désormais la distance du
+     * coin d'écran au CENTRE de la boîte (voir screenX/screenY), invariant à
+     * un changement de taille du contenu. Cette conversion (appliquée UNE
+     * SEULE FOIS, ici, à la taille naturelle de départ) garde la position
+     * VISUELLE de chaque module inchangée par rapport à avant ce correctif
+     * — seul le comportement FUTUR (au changement de taille) change.
+     */
+    private static float edgeOffsetToCenterOffsetX(float edgeOffsetPx, HudAnchor anchor, float w) {
+        if (anchor == HudAnchor.TOP_CENTER || anchor == HudAnchor.BOTTOM_CENTER) return edgeOffsetPx;
+        return edgeOffsetPx + w / 2f;
+    }
+
+    /** Voir {@link #edgeOffsetToCenterOffsetX} — pas de variante Y "centrée" (aucune ancre TOP/BOTTOM médiane sur cet axe), la conversion s'applique donc à TOUTES les ancres. */
+    private static float edgeOffsetToCenterOffsetY(float edgeOffsetPx, float h) {
+        return edgeOffsetPx + h / 2f;
     }
 
     /**
@@ -256,6 +282,13 @@ public class HudElement {
      * pour un viewport donné — reconvertit offsetX (fraction) en pixels du
      * viewport COURANT à chaque appel, voir javadoc de classe.
      *
+     * offsetX est la distance du coin d'écran au CENTRE de la boîte (voir
+     * BUG TROUVÉ dans la javadoc des constructeurs) — le centre ({@code
+     * centerX}) ne dépend donc JAMAIS de {@code w}, seul le bord retourné
+     * ici ({@code centerX - w/2}) en dépend : un changement de largeur du
+     * contenu fait grandir/rétrécir la boîte symétriquement autour de ce
+     * centre fixe, au lieu de déplacer tout le HUD.
+     *
      * Clampé au final dans {@code [0, vpWidth - w]} : la LARGEUR de la boîte
      * reste fixe en pixels (voir naturalSize()) alors que sa POSITION est
      * proportionnelle — un élément glissé loin de son ancre (ex: FPS ancré
@@ -269,67 +302,77 @@ public class HudElement {
      * pendant un drag actif.
      */
     public float screenX(int vpWidth) {
-        float offsetXPx = offsetX * vpWidth;
-        float x;
+        float centerOffsetXPx = offsetX * vpWidth;
+        float centerX;
         switch (anchor) {
             case TOP_RIGHT:
             case BOTTOM_RIGHT:
-                x = vpWidth - offsetXPx - w;
+                centerX = vpWidth - centerOffsetXPx;
                 break;
             case TOP_CENTER:
             case BOTTOM_CENTER:
-                x = vpWidth / 2f - w / 2f + offsetXPx;
+                centerX = vpWidth / 2f + centerOffsetXPx;
                 break;
             default: // TOP_LEFT, BOTTOM_LEFT
-                x = offsetXPx;
+                centerX = centerOffsetXPx;
         }
+        float x = centerX - w / 2f;
         return Math.max(0f, Math.min(vpWidth - w, x));
     }
 
-    /** Même clamp final que {@link #screenX} — voir sa javadoc. */
+    /** Même principe centre-invariant + même clamp final que {@link #screenX} — voir sa javadoc. */
     public float screenY(int vpHeight) {
-        float offsetYPx = offsetY * vpHeight;
-        float y;
+        float centerOffsetYPx = offsetY * vpHeight;
+        float centerY;
         switch (anchor) {
             case TOP_LEFT:
             case TOP_CENTER:
             case TOP_RIGHT:
-                y = vpHeight - offsetYPx - h;
+                centerY = vpHeight - centerOffsetYPx;
                 break;
             default: // BOTTOM_*
-                y = offsetYPx;
+                centerY = centerOffsetYPx;
         }
+        float y = centerY - h / 2f;
         return Math.max(0f, Math.min(vpHeight - h, y));
     }
 
-    /** Recalcule offsetX/offsetY (fraction, voir javadoc de classe) à partir d'une position absolue glissée en pixels (recomposée selon l'ancre actuelle). */
+    /**
+     * Recalcule offsetX/offsetY (fraction, distance au CENTRE de la boîte —
+     * voir javadoc de {@link #screenX}) à partir d'une position absolue
+     * glissée en pixels ({@code absX,absY} = coin bas-gauche de la boîte
+     * pendant le drag, voir UiHudBox — recomposé ici en centre via
+     * {@code +w/2}/{@code +h/2} avant conversion selon l'ancre actuelle).
+     */
     public void setScreenPosition(float absX, float absY, int vpWidth, int vpHeight) {
-        float offsetXPx;
+        float centerX = absX + w / 2f;
+        float centerOffsetXPx;
         switch (anchor) {
             case TOP_RIGHT:
             case BOTTOM_RIGHT:
-                offsetXPx = vpWidth - absX - w;
+                centerOffsetXPx = vpWidth - centerX;
                 break;
             case TOP_CENTER:
             case BOTTOM_CENTER:
-                offsetXPx = absX - (vpWidth / 2f - w / 2f);
+                centerOffsetXPx = centerX - vpWidth / 2f;
                 break;
             default:
-                offsetXPx = absX;
+                centerOffsetXPx = centerX;
         }
-        offsetX = offsetXPx / vpWidth;
+        offsetX = centerOffsetXPx / vpWidth;
 
-        float offsetYPx;
+        float centerY = absY + h / 2f;
+        float centerOffsetYPx;
         switch (anchor) {
             case TOP_LEFT:
             case TOP_CENTER:
             case TOP_RIGHT:
-                offsetYPx = vpHeight - absY - h;
+                centerOffsetYPx = vpHeight - centerY;
                 break;
             default:
-                offsetYPx = absY;
+                centerOffsetYPx = centerY;
         }
-        offsetY = offsetYPx / vpHeight;
+        offsetY = centerOffsetYPx / vpHeight;
     }
 
     /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+décalage tels que déclarés à la construction, PAS la taille/l'échelle (volontairement laissées telles quelles). */

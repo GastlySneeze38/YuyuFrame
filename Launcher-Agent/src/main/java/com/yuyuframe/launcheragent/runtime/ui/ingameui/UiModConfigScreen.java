@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.ConfigScreenBuilder;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
@@ -107,7 +108,7 @@ public class UiModConfigScreen extends UiScreenBase {
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            renderer.drawText(UiFont.BOLD, module.name, SIDE_MARGIN + UiTheme.scaled(46f), screenHeight - UiTheme.scaled(44f),
+            renderer.drawText(UiFont.BOLD, Lang.tr(module.name), SIDE_MARGIN + UiTheme.scaled(46f), screenHeight - UiTheme.scaled(44f),
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
             updateActiveCategory();
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
@@ -287,7 +288,9 @@ public class UiModConfigScreen extends UiScreenBase {
             }
             UiColor textColor = UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, activeT);
             // Agrandi/marge augmentée (retour utilisateur : "c'est trop petit... pas assez de marge") — 14px->18px, 0.48->0.5.
-            renderer.drawText(name, x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, UiTheme.scaled(0.5f), vpWidth, vpHeight);
+            // "name" reste le texte source (clé de anchors/activeCategory,
+            // voir onClick ci-dessous) — traduit UNIQUEMENT ici, à l'affichage.
+            renderer.drawText(Lang.tr(name), x + UiTheme.scaled(18f), y + h / 2f - UiTheme.scaled(6f), textColor, UiTheme.scaled(0.5f), vpWidth, vpHeight);
         }
 
         /** Ne bascule plus l'affichage (liste continue désormais, voir javadoc de classe) — fait défiler jusqu'à la section, la sous-sidebar suit ensuite toute seule au fil du scroll (voir updateActiveCategory). */

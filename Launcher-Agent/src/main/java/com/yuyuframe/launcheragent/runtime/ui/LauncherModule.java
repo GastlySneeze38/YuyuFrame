@@ -18,13 +18,20 @@ public abstract class LauncherModule {
     public final String id;
     public final String name;
     public final String description;
+    /** Voir {@link com.yuyuframe.launcheragent.runtime.ui.ModuleGroup#shortDescription} — même principe, pour un module non groupé dont la description serait exceptionnellement trop longue. {@code null} (défaut) pour la quasi-totalité des modules (description déjà courte). */
+    public final String shortDescription;
 
     private boolean enabled;
 
     protected LauncherModule(String id, String name, String description, boolean enabledByDefault) {
+        this(id, name, description, null, enabledByDefault);
+    }
+
+    protected LauncherModule(String id, String name, String description, String shortDescription, boolean enabledByDefault) {
         this.id = id;
         this.name = name;
         this.description = description;
+        this.shortDescription = shortDescription;
         this.enabled = enabledByDefault;
     }
 
