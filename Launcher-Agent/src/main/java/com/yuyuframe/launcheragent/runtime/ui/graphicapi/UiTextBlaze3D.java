@@ -566,18 +566,34 @@ public final class UiTextBlaze3D {
     // ── Texture "masque coin arrondi" (fonds de panneau HUD, voir drawRect) ──
 
     private static Object[] cornerMaskTexture; // [GpuTexture, GpuTextureView, GpuSampler]
-    private static final int CORNER_MASK_SIZE = 32;
+    // BUG TROUVÉ (retour utilisateur : "les arrondis des cards sont
+    // pixelisés") — cette texture représente un coin de rayon N (en
+    // texels), mappée par UV sur le coin RÉELLEMENT dessiné (voir
+    // putRectQuad) dont le rayon écran fait typiquement 2 à 16px (HUD/menu,
+    // voir GlobalUiSettings) — très en-dessous des 32 texels d'origine.
+    // Cette texture est donc systématiquement RÉDUITE d'un facteur ~2 à 16×
+    // au rendu, et la bande de lissage (voir javadoc de méthode ci-dessous)
+    // ne faisait qu'1 SEUL texel de large : réduite dans les mêmes
+    // proportions, elle devenait une fraction de pixel écran — un bord dur/
+    // crénelé plutôt qu'un dégradé lisse. Résolution source augmentée (plus
+    // de marge avant qu'un GROS rayon d'écran ne dépasse la texture et parte
+    // en agrandissement flou) ET bande de lissage élargie PROPORTIONNELLEMENT
+    // (voir FALLOFF_TEXELS) : une fois réduite au rayon écran réel, cette
+    // bande reste large de ~1-2 pixels au lieu d'une fraction de pixel.
+    private static final int CORNER_MASK_SIZE = 128;
+    private static final float FALLOFF_TEXELS = CORNER_MASK_SIZE / 10f;
 
     /**
      * Alpha = 1 (opaque) là où texel(tx,ty) est à distance <= N du point
      * "intérieur" (N,N) (coin bas-droite du carré NxN, voir drawRect pour la
      * correspondance écran) ; alpha = 0 au-delà, avec un lissage
-     * (smoothstep) sur le dernier pixel — MÊME formule que le shader legacy
-     * (drawRoundedRectLegacy, "alpha = 1 - smoothstep(radius-1, radius,
-     * dist)"), pré-calculée dans une texture au lieu d'un shader dédié
-     * (RenderPipelines.GUI_TEXT n'en a pas) : image = "un coin haut-gauche
-     * arrondi" — les 3 autres coins sont obtenus par retournement UV (voir
-     * putRectQuad), pas 4 textures séparées.
+     * (smoothstep) sur une bande de {@link #FALLOFF_TEXELS} texels (voir
+     * BUG TROUVÉ ci-dessus pour le pourquoi de cette largeur, PAS 1 texel
+     * comme le shader legacy équivalent — celui-ci n'est JAMAIS redimensionné
+     * après coup, contrairement à cette texture) — pré-calculée dans une
+     * texture au lieu d'un shader dédié (RenderPipelines.GUI_TEXT n'en a
+     * pas) : image = "un coin haut-gauche arrondi" — les 3 autres coins sont
+     * obtenus par retournement UV (voir putRectQuad), pas 4 textures séparées.
      */
     private static Object[] ensureCornerMaskTexture() throws Exception {
         if (cornerMaskTexture != null) return cornerMaskTexture;
@@ -587,7 +603,7 @@ public final class UiTextBlaze3D {
             for (int tx = 0; tx < n; tx++) {
                 float dx = tx - n, dy = ty - n;
                 float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                float t = Math.max(0f, Math.min(1f, (dist - (n - 1f)) / 1f));
+                float t = Math.max(0f, Math.min(1f, (dist - (n - FALLOFF_TEXELS)) / FALLOFF_TEXELS));
                 float alpha = 1f - (t * t * (3f - 2f * t)); // smoothstep
                 int a = Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f);
                 int nativeColor = (a << 24) | 0x00FFFFFF; // petit-boutiste RGBA — blanc, alpha calculé
