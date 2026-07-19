@@ -464,15 +464,18 @@ public final class ConfigScreenBuilder {
         rowLabel(rows, x, w, rowY, label, tooltip);
         UiColorPicker picker = new UiColorPicker(x + w - UiTheme.scaled(42f) - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(26f)) / 2f, initial, onChange);
         rows.add(picker);
-        // BUG TROUVÉ (retour utilisateur, capture d'écran : le toggle de la
-        // ligne suivante apparaissait à travers le bas du panneau déroulé) :
-        // cette marge était un nombre codé en dur (115, puis 150), recalculé
-        // à la main à chaque changement de la géométrie interne du color
-        // picker — et FAUX les deux fois (de ~130px la seconde fois). Fix :
-        // interroger directement picker.panelBottom() (la vraie position,
-        // publique désormais) au lieu de deviner — ne peut plus jamais
-        // désynchroniser de ce qui est réellement dessiné.
-        return picker.panelBottom() - ROW_GAP;
+        // BUG TROUVÉ (retour utilisateur : "je veux une modal détachée du
+        // bouton, que le bouton ne prenne que SA place") — cette ligne
+        // réservait jusqu'à picker.panelBottom(), c'est-à-dire la hauteur du
+        // panneau ENTIER dans la liste, MÊME QUAND IL EST FERMÉ (donc à
+        // chaque construction de l'écran) : le bouton poussait les lignes
+        // suivantes comme si le panneau était toujours ouvert. Ce n'était
+        // nécessaire qu'AVANT que le panneau ne se dessine en overlay (voir
+        // UiWidget#drawOverlay) — désormais il flotte TOUJOURS par-dessus
+        // tout, y compris les lignes suivantes de la liste, sans jamais
+        // avoir besoin qu'on lui réserve de la place. La ligne ne réserve
+        // donc plus que sa propre hauteur, comme toggleRow/sliderRow/etc.
+        return rowY - ROW_GAP;
     }
 
     private static float dropdownRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,

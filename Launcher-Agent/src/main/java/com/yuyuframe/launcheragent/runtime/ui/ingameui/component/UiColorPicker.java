@@ -200,11 +200,43 @@ public class UiColorPicker extends UiWidget {
         expanded = v;
     }
 
-    // ── Géométrie du panneau — dérivée depuis le bas de la pastille (y), empile VERS LE BAS ──
+    // ── Géométrie du panneau — dérivée depuis le bas de la pastille (y), empile VERS LE BAS (ou VERS LE HAUT si {@link #flipUp}) ──
 
     private float contentW() { return PANEL_W - 2 * PANEL_PAD; }
 
-    private float panelTop() { return y - PANEL_PAD; }
+    /**
+     * BUG TROUVÉ (retour utilisateur : "la modal apparaît en dessous du
+     * bouton même si il n'y a pas l'espace") — le panneau s'ouvrait
+     * TOUJOURS vers le bas depuis la pastille, sans jamais vérifier s'il y
+     * avait la place : une pastille proche du bas de l'écran/de la liste
+     * poussait le panneau hors de l'écran (ou par-dessus la pastille
+     * elle-même). Décidé une fois par frame dans {@link #drawOverlay}
+     * (seul point d'entrée qui reçoit {@code vpHeight}) puis mis en cache
+     * ici pour que {@link #pollContinuous} (qui n'a PAS accès à vpHeight,
+     * voir signature de {@code UiWidget#pollContinuous}) reste cohérent
+     * avec ce qui est dessiné.
+     */
+    private boolean flipUp;
+
+    /**
+     * Hauteur TOTALE du panneau — somme des mêmes écarts que la chaîne
+     * {@link #previewY}→{@link #recentY}→{@link #panelBottom}, mais
+     * calculée à plat (INDÉPENDANTE de {@link #panelTop}, donc valide que
+     * le panneau soit orienté vers le bas ou vers le haut) : sert à décider
+     * {@link #flipUp} et à ancrer le panneau retourné.
+     */
+    private float contentHeight() {
+        float total = PREVIEW_H
+            + 3f * (ROW_GAP + LABEL_H)   // wheelLabelY + briLabelY + alphaLabelY
+            + WHEEL_D
+            + 2f * BAND_H                // briBandY + alphaBandY
+            + ROW_GAP + HEX_H;
+        if (!RECENT.isEmpty()) total += ROW_GAP + RECENT_H;
+        total += PANEL_PAD; // symétrique du PANEL_PAD déjà soustrait par panelBottom()
+        return total;
+    }
+
+    private float panelTop() { return flipUp ? (y + h + PANEL_PAD + contentHeight()) : (y - PANEL_PAD); }
     private float previewY() { return panelTop() - PREVIEW_H; }
     private float wheelLabelY() { return previewY() - ROW_GAP - LABEL_H; }
     private float wheelY() { return wheelLabelY() - WHEEL_D; }
@@ -264,6 +296,13 @@ public class UiColorPicker extends UiWidget {
      */
     @Override
     public void drawOverlay(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        // Décidé AVANT le early-return ci-dessous (et avant tout appel à
+        // panelTop()/panelBottom()) — voir javadoc de #flipUp : doit rester
+        // à jour même pendant le fondu d'ouverture, et {@link #pollContinuous}
+        // (hit-test du clic extérieur, de la roue, etc.) lit ce cache CETTE
+        // même frame.
+        flipUp = (y - PANEL_PAD - contentHeight()) < UiTheme.scaled(10f);
+
         float swatchRadius = UiTheme.scaled(4f);
         panelTransition.setTarget(expanded);
         float panelAlpha = panelTransition.eased();
