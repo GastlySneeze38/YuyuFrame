@@ -16,9 +16,12 @@ pub struct ModInfo {
     pub sha1: String,
 }
 
-// Cache SHA1 : chemin → (taille, mtime_secs, sha1)
-// Invalidé automatiquement si le fichier est modifié ou remplacé.
-static SHA1_CACHE: LazyLock<Mutex<HashMap<PathBuf, (u64, u64, String)>>> =
+/// (taille, mtime_secs, sha1) — entrée du cache SHA1, invalidée automatiquement
+/// si le fichier est modifié ou remplacé.
+type Sha1CacheEntry = (u64, u64, String);
+
+// Cache SHA1 : chemin → Sha1CacheEntry
+static SHA1_CACHE: LazyLock<Mutex<HashMap<PathBuf, Sha1CacheEntry>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn compute_sha1(path: &std::path::Path) -> String {
@@ -83,7 +86,7 @@ pub async fn mods_list(instance_id: String) -> Result<Vec<ModInfo>, String> {
         }
     }
 
-    mods.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    mods.sort_by_key(|a| a.name.to_lowercase());
     Ok(mods)
 }
 
@@ -291,6 +294,9 @@ pub struct UpdateSafety {
 /// les contraintes de version (`depends`) déclarées par les *autres* mods
 /// installés dans l'instance — pour ne pas proposer une mise à jour qui
 /// casserait un mod dépendant (ex: Voxy exige Sodium &lt;0.8.13).
+/// (nom du mod déclarant, id visé, depends, breaks)
+type ModConstraint = (String, String, Vec<Vec<String>>, Vec<Vec<String>>);
+
 #[tauri::command]
 pub async fn mods_check_update_safety(
     instance_id: String,
@@ -303,8 +309,8 @@ pub async fn mods_check_update_safety(
     tokio::task::spawn_blocking(move || {
         // id fabric -> nom de fichier, pour retrouver le candidat par son id
         let mut id_by_name: HashMap<String, String> = HashMap::new();
-        // mods déclarant des contraintes : (nom du mod déclarant, id visé, depends, breaks)
-        let mut constraints: Vec<(String, String, Vec<Vec<String>>, Vec<Vec<String>>)> = Vec::new();
+        // mods déclarant des contraintes
+        let mut constraints: Vec<ModConstraint> = Vec::new();
 
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {

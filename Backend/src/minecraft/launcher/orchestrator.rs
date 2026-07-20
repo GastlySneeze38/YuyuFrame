@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,6 +38,7 @@ pub fn minecraft_dir() -> PathBuf {
 /// `loader` — "vanilla" | "fabric" | "forge" (None treated as vanilla)
 /// `game_dir` — instance directory (saves, mods, configs); shared assets stay in minecraft_dir()
 /// `console_label` — label de la fenêtre console à cibler pour les game_log
+#[allow(clippy::too_many_arguments)]
 pub async fn download_and_launch(
     version_id: &str,
     loader: Option<&str>,
@@ -69,7 +70,7 @@ pub async fn download_and_launch(
     // évite complètement le manifest + la requête détails par réseau, qui
     // se refaisaient sans condition à CHAQUE lancement même quand rien n'avait
     // changé depuis la fois précédente.
-    let version_json_cache = versions_dir.join(&version_id).join(format!("{}.json", version_id));
+    let version_json_cache = versions_dir.join(version_id).join(format!("{}.json", version_id));
     let details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
         set_progress(&app, 5, 100, "Détails de version (cache local)...");
         serde_json::from_str(&text)?
@@ -151,7 +152,7 @@ pub async fn download_and_launch(
                     return Err(anyhow!(LAUNCH_CANCELLED_MSG));
                 }
                 done += 1;
-                if done % 200 == 0 || done == total_assets {
+                if done.is_multiple_of(200) || done == total_assets {
                     set_progress(
                         &app,
                         50 + done * 40 / total_assets.max(1),
@@ -255,7 +256,7 @@ pub async fn download_and_launch(
         if let Some(cp) = cp_entry { classpath.push(cp); }
         natives_to_extract.extend(native_paths);
         libs_done += 1;
-        if libs_done % 10 == 0 || libs_done == total_libs {
+        if libs_done.is_multiple_of(10) || libs_done == total_libs {
             set_progress(&app, 20 + libs_done * 30 / total_libs.max(1), 100,
                 &format!("Bibliothèques {}/{}", libs_done, total_libs));
         }
@@ -695,8 +696,8 @@ fn json_str_array(values: &[serde_json::Value]) -> Vec<String> {
 
 async fn setup_fabric(
     mc_version: &str,
-    libraries_dir: &PathBuf,
-    mods_dir: &PathBuf,
+    libraries_dir: &Path,
+    mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
 ) -> Result<(String, Vec<String>, Vec<String>, Vec<String>)> {
@@ -736,8 +737,8 @@ async fn setup_fabric(
 
 async fn setup_forge(
     mc_version: &str,
-    mc_dir: &PathBuf,
-    libraries_dir: &PathBuf,
+    mc_dir: &Path,
+    libraries_dir: &Path,
     java: &str,
     app: &tauri::AppHandle,
 ) -> Result<(String, Vec<String>, Vec<String>, Vec<String>)> {

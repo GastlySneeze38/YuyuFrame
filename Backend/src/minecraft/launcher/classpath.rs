@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 
 use crate::minecraft::maven::MavenCoord;
@@ -55,19 +55,19 @@ pub(super) fn should_download_library(lib: &Library) -> bool {
     allowed
 }
 
-pub(super) fn artifact_path(base: &PathBuf, artifact: &Artifact, name: &str) -> PathBuf {
+pub(super) fn artifact_path(base: &Path, artifact: &Artifact, name: &str) -> PathBuf {
     if let Some(ref p) = artifact.path { return base.join(p); }
     library_jar_path(base, name)
 }
 
-fn library_jar_path(base: &PathBuf, name: &str) -> PathBuf {
+fn library_jar_path(base: &Path, name: &str) -> PathBuf {
     match MavenCoord::parse(name) {
         Some(coord) => base.join(coord.relative_path()),
         None => base.join(name),
     }
 }
 
-pub(super) async fn extract_natives(jar_path: &PathBuf, natives_dir: &PathBuf) -> Result<()> {
+pub(super) async fn extract_natives(jar_path: &Path, natives_dir: &Path) -> Result<()> {
     let jar_bytes = tokio::fs::read(jar_path).await?;
     let cursor = std::io::Cursor::new(jar_bytes);
     let mut archive = zip::ZipArchive::new(cursor)?;
@@ -87,7 +87,7 @@ pub(super) async fn extract_natives(jar_path: &PathBuf, natives_dir: &PathBuf) -
     Ok(())
 }
 
-pub(super) async fn download_file(client: &reqwest::Client, url: &str, path: &PathBuf) -> Result<()> {
+pub(super) async fn download_file(client: &reqwest::Client, url: &str, path: &Path) -> Result<()> {
     let resp = client.get(url).send().await?;
     if !resp.status().is_success() {
         return Err(anyhow!("Download failed {}: {}", url, resp.status()));

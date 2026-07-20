@@ -62,6 +62,7 @@ pub fn instance_set_favorite(conn: &Connection, id: &str, user_id: i64, favorite
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn instance_insert(
     conn: &Connection,
     id: &str,
@@ -81,6 +82,7 @@ pub fn instance_insert(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn instance_update(
     conn: &Connection,
     id: &str,

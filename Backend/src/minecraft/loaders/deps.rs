@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
 use crate::minecraft::versions::predicate::{
@@ -51,7 +51,7 @@ struct InstalledMod {
     path: PathBuf,
 }
 
-async fn scan_installed(mods_dir: &PathBuf) -> HashMap<String, InstalledMod> {
+async fn scan_installed(mods_dir: &Path) -> HashMap<String, InstalledMod> {
     let mut installed = HashMap::new();
     // Fabric API est gérée séparément — considérée toujours présente et compatible
     installed.insert(
@@ -94,7 +94,7 @@ struct MissingDep {
 }
 
 async fn collect_missing_deps(
-    mods_dir: &PathBuf,
+    mods_dir: &Path,
     installed: &HashMap<String, InstalledMod>,
     already_tried: &HashSet<String>,
     mc_version: &str,
@@ -192,7 +192,7 @@ async fn install_dep(
     dep: &MissingDep,
     mc_version: &str,
     loader: &str,
-    mods_dir: &PathBuf,
+    mods_dir: &Path,
     avoid_beta: bool,
 ) -> Result<String> {
     let dep_id = &dep.id;
@@ -284,7 +284,7 @@ async fn install_dep(
 pub async fn resolve_and_install_deps(
     mc_version: &str,
     loader: &str,
-    mods_dir: &PathBuf,
+    mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
 ) -> Result<()> {

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::minecraft::versions::VersionDetails;
 use crate::state::MinecraftSession;
@@ -22,7 +22,7 @@ pub(super) fn extract_tweak_class_args(mc_args: &str) -> Vec<String> {
     out
 }
 
-pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &PathBuf, java_major: u32) -> Vec<String> {
+pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -> Vec<String> {
     let mut base = vec![
         format!("-Xmx{}m", ram_mb),
         format!("-Xms{}m", ram_mb),  // Xms = Xmx : pas de redimensionnement du heap
@@ -179,8 +179,8 @@ pub(super) async fn ensure_gpu_preference(_java_exe: &str) {}
 pub(super) fn build_game_args(
     details: &VersionDetails,
     session: &MinecraftSession,
-    game_dir: &std::path::Path,
-    assets_dir: &PathBuf,
+    game_dir: &Path,
+    assets_dir: &Path,
     version_id: &str,
 ) -> Vec<String> {
     let assets_root = assets_dir.to_string_lossy().into_owned();

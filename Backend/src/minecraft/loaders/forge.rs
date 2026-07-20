@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::minecraft::maven::MavenCoord;
 
@@ -83,7 +83,7 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
 /// (1.7.x à ~1.12) utilisent des ids irréguliers selon la version (casse,
 /// suffixe dupliqué...), donc on recherche plutôt un dossier existant dont le
 /// nom contient à la fois la version MC et le build Forge.
-pub fn find_installed(mc_version: &str, forge_ver: &str, mc_dir: &PathBuf) -> Option<String> {
+pub fn find_installed(mc_version: &str, forge_ver: &str, mc_dir: &Path) -> Option<String> {
     let versions_dir = mc_dir.join("versions");
     let entries = std::fs::read_dir(&versions_dir).ok()?;
     for entry in entries.flatten() {
@@ -111,7 +111,7 @@ enum InstallerProfile {
 /// de version qu'il va produire, sans deviner via un pattern de chaîne (les
 /// vieux Forge ont des ids irréguliers selon la version : casse, suffixe
 /// dupliqué...).
-fn inspect_installer(installer_path: &PathBuf) -> Result<InstallerProfile> {
+fn inspect_installer(installer_path: &Path) -> Result<InstallerProfile> {
     use std::io::Read;
     let bytes = std::fs::read(installer_path)?;
     let cursor = std::io::Cursor::new(bytes);
@@ -144,7 +144,7 @@ fn inspect_installer(installer_path: &PathBuf) -> Result<InstallerProfile> {
 /// Écrit le version json et télécharge les libs (incluant le universal jar
 /// Forge) décrits par le profil legacy — équivalent du travail que ferait le
 /// `SimpleInstaller` GUI pour un client.
-async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &PathBuf, libraries_dir: &PathBuf) -> Result<()> {
+async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &Path, libraries_dir: &Path) -> Result<()> {
     let version_info = profile
         .get("versionInfo")
         .ok_or_else(|| anyhow!("Profil Forge legacy invalide"))?;
@@ -208,8 +208,8 @@ async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &
 pub async fn install(
     mc_version: &str,
     forge_ver: &str,
-    mc_dir: &PathBuf,
-    libraries_dir: &PathBuf,
+    mc_dir: &Path,
+    libraries_dir: &Path,
     java: &str,
 ) -> Result<String> {
     let installer_name = format!("forge-{}-{}-installer.jar", mc_version, forge_ver);
@@ -280,7 +280,7 @@ pub async fn install(
 
 /// Read and parse the installed Forge version JSON, given its resolved id
 /// (cf. [`find_installed`] / [`install`]).
-pub fn read_version_json(version_id: &str, mc_dir: &PathBuf) -> Result<ForgeVersionJson> {
+pub fn read_version_json(version_id: &str, mc_dir: &Path) -> Result<ForgeVersionJson> {
     let path = mc_dir
         .join("versions")
         .join(version_id)
@@ -293,7 +293,7 @@ pub fn read_version_json(version_id: &str, mc_dir: &PathBuf) -> Result<ForgeVers
 /// Download a Forge-specific library and return its local path. Handles both
 /// the modern `downloads.artifact` shape and the legacy (pré-1.13) shape
 /// where a library only has `name` + an optional base maven `url`.
-pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &PathBuf) -> Option<PathBuf> {
+pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path) -> Option<PathBuf> {
     let coord = MavenCoord::parse(&lib.name)?;
     let group = &coord.group_path;
     let (art, ver) = (coord.artifact, coord.version);

@@ -118,7 +118,7 @@ fn handle_peer(stream: TcpStream, peers: PeerMap, rt: tokio::runtime::Handle) {
 
     loop {
         while let Ok(msg) = rx.try_recv() {
-            if ws.send(Message::Text(msg.into())).is_err() { return; }
+            if ws.send(Message::Text(msg)).is_err() { return; }
         }
 
         match ws.read() {

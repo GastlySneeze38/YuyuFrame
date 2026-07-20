@@ -186,38 +186,30 @@ impl P2PLibp2pHandle {
                             // Identify d'un relay → écouter dessus
                             SwarmEvent::Behaviour(BehaviourEvent::Identify(
                                 identify::Event::Received { peer_id, info: _ }
-                            )) => {
-                                if relay_ids.contains(&peer_id)
-                                    && !listening_relays.contains(&peer_id)
-                                {
-                                    if let Some(relay_ma) = relay_addr_for_peer(&peer_id) {
-                                        let listen = relay_ma.clone().with(Protocol::P2pCircuit);
-                                        if swarm.listen_on(listen).is_ok() {
-                                            tracing::info!("[P2P libp2p] Relay réservé: {}", &peer_id.to_string()[..12]);
-                                            listening_relays.insert(peer_id);
-                                            relay_addrs.push((peer_id, relay_ma));
-                                        }
+                            )) if relay_ids.contains(&peer_id) && !listening_relays.contains(&peer_id) => {
+                                if let Some(relay_ma) = relay_addr_for_peer(&peer_id) {
+                                    let listen = relay_ma.clone().with(Protocol::P2pCircuit);
+                                    if swarm.listen_on(listen).is_ok() {
+                                        tracing::info!("[P2P libp2p] Relay réservé: {}", &peer_id.to_string()[..12]);
+                                        listening_relays.insert(peer_id);
+                                        relay_addrs.push((peer_id, relay_ma));
                                     }
                                 }
                             }
 
                             // Connexion établie
-                            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                                if !relay_ids.contains(&peer_id) {
-                                    tracing::info!("[P2P libp2p] Pair connecté: {}", &peer_id.to_string()[..12]);
-                                    remote_peer = Some(peer_id);
-                                }
+                            SwarmEvent::ConnectionEstablished { peer_id, .. } if !relay_ids.contains(&peer_id) => {
+                                tracing::info!("[P2P libp2p] Pair connecté: {}", &peer_id.to_string()[..12]);
+                                remote_peer = Some(peer_id);
                             }
 
                             // Connexion fermée
-                            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
-                                if remote_peer == Some(peer_id) {
-                                    tracing::warn!("[P2P libp2p] Pair déconnecté ({:?})", cause);
-                                    remote_peer = None;
-                                    let _ = bridge_tx.send(
-                                        BridgeEvent::PeerLeft(peer_id.to_string())
-                                    ).await;
-                                }
+                            SwarmEvent::ConnectionClosed { peer_id, cause, .. } if remote_peer == Some(peer_id) => {
+                                tracing::warn!("[P2P libp2p] Pair déconnecté ({:?})", cause);
+                                remote_peer = None;
+                                let _ = bridge_tx.send(
+                                    BridgeEvent::PeerLeft(peer_id.to_string())
+                                ).await;
                             }
 
                             // Hole punch

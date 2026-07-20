@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -43,7 +43,7 @@ const MOJANG_JAVA_MANIFEST: &str =
 pub(super) async fn ensure_java(
     component: &str,
     required_major: u32,
-    mc_dir: &PathBuf,
+    mc_dir: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
 ) -> Result<String> {
@@ -110,7 +110,7 @@ pub(super) async fn ensure_java(
 
 async fn download_mojang_runtime(
     component: &str,
-    dest: &PathBuf,
+    dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
 ) -> Result<()> {
@@ -183,7 +183,7 @@ async fn download_mojang_runtime(
     while let Some(r) = tasks.join_next().await {
         r??;
         done += 1;
-        if done % 100 == 0 || done == total {
+        if done.is_multiple_of(100) || done == total {
             set_progress(app, 12 + done * 8 / total.max(1), 100,
                 &format!("Java runtime {}/{}", done, total));
         }
@@ -196,7 +196,7 @@ async fn download_mojang_runtime(
 /// dans `dest` (structure finale : `dest/bin/java.exe`, comme Mojang).
 /// Windows uniquement pour l'instant — Adoptium sert un .zip sur Windows
 /// mais un .tar.gz sur macOS/Linux, et seul le crate `zip` est disponible ici.
-async fn download_adoptium_jre8(dest: &PathBuf, client: &reqwest::Client) -> Result<()> {
+async fn download_adoptium_jre8(dest: &Path, client: &reqwest::Client) -> Result<()> {
     let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x64" };
     let url = format!(
         "https://api.adoptium.net/v3/binary/latest/8/ga/windows/{}/jre/hotspot/normal/eclipse?project=jdk",
@@ -220,7 +220,7 @@ async fn download_adoptium_jre8(dest: &PathBuf, client: &reqwest::Client) -> Res
 
 /// Extrait un zip Adoptium en retirant son unique dossier racine (ex :
 /// "jdk8u492-b09-jre/") pour que `dest` contienne directement `bin/`, `lib/`...
-fn extract_zip_flatten_root(zip_path: &PathBuf, dest: &PathBuf) -> Result<()> {
+fn extract_zip_flatten_root(zip_path: &Path, dest: &Path) -> Result<()> {
     let file = std::fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
 

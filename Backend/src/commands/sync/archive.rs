@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::super::instance::mods::sha1_cached;
 
@@ -106,7 +106,7 @@ pub(super) fn require_ultimate(state: &crate::state::AppState) -> Result<(), Str
 
 // ── Save listing ───────────────────────────────────────────────────────────────
 
-pub(super) fn dir_size(path: &PathBuf) -> u64 {
+pub(super) fn dir_size(path: &Path) -> u64 {
     let mut size = 0u64;
     if let Ok(entries) = std::fs::read_dir(path) {
         for entry in entries.flatten() {
@@ -124,7 +124,7 @@ pub(super) fn dir_size(path: &PathBuf) -> u64 {
 // ── Mod manifest helpers ───────────────────────────────────────────────────────
 
 /// Lit le modpack.json de l'instance pour récupérer les infos Modrinth du pack.
-pub(super) fn read_modpack_ref(inst_dir: &PathBuf) -> Option<ModpackRef> {
+pub(super) fn read_modpack_ref(inst_dir: &Path) -> Option<ModpackRef> {
     let json = std::fs::read_to_string(inst_dir.join("modpack.json")).ok()?;
     #[derive(Deserialize)]
     struct PackMeta { project_id: String, version_id: String, name: String }
@@ -134,7 +134,7 @@ pub(super) fn read_modpack_ref(inst_dir: &PathBuf) -> Option<ModpackRef> {
 
 /// Liste tous les mods d'une instance.
 /// Retourne (nom_propre_sans_disabled, sha1, enabled).
-pub(super) fn list_mods_raw(mods_dir: &PathBuf) -> Vec<(String, String, bool)> {
+pub(super) fn list_mods_raw(mods_dir: &Path) -> Vec<(String, String, bool)> {
     let Ok(entries) = std::fs::read_dir(mods_dir) else { return vec![] };
     entries
         .flatten()
@@ -199,8 +199,8 @@ pub(super) async fn modrinth_lookup_batch(
 // ── ZIP helpers ────────────────────────────────────────────────────────────────
 
 pub(super) fn collect_files(
-    dir: &PathBuf,
-    base: &PathBuf,
+    dir: &Path,
+    base: &Path,
     prefix: &str,
     out: &mut Vec<(PathBuf, String)>,
 ) -> Result<(), String> {

@@ -10,16 +10,13 @@ use crate::state::SharedState;
 /// à la racine (MultiMC/Prism, CurseForge, ATLauncher) ou sous `.minecraft`/`minecraft`
 /// (Modrinth App, Feather, Lunar Client, TLauncher, installation manuelle...).
 fn find_mods_dir(root: &Path) -> Option<PathBuf> {
-    for candidate in [
+    [
         root.join("mods"),
         root.join(".minecraft").join("mods"),
         root.join("minecraft").join("mods"),
-    ] {
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-    }
-    None
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_dir())
 }
 
 /// Best-effort : cherche "fabric"/"forge"/"quilt"/"neoforge" dans un blob de texte
@@ -167,7 +164,7 @@ pub async fn import_scan_folder(path: String) -> Result<ScanResult, String> {
                 mods.push(ModInfo { name, size, enabled, sha1 });
             }
         }
-        mods.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        mods.sort_by_key(|a| a.name.to_lowercase());
 
         Ok(ScanResult { mods_dir: mods_dir.to_string_lossy().to_string(), source, mods })
     })

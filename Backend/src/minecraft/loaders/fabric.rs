@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::minecraft::maven::MavenCoord;
 
@@ -79,7 +79,7 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
 }
 
 /// Download a Fabric library and return its local path (None if unavailable).
-pub async fn download_library(lib: &FabricLibrary, libraries_dir: &PathBuf) -> Option<PathBuf> {
+pub async fn download_library(lib: &FabricLibrary, libraries_dir: &Path) -> Option<PathBuf> {
     let base_url = lib.url.as_deref().unwrap_or("https://libraries.minecraft.net/");
 
     // Fabric ne fournit jamais de classifier sur ses libs de loader — on ignore
@@ -134,11 +134,11 @@ struct ModrinthFile {
 
 /// Ensure Fabric API is present in the mods folder for `mc_version`.
 /// Downloads the latest version from Modrinth if not already installed.
-pub async fn ensure_fabric_api(mc_version: &str, mods_dir: &PathBuf) -> Result<()> {
+pub async fn ensure_fabric_api(mc_version: &str, mods_dir: &Path) -> Result<()> {
     tokio::fs::create_dir_all(mods_dir).await?;
 
     // Already installed if any fabric-api JAR exists for this MC version
-    let prefix = format!("fabric-api-");
+    let prefix = "fabric-api-".to_string();
     if let Ok(mut entries) = tokio::fs::read_dir(mods_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let name = entry.file_name().to_string_lossy().to_string();
