@@ -9,6 +9,7 @@ import Instances from '@/pages/Instances'
 import Mods from '@/pages/Mods'
 import Settings from '@/pages/Settings'
 import Information from '@/pages/Information'
+import Legal from '@/pages/Legal'
 import YuyuLogin from '@/pages/YuyuLogin'
 import Console from '@/pages/Console'
 import Sync from '@/pages/Sync'
@@ -84,6 +85,7 @@ export default function App() {
                   <Route path="/mods" element={<Mods />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/information" element={<Information />} />
+                  <Route path="/legal" element={<Legal />} />
                   <Route path="/sync" element={<Sync />} />
                   <Route path="/plans" element={<Plans />} />
                   <Route path="/stats" element={<Stats />} />
