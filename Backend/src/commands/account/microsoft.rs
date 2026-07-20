@@ -136,24 +136,16 @@ pub async fn auth_status(state: tauri::State<'_, SharedState>) -> Result<AuthSta
     if sess.expires_at - now < 1800 {
         if let Some(ms_ref) = &sess.refresh_token {
             tracing::info!("Auto-rafraîchissement du token MC pour {}", sess.username);
-            if let Ok((mc_at, mc_user, mc_uuid, new_ref, new_exp)) =
-                auth::refresh_session(ms_ref).await
-            {
+            if let Ok(result) = auth::refresh_session(ms_ref).await {
                 let s = state.read().await;
                 let conn = s.db.lock().await;
-                db::update_mc_tokens(&conn, yuyu_user_id, &mc_uuid, &mc_at, &new_ref, new_exp).ok();
+                let new_sess = super::apply_refreshed_tokens(&conn, yuyu_user_id, result);
                 drop(conn);
                 drop(s);
 
-                let new_sess = crate::state::MinecraftSession {
-                    username: mc_user.clone(),
-                    uuid: mc_uuid.clone(),
-                    access_token: mc_at,
-                    refresh_token: Some(new_ref),
-                    expires_at: new_exp,
-                };
+                let (username, uuid) = (new_sess.username.clone(), new_sess.uuid.clone());
                 state.write().await.session = Some(new_sess);
-                return Ok(AuthStatusResponse { authenticated: true, username: Some(mc_user), uuid: Some(mc_uuid) });
+                return Ok(AuthStatusResponse { authenticated: true, username: Some(username), uuid: Some(uuid) });
             }
         }
     }

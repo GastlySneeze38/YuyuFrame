@@ -220,33 +220,17 @@ async fn refresh_if_needed(
 
     tracing::info!("Token MC expiré — rafraîchissement en cours...");
 
-    let (mc_access_token, mc_username, mc_uuid, new_refresh_token, expires_at) =
-        auth::refresh_session(&refresh_token)
-            .await
-            .map_err(|e| format!("Échec du rafraîchissement du token MC : {}", e))?;
-
-    let new_session = MinecraftSession {
-        username: mc_username,
-        uuid: mc_uuid,
-        access_token: mc_access_token,
-        refresh_token: Some(new_refresh_token.clone()),
-        expires_at,
-    };
+    let result = auth::refresh_session(&refresh_token)
+        .await
+        .map_err(|e| format!("Échec du rafraîchissement du token MC : {}", e))?;
 
     // Persist to state and DB
-    {
+    let new_session = {
         let s = state.read().await;
         let yuyu_user_id = s.current_yuyu_user_id().unwrap_or(0);
         let db = s.db.lock().await;
-        let _ = db::update_mc_tokens(
-            &db,
-            yuyu_user_id,
-            &new_session.uuid,
-            &new_session.access_token,
-            &new_refresh_token,
-            expires_at,
-        );
-    }
+        crate::commands::account::apply_refreshed_tokens(&db, yuyu_user_id, result)
+    };
     state.write().await.session = Some(new_session.clone());
 
     tracing::info!("Token MC rafraîchi — expire dans 24h");

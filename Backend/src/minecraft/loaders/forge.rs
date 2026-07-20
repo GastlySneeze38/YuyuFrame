@@ -3,6 +3,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::minecraft::maven::MavenCoord;
+
 const FORGE_PROMOTIONS: &str =
     "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
 const FORGE_MAVEN: &str =
@@ -170,13 +172,8 @@ async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &
 
     for lib in libraries {
         let Some(name) = lib.get("name").and_then(|v| v.as_str()) else { continue };
-        let parts: Vec<&str> = name.split(':').collect();
-        if parts.len() < 3 {
-            continue;
-        }
-        let group = parts[0].replace('.', "/");
-        let art = parts[1];
-        let ver = parts[2];
+        let Some(coord) = MavenCoord::parse(name) else { continue };
+        let (group, art, ver) = (coord.group_path, coord.artifact, coord.version);
         let local_path = libraries_dir.join(&group).join(art).join(ver).join(format!("{}-{}.jar", art, ver));
 
         if let Some(parent) = local_path.parent() {
@@ -297,28 +294,20 @@ pub fn read_version_json(version_id: &str, mc_dir: &PathBuf) -> Result<ForgeVers
 /// the modern `downloads.artifact` shape and the legacy (pré-1.13) shape
 /// where a library only has `name` + an optional base maven `url`.
 pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &PathBuf) -> Option<PathBuf> {
-    let parts: Vec<&str> = lib.name.split(':').collect();
-    if parts.len() < 3 {
-        return None;
-    }
-    let group = parts[0].replace('.', "/");
-    let art = parts[1];
-    let ver = parts[2];
-    let fname = if parts.len() > 3 {
-        format!("{}-{}-{}.jar", art, ver, parts[3])
-    } else {
-        format!("{}-{}.jar", art, ver)
-    };
+    let coord = MavenCoord::parse(&lib.name)?;
+    let group = &coord.group_path;
+    let (art, ver) = (coord.artifact, coord.version);
+    let fname = coord.filename();
 
     let (local_path, url) = if let Some(downloads) = lib.downloads.as_ref() {
         let artifact = downloads.artifact.as_ref()?;
         let local_path = match &artifact.path {
             Some(rel_path) => libraries_dir.join(rel_path),
-            None => libraries_dir.join(&group).join(art).join(ver).join(&fname),
+            None => libraries_dir.join(group).join(art).join(ver).join(&fname),
         };
         (local_path, artifact.url.clone())
     } else {
-        let local_path = libraries_dir.join(&group).join(art).join(ver).join(&fname);
+        let local_path = libraries_dir.join(group).join(art).join(ver).join(&fname);
         let base = lib.url.clone().unwrap_or_else(|| "https://libraries.minecraft.net/".to_string());
         (local_path, format!("{}{}/{}/{}/{}", base, group, art, ver, fname))
     };

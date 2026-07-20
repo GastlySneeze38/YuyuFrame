@@ -49,16 +49,10 @@ pub async fn mc_switch(
     let mc_session = if row.expires_at - now < 1800 {
         tracing::info!("Rafraîchissement du token lors du switch pour {}", row.mc_username);
         match mc_auth::refresh_session(&row.ms_refresh_token).await {
-            Ok((mc_at, mc_user, mc_uuid, new_refresh, new_exp)) => {
+            Ok(result) => {
                 let s = state.read().await;
                 let conn = s.db.lock().await;
-                db::update_mc_tokens(&conn, yuyu_user_id, &mc_uuid, &mc_at, &new_refresh, new_exp).ok();
-                drop(conn);
-                drop(s);
-                crate::state::MinecraftSession {
-                    username: mc_user, uuid: mc_uuid, access_token: mc_at,
-                    refresh_token: Some(new_refresh), expires_at: new_exp,
-                }
+                super::apply_refreshed_tokens(&conn, yuyu_user_id, result)
             }
             Err(e) => {
                 tracing::warn!("Échec du rafraîchissement: {}", e);

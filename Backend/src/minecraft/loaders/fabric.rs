@@ -2,6 +2,8 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 
+use crate::minecraft::maven::MavenCoord;
+
 const FABRIC_META: &str = "https://meta.fabricmc.net/v2";
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 
@@ -80,25 +82,21 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
 pub async fn download_library(lib: &FabricLibrary, libraries_dir: &PathBuf) -> Option<PathBuf> {
     let base_url = lib.url.as_deref().unwrap_or("https://libraries.minecraft.net/");
 
-    let parts: Vec<&str> = lib.name.split(':').collect();
-    if parts.len() < 3 {
-        return None;
-    }
-
-    let group_path = parts[0].replace('.', "/");
-    let artifact = parts[1];
-    let version = parts[2];
-    let filename = format!("{}-{}.jar", artifact, version);
+    // Fabric ne fournit jamais de classifier sur ses libs de loader — on ignore
+    // volontairement `coord.classifier` (contrairement à Forge) pour garder le
+    // même nom de fichier `{artifact}-{version}.jar` qu'avant ce refacto.
+    let coord = MavenCoord::parse(&lib.name)?;
+    let filename = format!("{}-{}.jar", coord.artifact, coord.version);
 
     let url = format!(
         "{}{}/{}/{}/{}",
-        base_url, group_path, artifact, version, filename
+        base_url, coord.group_path, coord.artifact, coord.version, filename
     );
 
     let local_path = libraries_dir
-        .join(&group_path)
-        .join(artifact)
-        .join(version)
+        .join(&coord.group_path)
+        .join(coord.artifact)
+        .join(coord.version)
         .join(&filename);
 
     if let Some(parent) = local_path.parent() {

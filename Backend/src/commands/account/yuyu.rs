@@ -1,10 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::commands::api_base;
 use crate::{db, state::SharedState};
-
-fn api_base() -> String {
-    std::env::var("YUYU_API_URL").unwrap_or_else(|_| "http://localhost:3000".into())
-}
+use super::minecraft::AccountInfo;
 
 // ── Types retournés au frontend ───────────────────────────────────────────────
 
@@ -31,13 +29,6 @@ pub struct PlanResp {
 #[derive(Serialize)]
 pub struct CheckoutResp {
     pub checkout_url: String,
-}
-
-#[derive(Serialize)]
-pub struct AccountInfo {
-    pub mc_username: String,
-    pub mc_uuid: String,
-    pub is_active: bool,
 }
 
 // ── Réponse de la LauncherAPI ─────────────────────────────────────────────────
@@ -138,22 +129,10 @@ pub async fn yuyu_login(
             if row.expires_at - now < 1800 {
                 tracing::info!("Rafraîchissement du token pour {}", row.mc_username);
                 match mc_auth::refresh_session(&row.ms_refresh_token).await {
-                    Ok((mc_at, mc_user, mc_uuid, new_refresh, new_exp)) => {
+                    Ok(result) => {
                         let s = state.read().await;
                         let conn = s.db.lock().await;
-                        db::update_mc_tokens(
-                            &conn, data.user_id, &mc_uuid, &mc_at, &new_refresh, new_exp,
-                        )
-                        .ok();
-                        drop(conn);
-                        drop(s);
-                        active_session = Some(MinecraftSession {
-                            username: mc_user,
-                            uuid: mc_uuid,
-                            access_token: mc_at,
-                            refresh_token: Some(new_refresh),
-                            expires_at: new_exp,
-                        });
+                        active_session = Some(super::apply_refreshed_tokens(&conn, data.user_id, result));
                     }
                     Err(e) => {
                         tracing::warn!("Échec du rafraîchissement : {}", e);

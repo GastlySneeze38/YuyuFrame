@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 
+use crate::minecraft::maven::MavenCoord;
 use crate::minecraft::versions::{Artifact, Library};
 
 pub(super) fn dedup_classpath(entries: Vec<String>) -> Vec<String> {
@@ -60,18 +61,10 @@ pub(super) fn artifact_path(base: &PathBuf, artifact: &Artifact, name: &str) -> 
 }
 
 fn library_jar_path(base: &PathBuf, name: &str) -> PathBuf {
-    let parts: Vec<&str> = name.split(':').collect();
-    if parts.len() < 3 { return base.join(name); }
-    let group_path = parts[0].replace('.', "/");
-    let artifact = parts[1];
-    let version = parts[2];
-    let classifier = parts.get(3).copied().unwrap_or("");
-    let filename = if classifier.is_empty() {
-        format!("{}-{}.jar", artifact, version)
-    } else {
-        format!("{}-{}-{}.jar", artifact, version, classifier)
-    };
-    base.join(group_path).join(artifact).join(version).join(filename)
+    match MavenCoord::parse(name) {
+        Some(coord) => base.join(coord.relative_path()),
+        None => base.join(name),
+    }
 }
 
 pub(super) async fn extract_natives(jar_path: &PathBuf, natives_dir: &PathBuf) -> Result<()> {

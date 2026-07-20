@@ -5,9 +5,7 @@ use std::path::PathBuf;
 
 use super::super::instance::mods::sha1_cached;
 
-pub(super) fn api_base() -> String {
-    std::env::var("YUYU_API_URL").unwrap_or_else(|_| "http://localhost:3000".into())
-}
+pub(super) use crate::commands::api_base;
 
 // ── Types exposés au frontend ──────────────────────────────────────────────────
 

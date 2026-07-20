@@ -686,6 +686,13 @@ pub async fn download_and_launch(
 
 // ── Loader setup helpers ──────────────────────────────────────────────────────
 
+/// Extrait les chaînes d'un tableau JSON brut (`arguments.jvm`/`arguments.game`
+/// des profils Fabric/Forge), en ignorant silencieusement les entrées non-string
+/// (objets conditionnels de règles OS, non gérés ici).
+fn json_str_array(values: &[serde_json::Value]) -> Vec<String> {
+    values.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+}
+
 async fn setup_fabric(
     mc_version: &str,
     libraries_dir: &PathBuf,
@@ -721,7 +728,7 @@ async fn setup_fabric(
         .arguments
         .as_ref()
         .and_then(|a| a.jvm.as_ref())
-        .map(|jvm| jvm.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .map(|jvm| json_str_array(jvm))
         .unwrap_or_default();
 
     Ok((profile.main_class, fabric_cp, vec![], extra_jvm))
@@ -764,7 +771,7 @@ async fn setup_forge(
 
     let extra_game: Vec<String> = forge_json
         .arguments.as_ref().and_then(|a| a.game.as_ref())
-        .map(|g| g.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .map(|g| json_str_array(g))
         .unwrap_or_else(|| {
             // Legacy Forge (pré-1.13) : pas de bloc "arguments", seulement une
             // "minecraftArguments" à plat dont on extrait juste --tweakClass
@@ -774,7 +781,7 @@ async fn setup_forge(
 
     let mut extra_jvm: Vec<String> = forge_json
         .arguments.as_ref().and_then(|a| a.jvm.as_ref())
-        .map(|j| j.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .map(|j| json_str_array(j))
         .unwrap_or_default();
 
     // Forge legacy (pré-1.13, pas de bloc "arguments") : FML revérifie par défaut
