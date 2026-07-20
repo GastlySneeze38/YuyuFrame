@@ -237,10 +237,11 @@ public class UiMainMenuScreen extends UiScreenBase {
         // l'onglet Resource Packs, l'onglet Shaders y est proposé EN PLUS
         // (gating ShaderLoaderDetector appliqué DANS l'écran, voir
         // ModrinthContentScreen.buildLayout, pas ici).
-        ActionCard modrinthCard = new ActionCard("Modrinth (Resource Packs & Shaders)", "Rechercher et installer un resource pack ou un shader pack",
+        ActionCard modrinthCard = new ActionCard("Modrinth Install", "Rechercher et installer un resource pack ou un shader pack",
             "Resource packs et shaders",
             () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthContentScreen(UiMainMenuScreen.this)));
         modrinthCard.iconUrl = LauncherModule.icons8("puzzle");
+        modrinthCard.favorite = HudConfigStore.loadActionFavorite("modrinth");
         if (filter.isEmpty() || modrinthCard.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(modrinthCard);
         for (ModuleGroup g : ModuleRegistry.groups()) {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
@@ -320,11 +321,62 @@ public class UiMainMenuScreen extends UiScreenBase {
         float viewportTop = searchField.y - UiTheme.scaled(50f);
         modScroll = new UiScrollContainer(contentX, viewportBottom, contentW, Math.max(1f, viewportTop - viewportBottom));
 
-        for (int i = 0; i < filtered.size(); i++) {
-            Object entry = filtered.get(i);
+        // Favoris — demandé explicitement ("mets tout les favoris devant
+        // déjà même sans l'option activée") — TOUJOURS remontés en tête,
+        // inconditionnellement. LauncherModule/ModuleGroup/ActionCard
+        // favorisables tous les trois désormais (ActionCard ajouté après
+        // coup : "on ne peut pas mettre Modrinth en favori"). Le réglage
+        // {@link GlobalUiSettings#separateFavorites} ne pilote QUE
+        // l'affichage d'une section séparée avec titres, jamais l'ordre.
+        List<Object> favoriteEntries = new ArrayList<>();
+        List<Object> otherEntries = new ArrayList<>();
+        for (Object entry : filtered) {
+            boolean isFavorite = (entry instanceof LauncherModule && ((LauncherModule) entry).favorite)
+                || (entry instanceof ModuleGroup && ((ModuleGroup) entry).favorite)
+                || (entry instanceof ActionCard && ((ActionCard) entry).favorite);
+            if (isFavorite) favoriteEntries.add(entry);
+            else otherEntries.add(entry);
+        }
+
+        if (!GlobalUiSettings.INSTANCE.separateFavorites || favoriteEntries.isEmpty() || otherEntries.isEmpty()) {
+            // Pas de séparation visuelle à afficher (réglage désactivé, OU
+            // rien à séparer — une seule des deux listes non vide) : une
+            // seule grille continue, favoris déjà en tête via l'ordre de
+            // concaténation.
+            List<Object> combined = new ArrayList<>(favoriteEntries.size() + otherEntries.size());
+            combined.addAll(favoriteEntries);
+            combined.addAll(otherEntries);
+            layoutGrid(combined, contentX, top, cols, cardW, rowH, cardLayout);
+        } else {
+            // Séparation demandée ("tu sépare les deux liste avec des titre
+            // en majuscule et tu met les favori sur la liste du haut") — un
+            // en-tête + section par liste, favoris d'abord.
+            float headerH = sectionHeaderH();
+            modScroll.add(new SectionTitle(contentX, top - headerH, cardAreaW, headerH, Lang.tr("Favoris").toUpperCase(Locale.ROOT)));
+            top -= headerH + CARD_GAP;
+            top = layoutGrid(favoriteEntries, contentX, top, cols, cardW, rowH, cardLayout);
+            top -= CARD_GAP;
+            modScroll.add(new SectionTitle(contentX, top - headerH, cardAreaW, headerH, Lang.tr("Autres modules").toUpperCase(Locale.ROOT)));
+            top -= headerH + CARD_GAP;
+            layoutGrid(otherEntries, contentX, top, cols, cardW, rowH, cardLayout);
+        }
+    }
+
+    /**
+     * Construit les cartes (+ toggles) d'une liste d'entrées dans la grille,
+     * à partir de {@code startTop} — extrait de l'ancienne boucle unique de
+     * rebuildAll() (demande explicite : séparer favoris/autres en 2 sections,
+     * voir son appelant) pour pouvoir l'appeler 1 ou 2 fois selon {@link
+     * GlobalUiSettings#separateFavorites}. Retourne le nouveau "top" (bord
+     * BAS de la dernière ligne, repère LOCAL comme le reste de la grille)
+     * pour permettre d'enchaîner une 2ᵉ section juste en dessous.
+     */
+    private float layoutGrid(List<Object> entries, float contentX, float startTop, int cols, float cardW, float rowH, int cardLayout) {
+        for (int i = 0; i < entries.size(); i++) {
+            Object entry = entries.get(i);
             int col = i % cols, row = i / cols;
             float cx = contentX + col * (cardW + CARD_GAP);
-            float cy = top - row * (rowH + CARD_GAP) - rowH;
+            float cy = startTop - row * (rowH + CARD_GAP) - rowH;
 
             // Délai croissant par index (voir UiStagger) — les cartes
             // apparaissent en cascade plutôt que toutes d'un coup, à chaque
@@ -332,15 +384,56 @@ public class UiMainMenuScreen extends UiScreenBase {
             // javadoc de classe) : nouvelles instances de ModCard à chaque
             // fois, donc l'animation d'entrée rejoue naturellement à chaque
             // reconstruction — pas besoin de la déclencher "à la main".
+            // Redémarre à 0 par SECTION (pas un index global continu) : léger
+            // recouvrement de cascade entre la section favoris et la
+            // suivante, sans conséquence visuelle notable (positions déjà
+            // différentes à l'écran) — évite de faire transiter un compteur
+            // entre deux appels séparés pour un gain quasi imperceptible.
             float enterDelay = UiStagger.delayFor(i, 0.035f, 0.3f);
 
             if (entry instanceof ModuleGroup) {
                 ModuleGroup group = (ModuleGroup) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, rowH, cardLayout, group.name, group.description, group.shortDescription, group.iconUrl, enterDelay,
-                    () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
+                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, group.name, group.description, group.shortDescription, group.iconUrl, enterDelay,
+                    () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group)));
+                modScroll.add(card);
+                // Groupes rendus favorisables (demande explicite) — SEUL le
+                // cœur existe pour un groupe, pas de bande activer/désactiver
+                // (un groupe n'a pas d'état on/off propre, chaque module
+                // membre garde le sien, voir UiModGroupConfigScreen) : la
+                // bande reste donc TRACK_OFF par défaut (pairedToggle jamais
+                // posé ici, voir ModCard#drawIconGrid), comportement déjà
+                // existant avant cet ajout, inchangé.
+                if (cardLayout == 2) {
+                    float barH = iconGridBarH();
+                    float heartSize = iconGridHeartSize();
+                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
+                    float heartY = cy + (barH - heartSize) / 2f;
+                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, group.favorite,
+                        v -> { group.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
+                    modScroll.add(favoriteToggle);
+                    card.pairFavorite(favoriteToggle);
+                }
             } else if (entry instanceof ActionCard) {
                 ActionCard action = (ActionCard) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, rowH, cardLayout, action.name, action.description, action.shortDescription, action.iconUrl, enterDelay, action.action));
+                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, action.name, action.description, action.shortDescription, action.iconUrl, enterDelay, action.action);
+                modScroll.add(card);
+                // Favorisable (demande explicite : "on ne peut pas mettre
+                // Modrinth en favori") — même principe que le groupe
+                // ci-dessus (cœur seul, pas de bande on/off, une ActionCard
+                // n'a pas d'état activé/désactivé). "modrinth" en dur : seule
+                // ActionCard existante pour l'instant, voir HudConfigStore.
+                // loadActionFavorite/saveActionFavorite si une 2ᵉ apparaît un
+                // jour (identifiant à généraliser à ce moment-là).
+                if (cardLayout == 2) {
+                    float barH = iconGridBarH();
+                    float heartSize = iconGridHeartSize();
+                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
+                    float heartY = cy + (barH - heartSize) / 2f;
+                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, action.favorite,
+                        v -> { HudConfigStore.saveActionFavorite("modrinth", v); rebuildAll(); }).heartStyle();
+                    modScroll.add(favoriteToggle);
+                    card.pairFavorite(favoriteToggle);
+                }
             } else {
                 LauncherModule mod = (LauncherModule) entry;
                 // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
@@ -383,7 +476,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                     float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
                     float heartY = cy + (barH - heartSize) / 2f;
                     UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, mod.favorite,
-                        v -> { mod.favorite = v; HudConfigStore.save(); }).heartStyle();
+                        v -> { mod.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
 
                     modScroll.add(favoriteToggle);
                     modScroll.add(enableToggle);
@@ -403,6 +496,25 @@ public class UiMainMenuScreen extends UiScreenBase {
                     card.pairToggle(toggle);
                 }
             }
+        }
+        int rows = entries.isEmpty() ? 0 : (int) Math.ceil(entries.size() / (float) cols);
+        return startTop - rows * (rowH + CARD_GAP);
+    }
+
+    /** Hauteur d'un titre de section ("FAVORIS"/"AUTRES MODULES", voir rebuildAll()) — voir SectionTitle pour le dessin. */
+    private float sectionHeaderH() { return UiTheme.scaled(24f); }
+
+    /** Simple étiquette de section, non cliquable — le texte est déjà préparé (traduit + majuscule) par l'appelant, voir rebuildAll(). */
+    private final class SectionTitle extends UiWidget {
+        private final String label;
+        SectionTitle(float x, float y, float w, float h, String label) { super(x, y, w, h); this.label = label; }
+
+        @Override
+        public boolean contains(double mx, double my) { return false; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            renderer.drawText(label, x, y + h / 2f - UiTheme.scaled(4f), UiTheme.TEXT_MUTED.multiplyAlpha(clipFade), UiTheme.scaled(0.36f), vpWidth, vpHeight);
         }
     }
 
@@ -539,6 +651,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         final Runnable action;
         /** Voir LauncherModule#iconUrl — même principe, assigné après construction (voir rebuildAll(), carte Modrinth). */
         String iconUrl;
+        /** Voir LauncherModule/ModuleGroup#favorite — même principe (demandé explicitement : "on ne peut pas mettre Modrinth en favori"), rechargé à CHAQUE rebuildAll() (voir HudConfigStore.loadActionFavorite, cette carte est reconstruite à chaque fois, pas une instance persistante comme un module/groupe). */
+        boolean favorite;
         ActionCard(String name, String description, Runnable action) {
             this(name, description, null, action);
         }

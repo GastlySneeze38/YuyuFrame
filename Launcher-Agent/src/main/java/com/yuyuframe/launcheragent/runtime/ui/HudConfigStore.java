@@ -157,6 +157,37 @@ public final class HudConfigStore {
         }
     }
 
+    /** Voir {@link ModuleGroup#favorite} — même principe que {@link #applyTo(LauncherModule)} mais pour un groupe, qui n'a QUE ce champ à persister (pas de {@code enabled}/champs {@code @Config*} annotés, un groupe n'est pas un {@link LauncherModule}). */
+    public static void applyFavoriteTo(ModuleGroup group) {
+        ensureLoaded();
+        String favoriteStr = DATA.getProperty("group." + group.id + ".favorite");
+        if (favoriteStr != null) group.favorite = Boolean.parseBoolean(favoriteStr);
+    }
+
+    /**
+     * Favori d'une carte "action" (voir {@code UiMainMenuScreen.ActionCard}) —
+     * demandé explicitement ("on ne peut pas mettre Modrinth en favori").
+     * Contrairement à un {@link LauncherModule}/{@link ModuleGroup} (instance
+     * UNIQUE créée au démarrage, tenue par {@link ModuleRegistry}), une
+     * {@code ActionCard} est reconstruite à CHAQUE {@code rebuildAll()} —
+     * son état ne peut donc pas juste être relu depuis un champ persistant
+     * comme les deux autres, il doit être explicitement rechargé ICI à
+     * chaque reconstruction (voir l'appelant) plutôt qu'une seule fois au
+     * démarrage. {@code actionId} : identifiant stable choisi par
+     * l'appelant (ex: "modrinth") — pas de champ {@code id} dédié sur
+     * ActionCard, une seule carte de ce type existe pour l'instant.
+     */
+    public static boolean loadActionFavorite(String actionId) {
+        ensureLoaded();
+        return Boolean.parseBoolean(DATA.getProperty("action." + actionId + ".favorite", "false"));
+    }
+
+    /** Voir {@link #loadActionFavorite} — écrit ET sauvegarde immédiatement sur disque (même convention que {@link #save()}, appelé après chaque bascule de favori ailleurs). */
+    public static void saveActionFavorite(String actionId, boolean favorite) {
+        DATA.setProperty("action." + actionId + ".favorite", String.valueOf(favorite));
+        save();
+    }
+
     /** Sérialise l'état COURANT de tous les modules enregistrés — voir ConfigScreenBuilder (chaque callback de changement) et UiMainMenuScreen (toggle d'activation). */
     public static synchronized void save() {
         if (CONFIG_PATH == null) return;
@@ -171,6 +202,11 @@ public final class HudConfigStore {
             // aussi son constructeur, qui charge maintenant ces valeurs via
             // HudConfigStore.applyTo()).
             serializeModule(GlobalUiSettings.INSTANCE);
+            // Voir applyFavoriteTo(ModuleGroup) — même raison (pas dans
+            // ModuleRegistry.all()), un seul champ à écrire par groupe.
+            for (ModuleGroup group : ModuleRegistry.groups()) {
+                DATA.setProperty("group." + group.id + ".favorite", String.valueOf(group.favorite));
+            }
 
             File f = new File(CONFIG_PATH);
             File dir = f.getParentFile();

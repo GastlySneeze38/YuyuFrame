@@ -317,19 +317,33 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     /**
      * Équivalent 1.8.9 (LWJGL2/pré-refonte-Element) de {@link #mouseClicked}
      * ci-dessus — signature RÉELLE historique de {@code GuiScreen} (int, pas
-     * double ; pas de valeur de retour ; jamais renommée depuis, mappings MCP
-     * publics stables). Coexiste sans conflit avec la version "moderne" :
-     * chaque version n'active RÉELLEMENT que celle dont la signature
-     * correspond à son vrai Screen (l'autre reste une méthode inerte, jamais
-     * appelée par le jeu). Voir javadoc de {@link #mouseClicked} pour pourquoi
-     * on ignore les coordonnées passées en paramètre au profit de
-     * {@link #lastInput}.
+     * double ; pas de valeur de retour).
+     *
+     * BUG TROUVÉ (retour utilisateur : "en 1.8.9 on ne peut plus cliquer sur
+     * les boutons — même pas le bouton fermer", aucune exception nulle part)
+     * — CORRIGÉ mais laissé en trace ici : contrairement à ce qu'affirmait
+     * l'ancienne version de ce commentaire ("jamais renommée depuis, mappings
+     * MCP publics stables"), le nom déclaré ici ("mouseClicked") n'a JAMAIS
+     * correspondu au nom RÉEL en bytecode obfusqué de cette méthode sur
+     * GuiScreen 1.8.9 — confondait la stabilité du nom MCP/Yarn NAMED
+     * (lisible par un humain, effectivement stable) avec le nom OBFUSQUÉ
+     * (celui que la JVM utilise pour lier un override, complètement
+     * différent — "a", confirmé via mappings/mappings-1.8.9.tiny). Résolu
+     * comme les autres surcharges au-dessus (voir {@code ScreenStubPatcher},
+     * renommage ASM dynamique via {@code MappingsRegistry.getObfMethodName}).
      */
     public void mouseClicked(int mouseX, int mouseY, int mouseButton) {
         dispatchClick(mouseButton);
     }
 
-    /** Équivalent 1.8.9 de {@link #keyPressed} — GuiScreen.keyTyped(char,int), keyCode 1 = Keyboard.KEY_ESCAPE (LWJGL2). */
+    /**
+     * Équivalent 1.8.9 de {@link #keyPressed} — GuiScreen.keyTyped(char,int),
+     * keyCode 1 = Keyboard.KEY_ESCAPE (LWJGL2). MÊME correctif ASM que {@link
+     * #mouseClicked(int, int, int)} ci-dessus (même cause, même fix) — nommé
+     * "keyPressed" côté Yarn même en 1.8.9 (descripteur {@code (CI)V}),
+     * malgré le nom "keyTyped" gardé ici pour rester fidèle à la convention
+     * MCP historique du reste du module.
+     */
     public void keyTyped(char typedChar, int keyCode) {
         if (keyCode == 1) handleEscape();
     }

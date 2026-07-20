@@ -46,6 +46,14 @@ public final class ModuleGroup {
     public final List<Tab> tabs;
     /** Voir {@link LauncherModule#iconUrl} — même principe, assigné après construction (voir ModuleRegistry). */
     public String iconUrl;
+    /**
+     * Voir {@link LauncherModule#favorite} — même principe pour un groupe
+     * (demandé explicitement : "rends les groupes favorisables"), persisté
+     * séparément puisqu'un {@link ModuleGroup} n'est PAS un {@link
+     * LauncherModule} et ne vit pas dans {@link ModuleRegistry#all()} (voir
+     * {@code HudConfigStore}, clé {@code group.<id>.favorite}).
+     */
+    public boolean favorite;
 
     public ModuleGroup(String id, String name, String description, List<LauncherModule> members) {
         this(id, name, description, null, members, oneTabPerMember(members));

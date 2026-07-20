@@ -85,6 +85,16 @@ public final class GlobalUiSettings extends LauncherModule {
         category = "Apparence", options = { "Détaillé", "Compacte", "Grille d'icônes" })
     public int cardLayout = 2; // Grille d'icônes par défaut — retour utilisateur : "la grille est parfaite, mets-la par défaut".
 
+    // Demandé explicitement ("améliore le système de favori... rajoute un
+    // settings pour mettre à l'écart les modules en favori") — les favoris
+    // remontent TOUJOURS en tête de grille (voir UiMainMenuScreen.rebuildAll(),
+    // comportement inconditionnel, PAS piloté par ce réglage) ; celui-ci ne
+    // pilote QUE l'affichage d'une section séparée avec titres ("FAVORIS" /
+    // "AUTRES MODULES") au lieu d'une simple grille continue.
+    @ConfigToggle(name = "Séparer les favoris", description = "Affiche les mods favoris dans une section dédiée, avec un titre, en haut de la grille du menu principal.",
+        category = "Apparence")
+    public boolean separateFavorites = true; // Activé par défaut — retour utilisateur explicite.
+
     @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;
 

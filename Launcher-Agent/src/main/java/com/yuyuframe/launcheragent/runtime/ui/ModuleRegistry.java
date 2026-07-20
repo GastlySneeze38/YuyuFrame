@@ -359,6 +359,16 @@ public final class ModuleRegistry {
             optimisationsGroup.iconUrl = LauncherModule.icons8("rocket");
             GROUPS.add(optimisationsGroup);
         }
+
+        // Charge l'état "favori" persisté de CHAQUE groupe (demandé
+        // explicitement : "rends les groupes favorisables") — même rôle que
+        // HudConfigStore.applyTo(module) pour un LauncherModule, appliqué
+        // ici APRÈS que tous les groupes ci-dessus aient été ajoutés
+        // (jamais avant, sinon un groupe pas encore dans GROUPS ne serait
+        // simplement pas couvert par cette boucle).
+        for (ModuleGroup group : GROUPS) {
+            HudConfigStore.applyFavoriteTo(group);
+        }
     }
 
     public static void register(LauncherModule module) {
