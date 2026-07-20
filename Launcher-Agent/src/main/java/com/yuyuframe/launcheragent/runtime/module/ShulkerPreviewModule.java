@@ -125,6 +125,7 @@ public final class ShulkerPreviewModule extends LauncherModule {
     public ShulkerPreviewModule() {
         super("shulker-preview", "Aperçu shulker (Maj)", "Survole une shulker box dans un inventaire en maintenant Maj pour voir son contenu.",
             "Aperçu du contenu au survol", true);
+        iconUrl = icons8("treasure-chest");
     }
 
     /**

@@ -33,6 +33,7 @@ public final class KeystrokesModule extends SingleHudModule {
         super("keystrokes", "Keystrokes", "Touches ZQSD/WASD + espace + CPS", false,
             new HudElement("keystrokes", "Keystrokes", HudAnchor.BOTTOM_LEFT, 8f, 8f,
                 (HudElement.CustomRenderer) RENDERER));
+        iconUrl = icons8("keyboard");
     }
 
     @Override

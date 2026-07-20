@@ -83,7 +83,7 @@ public final class GlobalUiSettings extends LauncherModule {
     // reconstruction de la grille.
     @ConfigDropdown(name = "Affichage des cartes (menu)", description = "Disposition des cartes de mods dans le menu principal.",
         category = "Apparence", options = { "Détaillé", "Compacte", "Grille d'icônes" })
-    public int cardLayout = 0;
+    public int cardLayout = 2; // Grille d'icônes par défaut — retour utilisateur : "la grille est parfaite, mets-la par défaut".
 
     @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;

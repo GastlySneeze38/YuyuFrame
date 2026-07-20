@@ -73,6 +73,7 @@ public final class ChatEnhancementsModule extends LauncherModule {
 
     public ChatEnhancementsModule() {
         super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false);
+        iconUrl = icons8("chat");
     }
 
     private static boolean mixinDiagLogged;

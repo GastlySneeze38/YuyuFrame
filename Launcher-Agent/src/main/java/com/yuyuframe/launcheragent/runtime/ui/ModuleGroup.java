@@ -44,6 +44,8 @@ public final class ModuleGroup {
     public final String shortDescription;
     public final List<LauncherModule> members;
     public final List<Tab> tabs;
+    /** Voir {@link LauncherModule#iconUrl} — même principe, assigné après construction (voir ModuleRegistry). */
+    public String iconUrl;
 
     public ModuleGroup(String id, String name, String description, List<LauncherModule> members) {
         this(id, name, description, null, members, oneTabPerMember(members));

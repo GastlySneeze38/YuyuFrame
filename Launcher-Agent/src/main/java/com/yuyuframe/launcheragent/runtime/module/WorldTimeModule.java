@@ -36,5 +36,6 @@ public final class WorldTimeModule extends LauncherModule {
     public WorldTimeModule() {
         super("world-time", "Temps du monde", "Force l'heure affichée (soleil/lune/ciel), sans changer le vrai temps serveur",
             "Force l'heure affichée", false);
+        iconUrl = icons8("clock");
     }
 }

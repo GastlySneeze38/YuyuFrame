@@ -27,6 +27,7 @@ public final class CoordsModule extends SingleHudModule {
         super("coords", "Coordonnées", "Affiche la position X/Y/Z du joueur", true,
             new HudElement("coords", "Coordonnées", HudAnchor.TOP_LEFT, 8f, 40f,
                 (HudElement.CustomRenderer) new Renderer()));
+        iconUrl = icons8("map-marker");
     }
 
     private static final class Renderer implements HudElement.CustomRenderer {

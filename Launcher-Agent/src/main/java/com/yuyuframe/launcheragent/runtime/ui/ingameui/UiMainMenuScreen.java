@@ -7,10 +7,12 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleGroup;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAsyncFade;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiEasing;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiStagger;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
@@ -20,9 +22,16 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Écran d'accueil du moteur config custom — équivalent de OneConfigGui.create() :
@@ -231,6 +240,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         ActionCard modrinthCard = new ActionCard("Modrinth (Resource Packs & Shaders)", "Rechercher et installer un resource pack ou un shader pack",
             "Resource packs et shaders",
             () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthContentScreen(UiMainMenuScreen.this)));
+        modrinthCard.iconUrl = LauncherModule.icons8("puzzle");
         if (filter.isEmpty() || modrinthCard.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(modrinthCard);
         for (ModuleGroup g : ModuleRegistry.groups()) {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
@@ -326,11 +336,11 @@ public class UiMainMenuScreen extends UiScreenBase {
 
             if (entry instanceof ModuleGroup) {
                 ModuleGroup group = (ModuleGroup) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, rowH, cardLayout, group.name, group.description, group.shortDescription, enterDelay,
+                modScroll.add(new ModCard(cx, cy, cardW, rowH, cardLayout, group.name, group.description, group.shortDescription, group.iconUrl, enterDelay,
                     () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
             } else if (entry instanceof ActionCard) {
                 ActionCard action = (ActionCard) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, rowH, cardLayout, action.name, action.description, action.shortDescription, enterDelay, action.action));
+                modScroll.add(new ModCard(cx, cy, cardW, rowH, cardLayout, action.name, action.description, action.shortDescription, action.iconUrl, enterDelay, action.action));
             } else {
                 LauncherModule mod = (LauncherModule) entry;
                 // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
@@ -342,7 +352,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // pairedToggle.contains() (voir ModCard.contains()), donc aucune
                 // géométrie à dupliquer/désynchroniser ici quel que soit
                 // l'agencement.
-                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, enterDelay,
+                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, mod.iconUrl, enterDelay,
                     () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
                 modScroll.add(card);
 
@@ -394,6 +404,46 @@ public class UiMainMenuScreen extends UiScreenBase {
                 }
             }
         }
+    }
+
+    private static final Map<Integer, BufferedImage> CROSSHAIR_ICON_CACHE = new HashMap<>();
+
+    /**
+     * Réticule à 4 branches + point central, baké en texture CPU (même motif
+     * "forme vectorielle simple" que le cœur favori de {@code UiToggle}) —
+     * voir {@link LauncherModule#ICON_LOCAL_CROSSHAIR}. Retour utilisateur :
+     * "trouve un meilleur icone pour custom crosshair" — AUCUN nom d'icône
+     * crosshair/réticule/viseur n'existe dans le style "ios-filled" utilisé
+     * partout ailleurs (vérifié individuellement, tous 404), et mélanger un
+     * style icons8 différent pour cette seule carte aurait détonné
+     * visuellement (épaisseur de trait/couleur différentes) — un vrai
+     * réticule dessiné à la main est de toute façon plus fidèle au concept
+     * que n'importe quelle icône générique disponible (ex: "target", une
+     * cible en cercles concentriques, PAS un viseur).
+     */
+    private static BufferedImage crosshairImage(int px) {
+        BufferedImage cached = CROSSHAIR_ICON_CACHE.get(px);
+        if (cached != null) return cached;
+
+        BufferedImage img = new BufferedImage(px, px, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(java.awt.Color.WHITE);
+
+        float cx = px / 2f, cy = px / 2f;
+        float thickness = px * 0.09f;
+        float gap = px * 0.14f;
+        float armLen = px * 0.28f;
+        g.fill(new RoundRectangle2D.Float(cx - thickness / 2f, cy - gap - armLen, thickness, armLen, thickness, thickness));
+        g.fill(new RoundRectangle2D.Float(cx - thickness / 2f, cy + gap, thickness, armLen, thickness, thickness));
+        g.fill(new RoundRectangle2D.Float(cx - gap - armLen, cy - thickness / 2f, armLen, thickness, thickness, thickness));
+        g.fill(new RoundRectangle2D.Float(cx + gap, cy - thickness / 2f, armLen, thickness, thickness, thickness));
+        float dotR = px * 0.035f;
+        g.fill(new Ellipse2D.Float(cx - dotR, cy - dotR, dotR * 2f, dotR * 2f));
+        g.dispose();
+
+        CROSSHAIR_ICON_CACHE.put(px, img);
+        return img;
     }
 
     /**
@@ -487,6 +537,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         /** Voir LauncherModule/ModuleGroup#shortDescription — même principe pour une carte "action". {@code null} = pas de version dédiée. */
         final String shortDescription;
         final Runnable action;
+        /** Voir LauncherModule#iconUrl — même principe, assigné après construction (voir rebuildAll(), carte Modrinth). */
+        String iconUrl;
         ActionCard(String name, String description, Runnable action) {
             this(name, description, null, action);
         }
@@ -600,14 +652,19 @@ public class UiMainMenuScreen extends UiScreenBase {
         private UiToggle pairedToggle;
         /** Cœur "favori" (voir {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule#favorite}) — SEULEMENT en mode Grille (voir {@link #pairFavorite}), INDÉPENDANT de {@link #pairedToggle} (activation) : retour utilisateur explicite après une 1ère version où les deux étaient confondus. */
         private UiToggle pairedFavorite;
+        /** Voir {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule#iconUrl} — {@code null} = pas d'icône dédiée, {@link #drawIconOrInitial} retombe alors sur la pastille-lettre existante. */
+        private final String cardIconUrl;
+        /** Fondu d'entrée de l'icône distante une fois chargée (voir UiRemoteImage, non-bloquant) — même motif que ResultCard dans ModrinthContentScreen. */
+        private final UiAsyncFade iconFade = new UiAsyncFade();
 
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
-        ModCard(float x, float y, float w, float h, int layoutMode, String name, String description, String shortDescription, float enterDelay, Runnable onOpen) {
+        ModCard(float x, float y, float w, float h, int layoutMode, String name, String description, String shortDescription, String iconUrl, float enterDelay, Runnable onOpen) {
             super(x, y, w, h);
             this.layoutMode = layoutMode;
             this.cardName = name;
             this.cardDescription = description;
             this.cardShortDescription = shortDescription;
+            this.cardIconUrl = iconUrl;
             this.onOpen = onOpen;
             this.enterAnim = new UiTransition(0.28f, enterDelay, UiEasing.EASE_OUT_CUBIC);
             this.enterAnim.show();
@@ -783,23 +840,58 @@ public class UiMainMenuScreen extends UiScreenBase {
             }
         }
 
+        /**
+         * Icône carrée à {@code (ix,iy)} taille {@code size} — vraie icône
+         * distante ({@link #cardIconUrl}, voir {@link LauncherModule#iconUrl})
+         * une fois chargée, PASTILLE-LETTRE de repli sinon (pas encore
+         * chargée, ou aucune URL fournie pour cette carte — ex: modules pas
+         * encore couverts) : demandé explicitement ("ajoute des icônes pour
+         * tous les modules... même système que Modrinth"), voir
+         * ResultCard#draw dans ModrinthContentScreen pour le même motif
+         * exact (UiRemoteImage.get + UiAsyncFade + repli pastille). Partagé
+         * entre {@link #drawDetailed} et {@link #drawIconGrid} — seule la
+         * TAILLE/POSITION de l'icône diffère entre agencements, jamais son
+         * contenu.
+         */
+        private void drawIconOrInitial(UiRenderer renderer, float ix, float iy, float size, String initial,
+                float alpha, int vpWidth, int vpHeight) {
+            // Réticule baké en local (voir LauncherModule.ICON_LOCAL_CROSSHAIR)
+            // — synchrone, pas de fetch/fondu async nécessaire, contrairement
+            // à une vraie URL distante ci-dessous.
+            if (LauncherModule.ICON_LOCAL_CROSSHAIR.equals(cardIconUrl)) {
+                int px = Math.max(8, Math.round(size));
+                renderer.drawIcon(LauncherModule.ICON_LOCAL_CROSSHAIR, crosshairImage(px), ix, iy, size, size, alpha, vpWidth, vpHeight);
+                return;
+            }
+            BufferedImage icon = cardIconUrl != null ? UiRemoteImage.get(cardIconUrl) : null;
+            if (icon != null) {
+                iconFade.markReady();
+                renderer.drawIcon(cardIconUrl, icon, ix, iy, size, size, iconFade.alpha() * alpha, vpWidth, vpHeight);
+                return;
+            }
+            // Dégradé (accent clair en haut, dim en bas) plutôt qu'un fond
+            // plat — même jeu de lumière que le reste de l'appli. Échelle de
+            // texte FIXE (pas proportionnelle à `size`, comme avant l'ajout
+            // des icônes distantes) : la grande cellule du mode Grille a
+            // toujours utilisé la même échelle que la petite pastille du
+            // mode Détaillé, sans lien avec `size` — repli rare (icône
+            // distante manquante/en cours de chargement), pas retouché ici.
+            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * alpha);
+            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(alpha);
+            renderer.drawGradientRect(ix, iy, ix + size, iy + size, UiTheme.RADIUS_SM, iconBottom, iconTop, vpWidth, vpHeight);
+            float iconTextScale = UiTheme.scaled(0.5f);
+            float iw = renderer.textWidth(initial, iconTextScale);
+            renderer.drawText(initial, ix + (size - iw) / 2f, iy + size / 2f - UiTheme.scaled(4f),
+                UiTheme.ACCENT.multiplyAlpha(alpha), iconTextScale, vpWidth, vpHeight);
+        }
+
         /** Agencement d'origine, INCHANGÉ — icône en bas-gauche, nom + description empilés à droite. */
         private void drawDetailed(UiRenderer renderer, String displayName, String displayDescription, String initial,
                 float drawY, float alpha, int vpWidth, int vpHeight) {
             this.tooltip = null;
-            // Pastille icone (initiale du mod) — pas d'image reelle en attendant les icones mods.
-            // Dégradé (accent clair en haut, dim en bas) plutôt qu'un fond
-            // plat — même jeu de lumière que le reste de l'appli.
             float iconSize = UiTheme.scaled(36f);
             float pad = UiTheme.scaled(12f);
-            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * alpha);
-            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(alpha);
-            renderer.drawGradientRect(x + pad, drawY + h - iconSize - pad, x + pad + iconSize, drawY + h - pad,
-                UiTheme.RADIUS_SM, iconBottom, iconTop, vpWidth, vpHeight);
-            float iconTextScale = UiTheme.scaled(0.5f);
-            float iw = renderer.textWidth(initial, iconTextScale);
-            renderer.drawText(initial, x + pad + (iconSize - iw) / 2f, drawY + h - pad - iconSize / 2f - UiTheme.scaled(6f),
-                UiTheme.ACCENT.multiplyAlpha(alpha), iconTextScale, vpWidth, vpHeight);
+            drawIconOrInitial(renderer, x + pad, drawY + h - iconSize - pad, iconSize, initial, alpha, vpWidth, vpHeight);
 
             float textX = x + pad + iconSize + pad;
             // BUG TROUVÉ (retour utilisateur : "les sous-titres des cards de
@@ -854,20 +946,16 @@ public class UiMainMenuScreen extends UiScreenBase {
                 renderer.drawRoundedRect(x, drawY + UiTheme.RADIUS_MD, x + w, drawY + barH, 0f, barColor, vpWidth, vpHeight);
             }
 
-            // Icône (initiale du mod, pas d'image réelle — voir drawDetailed)
-            // centrée dans toute la zone au-dessus de la bande.
+            // Icône centrée dans la zone au-dessus de la bande — réduite
+            // (retour utilisateur : "met les icônes plus petites pour la
+            // grille") : occupait quasiment toute la zone disponible avant
+            // (juste la marge `pad` en moins), désormais une fraction fixe
+            // de cette zone, avec la marge résultante répartie tout autour.
             float iconAreaH = h - barH;
-            float iconSize = Math.max(UiTheme.scaled(20f), Math.min(w, iconAreaH) - pad * 2f);
+            float iconSize = Math.max(UiTheme.scaled(18f), Math.min(w, iconAreaH) * 0.55f);
             float iconX = x + (w - iconSize) / 2f;
             float iconY = drawY + barH + (iconAreaH - iconSize) / 2f;
-            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * alpha);
-            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(alpha);
-            renderer.drawGradientRect(iconX, iconY, iconX + iconSize, iconY + iconSize,
-                UiTheme.RADIUS_SM, iconBottom, iconTop, vpWidth, vpHeight);
-            float iconTextScale = UiTheme.scaled(0.5f);
-            float iw = renderer.textWidth(initial, iconTextScale);
-            renderer.drawText(initial, iconX + (iconSize - iw) / 2f, iconY + iconSize / 2f + UiTheme.scaled(4f),
-                UiTheme.ACCENT.multiplyAlpha(alpha), iconTextScale, vpWidth, vpHeight);
+            drawIconOrInitial(renderer, iconX, iconY, iconSize, initial, alpha, vpWidth, vpHeight);
 
             // Nom dans la bande, à gauche du cœur (voir rebuildAll() pour la
             // position du cœur lui-même — widget séparé {@link #pairedFavorite}).

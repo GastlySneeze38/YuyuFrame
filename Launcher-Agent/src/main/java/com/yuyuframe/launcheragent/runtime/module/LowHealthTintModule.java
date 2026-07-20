@@ -58,6 +58,7 @@ public final class LowHealthTintModule extends LauncherModule {
     public LowHealthTintModule() {
         super("low-health-tint", "Teinte vie basse", "Teinte l'écran quand la vie descend sous un seuil",
             "Teinte l'écran à vie basse", false);
+        iconUrl = icons8("heart-monitor");
     }
 
     // Diagnostic — un seul log par frame de test, throttlé à 1x/seconde
