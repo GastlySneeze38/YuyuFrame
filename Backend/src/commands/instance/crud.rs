@@ -36,8 +36,18 @@ fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32,
         ram_mb,
         description: description.to_string(),
     };
-    if let Ok(json) = serde_json::to_string_pretty(&meta) {
-        let _ = std::fs::write(instance_dir(id).join("meta.json"), json);
+    match serde_json::to_string_pretty(&meta) {
+        Ok(json) => {
+            // Best-effort : la DB reste la source de vérité pour cette instance
+            // (voir instance_list/get/update), meta.json ne sert qu'au repli
+            // "disk_wins" de instance_startup_sync si la DB est perdue — un
+            // échec ici ne doit pas faire échouer la commande appelante, mais
+            // doit au moins être visible dans les logs plutôt que muet.
+            if let Err(e) = std::fs::write(instance_dir(id).join("meta.json"), json) {
+                tracing::warn!("Écriture de meta.json pour l'instance {} échouée : {}", id, e);
+            }
+        }
+        Err(e) => tracing::warn!("Sérialisation de meta.json pour l'instance {} échouée : {}", id, e),
     }
 }
 

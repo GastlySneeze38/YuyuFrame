@@ -271,6 +271,7 @@ pub async fn sync_pull_instance(
         .map_err(|e| e.to_string())??;
 
     // ── Étape 3 : Installer les mods depuis le manifest ───────────────────────
+    let mut failed_mods: Vec<String> = Vec::new();
     let manifest_path = dir.join("mods.json");
     if manifest_path.exists() {
         let manifest_json = tokio::fs::read_to_string(&manifest_path)
@@ -302,28 +303,62 @@ pub async fn sync_pull_instance(
 
                 // Validation URL (CDN Modrinth uniquement)
                 if !modrinth.download_url.starts_with("https://cdn.modrinth.com/") {
+                    tracing::warn!("[Sync] URL non-Modrinth ignorée pour {} : {}", entry.filename, modrinth.download_url);
+                    failed_mods.push(entry.filename.clone());
                     continue;
                 }
 
-                let Ok(dl_resp) = client.get(&modrinth.download_url).send().await else { continue };
-                if !dl_resp.status().is_success() { continue; }
-                let Ok(bytes) = dl_resp.bytes().await else { continue };
+                let dl_resp = match client.get(&modrinth.download_url).send().await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::warn!("[Sync] téléchargement de {} échoué : {}", entry.filename, e);
+                        failed_mods.push(entry.filename.clone());
+                        continue;
+                    }
+                };
+                if !dl_resp.status().is_success() {
+                    tracing::warn!("[Sync] téléchargement de {} échoué : HTTP {}", entry.filename, dl_resp.status());
+                    failed_mods.push(entry.filename.clone());
+                    continue;
+                }
+                let bytes = match dl_resp.bytes().await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        tracing::warn!("[Sync] lecture du corps de réponse pour {} échouée : {}", entry.filename, e);
+                        failed_mods.push(entry.filename.clone());
+                        continue;
+                    }
+                };
 
                 let dest_name = if entry.enabled {
                     entry.filename.clone()
                 } else {
                     format!("{}.disabled", entry.filename)
                 };
-                tokio::fs::write(mods_dir.join(&dest_name), &bytes).await.ok();
+                if let Err(e) = tokio::fs::write(mods_dir.join(&dest_name), &bytes).await {
+                    tracing::warn!("[Sync] écriture de {} échouée : {}", entry.filename, e);
+                    failed_mods.push(entry.filename.clone());
+                }
             }
         }
     }
 
+    let done_label = if failed_mods.is_empty() {
+        "Restauré !".to_string()
+    } else {
+        format!("Restauré — {} mod(s) n'ont pas pu être retéléchargés", failed_mods.len())
+    };
     app.emit("sync_progress", SyncProgressEvent {
         phase: "done".into(),
         percent: 100,
-        label: "Restauré !".into(),
+        label: done_label,
     }).ok();
+    if !failed_mods.is_empty() {
+        let _ = app.emit("sync_pull_warning", serde_json::json!({
+            "instance_id": &instance_id,
+            "failed_mods": failed_mods,
+        }));
+    }
 
     Ok(())
 }

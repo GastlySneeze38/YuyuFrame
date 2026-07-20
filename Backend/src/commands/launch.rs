@@ -122,7 +122,7 @@ pub async fn launch_game(
             .ok()
         };
 
-        if let Err(e) = launcher::download_and_launch(
+        match launcher::download_and_launch(
             &instance.mc_version,
             Some(&instance.loader),
             &session,
@@ -137,9 +137,23 @@ pub async fn launch_game(
         )
         .await
         {
-            if e.to_string() == launcher::LAUNCH_CANCELLED_MSG {
+            Ok(warnings) if !warnings.is_empty() => {
+                // Lancement réussi mais avec des libs/dépendances manquantes
+                // (voir orchestrator::LoaderSetup) — le jeu peut planter ou
+                // manquer une fonctionnalité sans que rien n'ait "échoué" au
+                // sens strict, donc pas d'événement launch_error ici, mais
+                // l'utilisateur doit quand même le savoir.
+                tracing::warn!("Lancement de {} avec avertissements : {:?}", instance_id, warnings);
+                let _ = app.emit("launch_warning", serde_json::json!({
+                    "instance_id": &instance_id,
+                    "warnings": warnings,
+                }));
+            }
+            Ok(_) => {}
+            Err(e) if e.to_string() == launcher::LAUNCH_CANCELLED_MSG => {
                 let _ = app.emit("launch_cancelled", &instance_id);
-            } else {
+            }
+            Err(e) => {
                 tracing::error!("Erreur de lancement: {}", e);
                 let _ = app.emit("launch_error", e.to_string());
             }

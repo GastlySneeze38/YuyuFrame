@@ -77,6 +77,11 @@ pub struct ModpackMeta {
     /// Noms de fichiers (basename) installés par le modpack — sert à distinguer
     /// le contenu du pack du contenu ajouté manuellement par l'utilisateur.
     pub mod_files: Vec<String>,
+    /// Fichiers référencés par le pack qui n'ont pas pu être téléchargés
+    /// (réseau, URL invalide...) — le pack reste installé avec ce qui a
+    /// réussi, mais l'utilisateur doit savoir qu'il manque des fichiers.
+    #[serde(default)]
+    pub failed_files: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -234,21 +239,48 @@ pub async fn modpack_install(input: ModpackInstallInput) -> Result<ModpackMeta, 
         .build()
         .map_err(|e| e.to_string())?;
     let mut backed_up: Vec<String> = Vec::new();
+    let mut failed_files: Vec<String> = Vec::new();
     for file in &index.files {
-        let Some(url) = file.downloads.first() else { continue };
+        let Some(url) = file.downloads.first() else {
+            tracing::warn!("[Modpack] aucune URL de téléchargement pour {}", file.path);
+            failed_files.push(file.path.clone());
+            continue;
+        };
         if check_modrinth_url(url).is_err() {
+            tracing::warn!("[Modpack] URL non-Modrinth ignorée pour {} : {}", file.path, url);
+            failed_files.push(file.path.clone());
             continue;
         }
         let dest = file.path.split('/').fold(dir.clone(), |acc, c| acc.join(c));
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
         }
-        let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
+        let resp = match client.get(url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("[Modpack] téléchargement de {} échoué : {}", file.path, e);
+                failed_files.push(file.path.clone());
+                continue;
+            }
+        };
         if !resp.status().is_success() {
+            tracing::warn!("[Modpack] téléchargement de {} échoué : HTTP {}", file.path, resp.status());
+            failed_files.push(file.path.clone());
             continue;
         }
-        let data = resp.bytes().await.map_err(|e| e.to_string())?;
-        tokio::fs::write(&dest, &data).await.map_err(|e| e.to_string())?;
+        let data = match resp.bytes().await {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::warn!("[Modpack] lecture du corps de réponse pour {} échouée : {}", file.path, e);
+                failed_files.push(file.path.clone());
+                continue;
+            }
+        };
+        if let Err(e) = tokio::fs::write(&dest, &data).await {
+            tracing::warn!("[Modpack] écriture de {} échouée : {}", file.path, e);
+            failed_files.push(file.path.clone());
+            continue;
+        }
 
         if file.path.starts_with("mods/") {
             if let Some(new_meta) = read_fabric_mod_json(&dest) {
@@ -296,6 +328,7 @@ pub async fn modpack_install(input: ModpackInstallInput) -> Result<ModpackMeta, 
         date_modified: input.date_modified,
         categories: input.categories,
         mod_files,
+        failed_files,
     };
 
     let json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;

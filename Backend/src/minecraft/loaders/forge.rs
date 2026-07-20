@@ -293,14 +293,22 @@ pub fn read_version_json(version_id: &str, mc_dir: &Path) -> Result<ForgeVersion
 /// Download a Forge-specific library and return its local path. Handles both
 /// the modern `downloads.artifact` shape and the legacy (pré-1.13) shape
 /// where a library only has `name` + an optional base maven `url`.
+/// None si indisponible — voir les `tracing::warn!` pour la raison précise,
+/// remontée par l'appelant comme avertissement de lancement.
 pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path) -> Option<PathBuf> {
-    let coord = MavenCoord::parse(&lib.name)?;
+    let Some(coord) = MavenCoord::parse(&lib.name) else {
+        tracing::warn!("[Forge] coordonnée maven invalide, lib ignorée : {}", lib.name);
+        return None;
+    };
     let group = &coord.group_path;
     let (art, ver) = (coord.artifact, coord.version);
     let fname = coord.filename();
 
     let (local_path, url) = if let Some(downloads) = lib.downloads.as_ref() {
-        let artifact = downloads.artifact.as_ref()?;
+        let Some(artifact) = downloads.artifact.as_ref() else {
+            tracing::warn!("[Forge] pas d'artifact de téléchargement pour {}", lib.name);
+            return None;
+        };
         let local_path = match &artifact.path {
             Some(rel_path) => libraries_dir.join(rel_path),
             None => libraries_dir.join(group).join(art).join(ver).join(&fname),
@@ -313,18 +321,24 @@ pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path) -> Optio
     };
 
     if let Some(parent) = local_path.parent() {
-        if tokio::fs::create_dir_all(parent).await.is_err() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!("[Forge] création du dossier pour {} échouée : {}", lib.name, e);
             return None;
         }
     }
 
     if !local_path.exists() && !url.is_empty() {
-        if let Ok(resp) = reqwest::Client::new().get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(bytes) = resp.bytes().await {
-                    let _ = tokio::fs::write(&local_path, &bytes).await;
+        match reqwest::Client::new().get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                Ok(bytes) => {
+                    if let Err(e) = tokio::fs::write(&local_path, &bytes).await {
+                        tracing::warn!("[Forge] écriture de {} échouée : {}", lib.name, e);
+                    }
                 }
-            }
+                Err(e) => tracing::warn!("[Forge] lecture du corps de réponse pour {} échouée : {}", lib.name, e),
+            },
+            Ok(resp) => tracing::warn!("[Forge] téléchargement de {} échoué : HTTP {}", lib.name, resp.status()),
+            Err(e) => tracing::warn!("[Forge] téléchargement de {} échoué : {}", lib.name, e),
         }
     }
 

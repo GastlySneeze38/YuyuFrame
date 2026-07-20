@@ -281,15 +281,20 @@ async fn install_dep(
 /// Résout et installe les dépendances manquantes ou incompatibles pour tous les
 /// mods Fabric du dossier, en respectant les contraintes de version qu'ils
 /// déclarent. Itère jusqu'à ce qu'il n'y ait plus rien à installer (max 10 passes).
+/// Résout et installe les dépendances de mods manquantes. Retourne la liste
+/// des dépendances qui n'ont pas pu être installées (vide si tout a réussi)
+/// — l'appelant la remonte comme avertissement de lancement plutôt que de la
+/// laisser silencieuse dans les logs (une dépendance obligatoire manquante,
+/// ex: Fabric API pour Sodium, plante sinon le jeu au démarrage sans indice).
 pub async fn resolve_and_install_deps(
     mc_version: &str,
     loader: &str,
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     if !mods_dir.exists() {
-        return Ok(());
+        return Ok(vec![]);
     }
 
     let client = reqwest::Client::builder()
@@ -297,6 +302,7 @@ pub async fn resolve_and_install_deps(
         .build()?;
 
     let mut already_tried: HashSet<String> = HashSet::new();
+    let mut failed: Vec<String> = Vec::new();
 
     for _ in 0..10 {
         let installed = scan_installed(mods_dir).await;
@@ -320,10 +326,13 @@ pub async fn resolve_and_install_deps(
 
             match install_dep(&client, &dep, mc_version, loader, mods_dir, avoid_beta).await {
                 Ok(filename) => tracing::info!("Dépendance installée : {}", filename),
-                Err(e) => tracing::warn!("Impossible d'installer «{}» : {}", dep.id, e),
+                Err(e) => {
+                    tracing::warn!("Impossible d'installer «{}» : {}", dep.id, e);
+                    failed.push(dep.id.clone());
+                }
             }
         }
     }
 
-    Ok(())
+    Ok(failed)
 }

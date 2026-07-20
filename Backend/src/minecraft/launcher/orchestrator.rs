@@ -38,6 +38,11 @@ pub fn minecraft_dir() -> PathBuf {
 /// `loader` — "vanilla" | "fabric" | "forge" (None treated as vanilla)
 /// `game_dir` — instance directory (saves, mods, configs); shared assets stay in minecraft_dir()
 /// `console_label` — label de la fenêtre console à cibler pour les game_log
+///
+/// Retourne, en cas de succès, la liste des avertissements non-bloquants
+/// survenus pendant le lancement (lib Fabric/Forge ou dépendance de mod
+/// manquante — le jeu a quand même démarré, mais pourrait planter ou
+/// manquer une fonctionnalité). Vide si tout s'est bien passé.
 #[allow(clippy::too_many_arguments)]
 pub async fn download_and_launch(
     version_id: &str,
@@ -51,7 +56,7 @@ pub async fn download_and_launch(
     avoid_beta: bool,
     console_label: &str,
     cancel: watch::Receiver<bool>,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     let mc_dir = minecraft_dir();
     tokio::fs::create_dir_all(game_dir).await?;
     let versions_dir = mc_dir.join("versions").join(version_id);
@@ -282,12 +287,22 @@ pub async fn download_and_launch(
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
 
-    let (main_class, extra_classpath, extra_game_args, extra_jvm_args) =
-        match loader.unwrap_or("vanilla") {
-            "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta).await?,
-            "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app).await?,
-            _ => (details.main_class.clone(), vec![], vec![], vec![]),
-        };
+    let loader_setup = match loader.unwrap_or("vanilla") {
+        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta).await?,
+        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app).await?,
+        _ => LoaderSetup { main_class: details.main_class.clone(), ..Default::default() },
+    };
+    let (main_class, extra_classpath, extra_game_args, extra_jvm_args) = (
+        loader_setup.main_class,
+        loader_setup.classpath,
+        loader_setup.extra_game_args,
+        loader_setup.extra_jvm_args,
+    );
+    // Avertissements non-bloquants (lib Fabric/Forge ou dépendance de mod
+    // manquante) — remontés à l'appelant même en cas de lancement réussi,
+    // au lieu de rester silencieux dans les logs (voir commands/launch.rs,
+    // événement `launch_warning`).
+    let launch_warnings = loader_setup.warnings;
 
     // ── P2P setup ────────────────────────────────────────────────────────────
     // Démarre le signaling, télécharge les mappings Mojang et prépare les javaagents.
@@ -682,7 +697,7 @@ pub async fn download_and_launch(
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
     }
 
-    Ok(())
+    Ok(launch_warnings)
 }
 
 // ── Loader setup helpers ──────────────────────────────────────────────────────
@@ -694,31 +709,52 @@ fn json_str_array(values: &[serde_json::Value]) -> Vec<String> {
     values.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
 }
 
+#[derive(Default)]
+struct LoaderSetup {
+    main_class: String,
+    classpath: Vec<String>,
+    extra_game_args: Vec<String>,
+    extra_jvm_args: Vec<String>,
+    /// Libs ou dépendances qui n'ont pas pu être installées — le jeu démarre
+    /// quand même (best-effort), mais l'utilisateur doit en être informé
+    /// plutôt que de découvrir un crash Java sans indice.
+    warnings: Vec<String>,
+}
+
 async fn setup_fabric(
     mc_version: &str,
     libraries_dir: &Path,
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
-) -> Result<(String, Vec<String>, Vec<String>, Vec<String>)> {
+) -> Result<LoaderSetup> {
     set_progress(app, 72, 100, "Téléchargement Fabric Loader...");
 
     let profile = fabric::get_latest_profile(mc_version).await?;
+    let mut warnings = Vec::new();
 
     if let Err(e) = fabric::ensure_fabric_api(mc_version, mods_dir).await {
         tracing::warn!("Fabric API auto-install échoué: {}", e);
+        warnings.push("Fabric API n'a pas pu être installée automatiquement".to_string());
     }
 
     set_progress(app, 74, 100, "Résolution des dépendances des mods...");
-    if let Err(e) = deps::resolve_and_install_deps(mc_version, "fabric", mods_dir, app, avoid_beta).await {
-        tracing::warn!("Résolution des dépendances échouée: {}", e);
+    match deps::resolve_and_install_deps(mc_version, "fabric", mods_dir, app, avoid_beta).await {
+        Ok(failed) => warnings.extend(
+            failed.into_iter().map(|id| format!("Dépendance de mod manquante : {id}")),
+        ),
+        Err(e) => {
+            tracing::warn!("Résolution des dépendances échouée: {}", e);
+            warnings.push(format!("Résolution des dépendances de mods échouée : {e}"));
+        }
     }
 
     let mut fabric_cp = Vec::new();
     let total = profile.libraries.len();
     for (i, lib) in profile.libraries.iter().enumerate() {
-        if let Some(path) = fabric::download_library(lib, libraries_dir).await {
-            fabric_cp.push(path.to_string_lossy().to_string());
+        match fabric::download_library(lib, libraries_dir).await {
+            Some(path) => fabric_cp.push(path.to_string_lossy().to_string()),
+            None => warnings.push(format!("Bibliothèque Fabric manquante : {}", lib.name)),
         }
         if i % 5 == 0 {
             set_progress(app, 72 + i as u64 * 20 / total.max(1) as u64, 100, &format!("Fabric libs {}/{}", i + 1, total));
@@ -732,7 +768,13 @@ async fn setup_fabric(
         .map(|jvm| json_str_array(jvm))
         .unwrap_or_default();
 
-    Ok((profile.main_class, fabric_cp, vec![], extra_jvm))
+    Ok(LoaderSetup {
+        main_class: profile.main_class,
+        classpath: fabric_cp,
+        extra_game_args: vec![],
+        extra_jvm_args: extra_jvm,
+        warnings,
+    })
 }
 
 async fn setup_forge(
@@ -741,7 +783,7 @@ async fn setup_forge(
     libraries_dir: &Path,
     java: &str,
     app: &tauri::AppHandle,
-) -> Result<(String, Vec<String>, Vec<String>, Vec<String>)> {
+) -> Result<LoaderSetup> {
     set_progress(app, 70, 100, "Recherche de la version Forge...");
 
     let forge_ver = forge::fetch_latest_version(mc_version).await?;
@@ -757,12 +799,14 @@ async fn setup_forge(
 
     let forge_json = forge::read_version_json(&version_id, mc_dir)?;
     let mut forge_cp = Vec::new();
+    let mut warnings = Vec::new();
 
     if let Some(libs) = &forge_json.libraries {
         let total = libs.len();
         for (i, lib) in libs.iter().enumerate() {
-            if let Some(path) = forge::download_library(lib, libraries_dir).await {
-                forge_cp.push(path.to_string_lossy().to_string());
+            match forge::download_library(lib, libraries_dir).await {
+                Some(path) => forge_cp.push(path.to_string_lossy().to_string()),
+                None => warnings.push(format!("Bibliothèque Forge manquante : {}", lib.name)),
             }
             if i % 5 == 0 {
                 set_progress(app, 80 + i as u64 * 12 / total.max(1) as u64, 100, &format!("Forge libs {}/{}", i + 1, total));
@@ -797,5 +841,11 @@ async fn setup_forge(
         extra_jvm.push("-Dfml.ignorePatchDiscrepancies=true".into());
     }
 
-    Ok((forge_json.main_class, forge_cp, extra_game, extra_jvm))
+    Ok(LoaderSetup {
+        main_class: forge_json.main_class,
+        classpath: forge_cp,
+        extra_game_args: extra_game,
+        extra_jvm_args: extra_jvm,
+        warnings,
+    })
 }

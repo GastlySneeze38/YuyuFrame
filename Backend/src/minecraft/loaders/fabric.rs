@@ -78,14 +78,19 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
         .map_err(|e| anyhow!("Profil Fabric invalide: {}", e))
 }
 
-/// Download a Fabric library and return its local path (None if unavailable).
+/// Download a Fabric library and return its local path (None if unavailable
+/// — voir les `tracing::warn!` pour la raison précise, remontée par
+/// l'appelant comme avertissement de lancement, pas comme détail technique).
 pub async fn download_library(lib: &FabricLibrary, libraries_dir: &Path) -> Option<PathBuf> {
     let base_url = lib.url.as_deref().unwrap_or("https://libraries.minecraft.net/");
 
     // Fabric ne fournit jamais de classifier sur ses libs de loader — on ignore
     // volontairement `coord.classifier` (contrairement à Forge) pour garder le
     // même nom de fichier `{artifact}-{version}.jar` qu'avant ce refacto.
-    let coord = MavenCoord::parse(&lib.name)?;
+    let Some(coord) = MavenCoord::parse(&lib.name) else {
+        tracing::warn!("[Fabric] coordonnée maven invalide, lib ignorée : {}", lib.name);
+        return None;
+    };
     let filename = format!("{}-{}.jar", coord.artifact, coord.version);
 
     let url = format!(
@@ -100,18 +105,24 @@ pub async fn download_library(lib: &FabricLibrary, libraries_dir: &Path) -> Opti
         .join(&filename);
 
     if let Some(parent) = local_path.parent() {
-        if tokio::fs::create_dir_all(parent).await.is_err() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!("[Fabric] création du dossier pour {} échouée : {}", lib.name, e);
             return None;
         }
     }
 
     if !local_path.exists() {
-        if let Ok(resp) = reqwest::Client::new().get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(bytes) = resp.bytes().await {
-                    let _ = tokio::fs::write(&local_path, &bytes).await;
+        match reqwest::Client::new().get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                Ok(bytes) => {
+                    if let Err(e) = tokio::fs::write(&local_path, &bytes).await {
+                        tracing::warn!("[Fabric] écriture de {} échouée : {}", lib.name, e);
+                    }
                 }
-            }
+                Err(e) => tracing::warn!("[Fabric] lecture du corps de réponse pour {} échouée : {}", lib.name, e),
+            },
+            Ok(resp) => tracing::warn!("[Fabric] téléchargement de {} échoué : HTTP {}", lib.name, resp.status()),
+            Err(e) => tracing::warn!("[Fabric] téléchargement de {} échoué : {}", lib.name, e),
         }
     }
 
