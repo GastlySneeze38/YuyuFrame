@@ -23,6 +23,18 @@ public abstract class LauncherModule {
 
     private boolean enabled;
 
+    /**
+     * Marqueur "favori" (demandé explicitement, agencement Grille d'icônes :
+     * "la bande du dessous est cliquable pour activer/désactiver le module
+     * et le cœur c'est un système de favori") — VOLONTAIREMENT séparé de
+     * {@link #enabled} : un mod peut être favori sans être actif (juste
+     * épinglé pour le retrouver vite) et inversement. Purement déclaratif
+     * ici (pas de tri/filtre par favori pour l'instant, pas demandé) —
+     * persisté comme {@link #enabled} (voir HudConfigStore, clé
+     * {@code <id>.favorite}), lu/écrit directement par UiMainMenuScreen.
+     */
+    public boolean favorite;
+
     protected LauncherModule(String id, String name, String description, boolean enabledByDefault) {
         this(id, name, description, null, enabledByDefault);
     }

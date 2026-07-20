@@ -112,6 +112,8 @@ public final class HudConfigStore {
 
         String enabledStr = DATA.getProperty(id + ".enabled");
         if (enabledStr != null) module.setEnabled(Boolean.parseBoolean(enabledStr));
+        String favoriteStr = DATA.getProperty(id + ".favorite");
+        if (favoriteStr != null) module.favorite = Boolean.parseBoolean(favoriteStr);
 
         if (module instanceof HudElementOwner) {
             HudElement element = ((HudElementOwner) module).hudElement();
@@ -184,6 +186,7 @@ public final class HudConfigStore {
     private static void serializeModule(LauncherModule module) {
         String id = module.id;
         DATA.setProperty(id + ".enabled", String.valueOf(module.isEnabled()));
+        DATA.setProperty(id + ".favorite", String.valueOf(module.favorite));
 
         if (module instanceof HudElementOwner) {
             HudElement element = ((HudElementOwner) module).hudElement();
