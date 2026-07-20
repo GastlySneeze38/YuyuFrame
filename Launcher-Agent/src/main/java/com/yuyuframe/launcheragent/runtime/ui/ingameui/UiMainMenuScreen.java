@@ -654,6 +654,8 @@ public class UiMainMenuScreen extends UiScreenBase {
         private UiToggle pairedFavorite;
         /** Voir {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule#iconUrl} — {@code null} = pas d'icône dédiée, {@link #drawIconOrInitial} retombe alors sur la pastille-lettre existante. */
         private final String cardIconUrl;
+        /** Survol de la bande activer/désactiver EN MODE GRILLE UNIQUEMENT (retour utilisateur : "ajoute un hover à la bar") — DISTINCT du survol de toute la carte ({@link #hoverAnim}, qui pilote le soulèvement) : suit précisément la zone de {@link #pairedToggle} (toute la bande en mode Grille, voir rebuildAll()), pas la carte entière. */
+        private final UiAnimatedFloat barHoverAnim = new UiAnimatedFloat(0f, 16f);
         /** Fondu d'entrée de l'icône distante une fois chargée (voir UiRemoteImage, non-bloquant) — même motif que ResultCard dans ModrinthContentScreen. */
         private final UiAsyncFade iconFade = new UiAsyncFade();
 
@@ -834,7 +836,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // différence de rendu de carte elle-même. Seule Grille d'icônes
             // (2) a un rendu vraiment distinct.
             if (layoutMode == 2) {
-                drawIconGrid(renderer, displayName, displayDescription, initial, drawY, alpha, vpWidth, vpHeight);
+                drawIconGrid(renderer, displayName, displayDescription, initial, drawY, alpha, mouseX, mouseY, vpWidth, vpHeight);
             } else {
                 drawDetailed(renderer, displayName, displayDescription, initial, drawY, alpha, vpWidth, vpHeight);
             }
@@ -925,7 +927,7 @@ public class UiMainMenuScreen extends UiScreenBase {
          * portent chacun sa propre logique, cette méthode ne fait QUE dessiner.
          */
         private void drawIconGrid(UiRenderer renderer, String displayName, String displayDescription, String initial,
-                float drawY, float alpha, int vpWidth, int vpHeight) {
+                float drawY, float alpha, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             this.tooltip = displayDescription;
             float barH = iconGridBarH();
             float pad = UiTheme.scaled(8f);
@@ -939,8 +941,21 @@ public class UiMainMenuScreen extends UiScreenBase {
             // haut : seuls les 2 coins bas restent visuellement arrondis,
             // alignés sur ceux de la carte (même radius, même bord bas — voir
             // le fond générique de draw(), déjà dessiné avant l'appel ici).
+            //
+            // Survol ajouté (retour utilisateur : "ajoute un hover à la bar
+            // pour activer/désactiver le module") — hoverAnim (soulèvement
+            // de TOUTE la carte) ne suffit pas, il faut un retour visuel
+            // localisé À LA BANDE elle-même pour qu'elle se ressente comme
+            // cliquable indépendamment du reste de la carte. Interroge
+            // directement pairedToggle.contains() (sa géométrie EST la
+            // bande, voir rebuildAll()) plutôt que de dupliquer x/y/w/barH —
+            // même principe que ModCard.contains() plus haut.
             boolean enabled = pairedToggle != null && pairedToggle.value();
-            UiColor barColor = (enabled ? UiTheme.ACCENT : UiTheme.TRACK_OFF).multiplyAlpha(alpha);
+            barHoverAnim.setTarget(pairedToggle != null && pairedToggle.contains(mouseX, mouseY) ? 1f : 0f);
+            float barHoverT = barHoverAnim.get();
+            UiColor barBase = enabled ? UiTheme.ACCENT : UiTheme.TRACK_OFF;
+            UiColor barHovered = enabled ? UiTheme.accentLight() : UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.TEXT_MUTED, 0.35f);
+            UiColor barColor = UiColor.lerp(barBase, barHovered, barHoverT).multiplyAlpha(alpha);
             renderer.drawRoundedRect(x, drawY, x + w, drawY + barH, UiTheme.RADIUS_MD, barColor, vpWidth, vpHeight);
             if (barH > UiTheme.RADIUS_MD) {
                 renderer.drawRoundedRect(x, drawY + UiTheme.RADIUS_MD, x + w, drawY + barH, 0f, barColor, vpWidth, vpHeight);

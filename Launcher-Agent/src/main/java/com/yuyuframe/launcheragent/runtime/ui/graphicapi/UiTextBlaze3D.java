@@ -565,45 +565,64 @@ public final class UiTextBlaze3D {
 
     // ── Texture "masque coin arrondi" (fonds de panneau HUD, voir drawRect) ──
 
-    private static Object[] cornerMaskTexture; // [GpuTexture, GpuTextureView, GpuSampler]
     // BUG TROUVÉ (retour utilisateur : "les arrondis des cards sont
-    // pixelisés") — cette texture représente un coin de rayon N (en
-    // texels), mappée par UV sur le coin RÉELLEMENT dessiné (voir
-    // putRectQuad) dont le rayon écran fait typiquement 2 à 16px (HUD/menu,
-    // voir GlobalUiSettings) — très en-dessous des 32 texels d'origine.
-    // Cette texture est donc systématiquement RÉDUITE d'un facteur ~2 à 16×
-    // au rendu, et la bande de lissage (voir javadoc de méthode ci-dessous)
-    // ne faisait qu'1 SEUL texel de large : réduite dans les mêmes
-    // proportions, elle devenait une fraction de pixel écran — un bord dur/
-    // crénelé plutôt qu'un dégradé lisse. Résolution source augmentée (plus
-    // de marge avant qu'un GROS rayon d'écran ne dépasse la texture et parte
-    // en agrandissement flou) ET bande de lissage élargie PROPORTIONNELLEMENT
-    // (voir FALLOFF_TEXELS) : une fois réduite au rayon écran réel, cette
-    // bande reste large de ~1-2 pixels au lieu d'une fraction de pixel.
+    // pixelisés" PUIS, sur les tout petits rayons (badge cœur), "la courbe
+    // en 180° est mal calculée") — cette texture représentait un coin de
+    // rayon FIXE (128 texels), mappée PAR UV COMPLET (0..1) sur le coin
+    // RÉELLEMENT dessiné (voir putRectQuad) dont le rayon écran va de ~2px
+    // (badge cœur) à ~16px (cartes) — un facteur de réduction allant jusqu'à
+    // ~35× à l'affichage. Un sampler LINEAR (pas de mipmap) ne peut pas
+    // réduire une texture 128px vers un quad de 2-3px proprement, quelle que
+    // soit sa résolution source : le problème n'est pas la texture, c'est
+    // l'écart entre sa taille et celle réellement utilisée au rendu.
+    //
+    // Fix : UN masque PAR RAYON ÉCRAN (arrondi au pixel, mis en cache),
+    // généré à une taille PROCHE du rayon réel (léger sur-échantillonnage
+    // ×3 pour l'antialiasing, jamais plus de {@link #CORNER_MASK_SIZE}) au
+    // lieu d'une texture fixe toujours réduite à l'extrême — le facteur de
+    // réduction au rendu reste alors proche de 1:1 à 3:1 quel que soit le
+    // rayon, au lieu de jusqu'à 35:1. La bande de lissage (voir smoothstep
+    // ci-dessous) est recalculée PROPORTIONNELLEMENT à CHAQUE taille de
+    // masque (plus une fraction fixe d'une texture 128px sans rapport avec
+    // le rayon réel) — c'est ce qui corrige le "180° mal calculé" sur les
+    // petits rayons (la bande ne peut plus finir par couvrir tout le coin).
     private static final int CORNER_MASK_SIZE = 128;
-    private static final float FALLOFF_TEXELS = CORNER_MASK_SIZE / 10f;
+    private static final Map<Integer, Object[]> cornerMaskCache = new HashMap<>();
 
     /**
      * Alpha = 1 (opaque) là où texel(tx,ty) est à distance <= N du point
      * "intérieur" (N,N) (coin bas-droite du carré NxN, voir drawRect pour la
      * correspondance écran) ; alpha = 0 au-delà, avec un lissage
-     * (smoothstep) sur une bande de {@link #FALLOFF_TEXELS} texels (voir
-     * BUG TROUVÉ ci-dessus pour le pourquoi de cette largeur, PAS 1 texel
-     * comme le shader legacy équivalent — celui-ci n'est JAMAIS redimensionné
-     * après coup, contrairement à cette texture) — pré-calculée dans une
+     * (smoothstep) sur une bande proportionnelle à N — pré-calculée dans une
      * texture au lieu d'un shader dédié (RenderPipelines.GUI_TEXT n'en a
      * pas) : image = "un coin haut-gauche arrondi" — les 3 autres coins sont
      * obtenus par retournement UV (voir putRectQuad), pas 4 textures séparées.
+     *
+     * @param screenRadiusPx rayon écran RÉEL (en pixels) du coin sur le
+     *                        point d'appeler — détermine la taille (et donc
+     *                        la clé de cache) du masque généré, voir
+     *                        commentaire de classe ci-dessus.
      */
-    private static Object[] ensureCornerMaskTexture() throws Exception {
-        if (cornerMaskTexture != null) return cornerMaskTexture;
-        int n = CORNER_MASK_SIZE;
+    private static Object[] ensureCornerMaskTexture(float screenRadiusPx) throws Exception {
+        int bucket = Math.max(1, Math.round(screenRadiusPx));
+        Object[] cached = cornerMaskCache.get(bucket);
+        if (cached != null) return cached;
+
+        // ×3 : reste net (pas de flou d'agrandissement) tout en gardant un
+        // facteur de réduction modéré au rendu — 8 = plancher (même un
+        // rayon de 1px garde une bande de lissage exploitable) ; jamais plus
+        // que CORNER_MASK_SIZE (128, valeur d'origine — largement assez pour
+        // les gros rayons, donc AUCUN changement de qualité par rapport à
+        // avant sur ce cas, qui n'a jamais posé problème).
+        int n = Math.max(8, Math.min(CORNER_MASK_SIZE, bucket * 3));
+        float falloffTexels = Math.max(1.5f, n / 10f);
+
         Object nativeImage = ctorNativeImage.newInstance(fieldNativeImageFormatRgba, n, n, false);
         for (int ty = 0; ty < n; ty++) {
             for (int tx = 0; tx < n; tx++) {
                 float dx = tx - n, dy = ty - n;
                 float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                float t = Math.max(0f, Math.min(1f, (dist - (n - FALLOFF_TEXELS)) / FALLOFF_TEXELS));
+                float t = Math.max(0f, Math.min(1f, (dist - (n - falloffTexels)) / falloffTexels));
                 float alpha = 1f - (t * t * (3f - 2f * t)); // smoothstep
                 int a = Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f);
                 int nativeColor = (a << 24) | 0x00FFFFFF; // petit-boutiste RGBA — blanc, alpha calculé
@@ -611,15 +630,16 @@ public final class UiTextBlaze3D {
             }
         }
         Object device = mGetDevice.invoke(null);
-        java.util.function.Supplier<String> label = () -> "yuyuframe_corner_mask";
+        java.util.function.Supplier<String> label = () -> "yuyuframe_corner_mask_" + bucket;
         Object texture = mCreateTexture.invoke(device, label, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, n, n, 1, 1);
         Object encoder = mCreateCommandEncoder.invoke(device);
         mWriteToTexture.invoke(encoder, texture, nativeImage);
         Object textureView = mCreateTextureView.invoke(device, texture);
         Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
-        cornerMaskTexture = new Object[]{texture, textureView, sampler};
-        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture masque coin arrondi créée (" + n + "x" + n + ")");
-        return cornerMaskTexture;
+        Object[] result = {texture, textureView, sampler};
+        cornerMaskCache.put(bucket, result);
+        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture masque coin arrondi créée (rayon=" + bucket + "px, taille=" + n + "x" + n + ")");
+        return result;
     }
 
     // ── Textures d'icônes arbitraires (pastilles de mod/pack, une par cacheKey) ──
@@ -1149,8 +1169,15 @@ public final class UiTextBlaze3D {
             Object colorView = mGetColorAttachmentView.invoke(fb);
             if (colorView == null) return false;
 
+            // Rayon jamais plus grand que la moitié du plus petit côté —
+            // sinon les 4 coins se chevaucheraient (quads dégénérés/inversés).
+            // Calculé AVANT ensureCornerMaskTexture (contrairement à avant) :
+            // le masque est désormais dimensionné selon le rayon RÉEL, voir
+            // son commentaire de classe.
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+
             currentStage = "ensureCornerMaskTexture";
-            Object[] mask = ensureCornerMaskTexture();
+            Object[] mask = ensureCornerMaskTexture(r);
             Object maskView = mask[1], maskSampler = mask[2];
             currentStage = "ensureWhiteTexture(rect)";
             Object[] white = ensureWhiteTexture();
@@ -1160,9 +1187,6 @@ public final class UiTextBlaze3D {
             currentStage = "createCommandEncoder(rect)";
             Object encoder = mCreateCommandEncoder.invoke(device);
 
-            // Rayon jamais plus grand que la moitié du plus petit côté —
-            // sinon les 4 coins se chevaucheraient (quads dégénérés/inversés).
-            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
             int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator, comme le texte
             short light0 = 0, light1 = 0;
 
@@ -1380,8 +1404,10 @@ public final class UiTextBlaze3D {
             Object colorView = mGetColorAttachmentView.invoke(fb);
             if (colorView == null) return false;
 
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+
             currentStage = "ensureCornerMaskTexture(gradrect)";
-            Object[] mask = ensureCornerMaskTexture();
+            Object[] mask = ensureCornerMaskTexture(r);
             Object maskView = mask[1], maskSampler = mask[2];
             currentStage = "ensureWhiteTexture(gradrect)";
             Object[] white = ensureWhiteTexture();
@@ -1390,8 +1416,6 @@ public final class UiTextBlaze3D {
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(gradrect)";
             Object encoder = mCreateCommandEncoder.invoke(device);
-
-            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
             short light0 = 0, light1 = 0;
 
             ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
@@ -1491,8 +1515,10 @@ public final class UiTextBlaze3D {
             Object colorView = mGetColorAttachmentView.invoke(fb);
             if (colorView == null) return false;
 
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+
             currentStage = "ensureCornerMaskTexture(gradrect2d)";
-            Object[] mask = ensureCornerMaskTexture();
+            Object[] mask = ensureCornerMaskTexture(r);
             Object maskView = mask[1], maskSampler = mask[2];
             currentStage = "ensureWhiteTexture(gradrect2d)";
             Object[] white = ensureWhiteTexture();
@@ -1501,8 +1527,6 @@ public final class UiTextBlaze3D {
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(gradrect2d)";
             Object encoder = mCreateCommandEncoder.invoke(device);
-
-            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
             short light0 = 0, light1 = 0;
 
             ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
