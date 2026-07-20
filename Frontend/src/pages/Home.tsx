@@ -667,9 +667,14 @@ export default function Home() {
             © 2025 YuyuFrame — Tous droits réservés
           </span>
           <div className="flex items-center gap-4">
-            {['Licence', 'Confidentialité', 'Conditions'].map((lbl) => (
+            {[
+              { lbl: 'Licence', tab: 'licence' },
+              { lbl: 'Confidentialité', tab: 'confidentialite' },
+              { lbl: 'Conditions', tab: 'conditions' },
+            ].map(({ lbl, tab }) => (
               <button
                 key={lbl}
+                onClick={() => navigate(`/legal?tab=${tab}`)}
                 className="transition-colors duration-150"
                 style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', fontWeight: 500 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.5)' }}

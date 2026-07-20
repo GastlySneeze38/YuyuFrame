@@ -43,3 +43,4 @@ libp2p = { version = "0.53", features = [
 ] }
 futures = "0.3"
 sysinfo = "0.31"
+discord-rich-presence = "1"

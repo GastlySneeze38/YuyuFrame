@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod discord;
 mod minecraft;
 mod state;
 
@@ -122,6 +123,13 @@ pub fn run() {
             if !cfg!(dev) {
                 minecraft::launcher::deploy_bundled_agent(app.handle());
             }
+
+            // Discord Rich Presence — connexion IPC + activité initiale (voir
+            // discord.rs). Thread natif séparé (pas tokio::spawn : le crate
+            // fait de l'IPC bloquante, pas async) pour ne jamais retarder le
+            // reste du démarrage si Discord met du temps à répondre ou n'est
+            // pas lancé du tout sur la machine.
+            std::thread::spawn(discord::connect_and_announce);
 
             Ok(())
         })
