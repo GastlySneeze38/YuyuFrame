@@ -82,6 +82,17 @@ pub async fn launch_game(
         "instance_id": &instance_id,
     }));
 
+    // Discord Rich Presence — bascule sur "en jeu" (voir discord.rs). Clonés
+    // AVANT le move de `instance` dans le bloc async ci-dessous (sinon plus
+    // accessible ici). spawn_blocking : set_activity fait de l'IPC bloquante
+    // (écriture sur la pipe/socket Discord), jamais directement sur le
+    // runtime async.
+    {
+        let instance_name = instance.name.clone();
+        let mc_version = instance.mc_version.clone();
+        tokio::task::spawn_blocking(move || crate::discord::set_playing(instance_name, mc_version));
+    }
+
     let state_clone = state.inner().clone();
 
     tokio::spawn(async move {
@@ -145,6 +156,14 @@ pub async fn launch_game(
             let mut s = state_clone.write().await;
             s.running_instances.remove(&instance_id);
             s.launch_cancel.remove(&instance_id);
+            // Discord Rich Presence — retour "dans le launcher" SEULEMENT si
+            // plus AUCUNE instance ne tourne (any_running(), voir state.rs) :
+            // plusieurs instances peuvent tourner en parallèle
+            // (running_instances est un Set), fermer l'une d'elles ne doit
+            // pas repasser la présence en idle si une autre est encore active.
+            if !s.any_running() {
+                tokio::task::spawn_blocking(crate::discord::set_idle);
+            }
         }
         let _ = app.emit("game_state", serde_json::json!({
             "running": false,

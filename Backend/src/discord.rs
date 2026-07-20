@@ -33,18 +33,7 @@ pub fn connect_and_announce() {
         return;
     }
 
-    let activity = activity::Activity::new()
-        .state("Dans le launcher")
-        .details("YuyuFrame")
-        // Nécessite un asset uploadé sous cette clé exacte dans Discord
-        // Developer Portal > Rich Presence > Art Assets — décommenter une
-        // fois l'image ajoutée là-bas (sinon Discord ignore juste l'image,
-        // sans erreur, mais autant ne pas référencer une clé qui n'existe
-        // pas encore).
-        // .assets(activity::Assets::new().large_image("yuyuframe_logo"))
-        .timestamps(activity::Timestamps::new().start(chrono::Utc::now().timestamp()));
-
-    if let Err(e) = client.set_activity(activity) {
+    if let Err(e) = client.set_activity(idle_activity()) {
         tracing::warn!("[Discord] envoi de l'activité échoué : {e}");
         return;
     }
@@ -55,4 +44,59 @@ pub fn connect_and_announce() {
     // lib.rs), mais autant ignorer proprement plutôt que paniquer sur un
     // double appel futur.
     let _ = DISCORD_CLIENT.set(Mutex::new(client));
+}
+
+/// Activité "dans le menu" — factorisée car réutilisée par
+/// `connect_and_announce` (état initial) ET `set_idle` (retour au menu
+/// après une partie, voir plus bas).
+fn idle_activity() -> activity::Activity<'static> {
+    activity::Activity::new()
+        .state("Dans le launcher")
+        .details("YuyuFrame")
+        // Nécessite un asset uploadé sous cette clé exacte dans Discord
+        // Developer Portal > Rich Presence > Art Assets — décommenter une
+        // fois l'image ajoutée là-bas (sinon Discord ignore juste l'image,
+        // sans erreur, mais autant ne pas référencer une clé qui n'existe
+        // pas encore).
+        // .assets(activity::Assets::new().large_image("yuyuframe_logo"))
+        .timestamps(activity::Timestamps::new().start(chrono::Utc::now().timestamp()))
+}
+
+/// Bascule la présence sur "en train de jouer" — appelée au lancement
+/// effectif d'une instance (voir `commands/launch.rs`, juste après le
+/// passage de `running_instances` à non-vide). No-op silencieux si la
+/// connexion initiale a échoué ou si Discord n'est pas lancé — jamais
+/// fatal pour le lancement du jeu lui-même. `instance_name`/`mc_version`
+/// pris par valeur (pas de lifetime à gérer) : appelée depuis
+/// `tokio::task::spawn_blocking`, donc déjà dans une closure `'static`.
+pub fn set_playing(instance_name: String, mc_version: String) {
+    let Some(mutex) = DISCORD_CLIENT.get() else { return };
+    let Ok(mut client) = mutex.lock() else { return };
+
+    let details = format!("Joue à Minecraft {mc_version}");
+    let activity = activity::Activity::new()
+        .state(&instance_name)
+        .details(&details)
+        // Nouveau timestamp de début à CHAQUE lancement (pas celui de
+        // connect_and_announce, qui datait du démarrage du launcher) —
+        // Discord affiche un chrono "depuis" basé dessus, doit repartir de
+        // 0 à chaque nouvelle partie plutôt que de continuer à courir
+        // depuis l'ouverture du launcher.
+        .timestamps(activity::Timestamps::new().start(chrono::Utc::now().timestamp()));
+
+    if let Err(e) = client.set_activity(activity) {
+        tracing::warn!("[Discord] mise à jour de l'activité (en jeu) échouée : {e}");
+    }
+}
+
+/// Revient à l'état "dans le launcher" — appelée quand PLUS AUCUNE instance
+/// ne tourne (voir `commands/launch.rs`, gardé par `AppState::any_running`
+/// pour ne pas repasser en idle si une AUTRE instance est encore en cours).
+pub fn set_idle() {
+    let Some(mutex) = DISCORD_CLIENT.get() else { return };
+    let Ok(mut client) = mutex.lock() else { return };
+
+    if let Err(e) = client.set_activity(idle_activity()) {
+        tracing::warn!("[Discord] retour à l'état launcher échoué : {e}");
+    }
 }
