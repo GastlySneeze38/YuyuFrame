@@ -93,11 +93,20 @@ pub(super) async fn setup_fabric(
         .and_then(|a| a.jvm.as_ref())
         .map(|jvm| json_str_array(jvm))
         .unwrap_or_default();
+    // Rarement fourni par les profils Fabric en pratique, mais on l'applique
+    // par cohérence avec le vanilla (build_game_args) et Forge (extra_game) —
+    // avant, ce champ était désérialisé puis silencieusement jeté.
+    let extra_game: Vec<String> = profile
+        .arguments
+        .as_ref()
+        .and_then(|a| a.game.as_ref())
+        .map(|game| json_str_array(game))
+        .unwrap_or_default();
 
     Ok(LoaderSetup {
         main_class: profile.main_class,
         classpath: fabric_cp,
-        extra_game_args: vec![],
+        extra_game_args: extra_game,
         extra_jvm_args: extra_jvm,
         warnings,
     })

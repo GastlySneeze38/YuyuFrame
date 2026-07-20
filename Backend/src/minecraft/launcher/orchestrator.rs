@@ -12,7 +12,7 @@ use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDeta
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::classpath::{artifact_path, dedup_classpath, download_file, extract_natives, should_download_library};
 use super::java::ensure_java;
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference};
+use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, LoaderSetup};
@@ -361,6 +361,10 @@ pub async fn download_and_launch(
         format!("Java {} détecté — G1GC client activé", java_major)
     };
     log_to_console(&app, &console_label, &gc_msg, "out");
+    // Correctifs OS spécifiques suggérés par Mojang (ex: -XstartOnFirstThread
+    // obligatoire sur macOS) — en plus de notre tuning GC ci-dessus, jamais à
+    // sa place. Voir extract_mojang_jvm_args pour ce qui est filtré/substitué.
+    args.extend(extract_mojang_jvm_args(&details, &natives_dir));
     args.extend(extra_jvm_args);
     args.extend(p2p_jvm_args);
     args.extend(launcher_agent_jvm_args);

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::minecraft::versions::VersionDetails;
 use crate::state::MinecraftSession;
+use super::mojang_rules::rules_allow;
 
 /// Extrait juste la paire `--tweakClass <classe>` d'une `minecraftArguments`
 /// legacy (le reste de la chaîne ne fait que dupliquer les placeholders déjà
@@ -216,4 +217,47 @@ pub(super) fn build_game_args(
         }
     }
     args
+}
+
+/// Arguments JVM additionnels suggérés par Mojang pour cette version/OS
+/// (`arguments.jvm`, absent des vieilles versions qui n'ont que
+/// `minecraftArguments`) — surtout des correctifs spécifiques à l'OS, ex:
+/// `-XstartOnFirstThread` obligatoire sur macOS pour que LWJGL/GLFW
+/// fonctionnent, ou le fix `-Dos.name`/`-Dos.version` sur Windows 10+ pour
+/// contourner un bug de détection d'Intel/AMD dans certains pilotes.
+/// Ajoutés en plus de `build_jvm_args` (notre propre tuning GC), jamais à sa
+/// place. Le classpath (`-cp`, `${classpath}`) est volontairement filtré :
+/// on construit et pose le nôtre séparément, l'inclure ici le doublonnerait
+/// sans bénéfice. Tout placeholder qu'on ne sait pas substituer (autre que
+/// natives_directory/launcher_name/launcher_version) fait sauter l'argument
+/// plutôt que de passer un token brisé du style `${inconnu}` à Java.
+pub(super) fn extract_mojang_jvm_args(details: &VersionDetails, natives_dir: &Path) -> Vec<String> {
+    let Some(arguments) = details.arguments.as_ref() else { return Vec::new() };
+    let natives = natives_dir.to_string_lossy().into_owned();
+
+    arguments.jvm.iter()
+        .flat_map(|entry| match entry {
+            serde_json::Value::String(s) => vec![s.clone()],
+            serde_json::Value::Object(_) => {
+                let applies = entry.get("rules")
+                    .and_then(|r| r.as_array())
+                    .is_none_or(|r| rules_allow(r));
+                if !applies { return vec![]; }
+                match entry.get("value") {
+                    Some(serde_json::Value::String(s)) => vec![s.clone()],
+                    Some(serde_json::Value::Array(arr)) => {
+                        arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                    }
+                    _ => vec![],
+                }
+            }
+            _ => vec![],
+        })
+        .filter(|s| s != "-cp" && s != "-classpath" && !s.contains("${classpath}"))
+        .map(|s| s
+            .replace("${natives_directory}", &natives)
+            .replace("${launcher_name}", "YuyuFrame")
+            .replace("${launcher_version}", env!("CARGO_PKG_VERSION")))
+        .filter(|s| !s.contains("${"))
+        .collect()
 }

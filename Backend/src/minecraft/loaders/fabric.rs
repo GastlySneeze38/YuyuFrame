@@ -37,7 +37,6 @@ pub struct FabricLibrary {
 #[derive(Deserialize)]
 pub struct FabricArguments {
     pub jvm: Option<Vec<serde_json::Value>>,
-    #[allow(dead_code)]
     pub game: Option<Vec<serde_json::Value>>,
 }
 

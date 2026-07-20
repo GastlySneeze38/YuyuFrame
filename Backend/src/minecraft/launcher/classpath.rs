@@ -4,6 +4,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::minecraft::maven::MavenCoord;
 use crate::minecraft::versions::{Artifact, Library};
+use super::mojang_rules::rules_allow;
 
 pub(super) fn dedup_classpath(entries: Vec<String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
@@ -39,20 +40,10 @@ fn artifact_key(path: &str) -> String {
 }
 
 pub(super) fn should_download_library(lib: &Library) -> bool {
-    let os_name = if cfg!(target_os = "windows") { "windows" } else if cfg!(target_os = "macos") { "osx" } else { "linux" };
-    let Some(rules) = &lib.rules else { return true };
-    let mut allowed = true;
-    for rule in rules {
-        let action = rule.get("action").and_then(|a| a.as_str()).unwrap_or("allow");
-        if let Some(os) = rule.get("os") {
-            if let Some(name) = os.get("name").and_then(|n| n.as_str()) {
-                if name == os_name { allowed = action == "allow"; } else if action == "allow" { allowed = false; }
-            }
-        } else {
-            allowed = action == "allow";
-        }
+    match &lib.rules {
+        Some(rules) => rules_allow(rules),
+        None => true,
     }
-    allowed
 }
 
 pub(super) fn artifact_path(base: &Path, artifact: &Artifact, name: &str) -> PathBuf {
