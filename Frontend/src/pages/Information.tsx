@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 interface AppInfo {
   name: string
@@ -16,7 +16,6 @@ const FEATURES = [
 ]
 
 export default function Information() {
-  const navigate = useNavigate()
   const [info, setInfo] = useState<AppInfo | null>(null)
 
   useEffect(() => {
@@ -28,24 +27,9 @@ export default function Information() {
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D', color: 'white' }}>
 
-      {/* Header */}
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate('/home')}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
+      <PageHeader>
         <h1 className="font-black text-white" style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Informations</h1>
-      </div>
+      </PageHeader>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-6">

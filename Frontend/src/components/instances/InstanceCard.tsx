@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
 import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { MenuItem } from './MenuItem'
 
-export function InstanceCard({
+/** Mémoïsé : rendu en liste — les callbacks reçoivent l'id/l'instance pour
+ * que le parent puisse passer des références stables (useCallback ou setter
+ * Zustand/useState direct) au lieu d'une closure par ligne. */
+export const InstanceCard = memo(function InstanceCard({
   instance,
   selected,
   onSelect,
@@ -16,11 +19,11 @@ export function InstanceCard({
 }: {
   instance: Instance
   selected: boolean
-  onSelect: () => void
-  onToggleFavorite: () => void
-  onDelete: () => void
-  onEdit: () => void
-  onDuplicate: () => void
+  onSelect: (id: string) => void
+  onToggleFavorite: (id: string) => void
+  onDelete: (id: string) => void
+  onEdit: (instance: Instance) => void
+  onDuplicate: (instance: Instance) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -43,7 +46,7 @@ export function InstanceCard({
 
   return (
     <div
-      onClick={onSelect}
+      onClick={() => onSelect(instance.id)}
       className="flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-all duration-150"
       style={{
         background: selected ? 'rgba(75,63,207,0.18)' : hovered ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.04)',
@@ -73,7 +76,7 @@ export function InstanceCard({
 
             <div ref={menuRef} className="absolute flex flex-col items-center gap-0.5 flex-shrink-0" style={{ top: '50%', right: 0, transform: 'translateY(-50%)' }}>
               <button
-                onClick={(e) => { e.stopPropagation(); onToggleFavorite() }}
+                onClick={(e) => { e.stopPropagation(); onToggleFavorite(instance.id) }}
                 className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
                 title={instance.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                 style={{ color: instance.favorite ? '#facc15' : 'rgba(255,255,255,0.18)', background: 'transparent' }}
@@ -111,12 +114,12 @@ export function InstanceCard({
                   {!confirm ? (
                     <>
                       <MenuItem
-                        onClick={() => { setMenuOpen(false); onEdit() }}
+                        onClick={() => { setMenuOpen(false); onEdit(instance) }}
                         label="Modifier l'instance"
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>}
                       />
                       <MenuItem
-                        onClick={() => { setMenuOpen(false); onDuplicate() }}
+                        onClick={() => { setMenuOpen(false); onDuplicate(instance) }}
                         label="Dupliquer"
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>}
                       />
@@ -137,7 +140,7 @@ export function InstanceCard({
                       <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Supprimer définitivement cette instance ?</p>
                       <div className="flex gap-1.5">
                         <button
-                          onClick={() => { setMenuOpen(false); onDelete() }}
+                          onClick={() => { setMenuOpen(false); onDelete(instance.id) }}
                           className="flex-1 rounded-lg"
                           style={{ fontSize: 11, fontWeight: 600, color: 'rgb(248,113,113)', background: 'rgba(200,50,50,0.15)', padding: '5px 0' }}
                         >
@@ -186,4 +189,4 @@ export function InstanceCard({
       )}
     </div>
   )
-}
+})

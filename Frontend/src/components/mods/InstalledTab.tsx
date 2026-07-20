@@ -68,9 +68,9 @@ export function InstalledTab({
         update={update}
         updating={updatingMods.has(mod.sha1) || updatingAll}
         logoUrl={logoCache[displayName(mod.name)] ?? null}
-        onToggle={() => onToggle(mod)}
-        onDelete={() => onDelete(mod.name)}
-        onUpdate={() => update && onUpdateMod(update)}
+        onToggle={onToggle}
+        onDelete={onDelete}
+        onUpdate={onUpdateMod}
       />
     )
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { Mod } from '@/types'
 import { formatBytes } from '@/lib/format'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
@@ -6,16 +6,19 @@ import { Toggle } from '@/components/ui/Toggle'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { displayName, type ModUpdate } from './modUtils'
 
-export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, onToggle, onDelete, onUpdate }: {
+/** Mémoïsé : rendu en liste (potentiellement des dizaines de mods) — les
+ * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
+ * des références stables (useCallback) au lieu d'une closure par ligne. */
+export const ModRow = memo(function ModRow({ mod, version, modrinthName, update, updating, logoUrl, onToggle, onDelete, onUpdate }: {
   mod: Mod
   version: string | null
   modrinthName: string | null
   update: ModUpdate | null
   updating: boolean
   logoUrl: string | null
-  onToggle: () => void
-  onDelete: () => void
-  onUpdate: () => void
+  onToggle: (mod: Mod) => void
+  onDelete: (name: string) => void
+  onUpdate: (update: ModUpdate) => void
 }) {
   const [confirm, setConfirm] = useState(false)
   return (
@@ -52,7 +55,7 @@ export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, 
           const blocked = update.blockedBy.length > 0
           return (
             <button
-              onClick={onUpdate}
+              onClick={() => onUpdate(update)}
               disabled={updating || blocked}
               title={
                 blocked
@@ -83,10 +86,10 @@ export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, 
             </button>
           )
         })()}
-        <Toggle checked={mod.enabled} onChange={onToggle} size="sm" title={mod.enabled ? 'Désactiver' : 'Activer'} />
+        <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} size="sm" title={mod.enabled ? 'Désactiver' : 'Activer'} />
         {confirm ? (
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={() => { onDelete(); setConfirm(false) }} style={{ fontSize: 10, fontWeight: 600, color: 'rgb(248,113,113)', background: 'rgba(200,50,50,0.15)', borderRadius: 7, padding: '3px 7px' }}>Suppr.</button>
+            <button onClick={() => { onDelete(mod.name); setConfirm(false) }} style={{ fontSize: 10, fontWeight: 600, color: 'rgb(248,113,113)', background: 'rgba(200,50,50,0.15)', borderRadius: 7, padding: '3px 7px' }}>Suppr.</button>
             <button onClick={() => setConfirm(false)} style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.06)', borderRadius: 7, padding: '3px 7px' }}>Ann.</button>
           </div>
         ) : (
@@ -103,4 +106,4 @@ export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, 
       </div>
     </div>
   )
-}
+})

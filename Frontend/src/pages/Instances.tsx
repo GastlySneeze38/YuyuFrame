@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance } from '@/types'
@@ -49,19 +49,19 @@ export default function Instances() {
     .filter((v) => v.version_type === 'release')
     .map((v) => v.id)
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     try {
       await api.instances.delete(id)
       removeInstance(id)
     } catch { /* ignore */ }
-  }
+  }, [removeInstance])
 
-  const handleToggleFavorite = async (id: string) => {
+  const handleToggleFavorite = useCallback(async (id: string) => {
     try {
       const updated = await api.instances.toggleFavorite(id)
       updateInstance(updated)
     } catch { /* ignore */ }
-  }
+  }, [updateInstance])
 
   function renderCard(inst: Instance) {
     return (
@@ -69,11 +69,11 @@ export default function Instances() {
         key={inst.id}
         instance={inst}
         selected={inst.id === selectedInstanceId}
-        onSelect={() => setSelectedInstanceId(inst.id)}
-        onToggleFavorite={() => handleToggleFavorite(inst.id)}
-        onDelete={() => handleDelete(inst.id)}
-        onEdit={() => setEditTarget(inst)}
-        onDuplicate={() => setDuplicateSource(inst)}
+        onSelect={setSelectedInstanceId}
+        onToggleFavorite={handleToggleFavorite}
+        onDelete={handleDelete}
+        onEdit={setEditTarget}
+        onDuplicate={setDuplicateSource}
       />
     )
   }

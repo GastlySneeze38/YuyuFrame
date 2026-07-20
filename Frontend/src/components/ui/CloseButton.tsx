@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { CloseIcon } from './icons/CloseIcon'
 
 // Bouton "X" de fermeture — SVG dupliqué dans ModalShell, ModDetailModal et
 // UpgradeModal. Les couleurs par défaut correspondent au style de ModalShell ;
@@ -32,9 +33,7 @@ export function CloseButton({
       onMouseEnter={(e) => { e.currentTarget.style.color = hoverColor; e.currentTarget.style.background = hoverBg }}
       onMouseLeave={(e) => { e.currentTarget.style.color = idleColor; e.currentTarget.style.background = idleBg }}
     >
-      <svg viewBox="0 0 24 24" fill="currentColor" width={iconSize} height={iconSize}>
-        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-      </svg>
+      <CloseIcon size={iconSize} />
     </button>
   )
 }

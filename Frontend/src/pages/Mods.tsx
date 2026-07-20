@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
@@ -42,8 +42,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [importNotice, setImportNotice] = useState('')
   const [showImportFolder, setShowImportFolder] = useState(false)
 
-  const mergeVersions = (fetched: Record<string, ModrinthInfo>) =>
-    setVersionMap((prev) => ({ ...prev, ...fetched }))
+  const mergeVersions = useCallback((fetched: Record<string, ModrinthInfo>) =>
+    setVersionMap((prev) => ({ ...prev, ...fetched })), [])
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ModrinthHit[]>([])
@@ -222,22 +222,22 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }, [tab])
 
-  const handleToggle = async (mod: Mod) => {
+  const handleToggle = useCallback(async (mod: Mod) => {
     try {
       const updated = await api.mods.toggle(instanceId, mod.name)
       setMods((prev) => prev.map((m) => m.name === mod.name ? updated : m))
     } catch { /* ignore */ }
-  }
+  }, [instanceId])
 
-  const handleDelete = async (name: string) => {
+  const handleDelete = useCallback(async (name: string) => {
     try {
       await api.mods.delete(instanceId, name)
       setMods((prev) => prev.filter((m) => m.name !== name))
       delete _modrinthCache[instanceId]
     } catch { /* ignore */ }
-  }
+  }, [instanceId])
 
-  const handleUpdateMod = async (update: ModUpdate) => {
+  const handleUpdateMod = useCallback(async (update: ModUpdate) => {
     setUpdatingMods((prev) => new Set([...prev, update.mod.sha1]))
     try {
       const newMod = await api.mods.install(instanceId, update.fileUrl, update.filename)
@@ -266,7 +266,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     finally {
       setUpdatingMods((prev) => { const s = new Set(prev); s.delete(update.mod.sha1); return s })
     }
-  }
+  }, [instanceId, modpackMeta, mergeVersions])
 
   const handleUpdateAll = async () => {
     if (updatingAll) return
