@@ -161,6 +161,7 @@ pub fn run() {
             commands::instance::mods::mod_icon,
             commands::instance::mods::mods_check_update_safety,
             commands::instance::import::import_scan_folder,
+            commands::instance::import::import_check_duplicates,
             commands::instance::import::import_apply,
             commands::instance::import::mods_import_paths,
             commands::instance::modpack::modpack_fetch_index,

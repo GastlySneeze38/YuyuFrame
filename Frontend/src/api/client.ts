@@ -165,9 +165,13 @@ export const api = {
 
   importSource: {
     scanFolder: (path: string) => invoke<ScanResult>('import_scan_folder', { path }),
+    checkDuplicates: (sourceModsDir: string, targetInstanceId: string) =>
+      invoke<string[]>('import_check_duplicates', { sourceModsDir, targetInstanceId }),
     apply: (input: {
       sourceModsDir: string
+      sourceRoot: string
       selectedFiles: string[]
+      extraDirs: string[]
       mode: 'new' | 'existing'
       targetInstanceId?: string
       newInstance?: { name: string; mcVersion: string; loader: string; ramMb: number }
