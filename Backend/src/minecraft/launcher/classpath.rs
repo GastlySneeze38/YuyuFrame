@@ -69,22 +69,31 @@ fn library_jar_path(base: &Path, name: &str) -> PathBuf {
 
 pub(super) async fn extract_natives(jar_path: &Path, natives_dir: &Path) -> Result<()> {
     let jar_bytes = tokio::fs::read(jar_path).await?;
-    let cursor = std::io::Cursor::new(jar_bytes);
-    let mut archive = zip::ZipArchive::new(cursor)?;
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)?;
-        let name = entry.name().to_string();
-        if name.starts_with("META-INF") || name.ends_with('/') { continue; }
-        let is_native = name.ends_with(".dll") || name.ends_with(".so") || name.ends_with(".dylib") || name.ends_with(".jnilib");
-        if !is_native { continue; }
-        let file_name = std::path::Path::new(&name).file_name().unwrap_or_default().to_string_lossy().to_string();
-        let out_path = natives_dir.join(&file_name);
-        if !out_path.exists() {
-            let mut out = std::fs::File::create(&out_path)?;
-            std::io::copy(&mut entry, &mut out)?;
+    let natives_dir = natives_dir.to_path_buf();
+    // La décompression zip + les écritures fichier sont synchrones (crate
+    // `zip`, `std::fs`) — passées en spawn_blocking pour ne pas geler un
+    // thread worker tokio pendant que ça tourne (natives_to_extract est en
+    // plus maintenant traité en parallèle par l'appelant, voir orchestrator.rs).
+    tokio::task::spawn_blocking(move || {
+        let cursor = std::io::Cursor::new(jar_bytes);
+        let mut archive = zip::ZipArchive::new(cursor)?;
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i)?;
+            let name = entry.name().to_string();
+            if name.starts_with("META-INF") || name.ends_with('/') { continue; }
+            let is_native = name.ends_with(".dll") || name.ends_with(".so") || name.ends_with(".dylib") || name.ends_with(".jnilib");
+            if !is_native { continue; }
+            let file_name = std::path::Path::new(&name).file_name().unwrap_or_default().to_string_lossy().to_string();
+            let out_path = natives_dir.join(&file_name);
+            if !out_path.exists() {
+                let mut out = std::fs::File::create(&out_path)?;
+                std::io::copy(&mut entry, &mut out)?;
+            }
         }
-    }
-    Ok(())
+        Ok::<(), anyhow::Error>(())
+    })
+    .await
+    .map_err(|e| anyhow!("Tâche extraction natives : {}", e))?
 }
 
 pub(super) async fn download_file(client: &reqwest::Client, url: &str, path: &Path) -> Result<()> {

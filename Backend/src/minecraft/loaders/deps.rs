@@ -2,7 +2,10 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tauri::Emitter;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use crate::minecraft::versions::predicate::{
     normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed,
@@ -312,23 +315,56 @@ pub async fn resolve_and_install_deps(
             break;
         }
 
-        for dep in missing {
+        for dep in &missing {
             already_tried.insert(dep.id.clone());
+        }
+
+        // 4 installations simultanées — les dépendances trouvées dans une
+        // même passe sont indépendantes (chacune sa propre recherche +
+        // téléchargement Modrinth), donc parallélisables ; limité (contre 16
+        // ailleurs) par politesse envers l'API publique Modrinth plutôt que
+        // par une contrainte technique. Les dépendances-de-dépendances ne
+        // sont découvertes qu'à la passe suivante (re-scan de mods_dir),
+        // donc les passes elles restent séquentielles.
+        let sem = Arc::new(Semaphore::new(4));
+        let mut tasks: JoinSet<(String, Result<String>)> = JoinSet::new();
+        for dep in missing {
+            let sem = sem.clone();
+            let client = client.clone();
+            let mc_version = mc_version.to_string();
+            let loader = loader.to_string();
+            let mods_dir = mods_dir.to_path_buf();
+            let dep_id = dep.id.clone();
 
             let _ = app.emit(
                 "download_progress",
                 serde_json::json!({
                     "current": 0,
                     "total": 100,
-                    "message": format!("Dépendance : installation de {}…", dep.id)
+                    "message": format!("Dépendance : installation de {}…", dep_id)
                 }),
             );
 
-            match install_dep(&client, &dep, mc_version, loader, mods_dir, avoid_beta).await {
+            tasks.spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+                let result = install_dep(&client, &dep, &mc_version, &loader, &mods_dir, avoid_beta).await;
+                (dep_id, result)
+            });
+        }
+
+        while let Some(res) = tasks.join_next().await {
+            let (dep_id, result) = match res {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!("Tâche d'installation de dépendance échouée : {}", e);
+                    continue;
+                }
+            };
+            match result {
                 Ok(filename) => tracing::info!("Dépendance installée : {}", filename),
                 Err(e) => {
-                    tracing::warn!("Impossible d'installer «{}» : {}", dep.id, e);
-                    failed.push(dep.id.clone());
+                    tracing::warn!("Impossible d'installer «{}» : {}", dep_id, e);
+                    failed.push(dep_id);
                 }
             }
         }

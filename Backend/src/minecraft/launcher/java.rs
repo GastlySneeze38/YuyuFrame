@@ -38,7 +38,11 @@ pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
 const MOJANG_JAVA_MANIFEST: &str =
     "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
-/// Retourne un exécutable Java prêt à l'emploi pour `required_major`.
+/// Retourne un exécutable Java prêt à l'emploi pour `required_major`, ainsi
+/// que sa version majeure exacte — connue avec certitude pour tous les
+/// chemins de résolution sauf JAVA_HOME (composants Mojang et Temurin ciblés
+/// par version majeure par construction), ce qui évite à l'appelant de
+/// relancer `java -version` juste après pour la redécouvrir.
 /// Ordre de priorité : JAVA_HOME → install système → runtime Mojang en cache → téléchargement Mojang.
 pub(super) async fn ensure_java(
     component: &str,
@@ -46,14 +50,14 @@ pub(super) async fn ensure_java(
     mc_dir: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-) -> Result<String> {
+) -> Result<(String, u32)> {
     // 1. JAVA_HOME
     if let Ok(home) = std::env::var("JAVA_HOME") {
         let exe = PathBuf::from(&home).join("bin").join(java_exe_name());
         if exe.exists() {
             if let Some(v) = detect_java_major_version(&exe.to_string_lossy()).await {
                 if v >= required_major {
-                    return Ok(exe.to_string_lossy().to_string());
+                    return Ok((exe.to_string_lossy().to_string(), v));
                 }
             }
         }
@@ -61,7 +65,7 @@ pub(super) async fn ensure_java(
 
     // 2. Installation système
     if let Some(java) = find_system_java(required_major) {
-        return Ok(java);
+        return Ok((java, required_major));
     }
 
     // 3. Java 8 : Mojang fige son propre runtime à la build 8u51 depuis des années
@@ -72,13 +76,13 @@ pub(super) async fn ensure_java(
         let temurin_dir = mc_dir.join("runtime").join("jre-legacy-temurin");
         let temurin_exe = temurin_dir.join("bin").join(java_exe_name());
         if temurin_exe.exists() {
-            return Ok(temurin_exe.to_string_lossy().to_string());
+            return Ok((temurin_exe.to_string_lossy().to_string(), required_major));
         }
         if cfg!(target_os = "windows") {
             tracing::info!("Java 8 Mojang figé à 8u51 — tentative de téléchargement d'un Temurin récent");
             set_progress(app, 10, 100, "Téléchargement Java 8 récent (Eclipse Temurin)...");
             match download_adoptium_jre8(&temurin_dir, client).await {
-                Ok(()) if temurin_exe.exists() => return Ok(temurin_exe.to_string_lossy().to_string()),
+                Ok(()) if temurin_exe.exists() => return Ok((temurin_exe.to_string_lossy().to_string(), required_major)),
                 Ok(()) => tracing::warn!("Téléchargement Temurin terminé mais java introuvable, repli sur Mojang"),
                 Err(e) => tracing::warn!("Téléchargement Temurin échoué ({}), repli sur Mojang", e),
             }
@@ -93,7 +97,7 @@ pub(super) async fn ensure_java(
         runtime_dir.join("bin").join(java_exe_name())
     };
     if java_exe.exists() {
-        return Ok(java_exe.to_string_lossy().to_string());
+        return Ok((java_exe.to_string_lossy().to_string(), required_major));
     }
 
     // 5. Téléchargement depuis Mojang
@@ -102,7 +106,7 @@ pub(super) async fn ensure_java(
     download_mojang_runtime(component, &runtime_dir, client, app).await?;
 
     if java_exe.exists() {
-        Ok(java_exe.to_string_lossy().to_string())
+        Ok((java_exe.to_string_lossy().to_string(), required_major))
     } else {
         Err(anyhow!("Runtime Java installé mais introuvable à {}", java_exe.display()))
     }

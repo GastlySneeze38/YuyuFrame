@@ -13,7 +13,7 @@ use crate::minecraft::p2p;
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
 use super::agent_deploy::{launcher_agent_dir, launcher_agent_libs_dir};
 use super::classpath::{artifact_path, dedup_classpath, download_file, extract_natives, should_download_library};
-use super::java::{detect_java_major_version, ensure_java};
+use super::java::ensure_java;
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_tweak_class_args};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
@@ -267,9 +267,19 @@ pub async fn download_and_launch(
         }
     }
 
+    let mut native_tasks: JoinSet<(PathBuf, Result<()>)> = JoinSet::new();
     for np in natives_to_extract {
-        if let Err(e) = extract_natives(&np, &natives_dir).await {
-            tracing::warn!("Extraction natives échouée pour {} : {}", np.display(), e);
+        let natives_dir = natives_dir.clone();
+        native_tasks.spawn(async move {
+            let result = extract_natives(&np, &natives_dir).await;
+            (np, result)
+        });
+    }
+    while let Some(res) = native_tasks.join_next().await {
+        match res {
+            Ok((np, Err(e))) => tracing::warn!("Extraction natives échouée pour {} : {}", np.display(), e),
+            Ok((_, Ok(()))) => {}
+            Err(e) => tracing::warn!("Tâche extraction natives échouée : {}", e),
         }
     }
 
@@ -281,9 +291,8 @@ pub async fn download_and_launch(
     let java_component = details.java_version.as_ref()
         .map(|j| j.component.as_str())
         .unwrap_or("jre-legacy"); // composant Mojang pour Java 8
-    let java = ensure_java(java_component, required_java, &mc_dir, &client, &app).await?;
+    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app).await?;
     ensure_gpu_preference(&java).await;
-    let java_major = detect_java_major_version(&java).await.unwrap_or(17);
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
 
@@ -545,10 +554,14 @@ pub async fn download_and_launch(
     args.extend(["-cp".to_string(), classpath_str, main_class]);
     args.extend(build_game_args(&details, session, &mc_game_dir, &assets_dir, version_id));
     args.extend(extra_game_args);
-    // Laisser à la fenêtre console le temps d'enregistrer ses listeners JS
-    // avant de spawner Java — évite de perdre les premières lignes de log
-    // quand tout est en cache et que le lancement est quasi-instantané.
-    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    // NB : pas de sleep ici avant de spawner Java. La synchro avec la fenêtre
+    // console (attendre que Console.tsx ait attaché son listener game_log)
+    // est déjà faite bien plus tôt, dans commands/launch.rs, via
+    // `console_ready.notified()` (voir register_console_waiter) — AVANT même
+    // l'appel à download_and_launch. Un ancien sleep fixe de 1500ms vivait
+    // ici en plus de ce mécanisme (vestige d'avant son introduction) et
+    // ralentissait chaque lancement pour rien, y compris les lancements
+    // 100% en cache où c'était la quasi-totalité du temps perçu.
 
     // Passe le timer Windows à 1ms (défaut : 15ms) pour réduire le jitter de scheduling
     #[cfg(target_os = "windows")]
@@ -749,15 +762,35 @@ async fn setup_fabric(
         }
     }
 
+    // 16 téléchargements simultanés — même limite que les libs vanilla plus
+    // haut. Avant, ces libs se téléchargeaient une par une : négligeable pour
+    // Fabric (15-30 libs), mais le même code sert de modèle à setup_forge où
+    // Forge en a couramment 50-150+.
+    let total = profile.libraries.len() as u64;
+    let fabric_sem = Arc::new(Semaphore::new(16));
+    let mut fabric_tasks: JoinSet<(String, Option<PathBuf>)> = JoinSet::new();
+    for lib in profile.libraries {
+        let sem = fabric_sem.clone();
+        let libraries_dir = libraries_dir.to_path_buf();
+        fabric_tasks.spawn(async move {
+            let _permit = sem.acquire().await.unwrap();
+            let name = lib.name.clone();
+            let path = fabric::download_library(&lib, &libraries_dir).await;
+            (name, path)
+        });
+    }
+
     let mut fabric_cp = Vec::new();
-    let total = profile.libraries.len();
-    for (i, lib) in profile.libraries.iter().enumerate() {
-        match fabric::download_library(lib, libraries_dir).await {
+    let mut done = 0u64;
+    while let Some(result) = fabric_tasks.join_next().await {
+        let (name, path) = result.map_err(|e| anyhow!("Tâche lib Fabric : {}", e))?;
+        match path {
             Some(path) => fabric_cp.push(path.to_string_lossy().to_string()),
-            None => warnings.push(format!("Bibliothèque Fabric manquante : {}", lib.name)),
+            None => warnings.push(format!("Bibliothèque Fabric manquante : {}", name)),
         }
-        if i % 5 == 0 {
-            set_progress(app, 72 + i as u64 * 20 / total.max(1) as u64, 100, &format!("Fabric libs {}/{}", i + 1, total));
+        done += 1;
+        if done.is_multiple_of(5) || done == total {
+            set_progress(app, 72 + done * 20 / total.max(1), 100, &format!("Fabric libs {}/{}", done, total));
         }
     }
 
@@ -797,19 +830,38 @@ async fn setup_forge(
         }
     };
 
-    let forge_json = forge::read_version_json(&version_id, mc_dir)?;
+    let mut forge_json = forge::read_version_json(&version_id, mc_dir)?;
     let mut forge_cp = Vec::new();
     let mut warnings = Vec::new();
 
-    if let Some(libs) = &forge_json.libraries {
-        let total = libs.len();
-        for (i, lib) in libs.iter().enumerate() {
-            match forge::download_library(lib, libraries_dir).await {
+    // 16 téléchargements simultanés — même limite que les libs vanilla et
+    // Fabric plus haut. Forge a couramment 50-150+ libs : les télécharger une
+    // par une (comme avant) pouvait dominer le temps de lancement à froid.
+    if let Some(libs) = forge_json.libraries.take() {
+        let total = libs.len() as u64;
+        let forge_sem = Arc::new(Semaphore::new(16));
+        let mut forge_tasks: JoinSet<(String, Option<PathBuf>)> = JoinSet::new();
+        for lib in libs {
+            let sem = forge_sem.clone();
+            let libraries_dir = libraries_dir.to_path_buf();
+            forge_tasks.spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+                let name = lib.name.clone();
+                let path = forge::download_library(&lib, &libraries_dir).await;
+                (name, path)
+            });
+        }
+
+        let mut done = 0u64;
+        while let Some(result) = forge_tasks.join_next().await {
+            let (name, path) = result.map_err(|e| anyhow!("Tâche lib Forge : {}", e))?;
+            match path {
                 Some(path) => forge_cp.push(path.to_string_lossy().to_string()),
-                None => warnings.push(format!("Bibliothèque Forge manquante : {}", lib.name)),
+                None => warnings.push(format!("Bibliothèque Forge manquante : {}", name)),
             }
-            if i % 5 == 0 {
-                set_progress(app, 80 + i as u64 * 12 / total.max(1) as u64, 100, &format!("Forge libs {}/{}", i + 1, total));
+            done += 1;
+            if done.is_multiple_of(5) || done == total {
+                set_progress(app, 80 + done * 12 / total.max(1), 100, &format!("Forge libs {}/{}", done, total));
             }
         }
     }
