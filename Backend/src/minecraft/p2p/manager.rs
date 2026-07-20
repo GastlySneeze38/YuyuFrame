@@ -207,11 +207,10 @@ fn handle_peer(stream: TcpStream, peers: PeerMap, rt: tokio::runtime::Handle) {
                 }
             }
             Ok(Message::Ping(d)) => { ws.send(Message::Pong(d)).ok(); }
-            Ok(Message::Close(_)) => break,
             Err(tungstenite::Error::Io(e))
                 if e.kind() == io::ErrorKind::WouldBlock
                 || e.kind() == io::ErrorKind::TimedOut => {}
-            Err(_) => break,
+            Ok(Message::Close(_)) | Err(_) => break,
             _ => {}
         }
     }

@@ -81,7 +81,8 @@ pub(super) async fn extract_natives(jar_path: &Path, natives_dir: &Path) -> Resu
             let mut entry = archive.by_index(i)?;
             let name = entry.name().to_string();
             if name.starts_with("META-INF") || name.ends_with('/') { continue; }
-            let is_native = name.ends_with(".dll") || name.ends_with(".so") || name.ends_with(".dylib") || name.ends_with(".jnilib");
+            let lower = name.to_ascii_lowercase();
+            let is_native = lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib") || lower.ends_with(".jnilib");
             if !is_native { continue; }
             let file_name = std::path::Path::new(&name).file_name().unwrap_or_default().to_string_lossy().to_string();
             let out_path = natives_dir.join(&file_name);

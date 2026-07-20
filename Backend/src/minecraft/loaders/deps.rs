@@ -7,6 +7,7 @@ use tauri::Emitter;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use crate::minecraft::mod_files::is_enabled_jar;
 use crate::minecraft::versions::predicate::{
     normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed,
 };
@@ -66,7 +67,7 @@ async fn scan_installed(mods_dir: &Path) -> HashMap<String, InstalledMod> {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-            if !name.ends_with(".jar") {
+            if !is_enabled_jar(&name) {
                 continue;
             }
             if let Some(meta) = read_fabric_mod_json(&path) {
@@ -110,7 +111,7 @@ async fn collect_missing_deps(
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-            if !name.ends_with(".jar") {
+            if !is_enabled_jar(&name) {
                 continue;
             }
             let Some(meta) = read_fabric_mod_json(&path) else { continue };

@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 use crate::minecraft::maven::MavenCoord;
+use crate::minecraft::mod_files::is_jar_file;
 
 const FABRIC_META: &str = "https://meta.fabricmc.net/v2";
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
@@ -153,7 +154,7 @@ pub async fn ensure_fabric_api(mc_version: &str, mods_dir: &Path) -> Result<()> 
     if let Ok(mut entries) = tokio::fs::read_dir(mods_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&prefix) && (name.ends_with(".jar") || name.ends_with(".jar.disabled")) {
+            if name.to_ascii_lowercase().starts_with(&prefix) && is_jar_file(&name) {
                 tracing::info!("Fabric API déjà présente: {}", name);
                 return Ok(());
             }

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, LazyLock};
 
 use super::crud::instance_mods_dir;
+use crate::minecraft::mod_files::{is_disabled_jar, is_enabled_jar};
 use crate::minecraft::versions::predicate::{normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed};
 
 #[derive(Serialize, Clone)]
@@ -72,8 +73,8 @@ pub async fn mods_list(instance_id: String) -> Result<Vec<ModInfo>, String> {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
             let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-            let enabled = name.ends_with(".jar") && !name.ends_with(".jar.disabled");
-            let disabled = name.ends_with(".jar.disabled");
+            let enabled = is_enabled_jar(&name);
+            let disabled = is_disabled_jar(&name);
             if !enabled && !disabled {
                 continue;
             }
@@ -99,9 +100,14 @@ pub async fn mods_toggle(instance_id: String, name: String) -> Result<ModInfo, S
         return Err(format!("Mod '{}' introuvable", name));
     }
 
-    let (to_name, enabled) = if name.ends_with(".jar.disabled") {
-        (name.trim_end_matches(".disabled").to_string(), true)
-    } else if name.ends_with(".jar") {
+    let (to_name, enabled) = if is_disabled_jar(&name) {
+        // Retire le suffixe ".disabled" en préservant la casse du reste du nom.
+        // La détection ci-dessus est insensible à la casse (voir is_disabled_jar) :
+        // un `trim_end_matches(".disabled")` strictement minuscule laisserait un
+        // ".DISABLED" traînant sur un fichier renommé à la main avec cette casse.
+        let cut = name.len() - ".disabled".len();
+        (name[..cut].to_string(), true)
+    } else if is_enabled_jar(&name) {
         (format!("{}.disabled", name), false)
     } else {
         return Err("Nom de mod invalide".into());
@@ -151,7 +157,7 @@ pub async fn mods_install(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "mod.jar".to_string());
 
-    if !safe_name.ends_with(".jar") {
+    if !is_enabled_jar(&safe_name) {
         return Err("Seuls les fichiers .jar sont acceptés".into());
     }
 
@@ -256,7 +262,7 @@ pub async fn mods_upload(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "mod.jar".to_string());
 
-    if !safe_name.ends_with(".jar") {
+    if !is_enabled_jar(&safe_name) {
         return Err("Seuls les fichiers .jar sont acceptés".into());
     }
 
@@ -316,7 +322,7 @@ pub async fn mods_check_update_safety(
             for entry in entries.flatten() {
                 let path = entry.path();
                 let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                if !name.ends_with(".jar") {
+                if !is_enabled_jar(&name) {
                     continue;
                 }
                 let Some(meta) = read_fabric_mod_json(&path) else { continue };

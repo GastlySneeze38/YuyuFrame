@@ -112,12 +112,3 @@ pub struct AssetObject {
     pub size: u64,
 }
 
-pub async fn fetch_version_details(url: &str) -> Result<VersionDetails> {
-    let client = reqwest::Client::new();
-    Ok(client.get(url).send().await?.json().await?)
-}
-
-pub async fn fetch_asset_index(url: &str) -> Result<AssetIndexFile> {
-    let client = reqwest::Client::new();
-    Ok(client.get(url).send().await?.json().await?)
-}

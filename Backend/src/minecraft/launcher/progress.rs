@@ -1,6 +1,9 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use tauri::{Emitter, Manager};
+use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 use tokio::sync::Notify;
 
 use crate::state::DownloadProgress;
@@ -51,5 +54,56 @@ pub fn register_console_waiter(console_label: &str) -> Arc<Notify> {
 pub fn signal_console_ready(console_label: &str) {
     if let Some(notify) = CONSOLE_READY.lock().unwrap().get(console_label) {
         notify.notify_waiters();
+    }
+}
+
+/// Relit en continu `logs/latest.log` (log4j2, où Minecraft écrit ses vrais
+/// logs — pas sur stdout) et republie chaque nouvelle ligne vers la fenêtre
+/// console. Démarre à la fin du fichier existant pour ignorer les logs d'une
+/// session précédente ; repart de 0 si le fichier est recréé plus petit
+/// (nouveau lancement). S'arrête quand `stop_flag` passe à `true`.
+pub(super) async fn tail_log_file(log_path: PathBuf, stop_flag: Arc<AtomicBool>, app: tauri::AppHandle, console_label: String) {
+    let current_end = tokio::fs::metadata(&log_path).await.map(|m| m.len()).unwrap_or(0);
+    let mut pos: u64 = current_end;
+    let mut last_len: u64 = current_end;
+
+    loop {
+        if let Ok(metadata) = tokio::fs::metadata(&log_path).await {
+            let len = metadata.len();
+            if len < last_len {
+                // Fichier recréé au démarrage — recommencer depuis le début
+                pos = 0;
+            }
+            last_len = len;
+
+            if len > pos {
+                if let Ok(mut file) = tokio::fs::File::open(&log_path).await {
+                    if file.seek(std::io::SeekFrom::Start(pos)).await.is_ok() {
+                        let mut reader = BufReader::new(file);
+                        let mut line = String::new();
+                        loop {
+                            line.clear();
+                            match reader.read_line(&mut line).await {
+                                Ok(n) if n > 0 => {
+                                    pos += n as u64;
+                                    let trimmed = line.trim_end().to_string();
+                                    if !trimmed.is_empty() {
+                                        log_to_console(&app, &console_label, &trimmed, "out");
+                                    }
+                                }
+                                // Ok(0) = EOF, Err(_) = erreur de lecture — dans les deux cas
+                                // on arrête cette passe et on retente au prochain tick.
+                                _ => break,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 }

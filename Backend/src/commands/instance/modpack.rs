@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 
 use super::crud::instance_dir;
+use crate::minecraft::mod_files::is_jar_file;
 use crate::minecraft::versions::predicate::read_fabric_mod_json;
 
 /// Indexe les mods déjà présents par leur id `fabric.mod.json` — sert à détecter
@@ -13,7 +14,7 @@ fn collect_mod_ids(mods_dir: &std::path::Path) -> std::collections::HashMap<Stri
     for entry in entries.flatten() {
         let path = entry.path();
         let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-        if !name.ends_with(".jar") && !name.ends_with(".jar.disabled") {
+        if !is_jar_file(&name) {
             continue;
         }
         if let Some(meta) = read_fabric_mod_json(&path) {

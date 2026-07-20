@@ -1,23 +1,22 @@
 use anyhow::{anyhow, Result};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinSet;
 
 use crate::state::{MinecraftSession, SharedState};
-use crate::minecraft::loaders::{deps, fabric, forge};
-use crate::minecraft::p2p;
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
-use super::agent_deploy::{launcher_agent_dir, launcher_agent_libs_dir};
+use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::classpath::{artifact_path, dedup_classpath, download_file, extract_natives, should_download_library};
 use super::java::ensure_java;
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_tweak_class_args};
+use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
-use super::progress::{log_to_console, set_progress};
+use super::loader_setup::{setup_fabric, setup_forge, LoaderSetup};
+use super::progress::{log_to_console, set_progress, tail_log_file};
 
 /// Message d'erreur sentinelle renvoyé par `download_and_launch` quand l'arrêt
 /// vient d'une annulation demandée par l'utilisateur (`cancel_launch`), pour
@@ -43,6 +42,12 @@ pub fn minecraft_dir() -> PathBuf {
 /// survenus pendant le lancement (lib Fabric/Forge ou dépendance de mod
 /// manquante — le jeu a quand même démarré, mais pourrait planter ou
 /// manquer une fonctionnalité). Vide si tout s'est bien passé.
+///
+/// Orchestre les étapes dans l'ordre : détails de version → assets (en tâche
+/// de fond) → client jar + libs vanilla → natives → Java → setup loader
+/// (Fabric/Forge, voir `loader_setup.rs`) → setup agents JVM (P2P/
+/// LauncherAgent, voir `agents.rs`) → attente des assets → spawn + supervision
+/// du process Java (voir `progress::tail_log_file`).
 #[allow(clippy::too_many_arguments)]
 pub async fn download_and_launch(
     version_id: &str,
@@ -314,213 +319,21 @@ pub async fn download_and_launch(
     let launch_warnings = loader_setup.warnings;
 
     // ── P2P setup ────────────────────────────────────────────────────────────
-    // Démarre le signaling, télécharge les mappings Mojang et prépare les javaagents.
-    // Le JAR original Minecraft est utilisé directement — le remapping est assuré à
-    // l'exécution par MappingsRegistry (IRemapper Mixin) et les appels de réflexion.
-    let (effective_client_jar, p2p_jvm_args, p2p_extra_cp) = if p2p {
-        p2p::start_signaling(app.clone());
-
-        // Copier rust_core.dll dans natives_dir pour que -Djava.library.path le trouve
-        let dll_name = if cfg!(target_os = "windows") { "rust_core.dll" } else { "librust_core.so" };
-        let dll_src = p2p::p2p_dir().join(dll_name);
-        if dll_src.exists() {
-            tokio::fs::copy(&dll_src, natives_dir.join(dll_name)).await.ok();
-        } else {
-            tracing::warn!("[P2P] {} manquant dans {} — JNI désactivé", dll_name, p2p::p2p_dir().display());
-        }
-
-        // Télécharger les mappings Yarn (Fabric mergedv2)
-        let yarn_path = p2p::ensure_yarn_mappings(version_id, &client, &app).await?;
-
-        let mixin_jar     = p2p::p2p_dir().join("mixin.jar");
-        let agent_jar     = p2p::p2p_dir().join("p2p-agent.jar");
-        let asm_jar          = p2p::p2p_dir().join("asm-9.5.jar");
-        let asm_tree_jar     = p2p::p2p_dir().join("asm-tree-9.5.jar");
-        let asm_util_jar     = p2p::p2p_dir().join("asm-util-9.5.jar");
-        let asm_analysis_jar = p2p::p2p_dir().join("asm-analysis-9.5.jar");
-        let asm_commons_jar  = p2p::p2p_dir().join("asm-commons-9.5.jar");
-
-        if !mixin_jar.exists() {
-            return Err(anyhow!(
-                "mixin.jar manquant dans {}\n  Copier P2P-Server/p2p-agent/lib/mixin.jar vers ce dossier",
-                p2p::p2p_dir().display()
-            ));
-        }
-        if !agent_jar.exists() {
-            return Err(anyhow!(
-                "p2p-agent.jar manquant dans {}\n  Compiler P2P-Server/p2p-agent/ et copier le JAR vers ce dossier",
-                p2p::p2p_dir().display()
-            ));
-        }
-
-        // MixinAgent (dans mixin.jar) déclare registerTargetClass(String, ClassNode).
-        // Le JVM résout toutes les signatures déclarées au chargement de la classe, donc
-        // org.objectweb.asm.tree.ClassNode doit être sur le classpath AVANT que mixin.jar
-        // soit traité comme javaagent. On ajoute asm-9.5.jar et asm-tree-9.5.jar au -cp —
-        // SAUF en mode Fabric, où Fabric Loader apporte déjà sa propre copie d'ASM
-        // (généralement plus récente) sur le classpath. En ajouter une deuxième fait
-        // échouer Fabric Knot au démarrage : "duplicate ASM classes found on classpath"
-        // (vu en jeu avec LauncherAgent — voir docs/LauncherAgent/index.md). p2p-agent.jar
-        // ne doit plus jamais embarquer ASM lui-même (cf. build.bat) pour ne pas être,
-        // à lui seul, une troisième source du même conflit.
-        // asm-util/-analysis/-commons sont nécessaires en plus de asm/-tree : Mixin
-        // (DefaultExtensions.create()) référence org.objectweb.asm.util.CheckClassAdapter
-        // dès le bootstrap, même sans activer les checks — son absence provoque un
-        // NoClassDefFoundError immédiat (vu en 1.20.4 vanilla, pas en Fabric où Fabric
-        // Loader apporte déjà sa copie complète d'ASM).
-        let is_fabric = matches!(loader, Some("fabric"));
-        let mut extra_cp: Vec<String> = Vec::new();
-        if !is_fabric {
-            for jar in [&asm_jar, &asm_tree_jar, &asm_util_jar, &asm_analysis_jar, &asm_commons_jar] {
-                if jar.exists() {
-                    extra_cp.push(jar.to_string_lossy().to_string());
-                } else {
-                    tracing::warn!("[P2P] {} manquant — peut causer NoClassDefFoundError au démarrage", jar.display());
-                }
-            }
-        }
-
-        // Le peerId = PeerId libp2p base58 : c'est le code que l'hôte partage en jeu.
-        let peer_id = p2p::start_libp2p().await.unwrap_or_else(|e| {
-            tracing::warn!("[P2P] libp2p non démarré: {} — fallback UUID", e);
-            uuid::Uuid::new_v4().to_string()
-        });
-        log_to_console(&app, &console_label, &format!("[P2P] Code de session : {}", peer_id), "out");
-        // mixin.jar DOIT être listé AVANT p2p-agent.jar : MixinAgent.premain() capture
-        // l'Instrumentation que MixinBootstrap.init() utilisera ensuite.
-        let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
-        let agent_arg = format!(
-            "-javaagent:{}=peerId={},name={},server=ws://127.0.0.1:{},yarn={}",
-            agent_jar.display(), peer_id, session.username, p2p::SIGNALING_PORT,
-            yarn_path.display(),
-        );
-
-        log_to_console(&app, &console_label, &format!("[P2P] Mixin    : {}", mixin_arg), "out");
-        log_to_console(&app, &console_label, &format!("[P2P] Agent    : {}", agent_arg), "out");
-        log_to_console(&app, &console_label, &format!("[P2P] Yarn     : {}", yarn_path.display()), "out");
-        (client_jar.clone(), vec![mixin_arg, agent_arg], extra_cp)
+    // Le JAR original Minecraft est utilisé directement — le remapping est assuré
+    // à l'exécution par MappingsRegistry (IRemapper Mixin) et les appels de
+    // réflexion, pas besoin d'un JAR "effectif" différent ici.
+    let p2p_setup = if p2p {
+        setup_p2p(version_id, session, &natives_dir, loader, &client, &app, &console_label).await?
     } else {
-        (client_jar.clone(), vec![], vec![])
+        AgentSetup::default()
     };
+    let (p2p_jvm_args, p2p_extra_cp) = (p2p_setup.jvm_args, p2p_setup.extra_classpath);
 
     // ── LauncherAgent setup ──────────────────────────────────────────────────
     // Resource packs Modrinth in-game (voir docs/LauncherAgent/index.md). Agent
     // totalement indépendant du p2p-agent — actif que P2P soit activé ou non.
-    let (launcher_agent_jvm_args, launcher_agent_extra_cp): (Vec<String>, Vec<String>) = {
-        let libs_dir = launcher_agent_libs_dir();
-        let mixin_jar    = libs_dir.join("mixin.jar");
-        let agent_jar    = launcher_agent_dir().join("launcher-agent.jar");
-        let asm_jar          = libs_dir.join("asm-9.5.jar");
-        let asm_tree_jar     = libs_dir.join("asm-tree-9.5.jar");
-        let asm_util_jar     = libs_dir.join("asm-util-9.5.jar");
-        let asm_analysis_jar = libs_dir.join("asm-analysis-9.5.jar");
-        let asm_commons_jar  = libs_dir.join("asm-commons-9.5.jar");
-        // JNA (module optimodule "Fenêtre sans bordure", BorderlessWindowNative) —
-        // pas de conflit "duplicate classes" façon ASM/Fabric, donc ajoutée au
-        // classpath dans tous les cas (vanilla ET Fabric), pas seulement !is_fabric.
-        let jna_jar          = libs_dir.join("jna.jar");
-        let jna_platform_jar = libs_dir.join("jna-platform.jar");
-
-        if !agent_jar.exists() {
-            tracing::warn!(
-                "[LauncherAgent] launcher-agent.jar manquant dans {} — resource packs in-game désactivés",
-                launcher_agent_dir().display()
-            );
-            (vec![], vec![])
-        } else if !mixin_jar.exists() {
-            tracing::warn!(
-                "[LauncherAgent] mixin.jar manquant dans {} — resource packs in-game désactivés",
-                launcher_agent_dir().display()
-            );
-            (vec![], vec![])
-        } else {
-            // Mêmes mappings Yarn que le p2p-agent (cache partagé dans
-            // AppData/YuyuFrame/p2p/cache/) — ensure_yarn_mappings() court-circuite
-            // si déjà téléchargées pour cette version, donc pas de double téléchargement.
-            // Sans ce remapper, Mixin tente de résoudre les noms Yarn littéralement
-            // et échoue (ClassNotFoundException) puisque le JAR client est obfusqué.
-            //
-            // EXCEPTION (bracket 26.1.2, voir mixin/client/v26_1 côté Java) : à
-            // partir de la ligne 26.1.x, Mojang ne publie PLUS AUCUNE mapping —
-            // ni officielle, ni Yarn, ni intermediary Fabric (is_unobfuscated_version,
-            // voir sa javadoc pour les sources) — le jeu contient déjà ses VRAIS
-            // noms. Appeler ensure_yarn_mappings pour une telle version échouerait
-            // TOUJOURS (rien à télécharger nulle part) ; on saute directement à
-            // "pas de chemin Yarn", exactement l'état déjà validé pour un
-            // lancement vanilla classique sans Fabric (MappingsRegistry reste en
-            // scheme OFFICIAL, YarnMappings jamais chargé — voir AgentConfig/
-            // MappingsRegistry côté Java).
-            let yarn_result: Result<Option<PathBuf>> = if p2p::is_unobfuscated_version(version_id) {
-                log_to_console(&app, &console_label, &format!(
-                    "[LauncherAgent] MC {} non obfusqué (schéma ≥26.1, voir FabricMC/fabric-loom#1585) — mappings Yarn ignorées",
-                    version_id), "out");
-                Ok(None)
-            } else {
-                p2p::ensure_yarn_mappings(version_id, &client, &app).await.map(Some)
-            };
-
-            match yarn_result {
-                Ok(yarn_path_opt) => {
-                    // Même contrainte que pour le p2p-agent : ne pas ajouter notre
-                    // copie d'ASM si Fabric en apporte déjà une (conflit "duplicate
-                    // ASM classes" sinon — voir docs/LauncherAgent/index.md).
-                    // Même contrainte que pour le p2p-agent (voir plus haut) :
-                    // CheckClassAdapter (asm-util) est requis dès le bootstrap Mixin.
-                    let is_fabric = matches!(loader, Some("fabric"));
-                    let mut extra_cp: Vec<String> = Vec::new();
-                    if !is_fabric {
-                        for jar in [&asm_jar, &asm_tree_jar, &asm_util_jar, &asm_analysis_jar, &asm_commons_jar] {
-                            if jar.exists() {
-                                extra_cp.push(jar.to_string_lossy().to_string());
-                            } else {
-                                tracing::warn!("[LauncherAgent] {} manquant — peut causer NoClassDefFoundError au démarrage", jar.display());
-                            }
-                        }
-                    }
-                    for jar in [&jna_jar, &jna_platform_jar] {
-                        if jar.exists() {
-                            extra_cp.push(jar.to_string_lossy().to_string());
-                        } else {
-                            tracing::warn!("[LauncherAgent] {} manquant — module \"Fenêtre sans bordure\" indisponible", jar.display());
-                        }
-                    }
-
-                    // mixin.jar DOIT être listé AVANT launcher-agent.jar — même contrainte
-                    // que pour le p2p-agent (MixinAgent.premain() capture l'Instrumentation).
-                    //
-                    // version=... explicite ici : -Dminecraft.version n'est posé QUE par
-                    // Fabric, jamais par un lancement vanilla (Mojang passe la version en
-                    // argument de jeu "--version", pas en system property) — sans ce
-                    // paramètre, MinecraftVersionDetector.detect() renvoie "unknown" sur
-                    // vanilla, et LauncherAgent charge par erreur la config Mixin 1.21+
-                    // contre un jeu 1.8.9 (mismatch fatal). Rust connaît déjà version_id
-                    // avec certitude, pas besoin de deviner côté agent.
-                    //
-                    // yarn=... OMIS quand yarn_path_opt est None (26.1+) — AgentConfig
-                    // (Java) laisse alors yarnPath=null, MappingsRegistry reste en
-                    // scheme OFFICIAL sans jamais tenter de charger de jar Yarn.
-                    let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
-                    let agent_arg = match &yarn_path_opt {
-                        Some(yarn_path) => format!(
-                            "-javaagent:{}=yarn={},version={}",
-                            agent_jar.display(), yarn_path.display(), version_id,
-                        ),
-                        None => format!(
-                            "-javaagent:{}=version={}",
-                            agent_jar.display(), version_id,
-                        ),
-                    };
-                    log_to_console(&app, &console_label, &format!("[LauncherAgent] Mixin : {}", mixin_arg), "out");
-                    log_to_console(&app, &console_label, &format!("[LauncherAgent] Agent : {}", agent_arg), "out");
-                    (vec![mixin_arg, agent_arg], extra_cp)
-                }
-                Err(e) => {
-                    tracing::warn!("[LauncherAgent] mappings Yarn indisponibles ({}) — resource packs in-game désactivés", e);
-                    (vec![], vec![])
-                }
-            }
-        }
-    };
+    let launcher_agent = setup_launcher_agent(version_id, loader, &client, &app, &console_label).await;
+    let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
     // ── Attente des assets ────────────────────────────────────────────────────
     // Libs + loader terminés, on attend que les assets finissent avant de lancer.
@@ -538,7 +351,7 @@ pub async fn download_and_launch(
     full_classpath.extend(p2p_extra_cp); // asm-9.5.jar + asm-tree-9.5.jar avant tout le reste
     full_classpath.extend(launcher_agent_extra_cp); // idem pour le LauncherAgent
     full_classpath.extend(classpath);
-    full_classpath.push(effective_client_jar.to_string_lossy().to_string());
+    full_classpath.push(client_jar.to_string_lossy().to_string());
     let classpath_str = dedup_classpath(full_classpath).join(classpath_sep);
 
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major);
@@ -635,52 +448,7 @@ pub async fn download_and_launch(
 
     // Tailer logs/latest.log — Minecraft route ses logs via log4j2 vers ce fichier
     // plutôt que vers stdout, donc on lit le fichier directement.
-    let log_tailer = tokio::spawn(async move {
-        // Démarrer à la fin du fichier existant pour ignorer les logs des sessions précédentes.
-        // Quand Minecraft recrée le fichier (taille < last_len), on repart de 0.
-        let current_end = tokio::fs::metadata(&log_path).await.map(|m| m.len()).unwrap_or(0);
-        let mut pos: u64 = current_end;
-        let mut last_len: u64 = current_end;
-
-        loop {
-            if let Ok(metadata) = tokio::fs::metadata(&log_path).await {
-                let len = metadata.len();
-                if len < last_len {
-                    // Fichier recréé au démarrage — recommencer depuis le début
-                    pos = 0;
-                }
-                last_len = len;
-
-                if len > pos {
-                    if let Ok(mut file) = tokio::fs::File::open(&log_path).await {
-                        if file.seek(std::io::SeekFrom::Start(pos)).await.is_ok() {
-                            let mut reader = BufReader::new(file);
-                            let mut line = String::new();
-                            loop {
-                                line.clear();
-                                match reader.read_line(&mut line).await {
-                                    Ok(0) => break,
-                                    Ok(n) => {
-                                        pos += n as u64;
-                                        let trimmed = line.trim_end().to_string();
-                                        if !trimmed.is_empty() {
-                                            log_to_console(&app_log, &label_log, &trimmed, "out");
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if stop_flag_tailer.load(Ordering::Relaxed) {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-    });
+    let log_tailer = tokio::spawn(tail_log_file(log_path, stop_flag_tailer, app_log, label_log));
 
     // Clear progress — game is now running
     state.write().await.download_progress = None;
@@ -711,193 +479,4 @@ pub async fn download_and_launch(
     }
 
     Ok(launch_warnings)
-}
-
-// ── Loader setup helpers ──────────────────────────────────────────────────────
-
-/// Extrait les chaînes d'un tableau JSON brut (`arguments.jvm`/`arguments.game`
-/// des profils Fabric/Forge), en ignorant silencieusement les entrées non-string
-/// (objets conditionnels de règles OS, non gérés ici).
-fn json_str_array(values: &[serde_json::Value]) -> Vec<String> {
-    values.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
-}
-
-#[derive(Default)]
-struct LoaderSetup {
-    main_class: String,
-    classpath: Vec<String>,
-    extra_game_args: Vec<String>,
-    extra_jvm_args: Vec<String>,
-    /// Libs ou dépendances qui n'ont pas pu être installées — le jeu démarre
-    /// quand même (best-effort), mais l'utilisateur doit en être informé
-    /// plutôt que de découvrir un crash Java sans indice.
-    warnings: Vec<String>,
-}
-
-async fn setup_fabric(
-    mc_version: &str,
-    libraries_dir: &Path,
-    mods_dir: &Path,
-    app: &tauri::AppHandle,
-    avoid_beta: bool,
-) -> Result<LoaderSetup> {
-    set_progress(app, 72, 100, "Téléchargement Fabric Loader...");
-
-    let profile = fabric::get_latest_profile(mc_version).await?;
-    let mut warnings = Vec::new();
-
-    if let Err(e) = fabric::ensure_fabric_api(mc_version, mods_dir).await {
-        tracing::warn!("Fabric API auto-install échoué: {}", e);
-        warnings.push("Fabric API n'a pas pu être installée automatiquement".to_string());
-    }
-
-    set_progress(app, 74, 100, "Résolution des dépendances des mods...");
-    match deps::resolve_and_install_deps(mc_version, "fabric", mods_dir, app, avoid_beta).await {
-        Ok(failed) => warnings.extend(
-            failed.into_iter().map(|id| format!("Dépendance de mod manquante : {id}")),
-        ),
-        Err(e) => {
-            tracing::warn!("Résolution des dépendances échouée: {}", e);
-            warnings.push(format!("Résolution des dépendances de mods échouée : {e}"));
-        }
-    }
-
-    // 16 téléchargements simultanés — même limite que les libs vanilla plus
-    // haut. Avant, ces libs se téléchargeaient une par une : négligeable pour
-    // Fabric (15-30 libs), mais le même code sert de modèle à setup_forge où
-    // Forge en a couramment 50-150+.
-    let total = profile.libraries.len() as u64;
-    let fabric_sem = Arc::new(Semaphore::new(16));
-    let mut fabric_tasks: JoinSet<(String, Option<PathBuf>)> = JoinSet::new();
-    for lib in profile.libraries {
-        let sem = fabric_sem.clone();
-        let libraries_dir = libraries_dir.to_path_buf();
-        fabric_tasks.spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
-            let name = lib.name.clone();
-            let path = fabric::download_library(&lib, &libraries_dir).await;
-            (name, path)
-        });
-    }
-
-    let mut fabric_cp = Vec::new();
-    let mut done = 0u64;
-    while let Some(result) = fabric_tasks.join_next().await {
-        let (name, path) = result.map_err(|e| anyhow!("Tâche lib Fabric : {}", e))?;
-        match path {
-            Some(path) => fabric_cp.push(path.to_string_lossy().to_string()),
-            None => warnings.push(format!("Bibliothèque Fabric manquante : {}", name)),
-        }
-        done += 1;
-        if done.is_multiple_of(5) || done == total {
-            set_progress(app, 72 + done * 20 / total.max(1), 100, &format!("Fabric libs {}/{}", done, total));
-        }
-    }
-
-    let extra_jvm: Vec<String> = profile
-        .arguments
-        .as_ref()
-        .and_then(|a| a.jvm.as_ref())
-        .map(|jvm| json_str_array(jvm))
-        .unwrap_or_default();
-
-    Ok(LoaderSetup {
-        main_class: profile.main_class,
-        classpath: fabric_cp,
-        extra_game_args: vec![],
-        extra_jvm_args: extra_jvm,
-        warnings,
-    })
-}
-
-async fn setup_forge(
-    mc_version: &str,
-    mc_dir: &Path,
-    libraries_dir: &Path,
-    java: &str,
-    app: &tauri::AppHandle,
-) -> Result<LoaderSetup> {
-    set_progress(app, 70, 100, "Recherche de la version Forge...");
-
-    let forge_ver = forge::fetch_latest_version(mc_version).await?;
-    tracing::info!("Forge {} pour MC {}", forge_ver, mc_version);
-
-    let version_id = match forge::find_installed(mc_version, &forge_ver, mc_dir) {
-        Some(id) => id,
-        None => {
-            set_progress(app, 72, 100, "Téléchargement de l'installeur Forge...");
-            forge::install(mc_version, &forge_ver, mc_dir, libraries_dir, java).await?
-        }
-    };
-
-    let mut forge_json = forge::read_version_json(&version_id, mc_dir)?;
-    let mut forge_cp = Vec::new();
-    let mut warnings = Vec::new();
-
-    // 16 téléchargements simultanés — même limite que les libs vanilla et
-    // Fabric plus haut. Forge a couramment 50-150+ libs : les télécharger une
-    // par une (comme avant) pouvait dominer le temps de lancement à froid.
-    if let Some(libs) = forge_json.libraries.take() {
-        let total = libs.len() as u64;
-        let forge_sem = Arc::new(Semaphore::new(16));
-        let mut forge_tasks: JoinSet<(String, Option<PathBuf>)> = JoinSet::new();
-        for lib in libs {
-            let sem = forge_sem.clone();
-            let libraries_dir = libraries_dir.to_path_buf();
-            forge_tasks.spawn(async move {
-                let _permit = sem.acquire().await.unwrap();
-                let name = lib.name.clone();
-                let path = forge::download_library(&lib, &libraries_dir).await;
-                (name, path)
-            });
-        }
-
-        let mut done = 0u64;
-        while let Some(result) = forge_tasks.join_next().await {
-            let (name, path) = result.map_err(|e| anyhow!("Tâche lib Forge : {}", e))?;
-            match path {
-                Some(path) => forge_cp.push(path.to_string_lossy().to_string()),
-                None => warnings.push(format!("Bibliothèque Forge manquante : {}", name)),
-            }
-            done += 1;
-            if done.is_multiple_of(5) || done == total {
-                set_progress(app, 80 + done * 12 / total.max(1), 100, &format!("Forge libs {}/{}", done, total));
-            }
-        }
-    }
-
-    let extra_game: Vec<String> = forge_json
-        .arguments.as_ref().and_then(|a| a.game.as_ref())
-        .map(|g| json_str_array(g))
-        .unwrap_or_else(|| {
-            // Legacy Forge (pré-1.13) : pas de bloc "arguments", seulement une
-            // "minecraftArguments" à plat dont on extrait juste --tweakClass
-            // (le reste duplique les args vanilla déjà posés ailleurs).
-            forge_json.minecraft_arguments.as_deref().map(extract_tweak_class_args).unwrap_or_default()
-        });
-
-    let mut extra_jvm: Vec<String> = forge_json
-        .arguments.as_ref().and_then(|a| a.jvm.as_ref())
-        .map(|j| json_str_array(j))
-        .unwrap_or_default();
-
-    // Forge legacy (pré-1.13, pas de bloc "arguments") : FML revérifie par défaut
-    // à chaque lancement le certificat/checksum du client jar et compare son hash
-    // de patch attendu — utile une seule fois à l'installation, inutile ensuite
-    // puisque le jar ne change plus. On désactive ces deux contrôles redondants.
-    // Volontairement on NE touche PAS à -Xverify:none : ça désactiverait la
-    // vérification bytecode pour TOUTES les classes chargées, y compris les mods
-    // que l'utilisateur ajoute lui-même (non auditables par nous).
-    if forge_json.arguments.is_none() {
-        extra_jvm.push("-Dfml.ignoreInvalidMinecraftCertificates=true".into());
-        extra_jvm.push("-Dfml.ignorePatchDiscrepancies=true".into());
-    }
-
-    Ok(LoaderSetup {
-        main_class: forge_json.main_class,
-        classpath: forge_cp,
-        extra_game_args: extra_game,
-        extra_jvm_args: extra_jvm,
-        warnings,
-    })
 }

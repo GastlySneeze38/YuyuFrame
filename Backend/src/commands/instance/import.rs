@@ -5,6 +5,7 @@ use tauri::Emitter;
 
 use super::crud::{instance_create, instance_dir, instance_mods_dir};
 use super::mods::{sha1_cached, ModInfo};
+use crate::minecraft::mod_files::{is_disabled_jar, is_enabled_jar, is_jar_file};
 use crate::state::SharedState;
 
 /// Cherche le dossier `mods/` d'une instance externe, quel que soit le launcher :
@@ -198,8 +199,8 @@ pub async fn import_scan_folder(path: String) -> Result<ScanResult, String> {
             for entry in entries.flatten() {
                 let p = entry.path();
                 let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                let enabled = name.ends_with(".jar") && !name.ends_with(".jar.disabled");
-                let disabled = name.ends_with(".jar.disabled");
+                let enabled = is_enabled_jar(&name);
+                let disabled = is_disabled_jar(&name);
                 if !enabled && !disabled {
                     continue;
                 }
@@ -245,7 +246,7 @@ pub async fn import_check_duplicates(
             for entry in entries.flatten() {
                 let p = entry.path();
                 let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                if name.ends_with(".jar") || name.ends_with(".jar.disabled") {
+                if is_jar_file(&name) {
                     let h = sha1_cached(&p);
                     if !h.is_empty() {
                         dest_hashes.insert(h);
@@ -259,7 +260,7 @@ pub async fn import_check_duplicates(
             for entry in entries.flatten() {
                 let p = entry.path();
                 let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                if !name.ends_with(".jar") && !name.ends_with(".jar.disabled") {
+                if !is_jar_file(&name) {
                     continue;
                 }
                 let h = sha1_cached(&p);
@@ -290,7 +291,7 @@ fn copy_mods_into_instance(
         for entry in entries.flatten() {
             let p = entry.path();
             let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-            if name.ends_with(".jar") || name.ends_with(".jar.disabled") {
+            if is_jar_file(&name) {
                 let h = sha1_cached(&p);
                 if !h.is_empty() {
                     existing_hashes.insert(h);
@@ -335,7 +336,7 @@ fn copy_mods_into_instance(
         }
         existing_hashes.insert(sha1.clone());
         let size = std::fs::metadata(&dest_path).map(|m| m.len()).unwrap_or(0);
-        let enabled = dest_name.ends_with(".jar") && !dest_name.ends_with(".jar.disabled");
+        let enabled = is_enabled_jar(&dest_name);
         imported.push(ModInfo { name: dest_name, size, enabled, sha1 });
     }
 

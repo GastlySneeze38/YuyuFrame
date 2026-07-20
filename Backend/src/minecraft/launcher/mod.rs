@@ -1,7 +1,9 @@
 mod agent_deploy;
+mod agents;
 mod classpath;
 mod java;
 mod jvm_args;
+mod loader_setup;
 mod orchestrator;
 mod progress;
 

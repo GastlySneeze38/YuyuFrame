@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use super::super::instance::mods::sha1_cached;
+use crate::minecraft::mod_files::{is_disabled_jar, is_enabled_jar};
 
 pub(super) use crate::commands::api_base;
 
@@ -141,11 +142,13 @@ pub(super) fn list_mods_raw(mods_dir: &Path) -> Vec<(String, String, bool)> {
         .filter_map(|e| {
             let path = e.path();
             let raw = path.file_name()?.to_str()?.to_string();
-            let enabled = raw.ends_with(".jar");
-            let disabled = raw.ends_with(".jar.disabled");
+            let enabled = is_enabled_jar(&raw);
+            let disabled = is_disabled_jar(&raw);
             if !enabled && !disabled { return None; }
             let clean = if disabled {
-                raw.trim_end_matches(".disabled").to_string()
+                // Casse préservée pour le reste du nom (voir mods_toggle pour le
+                // même besoin) — la détection ci-dessus est insensible à la casse.
+                raw[..raw.len() - ".disabled".len()].to_string()
             } else {
                 raw.clone()
             };
