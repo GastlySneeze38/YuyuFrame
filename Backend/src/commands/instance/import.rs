@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::commands::instances::{instance_create, instance_mods_dir};
-use crate::commands::mods::{sha1_cached, ModInfo};
+use super::crud::{instance_create, instance_mods_dir};
+use super::mods::{sha1_cached, ModInfo};
 use crate::state::SharedState;
 
 /// Cherche le dossier `mods/` d'une instance externe, quel que soit le launcher :

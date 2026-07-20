@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, LazyLock};
 
-use crate::commands::instances::instance_mods_dir;
-use crate::minecraft::version_pred::{normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed};
+use super::crud::instance_mods_dir;
+use crate::minecraft::versions::predicate::{normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed};
 
 #[derive(Serialize, Clone)]
 pub struct ModInfo {

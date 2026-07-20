@@ -1,6 +1,6 @@
 use tauri::{Emitter, Manager};
 
-use crate::commands::instances::instance_dir;
+use crate::commands::instance::crud::instance_dir;
 use crate::db;
 use crate::minecraft::{auth, launcher};
 use crate::state::{MinecraftSession, SharedState};
@@ -37,7 +37,7 @@ pub async fn launch_game(
             .map_err(|e| e.to_string())?
             .ok_or("Instance introuvable")?
     };
-    let instance = crate::commands::instances::Instance {
+    let instance = crate::commands::instance::crud::Instance {
         id: instance.id,
         name: instance.name,
         mc_version: instance.mc_version,
@@ -82,7 +82,7 @@ pub async fn launch_game(
         "instance_id": &instance_id,
     }));
 
-    // Discord Rich Presence — bascule sur "en jeu" (voir discord.rs). Clonés
+    // Discord Rich Presence — bascule sur "en jeu" (voir integrations/discord.rs). Clonés
     // AVANT le move de `instance` dans le bloc async ci-dessous (sinon plus
     // accessible ici). spawn_blocking : set_activity fait de l'IPC bloquante
     // (écriture sur la pipe/socket Discord), jamais directement sur le
@@ -90,7 +90,7 @@ pub async fn launch_game(
     {
         let instance_name = instance.name.clone();
         let mc_version = instance.mc_version.clone();
-        tokio::task::spawn_blocking(move || crate::discord::set_playing(instance_name, mc_version));
+        tokio::task::spawn_blocking(move || crate::integrations::discord::set_playing(instance_name, mc_version));
     }
 
     let state_clone = state.inner().clone();
@@ -162,7 +162,7 @@ pub async fn launch_game(
             // (running_instances est un Set), fermer l'une d'elles ne doit
             // pas repasser la présence en idle si une autre est encore active.
             if !s.any_running() {
-                tokio::task::spawn_blocking(crate::discord::set_idle);
+                tokio::task::spawn_blocking(crate::integrations::discord::set_idle);
             }
         }
         let _ = app.emit("game_state", serde_json::json!({

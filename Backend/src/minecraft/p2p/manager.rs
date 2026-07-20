@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tungstenite::{accept, Message};
 
-use crate::minecraft::p2p_libp2p::{BridgeEvent, P2PLibp2pHandle};
+use crate::minecraft::p2p::libp2p_bridge::{BridgeEvent, P2PLibp2pHandle};
 
 pub const SIGNALING_PORT: u16 = 8765;
 

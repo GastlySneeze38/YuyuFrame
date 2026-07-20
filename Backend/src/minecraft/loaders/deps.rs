@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tauri::Emitter;
 
-use super::version_pred::{
+use crate::minecraft::versions::predicate::{
     normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed,
 };
 

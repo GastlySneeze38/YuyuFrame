@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 
-use crate::commands::instances::instance_dir;
-use crate::minecraft::version_pred::read_fabric_mod_json;
+use super::crud::instance_dir;
+use crate::minecraft::versions::predicate::read_fabric_mod_json;
 
 /// Indexe les mods déjà présents par leur id `fabric.mod.json` — sert à détecter
 /// les doublons (ex: "Fabric API" déjà installé en extra + ré-installé par le pack).

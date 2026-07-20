@@ -1,12 +1,5 @@
-pub mod auth;
-pub mod import;
-pub mod instances;
+pub mod account;
+pub mod instance;
 pub mod launch;
-pub mod mc;
-pub mod modpack;
-pub mod mods;
-pub mod stats;
 pub mod sync;
 pub mod system;
-pub mod versions;
-pub mod yuyu;
