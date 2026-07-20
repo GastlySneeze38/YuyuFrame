@@ -84,18 +84,22 @@ pub fn normalize_version(raw: &str, mc_version: &str, loader: &str) -> String {
         }
     }
 
-    for suffix in [format!("+mc{}", mc_version), format!("-mc{}", mc_version), format!("+{}", mc_version)] {
-        if let Some(rest) = s.strip_suffix(suffix.as_str()) {
-            s = rest.to_string();
-            break;
-        }
-    }
-
-    for suffix in [format!("-{}", loader), format!("+{}", loader)] {
-        if let Some(rest) = s.strip_suffix(suffix.as_str()) {
-            s = rest.to_string();
-            break;
-        }
+    // Boucle plutôt qu'un seul passage figé (mc puis loader) : certains mods
+    // empilent les deux dans un seul suffixe (ex: "+1.21.11-fabric") plutôt
+    // que dans l'ordre attendu par deux passages séparés. Un seul passage
+    // ratait alors le suffixe mc — déjà "mangé" par le -fabric terminal —
+    // laissant des chiffres de la version MC dans le "cœur" comparé, ce qui
+    // faisait échouer à tort une comparaison de version exacte sur un mod
+    // pourtant déjà à la bonne version (et donc le remplaçait pour rien).
+    let suffixes = [
+        format!("+mc{}", mc_version),
+        format!("-mc{}", mc_version),
+        format!("+{}", mc_version),
+        format!("-{}", loader),
+        format!("+{}", loader),
+    ];
+    while let Some(matched) = suffixes.iter().find(|suf| s.ends_with(suf.as_str())) {
+        s = s.strip_suffix(matched.as_str()).unwrap().to_string();
     }
 
     s

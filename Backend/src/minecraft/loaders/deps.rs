@@ -281,14 +281,53 @@ async fn install_dep(
     Ok(file.filename)
 }
 
+/// Fenêtre pendant laquelle une dépendance ayant échoué n'est PAS retentée.
+/// Sans ça, une dépendance sans version compatible sur Modrinth (contrainte
+/// trop stricte, mod jamais publié pour cette combo MC/loader...) refaisait
+/// sa recherche + tentative de téléchargement à CHAQUE lancement, pour
+/// échouer à nouveau à chaque fois — assez court pour retenter vite si
+/// l'utilisateur change de version ou qu'une version compatible sort entre
+/// temps, assez long pour ne pas spammer Modrinth sur une session de test.
+const DEP_FAILURE_COOLDOWN_SECS: i64 = 30 * 60;
+
+/// Fichier caché à la racine de l'instance (PAS dans mods_dir : mods_list ne
+/// liste que les .jar, mais autant rester hors de vue).
+fn dep_failures_path(mods_dir: &Path) -> PathBuf {
+    mods_dir.parent().unwrap_or(mods_dir).join(".dep_failures.json")
+}
+
+/// Charge les échecs récents encore dans la fenêtre de cooldown (les entrées
+/// plus vieilles sont silencieusement écartées — pas besoin de les réécrire,
+/// `save_recent_failures` ne persiste que ce qui a été effectivement revu
+/// dans cet appel).
+async fn load_recent_failures(mods_dir: &Path) -> HashMap<String, i64> {
+    let Ok(json) = tokio::fs::read_to_string(dep_failures_path(mods_dir)).await else {
+        return HashMap::new();
+    };
+    let all: HashMap<String, i64> = serde_json::from_str(&json).unwrap_or_default();
+    let now = chrono::Utc::now().timestamp();
+    all.into_iter().filter(|(_, ts)| now - ts < DEP_FAILURE_COOLDOWN_SECS).collect()
+}
+
+async fn save_recent_failures(mods_dir: &Path, failures: &HashMap<String, i64>) {
+    if failures.is_empty() {
+        let _ = tokio::fs::remove_file(dep_failures_path(mods_dir)).await;
+        return;
+    }
+    if let Ok(json) = serde_json::to_string(failures) {
+        let _ = tokio::fs::write(dep_failures_path(mods_dir), json).await;
+    }
+}
+
 /// Résout et installe les dépendances manquantes ou incompatibles pour tous les
 /// mods Fabric du dossier, en respectant les contraintes de version qu'ils
 /// déclarent. Itère jusqu'à ce qu'il n'y ait plus rien à installer (max 10 passes).
-/// Résout et installe les dépendances de mods manquantes. Retourne la liste
-/// des dépendances qui n'ont pas pu être installées (vide si tout a réussi)
-/// — l'appelant la remonte comme avertissement de lancement plutôt que de la
-/// laisser silencieuse dans les logs (une dépendance obligatoire manquante,
-/// ex: Fabric API pour Sodium, plante sinon le jeu au démarrage sans indice).
+/// Retourne la liste des dépendances qui n'ont pas pu être installées (vide si
+/// tout a réussi) — l'appelant la remonte comme avertissement de lancement
+/// plutôt que de la laisser silencieuse dans les logs (une dépendance
+/// obligatoire manquante, ex: Fabric API pour Sodium, plante sinon le jeu au
+/// démarrage sans indice). Inclut aussi les dépendances en cooldown (voir
+/// `DEP_FAILURE_COOLDOWN_SECS`), non retentées mais toujours signalées.
 pub async fn resolve_and_install_deps(
     mc_version: &str,
     loader: &str,
@@ -304,8 +343,9 @@ pub async fn resolve_and_install_deps(
         .user_agent("YuyuFrame/1.0")
         .build()?;
 
-    let mut already_tried: HashSet<String> = HashSet::new();
-    let mut failed: Vec<String> = Vec::new();
+    let mut recent_failures = load_recent_failures(mods_dir).await;
+    let mut already_tried: HashSet<String> = recent_failures.keys().cloned().collect();
+    let mut failed: Vec<String> = already_tried.iter().cloned().collect();
 
     for _ in 0..10 {
         let installed = scan_installed(mods_dir).await;
@@ -361,14 +401,19 @@ pub async fn resolve_and_install_deps(
                 }
             };
             match result {
-                Ok(filename) => tracing::info!("Dépendance installée : {}", filename),
+                Ok(filename) => {
+                    tracing::info!("Dépendance installée : {}", filename);
+                    recent_failures.remove(&dep_id);
+                }
                 Err(e) => {
                     tracing::warn!("Impossible d'installer «{}» : {}", dep_id, e);
-                    failed.push(dep_id);
+                    failed.push(dep_id.clone());
+                    recent_failures.insert(dep_id, chrono::Utc::now().timestamp());
                 }
             }
         }
     }
 
+    save_recent_failures(mods_dir, &recent_failures).await;
     Ok(failed)
 }
