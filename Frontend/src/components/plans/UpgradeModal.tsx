@@ -1,4 +1,6 @@
 import { PLANS } from '@/data/plans'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { CloseButton } from '@/components/ui/CloseButton'
 import { PlanIcon } from './PlanIcon'
 
 export type CheckoutState = 'idle' | 'loading' | 'waiting' | 'success' | 'timeout' | 'error'
@@ -42,17 +44,13 @@ export function UpgradeModal({
       >
         {/* Close */}
         {!busy && (
-          <button
+          <CloseButton
             onClick={onClose}
-            className="absolute right-4 top-4 flex items-center justify-center rounded-lg transition-all duration-150"
-            style={{ width: 28, height: 28, color: 'rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.04)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.25)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
+            className="absolute right-4 top-4"
+            idleColor="rgba(255,255,255,0.25)"
+            idleBg="rgba(255,255,255,0.04)"
+            hoverBg="rgba(255,255,255,0.08)"
+          />
         )}
 
         {/* Icon + title */}
@@ -104,7 +102,7 @@ export function UpgradeModal({
             className="flex flex-col items-center gap-3 rounded-xl p-5"
             style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
           >
-            <span className="h-8 w-8 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: planMeta.color }} />
+            <ButtonSpinner size={32} color={planMeta.color} trackColor="rgba(255,255,255,0.08)" />
             <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.6 }}>
               {checkoutState === 'loading' ? 'Création de la session de paiement...' : 'En attente de confirmation du paiement...\nCette fenêtre se mettra à jour automatiquement.'}
             </p>
@@ -181,7 +179,7 @@ export function UpgradeModal({
               }}
             >
               {refreshing
-                ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: 'rgba(255,255,255,0.5)' }} />
+                ? <ButtonSpinner size={14} color="rgba(255,255,255,0.5)" trackColor="rgba(255,255,255,0.1)" />
                 : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg>
               }
               {refreshing ? 'Vérification...' : 'Rafraîchir mon plan'}

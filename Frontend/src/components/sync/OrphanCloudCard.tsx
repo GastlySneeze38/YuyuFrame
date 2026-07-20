@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SyncInstance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatDateTime } from '@/lib/format'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloudContentSummary } from './CloudContentSummary'
 
 export function OrphanCloudCard({ ci, onRestore, onDelete }: {
@@ -78,7 +79,7 @@ export function OrphanCloudCard({ ci, onRestore, onDelete }: {
                 onMouseLeave={(e) => { if (!busy) e.currentTarget.style.background = 'rgba(74,222,128,0.1)' }}
               >
                 {restoring
-                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                  ? <ButtonSpinner size={14} />
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} style={{ transform: 'rotate(180deg)', flexShrink: 0 }}><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
                 }
                 Télécharger l'instance
@@ -93,7 +94,7 @@ export function OrphanCloudCard({ ci, onRestore, onDelete }: {
               onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.18)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
             >
               {deleting
-                ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'rgb(248,113,113)' }} />
+                ? <ButtonSpinner size={14} color="rgb(248,113,113)" trackColor="rgba(255,255,255,0.15)" />
                 : <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
               }
             </button>

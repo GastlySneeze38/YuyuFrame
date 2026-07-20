@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { CloseButton } from './CloseButton'
 
 // Avant ce fichier, cet overlay + cette carte existaient en copies quasi
 // identiques dans Instances.tsx (ModalShell local) et ImportSourceModal.tsx.
@@ -37,17 +38,7 @@ export function ModalShell({
         {title !== undefined && (
           <div className="flex flex-shrink-0 items-center justify-between">
             <p className="font-bold text-white" style={{ fontSize: 15 }}>{title}</p>
-            <button
-              onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150"
-              style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-              </svg>
-            </button>
+            <CloseButton onClick={onClose} />
           </div>
         )}
         {children}

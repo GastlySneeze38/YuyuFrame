@@ -12,20 +12,23 @@ export function DebugPanel() {
 
   // Polling — un seul agent local (propriétaire du port 3849) répond ; les autres
   // agents locaux (test multi-instance sur la même machine) lui poussent leurs stats
-  // via POST /report, agrégées ici dans peers_reported.
+  // via POST /report, agrégées ici dans peers_reported. Suspendu quand la fenêtre
+  // est en arrière-plan (minimisée/masquée) pour ne pas fetch inutilement.
   useEffect(() => {
     let alive = true
     async function poll() {
       while (alive) {
-        try {
-          const res = await fetch(OWNERSHIP_API)
-          if (res.ok) {
-            const json: OwnershipData = await res.json()
-            setData(json)
-            setError(false)
+        if (!document.hidden) {
+          try {
+            const res = await fetch(OWNERSHIP_API)
+            if (res.ok) {
+              const json: OwnershipData = await res.json()
+              setData(json)
+              setError(false)
+            }
+          } catch {
+            setError(true)
           }
-        } catch {
-          setError(true)
         }
         await new Promise(r => setTimeout(r, POLL_MS))
       }

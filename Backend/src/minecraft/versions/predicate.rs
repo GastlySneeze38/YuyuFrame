@@ -174,4 +174,60 @@ pub struct FabricModJson {
     pub depends: std::collections::HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub breaks: std::collections::HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub jars: Vec<NestedJarEntry>,
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct NestedJarEntry {
+    pub file: String,
+}
+
+/// Lit `fabric.mod.json` d'un jar, ainsi que les IDs des jars imbriqués
+/// (jar-in-jar, champ `jars`) qu'il embarque — ex: Fabric API qui empaquette
+/// fabric-networking-api-v1, fabric-resource-loader-v1... comme jars séparés
+/// plutôt que de tout déclarer sous le seul ID "fabric-api". Sans ça, un mod
+/// qui dépend directement d'un de ces sous-modules le voit comme manquant
+/// alors qu'il est bien présent (imbriqué), et le résolveur tente en vain de
+/// le télécharger séparément depuis Modrinth (échec systématique → cooldown).
+pub fn read_fabric_mod_json_with_nested(
+    jar_path: &std::path::Path,
+) -> Option<(FabricModJson, Vec<String>)> {
+    use std::io::Read;
+    let bytes = std::fs::read(jar_path).ok()?;
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor).ok()?;
+
+    let mut content = String::new();
+    {
+        let mut entry = archive.by_name("fabric.mod.json").ok()?;
+        entry.read_to_string(&mut content).ok()?;
+    }
+    let meta: FabricModJson = serde_json::from_str(&content).ok()?;
+
+    let mut nested_ids = Vec::new();
+    for nested in &meta.jars {
+        let nested_bytes = {
+            let Ok(mut nested_entry) = archive.by_name(&nested.file) else { continue };
+            let mut buf = Vec::new();
+            if nested_entry.read_to_end(&mut buf).is_err() {
+                continue;
+            }
+            buf
+        };
+        let Ok(mut nested_archive) = zip::ZipArchive::new(std::io::Cursor::new(nested_bytes)) else {
+            continue;
+        };
+        let Ok(mut nested_mod_json) = nested_archive.by_name("fabric.mod.json") else { continue };
+        let mut nested_content = String::new();
+        if nested_mod_json.read_to_string(&mut nested_content).is_err() {
+            continue;
+        }
+        drop(nested_mod_json);
+        if let Ok(nested_meta) = serde_json::from_str::<FabricModJson>(&nested_content) {
+            nested_ids.push(nested_meta.id);
+        }
+    }
+
+    Some((meta, nested_ids))
 }

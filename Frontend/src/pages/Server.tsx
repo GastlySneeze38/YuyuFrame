@@ -5,6 +5,7 @@ import { useStore } from '@/stores/useStore'
 import { BETA_TEST } from '@/config/beta'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { DebugPanel } from '@/components/server/DebugPanel'
+import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 
 export default function Server() {
   const navigate = useNavigate()
@@ -56,25 +57,8 @@ export default function Server() {
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
 
-      {/* Header — identique au gabarit standard de l'app (Stats/Settings/Plans) */}
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate('/home')}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
-
-        <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
-
+      <PageHeader>
+        <PageHeaderSeparator />
         <div>
           <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em', lineHeight: 1.2 }}>
             Serveur P2P
@@ -131,7 +115,7 @@ export default function Server() {
             </p>
           </div>
         )}
-      </div>
+      </PageHeader>
 
       {/* Content — pleine largeur, style tableau de bord (liste de serveurs + détail) */}
       <div className="flex-1 overflow-auto">

@@ -6,6 +6,8 @@ import type { Instance, SyncInstance } from '@/types'
 import { PremiumGate } from '@/components/ui/PremiumGate'
 import { InstanceSyncCard } from '@/components/sync/InstanceSyncCard'
 import { OrphanCloudCard } from '@/components/sync/OrphanCloudCard'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 
 // ── Sync content ──────────────────────────────────────────────────────────────
 
@@ -67,7 +69,7 @@ function SyncContent() {
   if (cloudLoading) {
     return (
       <div className="flex justify-center py-8">
-        <span className="h-5 w-5 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: 'rgba(75,63,207,0.8)' }} />
+        <ButtonSpinner size={20} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.08)" />
       </div>
     )
   }
@@ -136,21 +138,7 @@ export default function Sync() {
 
   return (
     <div className="flex h-full flex-col" style={{ background: '#09090D', color: 'white' }}>
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-5 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate('/home')}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
+      <PageHeader px={5}>
         <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em' }}>
           Synchronisation
         </h1>
@@ -159,7 +147,7 @@ export default function Sync() {
             {planLabel}
           </span>
         )}
-      </div>
+      </PageHeader>
 
       <div className="flex-1 overflow-y-auto p-5">
         {!yuyuToken ? (

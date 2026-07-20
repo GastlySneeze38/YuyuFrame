@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { Mod } from '@/types'
 import { formatBytes, formatDownloadCount } from '@/lib/format'
 import { Spinner } from '@/components/ui/Spinner'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { CloseButton } from '@/components/ui/CloseButton'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import {
   fetchProjectDetail, fetchProjectVersions, stripMarkdown, versionTypeBadge, formatGameVersions,
@@ -85,15 +87,7 @@ export function ModDetailModal({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg"
-            style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
 
         {/* Description complète (repliable) */}
@@ -180,7 +174,7 @@ export function ModDetailModal({
                     }}
                   >
                     {installing ? (
-                      <span className="h-3 w-3 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'white' }} />
+                      <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
                     ) : isInstalledVersion ? '✓ Installée' : installedMod ? 'Basculer' : 'Installer'}
                   </button>
                 </div>

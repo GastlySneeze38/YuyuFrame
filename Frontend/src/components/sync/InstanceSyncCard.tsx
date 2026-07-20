@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import type { Instance, SaveInfo, SyncInstance, SyncProgress } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRelativeTime } from '@/lib/format'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
 import { SaveSelector } from './SaveSelector'
@@ -225,7 +226,7 @@ export function InstanceSyncCard({
           {/* Save selector */}
           {savesLoading ? (
             <div className="flex items-center gap-2 py-1">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: 'rgba(75,63,207,0.8)' }} />
+              <ButtonSpinner size={14} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.08)" />
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>Chargement des saves...</span>
             </div>
           ) : (
@@ -268,7 +269,7 @@ export function InstanceSyncCard({
                 onMouseLeave={(e) => { if (!busy) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
               >
                 {pulling
-                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                  ? <ButtonSpinner size={14} />
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} style={{ transform: 'rotate(180deg)', flexShrink: 0 }}><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
                 }
                 Restaurer
@@ -290,7 +291,7 @@ export function InstanceSyncCard({
               onMouseLeave={(e) => { if (!pushing && !savesLoading) e.currentTarget.style.background = '#4B3FCF' }}
             >
               {pushing
-                ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                ? <ButtonSpinner size={14} />
                 : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} style={{ flexShrink: 0 }}><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
               }
               {pushing
@@ -313,7 +314,7 @@ export function InstanceSyncCard({
                 onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.18)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
               >
                 {deleting
-                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'rgb(248,113,113)' }} />
+                  ? <ButtonSpinner size={14} color="rgb(248,113,113)" trackColor="rgba(255,255,255,0.15)" />
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                 }
               </button>

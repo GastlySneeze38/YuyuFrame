@@ -9,7 +9,8 @@ use tokio::task::JoinSet;
 
 use crate::minecraft::mod_files::is_enabled_jar;
 use crate::minecraft::versions::predicate::{
-    normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed,
+    normalize_version, parse_predicate_groups, read_fabric_mod_json,
+    read_fabric_mod_json_with_nested, version_allowed,
 };
 
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
@@ -70,7 +71,14 @@ async fn scan_installed(mods_dir: &Path) -> HashMap<String, InstalledMod> {
             if !is_enabled_jar(&name) {
                 continue;
             }
-            if let Some(meta) = read_fabric_mod_json(&path) {
+            if let Some((meta, nested_ids)) = read_fabric_mod_json_with_nested(&path) {
+                // Jars imbriqués (jar-in-jar) : toujours considérés compatibles,
+                // comme fabric-api lui-même — voir doc de `read_fabric_mod_json_with_nested`.
+                for nested_id in nested_ids {
+                    installed
+                        .entry(nested_id)
+                        .or_insert_with(|| InstalledMod { version: String::new(), path: path.clone() });
+                }
                 installed.insert(meta.id, InstalledMod { version: meta.version, path });
             }
         }

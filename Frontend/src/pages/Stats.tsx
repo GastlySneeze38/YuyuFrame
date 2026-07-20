@@ -7,6 +7,8 @@ import { loaderColor } from '@/lib/loader'
 import { formatDuration, formatShortDate, formatTime, getLast14Days, formatDayLabel } from '@/lib/format'
 import { PremiumGate } from '@/components/ui/PremiumGate'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 
 export default function Stats() {
   const navigate = useNavigate()
@@ -35,25 +37,8 @@ export default function Stats() {
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
 
-      {/* Header */}
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate('/home')}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
-
-        <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
-
+      <PageHeader>
+        <PageHeaderSeparator />
         <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em' }}>
           Stats & Analytics
         </h1>
@@ -61,7 +46,7 @@ export default function Stats() {
         <span style={{ fontSize: 10, fontWeight: 700, color: planColor.color, background: planColor.bg, padding: '2px 8px', borderRadius: 6, letterSpacing: '0.05em' }}>
           {planLabel}
         </span>
-      </div>
+      </PageHeader>
 
       <div className="flex-1 overflow-auto">
       <div className="mx-auto w-full max-w-5xl px-6 py-8 flex flex-col gap-8">
@@ -80,7 +65,7 @@ export default function Stats() {
           />
         ) : loading ? (
           <div className="flex items-center justify-center py-20">
-            <span className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: '#818cf8' }} />
+            <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
           </div>
         ) : error ? (
           <div className="rounded-2xl px-5 py-4" style={{ background: 'rgba(200,50,50,0.08)', border: '1px solid rgba(200,50,50,0.2)' }}>

@@ -3,6 +3,7 @@ import { formatDownloadCount } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 
 export function ModpackBrowseTab({ query, results, searching, error, installing, onQueryChange, onInstall }: {
   query: string
@@ -32,8 +33,7 @@ export function ModpackBrowseTab({ query, results, searching, error, installing,
           onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
         />
         {searching && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin rounded-full border-2"
-            style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: 'rgba(75,63,207,0.8)' }} />
+          <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
         )}
       </div>
 
@@ -71,7 +71,7 @@ export function ModpackBrowseTab({ query, results, searching, error, installing,
               }}
             >
               {installing === hit.project_id ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'white' }} />
+                <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
               ) : 'Installer'}
             </button>
           </div>

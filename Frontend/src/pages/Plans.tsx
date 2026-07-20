@@ -10,6 +10,7 @@ import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PlanIcon } from '@/components/plans/PlanIcon'
 import { DevPaymentSimulator } from '@/components/plans/DevPaymentSimulator'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 
 export default function Plans() {
   const navigate = useNavigate()
@@ -141,7 +142,7 @@ export default function Plans() {
                   onMouseLeave={(e) => { if (!refreshing) (e.currentTarget as HTMLElement).style.color = 'rgba(75,63,207,0.7)' }}
                 >
                   {refreshing ? (
-                    <span className="h-3 w-3 animate-spin rounded-full border-2 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: 'rgba(75,63,207,0.6)' }} />
+                    <ButtonSpinner size={12} color="rgba(75,63,207,0.6)" trackColor="rgba(255,255,255,0.1)" />
                   ) : (
                     <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}>
                       <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />

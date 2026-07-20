@@ -1,5 +1,6 @@
 import { formatDownloadCount } from '@/lib/format'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import type { ModrinthHit } from './modUtils'
 
 export function ModrinthCard({ hit, installed, loading, onInstall, onOpenDetail }: {
@@ -40,7 +41,7 @@ export function ModrinthCard({ hit, installed, loading, onInstall, onOpenDetail 
         onMouseLeave={(e) => { if (!installed && !loading) e.currentTarget.style.background = 'rgba(75,63,207,0.3)' }}
       >
         {loading ? (
-          <span className="h-3 w-3 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: 'white' }} />
+          <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
         ) : installed ? '✓ Installé' : 'Installer'}
       </button>
     </div>

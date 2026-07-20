@@ -1,5 +1,6 @@
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import type { ModrinthHit } from './modUtils'
 import { ModrinthCard } from './ModrinthCard'
 
@@ -37,8 +38,7 @@ export function BrowseTab({
           onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
         />
         {searching && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin rounded-full border-2"
-            style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: 'rgba(75,63,207,0.8)' }} />
+          <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
         )}
       </div>
 

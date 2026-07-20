@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/stores/useStore'
+import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
+import { Toggle } from '@/components/ui/Toggle'
 
 export default function Settings() {
-  const navigate = useNavigate()
   const {
     brightness, setBrightness, defaultRam, setDefaultRam, closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
@@ -12,31 +12,8 @@ export default function Settings() {
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
 
-      {/* Header */}
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate('/home')}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
-            e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'rgba(255,255,255,0.35)'
-            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
-
-        <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
-
+      <PageHeader>
+        <PageHeaderSeparator />
         <div>
           <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em', lineHeight: 1.2 }}>
             Paramètres
@@ -45,7 +22,7 @@ export default function Settings() {
             Configuration de YuyuFrame
           </p>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-8">
@@ -97,23 +74,7 @@ export default function Settings() {
                     Cache le launcher pendant que le jeu tourne
                   </p>
                 </div>
-                <button
-                  onClick={() => setCloseOnLaunch(!closeOnLaunch)}
-                  className="relative flex-shrink-0 rounded-full transition-all duration-200"
-                  style={{
-                    width: 44, height: 24,
-                    background: closeOnLaunch ? 'rgba(75,63,207,0.8)' : 'rgba(255,255,255,0.1)',
-                    border: `1px solid ${closeOnLaunch ? 'rgba(75,63,207,1)' : 'rgba(255,255,255,0.15)'}`,
-                  }}
-                >
-                  <span
-                    className="absolute top-0.5 rounded-full bg-white transition-all duration-200"
-                    style={{
-                      width: 18, height: 18,
-                      left: closeOnLaunch ? 22 : 2,
-                    }}
-                  />
-                </button>
+                <Toggle checked={closeOnLaunch} onChange={() => setCloseOnLaunch(!closeOnLaunch)} />
               </div>
 
               <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
@@ -126,23 +87,7 @@ export default function Settings() {
                     N'installe jamais automatiquement une version beta/alpha/RC d'un mod requis (ex: Sodium) — évite les incompatibilités avec les mods qui ne les supportent pas encore
                   </p>
                 </div>
-                <button
-                  onClick={() => setAvoidBetaDependencies(!avoidBetaDependencies)}
-                  className="relative flex-shrink-0 rounded-full transition-all duration-200"
-                  style={{
-                    width: 44, height: 24,
-                    background: avoidBetaDependencies ? 'rgba(75,63,207,0.8)' : 'rgba(255,255,255,0.1)',
-                    border: `1px solid ${avoidBetaDependencies ? 'rgba(75,63,207,1)' : 'rgba(255,255,255,0.15)'}`,
-                  }}
-                >
-                  <span
-                    className="absolute top-0.5 rounded-full bg-white transition-all duration-200"
-                    style={{
-                      width: 18, height: 18,
-                      left: avoidBetaDependencies ? 22 : 2,
-                    }}
-                  />
-                </button>
+                <Toggle checked={avoidBetaDependencies} onChange={() => setAvoidBetaDependencies(!avoidBetaDependencies)} />
               </div>
 
               <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
@@ -155,20 +100,7 @@ export default function Settings() {
                     Applique automatiquement ton options.txt (touches, vidéo…) à chaque nouvelle instance — exporte-le depuis l'instance de ton choix via le bouton ··· dans la liste
                   </p>
                 </div>
-                <button
-                  onClick={() => setSyncGameSettings(!syncGameSettings)}
-                  className="relative flex-shrink-0 rounded-full transition-all duration-200"
-                  style={{
-                    width: 44, height: 24,
-                    background: syncGameSettings ? 'rgba(75,63,207,0.8)' : 'rgba(255,255,255,0.1)',
-                    border: `1px solid ${syncGameSettings ? 'rgba(75,63,207,1)' : 'rgba(255,255,255,0.15)'}`,
-                  }}
-                >
-                  <span
-                    className="absolute top-0.5 rounded-full bg-white transition-all duration-200"
-                    style={{ width: 18, height: 18, left: syncGameSettings ? 22 : 2 }}
-                  />
-                </button>
+                <Toggle checked={syncGameSettings} onChange={() => setSyncGameSettings(!syncGameSettings)} />
               </div>
 
               <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />

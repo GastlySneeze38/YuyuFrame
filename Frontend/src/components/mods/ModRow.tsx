@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { Mod } from '@/types'
 import { formatBytes } from '@/lib/format'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
+import { Toggle } from '@/components/ui/Toggle'
+import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { displayName, type ModUpdate } from './modUtils'
 
 export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, onToggle, onDelete, onUpdate }: {
@@ -71,7 +73,7 @@ export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, 
                   <path d="M12 2L1 21h22L12 2zm0 4.5L19.5 19h-15L12 6.5zM11 10v5h2v-5h-2zm0 6v2h2v-2h-2z" />
                 </svg>
               ) : updating ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: 'rgba(250,204,21,0.6)' }} />
+                <ButtonSpinner size={12} color="rgba(250,204,21,0.6)" trackColor="rgba(255,255,255,0.1)" />
               ) : (
                 <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}>
                   <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
@@ -81,11 +83,7 @@ export function ModRow({ mod, version, modrinthName, update, updating, logoUrl, 
             </button>
           )
         })()}
-        <button onClick={onToggle} title={mod.enabled ? 'Désactiver' : 'Activer'}
-          className="relative flex-shrink-0"
-          style={{ width: 40, height: 22, borderRadius: 11, background: mod.enabled ? '#4B3FCF' : 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer' }}>
-          <span className="absolute transition-all duration-200" style={{ top: 3, left: mod.enabled ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.4)' }} />
-        </button>
+        <Toggle checked={mod.enabled} onChange={onToggle} size="sm" title={mod.enabled ? 'Désactiver' : 'Activer'} />
         {confirm ? (
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={() => { onDelete(); setConfirm(false) }} style={{ fontSize: 10, fontWeight: 600, color: 'rgb(248,113,113)', background: 'rgba(200,50,50,0.15)', borderRadius: 7, padding: '3px 7px' }}>Suppr.</button>
