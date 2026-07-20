@@ -68,6 +68,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         super("armor-durability", "Armure/Durabilité", "Durabilité de l'armure et de l'objet en main", false,
             new HudElement("armor-durability", "Armure/Durabilité", HudAnchor.BOTTOM_RIGHT, 8f, 8f,
                 (HudElement.CustomRenderer) RENDERER));
+        iconUrl = icons8("shield");
     }
 
     @Override

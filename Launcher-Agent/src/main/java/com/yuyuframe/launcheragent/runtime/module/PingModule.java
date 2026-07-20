@@ -15,6 +15,7 @@ public final class PingModule extends SingleHudModule {
             new HudElement("ping", "Ping", HudAnchor.TOP_RIGHT, 8f, 8f, new ContentSource()));
         hudElement().textColor = new UiColor(120, 220, 140, 255);
         hudElement().accentSuffix = " ms";
+        iconUrl = icons8("wifi");
     }
 
     /** Ping réel du joueur local — retrouve le PlayerListEntry via son UUID (même chemin que l'onglet multijoueur vanilla). */

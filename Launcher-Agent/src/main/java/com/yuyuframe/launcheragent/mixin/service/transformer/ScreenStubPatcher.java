@@ -353,11 +353,49 @@ public final class ScreenStubPatcher {
             final String realKeyPressedEventName = MappingsRegistry.getObfMethodName(
                 "net/minecraft/client/gui/Element", "keyPressed", "(L" + officialKeyEvent + ";)Z");
 
+            /*
+             * BUG TROUVÉ (retour utilisateur : "en 1.8.9 on ne peut plus
+             * cliquer sur les boutons — même pas le bouton fermer", AUCUNE
+             * exception nulle part dans les logs) — le renommage ci-dessus ne
+             * couvre QUE les surcharges mouseClicked/keyPressed qui RENVOIENT
+             * un booléen (déclarées sur l'interface Element, brackets 1.13+).
+             * UiScreenBase.mouseClicked(int,int,int)/keyTyped(char,int) —
+             * signature RÉELLE historique de GuiScreen 1.8.9 (void, pas
+             * d'interface Element séparée à cette époque) — n'était JAMAIS
+             * renommée : le commentaire d'origine de ces deux méthodes
+             * affirmait à tort que leur nom "n'a jamais été renommé depuis"
+             * (vrai pour le nom MCP/Yarn NAMED, "mouseClicked"/lisible par un
+             * humain) — mais le nom RÉEL en bytecode obfusqué (celui que la
+             * JVM utilise pour lier un override) est complètement différent :
+             * confirmé dans mappings/mappings-1.8.9.tiny (classe axu =
+             * Screen/class_388) : {@code mouseClicked(III)V} → officiel "a"
+             * (method_1026), {@code keyPressed(CI)V} → officiel "a" aussi
+             * (method_1024, nommé "keyPressed" côté Yarn même si sémantiquement
+             * c'est notre keyTyped). Nos deux méthodes, toujours nommées
+             * littéralement "mouseClicked"/"keyTyped" en bytecode, ne
+             * correspondaient donc à AUCUN override réel — jamais appelées
+             * par le jeu, sans la moindre exception (une méthode qui n'est
+             * juste jamais invoquée n'en lève aucune). Résolues ici via
+             * Screen (PAS Element, qui n'existe pas en 1.8.9 — la requête y
+             * échouerait silencieusement et retomberait sur le nom Yarn
+             * inchangé) ; sur les brackets modernes (aucune méthode
+             * mouseClicked/keyPressed de CETTE forme précise sur Screen),
+             * getObfMethodName ne trouve rien et renvoie le nom Yarn tel
+             * quel — même garde-fou déjà établi pour Click/KeyInput/
+             * MouseButtonEvent/KeyEvent ci-dessus : la surcharge reste juste
+             * inerte, sans risque, sur les versions où elle ne s'applique pas.
+             */
+            final String realMouseClickedVoidName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/screen/Screen", "mouseClicked", "(III)V");
+            final String realKeyTypedVoidName = MappingsRegistry.getObfMethodName(
+                "net/minecraft/client/gui/screen/Screen", "keyPressed", "(CI)V");
+
             LauncherLog.asm(1, "[LauncherAgent ASM] " + cr.getClassName() + ": Screen=" + realScreen
                     + "  Text=" + realComp + "  noArgCtor=" + screenNoArgOk
                     + "  mouseClicked(DDI)->" + realMouseClickedName + "  keyPressed(III)->" + realKeyPressedName
                     + "  mouseClicked(Click)->" + realMouseClickedClickName + "  keyPressed(KeyInput)->" + realKeyPressedKeyInputName
-                    + "  mouseClicked(MouseButtonEvent)->" + realMouseClickedEventName + "  keyPressed(KeyEvent)->" + realKeyPressedEventName);
+                    + "  mouseClicked(MouseButtonEvent)->" + realMouseClickedEventName + "  keyPressed(KeyEvent)->" + realKeyPressedEventName
+                    + "  mouseClicked(III)V->" + realMouseClickedVoidName + "  keyTyped(CI)V->" + realKeyTypedVoidName);
             ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS) {
                 @Override protected String getCommonSuperClass(String t1, String t2) {
                     return "java/lang/Object";
@@ -426,6 +464,10 @@ public final class ScreenStubPatcher {
                         runtimeName = realMouseClickedEventName;
                     } else if ("keyPressed".equals(name) && ("(L" + STUB_KEY_EVENT + ";)Z").equals(descriptor)) {
                         runtimeName = realKeyPressedEventName;
+                    } else if ("mouseClicked".equals(name) && "(III)V".equals(descriptor)) {
+                        runtimeName = realMouseClickedVoidName;
+                    } else if ("keyTyped".equals(name) && "(CI)V".equals(descriptor)) {
+                        runtimeName = realKeyTypedVoidName;
                     } else {
                         runtimeName = OVERRIDE_METHODS.translate(name, descriptor);
                     }

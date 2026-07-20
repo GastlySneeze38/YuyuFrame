@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
@@ -281,8 +282,14 @@ public final class ConfigScreenBuilder {
             float barW = UiTheme.scaled(3f), barInset = UiTheme.scaled(3f);
             renderer.drawRoundedRect(x, y + barInset, x + barW, y + h - barInset, barW / 2f,
                 UiTheme.ACCENT.multiplyAlpha(clipFade), vpWidth, vpHeight);
+            // Traduit ICI, à l'affichage uniquement — "label" reste le texte
+            // source (français) partout ailleurs dans cette classe (jamais
+            // utilisé comme clé de recherche par ce widget lui-même, mais
+            // CategoryTab (UiModConfigScreen) s'en sert comme clé dans
+            // anchors — même principe, voir sa javadoc de classe).
+            String displayLabel = Lang.tr(label);
             float scale = UiTheme.scaled(0.5f);
-            renderer.drawTextShadowed(UiFont.BOLD, label, x + barW + UiTheme.scaled(10f), y + h / 2f - UiTheme.scaled(6f),
+            renderer.drawTextShadowed(UiFont.BOLD, displayLabel, x + barW + UiTheme.scaled(10f), y + h / 2f - UiTheme.scaled(6f),
                 UiTheme.TEXT_PRIMARY.multiplyAlpha(clipFade), new UiColor(0, 0, 0, 150).multiplyAlpha(clipFade),
                 scale, scale, scale, vpWidth, vpHeight);
 
@@ -298,8 +305,9 @@ public final class ConfigScreenBuilder {
                 renderer.drawRoundedRect(actionX(), actionY(), actionX() + actionW(), actionY() + actionH(),
                     UiTheme.RADIUS_SM, btnColor.multiplyAlpha(clipFade), vpWidth, vpHeight);
                 float actionScale = UiTheme.scaled(0.4f);
-                float tw = renderer.textWidth(actionLabel, actionScale);
-                renderer.drawText(actionLabel, actionX() + (actionW() - tw) / 2f, actionY() + actionH() / 2f - UiTheme.scaled(4f),
+                String displayAction = Lang.tr(actionLabel);
+                float tw = renderer.textWidth(displayAction, actionScale);
+                renderer.drawText(displayAction, actionX() + (actionW() - tw) / 2f, actionY() + actionH() / 2f - UiTheme.scaled(4f),
                     UiTheme.TEXT_PRIMARY.multiplyAlpha(clipFade), actionScale, vpWidth, vpHeight);
             }
         }
@@ -312,20 +320,20 @@ public final class ConfigScreenBuilder {
         List<UiWidget> rows = byCategory.computeIfAbsent(category, k -> new ArrayList<>());
         float cursor = 0f;
 
-        cursor = toggleRow(rows, x, w, cursor, "Verrouillé",
-            "Empêche de déplacer/redimensionner cet élément dans l'éditeur de HUD.",
+        cursor = toggleRow(rows, x, w, cursor, Lang.tr("Verrouillé"),
+            Lang.tr("Empêche de déplacer/redimensionner cet élément dans l'éditeur de HUD."),
             element.locked, v -> { element.locked = v; module.onConfigChanged(); HudConfigStore.save(); });
-        cursor = toggleRow(rows, x, w, cursor, "Afficher même avec un écran ouvert",
-            "Reste visible pendant le chat, l'inventaire ou tout autre écran (sauf nos propres menus).",
+        cursor = toggleRow(rows, x, w, cursor, Lang.tr("Afficher même avec un écran ouvert"),
+            Lang.tr("Reste visible pendant le chat, l'inventaire ou tout autre écran (sauf nos propres menus)."),
             element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); HudConfigStore.save(); });
-        cursor = sliderRow(rows, x, w, cursor, "Échelle",
-            "Taille de toute la boîte (largeur ET hauteur ensemble, jamais l'une sans l'autre).",
+        cursor = sliderRow(rows, x, w, cursor, Lang.tr("Échelle"),
+            Lang.tr("Taille de toute la boîte (largeur ET hauteur ensemble, jamais l'une sans l'autre)."),
             HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); HudConfigStore.save(); }, null);
-        cursor = sliderRow(rows, x, w, cursor, "Marge horizontale",
-            "Espace entre le bord de la boîte et le contenu (X).",
+        cursor = sliderRow(rows, x, w, cursor, Lang.tr("Marge horizontale"),
+            Lang.tr("Espace entre le bord de la boîte et le contenu (X)."),
             0f, 20f, 1f, element.paddingX, v -> { element.paddingX = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
-        cursor = sliderRow(rows, x, w, cursor, "Marge verticale",
-            "Espace entre le bord de la boîte et le contenu (Y).",
+        cursor = sliderRow(rows, x, w, cursor, Lang.tr("Marge verticale"),
+            Lang.tr("Espace entre le bord de la boîte et le contenu (Y)."),
             0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
 
         // Réinitialise anchor/offset (voir HudElement.resetPosition) — devait
@@ -338,12 +346,18 @@ public final class ConfigScreenBuilder {
             // buildContinuous (demande explicite : "le bouton réinitialiser
             // la position, place le dans le titre HUD pour tout les hud") —
             // déplacé DANS l'en-tête de section, plus de ligne dédiée.
+            // NOTE traduction : la clé de "category" (utilisée pour anchors/
+            // navigation) reste TOUJOURS le texte source français — le LABEL
+            // affiché (ici, l'action du header) reste NON traduit ici aussi :
+            // SectionHeader.draw() traduit "actionLabel" lui-même à
+            // l'affichage (seul point de traduction, pour éviter de
+            // traduire deux fois — voir sa javadoc).
             headerActions.put(category, resetAction);
             headerActionLabels.put(category, "Réinitialiser la position");
         } else {
             // build() legacy (voir UiModGroupConfigScreen, pas d'en-tête de
             // section dans ce mode) — comportement inchangé, ligne normale.
-            cursor = buttonRow(rows, x, w, cursor, "Réinitialiser la position", resetAction);
+            cursor = buttonRow(rows, x, w, cursor, Lang.tr("Réinitialiser la position"), resetAction);
         }
 
         cursors.put(category, cursor);
@@ -361,28 +375,30 @@ public final class ConfigScreenBuilder {
     private static float addRow(List<UiWidget> rows, Field field, LauncherModule module, float x, float w, float cursor) {
         if (field.isAnnotationPresent(ConfigToggle.class)) {
             ConfigToggle a = field.getAnnotation(ConfigToggle.class);
-            return toggleRow(rows, x, w, cursor, a.name(), a.description(), getBoolean(field, module),
+            return toggleRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), getBoolean(field, module),
                 v -> { setBoolean(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigSlider.class)) {
             ConfigSlider a = field.getAnnotation(ConfigSlider.class);
-            return sliderRow(rows, x, w, cursor, a.name(), a.description(), a.min(), a.max(), a.step(), getFloat(field, module),
+            return sliderRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), a.min(), a.max(), a.step(), getFloat(field, module),
                 v -> { setFloat(field, module, v); module.onConfigChanged(); HudConfigStore.save(); },
                 dependencySupplier(module, a.dependsOnField(), a.dependsOnValue()));
         }
         if (field.isAnnotationPresent(ConfigColor.class)) {
             ConfigColor a = field.getAnnotation(ConfigColor.class);
-            return colorRow(rows, x, w, cursor, a.name(), a.description(), getColor(field, module),
+            return colorRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), getColor(field, module),
                 v -> { setColor(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigDropdown.class)) {
             ConfigDropdown a = field.getAnnotation(ConfigDropdown.class);
-            return dropdownRow(rows, x, w, cursor, a.name(), a.description(), Arrays.asList(a.options()), getInt(field, module),
+            List<String> translatedOptions = new ArrayList<>();
+            for (String opt : a.options()) translatedOptions.add(Lang.tr(opt));
+            return dropdownRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), translatedOptions, getInt(field, module),
                 v -> { setInt(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         if (field.isAnnotationPresent(ConfigKeybind.class)) {
             ConfigKeybind a = field.getAnnotation(ConfigKeybind.class);
-            return keybindRow(rows, x, w, cursor, a.name(), a.description(), getString(field, module),
+            return keybindRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), getString(field, module),
                 v -> { setString(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
         }
         return cursor;

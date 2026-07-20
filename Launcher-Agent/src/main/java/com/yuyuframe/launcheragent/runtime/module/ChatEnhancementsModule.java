@@ -73,24 +73,14 @@ public final class ChatEnhancementsModule extends LauncherModule {
 
     public ChatEnhancementsModule() {
         super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false);
+        iconUrl = icons8("chat");
     }
-
-    private static boolean mixinDiagLogged;
 
     /** Appelé par {@code ChatListenerMixin261} — voir javadoc de tête pour le pourquoi (fiabilité face au polling par tick). */
     public static void onChatMessageObserved() {
         try {
             com.yuyuframe.launcheragent.runtime.ui.LauncherModule module =
                 com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry.get("chat-enhancements");
-            // Diag une seule fois, INCONDITIONNEL (même si désactivé) : sans ça,
-            // impossible de savoir si le Mixin appelle même bien cette méthode,
-            // et si la résolution du module/son état "activé" est correcte.
-            if (!mixinDiagLogged) {
-                mixinDiagLogged = true;
-                LauncherLog.info("[ChatEnhancementsModule] onChatMessageObserved diag: module=" + module
-                    + " isChatEnhancementsModule=" + (module instanceof ChatEnhancementsModule)
-                    + " enabled=" + (module != null ? module.isEnabled() : "n/a"));
-            }
             if (module instanceof ChatEnhancementsModule && module.isEnabled()) {
                 ((ChatEnhancementsModule) module).checkChatState();
             }
@@ -104,17 +94,9 @@ public final class ChatEnhancementsModule extends LauncherModule {
         checkChatState();
     }
 
-    private static boolean checkChatStateEntryLogged;
-    private static boolean chainDiagLogged;
-
     private void checkChatState() {
         try {
             Object mc = McReflect.minecraftClient();
-            // Diag une seule fois, INCONDITIONNEL — voir onChatMessageObserved().
-            if (!checkChatStateEntryLogged) {
-                checkChatStateEntryLogged = true;
-                LauncherLog.info("[ChatEnhancementsModule] checkChatState diag: mc=" + mc);
-            }
             if (mc == null) return;
             // 26.1+ : InGameHud→Gui, champ "inGameHud"→"gui" ; ChatHud→ChatComponent,
             // champ "chatHud"→"chat" (vérifiés par javap sur le jar client 26.1.2
@@ -144,11 +126,6 @@ public final class ChatEnhancementsModule extends LauncherModule {
             // n'existe plus du tout) — dégrade proprement plus bas (aucun crash,
             // juste la fusion visuelle qui ne s'applique pas sur 26.1+).
             Field messagesField = McReflect.field(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "messages", "allMessages");
-            if (!chainDiagLogged) {
-                chainDiagLogged = true;
-                LauncherLog.info("[ChatEnhancementsModule] checkChatState chain diag: inGameHudField=" + inGameHudField
-                    + " chatHud=" + chatHud + " messagesField=" + messagesField);
-            }
             if (messagesField == null) return;
             Object messagesObj = messagesField.get(chatHud);
             if (!(messagesObj instanceof List)) return;
@@ -208,18 +185,6 @@ public final class ChatEnhancementsModule extends LauncherModule {
                 // autre joueur).
                 String body = SENDER_TAG_PREFIX.matcher(plain).replaceFirst("");
                 boolean matched = username != null && !username.isEmpty() && body.toLowerCase().contains(username.toLowerCase());
-
-                // Diag pour CHAQUE nouveau message (pas juste une fois) — borné
-                // par la dédup déjà en place plus haut (une ligne par message
-                // RÉELLEMENT nouveau, pas par tick). Sans ça, impossible de
-                // savoir si un message précis n'a pas matché (mauvaise
-                // comparaison) ou n'a même jamais été vu comme "le plus récent"
-                // (plusieurs messages arrivés dans le même tick — un lobby
-                // Hypixel très actif en reçoit beaucoup — voir
-                // project_mc_261_port.md).
-                LauncherLog.info("[ChatEnhancementsModule] pingOnMention diag: sessionField=" + sessionField
-                    + " session=" + session + " getUsername=" + getUsername + " username=" + username
-                    + " plain=\"" + plain + "\" matched=" + matched);
 
                 if (matched) playPingSound(mc);
             }
@@ -290,11 +255,6 @@ public final class ChatEnhancementsModule extends LauncherModule {
                         ? McReflect.method(soundInstanceClass, "net/minecraft/client/sound/PositionedSoundInstance", "ui", "forUI", cachedOrbSoundEvent.getClass(), float.class)
                         : null;
                 }
-                // Diag une seule fois : sans ça, un échec de résolution silencieux
-                // (aucune exception, juste un "return" plus bas) ne laisse AUCUNE
-                // trace dans les logs — impossible à diagnostiquer à distance.
-                LauncherLog.info("[ChatEnhancementsModule] playPingSound diag: orbSound=" + cachedOrbSoundEvent
-                    + " getSoundManager=" + cachedGetSoundManager + " forUi=" + cachedForUi);
             }
             if (cachedOrbSoundEvent == null || cachedGetSoundManager == null || cachedForUi == null) return;
 
@@ -353,8 +313,6 @@ public final class ChatEnhancementsModule extends LauncherModule {
      * {@code false} si le mécanisme n'est pas disponible sur ce bracket —
      * l'appelant ne doit alors PAS mettre à jour son état de dédoublonnage.
      */
-    private static boolean mergeResolveDiagLogged;
-
     private boolean mergeRepeatedMessage(Object chatHud, List<Object> messages, Object headLine, Method getText, String combinedText) {
         try {
             Method sourceMethod = McReflect.noArgMethod(headLine.getClass(), "net/minecraft/client/gui/hud/ChatHudLine", "source");
@@ -386,15 +344,6 @@ public final class ChatEnhancementsModule extends LauncherModule {
             // + message combiné), il fait disparaître les anciennes lignes en
             // trop.
             Method rescaleChat = McReflect.noArgMethod(chatHud.getClass(), "net/minecraft/client/gui/hud/ChatHud", "rescaleChat");
-
-            // Diag une seule fois — voir playPingSound() pour le pourquoi (échec
-            // silencieux sinon, aucune trace en cas de "return false" plus bas).
-            if (!mergeResolveDiagLogged) {
-                mergeResolveDiagLogged = true;
-                LauncherLog.info("[ChatEnhancementsModule] mergeRepeatedMessage diag: source=" + sourceMethod
-                    + " tag=" + tagMethod + " signature=" + signatureMethod + " textClass=" + textClass
-                    + " literal=" + literalMethod + " addMessage4=" + addMessage4 + " rescaleChat=" + rescaleChat);
-            }
 
             if (sourceMethod == null || tagMethod == null || signatureMethod == null) return false;
             if (textClass == null || literalMethod == null) return false;

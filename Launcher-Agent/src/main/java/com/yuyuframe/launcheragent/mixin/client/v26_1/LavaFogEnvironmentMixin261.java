@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.module.ClearVisionModule;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import net.minecraft.client.Camera;
@@ -28,7 +29,7 @@ public abstract class LavaFogEnvironmentMixin261 {
             at = @At("TAIL"), require = 0)
     private void la$clearFog(FogData fogData, Camera camera, ClientLevel level, float partialTick, DeltaTracker deltaTracker, CallbackInfo ci) {
         try {
-            if (!clearVisionOrNoFogEnabled() || fogData == null) return;
+            if (!shouldClear() || fogData == null) return;
             fogData.environmentalStart = FAR;
             fogData.environmentalEnd = FAR * 2f;
             fogData.renderDistanceStart = FAR;
@@ -38,10 +39,12 @@ public abstract class LavaFogEnvironmentMixin261 {
         }
     }
 
-    private static boolean clearVisionOrNoFogEnabled() {
-        LauncherModule clearVision = ModuleRegistry.get("clear-vision");
-        if (clearVision != null && clearVision.isEnabled()) return true;
+    /** Voir {@code WaterFogEnvironmentMixin261#shouldClear} — même principe, {@link ClearVisionModule#clearLava} ici. */
+    private static boolean shouldClear() {
         LauncherModule noFog = ModuleRegistry.get("no-fog");
-        return noFog != null && noFog.isEnabled();
+        if (noFog != null && noFog.isEnabled()) return true;
+        LauncherModule clearVision = ModuleRegistry.get("clear-vision");
+        if (!(clearVision instanceof ClearVisionModule) || !clearVision.isEnabled()) return false;
+        return ((ClearVisionModule) clearVision).clearLava;
     }
 }

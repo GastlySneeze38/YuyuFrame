@@ -21,6 +21,7 @@ public final class FullbrightModule extends LauncherModule {
 
     public FullbrightModule() {
         super("fullbright", "Fullbright", "Éclaire toute la scène au maximum, ignore l'obscurité", false);
+        iconUrl = icons8("sun");
     }
 
     @Override

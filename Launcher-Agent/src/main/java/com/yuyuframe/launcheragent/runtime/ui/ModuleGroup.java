@@ -30,17 +30,48 @@ public final class ModuleGroup {
     public final String id;
     public final String name;
     public final String description;
+    /**
+     * Version abrégée de {@link #description}, utilisée UNIQUEMENT par la
+     * carte du menu principal en mode "Taille de l'interface" = Grande (voir
+     * UiMainMenuScreen.ModCard) — {@code null} (défaut, constructeurs sans ce
+     * paramètre) = pas de version dédiée, repli sur une troncature de
+     * {@link #description} (voir UiRenderer.truncate). Demandé explicitement
+     * ("changer le texte carrément selon la taille de l'interface") pour les
+     * groupes dont la description complète énumère tous les modules membres
+     * ("FOV, Zoom, Hurt Cam, Sprint/Sneak, ...") — bien trop long pour tenir
+     * en mode Grande, contrairement à un module seul (description courte).
+     */
+    public final String shortDescription;
     public final List<LauncherModule> members;
     public final List<Tab> tabs;
+    /** Voir {@link LauncherModule#iconUrl} — même principe, assigné après construction (voir ModuleRegistry). */
+    public String iconUrl;
+    /**
+     * Voir {@link LauncherModule#favorite} — même principe pour un groupe
+     * (demandé explicitement : "rends les groupes favorisables"), persisté
+     * séparément puisqu'un {@link ModuleGroup} n'est PAS un {@link
+     * LauncherModule} et ne vit pas dans {@link ModuleRegistry#all()} (voir
+     * {@code HudConfigStore}, clé {@code group.<id>.favorite}).
+     */
+    public boolean favorite;
 
     public ModuleGroup(String id, String name, String description, List<LauncherModule> members) {
-        this(id, name, description, members, oneTabPerMember(members));
+        this(id, name, description, null, members, oneTabPerMember(members));
+    }
+
+    public ModuleGroup(String id, String name, String description, String shortDescription, List<LauncherModule> members) {
+        this(id, name, description, shortDescription, members, oneTabPerMember(members));
     }
 
     public ModuleGroup(String id, String name, String description, List<LauncherModule> members, List<Tab> tabs) {
+        this(id, name, description, null, members, tabs);
+    }
+
+    public ModuleGroup(String id, String name, String description, String shortDescription, List<LauncherModule> members, List<Tab> tabs) {
         this.id = id;
         this.name = name;
         this.description = description;
+        this.shortDescription = shortDescription;
         this.members = members;
         this.tabs = tabs;
     }

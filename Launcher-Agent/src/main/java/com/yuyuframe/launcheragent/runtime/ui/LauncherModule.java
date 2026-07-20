@@ -18,13 +18,71 @@ public abstract class LauncherModule {
     public final String id;
     public final String name;
     public final String description;
+    /** Voir {@link com.yuyuframe.launcheragent.runtime.ui.ModuleGroup#shortDescription} — même principe, pour un module non groupé dont la description serait exceptionnellement trop longue. {@code null} (défaut) pour la quasi-totalité des modules (description déjà courte). */
+    public final String shortDescription;
 
     private boolean enabled;
 
+    /**
+     * Marqueur "favori" (demandé explicitement, agencement Grille d'icônes :
+     * "la bande du dessous est cliquable pour activer/désactiver le module
+     * et le cœur c'est un système de favori") — VOLONTAIREMENT séparé de
+     * {@link #enabled} : un mod peut être favori sans être actif (juste
+     * épinglé pour le retrouver vite) et inversement. Purement déclaratif
+     * ici (pas de tri/filtre par favori pour l'instant, pas demandé) —
+     * persisté comme {@link #enabled} (voir HudConfigStore, clé
+     * {@code <id>.favorite}), lu/écrit directement par UiMainMenuScreen.
+     */
+    public boolean favorite;
+
+    /**
+     * URL HTTPS d'icône distante pour la carte de ce module (demandé
+     * explicitement : "ajoute des icônes pour tous les modules", même
+     * système de fetch HTTPS-en-mémoire que la galerie Modrinth — voir
+     * {@link com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage}).
+     * {@code null} (défaut) = pas d'icône dédiée, {@code ModCard} retombe
+     * sur la pastille-lettre existante. Mutable et assigné APRÈS le
+     * {@code super(...)} (dans le corps du constructeur de chaque module,
+     * voir FpsModule etc.) plutôt qu'un nouveau paramètre de constructeur —
+     * évite de retoucher la signature des ~40 modules existants pour cette
+     * poignée qui en a besoin (même choix que {@link #favorite}).
+     */
+    public String iconUrl;
+
+    /**
+     * Construit une URL icons8 (voir {@link #iconUrl}) à partir du seul nom
+     * d'icône — évite de répéter le préfixe dans chaque module. Style
+     * "ios-filled", 100px, blanc (cohérent sur toutes les cartes, quel que
+     * soit le fond accent/thème derrière — voir ModCard). Noms vérifiés
+     * individuellement (HTTP 200, {@code image/png}) avant utilisation ici,
+     * voir ModuleRegistry pour la liste complète.
+     */
+    public static String icons8(String name) {
+        return "https://img.icons8.com/ios-filled/100/ffffff/" + name + ".png";
+    }
+
+    /**
+     * Sentinelle spéciale pour {@link #iconUrl} (voir {@code CrosshairModule}) —
+     * PAS une URL HTTPS, demande à {@code UiMainMenuScreen.ModCard} de
+     * dessiner un réticule baké localement (voir son {@code crosshairImage})
+     * au lieu de faire un fetch distant. Vit ICI (pas dans le screen lui-même)
+     * pour qu'un module (CrosshairModule) n'ait besoin de dépendre que de sa
+     * propre classe de base, jamais d'un écran concret — même principe
+     * d'architecture que le reste de {@link LauncherModule}, voir sa javadoc
+     * de classe ("un module n'écrit aucun code d'écran"). Constante définie
+     * ici, LUE là-bas.
+     */
+    public static final String ICON_LOCAL_CROSSHAIR = "local:crosshair";
+
     protected LauncherModule(String id, String name, String description, boolean enabledByDefault) {
+        this(id, name, description, null, enabledByDefault);
+    }
+
+    protected LauncherModule(String id, String name, String description, String shortDescription, boolean enabledByDefault) {
         this.id = id;
         this.name = name;
         this.description = description;
+        this.shortDescription = shortDescription;
         this.enabled = enabledByDefault;
     }
 

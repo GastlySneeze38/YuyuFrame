@@ -19,6 +19,7 @@ public final class PotionEffectsModule extends SingleHudModule {
         super("potion-effects", "Effets de potion", "Liste des effets de potion actifs", false,
             new HudElement("potion-effects", "Effets de potion", HudAnchor.TOP_RIGHT, 8f, 40f,
                 (HudElement.CustomRenderer) new Renderer()));
+        iconUrl = icons8("test-tube");
     }
 
     /**

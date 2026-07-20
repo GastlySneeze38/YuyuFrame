@@ -778,16 +778,6 @@ public final class ModrinthContentScreen extends UiScreenBase {
         return String.valueOf(n);
     }
 
-    /** Tronque {@code text} (avec "...") pour tenir dans {@code maxWidth} pixels à l'échelle donnée — sinon un titre/description long déborde par-dessus le bouton Installer. */
-    static String truncate(UiRenderer renderer, String text, float scale, float maxWidth) {
-        if (text == null) return "";
-        if (maxWidth <= 0 || renderer.textWidth(text, scale) <= maxWidth) return text;
-        String ellipsis = "...";
-        int len = text.length();
-        while (len > 0 && renderer.textWidth(text.substring(0, len) + ellipsis, scale) > maxWidth) len--;
-        return len <= 0 ? ellipsis : text.substring(0, len) + ellipsis;
-    }
-
     /**
      * Carte de résultat façon page Modrinth (icône, titre, auteur/stats,
      * description, bouton Installer/Installé) — remplace les simples lignes
@@ -929,16 +919,16 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // les échelles de texte agrandies) — répartis sur toute la
             // hauteur désormais disponible (rowH=128) plutôt que tassés en
             // haut/bas de la carte.
-            renderer.drawText(truncate(renderer, hit.title, 0.56f, textMaxW), textX, dy + h - 34,
+            renderer.drawText(renderer.truncate(hit.title, 0.56f, textMaxW), textX, dy + h - 34,
                 UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.56f, vpWidth, vpHeight);
 
             String meta = (hit.author != null && !hit.author.isEmpty() ? hit.author + "  ·  " : "")
                 + formatDownloads(hit.downloads) + " téléchargements";
-            renderer.drawText(truncate(renderer, meta, 0.42f, textMaxW), textX, dy + h - 62,
+            renderer.drawText(renderer.truncate(meta, 0.42f, textMaxW), textX, dy + h - 62,
                 UiTheme.TEXT_SECONDARY.multiplyAlpha(fade), 0.42f, vpWidth, vpHeight);
 
             if (hit.description != null && !hit.description.isEmpty()) {
-                renderer.drawText(truncate(renderer, hit.description, 0.4f, textMaxW), textX, dy + 22,
+                renderer.drawText(renderer.truncate(hit.description, 0.4f, textMaxW), textX, dy + 22,
                     UiTheme.TEXT_MUTED.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
             }
 

@@ -173,7 +173,7 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
             float titleMaxW = screenWidth - MARGIN * 2 - BACK_W - 16f;
-            renderer.drawText(UiFont.BOLD, ModrinthContentScreen.truncate(renderer, hit.title, 0.72f, titleMaxW),
+            renderer.drawText(UiFont.BOLD, renderer.truncate(hit.title, 0.72f, titleMaxW),
                 MARGIN, screenHeight - TITLE_TOP_GAP, UiTheme.TEXT_PRIMARY, 0.72f, screenWidth, screenHeight);
 
             String meta = (hit.author != null && !hit.author.isEmpty() ? hit.author + "  ·  " : "")

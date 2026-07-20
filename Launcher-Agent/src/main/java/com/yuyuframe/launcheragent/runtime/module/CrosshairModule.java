@@ -109,6 +109,12 @@ public final class CrosshairModule extends LauncherModule {
 
     public CrosshairModule() {
         super("custom-crosshair", "Crosshair personnalisé", "Remplace la croix de visée vanilla", false);
+        // Voir LauncherModule.ICON_LOCAL_CROSSHAIR — aucune icône "crosshair"/
+        // "réticule"/"viseur" trouvée dans le style icons8 utilisé partout
+        // ailleurs (vérifié individuellement), un vrai réticule dessiné à la
+        // main est de toute façon plus fidèle que "target" (cible en cercles
+        // concentriques, PAS un viseur).
+        iconUrl = ICON_LOCAL_CROSSHAIR;
     }
 
     @Override

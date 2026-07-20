@@ -305,14 +305,21 @@ public final class ModuleRegistry {
             get("saturation"), get("no-darkness"), get("no-fog"),
             get("no-pumpkin-overlay"), get("clear-vision"), get("freelook"));
         if (!comfortMembers.isEmpty()) {
-            GROUPS.add(new ModuleGroup("comfort", "Confort visuel", "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire", comfortMembers));
+            ModuleGroup comfortGroup = new ModuleGroup("comfort", "Confort visuel",
+                "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire",
+                "Réglages de confort et d'immersion", comfortMembers);
+            comfortGroup.iconUrl = LauncherModule.icons8("visible");
+            GROUPS.add(comfortGroup);
         }
         // Groupe entièrement exclu sur 1.16.5 (les 7 membres y sont tous
         // exclus, voir IS_1_16) — pas de carte vide affichée dans ce cas.
         List<LauncherModule> legacyMembers = nonNull(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
             get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"));
         if (!legacyMembers.isEmpty()) {
-            GROUPS.add(new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak", legacyMembers));
+            ModuleGroup legacyGroup = new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak",
+                "Animations façon 1.7", legacyMembers);
+            legacyGroup.iconUrl = LauncherModule.icons8("time-machine");
+            GROUPS.add(legacyGroup);
         }
         // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
         // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),
@@ -339,7 +346,7 @@ public final class ModuleRegistry {
             // à la suite les uns des autres dans le même onglet (voir
             // UiModGroupConfigScreen.buildLayout()). Les modules restants gardent
             // un onglet dédié (Tab à un seul membre).
-            GROUPS.add(new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés", optimisationMembers,
+            ModuleGroup optimisationsGroup = new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés", optimisationMembers,
                 Arrays.asList(
                     new ModuleGroup.Tab("Items non empilés", Collections.singletonList(get("unstacked-items"))),
                     new ModuleGroup.Tab("Culling face arrière", Arrays.asList(get("player-backface-culling"), get("entity-backface-culling"))),
@@ -348,7 +355,19 @@ public final class ModuleRegistry {
                     new ModuleGroup.Tab("Threads de construction", Collections.singletonList(get("chunk-builder-threads"))),
                     new ModuleGroup.Tab("Nuages Fancy en cache", Collections.singletonList(get("cached-fancy-clouds"))),
                     new ModuleGroup.Tab("Fenêtre sans bordure", Collections.singletonList(get("borderless-window")))
-                )));
+                ));
+            optimisationsGroup.iconUrl = LauncherModule.icons8("rocket");
+            GROUPS.add(optimisationsGroup);
+        }
+
+        // Charge l'état "favori" persisté de CHAQUE groupe (demandé
+        // explicitement : "rends les groupes favorisables") — même rôle que
+        // HudConfigStore.applyTo(module) pour un LauncherModule, appliqué
+        // ici APRÈS que tous les groupes ci-dessus aient été ajoutés
+        // (jamais avant, sinon un groupe pas encore dans GROUPS ne serait
+        // simplement pas couvert par cette boucle).
+        for (ModuleGroup group : GROUPS) {
+            HudConfigStore.applyFavoriteTo(group);
         }
     }
 

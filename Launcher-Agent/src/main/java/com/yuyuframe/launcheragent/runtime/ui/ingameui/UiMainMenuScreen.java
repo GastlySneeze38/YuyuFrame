@@ -1,15 +1,18 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleGroup;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAsyncFade;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiEasing;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
+import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiStagger;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiTransition;
@@ -19,9 +22,16 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Écran d'accueil du moteur config custom — équivalent de OneConfigGui.create() :
@@ -144,7 +154,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             renderer.drawShadow(glowX1, glowY1, glowX2, glowY2, glowHalfH, glowBlur, 0f,
                 UiTheme.ACCENT.multiplyAlpha(0.28f), screenWidth, screenHeight);
             renderer.drawText(UiFont.BOLD, "YuyuFrame", titleX, titleBaseline, UiTheme.TEXT_PRIMARY, titleScale, screenWidth, screenHeight);
-            renderer.drawText("Mods installes", SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
+            renderer.drawText(Lang.tr("Mods installes"), SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
                 UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.42f), screenWidth, screenHeight);
 
             // (Halo d'ambiance décoratif dans le coin haut-droit RETIRÉ — se
@@ -190,13 +200,22 @@ public class UiMainMenuScreen extends UiScreenBase {
         if (searchField == null) {
             // Recréé la grille (pas tout l'écran) à chaque frappe — même
             // instance de champ conservée, voir javadoc de la classe.
-            searchField = new UiTextField(0, 0, 0, 0, "Rechercher un mod...", v -> rebuildAll()).searchIcon();
+            searchField = new UiTextField(0, 0, 0, 0, Lang.tr("Rechercher un mod..."), v -> rebuildAll()).searchIcon();
         }
         searchField.x = contentX;
         searchField.y = screenHeight - UiTheme.scaled(64f) - SEARCH_H;
-        searchField.w = Math.min(UiTheme.scaled(380f), contentW);
+        // Réserve la place du bouton d'agencement (voir LayoutSwitchButton
+        // ci-dessous) — sinon la barre de recherche pleine largeur (380
+        // scaled) le chevaucherait.
+        float layoutBtnGap = UiTheme.scaled(8f);
+        float layoutBtnSize = SEARCH_H;
+        searchField.w = Math.min(UiTheme.scaled(380f), contentW - layoutBtnGap - layoutBtnSize);
         searchField.h = SEARCH_H;
         widgets.add(searchField);
+        // Icône à côté de la barre de recherche (demandé explicitement :
+        // "choisir avec une icon a coté de la bar de recherche") — cycle
+        // Détaillé -> Compacte -> Grille d'icônes -> Détaillé au clic.
+        widgets.add(new LayoutSwitchButton(searchField.x + searchField.w + layoutBtnGap, searchField.y, layoutBtnSize));
 
         // Chaque entrée est SOIT un LauncherModule (carte + toggle propre,
         // comme avant), SOIT un ModuleGroup (carte seule, pas de toggle —
@@ -218,8 +237,11 @@ public class UiMainMenuScreen extends UiScreenBase {
         // l'onglet Resource Packs, l'onglet Shaders y est proposé EN PLUS
         // (gating ShaderLoaderDetector appliqué DANS l'écran, voir
         // ModrinthContentScreen.buildLayout, pas ici).
-        ActionCard modrinthCard = new ActionCard("Modrinth (Resource Packs & Shaders)", "Rechercher et installer un resource pack ou un shader pack",
+        ActionCard modrinthCard = new ActionCard("Modrinth Install", "Rechercher et installer un resource pack ou un shader pack",
+            "Resource packs et shaders",
             () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthContentScreen(UiMainMenuScreen.this)));
+        modrinthCard.iconUrl = LauncherModule.icons8("puzzle");
+        modrinthCard.favorite = HudConfigStore.loadActionFavorite("modrinth");
         if (filter.isEmpty() || modrinthCard.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(modrinthCard);
         for (ModuleGroup g : ModuleRegistry.groups()) {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
@@ -228,7 +250,56 @@ public class UiMainMenuScreen extends UiScreenBase {
             if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
         }
 
-        float cardW = (contentW - CARD_GAP) / 2f;
+        // BUG TROUVÉ (retour utilisateur, capture d'écran : "la barre de
+        // scroll est chevauchée" par les toggles) — MÊME cause/même fix que
+        // UiModConfigScreen ("le scroll chevauche les paramètres") : les
+        // cartes/toggles utilisaient TOUTE la largeur de contentW, la même
+        // zone où la barre de scroll se dessine (~20px scaled du bord du
+        // viewport, voir UiScrollContainer.SCROLLBAR_W/MARGIN). Le viewport
+        // de modScroll garde TOUTE la largeur (la barre se dessine à son
+        // bord droit réel, voir modScroll ci-dessous), seule la largeur des
+        // CARTES est réduite par cette réserve.
+        float scrollbarReserve = UiTheme.scaled(20f);
+        float cardAreaW = contentW - scrollbarReserve;
+
+        // 3 agencements demandés explicitement ("comme dans Lunar") — colonnes
+        // et hauteur de ligne dépendent du mode, voir LayoutSwitchButton pour
+        // le cycle et GlobalUiSettings#cardLayout pour la persistance :
+        // - Détaillé (0, INCHANGÉ) : 2 colonnes, cartes hautes avec description.
+        // - Compacte (1) : MÊME apparence de carte que Détaillé (retour
+        //   utilisateur explicite : "garder l'apparence de la card détaillé
+        //   juste mettre tout sur 1 seule colonne") — voir ModCard.draw(),
+        //   layoutMode 1 utilise drawDetailed() telle quelle, seule la grille
+        //   change (1 colonne pleine largeur au lieu de 2).
+        // - Grille d'icônes (2) : autant de colonnes que la largeur le permet,
+        //   cellules carrées, pas de description (voir ModCard#tooltip à la place).
+        int cardLayout = GlobalUiSettings.INSTANCE.cardLayout;
+        int cols;
+        float cardW, rowH;
+        if (cardLayout == 1) {
+            cols = 1;
+            cardW = cardAreaW;
+            rowH = CARD_H;
+        } else if (cardLayout == 2) {
+            // Cellules ENCORE bien plus grandes que le premier essai (retour
+            // utilisateur : "agrandi les énormément, ils sont tout petit
+            // là") — 110->200 scaled, quitte à n'avoir que 2-4 colonnes sur
+            // un écran normal, exactement le style "grosses tuiles" visé.
+            float targetCell = UiTheme.scaled(200f);
+            cols = Math.max(1, (int) Math.floor((cardAreaW + CARD_GAP) / (targetCell + CARD_GAP)));
+            cardW = (cardAreaW - (cols - 1) * CARD_GAP) / cols;
+            // PAS carrée (rowH = cardW) — retour utilisateur : "c'est la
+            // hauteur de la card entière qu'il fallait réduire", pas celle
+            // de la bande (voir iconGridBarH, revenue à sa taille d'avant).
+            // Ratio choisi pour rester bien plus court que large, façon
+            // tuile Lunar, tout en gardant assez de place pour une icône
+            // lisible au-dessus de la bande.
+            rowH = cardW * 0.72f;
+        } else {
+            cols = 2;
+            cardW = (cardAreaW - CARD_GAP) / 2f;
+            rowH = CARD_H;
+        }
         // Grille positionnée dans un repère LOCAL arbitraire (contrairement à
         // avant, où "top" dérivait de searchField.y, un repère ÉCRAN absolu) —
         // UiScrollContainer se charge lui-même de replacer ce contenu dans le
@@ -238,14 +309,74 @@ public class UiMainMenuScreen extends UiScreenBase {
         float top = 0f;
 
         float viewportBottom = MARGIN;
-        float viewportTop = searchField.y - UiTheme.scaled(24f);
+        // BUG TROUVÉ (retour utilisateur : "les cards du haut disparaissent
+        // trop tard et chevauchent la barre de navigation") — UiScrollContainer
+        // continue de dessiner (en s'estompant progressivement, voir clipFade)
+        // un widget jusqu'à EDGE_FADE_ZONE (46 scaled) AU-DELÀ du viewport,
+        // pas juste jusqu'à son bord — cet écart n'était que de 24 scaled ici,
+        // donc une carte pouvait encore être visible (partiellement) jusqu'à
+        // 46-24=22px DANS la zone de la barre de recherche. Porté à 50
+        // (> EDGE_FADE_ZONE) pour que le fondu se termine TOUJOURS avant
+        // d'atteindre la barre.
+        float viewportTop = searchField.y - UiTheme.scaled(50f);
         modScroll = new UiScrollContainer(contentX, viewportBottom, contentW, Math.max(1f, viewportTop - viewportBottom));
 
-        for (int i = 0; i < filtered.size(); i++) {
-            Object entry = filtered.get(i);
-            int col = i % 2, row = i / 2;
+        // Favoris — demandé explicitement ("mets tout les favoris devant
+        // déjà même sans l'option activée") — TOUJOURS remontés en tête,
+        // inconditionnellement. LauncherModule/ModuleGroup/ActionCard
+        // favorisables tous les trois désormais (ActionCard ajouté après
+        // coup : "on ne peut pas mettre Modrinth en favori"). Le réglage
+        // {@link GlobalUiSettings#separateFavorites} ne pilote QUE
+        // l'affichage d'une section séparée avec titres, jamais l'ordre.
+        List<Object> favoriteEntries = new ArrayList<>();
+        List<Object> otherEntries = new ArrayList<>();
+        for (Object entry : filtered) {
+            boolean isFavorite = (entry instanceof LauncherModule && ((LauncherModule) entry).favorite)
+                || (entry instanceof ModuleGroup && ((ModuleGroup) entry).favorite)
+                || (entry instanceof ActionCard && ((ActionCard) entry).favorite);
+            if (isFavorite) favoriteEntries.add(entry);
+            else otherEntries.add(entry);
+        }
+
+        if (!GlobalUiSettings.INSTANCE.separateFavorites || favoriteEntries.isEmpty() || otherEntries.isEmpty()) {
+            // Pas de séparation visuelle à afficher (réglage désactivé, OU
+            // rien à séparer — une seule des deux listes non vide) : une
+            // seule grille continue, favoris déjà en tête via l'ordre de
+            // concaténation.
+            List<Object> combined = new ArrayList<>(favoriteEntries.size() + otherEntries.size());
+            combined.addAll(favoriteEntries);
+            combined.addAll(otherEntries);
+            layoutGrid(combined, contentX, top, cols, cardW, rowH, cardLayout);
+        } else {
+            // Séparation demandée ("tu sépare les deux liste avec des titre
+            // en majuscule et tu met les favori sur la liste du haut") — un
+            // en-tête + section par liste, favoris d'abord.
+            float headerH = sectionHeaderH();
+            modScroll.add(new SectionTitle(contentX, top - headerH, cardAreaW, headerH, Lang.tr("Favoris").toUpperCase(Locale.ROOT)));
+            top -= headerH + CARD_GAP;
+            top = layoutGrid(favoriteEntries, contentX, top, cols, cardW, rowH, cardLayout);
+            top -= CARD_GAP;
+            modScroll.add(new SectionTitle(contentX, top - headerH, cardAreaW, headerH, Lang.tr("Autres modules").toUpperCase(Locale.ROOT)));
+            top -= headerH + CARD_GAP;
+            layoutGrid(otherEntries, contentX, top, cols, cardW, rowH, cardLayout);
+        }
+    }
+
+    /**
+     * Construit les cartes (+ toggles) d'une liste d'entrées dans la grille,
+     * à partir de {@code startTop} — extrait de l'ancienne boucle unique de
+     * rebuildAll() (demande explicite : séparer favoris/autres en 2 sections,
+     * voir son appelant) pour pouvoir l'appeler 1 ou 2 fois selon {@link
+     * GlobalUiSettings#separateFavorites}. Retourne le nouveau "top" (bord
+     * BAS de la dernière ligne, repère LOCAL comme le reste de la grille)
+     * pour permettre d'enchaîner une 2ᵉ section juste en dessous.
+     */
+    private float layoutGrid(List<Object> entries, float contentX, float startTop, int cols, float cardW, float rowH, int cardLayout) {
+        for (int i = 0; i < entries.size(); i++) {
+            Object entry = entries.get(i);
+            int col = i % cols, row = i / cols;
             float cx = contentX + col * (cardW + CARD_GAP);
-            float cy = top - row * (CARD_H + CARD_GAP) - CARD_H;
+            float cy = startTop - row * (rowH + CARD_GAP) - rowH;
 
             // Délai croissant par index (voir UiStagger) — les cartes
             // apparaissent en cascade plutôt que toutes d'un coup, à chaque
@@ -253,15 +384,56 @@ public class UiMainMenuScreen extends UiScreenBase {
             // javadoc de classe) : nouvelles instances de ModCard à chaque
             // fois, donc l'animation d'entrée rejoue naturellement à chaque
             // reconstruction — pas besoin de la déclencher "à la main".
+            // Redémarre à 0 par SECTION (pas un index global continu) : léger
+            // recouvrement de cascade entre la section favoris et la
+            // suivante, sans conséquence visuelle notable (positions déjà
+            // différentes à l'écran) — évite de faire transiter un compteur
+            // entre deux appels séparés pour un gain quasi imperceptible.
             float enterDelay = UiStagger.delayFor(i, 0.035f, 0.3f);
 
             if (entry instanceof ModuleGroup) {
                 ModuleGroup group = (ModuleGroup) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, group.name, group.description, enterDelay,
-                    () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group))));
+                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, group.name, group.description, group.shortDescription, group.iconUrl, enterDelay,
+                    () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group)));
+                modScroll.add(card);
+                // Groupes rendus favorisables (demande explicite) — SEUL le
+                // cœur existe pour un groupe, pas de bande activer/désactiver
+                // (un groupe n'a pas d'état on/off propre, chaque module
+                // membre garde le sien, voir UiModGroupConfigScreen) : la
+                // bande reste donc TRACK_OFF par défaut (pairedToggle jamais
+                // posé ici, voir ModCard#drawIconGrid), comportement déjà
+                // existant avant cet ajout, inchangé.
+                if (cardLayout == 2) {
+                    float barH = iconGridBarH();
+                    float heartSize = iconGridHeartSize();
+                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
+                    float heartY = cy + (barH - heartSize) / 2f;
+                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, group.favorite,
+                        v -> { group.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
+                    modScroll.add(favoriteToggle);
+                    card.pairFavorite(favoriteToggle);
+                }
             } else if (entry instanceof ActionCard) {
                 ActionCard action = (ActionCard) entry;
-                modScroll.add(new ModCard(cx, cy, cardW, action.name, action.description, enterDelay, action.action));
+                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, action.name, action.description, action.shortDescription, action.iconUrl, enterDelay, action.action);
+                modScroll.add(card);
+                // Favorisable (demande explicite : "on ne peut pas mettre
+                // Modrinth en favori") — même principe que le groupe
+                // ci-dessus (cœur seul, pas de bande on/off, une ActionCard
+                // n'a pas d'état activé/désactivé). "modrinth" en dur : seule
+                // ActionCard existante pour l'instant, voir HudConfigStore.
+                // loadActionFavorite/saveActionFavorite si une 2ᵉ apparaît un
+                // jour (identifiant à généraliser à ce moment-là).
+                if (cardLayout == 2) {
+                    float barH = iconGridBarH();
+                    float heartSize = iconGridHeartSize();
+                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
+                    float heartY = cy + (barH - heartSize) / 2f;
+                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, action.favorite,
+                        v -> { HudConfigStore.saveActionFavorite("modrinth", v); rebuildAll(); }).heartStyle();
+                    modScroll.add(favoriteToggle);
+                    card.pairFavorite(favoriteToggle);
+                }
             } else {
                 LauncherModule mod = (LauncherModule) entry;
                 // Carte D'ABORD (dessinée en dessous), toggle ENSUITE (dessiné
@@ -269,25 +441,182 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // entièrement — visible nulle part bien que toujours cliquable
                 // en dessous). ModCard.contains() exclut explicitement la zone du
                 // toggle pour que le clic dessus continue de basculer le toggle
-                // plutôt que d'ouvrir la config du mod — mêmes méthodes
-                // toggleW()/toggleH()/toggleGapX()/toggleGapY() qu'utilisées
-                // ci-dessous pour la zone d'exclusion (avant ce correctif, la
-                // zone d'exclusion (34x18, voir ModCard.contains) ne
-                // correspondait PAS à la taille réelle du widget UiToggle
-                // (44x24) : un clic sur la tranche du toggle hors de cette
-                // zone trop étroite ouvrait la config du mod au lieu de
-                // basculer le toggle).
-                ModCard card = new ModCard(cx, cy, cardW, mod.name, mod.description, enterDelay,
+                // plutôt que d'ouvrir la config du mod — délègue directement à
+                // pairedToggle.contains() (voir ModCard.contains()), donc aucune
+                // géométrie à dupliquer/désynchroniser ici quel que soit
+                // l'agencement.
+                ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, mod.iconUrl, enterDelay,
                     () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
                 modScroll.add(card);
-                float togX = cx + cardW - toggleW() - toggleGapX(), togY = cy + CARD_H - toggleH() - toggleGapY();
-                UiToggle toggle = new UiToggle(togX, togY, mod.isEnabled(),
-                    v -> { mod.setEnabled(v); HudConfigStore.save(); });
-                modScroll.add(toggle);
-                // Suit le soulèvement au survol de sa carte (voir ModCard#pairToggle) —
-                // sinon il resterait figé pendant que la carte en dessous bouge.
-                card.pairToggle(toggle);
+
+                if (cardLayout == 2) {
+                    // Retour utilisateur, après une 1ère version où le cœur
+                    // pilotait l'activation : "en fait la bande du dessous
+                    // est cliquable pour activer/désactiver le module et le
+                    // cœur c'est un système de favori" — DEUX widgets
+                    // cliquables distincts désormais :
+                    // - toute la bande (voir ModCard#drawIconGrid pour le
+                    //   dessin, couleur pilotée par pairedToggle.value())
+                    //   bascule enabled — SANS rendu propre (invisibleStyle),
+                    //   ModCard dessine déjà tout.
+                    // - le cœur, petit, en haut de la bande, favori —
+                    //   INDÉPENDANT de enabled (voir LauncherModule#favorite).
+                    // Ajouté AVANT le toggle de bande dans modScroll — le
+                    // cœur est un sous-rectangle DANS la zone de la bande,
+                    // le premier widget dont contains() matche gagne le clic
+                    // (voir UiScreenBase.dispatchClick), donc le cœur doit
+                    // être testé EN PREMIER pour intercepter les clics sur
+                    // sa petite zone avant que la bande (bien plus grande)
+                    // ne les capte à sa place.
+                    float barH = iconGridBarH();
+                    UiToggle enableToggle = new UiToggle(cx, cy, cardW, barH, mod.isEnabled(),
+                        v -> { mod.setEnabled(v); HudConfigStore.save(); }).invisibleStyle();
+
+                    float heartSize = iconGridHeartSize();
+                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
+                    float heartY = cy + (barH - heartSize) / 2f;
+                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, mod.favorite,
+                        v -> { mod.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
+
+                    modScroll.add(favoriteToggle);
+                    modScroll.add(enableToggle);
+                    card.pairToggle(enableToggle);
+                    card.pairFavorite(favoriteToggle);
+                } else {
+                    // Position du toggle DÉPENDANTE de l'agencement — Compacte
+                    // réutilise l'apparence (et donc la position toggle) de
+                    // Détaillé telle quelle (voir commentaire plus haut).
+                    float togX = cx + cardW - toggleW() - toggleGapX();
+                    float togY = cy + rowH - toggleH() - toggleGapY();
+                    UiToggle toggle = new UiToggle(togX, togY, mod.isEnabled(),
+                        v -> { mod.setEnabled(v); HudConfigStore.save(); });
+                    modScroll.add(toggle);
+                    // Suit le soulèvement au survol de sa carte (voir ModCard#pairToggle) —
+                    // sinon il resterait figé pendant que la carte en dessous bouge.
+                    card.pairToggle(toggle);
+                }
             }
+        }
+        int rows = entries.isEmpty() ? 0 : (int) Math.ceil(entries.size() / (float) cols);
+        return startTop - rows * (rowH + CARD_GAP);
+    }
+
+    /** Hauteur d'un titre de section ("FAVORIS"/"AUTRES MODULES", voir rebuildAll()) — voir SectionTitle pour le dessin. */
+    private float sectionHeaderH() { return UiTheme.scaled(24f); }
+
+    /** Simple étiquette de section, non cliquable — le texte est déjà préparé (traduit + majuscule) par l'appelant, voir rebuildAll(). */
+    private final class SectionTitle extends UiWidget {
+        private final String label;
+        SectionTitle(float x, float y, float w, float h, String label) { super(x, y, w, h); this.label = label; }
+
+        @Override
+        public boolean contains(double mx, double my) { return false; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            renderer.drawText(label, x, y + h / 2f - UiTheme.scaled(4f), UiTheme.TEXT_MUTED.multiplyAlpha(clipFade), UiTheme.scaled(0.36f), vpWidth, vpHeight);
+        }
+    }
+
+    private static final Map<Integer, BufferedImage> CROSSHAIR_ICON_CACHE = new HashMap<>();
+
+    /**
+     * Réticule à 4 branches + point central, baké en texture CPU (même motif
+     * "forme vectorielle simple" que le cœur favori de {@code UiToggle}) —
+     * voir {@link LauncherModule#ICON_LOCAL_CROSSHAIR}. Retour utilisateur :
+     * "trouve un meilleur icone pour custom crosshair" — AUCUN nom d'icône
+     * crosshair/réticule/viseur n'existe dans le style "ios-filled" utilisé
+     * partout ailleurs (vérifié individuellement, tous 404), et mélanger un
+     * style icons8 différent pour cette seule carte aurait détonné
+     * visuellement (épaisseur de trait/couleur différentes) — un vrai
+     * réticule dessiné à la main est de toute façon plus fidèle au concept
+     * que n'importe quelle icône générique disponible (ex: "target", une
+     * cible en cercles concentriques, PAS un viseur).
+     */
+    private static BufferedImage crosshairImage(int px) {
+        BufferedImage cached = CROSSHAIR_ICON_CACHE.get(px);
+        if (cached != null) return cached;
+
+        BufferedImage img = new BufferedImage(px, px, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(java.awt.Color.WHITE);
+
+        float cx = px / 2f, cy = px / 2f;
+        float thickness = px * 0.09f;
+        float gap = px * 0.14f;
+        float armLen = px * 0.28f;
+        g.fill(new RoundRectangle2D.Float(cx - thickness / 2f, cy - gap - armLen, thickness, armLen, thickness, thickness));
+        g.fill(new RoundRectangle2D.Float(cx - thickness / 2f, cy + gap, thickness, armLen, thickness, thickness));
+        g.fill(new RoundRectangle2D.Float(cx - gap - armLen, cy - thickness / 2f, armLen, thickness, thickness, thickness));
+        g.fill(new RoundRectangle2D.Float(cx + gap, cy - thickness / 2f, armLen, thickness, thickness, thickness));
+        float dotR = px * 0.035f;
+        g.fill(new Ellipse2D.Float(cx - dotR, cy - dotR, dotR * 2f, dotR * 2f));
+        g.dispose();
+
+        CROSSHAIR_ICON_CACHE.put(px, img);
+        return img;
+    }
+
+    /**
+     * Icône à côté de la barre de recherche — cycle les 3 agencements de la
+     * grille de cartes ({@link GlobalUiSettings#cardLayout}). Dessine un
+     * petit pictogramme vectoriel représentant l'agencement COURANT (pas une
+     * texture — cohérent avec le reste du moteur pour une icône aussi simple,
+     * voir SidebarBackground/UiToggle pour le même principe de formes
+     * dessinées plutôt qu'une image).
+     */
+    private final class LayoutSwitchButton extends UiWidget {
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+        private final String[] LAYOUT_NAMES = { "Détaillé", "Compacte", "Grille d'icônes" };
+
+        LayoutSwitchButton(float x, float y, float size) { super(x, y, size, size); }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float hover = hoverAnim.get();
+            this.tooltip = Lang.tr("Affichage") + " : " + Lang.tr(LAYOUT_NAMES[GlobalUiSettings.INSTANCE.cardLayout]);
+
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+
+            UiColor iconColor = UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, hover);
+            float pad = UiTheme.scaled(8f);
+            float ix = x + pad, iy = y + pad, iw = w - pad * 2f, ih = h - pad * 2f;
+            int layout = GlobalUiSettings.INSTANCE.cardLayout;
+            if (layout == 1) {
+                // Compacte : mêmes cartes que Détaillé, mais 1 seule colonne
+                // pleine largeur — 2 lignes empilées (au lieu de 2 côte à
+                // côte pour Détaillé) pour distinguer visuellement l'icône.
+                float gap = UiTheme.scaled(3f);
+                float rh = (ih - gap) / 2f;
+                renderer.drawRoundedRect(ix, iy, ix + iw, iy + rh, UiTheme.scaled(1.5f), iconColor, vpWidth, vpHeight);
+                renderer.drawRoundedRect(ix, iy + rh + gap, ix + iw, iy + ih, UiTheme.scaled(1.5f), iconColor, vpWidth, vpHeight);
+            } else if (layout == 2) {
+                // Grille d'icônes : 3x3 petits carrés.
+                float gap = UiTheme.scaled(2.5f);
+                float cell = (iw - gap * 2f) / 3f;
+                for (int r = 0; r < 3; r++) {
+                    for (int c = 0; c < 3; c++) {
+                        float cx = ix + c * (cell + gap), cy = iy + r * (cell + gap);
+                        renderer.drawRoundedRect(cx, cy, cx + cell, cy + cell, UiTheme.scaled(1f), iconColor, vpWidth, vpHeight);
+                    }
+                }
+            } else {
+                // Détaillé : 2 grandes cartes côte à côte.
+                float gap = UiTheme.scaled(3f);
+                float cw = (iw - gap) / 2f;
+                renderer.drawRoundedRect(ix, iy, ix + cw, iy + ih, UiTheme.scaled(1.5f), iconColor, vpWidth, vpHeight);
+                renderer.drawRoundedRect(ix + cw + gap, iy, ix + iw, iy + ih, UiTheme.scaled(1.5f), iconColor, vpWidth, vpHeight);
+            }
+        }
+
+        @Override
+        public void onClick() {
+            GlobalUiSettings.INSTANCE.cardLayout = (GlobalUiSettings.INSTANCE.cardLayout + 1) % 3;
+            HudConfigStore.save();
+            rebuildAll();
         }
     }
 
@@ -305,6 +634,11 @@ public class UiMainMenuScreen extends UiScreenBase {
     private float toggleGapX() { return UiTheme.scaled(16f); }
     private float toggleGapY() { return UiTheme.scaled(14f); }
 
+    /** Hauteur de la bande colorée en bas d'une carte en mode Grille d'icônes (voir ModCard#drawIconGrid) — utilisée aussi ici pour positionner le cœur (pairedFavorite) au centre exact de cette bande. REVENU à 34 (retour utilisateur : "il ne fallait pas réduire sa hauteur [à elle], c'est la hauteur de la card entière qu'il fallait réduire" — voir rowH dans rebuildAll(), pas ce champ). */
+    private float iconGridBarH() { return UiTheme.scaled(34f); }
+    /** Retour utilisateur : "le cœur fait un peu plus petit" (20->15). */
+    private float iconGridHeartSize() { return UiTheme.scaled(15f); }
+
     /**
      * Entrée de grille "action" — carte qui exécute {@code action} au clic,
      * sans toggle ni {@link LauncherModule}/{@link ModuleRegistry} (outil
@@ -312,10 +646,20 @@ public class UiMainMenuScreen extends UiScreenBase {
      */
     private static final class ActionCard {
         final String name, description;
+        /** Voir LauncherModule/ModuleGroup#shortDescription — même principe pour une carte "action". {@code null} = pas de version dédiée. */
+        final String shortDescription;
         final Runnable action;
+        /** Voir LauncherModule#iconUrl — même principe, assigné après construction (voir rebuildAll(), carte Modrinth). */
+        String iconUrl;
+        /** Voir LauncherModule/ModuleGroup#favorite — même principe (demandé explicitement : "on ne peut pas mettre Modrinth en favori"), rechargé à CHAQUE rebuildAll() (voir HudConfigStore.loadActionFavorite, cette carte est reconstruite à chaque fois, pas une instance persistante comme un module/groupe). */
+        boolean favorite;
         ActionCard(String name, String description, Runnable action) {
+            this(name, description, null, action);
+        }
+        ActionCard(String name, String description, String shortDescription, Runnable action) {
             this.name = name;
             this.description = description;
+            this.shortDescription = shortDescription;
             this.action = action;
         }
     }
@@ -392,7 +736,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 renderer.drawGradientRect(x, y + edgeInset, x + edgeW, y + h - edgeInset, edgeRadius, edgeBottom, edgeTop, vpWidth, vpHeight);
             }
             UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);
-            renderer.drawText(label, x + UiTheme.scaled(12f), y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
+            renderer.drawText(Lang.tr(label), x + UiTheme.scaled(12f), y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
         }
 
         @Override
@@ -403,6 +747,10 @@ public class UiMainMenuScreen extends UiScreenBase {
 
     private final class ModCard extends UiWidget {
         private final String cardName, cardDescription;
+        /** Voir LauncherModule/ModuleGroup#shortDescription — {@code null} = pas de version dédiée, repli sur une troncature de {@link #cardDescription} (voir draw()). */
+        private final String cardShortDescription;
+        /** {@link GlobalUiSettings#cardLayout} au moment de la construction — voir rebuildAll(), figé pour la durée de vie de cette instance (une nouvelle est créée à chaque rebuildAll(), donc un changement d'agencement se reflète naturellement). 0=Détaillé, 1=Compacte, 2=Grille d'icônes. */
+        private final int layoutMode;
         private final Runnable onOpen;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
         /** Fondu + léger glissement vers le haut à l'apparition — durée fixe, PAS UiAnimatedFloat (voir sa javadoc). {@code enterDelay} = décalage en cascade, voir UiStagger dans rebuildAll(). */
@@ -414,14 +762,25 @@ public class UiMainMenuScreen extends UiScreenBase {
         // .get() par frame (voir sa javadoc), stocké dans une locale et
         // réutilisé pour couleur/ombre/décalage.
         private static final float HOVER_LIFT_PX = 4f;
-        /** Toggle "activer/désactiver" posé PAR-DESSUS cette carte (voir rebuildAll — widget SÉPARÉ, jamais construit pour ModuleGroup/ActionCard) — sa position Y suit le soulèvement au survol via {@link #pairToggle}, sinon il resterait figé pendant que la carte en dessous bouge. */
+        /** Toggle "activer/désactiver" posé PAR-DESSUS cette carte (voir rebuildAll — widget SÉPARÉ, jamais construit pour ModuleGroup/ActionCard) — sa position Y suit le soulèvement au survol via {@link #pairToggle}, sinon il resterait figé pendant que la carte en dessous bouge. En mode Grille (voir rebuildAll()), couvre TOUTE la bande du bas ({@code invisibleStyle}, dessin délégué à {@link #drawIconGrid}) plutôt qu'un petit switch — mêmes clic/valeur, juste une géométrie différente. */
         private UiToggle pairedToggle;
+        /** Cœur "favori" (voir {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule#favorite}) — SEULEMENT en mode Grille (voir {@link #pairFavorite}), INDÉPENDANT de {@link #pairedToggle} (activation) : retour utilisateur explicite après une 1ère version où les deux étaient confondus. */
+        private UiToggle pairedFavorite;
+        /** Voir {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule#iconUrl} — {@code null} = pas d'icône dédiée, {@link #drawIconOrInitial} retombe alors sur la pastille-lettre existante. */
+        private final String cardIconUrl;
+        /** Survol de la bande activer/désactiver EN MODE GRILLE UNIQUEMENT (retour utilisateur : "ajoute un hover à la bar") — DISTINCT du survol de toute la carte ({@link #hoverAnim}, qui pilote le soulèvement) : suit précisément la zone de {@link #pairedToggle} (toute la bande en mode Grille, voir rebuildAll()), pas la carte entière. */
+        private final UiAnimatedFloat barHoverAnim = new UiAnimatedFloat(0f, 16f);
+        /** Fondu d'entrée de l'icône distante une fois chargée (voir UiRemoteImage, non-bloquant) — même motif que ResultCard dans ModrinthContentScreen. */
+        private final UiAsyncFade iconFade = new UiAsyncFade();
 
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
-        ModCard(float x, float y, float w, String name, String description, float enterDelay, Runnable onOpen) {
-            super(x, y, w, CARD_H);
+        ModCard(float x, float y, float w, float h, int layoutMode, String name, String description, String shortDescription, String iconUrl, float enterDelay, Runnable onOpen) {
+            super(x, y, w, h);
+            this.layoutMode = layoutMode;
             this.cardName = name;
             this.cardDescription = description;
+            this.cardShortDescription = shortDescription;
+            this.cardIconUrl = iconUrl;
             this.onOpen = onOpen;
             this.enterAnim = new UiTransition(0.28f, enterDelay, UiEasing.EASE_OUT_CUBIC);
             this.enterAnim.show();
@@ -429,6 +788,17 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         void pairToggle(UiToggle toggle) {
             this.pairedToggle = toggle;
+            // Voir UiToggle#useExternalAlphaOnly — l'opacité de ce toggle
+            // vient ENTIÈREMENT de externalAlpha (poussé chaque frame dans
+            // draw() ci-dessous), plus jamais de son propre clipFade (calculé
+            // sur SA taille, différente de celle de la carte).
+            toggle.useExternalAlphaOnly();
+        }
+
+        /** Même principe que {@link #pairToggle} pour le cœur favori (mode Grille uniquement) — widget séparé, doit suivre le même soulèvement/fondu que la carte. */
+        void pairFavorite(UiToggle favorite) {
+            this.pairedFavorite = favorite;
+            favorite.useExternalAlphaOnly();
         }
 
         // Exclut la zone du toggle — la carte est vérifiée en PREMIER dans
@@ -454,6 +824,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         public boolean contains(double mx, double my) {
             if (!super.contains(mx, my)) return false;
             if (pairedToggle != null && pairedToggle.contains(mx, my)) return false;
+            if (pairedFavorite != null && pairedFavorite.contains(mx, my)) return false;
             return true;
         }
 
@@ -466,6 +837,21 @@ public class UiMainMenuScreen extends UiScreenBase {
             // vers le haut dans ce repère, voir UiRenderer) : la carte part
             // d'une position plus BASSE (y plus petit) et remonte vers y.
             float t = Math.max(0f, Math.min(1f, enterAnim.eased()));
+            // BUG TROUVÉ (retour utilisateur, comparaison avant/après scroll :
+            // "la barre de recherche disparaît après un scroll") — clipFade
+            // (posé CHAQUE frame par UiScrollContainer selon la proximité du
+            // bord du viewport, voir sa javadoc — 1 = pleinement opaque, vers
+            // 0 en s'approchant/dépassant le bord) n'était JAMAIS lu par
+            // cette carte : elle restait dessinée à PLEINE opacité tant
+            // qu'elle passait le test "visible" (jusqu'à EDGE_FADE_ZONE,
+            // 46 scaled, AU-DELÀ du bord du viewport), au lieu de s'estomper
+            // progressivement. modScroll se dessinant APRÈS la barre de
+            // recherche (voir uiDraw(), z-order — "titres par-dessus TOUT"),
+            // une carte encore opaque juste au-dessus du viewport recouvrait
+            // entièrement la barre. `alpha` combine les deux (PAS `drawY` —
+            // le glissement d'entrée reste piloté par `t` seul, un décalage
+            // de POSITION, pas d'opacité).
+            float alpha = t * clipFade;
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hoverT = hoverAnim.get();
             float drawY = y - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
@@ -485,7 +871,34 @@ public class UiMainMenuScreen extends UiScreenBase {
             // le léger soulèvement de survol à la position COURANTE du
             // toggle (déjà correctement offsettée par applyOffsets() cette
             // frame), au lieu de la remplacer par une base figée.
-            if (pairedToggle != null) pairedToggle.y += hoverT * HOVER_LIFT_PX;
+            if (pairedToggle != null) {
+                pairedToggle.y += hoverT * HOVER_LIFT_PX;
+                // BUG TROUVÉ (retour utilisateur : "le fade-in marche mais
+                // pas avec la card... vu que sa taille est plus grande [elle]
+                // peut être presque invisible alors que le toggle est bien
+                // visible") — poussait `t` seul, MAIS UiToggle multipliait
+                // ENCORE par SON PROPRE clipFade (posé indépendamment par
+                // UiScrollContainer selon SA PROPRE hauteur, bien plus petite
+                // que celle de la carte) : pour un même défilement, le bord
+                // du viewport "mange" plus de la carte (plus haute) que du
+                // toggle (plus petit, souvent encore loin du bord), donnant
+                // deux valeurs de fondu DIFFÉRENTES pour un seul élément
+                // visuel. Fix : pousse `alpha` (déjà `t * this.clipFade`,
+                // voir plus haut — la valeur COMPLÈTE de CETTE carte) et
+                // {@link UiToggle#useExternalAlphaOnly} (posé une fois dans
+                // pairToggle()) fait qu'il ignore désormais SON PROPRE
+                // clipFade — l'opacité du toggle suit alors EXACTEMENT celle
+                // de sa carte, quelle que soit leur différence de taille.
+                pairedToggle.setExternalAlpha(alpha);
+            }
+            // Même synchronisation position/alpha pour le cœur favori (voir
+            // pairFavorite()) — sinon il resterait figé/désynchronisé du
+            // soulèvement au survol pendant que la carte ET la bande du
+            // toggle d'activation, eux, bougent ensemble.
+            if (pairedFavorite != null) {
+                pairedFavorite.y += hoverT * HOVER_LIFT_PX;
+                pairedFavorite.setExternalAlpha(alpha);
+            }
 
             // Ombre portée AVANT le fond de la carte (sinon elle le
             // recouvrirait) — légèrement décalée vers le bas pour un effet
@@ -498,33 +911,192 @@ public class UiMainMenuScreen extends UiScreenBase {
             // Blur/alpha légèrement accentués au survol (+hoverT) — même
             // traitement que ResultCard, accentue la sensation de carte qui
             // se soulève plutôt que de simplement glisser.
-            UiColor shadowColor = new UiColor(0, 0, 0, 170).multiplyAlpha(t);
+            UiColor shadowColor = new UiColor(0, 0, 0, 170).multiplyAlpha(alpha);
             float shadowOff = UiTheme.scaled(6f);
             renderer.drawShadow(x, drawY - shadowOff, x + w, drawY + h - shadowOff, UiTheme.RADIUS_MD,
                 UiTheme.scaled(18f) + hoverT * UiTheme.scaled(6f), UiTheme.scaled(3f),
                 shadowColor, vpWidth, vpHeight);
 
-            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(t);
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(alpha);
             renderer.drawRoundedRect(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
 
-            // Pastille icone (initiale du mod) — pas d'image reelle en attendant les icones mods.
+            // Traduit UNE FOIS ici, à l'affichage — "cardName"/"cardDescription"
+            // restent le texte source (français) dans les champs de la
+            // classe (pas de conflit d'usage comme clé ici, contrairement à
+            // SectionHeader/CategoryTab, mais même principe : traduire au
+            // dernier moment permet un changement de langue instantané, sans
+            // attendre le prochain rebuildAll()).
+            String displayName = Lang.tr(cardName);
+            // BUG TROUVÉ (retour utilisateur : "il faut changer le texte
+            // carrément selon la taille de l'interface", PAS juste réduire
+            // l'échelle ou tronquer par défaut) — en mode "Taille de
+            // l'interface" = Grande, utilise la description COURTE dédiée du
+            // module/groupe si une a été fournie (voir LauncherModule/
+            // ModuleGroup#shortDescription — ex: "Confort visuel" y perd son
+            // énumération de tous ses modules membres pour une vraie phrase
+            // courte). Repli sur la description complète (comme avant) si
+            // aucune version courte n'a été déclarée pour cette carte —
+            // renderer.truncate ci-dessous reste alors le filet de sécurité.
+            boolean largeMode = UiTheme.UI_SCALE >= 1.4f;
+            String descriptionSource = (largeMode && cardShortDescription != null) ? cardShortDescription : cardDescription;
+            String displayDescription = Lang.tr(descriptionSource);
+            String initial = displayName.substring(0, 1).toUpperCase(Locale.ROOT);
+
+            // 3 agencements (voir GlobalUiSettings#cardLayout/LayoutSwitchButton) —
+            // Compacte (1) réutilise drawDetailed TEL QUEL (retour utilisateur
+            // explicite : "garder l'apparence de la card détaillé, juste
+            // mettre tout sur 1 seule colonne") — seule la grille change (voir
+            // rebuildAll(), 1 colonne pleine largeur au lieu de 2), aucune
+            // différence de rendu de carte elle-même. Seule Grille d'icônes
+            // (2) a un rendu vraiment distinct.
+            if (layoutMode == 2) {
+                drawIconGrid(renderer, displayName, displayDescription, initial, drawY, alpha, mouseX, mouseY, vpWidth, vpHeight);
+            } else {
+                drawDetailed(renderer, displayName, displayDescription, initial, drawY, alpha, vpWidth, vpHeight);
+            }
+        }
+
+        /**
+         * Icône carrée à {@code (ix,iy)} taille {@code size} — vraie icône
+         * distante ({@link #cardIconUrl}, voir {@link LauncherModule#iconUrl})
+         * une fois chargée, PASTILLE-LETTRE de repli sinon (pas encore
+         * chargée, ou aucune URL fournie pour cette carte — ex: modules pas
+         * encore couverts) : demandé explicitement ("ajoute des icônes pour
+         * tous les modules... même système que Modrinth"), voir
+         * ResultCard#draw dans ModrinthContentScreen pour le même motif
+         * exact (UiRemoteImage.get + UiAsyncFade + repli pastille). Partagé
+         * entre {@link #drawDetailed} et {@link #drawIconGrid} — seule la
+         * TAILLE/POSITION de l'icône diffère entre agencements, jamais son
+         * contenu.
+         */
+        private void drawIconOrInitial(UiRenderer renderer, float ix, float iy, float size, String initial,
+                float alpha, int vpWidth, int vpHeight) {
+            // Réticule baké en local (voir LauncherModule.ICON_LOCAL_CROSSHAIR)
+            // — synchrone, pas de fetch/fondu async nécessaire, contrairement
+            // à une vraie URL distante ci-dessous.
+            if (LauncherModule.ICON_LOCAL_CROSSHAIR.equals(cardIconUrl)) {
+                int px = Math.max(8, Math.round(size));
+                renderer.drawIcon(LauncherModule.ICON_LOCAL_CROSSHAIR, crosshairImage(px), ix, iy, size, size, alpha, vpWidth, vpHeight);
+                return;
+            }
+            BufferedImage icon = cardIconUrl != null ? UiRemoteImage.get(cardIconUrl) : null;
+            if (icon != null) {
+                iconFade.markReady();
+                renderer.drawIcon(cardIconUrl, icon, ix, iy, size, size, iconFade.alpha() * alpha, vpWidth, vpHeight);
+                return;
+            }
             // Dégradé (accent clair en haut, dim en bas) plutôt qu'un fond
-            // plat — même jeu de lumière que le reste de l'appli.
-            float iconSize = UiTheme.scaled(36f);
-            float pad = UiTheme.scaled(12f);
-            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * t);
-            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(t);
-            renderer.drawGradientRect(x + pad, drawY + h - iconSize - pad, x + pad + iconSize, drawY + h - pad,
-                UiTheme.RADIUS_SM, iconBottom, iconTop, vpWidth, vpHeight);
-            String initial = cardName.substring(0, 1).toUpperCase(Locale.ROOT);
+            // plat — même jeu de lumière que le reste de l'appli. Échelle de
+            // texte FIXE (pas proportionnelle à `size`, comme avant l'ajout
+            // des icônes distantes) : la grande cellule du mode Grille a
+            // toujours utilisé la même échelle que la petite pastille du
+            // mode Détaillé, sans lien avec `size` — repli rare (icône
+            // distante manquante/en cours de chargement), pas retouché ici.
+            UiColor iconTop = UiTheme.accentLight().multiplyAlpha(UiTheme.ACCENT_DIM.a * alpha);
+            UiColor iconBottom = UiTheme.ACCENT_DIM.multiplyAlpha(alpha);
+            renderer.drawGradientRect(ix, iy, ix + size, iy + size, UiTheme.RADIUS_SM, iconBottom, iconTop, vpWidth, vpHeight);
             float iconTextScale = UiTheme.scaled(0.5f);
             float iw = renderer.textWidth(initial, iconTextScale);
-            renderer.drawText(initial, x + pad + (iconSize - iw) / 2f, drawY + h - pad - iconSize / 2f - UiTheme.scaled(6f),
-                UiTheme.ACCENT.multiplyAlpha(t), iconTextScale, vpWidth, vpHeight);
+            renderer.drawText(initial, ix + (size - iw) / 2f, iy + size / 2f - UiTheme.scaled(4f),
+                UiTheme.ACCENT.multiplyAlpha(alpha), iconTextScale, vpWidth, vpHeight);
+        }
+
+        /** Agencement d'origine, INCHANGÉ — icône en bas-gauche, nom + description empilés à droite. */
+        private void drawDetailed(UiRenderer renderer, String displayName, String displayDescription, String initial,
+                float drawY, float alpha, int vpWidth, int vpHeight) {
+            this.tooltip = null;
+            float iconSize = UiTheme.scaled(36f);
+            float pad = UiTheme.scaled(12f);
+            drawIconOrInitial(renderer, x + pad, drawY + h - iconSize - pad, iconSize, initial, alpha, vpWidth, vpHeight);
 
             float textX = x + pad + iconSize + pad;
-            renderer.drawText(cardName, textX, drawY + h - UiTheme.scaled(26f), UiTheme.TEXT_PRIMARY.multiplyAlpha(t), UiTheme.scaled(0.42f), vpWidth, vpHeight);
-            renderer.drawText(cardDescription, textX, drawY + h - UiTheme.scaled(46f), UiTheme.TEXT_SECONDARY.multiplyAlpha(t), UiTheme.scaled(0.4f), vpWidth, vpHeight);
+            // BUG TROUVÉ (retour utilisateur : "les sous-titres des cards de
+            // mod en mode grand dépassent") — ni le nom ni la description
+            // n'étaient jamais bornés à la largeur réelle de la carte, texte
+            // fixe (pas de retour à la ligne voulu, voir demande explicite).
+            // renderer.truncate (voir UiRenderer, déplacé depuis
+            // ModrinthContentScreen où ce même besoin existait déjà) ne
+            // change RIEN tant que le texte tient déjà dans cette largeur —
+            // donc aucun effet en mode Petite/Normale, tronque avec "..."
+            // seulement quand ça déborde réellement (mode Grande, ou un nom/
+            // description simplement long). Gardé comme filet de sécurité
+            // pour l'instant (retour utilisateur : solution finale encore en
+            // discussion — voir "changer le texte carrément selon la taille
+            // de l'interface").
+            float textMaxW = (x + w) - textX - pad;
+            renderer.drawText(renderer.truncate(displayName, UiTheme.scaled(0.42f), textMaxW), textX, drawY + h - UiTheme.scaled(26f), UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), UiTheme.scaled(0.42f), vpWidth, vpHeight);
+            renderer.drawText(renderer.truncate(displayDescription, UiTheme.scaled(0.4f), textMaxW), textX, drawY + h - UiTheme.scaled(46f), UiTheme.TEXT_SECONDARY.multiplyAlpha(alpha), UiTheme.scaled(0.4f), vpWidth, vpHeight);
+        }
+
+        /**
+         * Cellule carrée (colonnes dynamiques, voir rebuildAll()) — refaite
+         * pour coller à une référence visuelle fournie par l'utilisateur :
+         * grande icône sur fond sombre au-dessus, bande en bas portant le
+         * nom à gauche et un cœur à droite. Précision utilisateur après une
+         * 1ère version : la bande ENTIÈRE (pas le cœur) est le clic
+         * activer/désactiver — sa couleur suit donc {@code pairedToggle.value()}
+         * (accent quand actif, gris terne sinon) — et le cœur est un
+         * FAVORI indépendant ({@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule#favorite}),
+         * voir rebuildAll() pour les deux widgets cliquables séparés qui
+         * portent chacun sa propre logique, cette méthode ne fait QUE dessiner.
+         */
+        private void drawIconGrid(UiRenderer renderer, String displayName, String displayDescription, String initial,
+                float drawY, float alpha, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            this.tooltip = displayDescription;
+            float barH = iconGridBarH();
+            float pad = UiTheme.scaled(8f);
+
+            // Bande cliquable (voir pairedToggle, invisibleStyle — ce
+            // dessin-ci est SA seule apparence) — couleur reflète l'état
+            // actif/inactif du mod, pas juste décorative. drawRoundedRect
+            // arrondit TOUJOURS les 4 coins identiquement (pas de contrôle
+            // par coin dans ce moteur), donc un second rect PLAT (radius 0)
+            // recouvre la moitié haute de la bande pour annuler l'arrondi du
+            // haut : seuls les 2 coins bas restent visuellement arrondis,
+            // alignés sur ceux de la carte (même radius, même bord bas — voir
+            // le fond générique de draw(), déjà dessiné avant l'appel ici).
+            //
+            // Survol ajouté (retour utilisateur : "ajoute un hover à la bar
+            // pour activer/désactiver le module") — hoverAnim (soulèvement
+            // de TOUTE la carte) ne suffit pas, il faut un retour visuel
+            // localisé À LA BANDE elle-même pour qu'elle se ressente comme
+            // cliquable indépendamment du reste de la carte. Interroge
+            // directement pairedToggle.contains() (sa géométrie EST la
+            // bande, voir rebuildAll()) plutôt que de dupliquer x/y/w/barH —
+            // même principe que ModCard.contains() plus haut.
+            boolean enabled = pairedToggle != null && pairedToggle.value();
+            barHoverAnim.setTarget(pairedToggle != null && pairedToggle.contains(mouseX, mouseY) ? 1f : 0f);
+            float barHoverT = barHoverAnim.get();
+            UiColor barBase = enabled ? UiTheme.ACCENT : UiTheme.TRACK_OFF;
+            UiColor barHovered = enabled ? UiTheme.accentLight() : UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.TEXT_MUTED, 0.35f);
+            UiColor barColor = UiColor.lerp(barBase, barHovered, barHoverT).multiplyAlpha(alpha);
+            renderer.drawRoundedRect(x, drawY, x + w, drawY + barH, UiTheme.RADIUS_MD, barColor, vpWidth, vpHeight);
+            if (barH > UiTheme.RADIUS_MD) {
+                renderer.drawRoundedRect(x, drawY + UiTheme.RADIUS_MD, x + w, drawY + barH, 0f, barColor, vpWidth, vpHeight);
+            }
+
+            // Icône centrée dans la zone au-dessus de la bande — réduite
+            // (retour utilisateur : "met les icônes plus petites pour la
+            // grille") : occupait quasiment toute la zone disponible avant
+            // (juste la marge `pad` en moins), désormais une fraction fixe
+            // de cette zone, avec la marge résultante répartie tout autour.
+            float iconAreaH = h - barH;
+            float iconSize = Math.max(UiTheme.scaled(18f), Math.min(w, iconAreaH) * 0.55f);
+            float iconX = x + (w - iconSize) / 2f;
+            float iconY = drawY + barH + (iconAreaH - iconSize) / 2f;
+            drawIconOrInitial(renderer, iconX, iconY, iconSize, initial, alpha, vpWidth, vpHeight);
+
+            // Nom dans la bande, à gauche du cœur (voir rebuildAll() pour la
+            // position du cœur lui-même — widget séparé {@link #pairedFavorite}).
+            // Blanc FIXE (pas TEXT_PRIMARY) : la bande reste colorée quel que
+            // soit le thème clair/sombre, un texte qui suivrait le thème
+            // perdrait tout contraste en thème clair.
+            float heartReserve = pairedFavorite != null ? (pairedFavorite.w + UiTheme.scaled(14f)) : pad;
+            float nameScale = UiTheme.scaled(0.36f);
+            float nameMaxW = w - pad * 2f - heartReserve;
+            String truncName = renderer.truncate(displayName, nameScale, nameMaxW);
+            renderer.drawText(truncName, x + pad, drawY + barH / 2f - UiTheme.scaled(4f),
+                new UiColor(1f, 1f, 1f, 1f).multiplyAlpha(alpha), nameScale, vpWidth, vpHeight);
         }
 
         @Override

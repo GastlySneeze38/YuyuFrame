@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.module.ClearVisionModule;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -51,8 +52,16 @@ public abstract class ClearOverlaysMixin261 {
                 return;
             }
             if (path.contains("powder_snow")) {
+                // Demandé explicitement ("3 paramètres indépendants eau/lave/
+                // neige") — cet overlay de givre est spécifique à la neige
+                // poudreuse, doit donc suivre EXACTEMENT le même réglage que
+                // le brouillard neige (voir PowderedSnowFogEnvironmentMixin261),
+                // pas juste l'état global du module.
                 LauncherModule module = ModuleRegistry.get("clear-vision");
-                if (module != null && module.isEnabled()) ci.cancel();
+                if (module instanceof ClearVisionModule && module.isEnabled()
+                        && ((ClearVisionModule) module).clearPowderSnow) {
+                    ci.cancel();
+                }
             }
         } catch (Throwable t) {
             LauncherLog.err("[ClearOverlaysMixin261] la$filterTextureOverlay: " + t);

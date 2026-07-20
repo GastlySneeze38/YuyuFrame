@@ -20,6 +20,7 @@ public final class FpsModule extends SingleHudModule {
             new HudElement("fps", "FPS", HudAnchor.TOP_LEFT, 8f, 8f, new ContentSource()));
         hudElement().textColor = new UiColor(100, 180, 255, 255);
         hudElement().accentSuffix = " FPS";
+        iconUrl = icons8("speedometer");
     }
 
     /** FPS réel courant — lecture du champ Minecraft.currentFps. */

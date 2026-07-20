@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
+import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
@@ -72,8 +73,41 @@ public final class GlobalUiSettings extends LauncherModule {
         category = "Apparence", options = { "Petite", "Normale", "Grande" })
     public int uiSize = 1;
 
+    // Demandé explicitement ("plusieurs agencements comme dans Lunar, choix
+    // via une icône à côté de la barre de recherche") — le champ existe ICI
+    // (persisté comme tout autre réglage @ConfigDropdown, voir HudConfigStore)
+    // uniquement pour la sauvegarde disque ; le changement rapide se fait
+    // depuis UiMainMenuScreen (icône dédiée), pas depuis cet écran Paramètres,
+    // mais rien n'empêche de le faire ici aussi (même champ, même source de
+    // vérité). Lu directement par UiMainMenuScreen.rebuildAll() à chaque
+    // reconstruction de la grille.
+    @ConfigDropdown(name = "Affichage des cartes (menu)", description = "Disposition des cartes de mods dans le menu principal.",
+        category = "Apparence", options = { "Détaillé", "Compacte", "Grille d'icônes" })
+    public int cardLayout = 2; // Grille d'icônes par défaut — retour utilisateur : "la grille est parfaite, mets-la par défaut".
+
+    // Demandé explicitement ("améliore le système de favori... rajoute un
+    // settings pour mettre à l'écart les modules en favori") — les favoris
+    // remontent TOUJOURS en tête de grille (voir UiMainMenuScreen.rebuildAll(),
+    // comportement inconditionnel, PAS piloté par ce réglage) ; celui-ci ne
+    // pilote QUE l'affichage d'une section séparée avec titres ("FAVORIS" /
+    // "AUTRES MODULES") au lieu d'une simple grille continue.
+    @ConfigToggle(name = "Séparer les favoris", description = "Affiche les mods favoris dans une section dédiée, avec un titre, en haut de la grille du menu principal.",
+        category = "Apparence")
+    public boolean separateFavorites = true; // Activé par défaut — retour utilisateur explicite.
+
     @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;
+
+    // Choix de langue (demande explicite : "ajoute le fait que on puisse
+    // choisir notre langue et donc avoir plusieurs fichier de traduction") —
+    // voir Lang pour le mécanisme (texte source français utilisé comme clé
+    // de recherche dans lang/<id>.json, jamais de clé abstraite dédiée à
+    // maintenir dans chaque module). Les index de {@link Lang#LANGUAGE_IDS}/
+    // {@link Lang#LANGUAGE_NAMES} pilotent directement les options ici — les
+    // deux tableaux DOIVENT rester en phase.
+    @ConfigDropdown(name = "Langue", description = "Langue de l'interface du launcher (menu, réglages, HUD...). Certains écrans avancés (navigateur Modrinth) restent en français pour le moment.",
+        category = "Général", options = { "Français", "English", "Español", "Deutsch", "Português (Brasil)", "Русский" })
+    public int language = 0;
 
     // Visibilité du HUD à travers les écrans vanilla/mod — réglage GLOBAL
     // (tous les modules HUD), demandé explicitement par l'utilisateur suite
@@ -111,6 +145,7 @@ public final class GlobalUiSettings extends LauncherModule {
 
     @Override
     public void onConfigChanged() {
+        Lang.setLanguage(language);
         UiTheme.applyMode(themeMode == 1 ? UiTheme.Mode.LIGHT : UiTheme.Mode.DARK);
 
         float hudAlpha = Math.max(0f, Math.min(1f, hudOpacity / 100f));
