@@ -3,19 +3,15 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { LOADERS, clampLoader } from '@/lib/loader'
+import { formatBytes, RAM_OPTIONS } from '@/lib/format'
+import { ModalShell } from '@/components/ui/ModalShell'
 import type { DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
-
-const LOADERS: Loader[] = ['vanilla', 'fabric', 'forge']
-const RAM_OPTIONS = [1024, 2048, 4096, 6144, 8192]
 
 const EXTRA_DIR_LABELS: Record<string, string> = {
   config: 'Configs des mods',
   resourcepacks: 'Packs de ressources',
   shaderpacks: 'Shaders',
-}
-
-function clampLoader(loader: string | null): Loader {
-  return (LOADERS as string[]).includes(loader ?? '') ? (loader as Loader) : 'vanilla'
 }
 
 function sourceLabel(source: DetectedSource) {
@@ -26,10 +22,6 @@ function sourceLabel(source: DetectedSource) {
     case 'modrinth_app': return 'Modrinth App détecté'
     default: return 'Dossier de mods trouvé'
   }
-}
-
-function formatSize(bytes: number) {
-  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} Mo` : `${(bytes / 1024).toFixed(0)} Ko`
 }
 
 interface ImportSourceModalProps {
@@ -180,27 +172,12 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    <ModalShell
+      title="Importer depuis un autre launcher"
+      onClose={onClose}
+      maxWidth="max-w-lg"
+      cardStyle={{ maxHeight: '85vh' }}
     >
-      <div
-        className="flex w-full max-w-lg flex-col gap-4 rounded-2xl p-6"
-        style={{ background: '#111118', border: '1px solid rgba(75,63,207,0.3)', boxShadow: '0 24px 80px rgba(0,0,0,0.6)', maxHeight: '85vh' }}
-      >
-        <div className="flex flex-shrink-0 items-center justify-between">
-          <p className="font-bold text-white" style={{ fontSize: 15 }}>Importer depuis un autre launcher</p>
-          <button
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg"
-            style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
-        </div>
 
         {step === 'pick' && (
           <div className="flex flex-col items-center gap-4 py-6">
@@ -343,7 +320,7 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
                     {isDuplicate && (
                       <span style={{ fontSize: 9.5, color: 'rgba(179,163,255,0.8)', fontWeight: 600 }}>déjà présent</span>
                     )}
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{formatSize(m.size)}</span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{formatBytes(m.size)}</span>
                   </label>
                 )
               })}
@@ -408,7 +385,6 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </ModalShell>
   )
 }

@@ -2,22 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Chill theme (défaut) ── */
-:root,
-[data-theme='chill'] {
-  --bg-primary: 15 23 42;
-  --bg-secondary: 22 33 58;
-  --bg-card: 30 41 59;
-  --accent: 99 102 241;
-  --accent-hover: 129 140 248;
-  --txt-primary: 241 245 249;
-  --txt-secondary: 148 163 184;
-  --border: 51 65 85;
-  --glow: 99 102 241;
-}
-
-/* ── Gamer theme ── */
-[data-theme='gamer'] {
+:root {
   --bg-primary: 12 12 14;
   --bg-secondary: 19 19 21;
   --bg-card: 30 30 35;

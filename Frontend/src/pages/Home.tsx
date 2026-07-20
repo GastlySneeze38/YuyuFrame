@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { BETA_TEST } from '@/config/beta'
-import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { loaderColor } from '@/lib/loader'
+import { useTauriEvent } from '@/hooks/useTauriEvent'
 
 interface DownloadProgress {
   current: number
@@ -39,12 +40,6 @@ const STARS = Array.from({ length: 55 }, (_, i) => ({
   r: i % 4 === 0 ? 2 : 1,
   o: 0.15 + (i % 5) * 0.08,
 }))
-
-function loaderColor(loader: string) {
-  if (loader === 'fabric') return '#b5a0ff'
-  if (loader === 'forge') return '#f0a040'
-  return 'rgba(255,255,255,0.4)'
-}
 
 export default function Home() {
   const navigate = useNavigate()
@@ -81,47 +76,33 @@ export default function Home() {
     }).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    let unlistenProgress: (() => void) | null = null
-    let unlistenState: (() => void) | null = null
-    let unlistenError: (() => void) | null = null
-    let unlistenCancelled: (() => void) | null = null
+  useTauriEvent<DownloadProgress>('download_progress', (payload) => {
+    setProgress(payload)
+  })
 
-    listen<DownloadProgress>('download_progress', (event) => {
-      setProgress(event.payload)
-    }).then((fn) => { unlistenProgress = fn })
-
-    listen<{ running: boolean; instance_id: string }>('game_state', (event) => {
-      const { running, instance_id } = event.payload
-      setInstanceRunning(instance_id, running)
-      if (!running) {
-        setProgress(null)
-        setCancelling(false)
-        getCurrentWindow().show()
-      }
-    }).then((fn) => { unlistenState = fn })
-
-    listen<string>('launch_error', (event) => {
-      setLaunchMsg(event.payload)
-      if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
+  useTauriEvent<{ running: boolean; instance_id: string }>('game_state', (payload) => {
+    const { running, instance_id } = payload
+    setInstanceRunning(instance_id, running)
+    if (!running) {
       setProgress(null)
       setCancelling(false)
-    }).then((fn) => { unlistenError = fn })
-
-    listen<string>('launch_cancelled', () => {
-      setCancelNotice('Lancement annulé')
-      setProgress(null)
-      setCancelling(false)
-      setTimeout(() => setCancelNotice(''), 4000)
-    }).then((fn) => { unlistenCancelled = fn })
-
-    return () => {
-      unlistenProgress?.()
-      unlistenState?.()
-      unlistenError?.()
-      unlistenCancelled?.()
+      getCurrentWindow().show()
     }
-  }, [])
+  })
+
+  useTauriEvent<string>('launch_error', (payload) => {
+    setLaunchMsg(payload)
+    if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
+    setProgress(null)
+    setCancelling(false)
+  })
+
+  useTauriEvent<string>('launch_cancelled', () => {
+    setCancelNotice('Lancement annulé')
+    setProgress(null)
+    setCancelling(false)
+    setTimeout(() => setCancelNotice(''), 4000)
+  })
 
   const handleCancelLaunch = async () => {
     if (!selectedInstanceId || cancelling) return

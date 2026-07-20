@@ -93,8 +93,6 @@ export interface ModpackMeta {
   mod_files: string[]
 }
 
-export type Theme = 'chill' | 'gamer'
-
 export interface Account {
   username: string
   uuid: string

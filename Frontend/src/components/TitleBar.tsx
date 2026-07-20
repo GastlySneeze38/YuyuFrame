@@ -4,7 +4,7 @@ import { useStore } from '@/stores/useStore'
 const win = getCurrentWindow()
 
 export function TitleBar() {
-  const { theme, toggleTheme, username } = useStore()
+  const { username } = useStore()
 
   const minimize = () => win.minimize()
   const maximize = () => win.toggleMaximize()
