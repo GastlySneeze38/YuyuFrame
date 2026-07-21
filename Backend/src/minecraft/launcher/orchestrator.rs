@@ -19,6 +19,7 @@ use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, ex
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, LoaderSetup};
 use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready};
+use super::ready_event::{create_ready_event, wait_for_ready_event};
 
 /// Message d'erreur sentinelle renvoyé par `download_and_launch` quand l'arrêt
 /// vient d'une annulation demandée par l'utilisateur (`cancel_launch`), pour
@@ -342,7 +343,14 @@ pub async fn download_and_launch(
     // ── LauncherAgent setup ──────────────────────────────────────────────────
     // Resource packs Modrinth in-game (voir docs/LauncherAgent/index.md). Agent
     // totalement indépendant du p2p-agent — actif que P2P soit activé ou non.
-    let launcher_agent = setup_launcher_agent(version_id, loader, &client, &app, &console_label, &progress_floor).await;
+    //
+    // Named Event Win32 (voir ready_event.rs) : canal principal pour
+    // game_ready, en plus du fallback stdout+fichier déjà en place — créé ICI
+    // (avant le spawn de la JVM) pour que son nom soit inclus dans l'argument
+    // -javaagent, mais attendu seulement après le spawn (plus bas).
+    let ready_event = create_ready_event(instance_id);
+    let ready_event_name = ready_event.as_ref().map(|(name, _)| name.clone());
+    let launcher_agent = setup_launcher_agent(version_id, loader, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
     let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
     // ── Attente des assets ────────────────────────────────────────────────────
@@ -402,13 +410,15 @@ pub async fn download_and_launch(
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_tailer = stop_flag.clone();
     let stop_flag_ready = stop_flag.clone();
+    let stop_flag_event = stop_flag.clone();
     let app_log = app.clone();
     let label_log = console_label.clone();
-    // Partagé entre les deux canaux de détection de game_ready (stdout +
-    // fichier, voir plus bas) — le premier qui voit le marqueur gagne.
+    // Partagé entre les trois canaux de détection de game_ready (event +
+    // stdout + fichier, voir plus bas) — le premier qui voit le signal gagne.
     let ready_sent = Arc::new(AtomicBool::new(false));
     let ready_sent_stdout = ready_sent.clone();
     let ready_sent_file = ready_sent.clone();
+    let ready_sent_event = ready_sent.clone();
 
     let mut java_cmd = tokio::process::Command::new(&java);
     java_cmd
@@ -488,9 +498,17 @@ pub async fn download_and_launch(
 
     // Filet de sécurité game_ready (voir watch_agent_log_for_ready) — course
     // avec la détection stdout ci-dessus, `ready_sent` partagé garantit qu'un
-    // seul des deux émet l'événement.
+    // seul des trois canaux émet l'événement.
     let agent_log_path = launcher_agent_dir().join("logs").join("launcher-agent.log");
     tokio::spawn(watch_agent_log_for_ready(agent_log_path, stop_flag_ready, ready_sent_file, app.clone(), instance_id.to_string()));
+
+    // Canal principal game_ready : Named Event Win32 (voir ready_event.rs) —
+    // créé plus haut, avant le spawn, pour que son nom soit dans l'argument
+    // -javaagent. `None` sur non-Windows ou si CreateEventW a échoué (le
+    // fallback stdout+fichier ci-dessus suffit alors).
+    if let Some((_, handle)) = ready_event {
+        tokio::spawn(wait_for_ready_event(handle, stop_flag_event, ready_sent_event, app.clone(), instance_id.to_string()));
+    }
 
     // Clear progress — game is now running
     state.write().await.download_progress = None;

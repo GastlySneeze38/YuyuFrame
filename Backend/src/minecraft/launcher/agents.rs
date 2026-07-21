@@ -125,6 +125,7 @@ pub(super) async fn setup_launcher_agent(
     app: &tauri::AppHandle,
     console_label: &str,
     progress_floor: &std::sync::atomic::AtomicU64,
+    ready_event_name: Option<&str>,
 ) -> AgentSetup {
     let libs_dir = launcher_agent_libs_dir();
     let mixin_jar    = libs_dir.join("mixin.jar");
@@ -226,7 +227,7 @@ pub(super) async fn setup_launcher_agent(
     // (Java) laisse alors yarnPath=null, MappingsRegistry reste en
     // scheme OFFICIAL sans jamais tenter de charger de jar Yarn.
     let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
-    let agent_arg = match &yarn_path_opt {
+    let mut agent_arg = match &yarn_path_opt {
         Some(yarn_path) => format!(
             "-javaagent:{}=yarn={},version={}",
             agent_jar.display(), yarn_path.display(), version_id,
@@ -236,6 +237,13 @@ pub(super) async fn setup_launcher_agent(
             agent_jar.display(), version_id,
         ),
     };
+    // readyEvent=... — Named Event Win32 (voir ready_event.rs) signalé par le
+    // hook TitleScreen.init() de l'agent (ReadyEventSignal.java, JNA) une fois
+    // le menu principal atteint. Absent (None) sur non-Windows ou si la
+    // création de l'event a échoué — le fallback stdout+fichier suffit alors.
+    if let Some(name) = ready_event_name {
+        agent_arg.push_str(&format!(",readyEvent={}", name));
+    }
     log_to_console(app, console_label, &format!("[LauncherAgent] Mixin : {}", mixin_arg), "out");
     log_to_console(app, console_label, &format!("[LauncherAgent] Agent : {}", agent_arg), "out");
 

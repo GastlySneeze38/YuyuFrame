@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-07-21-v660";
+    private static final String BUILD_VERSION = "2026-07-22-v661";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -124,6 +124,7 @@ public class LauncherAgent {
         // (appelé paresseusement à la première utilisation, quelle que soit la
         // copie de la classe) la relit pour se réinitialiser elle-même.
         if (config.yarnPath != null) System.setProperty("launcheragent.yarnPath", config.yarnPath);
+        if (config.readyEvent != null) System.setProperty("launcheragent.readyEvent", config.readyEvent);
         System.setProperty("launcheragent.fabric", String.valueOf(fabric));
 
         // Chemin du jar — lu par FabricKnotExposer pour enregistrer

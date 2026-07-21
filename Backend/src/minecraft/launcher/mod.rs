@@ -7,6 +7,7 @@ mod loader_setup;
 mod mojang_rules;
 mod orchestrator;
 pub(crate) mod progress;
+mod ready_event;
 
 pub use agent_deploy::deploy_bundled_agent;
 pub use orchestrator::{download_and_launch, minecraft_dir, LAUNCH_CANCELLED_MSG};

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client;
 
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
+import com.yuyuframe.launcheragent.runtime.ipc.ReadyEventSignal;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -28,5 +29,6 @@ public abstract class TitleScreenMixin {
         // + ressources) et affiche enfin le menu principal — comble le "trou"
         // entre la fin de nos téléchargements et le jeu réellement visible.
         LauncherLog.info("[YUYUFRAME_READY]");
+        ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
     }
 }

@@ -29,6 +29,14 @@ public class AgentConfig {
      */
     public String forcedVersion;
 
+    /**
+     * Nom du Named Event Win32 (arg "readyEvent=...") à signaler une fois le
+     * menu principal atteint — voir ReadyEventSignal. Null si non fourni
+     * (non-Windows, ou création échouée côté Rust) : le fallback stdout+
+     * fichier (marqueur [YUYUFRAME_READY]) reste alors le seul canal.
+     */
+    public String readyEvent;
+
     private static AgentConfig current;
 
     public static AgentConfig parse(String args) {
@@ -39,8 +47,9 @@ public class AgentConfig {
                 String[] kv = pair.split("=", 2);
                 if (kv.length != 2) continue;
                 switch (kv[0].trim()) {
-                    case "yarn":    cfg.yarnPath      = kv[1].trim(); break;
-                    case "version": cfg.forcedVersion = kv[1].trim(); break;
+                    case "yarn":       cfg.yarnPath      = kv[1].trim(); break;
+                    case "version":    cfg.forcedVersion = kv[1].trim(); break;
+                    case "readyEvent": cfg.readyEvent    = kv[1].trim(); break;
                 }
             }
         }

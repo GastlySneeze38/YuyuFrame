@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
+import com.yuyuframe.launcheragent.runtime.ipc.ReadyEventSignal;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,5 +23,6 @@ public abstract class TitleScreenMixin189 {
     private void la$onInit(CallbackInfo ci) {
         LauncherLog.ui(3, "[LauncherAgent] Hook TitleScreen.init() OK — pipeline 1.8.9 opérationnel");
         LauncherLog.info("[YUYUFRAME_READY]");
+        ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
     }
 }
