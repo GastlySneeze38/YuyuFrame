@@ -43,7 +43,7 @@ export default function Instances() {
       setInstances(insts)
       if (vers) setVersions(vers)
       if (insts.some((i) => i.favorite)) setOthersExpanded(false)
-    }).finally(() => setLoading(false))
+    }).catch(showError).finally(() => setLoading(false))
   }, [])
 
   const releaseVersions = versions
@@ -235,7 +235,7 @@ export default function Instances() {
         <ImportSourceModal
           onClose={() => setShowImport(false)}
           onImported={(instanceId) => {
-            api.instances.list().then(setInstances)
+            api.instances.list().then(setInstances).catch(showError)
             setSelectedInstanceId(instanceId)
           }}
         />

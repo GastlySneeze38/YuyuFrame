@@ -75,7 +75,7 @@ export default function Home() {
       if (!selectedInstanceId && list.length > 0) {
         setSelectedInstanceId(list[0].id)
       }
-    }).catch(() => {})
+    }).catch(showError)
   }, [])
 
   useTauriEvent<DownloadProgress>('download_progress', (payload) => {
@@ -111,7 +111,8 @@ export default function Home() {
     setCancelling(true)
     try {
       await api.launch.cancel(selectedInstanceId)
-    } catch {
+    } catch (e) {
+      showError(e)
       setCancelling(false)
     }
   }

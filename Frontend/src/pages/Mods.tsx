@@ -136,7 +136,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       setModpackMeta(null)
       delete _modrinthCache[instanceId]
       await loadMods()
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }
 
   const handleReplaceModpack = () => {
@@ -305,8 +305,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
       if (result.skipped.length > 0) {
         setImportNotice(`${result.skipped.length} mod(s) déjà présent(s) ignoré(s)`)
       }
-    } catch {
-      setModsError("Erreur lors de l'import")
+    } catch (e) {
+      showError(e)
     } finally {
       setUploading(false)
     }

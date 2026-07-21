@@ -6,6 +6,7 @@ import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
+import { showError } from '@/stores/useErrorToast'
 import { BETA_TEST } from '@/config/beta'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
@@ -55,7 +56,7 @@ export default function App() {
     api.instances.startupSync(instanceSyncMode)
       .then(() => api.instances.list())
       .then(setInstances)
-      .catch(() => {})
+      .catch(showError)
 
     // Rafraîchit le token Minecraft au démarrage et périodiquement — sinon
     // le seul refresh qui se produisait était celui déclenché par

@@ -54,7 +54,7 @@ export function InstanceSyncCard({
           : list.slice(0, maxSaves).map((s) => s.name)
         setSelectedSaves(new Set(auto))
       })
-      .catch(() => setSavesLoaded(true))
+      .catch((e) => { showError(e); setSavesLoaded(true) })
       .finally(() => setSavesLoading(false))
   }, [expanded])
 
