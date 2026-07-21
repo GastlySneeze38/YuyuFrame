@@ -6,8 +6,7 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
-import { CloseIcon } from '@/components/ui/icons/CloseIcon'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showNotice } from '@/stores/useErrorToast'
 
 interface DownloadProgress {
   current: number
@@ -62,7 +61,6 @@ export default function Home() {
 
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [launchMsg, setLaunchMsg] = useState('')
-  const [cancelNotice, setCancelNotice] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
   const [bannerAnimating, setBannerAnimating] = useState(false)
@@ -100,10 +98,9 @@ export default function Home() {
   })
 
   useTauriEvent<string>('launch_cancelled', () => {
-    setCancelNotice('Lancement annulé')
+    showNotice('Lancement annulé')
     setProgress(null)
     setCancelling(false)
-    setTimeout(() => setCancelNotice(''), 4000)
   })
 
   const handleCancelLaunch = async () => {
@@ -134,7 +131,6 @@ export default function Home() {
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
     setLaunchMsg('')
-    setCancelNotice('')
     try {
       if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies)
       else await api.launch.start(selectedInstanceId, avoidBetaDependencies)
@@ -370,49 +366,49 @@ export default function Home() {
             )}
           </div>
 
-          {/* Launch button (+ bouton d'annulation pendant le lancement) */}
+          {/* Launch button — l'annulation devient une pastille "Annuler"
+              intégrée sous le texte "EN JEU..." plutôt qu'un bouton rond
+              séparé, pour ne pas casser la forme du bouton principal. */}
           <div className="flex w-[80%] mx-auto gap-2">
-            <button
-              onClick={username ? handleLaunch : () => navigate('/login')}
-              disabled={gameRunning || (!!username && !selectedInstanceId)}
-              className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[52px] rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${gameRunning ? 'flex-[3]' : 'flex-1'} ${launchBtnBg} ${launchBtnShadow}`}
-            >
-              {progress && (
-                <span
-                  className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
-                  style={{ width: `${percent}%` }}
-                />
-              )}
-              {gameRunning ? (
-                <span className="relative z-10 flex items-center justify-center gap-2">
+            {gameRunning ? (
+              <div
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-1.5 rounded-2xl text-[13px] tracking-[0.04em] py-2.5 ${launchBtnBg} ${launchBtnShadow}`}
+              >
+                <span className="flex items-center justify-center gap-2">
                   <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
                   EN JEU...
                 </span>
-              ) : progress ? (
-                <span className="relative z-10 flex items-center justify-center gap-2 px-3">
-                  <span className="truncate">{progress.message}</span>
-                  <span className="flex-shrink-0 opacity-80">{percent}%</span>
-                </span>
-              ) : (
-                <span className="relative z-10">
-                  {!username ? 'SE CONNECTER'
-                    : !selectedInstanceId ? 'AUCUNE INSTANCE'
-                    : `LANCER ${instance?.name ?? ''}`}
-                </span>
-              )}
-            </button>
-
-            {gameRunning && (
+                <button
+                  onClick={handleCancelLaunch}
+                  disabled={cancelling}
+                  className={`rounded-full px-4 py-1 text-[10px] font-semibold transition-all duration-150 border ${cancelling ? 'text-[rgba(255,255,255,0.3)] border-[rgba(255,255,255,0.08)] bg-transparent cursor-not-allowed' : 'text-[rgba(252,165,165,0.9)] border-[rgba(248,113,113,0.35)] bg-[rgba(200,50,50,0.14)] cursor-pointer hover:bg-[rgba(200,50,50,0.26)]'}`}
+                >
+                  {cancelling ? 'Annulation...' : 'Annuler'}
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={handleCancelLaunch}
-                disabled={cancelling}
-                title="Annuler le lancement"
-                className={`flex items-center justify-center font-bold text-white transition-all duration-200 active:scale-95 flex-1 h-[52px] rounded-2xl text-[12px] border border-[rgba(248,113,113,0.35)] ${cancelling ? 'bg-[rgba(200,50,50,0.15)] text-[rgba(255,255,255,0.35)] cursor-not-allowed' : 'bg-[rgba(200,50,50,0.18)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(200,50,50,0.3)]'}`}
+                onClick={username ? handleLaunch : () => navigate('/login')}
+                disabled={!!username && !selectedInstanceId}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[52px] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
-                {cancelling ? (
-                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
+                {progress && (
+                  <span
+                    className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
+                    style={{ width: `${percent}%` }}
+                  />
+                )}
+                {progress ? (
+                  <span className="relative z-10 flex items-center justify-center gap-2 px-3">
+                    <span className="truncate">{progress.message}</span>
+                    <span className="flex-shrink-0 opacity-80">{percent}%</span>
+                  </span>
                 ) : (
-                  <CloseIcon size={16} />
+                  <span className="relative z-10">
+                    {!username ? 'SE CONNECTER'
+                      : !selectedInstanceId ? 'AUCUNE INSTANCE'
+                      : `LANCER ${instance?.name ?? ''}`}
+                  </span>
                 )}
               </button>
             )}
@@ -421,12 +417,6 @@ export default function Home() {
           {launchMsg && (
             <p className="w-full rounded-lg px-3 py-2 text-center text-xs text-red-300 bg-[rgba(200,50,50,0.12)]">
               {launchMsg}
-            </p>
-          )}
-
-          {cancelNotice && (
-            <p className="w-full rounded-lg px-3 py-2 text-center text-xs bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.5)]">
-              {cancelNotice}
             </p>
           )}
 
