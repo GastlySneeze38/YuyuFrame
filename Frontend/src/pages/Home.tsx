@@ -234,7 +234,7 @@ export default function Home() {
         </div>
 
         {/* RIGHT: Launcher panel */}
-        <div className="relative flex w-[28%] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 py-5">
+        <div className="relative flex w-[28%] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-5">
 
           <button
             onClick={() => navigate('/information')}
@@ -292,6 +292,12 @@ export default function Home() {
 
           <div className="w-full h-px bg-[rgba(255,255,255,0.06)]" />
 
+          {/* Instance + lancement — groupés avec un gap fixe pour que le bouton
+              ne flotte pas dans un espace résiduel géré par le justify-between
+              du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
+              pour former une pyramide inversée. */}
+          <div className="w-full flex flex-col gap-4">
+
           {/* Instance selector */}
           <div className="w-full flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -337,7 +343,7 @@ export default function Home() {
 
             {/* Instance info pill */}
             {instance && (
-              <div className="flex flex-col gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
+              <div className="w-[92%] mx-auto flex flex-col gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
                   <span className="text-[10px] text-[rgba(255,255,255,0.25)]">·</span>
@@ -365,20 +371,35 @@ export default function Home() {
           </div>
 
           {/* Launch button (+ bouton d'annulation pendant le lancement) */}
-          <div className="flex w-full gap-2">
+          <div className="flex w-[80%] mx-auto gap-2">
             <button
               onClick={username ? handleLaunch : () => navigate('/login')}
               disabled={gameRunning || (!!username && !selectedInstanceId)}
-              className={`font-bold text-white transition-all duration-200 active:scale-95 h-[60px] rounded-2xl text-[14px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${gameRunning ? 'flex-[3]' : 'flex-1'} ${launchBtnBg} ${launchBtnShadow}`}
+              className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[52px] rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${gameRunning ? 'flex-[3]' : 'flex-1'} ${launchBtnBg} ${launchBtnShadow}`}
             >
+              {progress && (
+                <span
+                  className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
+                  style={{ width: `${percent}%` }}
+                />
+              )}
               {gameRunning ? (
-                <span className="flex items-center justify-center gap-2">
+                <span className="relative z-10 flex items-center justify-center gap-2">
                   <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
                   EN JEU...
                 </span>
-              ) : !username ? 'SE CONNECTER'
-                : !selectedInstanceId ? 'AUCUNE INSTANCE'
-                : `LANCER ${instance?.name ?? ''}`}
+              ) : progress ? (
+                <span className="relative z-10 flex items-center justify-center gap-2 px-3">
+                  <span className="truncate">{progress.message}</span>
+                  <span className="flex-shrink-0 opacity-80">{percent}%</span>
+                </span>
+              ) : (
+                <span className="relative z-10">
+                  {!username ? 'SE CONNECTER'
+                    : !selectedInstanceId ? 'AUCUNE INSTANCE'
+                    : `LANCER ${instance?.name ?? ''}`}
+                </span>
+              )}
             </button>
 
             {gameRunning && (
@@ -386,7 +407,7 @@ export default function Home() {
                 onClick={handleCancelLaunch}
                 disabled={cancelling}
                 title="Annuler le lancement"
-                className={`flex items-center justify-center font-bold text-white transition-all duration-200 active:scale-95 flex-1 h-[60px] rounded-2xl text-[12px] border border-[rgba(248,113,113,0.35)] ${cancelling ? 'bg-[rgba(200,50,50,0.15)] text-[rgba(255,255,255,0.35)] cursor-not-allowed' : 'bg-[rgba(200,50,50,0.18)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(200,50,50,0.3)]'}`}
+                className={`flex items-center justify-center font-bold text-white transition-all duration-200 active:scale-95 flex-1 h-[52px] rounded-2xl text-[12px] border border-[rgba(248,113,113,0.35)] ${cancelling ? 'bg-[rgba(200,50,50,0.15)] text-[rgba(255,255,255,0.35)] cursor-not-allowed' : 'bg-[rgba(200,50,50,0.18)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(200,50,50,0.3)]'}`}
               >
                 {cancelling ? (
                   <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
@@ -409,17 +430,7 @@ export default function Home() {
             </p>
           )}
 
-          {progress && (
-            <div className="w-full flex flex-col gap-1.5">
-              <div className="flex justify-between text-[10px] text-[rgba(255,255,255,0.4)]">
-                <span className="truncate">{progress.message}</span>
-                <span className="ml-2 flex-shrink-0">{percent}%</span>
-              </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-[rgba(0,0,0,0.4)]">
-                <div className="h-full rounded-full transition-all duration-300 bg-[#4B3FCF]" style={{ width: `${percent}%` }} />
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
