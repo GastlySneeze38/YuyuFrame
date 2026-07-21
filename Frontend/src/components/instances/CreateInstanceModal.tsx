@@ -37,13 +37,14 @@ async function fetchPresetModFile(
 async function installPresetMods(
   instanceId: string,
   preset: InstancePreset,
+  mcVersion: string,
   onProgress: (done: number, total: number) => void,
 ) {
   for (let i = 0; i < preset.mods.length; i++) {
     onProgress(i, preset.mods.length)
     const entry = preset.mods[i]
     const file = typeof entry === 'string'
-      ? await fetchPresetModFile(entry, preset.mcVersion, preset.loader)
+      ? await fetchPresetModFile(entry, mcVersion, preset.loader)
       : entry
     if (!file) continue
     try { await api.mods.install(instanceId, file.url, file.filename) } catch { /* best-effort */ }
@@ -104,7 +105,7 @@ export function CreateInstanceModal({
     try {
       const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim())
       if (selectedPreset) {
-        await installPresetMods(instance.id, selectedPreset, (done, total) => {
+        await installPresetMods(instance.id, selectedPreset, mcVersion, (done, total) => {
           setLoadingLabel(`Installation des mods (${done}/${total})...`)
         })
       }
@@ -135,7 +136,7 @@ export function CreateInstanceModal({
         </div>
 
         {mode === 'preset' && (
-          <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto">
+          <div className="grid grid-cols-1 gap-2 max-h-[320px] overflow-y-auto pr-1">
             {INSTANCE_PRESETS.map((p) => (
               <PresetCard key={p.id} preset={p} selected={selectedPreset?.id === p.id} onSelect={() => handleSelectPreset(p)} />
             ))}
@@ -152,10 +153,18 @@ export function CreateInstanceModal({
                 <LoaderPicker value={loader} onChange={setLoader} />
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
-                <span className="text-[11px] text-[rgba(255,255,255,0.3)]">{mcVersion}</span>
-                <span className="text-[10px] font-semibold" style={{ color: loaderColor(loader) }}>{loader}</span>
-                <span className="text-[10px] text-[rgba(255,255,255,0.2)]">· {selectedPreset!.mods.length} mods installés automatiquement</span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-end gap-3">
+                  <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} className="flex-1" />
+                  <div className="flex h-[40px] items-center gap-1.5 rounded-xl px-3 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
+                    <span className="text-[11px] font-semibold" style={{ color: loaderColor(loader) }}>{loader}</span>
+                  </div>
+                </div>
+                {mcVersion !== selectedPreset!.mcVersion && (
+                  <p className="text-[10px] text-[rgba(250,204,21,0.75)]">
+                    Version différente du preset ({selectedPreset!.mcVersion}) — certains mods pourraient ne pas avoir de version compatible.
+                  </p>
+                )}
               </div>
             )}
 
