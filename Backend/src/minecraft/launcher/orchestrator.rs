@@ -506,8 +506,12 @@ pub async fn download_and_launch(
     // créé plus haut, avant le spawn, pour que son nom soit dans l'argument
     // -javaagent. `None` sur non-Windows ou si CreateEventW a échoué (le
     // fallback stdout+fichier ci-dessus suffit alors).
-    if let Some((_, handle)) = ready_event {
-        tokio::spawn(wait_for_ready_event(handle, stop_flag_event, ready_sent_event, app.clone(), instance_id.to_string()));
+    match ready_event {
+        Some((_, handle)) => {
+            tracing::info!("[ReadyEvent] spawn de wait_for_ready_event (handle={:#x})", handle);
+            tokio::spawn(wait_for_ready_event(handle, stop_flag_event, ready_sent_event, app.clone(), instance_id.to_string()));
+        }
+        None => tracing::info!("[ReadyEvent] pas d'event créé — repli sur stdout/fichier uniquement pour ce lancement"),
     }
 
     // Clear progress — game is now running

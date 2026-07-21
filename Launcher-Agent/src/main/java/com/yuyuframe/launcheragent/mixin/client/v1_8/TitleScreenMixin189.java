@@ -23,6 +23,15 @@ public abstract class TitleScreenMixin189 {
     private void la$onInit(CallbackInfo ci) {
         LauncherLog.ui(3, "[LauncherAgent] Hook TitleScreen.init() OK — pipeline 1.8.9 opérationnel");
         LauncherLog.info("[YUYUFRAME_READY]");
-        ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
+        // try/catch au point d'appel (pas seulement dans signalOnce) : une
+        // NoClassDefFoundError/LinkageError au premier chargement de
+        // ReadyEventSignal se produirait ICI, PAS dans signalOnce lui-même —
+        // sans ce filet, elle remonterait hors du mixin (injecté dans
+        // TitleScreen.init()) sans jamais toucher launcher-agent.log.
+        try {
+            ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
+        } catch (Throwable t) {
+            LauncherLog.warn("[LauncherAgent] ReadyEventSignal.signalOnce a échoué au point d'appel : " + t);
+        }
     }
 }

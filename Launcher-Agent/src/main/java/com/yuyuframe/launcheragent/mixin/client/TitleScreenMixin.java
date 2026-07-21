@@ -29,6 +29,10 @@ public abstract class TitleScreenMixin {
         // + ressources) et affiche enfin le menu principal — comble le "trou"
         // entre la fin de nos téléchargements et le jeu réellement visible.
         LauncherLog.info("[YUYUFRAME_READY]");
-        ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
+        try {
+            ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
+        } catch (Throwable t) {
+            LauncherLog.warn("[LauncherAgent] ReadyEventSignal.signalOnce a échoué au point d'appel : " + t);
+        }
     }
 }

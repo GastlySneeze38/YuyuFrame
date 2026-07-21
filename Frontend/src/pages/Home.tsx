@@ -116,7 +116,7 @@ export default function Home() {
     if (payload.current === 60 && payload.total === 100 && !phase2StartRef.current && selectedInstanceId) {
       startPhase2(selectedInstanceId)
     }
-  })
+  }, [selectedInstanceId])
 
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', (payload) => {
     const { running, instance_id } = payload
@@ -144,7 +144,7 @@ export default function Home() {
     clearPhase2()
     setProgress({ current: 100, total: 100, message: 'Minecraft prêt !' })
     setTimeout(() => setProgress(null), 900)
-  })
+  }, [selectedInstanceId])
 
   useTauriEvent<string>('launch_error', (payload) => {
     setLaunchMsg(payload)
@@ -152,7 +152,7 @@ export default function Home() {
     clearPhase2()
     setProgress(null)
     setCancelling(false)
-  })
+  }, [selectedInstanceId])
 
   useTauriEvent<string>('launch_cancelled', () => {
     showNotice('Lancement annulé')

@@ -28,6 +28,10 @@ public abstract class TitleScreenMixin261 {
     private void la$onInit(CallbackInfo ci) {
         FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
         LauncherLog.info("[YUYUFRAME_READY]");
-        ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
+        try {
+            ReadyEventSignal.signalOnce(System.getProperty("launcheragent.readyEvent"));
+        } catch (Throwable t) {
+            LauncherLog.warn("[LauncherAgent] ReadyEventSignal.signalOnce a échoué au point d'appel : " + t);
+        }
     }
 }

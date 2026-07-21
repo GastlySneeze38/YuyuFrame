@@ -64,21 +64,43 @@ pub(super) async fn wait_for_ready_event(
     app: tauri::AppHandle,
     instance_id: String,
 ) {
+    tracing::info!("[ReadyEvent] wait_for_ready_event démarré (handle={:#x}, instance={})", handle_raw, instance_id);
+    let mut iterations: u64 = 0;
     loop {
-        if stop_flag.load(Ordering::Relaxed) || ready_sent.load(Ordering::Relaxed) {
+        if stop_flag.load(Ordering::Relaxed) {
+            tracing::info!("[ReadyEvent] sortie sur stop_flag (jeu terminé avant signal) après {} itérations", iterations);
             break;
         }
-        let signaled = tokio::task::spawn_blocking(move || unsafe {
-            WaitForSingleObject(handle_raw as *mut std::ffi::c_void, 500) == WAIT_OBJECT_0
-        }).await.unwrap_or(false);
-        if signaled {
+        if ready_sent.load(Ordering::Relaxed) {
+            tracing::info!("[ReadyEvent] sortie sur ready_sent (un autre canal a déjà signalé) après {} itérations", iterations);
+            break;
+        }
+        let result = tokio::task::spawn_blocking(move || unsafe {
+            WaitForSingleObject(handle_raw as *mut std::ffi::c_void, 500)
+        }).await;
+        iterations += 1;
+        let code = match result {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("[ReadyEvent] spawn_blocking a paniqué : {}", e);
+                continue;
+            }
+        };
+        if code == WAIT_OBJECT_0 {
+            tracing::info!("[ReadyEvent] WAIT_OBJECT_0 reçu après {} itérations — émission game_ready", iterations);
             if ready_sent.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
-                let _ = app.emit("game_ready", serde_json::json!({ "instance_id": &instance_id }));
+                let emit_result = app.emit("game_ready", serde_json::json!({ "instance_id": &instance_id }));
+                tracing::info!("[ReadyEvent] app.emit(game_ready) résultat : {:?}", emit_result);
+            } else {
+                tracing::info!("[ReadyEvent] WAIT_OBJECT_0 reçu mais ready_sent déjà pris par un autre canal");
             }
             break;
+        } else if code != 258 /* WAIT_TIMEOUT */ {
+            tracing::warn!("[ReadyEvent] WaitForSingleObject code inattendu : {} (ni WAIT_OBJECT_0 ni WAIT_TIMEOUT)", code);
         }
     }
     unsafe { CloseHandle(handle_raw as *mut std::ffi::c_void); }
+    tracing::info!("[ReadyEvent] wait_for_ready_event terminé, handle fermé");
 }
 
 #[cfg(not(target_os = "windows"))]

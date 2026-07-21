@@ -40,6 +40,10 @@ public final class ReadyEventSignal {
     /** Sûr à appeler plusieurs fois (le hook TitleScreen.init() se redéclenche
      * à chaque retour au menu principal) — ne signale qu'une fois par JVM. */
     public static synchronized void signalOnce(String eventName) {
+        // Log inconditionnel (avant tout early-return) — sans ça, un
+        // eventName absent/vide est indiscernable d'un appel qui n'a jamais
+        // eu lieu (deux causes racines très différentes) dans les logs.
+        LauncherLog.ui(1, "[ReadyEventSignal] signalOnce appelé, sent=" + sent + ", eventName=" + eventName);
         if (sent || eventName == null || eventName.isEmpty()) return;
         sent = true;
         try {
