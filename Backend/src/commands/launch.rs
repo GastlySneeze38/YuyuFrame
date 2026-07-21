@@ -12,6 +12,7 @@ pub async fn launch_game(
     instance_id: String,
     p2p: Option<bool>,
     avoid_beta: Option<bool>,
+    show_console: Option<bool>,
 ) -> Result<(), String> {
     let session = {
         let s = state.read().await;
@@ -50,26 +51,36 @@ pub async fn launch_game(
     let game_dir = instance_dir(&instance_id);
     tokio::fs::create_dir_all(&game_dir).await.map_err(|e| e.to_string())?;
 
-    // Open or reopen the console window (label unique par instance)
+    // Open or reopen the console window (label unique par instance) — sauf si
+    // l'utilisateur a désactivé l'affichage de la console dans les réglages.
+    // Le jeu se lance identiquement dans les deux cas (log_to_console tombe
+    // simplement en broadcast si aucune fenêtre n'écoute, voir progress.rs).
     let window_label = format!("mc-console-{}", &instance_id[..8.min(instance_id.len())]);
-    if let Some(existing) = app.get_webview_window(&window_label) {
-        let _ = existing.close();
-    }
-    // Enregistré AVANT le build() de la fenêtre : garantit qu'aucun signal
-    // console_ready (invoqué par Console.tsx dès que son listener game_log est
-    // attaché) ne peut arriver avant que ce Notify n'existe déjà dans le
-    // registre — voir launcher::register_console_waiter.
-    let console_ready = launcher::register_console_waiter(&window_label);
+    let show_console = show_console.unwrap_or(true);
+    let console_ready = if show_console {
+        if let Some(existing) = app.get_webview_window(&window_label) {
+            let _ = existing.close();
+        }
+        // Enregistré AVANT le build() de la fenêtre : garantit qu'aucun signal
+        // console_ready (invoqué par Console.tsx dès que son listener game_log
+        // est attaché) ne peut arriver avant que ce Notify n'existe déjà dans
+        // le registre — voir launcher::register_console_waiter.
+        let ready = launcher::register_console_waiter(&window_label);
 
-    let _ = tauri::WebviewWindowBuilder::new(
-        &app,
-        &window_label,
-        tauri::WebviewUrl::App(std::path::PathBuf::from("console")),
-    )
-    .title(format!("Console — {}", instance.name))
-    .inner_size(960.0, 620.0)
-    .decorations(false)
-    .build();
+        let _ = tauri::WebviewWindowBuilder::new(
+            &app,
+            &window_label,
+            tauri::WebviewUrl::App(std::path::PathBuf::from("console")),
+        )
+        .title(format!("Console — {}", instance.name))
+        .inner_size(960.0, 620.0)
+        .decorations(false)
+        .build();
+
+        Some(ready)
+    } else {
+        None
+    };
 
     let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
     {
@@ -104,7 +115,10 @@ pub async fn launch_game(
         // attaché côté frontend). Timeout de sécurité : ne bloque jamais
         // indéfiniment si Console.tsx ne signale jamais (vieux build frontend
         // sans cet appel, ou fenêtre fermée avant d'avoir eu le temps).
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), console_ready.notified()).await;
+        // Rien à attendre si la console est désactivée (pas de fenêtre créée).
+        if let Some(console_ready) = console_ready {
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(5), console_ready.notified()).await;
+        }
 
         let started_at = chrono::Utc::now().timestamp();
 

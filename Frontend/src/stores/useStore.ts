@@ -66,6 +66,9 @@ interface Store {
   syncGameSettings: boolean
   setSyncGameSettings: (v: boolean) => void
 
+  showConsole: boolean
+  setShowConsole: (v: boolean) => void
+
   // ── Game state (par instance) ─────────────────────────────────────────────
   runningInstances: string[]
   isInstanceRunning: (id: string) => boolean
@@ -194,6 +197,9 @@ export const useStore = create<Store>()(
       syncGameSettings: false,
       setSyncGameSettings: (syncGameSettings) => set({ syncGameSettings }),
 
+      showConsole: true,
+      setShowConsole: (showConsole) => set({ showConsole }),
+
       // Game (multi-instance)
       runningInstances: [],
       isInstanceRunning: (id) => get().runningInstances.includes(id),
@@ -234,6 +240,7 @@ export const useStore = create<Store>()(
         instanceSyncMode: s.instanceSyncMode,
         avoidBetaDependencies: s.avoidBetaDependencies,
         syncGameSettings: s.syncGameSettings,
+        showConsole: s.showConsole,
         username: s.username,
         uuid: s.uuid,
         lastSession: s.lastSession,

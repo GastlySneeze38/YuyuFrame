@@ -6,7 +6,7 @@ export default function Settings() {
   const {
     brightness, setBrightness, defaultRam, setDefaultRam, closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
-    syncGameSettings, setSyncGameSettings,
+    syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
   } = useStore()
 
   return (
@@ -74,6 +74,19 @@ export default function Settings() {
                   </p>
                 </div>
                 <Toggle checked={closeOnLaunch} onChange={() => setCloseOnLaunch(!closeOnLaunch)} />
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Console au lancement */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Lancer avec la console</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    Ouvre la fenêtre de logs du jeu à chaque lancement — le jeu se lance normalement même désactivé
+                  </p>
+                </div>
+                <Toggle checked={showConsole} onChange={() => setShowConsole(!showConsole)} />
               </div>
 
               <div className="h-px bg-white/6" />

@@ -56,6 +56,7 @@ export default function Home() {
     closeOnLaunch,
     p2pEnabled, setP2pEnabled,
     avoidBetaDependencies,
+    showConsole,
   } = useStore()
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
@@ -134,8 +135,8 @@ export default function Home() {
     setTimeout(() => setBannerPulse(false), 900)
     setLaunchMsg('')
     try {
-      if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies)
-      else await api.launch.start(selectedInstanceId, avoidBetaDependencies)
+      if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole)
+      else await api.launch.start(selectedInstanceId, avoidBetaDependencies, showConsole)
       setInstanceRunning(selectedInstanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
       if (closeOnLaunch) getCurrentWindow().hide()
@@ -369,7 +370,13 @@ export default function Home() {
               <div
                 className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-1.5 rounded-2xl text-[13px] tracking-[0.04em] py-2.5 ${launchBtnBg} ${launchBtnShadow}`}
               >
-                <span className="flex items-center justify-center gap-2">
+                {progress && (
+                  <span
+                    className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
+                    style={{ width: `${percent}%` }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center justify-center gap-2">
                   <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
                   EN JEU...
                 </span>

@@ -80,10 +80,10 @@ export const api = {
   },
 
   launch: {
-    start: (instanceId: string, avoidBeta = true) =>
-      invoke<void>('launch_game', { instanceId, avoidBeta }),
-    startP2p: (instanceId: string, avoidBeta = true) =>
-      invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta }),
+    start: (instanceId: string, avoidBeta = true, showConsole = true) =>
+      invoke<void>('launch_game', { instanceId, avoidBeta, showConsole }),
+    startP2p: (instanceId: string, avoidBeta = true, showConsole = true) =>
+      invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta, showConsole }),
     reloadAgent: () =>
       invoke<void>('reload_agent'),
     cancel: (instanceId: string) =>
