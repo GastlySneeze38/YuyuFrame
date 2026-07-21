@@ -40,38 +40,36 @@ export function UpdateChecker() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-50 w-80 rounded-lg p-4 shadow-xl"
-      style={{ background: '#13131A', border: '1px solid rgba(255,255,255,0.08)' }}
+      className="fixed bottom-4 right-4 z-50 w-80 rounded-lg p-4 shadow-xl bg-[#13131A] border border-[rgba(255,255,255,0.08)]"
     >
       <div className="mb-2 text-sm font-semibold text-white">
         Mise à jour disponible — v{update.version}
       </div>
       {status === 'idle' && (
         <>
-          <p className="mb-3 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="mb-3 text-xs text-[rgba(255,255,255,0.5)]">
             Une nouvelle version de YuyuFrame est prête à être installée.
           </p>
           <button
             onClick={installUpdate}
-            className="w-full rounded px-3 py-1.5 text-xs font-medium text-white"
-            style={{ background: '#4B3FCF' }}
+            className="w-full rounded px-3 py-1.5 text-xs font-medium text-white bg-[#4B3FCF]"
           >
             Télécharger et installer
           </button>
         </>
       )}
       {status === 'downloading' && (
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="text-xs text-[rgba(255,255,255,0.5)]">
           Téléchargement... {progress}%
         </p>
       )}
       {status === 'installing' && (
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="text-xs text-[rgba(255,255,255,0.5)]">
           Installation, redémarrage en cours...
         </p>
       )}
       {status === 'error' && (
-        <p className="text-xs" style={{ color: 'rgba(220,90,90,0.85)' }}>
+        <p className="text-xs text-[rgba(220,90,90,0.85)]">
           Échec de la mise à jour. Réessayez plus tard.
         </p>
       )}

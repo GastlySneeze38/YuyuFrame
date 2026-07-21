@@ -15,13 +15,13 @@ export function ServerSidebar({ agents, error, activeId, onSelect, tab, onTabCha
   onTabChange: (t: TabId) => void
 }) {
   return (
-    <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'flex-start' }}>
-      <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)' }}>
+    <div className="w-[220px] shrink-0 flex flex-col gap-3 self-start">
+      <div className="border border-[rgba(255,255,255,0.08)] rounded-[10px] overflow-hidden">
+        <div className="px-[12px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
           Agents ({agents.length})
         </div>
         {agents.length === 0 ? (
-          <div style={{ padding: 14, fontSize: 11, color: error ? '#ef4444' : 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
+          <div className={`p-[14px] text-[11px] font-mono ${error ? 'text-[#ef4444]' : 'text-[rgba(255,255,255,0.3)]'}`}>
             {error ? 'Agent P2P inaccessible' : 'En attente de données…'}
           </div>
         ) : (
@@ -31,28 +31,26 @@ export function ServerSidebar({ agents, error, activeId, onSelect, tab, onTabCha
               <button
                 key={a.peer_id}
                 onClick={() => onSelect(a.peer_id)}
-                className="flex w-full items-center gap-2 text-left"
-                style={{
-                  padding: '9px 12px', fontSize: 11, fontFamily: 'monospace', cursor: 'pointer',
-                  background: isActive ? 'rgba(129,140,248,0.12)' : 'transparent',
-                  borderLeft: isActive ? '2px solid #818cf8' : '2px solid transparent',
-                  color: isActive ? '#fff' : 'rgba(255,255,255,0.55)',
-                }}
+                className={
+                  isActive
+                    ? 'flex w-full items-center gap-2 text-left px-[12px] py-[9px] text-[11px] font-mono cursor-pointer bg-[rgba(129,140,248,0.12)] border-l-2 border-l-[#818cf8] text-white'
+                    : 'flex w-full items-center gap-2 text-left px-[12px] py-[9px] text-[11px] font-mono cursor-pointer bg-transparent border-l-2 border-l-transparent text-[rgba(255,255,255,0.55)]'
+                }
               >
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: ownerColor(i), flexShrink: 0 }} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.peer_name}</div>
-                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{i === 0 ? 'local' : 'rapporté'}</div>
+                <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: ownerColor(i) }} />
+                <div className="min-w-0 flex-1">
+                  <div className="overflow-hidden text-ellipsis whitespace-nowrap">{a.peer_name}</div>
+                  <div className="text-[9px] text-[rgba(255,255,255,0.3)]">{i === 0 ? 'local' : 'rapporté'}</div>
                 </div>
-                <span style={{ fontSize: 10, color: tpsColor(a.tps), fontWeight: 700, flexShrink: 0 }}>{a.tps.toFixed(0)}</span>
+                <span className="text-[10px] font-bold shrink-0" style={{ color: tpsColor(a.tps) }}>{a.tps.toFixed(0)}</span>
               </button>
             )
           })
         )}
       </div>
 
-      <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)' }}>
+      <div className="border border-[rgba(255,255,255,0.08)] rounded-[10px] overflow-hidden">
+        <div className="px-[12px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
           Catégories
         </div>
         {TABS.map(t => {
@@ -61,13 +59,11 @@ export function ServerSidebar({ agents, error, activeId, onSelect, tab, onTabCha
             <button
               key={t.id}
               onClick={() => onTabChange(t.id)}
-              className="flex w-full items-center text-left"
-              style={{
-                padding: '9px 12px', fontSize: 11, fontWeight: 600, fontFamily: 'monospace', cursor: 'pointer',
-                background: isActive ? 'rgba(129,140,248,0.12)' : 'transparent',
-                borderLeft: isActive ? '2px solid #818cf8' : '2px solid transparent',
-                color: isActive ? '#fff' : 'rgba(255,255,255,0.5)',
-              }}
+              className={
+                isActive
+                  ? 'flex w-full items-center text-left px-[12px] py-[9px] text-[11px] font-semibold font-mono cursor-pointer bg-[rgba(129,140,248,0.12)] border-l-2 border-l-[#818cf8] text-white'
+                  : 'flex w-full items-center text-left px-[12px] py-[9px] text-[11px] font-semibold font-mono cursor-pointer bg-transparent border-l-2 border-l-transparent text-[rgba(255,255,255,0.5)]'
+              }
             >
               {t.label}
             </button>

@@ -1,9 +1,9 @@
-import type { CSSProperties } from 'react'
 import type { OwnershipData } from './types'
 import { ownerColor, tpsColor, latencyColor } from './utils'
 
-const thStyle: CSSProperties = { textAlign: 'left', padding: '7px 10px', color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }
-const tdStyle: CSSProperties = { padding: '7px 10px', color: 'rgba(255,255,255,0.7)', verticalAlign: 'middle' }
+const thClass = 'text-left px-[10px] py-[7px] text-[rgba(255,255,255,0.35)] text-[9px] uppercase tracking-[0.5px] font-semibold'
+const tdBase = 'px-[10px] py-[7px] align-middle'
+const tdColor = 'text-[rgba(255,255,255,0.7)]'
 
 /**
  * Table des pairs connus : self + peers_reported[] (agents locaux multi-instance).
@@ -15,43 +15,43 @@ export function PeersTable({ self }: { self: OwnershipData }) {
   const undetailed = Math.max(0, (self.pc ?? 0) - rows.length)
 
   return (
-    <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden' }}>
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)' }}>
+    <div className="border border-[rgba(255,255,255,0.08)] rounded-lg overflow-hidden">
+      <div className="px-[10px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
         Pairs connectés
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+      <table className="w-full border-collapse text-[11px]">
         <thead>
-          <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <th style={thStyle}></th>
-            <th style={thStyle}>Pair</th>
-            <th style={thStyle}>Position</th>
-            <th style={thStyle}>TPS</th>
-            <th style={thStyle}>Latence</th>
-            <th style={thStyle}>Quads</th>
-            <th style={thStyle}>Blocs env.</th>
+          <tr className="bg-[rgba(255,255,255,0.04)]">
+            <th className={thClass}></th>
+            <th className={thClass}>Pair</th>
+            <th className={thClass}>Position</th>
+            <th className={thClass}>TPS</th>
+            <th className={thClass}>Latence</th>
+            <th className={thClass}>Quads</th>
+            <th className={thClass}>Blocs env.</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((p, i) => {
             const myQuads = p.quads.filter(q => q.o === 0).length
             return (
-              <tr key={p.peer_id} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <td style={tdStyle}><div style={{ width: 8, height: 8, borderRadius: '50%', background: ownerColor(i) }} /></td>
-                <td style={tdStyle}>
-                  <div style={{ color: '#fff' }}>{p.peer_name}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', fontSize: 9 }}>{p.peer_id}</div>
+              <tr key={p.peer_id} className="border-t border-[rgba(255,255,255,0.05)]">
+                <td className={tdBase}><div className="w-[8px] h-[8px] rounded-full" style={{ background: ownerColor(i) }} /></td>
+                <td className={tdBase}>
+                  <div className="text-white">{p.peer_name}</div>
+                  <div className="text-[rgba(255,255,255,0.3)] font-mono text-[9px]">{p.peer_id}</div>
                 </td>
-                <td style={tdStyle}>{Math.floor(p.my_x)}, {Math.floor(p.my_z)}</td>
-                <td style={{ ...tdStyle, color: tpsColor(p.tps) }}>{p.tps.toFixed(1)}</td>
-                <td style={{ ...tdStyle, color: latencyColor(p.latency_ms) }}>{p.latency_ms >= 0 ? p.latency_ms + ' ms' : '—'}</td>
-                <td style={tdStyle}>{myQuads}</td>
-                <td style={tdStyle}>{p.live_blocks_sent}</td>
+                <td className={`${tdBase} ${tdColor}`}>{Math.floor(p.my_x)}, {Math.floor(p.my_z)}</td>
+                <td className={tdBase} style={{ color: tpsColor(p.tps) }}>{p.tps.toFixed(1)}</td>
+                <td className={tdBase} style={{ color: latencyColor(p.latency_ms) }}>{p.latency_ms >= 0 ? p.latency_ms + ' ms' : '—'}</td>
+                <td className={`${tdBase} ${tdColor}`}>{myQuads}</td>
+                <td className={`${tdBase} ${tdColor}`}>{p.live_blocks_sent}</td>
               </tr>
             )
           })}
           {undetailed > 0 && (
-            <tr style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <td colSpan={7} style={{ ...tdStyle, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+            <tr className="border-t border-[rgba(255,255,255,0.05)]">
+              <td colSpan={7} className={`${tdBase} text-[rgba(255,255,255,0.3)] italic`}>
                 + {undetailed} pair(s) distant(s) non détaillé(s) — pas de métriques par pair distant côté agent
               </td>
             </tr>

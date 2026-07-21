@@ -32,12 +32,12 @@ export function ModalShell({
       onClick={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose() } : undefined}
     >
       <div
-        className={`w-full ${maxWidth} rounded-2xl p-6 flex flex-col gap-5`}
-        style={{ background: '#111118', border: '1px solid rgba(75,63,207,0.3)', boxShadow: '0 24px 80px rgba(0,0,0,0.6)', ...cardStyle }}
+        className={`w-full ${maxWidth} rounded-2xl p-6 flex flex-col gap-5 bg-[#111118] border border-[rgba(75,63,207,0.3)] shadow-[0_24px_80px_rgba(0,0,0,0.6)]`}
+        style={cardStyle}
       >
         {title !== undefined && (
           <div className="flex flex-shrink-0 items-center justify-between">
-            <p className="font-bold text-white" style={{ fontSize: 15 }}>{title}</p>
+            <p className="font-bold text-white text-[15px]">{title}</p>
             <CloseButton onClick={onClose} />
           </div>
         )}

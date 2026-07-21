@@ -181,13 +181,13 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
     <div className="flex w-full flex-col gap-3">
       {/* ── Barre d'en-tête ── */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: error ? '#ef4444' : '#22c55e', boxShadow: `0 0 5px ${error ? '#ef4444' : '#22c55e'}` }} />
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={error ? 'w-[6px] h-[6px] rounded-full bg-[#ef4444] shadow-[0_0_5px_#ef4444]' : 'w-[6px] h-[6px] rounded-full bg-[#22c55e] shadow-[0_0_5px_#22c55e]'} />
+          <span className="text-[11px] text-[rgba(255,255,255,0.45)] font-mono">
             {error ? 'Agent P2P inaccessible (port 3849)' : label}
           </span>
           {data && (
-            <span style={{ fontSize: 10, color: 'rgba(120,110,230,0.7)', fontFamily: 'monospace', fontWeight: 600 }}>
+            <span className="text-[10px] text-[rgba(120,110,230,0.7)] font-mono font-semibold">
               ({data.peer_name} · {data.peer_id})
             </span>
           )}
@@ -195,14 +195,11 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
         <button
           onClick={handleCopy}
           disabled={!data}
-          style={{
-            fontSize: 10, fontWeight: 600, fontFamily: 'monospace', letterSpacing: 0.3,
-            padding: '3px 9px', borderRadius: 5, cursor: data ? 'pointer' : 'default',
-            background: copied ? 'rgba(40,160,90,0.18)' : 'rgba(255,255,255,0.04)',
-            border: copied ? '1px solid rgba(40,160,90,0.35)' : '1px solid rgba(255,255,255,0.08)',
-            color: copied ? 'rgba(80,210,130,0.9)' : 'rgba(255,255,255,0.4)',
-            transition: 'all 0.15s',
-          }}
+          className={
+            copied
+              ? 'text-[10px] font-semibold font-mono tracking-[0.3px] px-[9px] py-[3px] rounded-[5px] cursor-pointer disabled:cursor-default transition-all duration-150 bg-[rgba(40,160,90,0.18)] border border-[rgba(40,160,90,0.35)] text-[rgba(80,210,130,0.9)]'
+              : 'text-[10px] font-semibold font-mono tracking-[0.3px] px-[9px] py-[3px] rounded-[5px] cursor-pointer disabled:cursor-default transition-all duration-150 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)]'
+          }
         >
           {copied ? 'Copié ✓' : '{ } Copier en JSON'}
         </button>
@@ -212,15 +209,10 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
       {tab === 'apercu' && (
         <div className="flex flex-col gap-4">
           <div
-            className="flex items-center gap-6"
-            style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '20px 22px', background: 'rgba(255,255,255,0.02)' }}
+            className="flex items-center gap-6 border border-[rgba(255,255,255,0.08)] rounded-xl px-[22px] py-[20px] bg-[rgba(255,255,255,0.02)]"
           >
-            <div style={{
-              width: 88, height: 88, flexShrink: 0, borderRadius: 16,
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth={1.3} style={{ width: 42, height: 42 }}>
+            <div className="w-[88px] h-[88px] shrink-0 rounded-2xl bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth={1.3} className="w-[42px] h-[42px]">
                 <rect x="3" y="3" width="18" height="5.5" rx="1.1" />
                 <rect x="3" y="10" width="18" height="5.5" rx="1.1" />
                 <rect x="3" y="17" width="18" height="4" rx="1" />
@@ -228,42 +220,42 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
                 <circle cx="6.3" cy="12.75" r="0.9" fill={!error ? '#22c55e' : '#ef4444'} stroke="none" />
               </svg>
             </div>
-            <div className="flex flex-col gap-1" style={{ minWidth: 0 }}>
-              <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="font-mono text-[13px] font-semibold text-[rgba(255,255,255,0.7)]">
                 {error ? 'Agent P2P inaccessible' : (data ? data.peer_name : '—')}
               </span>
-              <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+              <span className="font-mono text-[11px] text-[rgba(255,255,255,0.3)]">
                 {data ? `${data.peer_id} · ${data.pc} pair(s) connecté(s)` : 'En attente de données…'}
               </span>
-              <div className="flex items-baseline gap-2" style={{ marginTop: 8 }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 38, fontWeight: 700, color: data ? tpsColor(data.tps) : 'rgba(255,255,255,0.25)' }}>
+              <div className="flex items-baseline gap-2 mt-[8px]">
+                <span className="font-mono text-[38px] font-bold" style={{ color: data ? tpsColor(data.tps) : 'rgba(255,255,255,0.25)' }}>
                   {data ? data.tps.toFixed(1) : '—'}
                 </span>
-                <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>TPS</span>
+                <span className="font-mono text-[12px] text-[rgba(255,255,255,0.35)]">TPS</span>
               </div>
             </div>
           </div>
 
-          <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)' }}>
+          <div className="border border-[rgba(255,255,255,0.08)] rounded-xl overflow-hidden">
+            <div className="px-[12px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] font-mono uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
               Pairs & ping
             </div>
-            <div className="flex flex-col" style={{ padding: '6px 12px' }}>
+            <div className="flex flex-col px-[12px] py-[6px]">
               {data ? [data, ...(data.peers_reported ?? [])].map((p, i) => (
-                <div key={p.peer_id} className="flex items-center justify-between gap-3" style={{ padding: '6px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                  <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
-                    <div style={{ width: 9, height: 9, borderRadius: 2, background: ownerColor(i), flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{i === 0 ? 'Moi' : p.peer_name}</span>
+                <div key={p.peer_id} className={`flex items-center justify-between gap-3 py-[6px] ${i > 0 ? 'border-t border-[rgba(255,255,255,0.05)]' : ''}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-[9px] h-[9px] rounded-sm shrink-0" style={{ background: ownerColor(i) }} />
+                    <span className="font-mono text-[11px] text-[rgba(255,255,255,0.5)]">{i === 0 ? 'Moi' : p.peer_name}</span>
                   </div>
-                  <span style={{ fontFamily: 'monospace', fontSize: 11, color: i === 0 ? 'rgba(255,255,255,0.3)' : latencyColor(p.latency_ms) }}>
+                  <span className="font-mono text-[11px]" style={{ color: i === 0 ? 'rgba(255,255,255,0.3)' : latencyColor(p.latency_ms) }}>
                     {i === 0 ? '—' : p.latency_ms >= 0 ? `${p.latency_ms} ms` : '—'}
                   </span>
                 </div>
               )) : (
-                <div style={{ padding: '8px 0', fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>En attente de données…</div>
+                <div className="py-[8px] font-mono text-[11px] text-[rgba(255,255,255,0.3)]">En attente de données…</div>
               )}
               {(data?.pc ?? 0) - 1 - (data?.peers_reported?.length ?? 0) > 0 && (
-                <div style={{ padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.05)', fontFamily: 'monospace', fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                <div className="py-[6px] border-t border-[rgba(255,255,255,0.05)] font-mono text-[10px] text-[rgba(255,255,255,0.3)]">
                   +{(data?.pc ?? 0) - 1 - (data?.peers_reported?.length ?? 0)} pair(s) distant(s) non détaillé(s)
                 </div>
               )}
@@ -274,7 +266,7 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
 
       {/* ── Performance — graphes temporels pleine largeur ── */}
       {tab === 'performance' && (
-        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
+        <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(340px,1fr))]">
           <Chart title="TPS" data={h.tps} color={data ? tpsColor(data.tps) : '#818cf8'} />
           <Chart title="MSPT" data={h.mspt} color="#818cf8" unit="ms" />
           <Chart title="Latence" data={h.latency} color={data ? latencyColor(data.latency_ms) : '#818cf8'} unit="ms" />
@@ -289,17 +281,17 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
       {tab === 'reseau' && (
         <div className="flex flex-col gap-3">
           {showPeers && data ? <PeersTable self={data} /> : (
-            <div style={{ padding: 14, fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
+            <div className="p-[14px] text-[11px] text-[rgba(255,255,255,0.3)] font-mono border border-[rgba(255,255,255,0.08)] rounded-lg">
               La table des pairs n'est disponible que sur l'agent local (propriétaire de l'agrégation).
             </div>
           )}
-          <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden' }}>
-            <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: 'rgba(255,255,255,0.35)' }}>
+          <div className="border border-[rgba(255,255,255,0.08)] rounded-lg overflow-hidden">
+            <div className="px-[10px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
               Carte d'ownership
             </div>
-            <div className="flex justify-center" style={{ padding: 14 }}>
-              <div style={{ width: CANVAS, maxWidth: '100%', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, overflow: 'hidden' }}>
-                <canvas ref={canvasRef} width={CANVAS} height={CANVAS} style={{ display: 'block', width: '100%', height: 'auto' }} />
+            <div className="flex justify-center p-[14px]">
+              <div className="max-w-full border border-[rgba(255,255,255,0.08)] rounded-md overflow-hidden" style={{ width: CANVAS }}>
+                <canvas ref={canvasRef} width={CANVAS} height={CANVAS} className="block w-full h-auto" />
               </div>
             </div>
           </div>
@@ -311,12 +303,12 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <div style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.35)' }}>
+              <div className="text-[10px] font-mono uppercase tracking-[1px] text-[rgba(255,255,255,0.35)]">
                 Snapshot initial
               </div>
-              <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.3)' }}>Handshake unique à la connexion (J1 → J2)</div>
+              <div className="text-[10px] font-mono text-[rgba(255,255,255,0.3)]">Handshake unique à la connexion (J1 → J2)</div>
             </div>
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
               <StatBox title="Réception (chez moi)">
                 <StatRow label="Chunks" value={data?.baseline_chunks_applied ?? 0} />
                 <StatRow label="Blocs" value={data?.baseline_blocks_applied ?? 0} />
@@ -338,16 +330,16 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <div style={{ fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(255,255,255,0.35)' }}>
+              <div className="text-[10px] font-mono uppercase tracking-[1px] text-[rgba(255,255,255,0.35)]">
                 Delta temps réel
               </div>
-              <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.3)' }}>Flux continu pendant la partie</div>
+              <div className="text-[10px] font-mono text-[rgba(255,255,255,0.3)]">Flux continu pendant la partie</div>
             </div>
             <div className="flex flex-wrap gap-2">
               <HealthBadge label="tickChunk hook (ownership)" ok={(data?.hook_calls ?? 0) > 0} />
               <HealthBadge label="send() hook (delta sortant)" ok={(data?.send_hook_calls ?? 0) > 0} />
             </div>
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
               <StatBox title="Reçu (chez moi)">
                 <StatRow label="Blocs appliqués" value={data?.live_blocks_applied ?? 0} />
                 <StatRow label="File entrante" value={data?.live_queue ?? 0} />

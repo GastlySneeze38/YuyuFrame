@@ -13,20 +13,17 @@ export default function Server() {
 
   if (BETA_TEST) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4" style={{ background: '#09090D' }}>
-        <div style={{ fontSize: 32, opacity: 0.15 }}>
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D]">
+        <div className="text-[32px] opacity-[0.15]">
           <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
         </div>
-        <p style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.5)' }}>P2P non disponible en bêta</p>
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', maxWidth: 280 }}>
+        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">P2P non disponible en bêta</p>
+        <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
           Le serveur P2P sera accessible dans une prochaine version.
         </p>
         <button
           onClick={() => navigate('/home')}
-          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150"
-          style={{ background: 'rgba(75,63,207,0.18)', border: '1px solid rgba(75,63,207,0.35)', color: 'rgba(180,170,255,0.9)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.3)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.18)' }}
+          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
         >
           Retour
         </button>
@@ -55,19 +52,19 @@ export default function Server() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
+    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
 
       <PageHeader>
         <PageHeaderSeparator />
         <div>
-          <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+          <h1 className="font-black text-white text-[16px] tracking-[-0.01em] leading-[1.2]">
             Serveur P2P
           </h1>
-          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 1 }}>
+          <p className="text-[10px] text-[rgba(255,255,255,0.28)] mt-[1px]">
             {instance ? (
-              <span style={{ color: 'rgba(120,110,230,0.7)', fontWeight: 600 }}>{instance.name} — {instance.mc_version}</span>
+              <span className="text-[rgba(120,110,230,0.7)] font-semibold">{instance.name} — {instance.mc_version}</span>
             ) : (
-              <span style={{ color: 'rgba(255,100,100,0.6)' }}>Aucune instance sélectionnée</span>
+              <span className="text-[rgba(255,100,100,0.6)]">Aucune instance sélectionnée</span>
             )}
           </p>
         </div>
@@ -77,32 +74,13 @@ export default function Server() {
             <button
               onClick={handleReloadAgent}
               disabled={reloadStatus !== 'idle'}
-              style={{
-                height: 30, padding: '0 14px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                letterSpacing: '0.03em', cursor: reloadStatus !== 'idle' ? 'default' : 'pointer',
-                background: reloadStatus === 'sent'
-                  ? 'rgba(40,160,90,0.18)'
+              className={
+                reloadStatus === 'sent'
+                  ? 'h-[30px] px-[14px] rounded-lg text-[11px] font-semibold tracking-[0.03em] transition-all duration-200 cursor-pointer disabled:cursor-default bg-[rgba(40,160,90,0.18)] border border-[rgba(40,160,90,0.35)] text-[rgba(80,210,130,0.9)]'
                   : reloadStatus === 'error'
-                    ? 'rgba(200,50,50,0.18)'
-                    : 'rgba(255,255,255,0.04)',
-                border: reloadStatus === 'sent'
-                  ? '1px solid rgba(40,160,90,0.35)'
-                  : reloadStatus === 'error'
-                    ? '1px solid rgba(200,50,50,0.35)'
-                    : '1px solid rgba(255,255,255,0.08)',
-                color: reloadStatus === 'sent'
-                  ? 'rgba(80,210,130,0.9)'
-                  : reloadStatus === 'error'
-                    ? 'rgba(255,100,100,0.9)'
-                    : 'rgba(255,255,255,0.45)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (reloadStatus === 'idle') (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.7)'
-              }}
-              onMouseLeave={(e) => {
-                if (reloadStatus === 'idle') (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.45)'
-              }}
+                    ? 'h-[30px] px-[14px] rounded-lg text-[11px] font-semibold tracking-[0.03em] transition-all duration-200 cursor-pointer disabled:cursor-default bg-[rgba(200,50,50,0.18)] border border-[rgba(200,50,50,0.35)] text-[rgba(255,100,100,0.9)]'
+                    : 'h-[30px] px-[14px] rounded-lg text-[11px] font-semibold tracking-[0.03em] transition-all duration-200 cursor-pointer disabled:cursor-default bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.45)] hover:text-[rgba(255,255,255,0.7)]'
+              }
             >
               {reloadStatus === 'sent'
                 ? 'Rechargement envoyé ✓'
@@ -110,7 +88,7 @@ export default function Server() {
                   ? 'Erreur d’écriture'
                   : 'Recharger l’agent P2P'}
             </button>
-            <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>
+            <p className="text-[9px] text-[rgba(255,255,255,0.18)]">
               Relit p2p-agent.properties sans relancer Minecraft
             </p>
           </div>

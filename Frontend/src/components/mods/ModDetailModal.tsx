@@ -55,32 +55,30 @@ export function ModDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.6)] backdrop-blur-[4px]"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl p-6"
-        style={{ background: '#111118', border: '1px solid rgba(75,63,207,0.3)', boxShadow: '0 24px 80px rgba(0,0,0,0.6)', maxHeight: '85vh' }}
+        className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl p-6 bg-[#111118] border border-[rgba(75,63,207,0.3)] shadow-[0_24px_80px_rgba(0,0,0,0.6)] max-h-[85vh]"
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-start gap-3">
-          <div style={{ width: 52, height: 52, borderRadius: 14, flexShrink: 0, overflow: 'hidden', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {hit.icon_url ? <img src={hit.icon_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <PlugIcon size={24} color="rgba(255,255,255,0.2)" />}
+          <div className="w-[52px] h-[52px] rounded-[14px] flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
+            {hit.icon_url ? <img src={hit.icon_url} alt="" className="w-full h-full object-cover" /> : <PlugIcon size={24} color="rgba(255,255,255,0.2)" />}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-white" style={{ fontSize: 16 }}>{hit.title}</p>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{hit.description}</p>
+            <p className="font-bold text-white text-[16px]">{hit.title}</p>
+            <p className="text-[12px] text-[rgba(255,255,255,0.4)] mt-0.5">{hit.description}</p>
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
-              <span className="flex items-center gap-1" style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+              <span className="flex items-center gap-1 text-[11px] text-[rgba(255,255,255,0.3)]">
                 <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
                 {formatDownloadCount(hit.downloads)}
               </span>
               {hit.categories.slice(0, 4).map((c) => (
-                <span key={c} className="rounded-full px-2 py-0.5" style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>{c}</span>
+                <span key={c} className="rounded-full px-2 py-0.5 text-[10px] bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.4)]">{c}</span>
               ))}
               {installedVersionNumber && (
-                <span className="rounded-full px-2 py-0.5 font-semibold" style={{ fontSize: 10, background: 'rgba(75,63,207,0.2)', color: 'rgba(179,163,255,0.9)' }}>
+                <span className="rounded-full px-2 py-0.5 font-semibold text-[10px] bg-[rgba(75,63,207,0.2)] text-[rgba(179,163,255,0.9)]">
                   Installé : {installedVersionNumber}
                 </span>
               )}
@@ -94,16 +92,15 @@ export function ModDetailModal({
           <div className="flex-shrink-0">
             <button
               onClick={() => setShowFullBody((v) => !v)}
-              style={{ fontSize: 11.5, color: 'rgba(179,163,255,0.9)', fontWeight: 600 }}
+              className="text-[11.5px] text-[rgba(179,163,255,0.9)] font-semibold"
             >
               {showFullBody ? 'Masquer la description complète' : 'Voir la description complète'}
             </button>
             {showFullBody && (
               <div
-                className="mt-2 overflow-y-auto rounded-xl p-3"
-                style={{ maxHeight: 160, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}
+                className="mt-2 overflow-y-auto rounded-xl p-3 max-h-[160px] bg-[rgba(0,0,0,0.3)] border border-[rgba(255,255,255,0.06)]"
               >
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                <p className="text-[12px] text-[rgba(255,255,255,0.6)] whitespace-pre-wrap leading-[1.5]">
                   {stripMarkdown(detail.body)}
                 </p>
               </div>
@@ -113,18 +110,14 @@ export function ModDetailModal({
 
         {/* Versions */}
         <div className="flex flex-shrink-0 items-center justify-between">
-          <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <p className="text-[11px] font-bold text-[rgba(255,255,255,0.4)] uppercase tracking-[0.06em]">
             Versions disponibles
           </p>
           <button
             onClick={() => setShowAllVersions((v) => !v)}
-            className="rounded-lg px-2.5 py-1 font-semibold"
-            style={{
-              fontSize: 10.5,
-              background: showAllVersions ? 'rgba(75,63,207,0.3)' : 'rgba(255,255,255,0.05)',
-              color: showAllVersions ? 'white' : 'rgba(255,255,255,0.45)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
+            className={`rounded-lg px-2.5 py-1 font-semibold text-[10.5px] border border-[rgba(255,255,255,0.08)] ${
+              showAllVersions ? 'bg-[rgba(75,63,207,0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
+            }`}
           >
             {showAllVersions ? `Toutes versions` : `Compatibles ${mcVersion}`}
           </button>
@@ -134,7 +127,7 @@ export function ModDetailModal({
           {loadingVersions ? (
             <Spinner />
           ) : versions.length === 0 ? (
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '16px 0' }}>
+            <p className="text-[12px] text-[rgba(255,255,255,0.3)] text-center py-4">
               Aucune version {showAllVersions ? '' : `compatible avec ${mcVersion}`}
             </p>
           ) : (
@@ -146,29 +139,35 @@ export function ModDetailModal({
               return (
                 <div
                   key={v.id}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2"
-                  style={{ background: isInstalledVersion ? 'rgba(75,63,207,0.1)' : 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2 border border-[rgba(255,255,255,0.06)] ${
+                    isInstalledVersion ? 'bg-[rgba(75,63,207,0.1)]' : 'bg-[rgba(255,255,255,0.03)]'
+                  }`}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white" style={{ fontSize: 12.5 }}>{v.version_number}</span>
-                      <span style={{ fontSize: 9.5, fontWeight: 700, color: badge.color, textTransform: 'uppercase' }}>{badge.label}</span>
+                      <span className="font-semibold text-white text-[12.5px]">{v.version_number}</span>
+                      <span className={`text-[9.5px] font-bold uppercase ${
+                        badge.label === 'release'
+                          ? 'text-[rgba(74,222,128,0.85)]'
+                          : badge.label === 'beta'
+                            ? 'text-[rgba(250,204,21,0.85)]'
+                            : 'text-[rgba(248,113,113,0.85)]'
+                      }`}>{badge.label}</span>
                     </div>
-                    <p style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+                    <p className="text-[10.5px] text-[rgba(255,255,255,0.3)] mt-0.5">
                       MC {formatGameVersions(v.game_versions)} · {file ? formatBytes(file.size) : '—'}
                     </p>
                   </div>
                   <button
                     onClick={() => handleInstall(v)}
                     disabled={isInstalledVersion || installing || !file}
-                    className="flex-shrink-0 flex items-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-95"
-                    style={{
-                      height: 28, padding: '0 12px', fontSize: 11,
-                      background: isInstalledVersion ? 'rgba(255,255,255,0.05)' : installing ? 'rgba(40,38,65,0.7)' : 'rgba(75,63,207,0.3)',
-                      border: `1px solid ${isInstalledVersion ? 'rgba(255,255,255,0.08)' : 'rgba(75,63,207,0.5)'}`,
-                      color: isInstalledVersion ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
-                      cursor: isInstalledVersion || installing ? 'not-allowed' : 'pointer',
-                    }}
+                    className={`flex-shrink-0 flex items-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-95 h-7 px-3 text-[11px] border ${
+                      isInstalledVersion
+                        ? 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
+                        : installing
+                          ? 'bg-[rgba(40,38,65,0.7)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
+                          : 'bg-[rgba(75,63,207,0.3)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer'
+                    }`}
                   >
                     {installing ? (
                       <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />

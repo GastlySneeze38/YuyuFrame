@@ -45,7 +45,7 @@ export function DebugPanel() {
   return (
     <div className="flex w-full gap-4">
       <ServerSidebar agents={agents} error={error} activeId={activeId} onSelect={setSelected} tab={tab} onTabChange={setTab} />
-      <div className="flex-1" style={{ minWidth: 0 }}>
+      <div className="flex-1 min-w-0">
         <AgentDetail
           data={active}
           error={error && agents.length === 0}

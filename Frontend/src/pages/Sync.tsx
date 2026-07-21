@@ -86,8 +86,8 @@ function SyncContent() {
   if (instances.length === 0 && orphanCloud.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-8">
-        <div style={{ fontSize: 24, opacity: 0.18 }}>🧱</div>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center' }}>
+        <div className="text-[24px] opacity-[0.18]">🧱</div>
+        <p className="text-[12px] text-[rgba(255,255,255,0.2)] text-center">
           Crée une instance pour commencer<br />à synchroniser.
         </p>
       </div>
@@ -111,7 +111,7 @@ function SyncContent() {
       {/* Orphan cloud entries */}
       {orphanCloud.length > 0 && (
         <div className="flex flex-col gap-2 mt-2">
-          <p style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          <p className="text-[10px] font-bold text-[rgba(255,255,255,0.18)] tracking-[0.1em] uppercase">
             Dans le cloud · sans instance locale
           </p>
           {orphanCloud.map((ci) => (
@@ -125,7 +125,7 @@ function SyncContent() {
         </div>
       )}
 
-      <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.1)', textAlign: 'center', marginTop: 4 }}>
+      <p className="text-[10px] text-[rgba(255,255,255,0.1)] text-center mt-1">
         mods/ + config/ + saves sélectionnées · {QUOTA_SAVES} saves max · Premium
       </p>
     </div>
@@ -139,18 +139,21 @@ export default function Sync() {
   const { yuyuToken, isPremium, yuyuPlan } = useStore()
 
   const planLabel = yuyuPlan === 'ultimate' ? 'ULTIMATE' : 'PREMIUM'
-  const planColor = yuyuPlan === 'ultimate'
-    ? { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' }
-    : { color: '#818cf8', bg: 'rgba(75,63,207,0.18)' }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#09090D', color: 'white' }}>
+    <div className="flex h-full flex-col bg-[#09090D] text-white">
       <PageHeader px={5}>
-        <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em' }}>
+        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
           Synchronisation
         </h1>
         {yuyuToken && isPremium() && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: planColor.color, background: planColor.bg, padding: '2px 8px', borderRadius: 6, letterSpacing: '0.05em' }}>
+          <span
+            className={
+              yuyuPlan === 'ultimate'
+                ? 'text-[10px] font-bold text-[#f59e0b] bg-[rgba(245,158,11,0.15)] px-2 py-0.5 rounded-md tracking-[0.05em]'
+                : 'text-[10px] font-bold text-[#818cf8] bg-[rgba(75,63,207,0.18)] px-2 py-0.5 rounded-md tracking-[0.05em]'
+            }
+          >
             {planLabel}
           </span>
         )}
@@ -159,8 +162,8 @@ export default function Sync() {
       <div className="flex-1 overflow-y-auto p-5">
         {!yuyuToken ? (
           <div className="flex flex-col items-center justify-center gap-3 py-10">
-            <div style={{ fontSize: 28, opacity: 0.2 }}>🔒</div>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 600, textAlign: 'center' }}>
+            <div className="text-[28px] opacity-20">🔒</div>
+            <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">
               Connecte-toi à YuyuFrame<br />pour synchroniser tes instances
             </p>
           </div>

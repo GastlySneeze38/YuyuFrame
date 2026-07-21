@@ -22,8 +22,7 @@ export function BrowseTab({
     <div className="flex flex-col gap-3">
       <div className="relative">
         <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}
-          className="absolute left-3 top-1/2 -translate-y-1/2"
-          style={{ color: 'rgba(255,255,255,0.3)', pointerEvents: 'none' }}>
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgba(255,255,255,0.3)] pointer-events-none">
           <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
         </svg>
         <input
@@ -31,10 +30,7 @@ export function BrowseTab({
           placeholder={isPlugin ? 'Rechercher un plugin...' : 'Rechercher un mod...'}
           value={query}
           onChange={onQueryChange}
-          className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none"
-          style={{ height: 40, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(75,63,207,0.6)' }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+          className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
         />
         {searching && (
           <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />

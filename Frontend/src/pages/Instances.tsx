@@ -80,10 +80,10 @@ export default function Instances() {
   }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#09090D', color: 'white' }}>
+    <div className="flex h-full flex-col bg-[#09090D] text-white">
 
       <PageHeader px={5}>
-        <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em' }}>Instances</h1>
+        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">Instances</h1>
       </PageHeader>
 
       {/* Body: sidebar + mods panel */}
@@ -91,8 +91,7 @@ export default function Instances() {
 
         {/* Left sidebar — instance list */}
         <div
-          className="flex flex-col overflow-hidden"
-          style={{ width: '22%', minWidth: 320, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.06)' }}
+          className="flex flex-col overflow-hidden w-[22%] min-w-[320px] flex-shrink-0 border-r border-[rgba(255,255,255,0.06)]"
         >
           {/* Scrollable list */}
           <div className="flex flex-1 flex-col overflow-y-auto p-3">
@@ -102,14 +101,14 @@ export default function Instances() {
               </div>
             ) : instances.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2">
-                <div style={{ fontSize: 32 }}>🧱</div>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 600, textAlign: 'center' }}>Aucune instance</p>
+                <div className="text-[32px]">🧱</div>
+                <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">Aucune instance</p>
               </div>
             ) : (
               <>
                 {favorites.length > 0 && (
                   <div className="mb-1">
-                    <p className="px-1 pb-1.5 text-xs font-semibold" style={{ color: '#facc15', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    <p className="px-1 pb-1.5 text-xs font-semibold text-[#facc15] tracking-[0.08em] uppercase">
                       ★ Favoris
                     </p>
                     <div className="flex flex-col gap-2">
@@ -126,11 +125,11 @@ export default function Instances() {
                     >
                       <svg
                         viewBox="0 0 24 24" fill="currentColor" width={10} height={10}
-                        style={{ color: 'rgba(255,255,255,0.3)', transition: 'transform 0.15s', transform: othersExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                        className={`text-[rgba(255,255,255,0.3)] transition-transform duration-150 ${othersExpanded ? 'rotate-90' : 'rotate-0'}`}
                       >
                         <path d="M8 5v14l11-7z" />
                       </svg>
-                      <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      <p className="text-xs font-semibold text-[rgba(255,255,255,0.3)] tracking-[0.08em] uppercase">
                         Autres ({others.length})
                       </p>
                     </button>
@@ -146,13 +145,10 @@ export default function Instances() {
           </div>
 
           {/* Fixed bottom button */}
-          <div className="flex-shrink-0 flex flex-col gap-2 p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex-shrink-0 flex flex-col gap-2 p-3 border-t border-[rgba(255,255,255,0.06)]">
             <button
               onClick={() => setShowCreate(true)}
-              className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95"
-              style={{ height: 44, borderRadius: 12, fontSize: 13, background: '#4B3FCF', boxShadow: '0 4px 20px rgba(75,63,207,0.3)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#6155e8' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#4B3FCF' }}
+              className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95 h-[44px] rounded-xl text-[13px] bg-[#4B3FCF] shadow-[0_4px_20px_rgba(75,63,207,0.3)] hover:bg-[#6155e8]"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}>
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -161,10 +157,7 @@ export default function Instances() {
             </button>
             <button
               onClick={() => setShowImport(true)}
-              className="w-full flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-95"
-              style={{ height: 38, borderRadius: 12, fontSize: 12, background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+              className="w-full flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-95 h-[38px] rounded-xl text-[12px] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.6)] hover:bg-[rgba(255,255,255,0.1)]"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
                 <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
@@ -180,11 +173,11 @@ export default function Instances() {
             <ModsContent key={`${selectedInstance.id}-${selectedInstance.mc_version}`} instance={selectedInstance} />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-3">
-              <div style={{ fontSize: 32, opacity: 0.4 }}>←</div>
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>
+              <div className="text-[32px] opacity-40">←</div>
+              <p className="text-[14px] text-[rgba(255,255,255,0.3)] font-semibold">
                 Sélectionne une instance
               </p>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.15)' }}>
+              <p className="text-[12px] text-[rgba(255,255,255,0.15)]">
                 Les mods s'afficheront ici
               </p>
             </div>

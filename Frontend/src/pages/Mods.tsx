@@ -379,19 +379,17 @@ export function ModsContent({ instance }: { instance: Instance }) {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Sub-header: 3 zones — gauche/centre/droite */}
       <div
-        className="flex flex-shrink-0 items-center px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+        className="flex flex-shrink-0 items-center px-6 py-3 border-b border-b-[rgba(255,255,255,0.05)]"
       >
         {/* Gauche : tab Installés + badge mises à jour */}
         <div className="flex flex-1 items-center gap-1">
           <button
             onClick={() => setTab('installed')}
-            className="rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150"
-            style={{
-              background: tab === 'installed' ? 'rgba(75,63,207,0.25)' : 'transparent',
-              color: tab === 'installed' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
-              border: `1px solid ${tab === 'installed' ? 'rgba(75,63,207,0.5)' : 'transparent'}`,
-            }}
+            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150 border ${
+              tab === 'installed'
+                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)] border-[rgba(75,63,207,0.5)]'
+                : 'bg-transparent text-[rgba(255,255,255,0.35)] border-transparent'
+            }`}
           >
             {`Installés (${mods.length})`}
           </button>
@@ -400,13 +398,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
               onClick={handleUpdateAll}
               disabled={updatingAll}
               title="Tout mettre à jour (contenu supplémentaire uniquement)"
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all duration-150"
-              style={{
-                background: updatingAll ? 'rgba(255,255,255,0.04)' : 'rgba(250,204,21,0.12)',
-                color: updatingAll ? 'rgba(255,255,255,0.25)' : 'rgba(250,204,21,0.9)',
-                border: '1px solid rgba(250,204,21,0.28)',
-                cursor: updatingAll ? 'not-allowed' : 'pointer',
-              }}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all duration-150 border border-[rgba(250,204,21,0.28)] ${
+                updatingAll
+                  ? 'bg-[rgba(255,255,255,0.04)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
+                  : 'bg-[rgba(250,204,21,0.12)] text-[rgba(250,204,21,0.9)] cursor-pointer'
+              }`}
             >
               <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}>
                 <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
@@ -417,19 +413,14 @@ export function ModsContent({ instance }: { instance: Instance }) {
         </div>
 
         {/* Centre : boutons d'ajout groupés */}
-        <div className="flex items-center" style={{ border: '1px solid rgba(75,63,207,0.35)', borderRadius: 10, overflow: 'hidden' }}>
+        <div className="flex items-center border border-[rgba(75,63,207,0.35)] rounded-[10px] overflow-hidden">
           <button
             onClick={() => setTab('browse')}
-            className="flex items-center gap-1.5 font-semibold transition-all duration-150"
-            style={{
-              height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
-              borderRight: '1px solid rgba(75,63,207,0.35)',
-              background: tab === 'browse' ? 'rgba(75,63,207,0.25)' : 'transparent',
-              color: tab === 'browse' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => { if (tab !== 'browse') e.currentTarget.style.background = 'rgba(75,63,207,0.12)' }}
-            onMouseLeave={(e) => { if (tab !== 'browse') e.currentTarget.style.background = 'transparent' }}
+            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
+              tab === 'browse'
+                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
+                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
+            }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
@@ -438,16 +429,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
           </button>
           <button
             onClick={() => setTab('modpack')}
-            className="flex items-center gap-1.5 font-semibold transition-all duration-150"
-            style={{
-              height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
-              borderRight: '1px solid rgba(75,63,207,0.35)',
-              background: tab === 'modpack' ? 'rgba(75,63,207,0.25)' : 'transparent',
-              color: tab === 'modpack' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => { if (tab !== 'modpack') e.currentTarget.style.background = 'rgba(75,63,207,0.12)' }}
-            onMouseLeave={(e) => { if (tab !== 'modpack') e.currentTarget.style.background = 'transparent' }}
+            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
+              tab === 'modpack'
+                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
+                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
+            }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
@@ -457,16 +443,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
           <button
             onClick={handlePickJars}
             disabled={uploading}
-            className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95"
-            style={{
-              height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
-              borderRight: '1px solid rgba(75,63,207,0.35)',
-              background: uploading ? 'rgba(40,38,65,0.7)' : 'rgba(75,63,207,0.3)',
-              color: uploading ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
-              cursor: uploading ? 'not-allowed' : 'pointer',
-            }}
-            onMouseEnter={(e) => { if (!uploading) e.currentTarget.style.background = 'rgba(75,63,207,0.5)' }}
-            onMouseLeave={(e) => { if (!uploading) e.currentTarget.style.background = uploading ? 'rgba(40,38,65,0.7)' : 'rgba(75,63,207,0.3)' }}
+            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border-r border-r-[rgba(75,63,207,0.35)] ${
+              uploading
+                ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
+                : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(75,63,207,0.5)]'
+            }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -475,15 +456,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
           </button>
           <button
             onClick={() => setShowImportFolder(true)}
-            className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95"
-            style={{
-              height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12, border: 'none',
-              background: 'rgba(75,63,207,0.15)',
-              color: 'rgba(255,255,255,0.7)',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.3)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.15)' }}
+            className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] bg-[rgba(75,63,207,0.15)] text-[rgba(255,255,255,0.7)] cursor-pointer hover:bg-[rgba(75,63,207,0.3)]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
@@ -495,9 +468,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
         {/* Droite : informations de l'instance */}
         <div className="flex flex-1 items-center justify-end gap-3">
           {importNotice && (
-            <span style={{ fontSize: 10.5, color: 'rgba(179,163,255,0.9)' }}>{importNotice}</span>
+            <span className="text-[10.5px] text-[rgba(179,163,255,0.9)]">{importNotice}</span>
           )}
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>
+          <span className="text-[11px] text-[rgba(255,255,255,0.25)]">
             {instance.name} · {mcVersion} · {loader}
           </span>
         </div>
@@ -602,13 +575,12 @@ export default function Mods() {
 
   if (!instance) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4" style={{ background: '#09090D', color: 'white' }}>
-        <div style={{ fontSize: 36 }}>🧱</div>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>Aucune instance sélectionnée</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] text-white">
+        <div className="text-[36px]">🧱</div>
+        <p className="text-[14px] text-[rgba(255,255,255,0.4)] font-semibold">Aucune instance sélectionnée</p>
         <button
           onClick={() => navigate('/instances')}
-          className="font-semibold transition-all duration-200 active:scale-95"
-          style={{ height: 38, padding: '0 20px', borderRadius: 10, fontSize: 13, background: '#4B3FCF', color: 'white' }}
+          className="font-semibold transition-all duration-200 active:scale-95 h-[38px] px-5 rounded-[10px] text-[13px] bg-[#4B3FCF] text-white"
         >
           Gérer les instances
         </button>
@@ -617,9 +589,9 @@ export default function Mods() {
   }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: '#09090D', color: 'white' }}>
+    <div className="flex h-full flex-col bg-[#09090D] text-white">
       <PageHeader>
-        <h1 className="font-black text-white" style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Mods</h1>
+        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">Mods</h1>
       </PageHeader>
       <ModsContent instance={instance} />
     </div>

@@ -19,15 +19,12 @@ export function DevPaymentSimulator({ onSimulate }: { onSimulate: (plan: string)
   }
 
   return (
-    <div
-      className="flex flex-col gap-3 rounded-2xl p-5"
-      style={{ background: 'rgba(255,200,0,0.04)', border: '1px dashed rgba(255,200,0,0.25)' }}
-    >
+    <div className="flex flex-col gap-3 rounded-2xl p-5 bg-[rgba(255,200,0,0.04)] border border-dashed border-[rgba(255,200,0,0.25)]">
       <div className="flex items-center gap-2">
-        <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,200,0,0.6)', letterSpacing: '0.1em' }}>
+        <span className="text-[10px] font-extrabold text-[rgba(255,200,0,0.6)] tracking-[0.1em]">
           DEV ONLY
         </span>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
+        <span className="text-[12px] text-[rgba(255,255,255,0.4)] font-medium">
           Simuler un paiement Lemon Squeezy
         </span>
       </div>
@@ -37,15 +34,7 @@ export function DevPaymentSimulator({ onSimulate }: { onSimulate: (plan: string)
             key={plan}
             disabled={simulating}
             onClick={() => run(plan)}
-            className="rounded-lg px-3 py-1.5 font-semibold transition-all duration-150 active:scale-95"
-            style={{
-              fontSize: 11,
-              background: plan === 'premium' ? 'rgba(129,140,248,0.12)' : 'rgba(245,158,11,0.12)',
-              color: plan === 'premium' ? '#818cf8' : '#f59e0b',
-              border: `1px solid ${plan === 'premium' ? 'rgba(129,140,248,0.25)' : 'rgba(245,158,11,0.25)'}`,
-              opacity: simulating ? 0.5 : 1,
-              cursor: simulating ? 'not-allowed' : 'pointer',
-            }}
+            className={`rounded-lg px-3 py-1.5 font-semibold transition-all duration-150 active:scale-95 text-[11px] ${simulating ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer'} ${plan === 'premium' ? 'bg-[rgba(129,140,248,0.12)] text-[#818cf8] border border-[rgba(129,140,248,0.25)]' : 'bg-[rgba(245,158,11,0.12)] text-[#f59e0b] border border-[rgba(245,158,11,0.25)]'}`}
           >
             {plan}
           </button>
@@ -53,21 +42,13 @@ export function DevPaymentSimulator({ onSimulate }: { onSimulate: (plan: string)
         <button
           disabled={simulating}
           onClick={() => run('free')}
-          className="rounded-lg px-3 py-1.5 font-semibold transition-all duration-150 active:scale-95"
-          style={{
-            fontSize: 11,
-            background: 'rgba(255,255,255,0.05)',
-            color: 'rgba(255,255,255,0.35)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            opacity: simulating ? 0.5 : 1,
-            cursor: simulating ? 'not-allowed' : 'pointer',
-          }}
+          className={`rounded-lg px-3 py-1.5 font-semibold transition-all duration-150 active:scale-95 text-[11px] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] border border-[rgba(255,255,255,0.1)] ${simulating ? 'opacity-50 cursor-not-allowed' : 'opacity-100 cursor-pointer'}`}
         >
           reset → free
         </button>
       </div>
       {simMsg && (
-        <p style={{ fontSize: 11, color: simMsg.ok ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+        <p className={`text-[11px] font-semibold ${simMsg.ok ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
           {simMsg.text}
         </p>
       )}

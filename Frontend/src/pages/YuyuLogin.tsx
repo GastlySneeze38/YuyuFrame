@@ -70,10 +70,9 @@ export default function YuyuLogin() {
 
   if (mode === 'checking') {
     return (
-      <div className="flex h-full items-center justify-center" style={{ background: '#09090D' }}>
+      <div className="flex h-full items-center justify-center bg-[#09090D]">
         <div
-          className="h-8 w-8 animate-spin-slow rounded-full border-2"
-          style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: '#4B3FCF' }}
+          className="h-8 w-8 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#4B3FCF]"
         />
       </div>
     )
@@ -81,15 +80,14 @@ export default function YuyuLogin() {
 
   if (mode === 'error') {
     return (
-      <div className="flex h-full items-center justify-center" style={{ background: '#09090D' }}>
+      <div className="flex h-full items-center justify-center bg-[#09090D]">
         <div className="flex flex-col items-center gap-4">
-          <p style={{ color: 'rgba(255,100,100,0.8)', fontSize: 13 }}>
+          <p className="text-[rgba(255,100,100,0.8)] text-[13px]">
             Impossible de contacter le backend.
           </p>
           <button
             onClick={() => { setMode('checking'); api.yuyu.status().then((s) => setMode(s.has_account ? 'login' : 'register')).catch(() => setMode('error')) }}
-            className="rounded-xl px-4 py-2 text-sm text-white transition-all"
-            style={{ background: 'rgba(75,63,207,0.2)', border: '1px solid rgba(75,63,207,0.4)' }}
+            className="rounded-xl px-4 py-2 text-sm text-white transition-all bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.4)]"
           >
             Réessayer
           </button>
@@ -101,12 +99,11 @@ export default function YuyuLogin() {
   const isRegister = mode === 'register'
 
   return (
-    <div className="flex h-full flex-col items-center justify-center overflow-hidden" style={{ background: '#09090D' }}>
+    <div className="flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D]">
 
       {/* Background glow */}
       <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse at 50% 60%, rgba(75,63,207,0.07) 0%, transparent 65%)' }}
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_60%,rgba(75,63,207,0.07)_0%,transparent_65%)]"
       />
 
       <div className="relative z-10 flex w-full max-w-sm flex-col gap-6 px-6">

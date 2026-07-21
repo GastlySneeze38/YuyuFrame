@@ -12,10 +12,7 @@ export function PageBackButton({ to = '/home' }: { to?: string | number }) {
   return (
     <button
       onClick={go}
-      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-      style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.35)] bg-[rgba(255,255,255,0.04)] hover:text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.08)]"
     >
       <BackArrowIcon />
     </button>
@@ -23,7 +20,7 @@ export function PageBackButton({ to = '/home' }: { to?: string | number }) {
 }
 
 export function PageHeaderSeparator() {
-  return <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
+  return <div className="w-px h-[28px] bg-[rgba(255,255,255,0.07)] flex-shrink-0" />
 }
 
 /** Barre d'en-tête standard (bouton retour + contenu libre) — le contenu après
@@ -32,8 +29,7 @@ export function PageHeaderSeparator() {
 export function PageHeader({ px = 6, backTo, children }: { px?: number; backTo?: string | number; children: ReactNode }) {
   return (
     <div
-      className="flex flex-shrink-0 items-center gap-3"
-      style={{ padding: `12px ${px * 4}px`, borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+      className={`flex flex-shrink-0 items-center gap-3 py-3 border-b border-[rgba(255,255,255,0.06)] ${px === 5 ? 'px-5' : 'px-6'}`}
     >
       <PageBackButton to={backTo} />
       {children}

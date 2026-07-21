@@ -27,7 +27,7 @@ const Stats = lazy(() => import('@/pages/Stats'))
 const Server = lazy(() => import('@/pages/Server'))
 
 function RouteFallback() {
-  return <div className="flex h-full w-full" style={{ background: '#09090D' }} />
+  return <div className="flex h-full w-full bg-[#09090D]" />
 }
 
 const label = getCurrentWindow().label

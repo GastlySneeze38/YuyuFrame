@@ -16,7 +16,9 @@ export default function Stats() {
   const { isPremium, yuyuPlan } = useStore()
   const premium = isPremium()
   const planLabel = yuyuPlan === 'ultimate' ? 'ULTIMATE' : 'PREMIUM'
-  const planColor = yuyuPlan === 'ultimate' ? { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' } : { color: '#818cf8', bg: 'rgba(75,63,207,0.18)' }
+  const planClasses = yuyuPlan === 'ultimate'
+    ? 'text-[#f59e0b] bg-[rgba(245,158,11,0.15)]'
+    : 'text-[#818cf8] bg-[rgba(75,63,207,0.18)]'
 
   const [stats, setStats] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,15 +37,15 @@ export default function Stats() {
   const maxInstanceSecs = Math.max(...(stats?.per_instance.map((i) => i.total_secs) ?? []), 1)
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
+    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
 
       <PageHeader>
         <PageHeaderSeparator />
-        <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em' }}>
+        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
           Stats & Analytics
         </h1>
 
-        <span style={{ fontSize: 10, fontWeight: 700, color: planColor.color, background: planColor.bg, padding: '2px 8px', borderRadius: 6, letterSpacing: '0.05em' }}>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tracking-[0.05em] ${planClasses}`}>
           {planLabel}
         </span>
       </PageHeader>
@@ -69,7 +71,7 @@ export default function Stats() {
           </div>
         ) : !stats ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Impossible de charger les statistiques</p>
+            <p className="text-[13px] text-white/30">Impossible de charger les statistiques</p>
           </div>
         ) : (
           <>
@@ -96,30 +98,27 @@ export default function Stats() {
             </div>
 
             {/* 14-day activity */}
-            <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>ACTIVITÉ — 14 DERNIERS JOURS</span>
-              <div className="flex items-end gap-1.5" style={{ height: 80 }}>
+            <div className="rounded-2xl p-6 flex flex-col gap-4 bg-white/2 border border-white/7">
+              <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">ACTIVITÉ — 14 DERNIERS JOURS</span>
+              <div className="flex items-end gap-1.5 h-20">
                 {days.map((day) => {
                   const secs = dailyMap.get(day) ?? 0
                   const heightPct = secs > 0 ? Math.max(8, Math.round((secs / maxDaySecs) * 100)) : 0
                   const isToday = day === new Date().toISOString().split('T')[0]
+                  const barClasses = isToday
+                    ? 'bg-gradient-to-b from-[#818cf8] to-[rgba(75,63,207,0.6)]'
+                    : secs > 0
+                    ? 'bg-[rgba(129,140,248,0.45)]'
+                    : 'bg-white/4'
                   return (
                     <div key={day} className="flex flex-1 flex-col items-center gap-1" title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}>
-                      <div className="w-full flex items-end" style={{ height: 64 }}>
+                      <div className="w-full flex items-end h-16">
                         <div
-                          className="w-full rounded-sm transition-all duration-300"
-                          style={{
-                            height: `${heightPct}%`,
-                            minHeight: secs > 0 ? 4 : 0,
-                            background: isToday
-                              ? 'linear-gradient(180deg, #818cf8, rgba(75,63,207,0.6))'
-                              : secs > 0
-                              ? 'rgba(129,140,248,0.45)'
-                              : 'rgba(255,255,255,0.04)',
-                          }}
+                          className={`w-full rounded-sm transition-all duration-300 ${secs > 0 ? 'min-h-1' : 'min-h-0'} ${barClasses}`}
+                          style={{ height: `${heightPct}%` }}
                         />
                       </div>
-                      <span style={{ fontSize: 8, color: isToday ? '#818cf8' : 'rgba(255,255,255,0.2)', fontWeight: isToday ? 700 : 400 }}>
+                      <span className={`text-[8px] ${isToday ? 'text-[#818cf8] font-bold' : 'text-white/20 font-normal'}`}>
                         {formatDayLabel(day)}
                       </span>
                     </div>
@@ -132,8 +131,8 @@ export default function Stats() {
             <div className="grid grid-cols-2 gap-5">
 
               {/* Per-instance breakdown */}
-              <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>PAR MODPACK</span>
+              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-white/2 border border-white/7">
+                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">PAR MODPACK</span>
                 {stats.per_instance.length === 0 ? (
                   <EmptyState
                     compact
@@ -151,23 +150,19 @@ export default function Stats() {
                       <div key={inst.instance_id} className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{inst.instance_name}</span>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: loaderColor(inst.loader) }}>{inst.loader}</span>
-                            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)' }}>{inst.mc_version}</span>
+                            <span className="text-[12px] font-semibold text-white/80">{inst.instance_name}</span>
+                            <span className="text-[9px] font-bold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
+                            <span className="text-[9px] text-white/25">{inst.mc_version}</span>
                           </div>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: '#818cf8' }}>{formatDuration(inst.total_secs)}</span>
+                          <span className="text-[11px] font-semibold text-[#818cf8]">{formatDuration(inst.total_secs)}</span>
                         </div>
-                        <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                        <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/6">
                           <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.round((inst.total_secs / maxInstanceSecs) * 100)}%`,
-                              background: 'linear-gradient(90deg, rgba(75,63,207,0.8), #818cf8)',
-                              transition: 'width 0.4s ease',
-                            }}
+                            className="h-full rounded-full bg-gradient-to-r from-[rgba(75,63,207,0.8)] to-[#818cf8] transition-[width] duration-[400ms] ease-[ease]"
+                            style={{ width: `${Math.round((inst.total_secs / maxInstanceSecs) * 100)}%` }}
                           />
                         </div>
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
+                        <span className="text-[10px] text-white/25">
                           {inst.sessions} session{inst.sessions > 1 ? 's' : ''}
                         </span>
                       </div>
@@ -177,8 +172,8 @@ export default function Stats() {
               </div>
 
               {/* Recent sessions */}
-              <div className="rounded-2xl p-6 flex flex-col gap-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SESSIONS RÉCENTES</span>
+              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-white/2 border border-white/7">
+                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">SESSIONS RÉCENTES</span>
                 {stats.recent_sessions.length === 0 ? (
                   <EmptyState
                     compact
@@ -191,24 +186,22 @@ export default function Stats() {
                     subtitle="Lance une partie pour commencer"
                   />
                 ) : (
-                  <div className="flex flex-col gap-2 overflow-auto" style={{ maxHeight: 280 }}>
+                  <div className="flex flex-col gap-2 overflow-auto max-h-[280px]">
                     {stats.recent_sessions.map((s, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between rounded-xl px-3 py-2.5"
-                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 bg-white/3 border border-white/5"
                       >
                         <div className="flex flex-col gap-0.5">
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)' }}>{s.instance_name}</span>
+                          <span className="text-[12px] font-semibold text-white/75">{s.instance_name}</span>
                           <div className="flex items-center gap-1.5">
-                            <span style={{ fontSize: 9, color: loaderColor(s.loader), fontWeight: 700 }}>{s.loader}</span>
-                            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)' }}>·</span>
-                            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{formatShortDate(s.started_at)} à {formatTime(s.started_at)}</span>
+                            <span className="text-[9px] font-bold" style={{ color: loaderColor(s.loader) }}>{s.loader}</span>
+                            <span className="text-[9px] text-white/20">·</span>
+                            <span className="text-[9px] text-white/30">{formatShortDate(s.started_at)} à {formatTime(s.started_at)}</span>
                           </div>
                         </div>
                         <span
-                          className="rounded-lg px-2 py-0.5"
-                          style={{ fontSize: 11, fontWeight: 700, color: '#818cf8', background: 'rgba(75,63,207,0.15)', flexShrink: 0 }}
+                          className="rounded-lg px-2 py-0.5 text-[11px] font-bold text-[#818cf8] bg-[rgba(75,63,207,0.15)] flex-shrink-0"
                         >
                           {formatDuration(s.duration_secs)}
                         </span>
@@ -232,13 +225,11 @@ export default function Stats() {
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
     <div
-      className="flex flex-col gap-2 rounded-2xl p-5"
-      style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}
+      className="flex flex-col gap-2 rounded-2xl p-5 bg-white/2 border border-white/7"
     >
-      <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</span>
-      <span className="font-black" style={{ fontSize: 26, color, letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</span>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{sub}</span>
+      <span className="text-[10px] font-bold text-white/35 tracking-[0.08em] uppercase">{label}</span>
+      <span className="font-black text-[26px] tracking-[-0.02em] leading-none" style={{ color }}>{value}</span>
+      <span className="text-[11px] text-white/30">{sub}</span>
     </div>
   )
 }
-

@@ -17,20 +17,20 @@ export function EmptyState({
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-2">
         {icon}
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>{title}</span>
-        {subtitle && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)' }}>{subtitle}</span>}
+        <span className="text-[12px] text-[rgba(255,255,255,0.25)]">{title}</span>
+        {subtitle && <span className="text-[11px] text-[rgba(255,255,255,0.15)]">{subtitle}</span>}
       </div>
     )
   }
 
   return (
     <div className="flex h-48 flex-col items-center justify-center gap-4">
-      <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="w-[56px] h-[56px] rounded-2xl bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
         {icon}
       </div>
       <div className="text-center">
-        <p className="font-semibold" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>{title}</p>
-        {subtitle && <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, marginTop: 4 }}>{subtitle}</p>}
+        <p className="font-semibold text-[14px] text-[rgba(255,255,255,0.5)]">{title}</p>
+        {subtitle && <p className="text-[12px] text-[rgba(255,255,255,0.2)] mt-1">{subtitle}</p>}
       </div>
     </div>
   )

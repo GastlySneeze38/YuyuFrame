@@ -25,10 +25,10 @@ export default function Information() {
   }, [])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D', color: 'white' }}>
+    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-white">
 
       <PageHeader>
-        <h1 className="font-black text-white" style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Informations</h1>
+        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">Informations</h1>
       </PageHeader>
 
       {/* Content */}
@@ -37,27 +37,25 @@ export default function Information() {
 
           {/* Branding */}
           <div
-            className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center"
-            style={{ background: 'rgba(75,63,207,0.08)', border: '1px solid rgba(75,63,207,0.2)' }}
+            className="flex flex-col items-center gap-3 rounded-2xl px-6 py-8 text-center bg-[rgba(75,63,207,0.08)] border border-[rgba(75,63,207,0.2)]"
           >
             <div
-              className="flex items-center justify-center rounded-2xl font-black text-white"
-              style={{ width: 72, height: 72, background: 'rgba(75,63,207,0.25)', fontSize: 32, fontFamily: 'monospace', boxShadow: '0 0 40px rgba(75,63,207,0.3)' }}
+              className="flex items-center justify-center rounded-2xl font-black text-white w-[72px] h-[72px] bg-[rgba(75,63,207,0.25)] text-[32px] font-mono shadow-[0_0_40px_rgba(75,63,207,0.3)]"
             >
               Y
             </div>
             <div>
-              <h2 className="font-black text-white" style={{ fontSize: 28, letterSpacing: '-0.02em', textShadow: '0 0 32px rgba(75,63,207,0.5)' }}>
+              <h2 className="font-black text-white text-[28px] tracking-[-0.02em] [text-shadow:0_0_32px_rgba(75,63,207,0.5)]">
                 YuyuFrame
               </h2>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+              <p className="text-[13px] text-white/40 mt-1">
                 Le launcher Minecraft open-source
               </p>
             </div>
             {info && (
               <div className="flex items-center gap-2 mt-1">
                 <span
-                  style={{ fontSize: 12, fontWeight: 700, color: 'rgba(120,110,230,0.9)', background: 'rgba(75,63,207,0.2)', border: '1px solid rgba(75,63,207,0.35)', borderRadius: 8, padding: '3px 10px' }}
+                  className="text-[12px] font-bold text-[rgba(120,110,230,0.9)] bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.35)] rounded-lg px-[10px] py-[3px]"
                 >
                   v{info.version}
                 </span>
@@ -80,11 +78,10 @@ export default function Information() {
               {FEATURES.map((f) => (
                 <div
                   key={f}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 bg-white/3 border border-white/6"
                 >
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(75,63,207,0.8)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{f}</span>
+                  <div className="w-[5px] h-[5px] rounded-full bg-[rgba(75,63,207,0.8)] flex-shrink-0" />
+                  <span className="text-[13px] text-white/60">{f}</span>
                 </div>
               ))}
             </div>
@@ -99,11 +96,11 @@ export default function Information() {
 
           {/* Mentions légales */}
           <Section title="Mentions légales">
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}>
+            <p className="text-[12px] text-white/30 leading-[1.7]">
               YuyuFrame est un launcher non-officiel et n'est pas affilié à Mojang Studios ou Microsoft.
               Minecraft est une marque déposée de Microsoft Corporation.
             </p>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', marginTop: 8 }}>
+            <p className="text-[11px] text-white/18 mt-2">
               © 2025 YuyuFrame — Tous droits réservés
             </p>
           </Section>
@@ -117,7 +114,7 @@ export default function Information() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3">
-      <h3 style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+      <h3 className="text-[11px] font-bold text-white/30 tracking-[0.1em] uppercase">
         {title}
       </h3>
       {children}
@@ -128,11 +125,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function InfoRow({ label, value, dim }: { label: string; value: string; dim?: boolean }) {
   return (
     <div
-      className="flex items-center justify-between rounded-xl px-4 py-3"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+      className="flex items-center justify-between rounded-xl px-4 py-3 bg-white/3 border border-white/6"
     >
-      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: dim ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.75)' }}>{value}</span>
+      <span className="text-[13px] text-white/40">{label}</span>
+      <span className={`text-[13px] font-semibold ${dim ? 'text-white/25' : 'text-white/75'}`}>{value}</span>
     </div>
   )
 }

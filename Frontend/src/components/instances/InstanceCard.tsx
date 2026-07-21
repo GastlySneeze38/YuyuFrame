@@ -48,22 +48,20 @@ export const InstanceCard = memo(function InstanceCard({
   return (
     <div
       onClick={() => onSelect(instance.id)}
-      className="flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-all duration-150"
-      style={{
-        background: selected ? 'rgba(75,63,207,0.18)' : hovered ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.04)',
-        border: `1px solid ${selected ? 'rgba(75,63,207,0.55)' : 'rgba(255,255,255,0.06)'}`,
-        boxShadow: selected ? '0 0 20px rgba(75,63,207,0.18)' : 'none',
-        position: 'relative',
-        zIndex: menuOpen ? 40 : 'auto',
-      }}
+      className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-all duration-150 relative border ${menuOpen ? 'z-40' : 'z-auto'} ${
+        selected
+          ? 'bg-[rgba(75,63,207,0.18)] border-[rgba(75,63,207,0.55)] shadow-[0_0_20px_rgba(75,63,207,0.18)]'
+          : hovered
+            ? 'bg-[rgba(255,255,255,0.06)] border-[rgba(255,255,255,0.06)] shadow-none'
+            : 'bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.06)] shadow-none'
+      }`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Partie haute : icône + nom + infos */}
       <div className="flex items-start gap-3 relative">
         <div
-          className="flex items-center justify-center rounded-xl flex-shrink-0"
-          style={{ width: 36, height: 36, background: selected ? 'rgba(75,63,207,0.3)' : 'rgba(255,255,255,0.05)', fontSize: 15 }}
+          className={`flex items-center justify-center rounded-xl flex-shrink-0 w-[36px] h-[36px] text-[15px] ${selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}`}
         >
           🧱
         </div>
@@ -71,18 +69,19 @@ export const InstanceCard = memo(function InstanceCard({
         <div className="flex flex-col flex-1 min-w-0">
           {/* Nom + étoile + menu */}
           <div>
-            <p className="font-bold truncate" style={{ fontSize: 13, color: selected ? 'white' : 'rgba(255,255,255,0.85)', paddingRight: 30, width: '100%' }}>
+            <p className={`font-bold truncate text-[13px] pr-[30px] w-full ${selected ? 'text-white' : 'text-[rgba(255,255,255,0.85)]'}`}>
               {instance.name}
             </p>
 
-            <div ref={menuRef} className="absolute flex flex-col items-center gap-0.5 flex-shrink-0" style={{ top: '50%', right: 0, transform: 'translateY(-50%)' }}>
+            <div ref={menuRef} className="absolute flex flex-col items-center gap-0.5 flex-shrink-0 top-1/2 right-0 -translate-y-1/2">
               <button
                 onClick={(e) => { e.stopPropagation(); onToggleFavorite(instance.id) }}
-                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
+                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 bg-transparent ${
+                  instance.favorite
+                    ? 'text-[#facc15] hover:text-[#fde047]'
+                    : 'text-[rgba(255,255,255,0.18)] hover:text-[rgba(255,255,255,0.5)]'
+                }`}
                 title={instance.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                style={{ color: instance.favorite ? '#facc15' : 'rgba(255,255,255,0.18)', background: 'transparent' }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = instance.favorite ? '#fde047' : 'rgba(255,255,255,0.5)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = instance.favorite ? '#facc15' : 'rgba(255,255,255,0.18)' }}
               >
                 <svg viewBox="0 0 24 24" fill={instance.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={instance.favorite ? 0 : 1.8} width={13} height={13}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
@@ -91,11 +90,12 @@ export const InstanceCard = memo(function InstanceCard({
 
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); setConfirm(false) }}
-                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
+                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 ${
+                  menuOpen
+                    ? 'text-[rgba(255,255,255,0.85)] bg-[rgba(255,255,255,0.1)]'
+                    : 'text-[rgba(255,255,255,0.25)] bg-transparent hover:text-[rgba(255,255,255,0.6)]'
+                }`}
                 title="Plus d'actions"
-                style={{ color: menuOpen ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.25)', background: menuOpen ? 'rgba(255,255,255,0.1)' : 'transparent' }}
-                onMouseEnter={(e) => { if (!menuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
-                onMouseLeave={(e) => { if (!menuOpen) e.currentTarget.style.color = 'rgba(255,255,255,0.25)' }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
                   <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
@@ -105,12 +105,7 @@ export const InstanceCard = memo(function InstanceCard({
               {menuOpen && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute flex flex-col gap-0.5 rounded-xl p-1"
-                  style={{
-                    top: '100%', right: 0, marginTop: 4, width: 190, zIndex: 30,
-                    background: '#1a1a24', border: '1px solid rgba(255,255,255,0.1)',
-                    boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-                  }}
+                  className="absolute flex flex-col gap-0.5 rounded-xl p-1 top-full right-0 mt-1 w-[190px] z-30 bg-[#1a1a24] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                 >
                   {!confirm ? (
                     <>
@@ -141,19 +136,17 @@ export const InstanceCard = memo(function InstanceCard({
                     </>
                   ) : (
                     <div className="flex flex-col gap-1.5 p-1">
-                      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Supprimer définitivement cette instance ?</p>
+                      <p className="text-[11px] text-[rgba(255,255,255,0.5)]">Supprimer définitivement cette instance ?</p>
                       <div className="flex gap-1.5">
                         <button
                           onClick={() => { setMenuOpen(false); onDelete(instance.id) }}
-                          className="flex-1 rounded-lg"
-                          style={{ fontSize: 11, fontWeight: 600, color: 'rgb(248,113,113)', background: 'rgba(200,50,50,0.15)', padding: '5px 0' }}
+                          className="flex-1 rounded-lg text-[11px] font-semibold text-[rgb(248,113,113)] bg-[rgba(200,50,50,0.15)] py-[5px]"
                         >
                           Supprimer
                         </button>
                         <button
                           onClick={() => setConfirm(false)}
-                          className="flex-1 rounded-lg"
-                          style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)', padding: '5px 0' }}
+                          className="flex-1 rounded-lg text-[11px] text-[rgba(255,255,255,0.5)] bg-[rgba(255,255,255,0.06)] py-[5px]"
                         >
                           Annuler
                         </button>
@@ -167,9 +160,9 @@ export const InstanceCard = memo(function InstanceCard({
 
           {/* Infos */}
           <div className="flex items-center gap-2 mt-0.5">
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{instance.mc_version}</span>
-            <span style={{ fontSize: 10, color: loaderColor(instance.loader), fontWeight: 600 }}>{instance.loader}</span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>{formatRam(instance.ram_mb)}</span>
+            <span className="text-[11px] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>
+            <span className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>
+            <span className="text-[10px] text-[rgba(255,255,255,0.2)]">{formatRam(instance.ram_mb)}</span>
           </div>
         </div>
       </div>
@@ -177,16 +170,11 @@ export const InstanceCard = memo(function InstanceCard({
       {/* Description (si renseignée) — masquée par défaut, dépliée lentement au survol */}
       {instance.description && (
         <div
-          className="overflow-hidden"
-          style={{
-            maxHeight: hovered ? 60 : 0,
-            opacity: hovered ? 1 : 0,
-            marginTop: hovered ? 8 : 0,
-            marginLeft: 0,
-            transition: 'max-height 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 380ms ease, margin-top 420ms cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
+          className={`overflow-hidden ml-0 [transition:max-height_420ms_cubic-bezier(0.16,1,0.3,1),opacity_380ms_ease,margin-top_420ms_cubic-bezier(0.16,1,0.3,1)] ${
+            hovered ? 'max-h-[60px] opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
+          }`}
         >
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          <p className="text-[11px] text-[rgba(255,255,255,0.35)] whitespace-pre-wrap break-words">
             {instance.description}
           </p>
         </div>

@@ -9,36 +9,30 @@ export function ModrinthCard({ hit, installed, loading, onInstall, onOpenDetail 
   return (
     <div
       onClick={onOpenDetail}
-      className="flex cursor-pointer items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-150"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+      className="flex cursor-pointer items-center gap-3 rounded-2xl px-4 py-3 transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.05)]"
     >
-      <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, overflow: 'hidden', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
         {hit.icon_url ? (
-          <img src={hit.icon_url} alt={hit.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={hit.icon_url} alt={hit.title} className="w-full h-full object-cover" />
         ) : (
           <PlugIcon size={20} color="rgba(255,255,255,0.2)" />
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold text-white" style={{ fontSize: 13 }}>{hit.title}</p>
-        <p className="truncate" style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{hit.description}</p>
-        <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>{formatDownloadCount(hit.downloads)} téléchargements</p>
+        <p className="truncate font-semibold text-white text-[13px]">{hit.title}</p>
+        <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.description}</p>
+        <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloads)} téléchargements</p>
       </div>
       <button
         onClick={(e) => { e.stopPropagation(); onInstall() }}
         disabled={installed || loading}
-        className="flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95"
-        style={{
-          height: 32, paddingLeft: 14, paddingRight: 14, fontSize: 12,
-          background: installed ? 'rgba(255,255,255,0.05)' : loading ? 'rgba(40,38,65,0.7)' : 'rgba(75,63,207,0.3)',
-          border: `1px solid ${installed ? 'rgba(255,255,255,0.08)' : 'rgba(75,63,207,0.5)'}`,
-          color: installed ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
-          cursor: installed || loading ? 'not-allowed' : 'pointer',
-        }}
-        onMouseEnter={(e) => { if (!installed && !loading) e.currentTarget.style.background = 'rgba(75,63,207,0.5)' }}
-        onMouseLeave={(e) => { if (!installed && !loading) e.currentTarget.style.background = 'rgba(75,63,207,0.3)' }}
+        className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border ${
+          installed
+            ? 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
+            : loading
+              ? 'bg-[rgba(40,38,65,0.7)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
+              : 'bg-[rgba(75,63,207,0.3)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(75,63,207,0.5)]'
+        }`}
       >
         {loading ? (
           <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />

@@ -120,17 +120,14 @@ export function CreateInstanceModal({
   return (
     <ModalShell title="Nouvelle instance" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <div className="flex gap-1 rounded-xl p-1" style={{ background: 'rgba(0,0,0,0.3)' }}>
+        <div className="flex gap-1 rounded-xl p-1 bg-[rgba(0,0,0,0.3)]">
           {(['blank', 'preset'] as const).map((m) => (
             <button
               key={m}
               onClick={() => handleSwitchMode(m)}
-              className="flex-1 rounded-lg text-xs font-semibold transition-all duration-150"
-              style={{
-                height: 32,
-                background: mode === m ? 'rgba(75,63,207,0.4)' : 'transparent',
-                color: mode === m ? 'white' : 'rgba(255,255,255,0.4)',
-              }}
+              className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-[32px] ${
+                mode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'
+              }`}
             >
               {m === 'blank' ? 'Vierge' : 'Modpack'}
             </button>
@@ -138,7 +135,7 @@ export function CreateInstanceModal({
         </div>
 
         {mode === 'preset' && (
-          <div className="grid grid-cols-1 gap-2" style={{ maxHeight: 200, overflowY: 'auto' }}>
+          <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto">
             {INSTANCE_PRESETS.map((p) => (
               <PresetCard key={p.id} preset={p} selected={selectedPreset?.id === p.id} onSelect={() => handleSelectPreset(p)} />
             ))}
@@ -155,10 +152,10 @@ export function CreateInstanceModal({
                 <LoaderPicker value={loader} onChange={setLoader} />
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{mcVersion}</span>
-                <span style={{ fontSize: 10, color: loaderColor(loader), fontWeight: 600 }}>{loader}</span>
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>· {selectedPreset!.mods.length} mods installés automatiquement</span>
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
+                <span className="text-[11px] text-[rgba(255,255,255,0.3)]">{mcVersion}</span>
+                <span className="text-[10px] font-semibold" style={{ color: loaderColor(loader) }}>{loader}</span>
+                <span className="text-[10px] text-[rgba(255,255,255,0.2)]">· {selectedPreset!.mods.length} mods installés automatiquement</span>
               </div>
             )}
 

@@ -2,7 +2,7 @@
 export function Sparkline({ data, color, height = 26 }: { data: number[]; color: string; height?: number }) {
   const VW = 240
   if (data.length < 2) {
-    return <svg width="100%" height={height} style={{ display: 'block' }} />
+    return <svg width="100%" height={height} className="block" />
   }
   const min = Math.min(...data)
   const max = Math.max(...data)
@@ -15,7 +15,7 @@ export function Sparkline({ data, color, height = 26 }: { data: number[]; color:
   })
   const areaPoints = `0,${height} ${linePoints.join(' ')} ${VW},${height}`
   return (
-    <svg viewBox={`0 0 ${VW} ${height}`} preserveAspectRatio="none" width="100%" height={height} style={{ display: 'block' }}>
+    <svg viewBox={`0 0 ${VW} ${height}`} preserveAspectRatio="none" width="100%" height={height} className="block">
       <polyline points={areaPoints} fill={`${color}22`} stroke="none" />
       <polyline points={linePoints.join(' ')} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
