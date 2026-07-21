@@ -7,6 +7,7 @@ import { useStore } from '@/stores/useStore'
 import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError, showNotice } from '@/stores/useErrorToast'
+import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 
 interface DownloadProgress {
   current: number
@@ -62,6 +63,7 @@ export default function Home() {
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [launchMsg, setLaunchMsg] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
   const [bannerAnimating, setBannerAnimating] = useState(false)
 
@@ -317,24 +319,17 @@ export default function Home() {
                 Créer une instance
               </button>
             ) : (
-              <div className="relative w-full">
-                <select
-                  value={selectedInstanceId ?? ''}
-                  onChange={(e) => setSelectedInstanceId(e.target.value)}
-                  className="w-full appearance-none rounded-xl px-3 pr-8 text-sm font-medium text-white outline-none h-[45px] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)]"
-                >
-                  {instances.map((inst) => (
-                    <option key={inst.id} value={inst.id} className="bg-[#111118] text-white">
-                      {inst.name} — {inst.mc_version} ({inst.loader})
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                  <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="opacity-[0.45]">
-                    <path d="M0 0l5 6 5-6z" />
-                  </svg>
-                </div>
-              </div>
+              <button
+                onClick={() => setShowInstanceSwitch(true)}
+                className="relative w-full flex items-center justify-between rounded-xl px-3 text-sm font-medium text-white outline-none h-[45px] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)] transition-all duration-150 hover:border-[rgba(75,63,207,0.4)]"
+              >
+                <span className="truncate">
+                  {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : 'Choisir une instance'}
+                </span>
+                <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="flex-shrink-0 opacity-[0.45]">
+                  <path d="M0 0l5 6 5-6z" />
+                </svg>
+              </button>
             )}
 
             {/* Instance info pill */}
@@ -587,6 +582,15 @@ export default function Home() {
         </div>
 
       </div>
+
+      {showInstanceSwitch && (
+        <InstanceSwitchModal
+          instances={instances}
+          selectedInstanceId={selectedInstanceId}
+          onClose={() => setShowInstanceSwitch(false)}
+          onSelect={setSelectedInstanceId}
+        />
+      )}
     </div>
   )
 }

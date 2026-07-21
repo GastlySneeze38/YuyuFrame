@@ -6,6 +6,7 @@ import { useStore } from '@/stores/useStore'
 import type { Instance, Mod, ModpackMeta } from '@/types'
 import { searchModrinthModpacks, resolveModpackFile, type ModpackHit } from '@/lib/modrinthModpacks'
 import { ImportSourceModal } from '@/components/import/ImportSourceModal'
+import { ImportChoiceModal } from '@/components/import/ImportChoiceModal'
 import { InstalledTab } from '@/components/mods/InstalledTab'
 import { ModpackBanner } from '@/components/mods/ModpackBanner'
 import { ModpackBrowseTab } from '@/components/mods/ModpackBrowseTab'
@@ -41,6 +42,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [updatingAll, setUpdatingAll] = useState(false)
   const [updatingPackAll, setUpdatingPackAll] = useState(false)
   const [importNotice, setImportNotice] = useState('')
+  const [showImportChoice, setShowImportChoice] = useState(false)
   const [showImportFolder, setShowImportFolder] = useState(false)
 
   const mergeVersions = useCallback((fetched: Record<string, ModrinthInfo>) =>
@@ -441,27 +443,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
             {modpackMeta ? 'Remplacer le modpack' : 'Installer un modpack'}
           </button>
           <button
-            onClick={handlePickJars}
+            onClick={() => setShowImportChoice(true)}
             disabled={uploading}
-            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border-r border-r-[rgba(75,63,207,0.35)] ${
+            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer ${
               uploading
                 ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
-                : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(75,63,207,0.5)]'
+                : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.5)]'
             }`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
             </svg>
-            {uploading ? 'Import...' : isPlugin ? 'Importer un plugin' : 'Importer un mod'}
-          </button>
-          <button
-            onClick={() => setShowImportFolder(true)}
-            className="flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] bg-[rgba(75,63,207,0.15)] text-[rgba(255,255,255,0.7)] cursor-pointer hover:bg-[rgba(75,63,207,0.3)]"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-            Importer un dossier
+            {uploading ? 'Import...' : 'Importer'}
           </button>
         </div>
 
@@ -475,6 +468,15 @@ export function ModsContent({ instance }: { instance: Instance }) {
           </span>
         </div>
       </div>
+
+      {showImportChoice && (
+        <ImportChoiceModal
+          isPlugin={isPlugin}
+          onClose={() => setShowImportChoice(false)}
+          onPickJars={handlePickJars}
+          onPickFolder={() => setShowImportFolder(true)}
+        />
+      )}
 
       {showImportFolder && (
         <ImportSourceModal
