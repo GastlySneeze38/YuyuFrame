@@ -98,7 +98,7 @@ export default function Stats() {
             </div>
 
             {/* 14-day activity */}
-            <div className="rounded-2xl p-6 flex flex-col gap-4 bg-white/2 border border-white/7">
+            <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
               <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">ACTIVITÉ — 14 DERNIERS JOURS</span>
               <div className="flex items-end gap-1.5 h-20">
                 {days.map((day) => {
@@ -109,7 +109,7 @@ export default function Stats() {
                     ? 'bg-gradient-to-b from-[#818cf8] to-[rgba(75,63,207,0.6)]'
                     : secs > 0
                     ? 'bg-[rgba(129,140,248,0.45)]'
-                    : 'bg-white/4'
+                    : 'bg-[rgba(255,255,255,0.04)]'
                   return (
                     <div key={day} className="flex flex-1 flex-col items-center gap-1" title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}>
                       <div className="w-full flex items-end h-16">
@@ -131,7 +131,7 @@ export default function Stats() {
             <div className="grid grid-cols-2 gap-5">
 
               {/* Per-instance breakdown */}
-              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-white/2 border border-white/7">
+              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
                 <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">PAR MODPACK</span>
                 {stats.per_instance.length === 0 ? (
                   <EmptyState
@@ -156,7 +156,7 @@ export default function Stats() {
                           </div>
                           <span className="text-[11px] font-semibold text-[#818cf8]">{formatDuration(inst.total_secs)}</span>
                         </div>
-                        <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/6">
+                        <div className="h-1.5 w-full rounded-full overflow-hidden bg-[rgba(255,255,255,0.06)]">
                           <div
                             className="h-full rounded-full bg-gradient-to-r from-[rgba(75,63,207,0.8)] to-[#818cf8] transition-[width] duration-[400ms] ease-[ease]"
                             style={{ width: `${Math.round((inst.total_secs / maxInstanceSecs) * 100)}%` }}
@@ -172,7 +172,7 @@ export default function Stats() {
               </div>
 
               {/* Recent sessions */}
-              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-white/2 border border-white/7">
+              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
                 <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">SESSIONS RÉCENTES</span>
                 {stats.recent_sessions.length === 0 ? (
                   <EmptyState
@@ -190,7 +190,7 @@ export default function Stats() {
                     {stats.recent_sessions.map((s, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between rounded-xl px-3 py-2.5 bg-white/3 border border-white/5"
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]"
                       >
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[12px] font-semibold text-white/75">{s.instance_name}</span>
@@ -225,7 +225,7 @@ export default function Stats() {
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
     <div
-      className="flex flex-col gap-2 rounded-2xl p-5 bg-white/2 border border-white/7"
+      className="flex flex-col gap-2 rounded-2xl p-5 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]"
     >
       <span className="text-[10px] font-bold text-white/35 tracking-[0.08em] uppercase">{label}</span>
       <span className="font-black text-[26px] tracking-[-0.02em] leading-none" style={{ color }}>{value}</span>

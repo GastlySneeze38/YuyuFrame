@@ -41,7 +41,7 @@ export default function Legal() {
 
       {/* Tabs */}
       <div
-        className="flex flex-shrink-0 items-center gap-1 px-6 pt-4 border-b border-white/6"
+        className="flex flex-shrink-0 items-center gap-1 px-6 pt-4 border-b border-[rgba(255,255,255,0.06)]"
       >
         {TABS.map((t) => (
           <button

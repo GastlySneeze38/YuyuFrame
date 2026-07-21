@@ -78,7 +78,7 @@ export default function Information() {
               {FEATURES.map((f) => (
                 <div
                   key={f}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 bg-white/3 border border-white/6"
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]"
                 >
                   <div className="w-[5px] h-[5px] rounded-full bg-[rgba(75,63,207,0.8)] flex-shrink-0" />
                   <span className="text-[13px] text-white/60">{f}</span>
@@ -125,7 +125,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function InfoRow({ label, value, dim }: { label: string; value: string; dim?: boolean }) {
   return (
     <div
-      className="flex items-center justify-between rounded-xl px-4 py-3 bg-white/3 border border-white/6"
+      className="flex items-center justify-between rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]"
     >
       <span className="text-[13px] text-white/40">{label}</span>
       <span className={`text-[13px] font-semibold ${dim ? 'text-white/25' : 'text-white/75'}`}>{value}</span>

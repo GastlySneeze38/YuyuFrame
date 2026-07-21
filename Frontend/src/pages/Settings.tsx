@@ -122,7 +122,7 @@ export default function Settings() {
                       <button
                         key={value}
                         onClick={() => setInstanceSyncMode(value)}
-                        className={`flex flex-col gap-1 rounded-xl p-3 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-white/3 border border-white/7'}`}
+                        className={`flex flex-col gap-1 rounded-xl p-3 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]'}`}
                       >
                         <span className="font-semibold text-white text-[12px]">{label}</span>
                         <span className="text-[10px] text-white/35 leading-[1.4]">{desc}</span>
@@ -157,7 +157,7 @@ export default function Settings() {
                       <button
                         key={id}
                         onClick={() => setBrightness(value)}
-                        className={`flex flex-col gap-1 rounded-xl p-4 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-white/3 border border-white/7'}`}
+                        className={`flex flex-col gap-1 rounded-xl p-4 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]'}`}
                       >
                         <span className="text-[18px] leading-none">{icon}</span>
                         <span className="font-semibold text-white text-[13px]">{label}</span>
@@ -224,7 +224,7 @@ export default function Settings() {
 function SCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div
-      className="rounded-2xl p-6 bg-white/[.025] border border-white/7"
+      className="rounded-2xl p-6 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]"
     >
       <div className="mb-5 flex items-center gap-3">
         <div
