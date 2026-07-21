@@ -4,17 +4,20 @@ import { formatBytes, formatDownloadCount } from '@/lib/format'
 import { Spinner } from '@/components/ui/Spinner'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloseButton } from '@/components/ui/CloseButton'
+import { Toggle } from '@/components/ui/Toggle'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { showError } from '@/stores/useErrorToast'
+import { useStore } from '@/stores/useStore'
 import {
   fetchProjectDetail, fetchProjectVersions, stripMarkdown, versionTypeBadge, formatGameVersions,
   type ModrinthHit, type ModrinthProjectDetail, type ModrinthVersionEntry,
 } from './modUtils'
 
 export function ModDetailModal({
-  hit, mcVersion, loader, installedMod, installedVersionNumber, onClose, onInstall,
+  hit, instanceId, mcVersion, loader, installedMod, installedVersionNumber, onClose, onInstall,
 }: {
   hit: ModrinthHit
+  instanceId: string
   mcVersion: string
   loader: string
   installedMod: Mod | null
@@ -22,6 +25,9 @@ export function ModDetailModal({
   onClose: () => void
   onInstall: (file: { url: string; filename: string }) => Promise<void>
 }) {
+  const isModPinned = useStore((s) => s.isModPinned)
+  const setModPinned = useStore((s) => s.setModPinned)
+  const pinned = !!installedMod && isModPinned(instanceId, hit.project_id)
   const [detail, setDetail] = useState<ModrinthProjectDetail | null>(null)
   const [versions, setVersions] = useState<ModrinthVersionEntry[]>([])
   const [loadingVersions, setLoadingVersions] = useState(true)
@@ -46,6 +52,11 @@ export function ModDetailModal({
     setInstallingId(version.id)
     try {
       await onInstall(file)
+      // Choisi une version qui n'est pas la plus récente de la liste affichée
+      // → downgrade délibéré, on épingle pour ne plus proposer de mise à jour.
+      if (installedMod && versions[0]?.id !== version.id) {
+        setModPinned(instanceId, hit.project_id, true)
+      }
     } catch (e) {
       showError(e)
     } finally {
@@ -178,6 +189,18 @@ export function ModDetailModal({
             })
           )}
         </div>
+
+        {installedMod && (
+          <div className="flex flex-shrink-0 items-center justify-between rounded-xl px-3.5 py-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+            <div>
+              <p className="text-[12px] font-semibold text-[rgba(255,255,255,0.75)]">Ignorer les mises à jour</p>
+              <p className="text-[10.5px] text-[rgba(255,255,255,0.3)] mt-0.5">
+                Ne propose plus de mise à jour pour ce mod tant que c'est activé
+              </p>
+            </div>
+            <Toggle checked={pinned} onChange={() => setModPinned(instanceId, hit.project_id, !pinned)} size="sm" />
+          </div>
+        )}
       </div>
     </div>
   )

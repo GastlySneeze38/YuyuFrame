@@ -9,16 +9,22 @@ import { displayName, type ModUpdate } from './modUtils'
 /** Mémoïsé : rendu en liste (potentiellement des dizaines de mods) — les
  * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
  * des références stables (useCallback) au lieu d'une closure par ligne. */
-export const ModRow = memo(function ModRow({ mod, version, modrinthName, update, updating, logoUrl, onToggle, onDelete, onUpdate }: {
+export const ModRow = memo(function ModRow({
+  mod, version, modrinthName, projectId, update, updating, switchingVersion, logoUrl,
+  onToggle, onDelete, onUpdate, onSwitchVersion,
+}: {
   mod: Mod
   version: string | null
   modrinthName: string | null
+  projectId: string | null
   update: ModUpdate | null
   updating: boolean
+  switchingVersion: boolean
   logoUrl: string | null
   onToggle: (mod: Mod) => void
   onDelete: (name: string) => void
   onUpdate: (update: ModUpdate) => void
+  onSwitchVersion: (mod: Mod) => void
 }) {
   const [confirm, setConfirm] = useState(false)
   return (
@@ -90,6 +96,26 @@ export const ModRow = memo(function ModRow({ mod, version, modrinthName, update,
             </button>
           )
         })()}
+        {projectId && (
+          <button
+            onClick={() => onSwitchVersion(mod)}
+            disabled={switchingVersion}
+            title="Changer de version"
+            className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150 ${
+              switchingVersion
+                ? 'text-[rgba(255,255,255,0.15)] cursor-not-allowed'
+                : 'text-[rgba(255,255,255,0.3)] hover:text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.12)] cursor-pointer'
+            }`}
+          >
+            {switchingVersion ? (
+              <ButtonSpinner size={13} trackColor="rgba(255,255,255,0.1)" />
+            ) : (
+              <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
+                <path d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm-6 7c0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z" />
+              </svg>
+            )}
+          </button>
+        )}
         <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} size="sm" title={mod.enabled ? 'Désactiver' : 'Activer'} />
         {confirm ? (
           <div className="flex items-center gap-1 flex-shrink-0">

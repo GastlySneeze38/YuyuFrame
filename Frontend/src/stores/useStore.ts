@@ -77,6 +77,13 @@ interface Store {
   // ── Last session ───────────────────────────────────────────────────────────
   lastSession: { instanceName: string; at: string } | null
   setLastSession: (s: { instanceName: string; at: string }) => void
+
+  // ── Mods épinglés (persisté) — mod projectId pour lequel on a délibérément
+  // basculé sur une version plus ancienne : on n'affiche plus le badge "mise
+  // à jour disponible" pour ce mod tant que ce n'est pas désépinglé.
+  pinnedMods: Record<string, boolean>
+  isModPinned: (instanceId: string, projectId: string) => boolean
+  setModPinned: (instanceId: string, projectId: string, pinned: boolean) => void
 }
 
 export const useStore = create<Store>()(
@@ -203,6 +210,18 @@ export const useStore = create<Store>()(
       // Last session
       lastSession: null,
       setLastSession: (lastSession) => set({ lastSession }),
+
+      // Mods épinglés
+      pinnedMods: {},
+      isModPinned: (instanceId, projectId) => !!get().pinnedMods[`${instanceId}:${projectId}`],
+      setModPinned: (instanceId, projectId, pinned) =>
+        set((s) => {
+          const key = `${instanceId}:${projectId}`
+          const next = { ...s.pinnedMods }
+          if (pinned) next[key] = true
+          else delete next[key]
+          return { pinnedMods: next }
+        }),
     }),
     {
       name: 'yuyuframe-store',
@@ -218,6 +237,7 @@ export const useStore = create<Store>()(
         username: s.username,
         uuid: s.uuid,
         lastSession: s.lastSession,
+        pinnedMods: s.pinnedMods,
       }),
     }
   )

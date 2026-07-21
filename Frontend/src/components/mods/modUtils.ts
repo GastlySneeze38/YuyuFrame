@@ -195,8 +195,11 @@ export async function checkForUpdates(
   mcVersion: string,
   loader: string,
   avoidBeta: boolean,
+  pinnedProjectIds: Set<string> = new Set(),
 ): Promise<ModUpdate[]> {
-  const eligible = mods.filter((m) => m.sha1)
+  // Un mod épinglé = on a délibérément basculé sur une version plus ancienne
+  // via le sélecteur de version — ne pas le re-proposer en mise à jour.
+  const eligible = mods.filter((m) => m.sha1 && !pinnedProjectIds.has(versionData[m.sha1]?.projectId ?? ''))
   if (eligible.length === 0) return []
   try {
     const body: Record<string, unknown> = {

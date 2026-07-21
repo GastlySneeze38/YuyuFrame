@@ -8,7 +8,8 @@ import { ModRow } from './ModRow'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
-  updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod, onBrowseExtra, onUploadExtra,
+  updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod, onSwitchVersion, switchingSha1,
+  onBrowseExtra, onUploadExtra,
 }: {
   mods: Mod[]
   modpackMeta: ModpackMeta | null
@@ -27,6 +28,8 @@ export function InstalledTab({
   onToggle: (mod: Mod) => void
   onDelete: (name: string) => void
   onUpdateMod: (u: ModUpdate) => void
+  onSwitchVersion: (mod: Mod) => void
+  switchingSha1: string | null
   onBrowseExtra: () => void
   onUploadExtra: () => void
 }) {
@@ -64,12 +67,15 @@ export function InstalledTab({
         mod={mod}
         version={versionMap[mod.sha1]?.version ?? null}
         modrinthName={versionMap[mod.sha1]?.modrinthName || null}
+        projectId={versionMap[mod.sha1]?.projectId ?? null}
         update={update}
         updating={updatingMods.has(mod.sha1) || updatingAll}
+        switchingVersion={switchingSha1 === mod.sha1}
         logoUrl={logoCache[displayName(mod.name)] ?? null}
         onToggle={onToggle}
         onDelete={onDelete}
         onUpdate={onUpdateMod}
+        onSwitchVersion={onSwitchVersion}
       />
     )
   }

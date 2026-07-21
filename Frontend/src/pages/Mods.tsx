@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
-  _modrinthCache, _iconCache,
+  fetchProjectDetail, _modrinthCache, _iconCache,
   type ModrinthInfo, type ModUpdate, type ModrinthHit, type Tab,
 } from '@/components/mods/modUtils'
 
@@ -29,7 +29,16 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const mcVersion = instance.mc_version
   const loader = instance.loader
   const isPlugin = loader === 'vanilla'
-  const { avoidBetaDependencies } = useStore()
+  const { avoidBetaDependencies, pinnedMods } = useStore()
+
+  const pinnedProjectIds = useMemo(() => {
+    const prefix = `${instanceId}:`
+    return new Set(
+      Object.keys(pinnedMods)
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => k.slice(prefix.length)),
+    )
+  }, [pinnedMods, instanceId])
 
   const [tab, setTab] = useState<Tab>('installed')
   const [mods, setMods] = useState<Mod[]>([])
@@ -57,6 +66,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [modSearch, setModSearch] = useState('')
   const [logoCache, setLogoCache] = useState<Record<string, string | null>>({})
   const [detailHit, setDetailHit] = useState<ModrinthHit | null>(null)
+  const [switchingSha1, setSwitchingSha1] = useState<string | null>(null)
 
   const installedByProject = useMemo(() => {
     const map: Record<string, Mod> = {}
@@ -197,7 +207,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       } else {
         fetchVersionsByHash(loaded.map((m) => m.sha1)).then((vd) => {
           mergeVersions(vd)
-          checkForUpdates(instanceId, loaded, vd, mcVersion, loader, avoidBetaDependencies).then((upd) => {
+          checkForUpdates(instanceId, loaded, vd, mcVersion, loader, avoidBetaDependencies, pinnedProjectIds).then((upd) => {
             setUpdates(upd)
             _modrinthCache[instanceId] = { versionMap: vd, updates: upd }
           })
@@ -374,6 +384,30 @@ export function ModsContent({ instance }: { instance: Instance }) {
     delete _modrinthCache[instanceId]
   }
 
+  /// Ouvre directement le sélecteur de version d'un mod déjà installé (liste
+  /// Installés) — avant, il fallait le rechercher à nouveau dans l'onglet
+  /// Parcourir pour accéder à la liste des versions.
+  const handleSwitchVersion = async (mod: Mod) => {
+    const projectId = versionMap[mod.sha1]?.projectId
+    if (!projectId) return
+    setSwitchingSha1(mod.sha1)
+    try {
+      const detail = await fetchProjectDetail(projectId)
+      if (!detail) { showError('Impossible de joindre Modrinth'); return }
+      setDetailHit({
+        project_id: detail.id,
+        slug: detail.id,
+        title: detail.title,
+        description: detail.description,
+        icon_url: detail.icon_url,
+        downloads: detail.downloads,
+        categories: detail.categories,
+      })
+    } finally {
+      setSwitchingSha1(null)
+    }
+  }
+
   const extraUpdatesCount = updates.filter((u) => u.blockedBy.length === 0 && !isPackMod(u.mod.name)).length
   const packUpdatesCount = updates.filter((u) => u.blockedBy.length === 0 && isPackMod(u.mod.name)).length
 
@@ -489,6 +523,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       {detailHit && (
         <ModDetailModal
           hit={detailHit}
+          instanceId={instanceId}
           mcVersion={mcVersion}
           loader={loader}
           installedMod={installedByProject[detailHit.project_id] ?? null}
@@ -538,6 +573,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onToggle={handleToggle}
             onDelete={handleDelete}
             onUpdateMod={handleUpdateMod}
+            onSwitchVersion={handleSwitchVersion}
+            switchingSha1={switchingSha1}
             onBrowseExtra={() => setTab('modpack')}
             onUploadExtra={handlePickJars}
           />
