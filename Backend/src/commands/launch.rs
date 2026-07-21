@@ -147,6 +147,7 @@ pub async fn launch_game(
             p2p.unwrap_or(false),
             avoid_beta.unwrap_or(true),
             &window_label,
+            &instance_id,
             cancel_rx,
         )
         .await

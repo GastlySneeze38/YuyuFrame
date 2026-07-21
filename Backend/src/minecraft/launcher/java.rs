@@ -4,8 +4,9 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use std::sync::atomic::AtomicU64;
 use super::classpath::download_file;
-use super::progress::set_progress;
+use super::progress::set_progress_monotonic;
 
 pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
     let out = tokio::process::Command::new(java)
@@ -50,6 +51,7 @@ pub(super) async fn ensure_java(
     mc_dir: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
+    progress_floor: &AtomicU64,
 ) -> Result<(String, u32)> {
     // 1. JAVA_HOME
     if let Ok(home) = std::env::var("JAVA_HOME") {
@@ -80,7 +82,7 @@ pub(super) async fn ensure_java(
         }
         if cfg!(target_os = "windows") {
             tracing::info!("Java 8 Mojang figé à 8u51 — tentative de téléchargement d'un Temurin récent");
-            set_progress(app, 10, 100, "Téléchargement Java 8 récent (Eclipse Temurin)...");
+            set_progress_monotonic(app, progress_floor, 10, 100, "Téléchargement Java 8 récent (Eclipse Temurin)...");
             match download_adoptium_jre8(&temurin_dir, client).await {
                 Ok(()) if temurin_exe.exists() => return Ok((temurin_exe.to_string_lossy().to_string(), required_major)),
                 Ok(()) => tracing::warn!("Téléchargement Temurin terminé mais java introuvable, repli sur Mojang"),
@@ -102,8 +104,8 @@ pub(super) async fn ensure_java(
 
     // 5. Téléchargement depuis Mojang
     tracing::info!("Java {} ({}) introuvable — téléchargement depuis Mojang", required_major, component);
-    set_progress(app, 12, 100, &format!("Téléchargement Java {} (Mojang)...", required_major));
-    download_mojang_runtime(component, &runtime_dir, client, app).await?;
+    set_progress_monotonic(app, progress_floor, 12, 100, &format!("Téléchargement Java {} (Mojang)...", required_major));
+    download_mojang_runtime(component, &runtime_dir, client, app, progress_floor).await?;
 
     if java_exe.exists() {
         Ok((java_exe.to_string_lossy().to_string(), required_major))
@@ -117,6 +119,7 @@ async fn download_mojang_runtime(
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
+    progress_floor: &AtomicU64,
 ) -> Result<()> {
     let platform = mojang_platform_key();
 
@@ -188,7 +191,7 @@ async fn download_mojang_runtime(
         r??;
         done += 1;
         if done.is_multiple_of(100) || done == total {
-            set_progress(app, 12 + done * 8 / total.max(1), 100,
+            set_progress_monotonic(app, progress_floor, 12 + done * 8 / total.max(1), 100,
                 &format!("Java runtime {}/{}", done, total));
         }
     }

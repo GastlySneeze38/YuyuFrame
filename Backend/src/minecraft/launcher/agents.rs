@@ -27,6 +27,7 @@ pub(super) async fn setup_p2p(
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     console_label: &str,
+    progress_floor: &std::sync::atomic::AtomicU64,
 ) -> Result<AgentSetup> {
     p2p::start_signaling(app.clone());
 
@@ -40,7 +41,7 @@ pub(super) async fn setup_p2p(
     }
 
     // Télécharger les mappings Yarn (Fabric mergedv2)
-    let yarn_path = p2p::ensure_yarn_mappings(version_id, client, app).await?;
+    let yarn_path = p2p::ensure_yarn_mappings(version_id, client, app, progress_floor).await?;
 
     let mixin_jar     = p2p::p2p_dir().join("mixin.jar");
     let agent_jar     = p2p::p2p_dir().join("p2p-agent.jar");
@@ -123,6 +124,7 @@ pub(super) async fn setup_launcher_agent(
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     console_label: &str,
+    progress_floor: &std::sync::atomic::AtomicU64,
 ) -> AgentSetup {
     let libs_dir = launcher_agent_libs_dir();
     let mixin_jar    = libs_dir.join("mixin.jar");
@@ -175,7 +177,7 @@ pub(super) async fn setup_launcher_agent(
             version_id), "out");
         Ok(None)
     } else {
-        p2p::ensure_yarn_mappings(version_id, client, app).await.map(Some)
+        p2p::ensure_yarn_mappings(version_id, client, app, progress_floor).await.map(Some)
     };
 
     let yarn_path_opt = match yarn_result {

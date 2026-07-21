@@ -1,12 +1,13 @@
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::minecraft::loaders::{deps, fabric, forge};
 use super::jvm_args::extract_tweak_class_args;
-use super::progress::set_progress;
+use super::progress::set_progress_monotonic;
 
 /// Extrait les chaînes d'un tableau JSON brut (`arguments.jvm`/`arguments.game`
 /// des profils Fabric/Forge), en ignorant silencieusement les entrées non-string
@@ -33,8 +34,9 @@ pub(super) async fn setup_fabric(
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
+    progress_floor: &AtomicU64,
 ) -> Result<LoaderSetup> {
-    set_progress(app, 72, 100, "Téléchargement Fabric Loader...");
+    set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Fabric Loader...");
 
     let profile = fabric::get_latest_profile(mc_version).await?;
     let mut warnings = Vec::new();
@@ -44,8 +46,8 @@ pub(super) async fn setup_fabric(
         warnings.push("Fabric API n'a pas pu être installée automatiquement".to_string());
     }
 
-    set_progress(app, 74, 100, "Résolution des dépendances des mods...");
-    match deps::resolve_and_install_deps(mc_version, "fabric", mods_dir, app, avoid_beta).await {
+    set_progress_monotonic(app, progress_floor, 74, 100, "Résolution des dépendances des mods...");
+    match deps::resolve_and_install_deps(mc_version, "fabric", mods_dir, app, avoid_beta, progress_floor).await {
         Ok(failed) => warnings.extend(
             failed.into_iter().map(|id| format!("Dépendance de mod manquante : {id}")),
         ),
@@ -83,7 +85,7 @@ pub(super) async fn setup_fabric(
         }
         done += 1;
         if done.is_multiple_of(5) || done == total {
-            set_progress(app, 72 + done * 20 / total.max(1), 100, &format!("Fabric libs {}/{}", done, total));
+            set_progress_monotonic(app, progress_floor, 72 + done * 20 / total.max(1), 100, &format!("Fabric libs {}/{}", done, total));
         }
     }
 
@@ -118,8 +120,9 @@ pub(super) async fn setup_forge(
     libraries_dir: &Path,
     java: &str,
     app: &tauri::AppHandle,
+    progress_floor: &AtomicU64,
 ) -> Result<LoaderSetup> {
-    set_progress(app, 70, 100, "Recherche de la version Forge...");
+    set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version Forge...");
 
     let forge_ver = forge::fetch_latest_version(mc_version).await?;
     tracing::info!("Forge {} pour MC {}", forge_ver, mc_version);
@@ -127,7 +130,7 @@ pub(super) async fn setup_forge(
     let version_id = match forge::find_installed(mc_version, &forge_ver, mc_dir) {
         Some(id) => id,
         None => {
-            set_progress(app, 72, 100, "Téléchargement de l'installeur Forge...");
+            set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur Forge...");
             forge::install(mc_version, &forge_ver, mc_dir, libraries_dir, java).await?
         }
     };
@@ -163,7 +166,7 @@ pub(super) async fn setup_forge(
             }
             done += 1;
             if done.is_multiple_of(5) || done == total {
-                set_progress(app, 80 + done * 12 / total.max(1), 100, &format!("Forge libs {}/{}", done, total));
+                set_progress_monotonic(app, progress_floor, 80 + done * 12 / total.max(1), 100, &format!("Forge libs {}/{}", done, total));
             }
         }
     }

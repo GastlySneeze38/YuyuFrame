@@ -23,5 +23,10 @@ public abstract class TitleScreenMixin {
     private void la$onInit(CallbackInfo ci) {
         FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
         LauncherLog.ui(3, "[LauncherAgent] Hook TitleScreen.init() OK — pipeline Mixin opérationnel");
+        // Signal lu par le launcher Rust (stdout du process, voir orchestrator.rs)
+        // pour savoir que Minecraft a fini son propre chargement interne (splash
+        // + ressources) et affiche enfin le menu principal — comble le "trou"
+        // entre la fin de nos téléchargements et le jeu réellement visible.
+        LauncherLog.info("[YUYUFRAME_READY]");
     }
 }

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -25,5 +26,6 @@ public abstract class TitleScreenMixin261 {
     @Inject(method = "init()V", at = @At("TAIL"))
     private void la$onInit(CallbackInfo ci) {
         FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
+        LauncherLog.info("[YUYUFRAME_READY]");
     }
 }

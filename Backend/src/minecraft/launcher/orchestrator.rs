@@ -2,13 +2,15 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinSet;
 
 use crate::state::{MinecraftSession, SharedState};
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
+use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::classpath::{artifact_path, dedup_classpath, download_file, extract_natives, should_download_library};
 use super::java::ensure_java;
@@ -16,7 +18,7 @@ use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, ex
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, LoaderSetup};
-use super::progress::{log_to_console, set_progress, tail_log_file};
+use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready};
 
 /// Message d'erreur sentinelle renvoyé par `download_and_launch` quand l'arrêt
 /// vient d'une annulation demandée par l'utilisateur (`cancel_launch`), pour
@@ -60,6 +62,7 @@ pub async fn download_and_launch(
     p2p: bool,
     avoid_beta: bool,
     console_label: &str,
+    instance_id: &str,
     cancel: watch::Receiver<bool>,
 ) -> Result<Vec<String>> {
     let mc_dir = minecraft_dir();
@@ -106,6 +109,11 @@ pub async fn download_and_launch(
         .pool_max_idle_per_host(32)
         .build()?);
 
+    // Plafond partagé entre les deux émetteurs concurrents (libs + assets, voir
+    // set_progress_monotonic) — un seul par lancement, jamais partagé entre
+    // deux lancements différents.
+    let progress_floor = Arc::new(AtomicU64::new(0));
+
     // ── Assets en tâche de fond — démarre immédiatement, indépendant des libs ──
     // Les assets et les libs sont totalement indépendants : on les télécharge en parallèle.
     let assets_task = {
@@ -114,6 +122,7 @@ pub async fn download_and_launch(
         let assets_dir = assets_dir.clone();
         let asset_index = details.asset_index.clone();
         let cancel = cancel.clone();
+        let progress_floor = progress_floor.clone();
         tokio::spawn(async move {
             let asset_index_path = assets_dir
                 .join("indexes")
@@ -163,8 +172,9 @@ pub async fn download_and_launch(
                 }
                 done += 1;
                 if done.is_multiple_of(200) || done == total_assets {
-                    set_progress(
+                    set_progress_monotonic(
                         &app,
+                        &progress_floor,
                         50 + done * 40 / total_assets.max(1),
                         100,
                         &format!("Assets {}/{}", done, total_assets),
@@ -177,11 +187,11 @@ pub async fn download_and_launch(
 
     let client_jar = versions_dir.join(format!("{}.jar", version_id));
     if !client_jar.exists() {
-        set_progress(&app, 10, 100, "Téléchargement du client Minecraft...");
+        set_progress_monotonic(&app, &progress_floor, 10, 100, "Téléchargement du client Minecraft...");
         download_file(&client, &details.downloads.client.url, &client_jar).await?;
     }
 
-    set_progress(&app, 20, 100, "Téléchargement des bibliothèques...");
+    set_progress_monotonic(&app, &progress_floor, 20, 100, "Téléchargement des bibliothèques...");
     let total_libs = details.libraries.len() as u64;
 
     // 16 téléchargements simultanés — équilibre bande passante / charge serveur Mojang
@@ -267,7 +277,7 @@ pub async fn download_and_launch(
         natives_to_extract.extend(native_paths);
         libs_done += 1;
         if libs_done.is_multiple_of(10) || libs_done == total_libs {
-            set_progress(&app, 20 + libs_done * 30 / total_libs.max(1), 100,
+            set_progress_monotonic(&app, &progress_floor, 20 + libs_done * 30 / total_libs.max(1), 100,
                 &format!("Bibliothèques {}/{}", libs_done, total_libs));
         }
     }
@@ -296,14 +306,14 @@ pub async fn download_and_launch(
     let java_component = details.java_version.as_ref()
         .map(|j| j.component.as_str())
         .unwrap_or("jre-legacy"); // composant Mojang pour Java 8
-    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app).await?;
+    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor).await?;
     ensure_gpu_preference(&java).await;
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
 
     let loader_setup = match loader.unwrap_or("vanilla") {
-        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta).await?,
-        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app).await?,
+        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor).await?,
+        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor).await?,
         _ => LoaderSetup { main_class: details.main_class.clone(), ..Default::default() },
     };
     let (main_class, extra_classpath, extra_game_args, extra_jvm_args) = (
@@ -323,7 +333,7 @@ pub async fn download_and_launch(
     // à l'exécution par MappingsRegistry (IRemapper Mixin) et les appels de
     // réflexion, pas besoin d'un JAR "effectif" différent ici.
     let p2p_setup = if p2p {
-        setup_p2p(version_id, session, &natives_dir, loader, &client, &app, &console_label).await?
+        setup_p2p(version_id, session, &natives_dir, loader, &client, &app, &console_label, &progress_floor).await?
     } else {
         AgentSetup::default()
     };
@@ -332,7 +342,7 @@ pub async fn download_and_launch(
     // ── LauncherAgent setup ──────────────────────────────────────────────────
     // Resource packs Modrinth in-game (voir docs/LauncherAgent/index.md). Agent
     // totalement indépendant du p2p-agent — actif que P2P soit activé ou non.
-    let launcher_agent = setup_launcher_agent(version_id, loader, &client, &app, &console_label).await;
+    let launcher_agent = setup_launcher_agent(version_id, loader, &client, &app, &console_label, &progress_floor).await;
     let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
     // ── Attente des assets ────────────────────────────────────────────────────
@@ -343,7 +353,11 @@ pub async fn download_and_launch(
 
     // ── Launch ───────────────────────────────────────────────────────────────
 
-    set_progress(&app, 95, 100, "Lancement de Minecraft...");
+    // Valeur brute 100 (pas 95) : dernier point de la phase téléchargements,
+    // rescale exactement à 60% affichés (voir DOWNLOAD_PHASE_PERCENT) — le
+    // frontend reconnaît ce palier pile pour démarrer sa propre estimation de
+    // la phase de lancement (60-100%, voir Home.tsx).
+    set_progress_monotonic(&app, &progress_floor, 100, 100, "Lancement de Minecraft...");
 
     let classpath_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
 
@@ -387,8 +401,14 @@ pub async fn download_and_launch(
     let log_path = mc_game_dir.join("logs").join("latest.log");
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_tailer = stop_flag.clone();
+    let stop_flag_ready = stop_flag.clone();
     let app_log = app.clone();
     let label_log = console_label.clone();
+    // Partagé entre les deux canaux de détection de game_ready (stdout +
+    // fichier, voir plus bas) — le premier qui voit le marqueur gagne.
+    let ready_sent = Arc::new(AtomicBool::new(false));
+    let ready_sent_stdout = ready_sent.clone();
+    let ready_sent_file = ready_sent.clone();
 
     let mut java_cmd = tokio::process::Command::new(&java);
     java_cmd
@@ -421,13 +441,25 @@ pub async fn download_and_launch(
     let label_out = console_label.clone();
     let app_err = app.clone();
     let label_err = console_label.clone();
+    let instance_id_out = instance_id.to_string();
 
     if let Some(mut reader) = stdout {
         tokio::spawn(async move {
             let mut line = String::new();
+            // Signalé une seule fois par lancement — le hook TitleScreen.init()
+            // du LauncherAgent (voir TitleScreenMixin*.java) se redéclenche à
+            // chaque retour au menu principal pendant la session, pas juste au
+            // premier chargement. `ready_sent` est partagé avec le filet de
+            // sécurité côté fichier (watch_agent_log_for_ready) — le premier
+            // des deux canaux qui voit le marqueur gagne.
             while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
                 let trimmed = line.trim_end().to_string();
                 log_to_console(&app_out, &label_out, &trimmed, "out");
+                if trimmed.contains("[YUYUFRAME_READY]")
+                    && ready_sent_stdout.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+                {
+                    let _ = app_out.emit("game_ready", serde_json::json!({ "instance_id": &instance_id_out }));
+                }
                 // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
                 // main.rs) — la fenêtre console (webview) ne garde rien après
                 // un crash/fermeture, ce qui rendait tout diagnostic après-coup
@@ -453,6 +485,12 @@ pub async fn download_and_launch(
     // Tailer logs/latest.log — Minecraft route ses logs via log4j2 vers ce fichier
     // plutôt que vers stdout, donc on lit le fichier directement.
     let log_tailer = tokio::spawn(tail_log_file(log_path, stop_flag_tailer, app_log, label_log));
+
+    // Filet de sécurité game_ready (voir watch_agent_log_for_ready) — course
+    // avec la détection stdout ci-dessus, `ready_sent` partagé garantit qu'un
+    // seul des deux émet l'événement.
+    let agent_log_path = launcher_agent_dir().join("logs").join("launcher-agent.log");
+    tokio::spawn(watch_agent_log_for_ready(agent_log_path, stop_flag_ready, ready_sent_file, app.clone(), instance_id.to_string()));
 
     // Clear progress — game is now running
     state.write().await.download_progress = None;

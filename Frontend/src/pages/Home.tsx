@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { BETA_TEST } from '@/config/beta'
@@ -57,6 +57,7 @@ export default function Home() {
     p2pEnabled, setP2pEnabled,
     avoidBetaDependencies,
     showConsole,
+    launchPhaseDurations, recordLaunchPhaseDuration,
   } = useStore()
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
@@ -70,6 +71,35 @@ export default function Home() {
 
   const instance = selectedInstance()
 
+  // Phase 2 ("lancement", 60-100%) — les téléchargements (backend) s'arrêtent
+  // pile à 60%, le reste (démarrage JVM + chargement interne Minecraft
+  // jusqu'au menu principal, voir game_ready) n'a pas de progression réelle
+  // connue. On mesure la durée réelle à chaque lancement (voir game_ready
+  // ci-dessous) et on la réutilise pour animer la barre les fois suivantes,
+  // au lieu de la laisser figée à 60% pendant tout ce temps.
+  const phase2StartRef = useRef<number | null>(null)
+  const phase2TimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const clearPhase2 = () => {
+    if (phase2TimerRef.current) { clearInterval(phase2TimerRef.current); phase2TimerRef.current = null }
+    phase2StartRef.current = null
+  }
+
+  const startPhase2 = (instanceId: string) => {
+    phase2StartRef.current = Date.now()
+    const remembered = launchPhaseDurations[instanceId]
+    if (!remembered) return // pas encore de mesure — reste figé à 60%, rien à animer
+    if (phase2TimerRef.current) clearInterval(phase2TimerRef.current)
+    phase2TimerRef.current = setInterval(() => {
+      if (!phase2StartRef.current) return
+      const elapsed = Date.now() - phase2StartRef.current
+      const frac = Math.min(0.975, elapsed / remembered)
+      setProgress({ current: 60 + Math.round(frac * 40), total: 100, message: 'Démarrage de Minecraft...' })
+    }, 250)
+  }
+
+  useEffect(() => clearPhase2, [])
+
   useEffect(() => {
     api.instances.list().then((list) => {
       setInstances(list)
@@ -81,27 +111,52 @@ export default function Home() {
 
   useTauriEvent<DownloadProgress>('download_progress', (payload) => {
     setProgress(payload)
+    // Palier exact émis par le backend une fois tous les téléchargements
+    // finis (voir DOWNLOAD_PHASE_PERCENT côté Rust) — démarre la phase 2.
+    if (payload.current === 60 && payload.total === 100 && !phase2StartRef.current && selectedInstanceId) {
+      startPhase2(selectedInstanceId)
+    }
   })
 
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', (payload) => {
     const { running, instance_id } = payload
     setInstanceRunning(instance_id, running)
     if (!running) {
+      clearPhase2()
       setProgress(null)
       setCancelling(false)
       getCurrentWindow().show()
     }
   })
 
+  // Émis par le backend quand le hook TitleScreen.init() du LauncherAgent se
+  // déclenche (voir TitleScreenMixin*.java) — Minecraft a fini son propre
+  // chargement interne (splash + ressources) et affiche enfin le menu
+  // principal. Avant ça, la barre restait figée à 60% pendant tout ce temps
+  // mort (aucun signal entre la fin de nos téléchargements et le jeu
+  // réellement visible). On mesure la durée réelle de cette phase pour
+  // affiner l'animation des prochains lancements de cette instance.
+  useTauriEvent<{ instance_id: string }>('game_ready', (payload) => {
+    if (payload.instance_id !== selectedInstanceId) return
+    if (phase2StartRef.current) {
+      recordLaunchPhaseDuration(payload.instance_id, Date.now() - phase2StartRef.current)
+    }
+    clearPhase2()
+    setProgress({ current: 100, total: 100, message: 'Minecraft prêt !' })
+    setTimeout(() => setProgress(null), 900)
+  })
+
   useTauriEvent<string>('launch_error', (payload) => {
     setLaunchMsg(payload)
     if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
+    clearPhase2()
     setProgress(null)
     setCancelling(false)
   })
 
   useTauriEvent<string>('launch_cancelled', () => {
     showNotice('Lancement annulé')
+    clearPhase2()
     setProgress(null)
     setCancelling(false)
   })

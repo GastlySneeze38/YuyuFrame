@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
 use tungstenite::{accept, Message};
 
+use crate::minecraft::launcher::progress::set_progress_monotonic;
 use crate::minecraft::p2p::libp2p_bridge::{BridgeEvent, P2PLibp2pHandle};
 
 pub const SIGNALING_PORT: u16 = 8765;
@@ -320,6 +320,7 @@ pub async fn ensure_yarn_mappings(
     version: &str,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
+    progress_floor: &std::sync::atomic::AtomicU64,
 ) -> Result<PathBuf> {
     let cache_dir = p2p_dir().join("cache");
     tokio::fs::create_dir_all(&cache_dir).await?;
@@ -330,7 +331,7 @@ pub async fn ensure_yarn_mappings(
             tracing::info!("[P2P] Yarn en cache : {}", jar_path.display());
             return Ok(jar_path);
         }
-        match download_yarn(&mc_ver, &jar_path, client, app).await {
+        match download_yarn(&mc_ver, &jar_path, client, app, progress_floor).await {
             Ok(_) => return Ok(jar_path),
             Err(e) => {
                 tracing::warn!("[P2P] Yarn {} introuvable: {}", mc_ver, e);
@@ -370,9 +371,10 @@ async fn download_yarn(
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
+    progress_floor: &std::sync::atomic::AtomicU64,
 ) -> Result<()> {
     match download_yarn_from(
-        mc_version, dest, client, app,
+        mc_version, dest, client, app, progress_floor,
         "https://meta.fabricmc.net/v2/versions/yarn",
         "https://maven.fabricmc.net/net/fabricmc/yarn",
     ).await {
@@ -380,7 +382,7 @@ async fn download_yarn(
         Err(e) => {
             tracing::warn!("[P2P] Yarn moderne indisponible pour {} ({}) — tentative Legacy Fabric", mc_version, e);
             download_yarn_from(
-                mc_version, dest, client, app,
+                mc_version, dest, client, app, progress_floor,
                 "https://meta.legacyfabric.net/v2/versions/yarn",
                 "https://maven.legacyfabric.net/net/legacyfabric/yarn",
             ).await
@@ -393,6 +395,7 @@ async fn download_yarn_from(
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
+    progress_floor: &std::sync::atomic::AtomicU64,
     meta_base: &str,
     maven_base: &str,
 ) -> Result<()> {
@@ -411,10 +414,7 @@ async fn download_yarn_from(
         .to_owned();
 
     tracing::info!("[P2P] Yarn MC {} → {}", mc_version, yarn_version);
-    let _ = app.emit("download_progress", serde_json::json!({
-        "current": 0, "total": 100,
-        "message": format!("P2P : Yarn mappings {}...", yarn_version)
-    }));
+    set_progress_monotonic(app, progress_floor, 0, 100, &format!("P2P : Yarn mappings {}...", yarn_version));
 
     let jar_url = format!(
         "{}/{}/yarn-{}-mergedv2.jar",

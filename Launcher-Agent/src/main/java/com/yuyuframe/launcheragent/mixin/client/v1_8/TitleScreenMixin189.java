@@ -21,5 +21,6 @@ public abstract class TitleScreenMixin189 {
     @Inject(method = "init()V", at = @At("TAIL"))
     private void la$onInit(CallbackInfo ci) {
         LauncherLog.ui(3, "[LauncherAgent] Hook TitleScreen.init() OK — pipeline 1.8.9 opérationnel");
+        LauncherLog.info("[YUYUFRAME_READY]");
     }
 }

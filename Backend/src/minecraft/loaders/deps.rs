@@ -3,9 +3,10 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+
+use crate::minecraft::launcher::progress::set_progress_monotonic;
 
 use crate::minecraft::mod_files::is_enabled_jar;
 use crate::minecraft::versions::predicate::{
@@ -343,6 +344,7 @@ pub async fn resolve_and_install_deps(
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
+    progress_floor: &std::sync::atomic::AtomicU64,
 ) -> Result<Vec<String>> {
     if !mods_dir.exists() {
         return Ok(vec![]);
@@ -385,14 +387,7 @@ pub async fn resolve_and_install_deps(
             let mods_dir = mods_dir.to_path_buf();
             let dep_id = dep.id.clone();
 
-            let _ = app.emit(
-                "download_progress",
-                serde_json::json!({
-                    "current": 0,
-                    "total": 100,
-                    "message": format!("Dépendance : installation de {}…", dep_id)
-                }),
-            );
+            set_progress_monotonic(app, progress_floor, 0, 100, &format!("Dépendance : installation de {}…", dep_id));
 
             tasks.spawn(async move {
                 let _permit = sem.acquire().await.unwrap();

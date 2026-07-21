@@ -87,6 +87,13 @@ interface Store {
   pinnedMods: Record<string, boolean>
   isModPinned: (instanceId: string, projectId: string) => boolean
   setModPinned: (instanceId: string, projectId: string, pinned: boolean) => void
+
+  // ── Durée de la phase "lancement" (JVM + chargement Minecraft, entre la fin
+  // des téléchargements et game_ready) par instance — moyenne mobile en ms,
+  // réutilisée pour animer la barre de progression sur les lancements suivants
+  // au lieu de la laisser figée pendant cette phase (voir Home.tsx).
+  launchPhaseDurations: Record<string, number>
+  recordLaunchPhaseDuration: (instanceId: string, ms: number) => void
 }
 
 export const useStore = create<Store>()(
@@ -228,6 +235,18 @@ export const useStore = create<Store>()(
           else delete next[key]
           return { pinnedMods: next }
         }),
+
+      // Durée phase lancement
+      launchPhaseDurations: {},
+      recordLaunchPhaseDuration: (instanceId, ms) =>
+        set((s) => {
+          const prev = s.launchPhaseDurations[instanceId]
+          // Moyenne mobile (70% historique / 30% dernière mesure) — lisse les
+          // écarts ponctuels (ex: premier démarrage JVM après reboot) sans
+          // garder un historique complet.
+          const next = prev ? Math.round(prev * 0.7 + ms * 0.3) : ms
+          return { launchPhaseDurations: { ...s.launchPhaseDurations, [instanceId]: next } }
+        }),
     }),
     {
       name: 'yuyuframe-store',
@@ -245,6 +264,7 @@ export const useStore = create<Store>()(
         uuid: s.uuid,
         lastSession: s.lastSession,
         pinnedMods: s.pinnedMods,
+        launchPhaseDurations: s.launchPhaseDurations,
       }),
     }
   )
