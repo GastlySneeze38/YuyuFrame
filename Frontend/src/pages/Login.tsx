@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-shell'
+import { getCurrentWindow, currentMonitor, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -8,21 +9,90 @@ import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
 
-type Step = 'idle' | 'loading' | 'polling' | 'error'
+type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
+
+const OVERLAY_WIDTH = 380
+const OVERLAY_HEIGHT = 340
+const OVERLAY_CONFIRM_HEIGHT = 460
+const OVERLAY_MARGIN = 24
 
 export default function Login() {
   const navigate = useNavigate()
-  const { uuid, accounts, setAccounts, setUser, removeAccount } = useStore()
+  const { uuid, username, accounts, setAccounts, setUser, removeAccount } = useStore()
   const [step, setStep] = useState<Step>('idle')
   const [userCode, setUserCode] = useState('')
   const [verifyUrl, setVerifyUrl] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewUuid, setPreviewUuid] = useState<string | null>(null)
+  const [overlayActive, setOverlayActive] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<SkinViewer | null>(null)
+  const savedWindowGeometry = useRef<{ size: PhysicalSize; position: PhysicalPosition } | null>(null)
+
+  // Position/taille de l'overlay : milieu droit de l'écran, ancré au bord
+  // droit avec une marge, centré verticalement pour la hauteur donnée.
+  const computeOverlayGeometry = async (heightPx: number) => {
+    const monitor = await currentMonitor()
+    const scale = monitor?.scaleFactor ?? 1
+    const size = new PhysicalSize(Math.round(OVERLAY_WIDTH * scale), Math.round(heightPx * scale))
+    const margin = Math.round(OVERLAY_MARGIN * scale)
+    const monitorSize = monitor?.size ?? new PhysicalSize(1920, 1080)
+    const monitorPos = monitor?.position ?? new PhysicalPosition(0, 0)
+    const position = new PhysicalPosition(
+      monitorPos.x + monitorSize.width - size.width - margin,
+      monitorPos.y + Math.round((monitorSize.height - size.height) / 2),
+    )
+    return { size, position }
+  }
+
+  // Rétrécit la fenêtre en overlay compact + always-on-top pendant l'auth
+  // Microsoft — sans ça, la fenêtre disparaît derrière le navigateur et
+  // l'utilisateur perd de vue le code à entrer / le statut de connexion.
+  const enterOverlay = async () => {
+    const win = getCurrentWindow()
+    try {
+      savedWindowGeometry.current = {
+        size: await win.outerSize(),
+        position: await win.outerPosition(),
+      }
+      const { size, position } = await computeOverlayGeometry(OVERLAY_HEIGHT)
+      await win.setSize(size)
+      await win.setPosition(position)
+      await win.setAlwaysOnTop(true)
+      setOverlayActive(true)
+    } catch {
+      // Best-effort : si le redimensionnement échoue, on reste en page pleine
+    }
+  }
+
+  // Agrandit l'overlay en hauteur pour la page de confirmation (avatar +
+  // nom de compte), sans toucher à savedWindowGeometry ni à l'always-on-top.
+  const growOverlayForConfirmation = async () => {
+    const win = getCurrentWindow()
+    try {
+      const { size, position } = await computeOverlayGeometry(OVERLAY_CONFIRM_HEIGHT)
+      await win.setSize(size)
+      await win.setPosition(position)
+    } catch { /* best-effort */ }
+  }
+
+  const exitOverlay = async () => {
+    const win = getCurrentWindow()
+    const saved = savedWindowGeometry.current
+    savedWindowGeometry.current = null
+    setOverlayActive(false)
+    try {
+      await win.setAlwaysOnTop(false)
+      if (saved) {
+        await win.setSize(saved.size)
+        await win.setPosition(saved.position)
+      }
+      await win.setFocus()
+    } catch { /* best-effort */ }
+  }
 
   useEffect(() => {
     api.mc.accounts()
@@ -90,16 +160,21 @@ export default function Login() {
       setVerifyUrl(resp.verification_uri)
       open(resp.verification_uri)
       setStep('polling')
+      enterOverlay()
       pollRef.current = setInterval(async () => {
         try {
           const poll = await api.auth.poll()
           if (poll.status === 'success' && poll.username) {
             stopPolling()
+            setStep('confirmed')
+            await growOverlayForConfirmation()
             const accs = await api.mc.accounts()
             const mapped: Account[] = accs.map((a) => ({ username: a.mc_username, uuid: a.mc_uuid }))
             setAccounts(mapped)
             const active = accs.find((a) => a.is_active)
             if (active) setUser(active.mc_username, active.mc_uuid)
+            await new Promise((r) => setTimeout(r, 1400))
+            await exitOverlay()
             navigate('/home', { replace: true })
           } else if (poll.status === 'error') {
             stopPolling()
@@ -134,9 +209,111 @@ export default function Login() {
     } catch (e) { showError(e) }
   }
 
-  useEffect(() => () => stopPolling(), [])
+  useEffect(() => {
+    return () => {
+      stopPolling()
+      if (savedWindowGeometry.current) exitOverlay()
+    }
+  }, [])
 
   const displayAccount = accounts.find((a) => a.uuid === (previewUuid ?? uuid))
+
+  if (overlayActive) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] px-5 py-4">
+        <div className="flex items-center gap-2">
+          <div className="h-3.5 w-3.5 rounded-sm bg-[#4B3FCF]" />
+          <span className="font-black text-white text-[13px] tracking-[-0.01em]">YuyuFrame</span>
+        </div>
+
+        {step === 'polling' && (
+          <div className="flex w-full flex-col gap-3">
+            <p className="text-center text-[11px] text-[rgba(255,255,255,0.45)]">
+              Entre ce code sur la page Microsoft :
+            </p>
+            <button
+              onClick={() => { navigator.clipboard.writeText(userCode); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              className={`rounded-xl py-2.5 text-center transition-all duration-150 border ${copied ? 'bg-[rgba(74,222,128,0.08)] border-[rgba(74,222,128,0.3)]' : 'bg-[rgba(0,0,0,0.4)] border-[rgba(255,255,255,0.08)]'}`}
+              title="Cliquer pour copier"
+            >
+              <span className="font-mono font-black text-white text-[22px] tracking-[0.2em]">
+                {userCode}
+              </span>
+              <p className={`text-[10px] mt-1 ${copied ? 'text-[rgb(134,239,172)]' : 'text-[rgba(255,255,255,0.2)]'}`}>
+                {copied ? 'Copié !' : 'Cliquer pour copier'}
+              </p>
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => open(verifyUrl)}
+                className="flex-1 rounded-xl py-2 text-[12px] font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
+              >
+                Ouvrir Microsoft →
+              </button>
+              <button
+                onClick={() => { stopPolling(); exitOverlay(); setStep('idle') }}
+                className="rounded-xl px-3 py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.3)] border border-[rgba(255,255,255,0.07)] hover:text-[rgba(255,255,255,0.65)]"
+              >
+                Annuler
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
+              <span className="text-[10px] text-[rgba(255,255,255,0.35)]">
+                En attente de confirmation...
+              </span>
+            </div>
+          </div>
+        )}
+
+        {step === 'confirmed' && (
+          <div className="flex w-full flex-col items-center gap-3 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(74,222,128,0.12)] border border-[rgba(74,222,128,0.35)]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            {username && (
+              <img
+                src={`https://mc-heads.net/avatar/${uuid}/40`}
+                alt={username}
+                className="rounded-lg w-10 h-10 [image-rendering:pixelated]"
+              />
+            )}
+            <div>
+              <p className="font-bold text-white text-[14px]">Connecté avec succès</p>
+              {username && (
+                <p className="text-[12px] text-[rgba(255,255,255,0.4)] mt-1">{username}</p>
+              )}
+            </div>
+            <p className="text-[10px] text-[rgba(255,255,255,0.25)]">Retour au launcher...</p>
+          </div>
+        )}
+
+        {step === 'error' && (
+          <div className="flex w-full flex-col gap-3">
+            <div className="rounded-xl px-3 py-2.5 bg-[rgba(200,50,50,0.12)] border border-[rgba(200,50,50,0.2)]">
+              <p className="text-[11px] text-[rgb(252,165,165)] break-all whitespace-pre-wrap">{error}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { navigator.clipboard.writeText(error); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                className={`rounded-xl px-3 py-2 text-[12px] transition-all duration-150 border ${copied ? 'text-[rgb(134,239,172)] border-[rgba(74,222,128,0.3)]' : 'text-[rgba(255,255,255,0.4)] border-[rgba(255,255,255,0.08)]'}`}
+              >
+                {copied ? 'Copié ✓' : 'Copier'}
+              </button>
+              <button
+                onClick={() => { exitOverlay(); setStep('idle') }}
+                className="flex-1 rounded-xl py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
