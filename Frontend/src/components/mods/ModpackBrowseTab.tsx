@@ -5,11 +5,10 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 
-export function ModpackBrowseTab({ query, results, searching, error, installing, onQueryChange, onInstall }: {
+export function ModpackBrowseTab({ query, results, searching, installing, onQueryChange, onInstall }: {
   query: string
   results: ModpackHit[]
   searching: boolean
-  error: string
   installing: string | null
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onInstall: (hit: ModpackHit) => void
@@ -37,9 +36,7 @@ export function ModpackBrowseTab({ query, results, searching, error, installing,
         )}
       </div>
 
-      {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
-
-      {!searching && results.length === 0 && !error && (
+      {!searching && results.length === 0 && (
         <EmptyState
           icon={<SearchIcon size={28} color="rgba(255,255,255,0.15)" />}
           title="Aucun résultat"

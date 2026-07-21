@@ -6,6 +6,7 @@ import { useStore } from '@/stores/useStore'
 import { LOADERS, clampLoader } from '@/lib/loader'
 import { formatBytes, RAM_OPTIONS } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
+import { showError } from '@/stores/useErrorToast'
 import type { DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
 
 const EXTRA_DIR_LABELS: Record<string, string> = {
@@ -31,7 +32,7 @@ interface ImportSourceModalProps {
   fixedInstanceId?: string
 }
 
-export default function ImportSourceModal({ onClose, onImported, fixedInstanceId }: ImportSourceModalProps) {
+export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: ImportSourceModalProps) {
   const { instances, versions, defaultRam } = useStore()
   const releaseVersions = versions.filter((v) => v.version_type === 'release').map((v) => v.id)
 
@@ -42,7 +43,6 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
   const [duplicates, setDuplicates] = useState<Set<string>>(new Set())
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
   const [extraDirsSelected, setExtraDirsSelected] = useState<Set<string>>(new Set())
-  const [error, setError] = useState('')
 
   const [destMode, setDestMode] = useState<'new' | 'existing'>(fixedInstanceId ? 'existing' : 'new')
   const [targetInstanceId, setTargetInstanceId] = useState(fixedInstanceId ?? instances[0]?.id ?? '')
@@ -74,7 +74,6 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
   }
 
   const handlePickFolder = async () => {
-    setError('')
     const picked = await open({ directory: true })
     if (!picked || Array.isArray(picked)) return
     setScanning(true)
@@ -92,7 +91,7 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
         runDuplicateCheck(res.modsDir, fixedInstanceId)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : "Impossible d'analyser ce dossier")
+      showError(e)
     } finally {
       setScanning(false)
     }
@@ -137,11 +136,10 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
 
   const handleApply = async () => {
     if (!scan) return
-    if (destMode === 'new' && !name.trim()) { setError('Nom requis'); return }
-    if (destMode === 'existing' && !targetInstanceId) { setError('Choisis une instance'); return }
-    if (selected.size === 0 && extraDirsSelected.size === 0) { setError('Sélectionne au moins un mod ou un dossier'); return }
+    if (destMode === 'new' && !name.trim()) { showError('Nom requis'); return }
+    if (destMode === 'existing' && !targetInstanceId) { showError('Choisis une instance'); return }
+    if (selected.size === 0 && extraDirsSelected.size === 0) { showError('Sélectionne au moins un mod ou un dossier'); return }
 
-    setError('')
     setApplying(true)
     setProgress({ phase: 'mods', current: 0, total: selected.size })
 
@@ -163,7 +161,7 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
       setStep('done')
       onImported(res.instanceId)
     } catch (e) {
-      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : "Erreur lors de l'import")
+      showError(e)
     } finally {
       unlisten()
       setApplying(false)
@@ -192,7 +190,6 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
             >
               {scanning ? 'Analyse...' : 'Choisir un dossier'}
             </button>
-            {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
           </div>
         )}
 
@@ -325,8 +322,6 @@ export default function ImportSourceModal({ onClose, onImported, fixedInstanceId
                 )
               })}
             </div>
-
-            {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
 
             {applying && progress && (
               <div className="flex flex-shrink-0 flex-col gap-1">

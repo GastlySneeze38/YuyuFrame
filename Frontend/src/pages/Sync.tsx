@@ -8,6 +8,7 @@ import { InstanceSyncCard } from '@/components/sync/InstanceSyncCard'
 import { OrphanCloudCard } from '@/components/sync/OrphanCloudCard'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { showError } from '@/stores/useErrorToast'
 
 // ── Sync content ──────────────────────────────────────────────────────────────
 
@@ -18,7 +19,6 @@ function SyncContent() {
 
   const [cloudInstances, setCloudInstances] = useState<SyncInstance[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
-  const [error, setError] = useState('')
   const cloudLoaded = useRef(false)
 
   useEffect(() => {
@@ -27,7 +27,7 @@ function SyncContent() {
     setCloudLoading(true)
     api.sync.list()
       .then(setCloudInstances)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch(showError)
       .finally(() => setCloudLoading(false))
   }, [yuyuToken])
 
@@ -52,14 +52,23 @@ function SyncContent() {
     setCloudInstances((prev) => prev.filter((ci) => ci.id !== id))
   }
 
+  /// Suppression d'une entrée cloud "orpheline" (sans instance locale) — appelle
+  /// bien l'API avant de retirer l'entrée localement (bug corrigé : la version
+  /// précédente ne faisait que la retirer du state, sans jamais la supprimer
+  /// côté serveur, donc elle réapparaissait au rechargement).
+  const handleOrphanDelete = async (id: number) => {
+    try {
+      await api.sync.delete(id)
+      handleCloudDelete(id)
+    } catch (e) { showError(e) }
+  }
+
   const handleRestore = async (ci: SyncInstance) => {
     try {
       const newInstance = await api.instances.create(ci.instance_name, ci.mc_version, ci.loader, ci.ram_mb)
       addInstance(newInstance)
       await api.sync.pull(ci.id, newInstance.id)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
+    } catch (e) { showError(e) }
   }
 
   const orphanCloud = cloudInstances.filter(
@@ -87,8 +96,6 @@ function SyncContent() {
 
   return (
     <div className="flex flex-col gap-2">
-      {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)', paddingBottom: 4 }}>{error}</p>}
-
       {/* Local instances */}
       {instances.map((inst) => (
         <InstanceSyncCard
@@ -112,7 +119,7 @@ function SyncContent() {
               key={ci.id}
               ci={ci}
               onRestore={handleRestore}
-              onDelete={async (id) => handleCloudDelete(id)}
+              onDelete={handleOrphanDelete}
             />
           ))}
         </div>

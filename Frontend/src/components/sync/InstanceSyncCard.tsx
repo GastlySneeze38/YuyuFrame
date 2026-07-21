@@ -5,6 +5,7 @@ import type { Instance, SaveInfo, SyncInstance, SyncProgress } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRelativeTime } from '@/lib/format'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { showError } from '@/stores/useErrorToast'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
 import { SaveSelector } from './SaveSelector'
@@ -29,7 +30,6 @@ export function InstanceSyncCard({
   const [pulling, setPulling] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [progress, setProgress] = useState<SyncProgress | null>(null)
-  const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const unlistenRef = useRef<(() => void) | null>(null)
 
@@ -82,7 +82,6 @@ export function InstanceSyncCard({
 
   const handlePush = async () => {
     setPushing(true)
-    setError('')
     setProgress({ phase: 'resolving_mods', percent: 0, label: 'Démarrage...' })
 
     const unlisten = await listen<SyncProgress>('sync_progress', (ev) => {
@@ -95,7 +94,7 @@ export function InstanceSyncCard({
       onCloudUpdate(updated)
       flash('Sauvegardé dans le cloud !')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      showError(e)
     } finally {
       unlisten()
       unlistenRef.current = null
@@ -107,7 +106,6 @@ export function InstanceSyncCard({
   const handlePull = async () => {
     if (!cloudEntry) return
     setPulling(true)
-    setError('')
     setProgress({ phase: 'downloading', percent: 0, label: 'Démarrage de la restauration...' })
 
     const unlisten = await listen<SyncProgress>('sync_progress', (ev) => {
@@ -119,7 +117,7 @@ export function InstanceSyncCard({
       await api.sync.pull(cloudEntry.id, instance.id)
       flash('Données restaurées !')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      showError(e)
     } finally {
       unlisten()
       unlistenRef.current = null
@@ -131,13 +129,12 @@ export function InstanceSyncCard({
   const handleDelete = async () => {
     if (!cloudEntry) return
     setDeleting(true)
-    setError('')
     try {
       await api.sync.delete(cloudEntry.id)
       onCloudDelete(cloudEntry.id)
       setExpanded(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      showError(e)
     } finally {
       setDeleting(false)
     }
@@ -180,12 +177,12 @@ export function InstanceSyncCard({
             </span>
           </div>
           <p style={{ fontSize: 11, marginTop: 2 }}>
-            {hasSynced
+            {cloudEntry?.has_data
               ? <span style={{ color: 'rgba(74,222,128,0.7)' }}>
-                  ✓ Sauvegardé {formatRelativeTime(cloudEntry!.updated_at)}
-                  {cloudEntry!.save_names.length > 0 && (
+                  ✓ Sauvegardé {formatRelativeTime(cloudEntry.updated_at)}
+                  {cloudEntry.save_names.length > 0 && (
                     <span style={{ color: 'rgba(255,255,255,0.2)', marginLeft: 6 }}>
-                      · {cloudEntry!.save_names.length} save{cloudEntry!.save_names.length > 1 ? 's' : ''}
+                      · {cloudEntry.save_names.length} save{cloudEntry.save_names.length > 1 ? 's' : ''}
                     </span>
                   )}
                 </span>
@@ -246,9 +243,6 @@ export function InstanceSyncCard({
               <ProgressBar progress={progress} />
             </div>
           )}
-
-          {/* Error */}
-          {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
 
           {/* Action buttons */}
           <div className="flex gap-2">

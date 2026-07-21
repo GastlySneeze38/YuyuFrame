@@ -5,6 +5,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloseButton } from '@/components/ui/CloseButton'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
+import { showError } from '@/stores/useErrorToast'
 import {
   fetchProjectDetail, fetchProjectVersions, stripMarkdown, versionTypeBadge, formatGameVersions,
   type ModrinthHit, type ModrinthProjectDetail, type ModrinthVersionEntry,
@@ -27,7 +28,6 @@ export function ModDetailModal({
   const [showAllVersions, setShowAllVersions] = useState(false)
   const [showFullBody, setShowFullBody] = useState(false)
   const [installingId, setInstallingId] = useState<string | null>(null)
-  const [installError, setInstallError] = useState('')
 
   useEffect(() => {
     fetchProjectDetail(hit.project_id).then(setDetail)
@@ -43,12 +43,11 @@ export function ModDetailModal({
   const handleInstall = async (version: ModrinthVersionEntry) => {
     const file = version.files.find((f) => f.primary) ?? version.files[0]
     if (!file) return
-    setInstallError('')
     setInstallingId(version.id)
     try {
       await onInstall(file)
     } catch (e) {
-      setInstallError(e instanceof Error ? e.message : "Erreur lors de l'installation")
+      showError(e)
     } finally {
       setInstallingId(null)
     }
@@ -130,8 +129,6 @@ export function ModDetailModal({
             {showAllVersions ? `Toutes versions` : `Compatibles ${mcVersion}`}
           </button>
         </div>
-
-        {installError && <p className="flex-shrink-0" style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{installError}</p>}
 
         <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto">
           {loadingVersions ? (

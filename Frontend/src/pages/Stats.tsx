@@ -9,6 +9,7 @@ import { PremiumGate } from '@/components/ui/PremiumGate'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { showError } from '@/stores/useErrorToast'
 
 export default function Stats() {
   const navigate = useNavigate()
@@ -19,12 +20,11 @@ export default function Stats() {
 
   const [stats, setStats] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     api.stats.get()
       .then(setStats)
-      .catch((e) => setError(String(e)))
+      .catch(showError)
       .finally(() => setLoading(false))
   }, [])
 
@@ -67,11 +67,11 @@ export default function Stats() {
           <div className="flex items-center justify-center py-20">
             <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
           </div>
-        ) : error ? (
-          <div className="rounded-2xl px-5 py-4" style={{ background: 'rgba(200,50,50,0.08)', border: '1px solid rgba(200,50,50,0.2)' }}>
-            <p style={{ fontSize: 13, color: 'rgb(248,113,113)' }}>{error}</p>
+        ) : !stats ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-2">
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Impossible de charger les statistiques</p>
           </div>
-        ) : stats && (
+        ) : (
           <>
             {/* Top stat cards */}
             <div className="grid grid-cols-3 gap-4">

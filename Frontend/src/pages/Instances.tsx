@@ -3,13 +3,14 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance } from '@/types'
 import { ModsContent } from '@/pages/Mods'
-import ImportSourceModal from '@/components/import/ImportSourceModal'
+import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { InstanceCard } from '@/components/instances/InstanceCard'
 import { CreateInstanceModal } from '@/components/instances/CreateInstanceModal'
 import { EditInstanceModal } from '@/components/instances/EditInstanceModal'
 import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstanceModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { showError } from '@/stores/useErrorToast'
 
 export default function Instances() {
   const {
@@ -53,14 +54,14 @@ export default function Instances() {
     try {
       await api.instances.delete(id)
       removeInstance(id)
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }, [removeInstance])
 
   const handleToggleFavorite = useCallback(async (id: string) => {
     try {
       const updated = await api.instances.toggleFavorite(id)
       updateInstance(updated)
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }, [updateInstance])
 
   function renderCard(inst: Instance) {

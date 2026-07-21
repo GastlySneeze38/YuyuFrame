@@ -5,13 +5,12 @@ import type { ModrinthHit } from './modUtils'
 import { ModrinthCard } from './ModrinthCard'
 
 export function BrowseTab({
-  query, results, searching, error, installing, isInstalled, isPlugin,
+  query, results, searching, installing, isInstalled, isPlugin,
   onQueryChange, onInstall, onOpenDetail,
 }: {
   query: string
   results: ModrinthHit[]
   searching: boolean
-  error: string
   installing: string | null
   isInstalled: (slug: string) => boolean
   isPlugin: boolean
@@ -42,9 +41,7 @@ export function BrowseTab({
         )}
       </div>
 
-      {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
-
-      {!searching && results.length === 0 && !error && (
+      {!searching && results.length === 0 && (
         <EmptyState
           icon={<SearchIcon size={28} color="rgba(255,255,255,0.15)" />}
           title="Aucun résultat"

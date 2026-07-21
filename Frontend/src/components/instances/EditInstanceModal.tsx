@@ -4,6 +4,7 @@ import type { Instance, Loader } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker } from '@/components/ui/RamPicker'
+import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 
 export function EditInstanceModal({
@@ -24,11 +25,10 @@ export function EditInstanceModal({
   const [ram, setRam] = useState(instance.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Enregistrement...')
-  const [error, setError] = useState('')
 
   const handleSave = async () => {
-    if (!name.trim()) { setError('Nom requis'); return }
-    setLoading(true); setError(''); setLoadingLabel('Enregistrement...')
+    if (!name.trim()) { showError('Nom requis'); return }
+    setLoading(true); setLoadingLabel('Enregistrement...')
     try {
       const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim())
       if (mcVersion !== instance.mc_version) {
@@ -37,7 +37,7 @@ export function EditInstanceModal({
       }
       onUpdate(updated)
     } catch (e) {
-      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Erreur')
+      showError(e)
     } finally {
       setLoading(false)
     }
@@ -68,7 +68,6 @@ export function EditInstanceModal({
           </div>
         )}
 
-        {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
         <SubmitButton loading={loading} label="Enregistrer" loadingLabel={loadingLabel} onClick={handleSave} />
       </div>
     </ModalShell>

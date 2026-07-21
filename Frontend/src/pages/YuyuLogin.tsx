@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { showError } from '@/stores/useErrorToast'
 import type { Account } from '@/types'
 
 type Mode = 'checking' | 'login' | 'register' | 'error'
@@ -15,7 +16,6 @@ export default function YuyuLogin() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     api.yuyu.status()
@@ -25,14 +25,13 @@ export default function YuyuLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
 
     if (mode === 'register' && password !== confirm) {
-      setError('Les mots de passe ne correspondent pas.')
+      showError('Les mots de passe ne correspondent pas.')
       return
     }
     if (password.length < 4) {
-      setError('Le mot de passe doit faire au moins 4 caractères.')
+      showError('Le mot de passe doit faire au moins 4 caractères.')
       return
     }
 
@@ -63,7 +62,7 @@ export default function YuyuLogin() {
 
       navigate('/home', { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur inconnue')
+      showError(err)
     } finally {
       setLoading(false)
     }
@@ -172,15 +171,6 @@ export default function YuyuLogin() {
               />
             )}
 
-            {error && (
-              <div
-                className="rounded-xl px-4 py-2.5 text-center"
-                style={{ background: 'rgba(200,50,50,0.12)', border: '1px solid rgba(200,50,50,0.2)' }}
-              >
-                <span style={{ fontSize: 12, color: 'rgb(252,165,165)' }}>{error}</span>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading || !username || !password}
@@ -222,7 +212,7 @@ export default function YuyuLogin() {
           </span>
           <button
             type="button"
-            onClick={() => { setMode(isRegister ? 'login' : 'register'); setError(''); setConfirm('') }}
+            onClick={() => { setMode(isRegister ? 'login' : 'register'); setConfirm('') }}
             style={{ fontSize: 11, color: '#7B6EE8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
             {isRegister ? 'Se connecter' : 'Créer un compte'}

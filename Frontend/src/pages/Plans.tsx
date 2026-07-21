@@ -12,6 +12,7 @@ import { DevPaymentSimulator } from '@/components/plans/DevPaymentSimulator'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
+import { showError } from '@/stores/useErrorToast'
 
 export default function Plans() {
   const navigate = useNavigate()
@@ -43,7 +44,7 @@ export default function Plans() {
   const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
 
   const [refreshing, setRefreshing] = useState(false)
-  const [refreshMsg, setRefreshMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<string | null>(null)
   const [checkoutState, setCheckoutState] = useState<'idle' | 'loading' | 'waiting' | 'success' | 'timeout' | 'error'>('idle')
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
@@ -54,12 +55,12 @@ export default function Plans() {
     try {
       const resp = await api.yuyu.refreshPlan()
       setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-      setRefreshMsg({ ok: true, text: `Plan mis à jour : ${resp.plan}` })
+      setRefreshMsg(`Plan mis à jour : ${resp.plan}`)
+      setTimeout(() => setRefreshMsg(null), 4000)
     } catch (e) {
-      setRefreshMsg({ ok: false, text: 'Impossible de contacter le serveur' })
+      showError('Impossible de contacter le serveur')
     } finally {
       setRefreshing(false)
-      setTimeout(() => setRefreshMsg(null), 4000)
     }
   }
 
@@ -158,13 +159,10 @@ export default function Plans() {
         {refreshMsg && (
           <div
             className="flex items-center gap-2 rounded-xl px-4 py-2.5"
-            style={{
-              background: refreshMsg.ok ? 'rgba(74,222,128,0.07)' : 'rgba(200,50,50,0.1)',
-              border: `1px solid ${refreshMsg.ok ? 'rgba(74,222,128,0.2)' : 'rgba(200,50,50,0.2)'}`,
-            }}
+            style={{ background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)' }}
           >
-            <span style={{ fontSize: 12, color: refreshMsg.ok ? 'rgb(74,222,128)' : 'rgb(248,113,113)', fontWeight: 600 }}>
-              {refreshMsg.text}
+            <span style={{ fontSize: 12, color: 'rgb(74,222,128)', fontWeight: 600 }}>
+              {refreshMsg}
             </span>
           </div>
         )}

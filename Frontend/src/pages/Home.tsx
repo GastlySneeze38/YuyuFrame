@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { BETA_TEST } from '@/config/beta'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { BETA_TEST } from '@/config/beta'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { CloseIcon } from '@/components/ui/icons/CloseIcon'
+import { showError } from '@/stores/useErrorToast'
 
 interface DownloadProgress {
   current: number
@@ -116,9 +117,11 @@ export default function Home() {
   }
 
   const handleLogout = async () => {
-    await api.auth.logout()
-    clearUser()
-    navigate('/login', { replace: true })
+    try {
+      await api.auth.logout()
+      clearUser()
+      navigate('/login', { replace: true })
+    } catch (e) { showError(e) }
   }
 
   const handleBannerPlay = () => {

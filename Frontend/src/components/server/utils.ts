@@ -22,12 +22,6 @@ export function ownerColor(o: number): string {
   return COLORS[o % COLORS.length]
 }
 
-export function fmtBytes(n: number): string {
-  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' Mo'
-  if (n >= 1024) return (n / 1024).toFixed(1) + ' Ko'
-  return n + ' o'
-}
-
 export function tpsColor(tps: number): string {
   if (tps >= 19) return '#22c55e'
   if (tps >= 15) return '#eab308'

@@ -5,13 +5,14 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance, Mod, ModpackMeta } from '@/types'
 import { searchModrinthModpacks, resolveModpackFile, type ModpackHit } from '@/lib/modrinthModpacks'
-import ImportSourceModal from '@/components/import/ImportSourceModal'
+import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { InstalledTab } from '@/components/mods/InstalledTab'
 import { ModpackBanner } from '@/components/mods/ModpackBanner'
 import { ModpackBrowseTab } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab } from '@/components/mods/BrowseTab'
 import { ModDetailModal } from '@/components/mods/ModDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { showError } from '@/stores/useErrorToast'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
   _modrinthCache, _iconCache,
@@ -48,7 +49,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ModrinthHit[]>([])
   const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState('')
   const [installing, setInstalling] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -71,7 +71,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [packQuery, setPackQuery] = useState('')
   const [packResults, setPackResults] = useState<ModpackHit[]>([])
   const [packSearching, setPackSearching] = useState(false)
-  const [packError, setPackError] = useState('')
   const [packInstalling, setPackInstalling] = useState<string | null>(null)
   const packDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -84,11 +83,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const runPackSearch = async (q: string) => {
     setPackSearching(true)
-    setPackError('')
     try {
       setPackResults(await searchModrinthModpacks(q))
     } catch {
-      setPackError('Impossible de joindre Modrinth')
+      showError('Impossible de joindre Modrinth')
     } finally {
       setPackSearching(false)
     }
@@ -103,7 +101,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const handleInstallModpack = async (hit: ModpackHit) => {
     setPackInstalling(hit.project_id)
-    setPackError('')
     try {
       const file = await resolveModpackFile(hit.project_id)
       if (!file) throw new Error('Aucun fichier .mrpack disponible')
@@ -126,7 +123,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       delete _modrinthCache[instanceId]
       await loadMods()
     } catch (e) {
-      setPackError(e instanceof Error ? e.message : "Erreur lors de l'installation du modpack")
+      showError(e)
     } finally {
       setPackInstalling(null)
     }
@@ -226,7 +223,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     try {
       const updated = await api.mods.toggle(instanceId, mod.name)
       setMods((prev) => prev.map((m) => m.name === mod.name ? updated : m))
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }, [instanceId])
 
   const handleDelete = useCallback(async (name: string) => {
@@ -234,7 +231,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       await api.mods.delete(instanceId, name)
       setMods((prev) => prev.filter((m) => m.name !== name))
       delete _modrinthCache[instanceId]
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }, [instanceId])
 
   const handleUpdateMod = useCallback(async (update: ModUpdate) => {
@@ -262,7 +259,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
           if (meta) setModpackMeta(meta)
         }).catch(() => {})
       }
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
     finally {
       setUpdatingMods((prev) => { const s = new Set(prev); s.delete(update.mod.sha1); return s })
     }
@@ -317,11 +314,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const runSearch = async (q: string) => {
     setSearching(true)
-    setSearchError('')
     try {
       setResults(await fetchModrinthSearch(q, mcVersion, loader))
     } catch {
-      setSearchError('Impossible de joindre Modrinth')
+      showError('Impossible de joindre Modrinth')
     } finally {
       setSearching(false)
     }
@@ -352,7 +348,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       fetchVersionsByHash([newMod.sha1]).then(mergeVersions)
       delete _modrinthCache[instanceId]
     } catch (e) {
-      setSearchError(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Erreur installation')
+      showError(e)
     } finally {
       setInstalling(null)
     }
@@ -575,7 +571,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
             query={query}
             results={results}
             searching={searching}
-            error={searchError}
             installing={installing}
             isInstalled={isInstalled}
             isPlugin={isPlugin}
@@ -588,7 +583,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
             query={packQuery}
             results={packResults}
             searching={packSearching}
-            error={packError}
             installing={packInstalling}
             onQueryChange={handlePackQueryChange}
             onInstall={handleInstallModpack}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { formatBytes } from '@/lib/format'
 import type { OwnershipData, TabId } from './types'
-import { CANVAS, CELL, QUAD_OFFSET, VIEW_HALF, CHUNK_PX, fmtBytes, ownerColor, tpsColor, latencyColor, pushSample } from './utils'
+import { CANVAS, CELL, QUAD_OFFSET, VIEW_HALF, CHUNK_PX, ownerColor, tpsColor, latencyColor, pushSample } from './utils'
 import { StatBox } from './StatBox'
 import { StatRow } from './StatRow'
 import { DiagLine } from './DiagLine'
@@ -143,7 +144,7 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
         },
         emission: {
           chunks: data?.baseline_chunks_sent ?? 0,
-          volume: fmtBytes(data?.baseline_bytes_sent ?? 0),
+          volume: formatBytes(data?.baseline_bytes_sent ?? 0),
           streams_actifs: data?.baseline_active_streams ?? 0,
         },
       },
@@ -173,7 +174,7 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
-    } catch {}
+    } catch { /* clipboard best-effort — pas de feedback d'erreur si refusé/indisponible */ }
   }
 
   return (
@@ -325,7 +326,7 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
               </StatBox>
               <StatBox title="Émission (vers le pair)">
                 <StatRow label="Chunks" value={data?.baseline_chunks_sent ?? 0} />
-                <StatRow label="Volume" value={fmtBytes(data?.baseline_bytes_sent ?? 0)} />
+                <StatRow label="Volume" value={formatBytes(data?.baseline_bytes_sent ?? 0)} />
                 <StatRow label="Streams actifs" value={data?.baseline_active_streams ?? 0} />
               </StatBox>
               <StatBox title="Ownership détaillé">

@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
+import { showError } from '@/stores/useErrorToast'
 
 type Step = 'idle' | 'loading' | 'polling' | 'error'
 
@@ -123,14 +124,14 @@ export default function Login() {
       await api.mc.switch(acc.uuid)
       setUser(acc.username, acc.uuid)
       navigate('/home')
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }
 
   const handleRemove = async (acc: Account) => {
     try {
       await api.mc.delete(acc.uuid)
       removeAccount(acc.uuid)
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }
 
   useEffect(() => () => stopPolling(), [])

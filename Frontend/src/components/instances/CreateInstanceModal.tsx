@@ -5,6 +5,7 @@ import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker } from '@/components/ui/RamPicker'
+import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { PresetCard } from './PresetCard'
 
@@ -71,7 +72,6 @@ export function CreateInstanceModal({
   const [ram, setRam] = useState(defaultRam)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Création...')
-  const [error, setError] = useState('')
 
   useEffect(() => {
     if (versions.length > 0 && !mcVersion) setMcVersion(versions[0])
@@ -83,7 +83,6 @@ export function CreateInstanceModal({
     setMcVersion(preset.mcVersion)
     setLoader(preset.loader)
     setRam(preset.ramMb)
-    setError('')
   }
 
   const handleSwitchMode = (m: 'blank' | 'preset') => {
@@ -99,9 +98,9 @@ export function CreateInstanceModal({
   }
 
   const handleCreate = async () => {
-    if (!name.trim()) { setError('Nom requis'); return }
-    if (!mcVersion) { setError('Sélectionne une version'); return }
-    setLoading(true); setError(''); setLoadingLabel('Création...')
+    if (!name.trim()) { showError('Nom requis'); return }
+    if (!mcVersion) { showError('Sélectionne une version'); return }
+    setLoading(true); setLoadingLabel('Création...')
     try {
       const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim())
       if (selectedPreset) {
@@ -112,7 +111,7 @@ export function CreateInstanceModal({
       onCreate(instance)
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Erreur')
+      showError(e)
     } finally {
       setLoading(false)
     }
@@ -166,8 +165,6 @@ export function CreateInstanceModal({
             <RamPicker value={ram} onChange={setRam} />
 
             <DescriptionInput value={description} onChange={setDescription} />
-
-            {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
 
             <SubmitButton loading={loading} label="Créer l'instance" loadingLabel={loadingLabel} onClick={handleCreate} />
           </>

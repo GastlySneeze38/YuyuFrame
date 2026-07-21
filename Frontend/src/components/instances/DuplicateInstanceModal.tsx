@@ -5,6 +5,7 @@ import { updateModsForNewVersion } from '@/pages/Mods'
 import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker } from '@/components/ui/RamPicker'
+import { showError } from '@/stores/useErrorToast'
 import { NameInput, SubmitButton, VersionSelect } from './InstanceFormFields'
 
 export function DuplicateInstanceModal({
@@ -23,11 +24,10 @@ export function DuplicateInstanceModal({
   const [ram, setRam] = useState(source.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Duplication...')
-  const [error, setError] = useState('')
 
   const handleDuplicate = async () => {
-    if (!name.trim()) { setError('Nom requis'); return }
-    setLoading(true); setError(''); setLoadingLabel('Duplication...')
+    if (!name.trim()) { showError('Nom requis'); return }
+    setLoading(true); setLoadingLabel('Duplication...')
     try {
       const instance = await api.instances.duplicate(source.id, name.trim(), mcVersion, ram)
       if (mcVersion !== source.mc_version) {
@@ -37,7 +37,7 @@ export function DuplicateInstanceModal({
       onDuplicate(instance)
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Erreur')
+      showError(e)
     } finally {
       setLoading(false)
     }
@@ -63,8 +63,6 @@ export function DuplicateInstanceModal({
               : 'les mods seront copiés.'}
           </p>
         </div>
-
-        {error && <p style={{ fontSize: 12, color: 'rgb(248,113,113)' }}>{error}</p>}
 
         <SubmitButton loading={loading} label="Dupliquer" loadingLabel={loadingLabel} onClick={handleDuplicate} />
       </div>

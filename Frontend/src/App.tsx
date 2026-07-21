@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useNavigate, useLocation } from 'react-router-
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
+import { ErrorToast } from '@/components/ui/ErrorToast'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { BETA_TEST } from '@/config/beta'
@@ -70,6 +71,7 @@ export default function App() {
   if (isConsoleWindow) {
     return (
       <Suspense fallback={<RouteFallback />}>
+        <ErrorToast />
         <Console />
       </Suspense>
     )
@@ -77,6 +79,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-bg-primary">
+      <ErrorToast />
       <TitleBar />
       <UpdateChecker />
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
