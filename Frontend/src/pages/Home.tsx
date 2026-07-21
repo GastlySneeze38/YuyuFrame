@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { BETA_TEST } from '@/config/beta'
-import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { BETA_TEST } from '@/config/beta'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { loaderColor } from '@/lib/loader'
+import { useTauriEvent } from '@/hooks/useTauriEvent'
+import { showError, showNotice } from '@/stores/useErrorToast'
+import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 
 interface DownloadProgress {
   current: number
@@ -40,12 +43,6 @@ const STARS = Array.from({ length: 55 }, (_, i) => ({
   o: 0.15 + (i % 5) * 0.08,
 }))
 
-function loaderColor(loader: string) {
-  if (loader === 'fabric') return '#b5a0ff'
-  if (loader === 'forge') return '#f0a040'
-  return 'rgba(255,255,255,0.4)'
-}
-
 export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -65,8 +62,8 @@ export default function Home() {
 
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [launchMsg, setLaunchMsg] = useState('')
-  const [cancelNotice, setCancelNotice] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
   const [bannerAnimating, setBannerAnimating] = useState(false)
 
@@ -78,65 +75,53 @@ export default function Home() {
       if (!selectedInstanceId && list.length > 0) {
         setSelectedInstanceId(list[0].id)
       }
-    }).catch(() => {})
+    }).catch(showError)
   }, [])
 
-  useEffect(() => {
-    let unlistenProgress: (() => void) | null = null
-    let unlistenState: (() => void) | null = null
-    let unlistenError: (() => void) | null = null
-    let unlistenCancelled: (() => void) | null = null
+  useTauriEvent<DownloadProgress>('download_progress', (payload) => {
+    setProgress(payload)
+  })
 
-    listen<DownloadProgress>('download_progress', (event) => {
-      setProgress(event.payload)
-    }).then((fn) => { unlistenProgress = fn })
-
-    listen<{ running: boolean; instance_id: string }>('game_state', (event) => {
-      const { running, instance_id } = event.payload
-      setInstanceRunning(instance_id, running)
-      if (!running) {
-        setProgress(null)
-        setCancelling(false)
-        getCurrentWindow().show()
-      }
-    }).then((fn) => { unlistenState = fn })
-
-    listen<string>('launch_error', (event) => {
-      setLaunchMsg(event.payload)
-      if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
+  useTauriEvent<{ running: boolean; instance_id: string }>('game_state', (payload) => {
+    const { running, instance_id } = payload
+    setInstanceRunning(instance_id, running)
+    if (!running) {
       setProgress(null)
       setCancelling(false)
-    }).then((fn) => { unlistenError = fn })
-
-    listen<string>('launch_cancelled', () => {
-      setCancelNotice('Lancement annulé')
-      setProgress(null)
-      setCancelling(false)
-      setTimeout(() => setCancelNotice(''), 4000)
-    }).then((fn) => { unlistenCancelled = fn })
-
-    return () => {
-      unlistenProgress?.()
-      unlistenState?.()
-      unlistenError?.()
-      unlistenCancelled?.()
+      getCurrentWindow().show()
     }
-  }, [])
+  })
+
+  useTauriEvent<string>('launch_error', (payload) => {
+    setLaunchMsg(payload)
+    if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
+    setProgress(null)
+    setCancelling(false)
+  })
+
+  useTauriEvent<string>('launch_cancelled', () => {
+    showNotice('Lancement annulé')
+    setProgress(null)
+    setCancelling(false)
+  })
 
   const handleCancelLaunch = async () => {
     if (!selectedInstanceId || cancelling) return
     setCancelling(true)
     try {
       await api.launch.cancel(selectedInstanceId)
-    } catch {
+    } catch (e) {
+      showError(e)
       setCancelling(false)
     }
   }
 
   const handleLogout = async () => {
-    await api.auth.logout()
-    clearUser()
-    navigate('/login', { replace: true })
+    try {
+      await api.auth.logout()
+      clearUser()
+      navigate('/login', { replace: true })
+    } catch (e) { showError(e) }
   }
 
   const handleBannerPlay = () => {
@@ -148,7 +133,6 @@ export default function Home() {
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
     setLaunchMsg('')
-    setCancelNotice('')
     try {
       if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies)
       else await api.launch.start(selectedInstanceId, avoidBetaDependencies)
@@ -170,30 +154,37 @@ export default function Home() {
     ? Math.round(progress.current / progress.total * 100)
     : 0
 
+  const p2pToggleClasses = BETA_TEST
+    ? 'bg-[rgba(255,255,255,0.01)] border border-[rgba(255,255,255,0.04)]'
+    : p2pEnabled
+      ? 'bg-[rgba(75,63,207,0.18)] border border-[rgba(120,100,255,0.35)]'
+      : 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]'
+
+  const launchBtnBg = canLaunch
+    ? 'bg-[#4B3FCF] hover:bg-[#6155e8]'
+    : !username
+      ? 'bg-[rgba(75,63,207,0.45)] hover:bg-[rgba(75,63,207,0.65)]'
+      : 'bg-[rgba(40,38,65,0.7)]'
+
+  const launchBtnShadow = canLaunch
+    ? 'shadow-[0_4px_28px_rgba(75,63,207,0.42)] hover:shadow-[0_6px_32px_rgba(75,63,207,0.62)]'
+    : 'shadow-none'
+
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
+    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
 
       {/* ── Main area ── */}
-      <div className="flex gap-4 overflow-hidden p-4" style={{ flex: '1 1 0', minHeight: 0 }}>
+      <div className="flex gap-4 overflow-hidden p-4 flex-[1_1_0] min-h-0">
 
         {/* LEFT: Cinematic Minecraft banner */}
-        <div
-          className="relative flex-1 overflow-hidden rounded-[20px]"
-          style={{
-            border: '1px solid rgba(200,200,220,0.08)',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
-          }}
-        >
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #020208 0%, #06041a 18%, #0e0932 40%, #1c1250 58%, #130d35 76%, #070512 100%)' }} />
-          <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 38% 55%, rgba(75,63,207,0.09) 0%, transparent 55%)' }} />
-          <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 68% 58%, rgba(80,210,80,0.06) 0%, transparent 38%)' }} />
+        <div className="relative flex-1 overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]">
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgba(75,63,207,0.09)_0%,transparent_55%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_68%_58%,rgba(80,210,80,0.06)_0%,transparent_38%)]" />
 
           {/* Aurora — pulse infinie quand animating */}
           {bannerAnimating && (
-            <div
-              className="absolute inset-0 pointer-events-none animate-banner-glow"
-              style={{ background: 'radial-gradient(ellipse at 38% 60%, rgba(90,70,255,0.7) 0%, rgba(75,63,207,0.35) 40%, transparent 70%)' }}
-            />
+            <div className="absolute inset-0 pointer-events-none animate-banner-glow bg-[radial-gradient(ellipse_at_38%_60%,rgba(90,70,255,0.7)_0%,rgba(75,63,207,0.35)_40%,transparent_70%)]" />
           )}
 
           {/* Stars — scintillent en continu quand animating */}
@@ -205,37 +196,21 @@ export default function Home() {
 
           {/* Flash violet au lancement */}
           {bannerPulse && (
-            <div
-              className="absolute inset-0 pointer-events-none animate-banner-flash rounded-[20px]"
-              style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(160,130,255,0.95) 0%, rgba(90,70,255,0.6) 35%, transparent 72%)', zIndex: 10 }}
-            />
+            <div className="absolute inset-0 pointer-events-none animate-banner-flash rounded-[20px] z-10 bg-[radial-gradient(ellipse_at_50%_50%,rgba(160,130,255,0.95)_0%,rgba(90,70,255,0.6)_35%,transparent_72%)]" />
           )}
 
-          <div className={`absolute bottom-0 left-0 right-0 ${bannerAnimating ? 'animate-terrain-float' : ''}`} style={{ height: '38%' }}>
+          <div className={`absolute bottom-0 left-0 right-0 h-[38%] ${bannerAnimating ? 'animate-terrain-float' : ''}`}>
             <svg viewBox="0 0 800 220" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
               <path d="M0 220 L0 110 L16 110 L16 90 L32 90 L32 110 L48 110 L48 130 L64 130 L64 100 L80 100 L80 78 L96 78 L96 100 L112 100 L112 120 L128 120 L128 95 L144 95 L144 78 L160 78 L160 95 L176 95 L176 115 L192 115 L192 135 L208 135 L208 115 L224 115 L224 98 L240 98 L240 78 L256 78 L256 95 L272 95 L272 115 L288 115 L288 100 L304 100 L304 82 L320 82 L320 100 L336 100 L336 120 L352 120 L352 100 L368 100 L368 82 L384 82 L384 100 L400 100 L400 118 L416 118 L416 135 L432 135 L432 115 L448 115 L448 95 L464 95 L464 78 L480 78 L480 92 L496 92 L496 110 L512 110 L512 128 L528 128 L528 108 L544 108 L544 88 L560 88 L560 108 L576 108 L576 125 L592 125 L592 140 L608 140 L608 120 L624 120 L624 100 L640 100 L640 80 L656 80 L656 98 L672 98 L672 115 L688 115 L688 100 L704 100 L704 82 L720 82 L720 100 L736 100 L736 118 L752 118 L752 105 L768 105 L768 120 L784 120 L784 140 L800 140 L800 220 Z" fill="rgba(4,3,12,0.88)" />
             </svg>
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 h-24" style={{ background: 'linear-gradient(to top, rgba(9,9,13,0.95), transparent)' }} />
+          <div className="absolute bottom-0 left-0 right-0 h-24 bg-[linear-gradient(to_top,rgba(9,9,13,0.95),transparent)]" />
 
           {/* Play capsule — top left (animation only) */}
           <button
             onClick={handleBannerPlay}
-            className="absolute left-4 top-4 flex items-center gap-2 transition-all duration-200"
-            style={{
-              height: 30, paddingLeft: 10, paddingRight: 14,
-              background: bannerAnimating ? 'rgba(75,63,207,0.45)' : 'rgba(18,15,38,0.78)',
-              border: bannerAnimating ? '1px solid rgba(120,100,255,0.6)' : '1px solid rgba(255,255,255,0.22)',
-              borderRadius: 20,
-              backdropFilter: 'blur(10px)',
-              transition: 'background 0.3s, border-color 0.3s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.32)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.45)' }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = bannerAnimating ? 'rgba(75,63,207,0.45)' : 'rgba(18,15,38,0.78)'
-              e.currentTarget.style.borderColor = bannerAnimating ? 'rgba(120,100,255,0.6)' : 'rgba(255,255,255,0.22)'
-            }}
+            className={`absolute left-4 top-4 flex items-center gap-2 h-[30px] pl-[10px] pr-[14px] rounded-[20px] backdrop-blur-[10px] transition-[background,border-color] duration-300 hover:bg-[rgba(75,63,207,0.32)] hover:border-[rgba(255,255,255,0.45)] ${bannerAnimating ? 'bg-[rgba(75,63,207,0.45)] border border-[rgba(120,100,255,0.6)]' : 'bg-[rgba(18,15,38,0.78)] border border-[rgba(255,255,255,0.22)]'}`}
           >
             {bannerAnimating ? (
               <svg viewBox="0 0 10 10" fill="white" width={9} height={9}><rect x="1" y="1" width="3" height="8" /><rect x="6" y="1" width="3" height="8" /></svg>
@@ -250,26 +225,23 @@ export default function Home() {
           {/* Instance badge — bottom right */}
           {instance && (
             <div className="absolute bottom-4 right-4 flex items-center gap-1.5">
-              <span style={{ fontSize: 10, color: loaderColor(instance.loader), fontWeight: 600 }}>{instance.loader}</span>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', fontWeight: 500 }}>{instance.mc_version}</span>
+              <span className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>
+              <span className="text-[11px] text-[rgba(255,255,255,0.18)] font-medium">{instance.mc_version}</span>
             </div>
           )}
         </div>
 
         {/* RIGHT: Launcher panel */}
-        <div className="relative flex w-[28%] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 py-5">
+        <div className="relative flex w-[28%] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-5">
 
           <button
             onClick={() => navigate('/information')}
-            className="absolute flex items-center justify-center rounded-lg transition-all duration-150"
-            style={{ top: 8, right: 8, width: 36, height: 36, color: 'rgba(255,255,255,0.3)', background: 'transparent' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'transparent' }}
+            className="absolute top-[8px] right-[8px] w-[36px] h-[36px] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={20} height={20}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
           </button>
 
-          <h1 className="text-center font-black text-white leading-none" style={{ fontSize: 'clamp(28px, 3.5vw, 64px)', textShadow: '0 0 40px rgba(75,63,207,0.60)', letterSpacing: '-0.01em' }}>
+          <h1 className="text-center font-black text-white leading-none text-[clamp(28px,3.5vw,64px)] [text-shadow:0_0_40px_rgba(75,63,207,0.60)] tracking-[-0.01em]">
             YuyuFrame
           </h1>
 
@@ -282,8 +254,7 @@ export default function Home() {
                     <img
                       src={`https://mc-heads.net/avatar/${uuid}/200`}
                       alt={username}
-                      className="rounded-xl transition-all duration-200 group-hover:brightness-75"
-                      style={{ width: 'clamp(80px, 9vw, 150px)', height: 'clamp(80px, 9vw, 150px)', imageRendering: 'pixelated', boxShadow: '0 4px 24px rgba(0,0,0,0.6)' }}
+                      className="rounded-xl transition-all duration-200 group-hover:brightness-75 w-[clamp(80px,9vw,150px)] h-[clamp(80px,9vw,150px)] [image-rendering:pixelated] shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none'
                         const fb = e.currentTarget.nextElementSibling as HTMLElement | null
@@ -291,48 +262,49 @@ export default function Home() {
                       }}
                     />
                   )}
-                  <div className="items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75"
-                    style={{ width: 'clamp(80px, 9vw, 150px)', height: 'clamp(80px, 9vw, 150px)', fontSize: 'clamp(28px, 4vw, 56px)', background: 'rgba(75,63,207,0.60)', fontFamily: 'monospace', display: uuid ? 'none' : 'flex' }}>
+                  <div
+                    className={`items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75 w-[clamp(80px,9vw,150px)] h-[clamp(80px,9vw,150px)] text-[clamp(28px,4vw,56px)] bg-[rgba(75,63,207,0.60)] [font-family:monospace] ${uuid ? 'hidden' : 'flex'}`}
+                  >
                     {username[0].toUpperCase()}
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <svg viewBox="0 0 24 24" fill="white" style={{ width: 24, height: 24, opacity: 0.9 }}>
+                    <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6 opacity-90">
                       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
                     </svg>
                   </div>
                 </div>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>{username}</span>
+                <span className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium">{username}</span>
               </button>
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200"
-                style={{ width: 'clamp(80px, 9vw, 150px)', height: 'clamp(80px, 9vw, 150px)', border: '2px dashed rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.25)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(75,63,207,0.5)'; e.currentTarget.style.color = 'rgba(120,110,230,0.7)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.25)' }}
+                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200 w-[clamp(80px,9vw,150px)] h-[clamp(80px,9vw,150px)] border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.25)] hover:border-[rgba(75,63,207,0.5)] hover:text-[rgba(120,110,230,0.7)]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8">
                   <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" />
                 </svg>
-                <span style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>SE CONNECTER</span>
+                <span className="text-[10px] tracking-[0.1em] font-semibold">SE CONNECTER</span>
               </button>
             )}
           </div>
 
-          <div className="w-full h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="w-full h-px bg-[rgba(255,255,255,0.06)]" />
+
+          {/* Instance + lancement — groupés avec un gap fixe pour que le bouton
+              ne flotte pas dans un espace résiduel géré par le justify-between
+              du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
+              pour former une pyramide inversée. */}
+          <div className="w-full flex flex-col gap-4">
 
           {/* Instance selector */}
           <div className="w-full flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <label style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 600 }}>
+              <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">
                 Instance
               </label>
               <button
                 onClick={() => navigate('/instances')}
-                className="flex items-center gap-1 transition-colors duration-150"
-                style={{ fontSize: 10, color: 'rgba(75,63,207,0.7)', fontWeight: 600 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#7872e8' }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(75,63,207,0.7)' }}
+                className="flex items-center gap-1 transition-colors duration-150 text-[10px] text-[rgba(75,63,207,0.7)] font-semibold hover:text-[#7872e8]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
                 Gérer
@@ -342,161 +314,113 @@ export default function Home() {
             {instances.length === 0 ? (
               <button
                 onClick={() => navigate('/instances')}
-                className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200"
-                style={{ height: 45, border: '2px dashed rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.2)', fontSize: 12 }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(75,63,207,0.4)'; e.currentTarget.style.color = 'rgba(120,110,230,0.6)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.2)' }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200 h-[45px] border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[12px] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
               >
                 Créer une instance
               </button>
             ) : (
-              <div className="relative w-full">
-                <select
-                  value={selectedInstanceId ?? ''}
-                  onChange={(e) => setSelectedInstanceId(e.target.value)}
-                  className="w-full appearance-none rounded-xl px-3 pr-8 text-sm font-medium text-white outline-none"
-                  style={{ height: 45, background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.1)' }}
-                >
-                  {instances.map((inst) => (
-                    <option key={inst.id} value={inst.id} style={{ background: '#111118', color: 'white' }}>
-                      {inst.name} — {inst.mc_version} ({inst.loader})
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                  <svg viewBox="0 0 10 6" fill="white" width={10} height={6} style={{ opacity: 0.45 }}>
-                    <path d="M0 0l5 6 5-6z" />
-                  </svg>
-                </div>
-              </div>
+              <button
+                onClick={() => setShowInstanceSwitch(true)}
+                className="relative w-full flex items-center justify-between rounded-xl px-3 text-sm font-medium text-white outline-none h-[45px] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)] transition-all duration-150 hover:border-[rgba(75,63,207,0.4)]"
+              >
+                <span className="truncate">
+                  {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : 'Choisir une instance'}
+                </span>
+                <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="flex-shrink-0 opacity-[0.45]">
+                  <path d="M0 0l5 6 5-6z" />
+                </svg>
+              </button>
             )}
 
             {/* Instance info pill */}
             {instance && (
-              <div className="flex flex-col gap-1.5 px-3 py-1.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="w-[92%] mx-auto flex flex-col gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
                 <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 10, color: loaderColor(instance.loader), fontWeight: 700 }}>{instance.loader.toUpperCase()}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>·</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{instance.mc_version}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>·</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>{instance.ram_mb >= 1024 ? `${instance.ram_mb / 1024}Go` : `${instance.ram_mb}Mo`}</span>
+                  <span className="text-[10px] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
+                  <span className="text-[10px] text-[rgba(255,255,255,0.25)]">·</span>
+                  <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>
+                  <span className="text-[10px] text-[rgba(255,255,255,0.25)]">·</span>
+                  <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{instance.ram_mb >= 1024 ? `${instance.ram_mb / 1024}Go` : `${instance.ram_mb}Mo`}</span>
                 </div>
 
                 <button
                   onClick={() => !gameRunning && !BETA_TEST && setP2pEnabled(!p2pEnabled)}
                   disabled={gameRunning || BETA_TEST}
                   title={BETA_TEST ? 'P2P non disponible en beta' : undefined}
-                  className="flex items-center justify-between transition-all duration-150"
-                  style={{
-                    height: 26, borderRadius: 8, padding: '0 8px',
-                    cursor: gameRunning || BETA_TEST ? 'not-allowed' : 'pointer',
-                    background: BETA_TEST ? 'rgba(255,255,255,0.01)' : p2pEnabled ? 'rgba(75,63,207,0.18)' : 'rgba(255,255,255,0.02)',
-                    border: BETA_TEST ? '1px solid rgba(255,255,255,0.04)' : p2pEnabled ? '1px solid rgba(120,100,255,0.35)' : '1px solid rgba(255,255,255,0.06)',
-                    opacity: BETA_TEST ? 0.60 : 1,
-                  }}
+                  className={`flex items-center justify-between transition-all duration-150 h-[26px] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${BETA_TEST ? 'opacity-60' : 'opacity-100'} ${p2pToggleClasses}`}
                 >
-                  <span className="flex items-center gap-1.5" style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.25)' }}>
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[rgba(255,255,255,0.25)]">
                     <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
-                    P2P {BETA_TEST && <span style={{ fontSize: 9, opacity: 0.6 }}>(bêta)</span>}
+                    P2P {BETA_TEST && <span className="text-[9px] opacity-60">(bêta)</span>}
                   </span>
-                  <span
-                    className="relative transition-all duration-200"
-                    style={{ width: 26, height: 14, borderRadius: 7, background: 'rgba(255,255,255,0.12)' }}
-                  >
-                    <span
-                      className="absolute top-0.5 rounded-full bg-white transition-all duration-200"
-                      style={{ width: 10, height: 10, left: 2, opacity: 0.4 }}
-                    />
+                  <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)]">
+                    <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />
                   </span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* Launch button (+ bouton d'annulation pendant le lancement) */}
-          <div className="flex w-full gap-2">
-            <button
-              onClick={username ? handleLaunch : () => navigate('/login')}
-              disabled={gameRunning || (!!username && !selectedInstanceId)}
-              className="font-bold text-white transition-all duration-200 active:scale-95"
-              style={{
-                flex: gameRunning ? 3 : 1,
-                height: 60, borderRadius: 16, fontSize: 14, letterSpacing: '0.04em',
-                background: canLaunch ? '#4B3FCF' : !username ? 'rgba(75,63,207,0.45)' : 'rgba(40,38,65,0.7)',
-                boxShadow: canLaunch ? '0 4px 28px rgba(75,63,207,0.42)' : 'none',
-                cursor: (gameRunning || (!!username && !selectedInstanceId)) ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={(e) => { if (canLaunch) { e.currentTarget.style.background = '#6155e8'; e.currentTarget.style.boxShadow = '0 6px 32px rgba(75,63,207,0.62)' } else if (!username) { e.currentTarget.style.background = 'rgba(75,63,207,0.65)' } }}
-              onMouseLeave={(e) => { if (canLaunch) { e.currentTarget.style.background = '#4B3FCF'; e.currentTarget.style.boxShadow = '0 4px 28px rgba(75,63,207,0.42)' } else if (!username) { e.currentTarget.style.background = 'rgba(75,63,207,0.45)' } }}
-            >
-              {gameRunning ? (
+          {/* Launch button — l'annulation devient une pastille "Annuler"
+              intégrée sous le texte "EN JEU..." plutôt qu'un bouton rond
+              séparé, pour ne pas casser la forme du bouton principal. */}
+          <div className="flex w-[80%] mx-auto gap-2">
+            {gameRunning ? (
+              <div
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-1.5 rounded-2xl text-[13px] tracking-[0.04em] py-2.5 ${launchBtnBg} ${launchBtnShadow}`}
+              >
                 <span className="flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
                   EN JEU...
                 </span>
-              ) : !username ? 'SE CONNECTER'
-                : !selectedInstanceId ? 'AUCUNE INSTANCE'
-                : `LANCER ${instance?.name ?? ''}`}
-            </button>
-
-            {gameRunning && (
+                <button
+                  onClick={handleCancelLaunch}
+                  disabled={cancelling}
+                  className={`rounded-full px-4 py-1 text-[10px] font-semibold transition-all duration-150 border ${cancelling ? 'text-[rgba(255,255,255,0.3)] border-[rgba(255,255,255,0.08)] bg-transparent cursor-not-allowed' : 'text-[rgba(252,165,165,0.9)] border-[rgba(248,113,113,0.35)] bg-[rgba(200,50,50,0.14)] cursor-pointer hover:bg-[rgba(200,50,50,0.26)]'}`}
+                >
+                  {cancelling ? 'Annulation...' : 'Annuler'}
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={handleCancelLaunch}
-                disabled={cancelling}
-                title="Annuler le lancement"
-                className="flex items-center justify-center font-bold text-white transition-all duration-200 active:scale-95"
-                style={{
-                  flex: 1, height: 60, borderRadius: 16, fontSize: 12,
-                  background: cancelling ? 'rgba(200,50,50,0.15)' : 'rgba(200,50,50,0.18)',
-                  border: '1px solid rgba(248,113,113,0.35)',
-                  color: cancelling ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.85)',
-                  cursor: cancelling ? 'not-allowed' : 'pointer',
-                }}
-                onMouseEnter={(e) => { if (!cancelling) e.currentTarget.style.background = 'rgba(200,50,50,0.3)' }}
-                onMouseLeave={(e) => { if (!cancelling) e.currentTarget.style.background = 'rgba(200,50,50,0.18)' }}
+                onClick={username ? handleLaunch : () => navigate('/login')}
+                disabled={!!username && !selectedInstanceId}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[52px] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
-                {cancelling ? (
-                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }} />
+                {progress && (
+                  <span
+                    className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
+                    style={{ width: `${percent}%` }}
+                  />
+                )}
+                {progress ? (
+                  <span className="relative z-10 flex items-center justify-center gap-2 px-3">
+                    <span className="truncate">{progress.message}</span>
+                    <span className="flex-shrink-0 opacity-80">{percent}%</span>
+                  </span>
                 ) : (
-                  <svg viewBox="0 0 24 24" fill="currentColor" width={16} height={16}>
-                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                  </svg>
+                  <span className="relative z-10">
+                    {!username ? 'SE CONNECTER'
+                      : !selectedInstanceId ? 'AUCUNE INSTANCE'
+                      : `LANCER ${instance?.name ?? ''}`}
+                  </span>
                 )}
               </button>
             )}
           </div>
 
           {launchMsg && (
-            <p className="w-full rounded-lg px-3 py-2 text-center text-xs text-red-300" style={{ background: 'rgba(200,50,50,0.12)' }}>
+            <p className="w-full rounded-lg px-3 py-2 text-center text-xs text-red-300 bg-[rgba(200,50,50,0.12)]">
               {launchMsg}
             </p>
           )}
 
-          {cancelNotice && (
-            <p className="w-full rounded-lg px-3 py-2 text-center text-xs" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' }}>
-              {cancelNotice}
-            </p>
-          )}
-
-          {progress && (
-            <div className="w-full flex flex-col gap-1.5">
-              <div className="flex justify-between" style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
-                <span className="truncate">{progress.message}</span>
-                <span className="ml-2 flex-shrink-0">{percent}%</span>
-              </div>
-              <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: 'rgba(0,0,0,0.4)' }}>
-                <div className="h-full rounded-full transition-all duration-300" style={{ width: `${percent}%`, background: '#4B3FCF' }} />
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
       {/* ── Footer ── */}
-      <div
-        className="flex flex-shrink-0 flex-col px-6 py-4"
-        style={{ flex: '0 0 30%', minHeight: 250, background: '#09090D', borderTop: '1px solid rgba(255,255,255,0.06)', gap: 12 }}
-      >
+      <div className="flex flex-shrink-0 flex-col px-6 py-4 flex-[0_0_30%] min-h-[250px] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-3">
 
         {/* Zone principale — s'étire pour remplir l'espace disponible */}
         <div className="flex flex-1 flex-col gap-4">
@@ -509,31 +433,15 @@ export default function Home() {
             <div
               key={i}
               onClick={f.path && !betaLocked ? () => navigate(f.path!) : undefined}
-              className="flex flex-1 flex-col gap-1.5 rounded-xl px-3 py-2.5 transition-all duration-150"
-              style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid rgba(255,255,255,0.05)',
-                cursor: betaLocked ? 'not-allowed' : f.path ? 'pointer' : 'default',
-                opacity: betaLocked ? 0.60 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!f.path || betaLocked) return
-                e.currentTarget.style.background = 'rgba(75,63,207,0.06)'
-                e.currentTarget.style.borderColor = 'rgba(120,100,255,0.25)'
-              }}
-              onMouseLeave={(e) => {
-                if (!f.path || betaLocked) return
-                e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'
-              }}
+              className={`flex flex-1 flex-col gap-1.5 rounded-xl px-3 py-2.5 transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${betaLocked ? 'cursor-not-allowed opacity-60' : f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path && !betaLocked ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
             >
-              <div className="flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.35)]">
                 {f.icon}
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
+                <span className="text-[10px] font-bold text-[rgba(255,255,255,0.6)] whitespace-nowrap">
                   {f.title}
                 </span>
               </div>
-              <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', lineHeight: 1.55, margin: 0 }}>
+              <p className="text-[9px] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
                 {f.desc}
               </p>
             </div>
@@ -541,45 +449,40 @@ export default function Home() {
         </div>
 
         {/* Brand | Nav | Promo — 3 colonnes égales, alignées en haut */}
-        <div className="my-auto grid gap-8" style={{ gridTemplateColumns: 'auto 1fr auto', alignItems: 'center' }}>
+        <div className="my-auto grid gap-8 grid-cols-[auto_1fr_auto] items-center">
 
           {/* LEFT — Brand + compte */}
           <div className="flex flex-col gap-2">
-            <span className="font-black text-white" style={{ fontSize: 15, letterSpacing: '-0.01em' }}>
+            <span className="font-black text-white text-[15px] tracking-[-0.01em]">
               YuyuFrame
             </span>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)', lineHeight: 1.5 }}>
+            <span className="text-[10px] text-[rgba(255,255,255,0.22)] leading-normal">
               Le launcher Minecraft open-source.
             </span>
             <div className="flex items-center mt-1">
               {username ? (
-                <div className="flex items-center overflow-hidden" style={{ height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                <div className="flex items-center overflow-hidden h-8 rounded-[10px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.09)]">
                   <button
                     onClick={() => navigate('/login')}
-                    className="flex items-center gap-2 h-full pl-2.5 pr-3 transition-all duration-150"
+                    className="flex items-center gap-2 h-full pl-2.5 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.14)]"
                     title="Gérer le compte"
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.14)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                   >
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', flexShrink: 0, display: 'inline-block' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] flex-shrink-0 inline-block" />
                     {uuid && (
                       <img src={`https://mc-heads.net/avatar/${uuid}/32`} alt={username}
-                        style={{ width: 16, height: 16, imageRendering: 'pixelated', borderRadius: 3, flexShrink: 0 }}
+                        className="w-4 h-4 [image-rendering:pixelated] rounded-[3px] flex-shrink-0"
                         onError={(e) => { e.currentTarget.style.display = 'none' }}
                       />
                     )}
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.82)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.82)] max-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap">
                       {username}
                     </span>
                   </button>
-                  <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
+                  <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] flex-shrink-0" />
                   <button
                     onClick={handleLogout}
-                    className="flex items-center justify-center h-full px-2.5 transition-all duration-150"
+                    className="flex items-center justify-center h-full px-2.5 transition-all duration-150 text-[rgba(255,255,255,0.28)] hover:bg-[rgba(200,50,50,0.14)] hover:text-[rgb(248,113,113)]"
                     title="Déconnexion"
-                    style={{ color: 'rgba(255,255,255,0.28)' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(200,50,50,0.14)'; e.currentTarget.style.color = 'rgb(248,113,113)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.28)' }}
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
                       <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
@@ -589,10 +492,7 @@ export default function Home() {
               ) : (
                 <button
                   onClick={() => navigate('/login')}
-                  className="flex items-center gap-1.5 rounded-xl px-4 font-semibold transition-all duration-200"
-                  style={{ height: 32, fontSize: 11, background: '#4B3FCF', color: 'white' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#6155e8' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#4B3FCF' }}
+                  className="flex items-center gap-1.5 rounded-xl px-4 font-semibold transition-all duration-200 h-8 text-[11px] bg-[#4B3FCF] text-white hover:bg-[#6155e8]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}><path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" /></svg>
                   Se connecter
@@ -602,7 +502,7 @@ export default function Home() {
           </div>
 
           {/* CENTER — Nav pyramid */}
-          <div className="flex items-center justify-center gap-2 w-full" style={{ containerType: 'inline-size' }}>
+          <div className="flex items-center justify-center gap-2 w-full [container-type:inline-size]">
             <NavLink label="Instances" path="/instances" onClick={() => navigate('/instances')} currentPath={location.pathname} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
             </NavLink>
@@ -628,29 +528,27 @@ export default function Home() {
 
           {/* RIGHT — YuyuFrame Pro, miroir du LEFT aligné à droite */}
           <div className="flex flex-col gap-2 items-end">
-            <span className="font-black text-white text-right" style={{ fontSize: 15, letterSpacing: '-0.01em' }}>
-              YuyuFrame <span style={{ color: '#a78bfa' }}>Pro</span>
+            <span className="font-black text-white text-right text-[15px] tracking-[-0.01em]">
+              YuyuFrame <span className="text-[#a78bfa]">Pro</span>
             </span>
-            <span className="text-right" style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)', lineHeight: 1.6 }}>
+            <span className="text-right text-[10px] text-[rgba(255,255,255,0.22)] leading-[1.6]">
               Sync illimité · Stats avancées
             </span>
             {/* Pill pleine largeur : bouton | séparateur | -50% */}
-            <div className="flex items-center overflow-hidden mt-1" style={{ height: 32, borderRadius: 10, background: 'rgba(75,63,207,0.08)', border: '1px solid rgba(120,100,255,0.2)' }}>
+            <div className="flex items-center overflow-hidden mt-1 h-8 rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]">
               <button
                 onClick={() => navigate('/plans')}
-                className="flex items-center gap-2 h-full pl-3 pr-3 transition-all duration-150"
+                className="flex items-center gap-2 h-full pl-3 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.2)]"
                 title="Voir les plans Pro"
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.2)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
               >
-                <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} style={{ color: '#a78bfa', flexShrink: 0 }}><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
-                <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap' }}>
+                <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="text-[#a78bfa] flex-shrink-0"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
+                <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.82)] whitespace-nowrap">
                   Voir les plans
                 </span>
               </button>
-              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
+              <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] flex-shrink-0" />
               <div className="flex items-center justify-center h-full px-3">
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#a78bfa', whiteSpace: 'nowrap' }}>-50%</span>
+                <span className="text-[10px] font-bold text-[#a78bfa] whitespace-nowrap">-50%</span>
               </div>
             </div>
           </div>
@@ -659,11 +557,11 @@ export default function Home() {
         </div>{/* fin zone principale */}
 
         {/* Divider — collé en bas */}
-        <div className="mt-auto h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div className="mt-auto h-px bg-[rgba(255,255,255,0.06)]" />
 
         {/* Copyright + legal */}
         <div className="flex items-center justify-between">
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)', fontWeight: 500 }}>
+          <span className="text-[10px] text-[rgba(255,255,255,0.15)] font-medium">
             © 2025 YuyuFrame — Tous droits réservés
           </span>
           <div className="flex items-center gap-4">
@@ -675,10 +573,7 @@ export default function Home() {
               <button
                 key={lbl}
                 onClick={() => navigate(`/legal?tab=${tab}`)}
-                className="transition-colors duration-150"
-                style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', fontWeight: 500 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.5)' }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.18)' }}
+                className="transition-colors duration-150 text-[10px] text-[rgba(255,255,255,0.18)] font-medium hover:text-[rgba(255,255,255,0.5)]"
               >
                 {lbl}
               </button>
@@ -687,10 +582,33 @@ export default function Home() {
         </div>
 
       </div>
+
+      {showInstanceSwitch && (
+        <InstanceSwitchModal
+          instances={instances}
+          selectedInstanceId={selectedInstanceId}
+          onClose={() => setShowInstanceSwitch(false)}
+          onSelect={setSelectedInstanceId}
+        />
+      )}
     </div>
   )
 }
 
+
+const NAV_SIZE_CLASSES = [
+  'h-[clamp(52px,6vh,76px)] text-[clamp(13px,2.6cqw,21px)] font-[700] px-[clamp(7px,1.4cqw,12px)]',
+  'h-[clamp(46px,5.5vh,68px)] text-[clamp(12px,2.3cqw,19px)] font-[650] px-[clamp(6px,1.2cqw,11px)]',
+  'h-[clamp(40px,5vh,60px)] text-[clamp(11px,2cqw,17px)] font-[600] px-[clamp(5px,1.1cqw,9px)]',
+  'h-[clamp(36px,4.5vh,52px)] text-[clamp(10px,1.7cqw,14px)] font-[550] px-[clamp(4px,0.9cqw,8px)]',
+]
+
+const NAV_ICON_CLASSES = [
+  'w-[clamp(16px,2.6cqw,22px)] h-[clamp(16px,2.6cqw,22px)]',
+  'w-[clamp(14px,2.3cqw,19px)] h-[clamp(14px,2.3cqw,19px)]',
+  'w-[clamp(12px,2cqw,17px)] h-[clamp(12px,2cqw,17px)]',
+  'w-[clamp(11px,1.7cqw,14px)] h-[clamp(11px,1.7cqw,14px)]',
+]
 
 function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPath, disabled, children }: {
   label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number; path?: string; currentPath?: string; disabled?: boolean; children: React.ReactNode
@@ -698,60 +616,31 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
   // Tailles relatives à la fenêtre via clamp — s'adaptent à toutes les largeurs
   // Unités cqw : relatives à la largeur réellement disponible pour la nav (container query),
   // plutôt qu'à la largeur de toute la fenêtre — la nav s'adapte donc à la place qui lui est laissée.
-  const SIZES = [
-    { h: 'clamp(52px,6vh,76px)', fs: 'clamp(13px,2.6cqw,21px)', fw: 700,  icon: 'clamp(16px,2.6cqw,22px)', px: 'clamp(7px,1.4cqw,12px)' },
-    { h: 'clamp(46px,5.5vh,68px)', fs: 'clamp(12px,2.3cqw,19px)', fw: 650, icon: 'clamp(14px,2.3cqw,19px)', px: 'clamp(6px,1.2cqw,11px)' },
-    { h: 'clamp(40px,5vh,60px)',   fs: 'clamp(11px,2cqw,17px)', fw: 600, icon: 'clamp(12px,2cqw,17px)', px: 'clamp(5px,1.1cqw,9px)'   },
-    { h: 'clamp(36px,4.5vh,52px)', fs: 'clamp(10px,1.7cqw,14px)', fw: 550, icon: 'clamp(11px,1.7cqw,14px)', px: 'clamp(4px,0.9cqw,8px)' },
-  ]
-
   const d = Math.min(distance, 3)
-  const { h, fs, fw, icon, px } = SIZES[d]
   const isActive = path ? currentPath === path : false
-  const baseColor = plans ? '#c4b5fd' : isActive ? '#a5b4fc' : 'rgba(255,255,255,0.9)'
+  const baseColorClass = plans ? 'text-[#c4b5fd]' : isActive ? 'text-[#a5b4fc]' : 'text-[rgba(255,255,255,0.9)]'
+  const bgBorderShadow = plans
+    ? 'bg-[rgba(75,63,207,0.1)] border border-[rgba(120,100,255,0.22)] shadow-[0_0_18px_rgba(75,63,207,0.12)_inset]'
+    : 'bg-transparent border border-transparent shadow-none'
+  const hoverClasses = disabled
+    ? ''
+    : plans
+      ? 'hover:text-[#e9d5ff] hover:bg-[rgba(75,63,207,0.22)] hover:border-[rgba(139,92,246,0.48)]'
+      : accent
+        ? 'hover:text-[#c4b5fd] hover:bg-[rgba(139,92,246,0.22)] hover:border-[rgba(139,92,246,0.60)]'
+        : 'hover:text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.06)]'
 
   return (
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       title={disabled ? 'Non disponible en bêta' : undefined}
-      className="relative flex items-center gap-1 rounded-xl transition-all duration-150"
-      style={{
-        height: h, fontSize: fs, fontWeight: fw, color: baseColor,
-        paddingLeft: px, paddingRight: px,
-        background: disabled ? (plans ? 'rgba(75,63,207,0.1)' : 'transparent') : plans ? 'rgba(75,63,207,0.1)' : 'transparent',
-        border: disabled ? (plans ? '1px solid rgba(120,100,255,0.22)' : '1px solid transparent') : plans ? '1px solid rgba(120,100,255,0.22)' : '1px solid transparent',
-        boxShadow: disabled ? (plans ? '0 0 18px rgba(75,63,207,0.12) inset' : 'none') : plans ? '0 0 18px rgba(75,63,207,0.12) inset' : 'none',
-        whiteSpace: 'nowrap',
-        opacity: disabled ? 0.60 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-      onMouseEnter={(e) => {
-        if (disabled) return
-        if (plans) {
-          e.currentTarget.style.color = '#e9d5ff'
-          e.currentTarget.style.background = 'rgba(75,63,207,0.22)'
-          e.currentTarget.style.borderColor = 'rgba(139,92,246,0.48)'
-        } else if (accent) {
-          e.currentTarget.style.color = '#c4b5fd'
-          e.currentTarget.style.background = 'rgba(139,92,246,0.22)'
-          e.currentTarget.style.borderColor = 'rgba(139,92,246,0.60)'
-        } else {
-          e.currentTarget.style.color = 'rgba(255,255,255,0.92)'
-          e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (disabled) return
-        e.currentTarget.style.color = baseColor
-        e.currentTarget.style.background = plans ? 'rgba(75,63,207,0.1)' : 'transparent'
-        e.currentTarget.style.borderColor = plans ? 'rgba(120,100,255,0.22)' : 'transparent'
-      }}
+      className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap disabled:cursor-not-allowed cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${disabled ? 'opacity-60' : 'opacity-100'} ${hoverClasses}`}
     >
-      <span style={{ display: 'flex', width: icon, height: icon, flexShrink: 0, color: plans ? '#a78bfa' : 'inherit' }}>{children}</span>
+      <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
       {label}
       {isActive && (
-        <span style={{ position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: 14, height: 2, borderRadius: 1, background: plans ? '#a78bfa' : '#818cf8' }} />
+        <span className={`absolute bottom-[5px] left-1/2 -translate-x-1/2 w-[14px] h-0.5 rounded-[1px] ${plans ? 'bg-[#a78bfa]' : 'bg-[#818cf8]'}`} />
       )}
     </button>
   )

@@ -1,26 +1,98 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-shell'
+import { getCurrentWindow, currentMonitor, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Account } from '@/types'
+import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
+import { showError } from '@/stores/useErrorToast'
 
-type Step = 'idle' | 'loading' | 'polling' | 'error'
+type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
+
+const OVERLAY_WIDTH = 380
+const OVERLAY_HEIGHT = 340
+const OVERLAY_CONFIRM_HEIGHT = 460
+const OVERLAY_MARGIN = 24
 
 export default function Login() {
   const navigate = useNavigate()
-  const { uuid, accounts, setAccounts, setUser, removeAccount } = useStore()
+  const { uuid, username, accounts, setAccounts, setUser, removeAccount } = useStore()
   const [step, setStep] = useState<Step>('idle')
   const [userCode, setUserCode] = useState('')
   const [verifyUrl, setVerifyUrl] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewUuid, setPreviewUuid] = useState<string | null>(null)
+  const [overlayActive, setOverlayActive] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<SkinViewer | null>(null)
+  const savedWindowGeometry = useRef<{ size: PhysicalSize; position: PhysicalPosition } | null>(null)
+
+  // Position/taille de l'overlay : milieu droit de l'écran, ancré au bord
+  // droit avec une marge, centré verticalement pour la hauteur donnée.
+  const computeOverlayGeometry = async (heightPx: number) => {
+    const monitor = await currentMonitor()
+    const scale = monitor?.scaleFactor ?? 1
+    const size = new PhysicalSize(Math.round(OVERLAY_WIDTH * scale), Math.round(heightPx * scale))
+    const margin = Math.round(OVERLAY_MARGIN * scale)
+    const monitorSize = monitor?.size ?? new PhysicalSize(1920, 1080)
+    const monitorPos = monitor?.position ?? new PhysicalPosition(0, 0)
+    const position = new PhysicalPosition(
+      monitorPos.x + monitorSize.width - size.width - margin,
+      monitorPos.y + Math.round((monitorSize.height - size.height) / 2),
+    )
+    return { size, position }
+  }
+
+  // Rétrécit la fenêtre en overlay compact + always-on-top pendant l'auth
+  // Microsoft — sans ça, la fenêtre disparaît derrière le navigateur et
+  // l'utilisateur perd de vue le code à entrer / le statut de connexion.
+  const enterOverlay = async () => {
+    const win = getCurrentWindow()
+    try {
+      savedWindowGeometry.current = {
+        size: await win.outerSize(),
+        position: await win.outerPosition(),
+      }
+      const { size, position } = await computeOverlayGeometry(OVERLAY_HEIGHT)
+      await win.setSize(size)
+      await win.setPosition(position)
+      await win.setAlwaysOnTop(true)
+      setOverlayActive(true)
+    } catch {
+      // Best-effort : si le redimensionnement échoue, on reste en page pleine
+    }
+  }
+
+  // Agrandit l'overlay en hauteur pour la page de confirmation (avatar +
+  // nom de compte), sans toucher à savedWindowGeometry ni à l'always-on-top.
+  const growOverlayForConfirmation = async () => {
+    const win = getCurrentWindow()
+    try {
+      const { size, position } = await computeOverlayGeometry(OVERLAY_CONFIRM_HEIGHT)
+      await win.setSize(size)
+      await win.setPosition(position)
+    } catch { /* best-effort */ }
+  }
+
+  const exitOverlay = async () => {
+    const win = getCurrentWindow()
+    const saved = savedWindowGeometry.current
+    savedWindowGeometry.current = null
+    setOverlayActive(false)
+    try {
+      await win.setAlwaysOnTop(false)
+      if (saved) {
+        await win.setSize(saved.size)
+        await win.setPosition(saved.position)
+      }
+      await win.setFocus()
+    } catch { /* best-effort */ }
+  }
 
   useEffect(() => {
     api.mc.accounts()
@@ -88,16 +160,21 @@ export default function Login() {
       setVerifyUrl(resp.verification_uri)
       open(resp.verification_uri)
       setStep('polling')
+      enterOverlay()
       pollRef.current = setInterval(async () => {
         try {
           const poll = await api.auth.poll()
           if (poll.status === 'success' && poll.username) {
             stopPolling()
+            setStep('confirmed')
+            await growOverlayForConfirmation()
             const accs = await api.mc.accounts()
             const mapped: Account[] = accs.map((a) => ({ username: a.mc_username, uuid: a.mc_uuid }))
             setAccounts(mapped)
             const active = accs.find((a) => a.is_active)
             if (active) setUser(active.mc_username, active.mc_uuid)
+            await new Promise((r) => setTimeout(r, 1400))
+            await exitOverlay()
             navigate('/home', { replace: true })
           } else if (poll.status === 'error') {
             stopPolling()
@@ -122,100 +199,165 @@ export default function Login() {
       await api.mc.switch(acc.uuid)
       setUser(acc.username, acc.uuid)
       navigate('/home')
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }
 
   const handleRemove = async (acc: Account) => {
     try {
       await api.mc.delete(acc.uuid)
       removeAccount(acc.uuid)
-    } catch { /* ignore */ }
+    } catch (e) { showError(e) }
   }
 
-  useEffect(() => () => stopPolling(), [])
+  useEffect(() => {
+    return () => {
+      stopPolling()
+      if (savedWindowGeometry.current) exitOverlay()
+    }
+  }, [])
 
   const displayAccount = accounts.find((a) => a.uuid === (previewUuid ?? uuid))
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D' }}>
+  if (overlayActive) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] px-5 py-4">
+        <div className="flex items-center gap-2">
+          <div className="h-3.5 w-3.5 rounded-sm bg-[#4B3FCF]" />
+          <span className="font-black text-white text-[13px] tracking-[-0.01em]">YuyuFrame</span>
+        </div>
 
-      {/* Header */}
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate('/home')}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
-        <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.07)', flexShrink: 0 }} />
+        {step === 'polling' && (
+          <div className="flex w-full flex-col gap-3">
+            <p className="text-center text-[11px] text-[rgba(255,255,255,0.45)]">
+              Entre ce code sur la page Microsoft :
+            </p>
+            <button
+              onClick={() => { navigator.clipboard.writeText(userCode); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              className={`rounded-xl py-2.5 text-center transition-all duration-150 border ${copied ? 'bg-[rgba(74,222,128,0.08)] border-[rgba(74,222,128,0.3)]' : 'bg-[rgba(0,0,0,0.4)] border-[rgba(255,255,255,0.08)]'}`}
+              title="Cliquer pour copier"
+            >
+              <span className="font-mono font-black text-white text-[22px] tracking-[0.2em]">
+                {userCode}
+              </span>
+              <p className={`text-[10px] mt-1 ${copied ? 'text-[rgb(134,239,172)]' : 'text-[rgba(255,255,255,0.2)]'}`}>
+                {copied ? 'Copié !' : 'Cliquer pour copier'}
+              </p>
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => open(verifyUrl)}
+                className="flex-1 rounded-xl py-2 text-[12px] font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
+              >
+                Ouvrir Microsoft →
+              </button>
+              <button
+                onClick={() => { stopPolling(); exitOverlay(); setStep('idle') }}
+                className="rounded-xl px-3 py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.3)] border border-[rgba(255,255,255,0.07)] hover:text-[rgba(255,255,255,0.65)]"
+              >
+                Annuler
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
+              <span className="text-[10px] text-[rgba(255,255,255,0.35)]">
+                En attente de confirmation...
+              </span>
+            </div>
+          </div>
+        )}
+
+        {step === 'confirmed' && (
+          <div className="flex w-full flex-col items-center gap-3 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(74,222,128,0.12)] border border-[rgba(74,222,128,0.35)]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            {username && (
+              <img
+                src={`https://mc-heads.net/avatar/${uuid}/40`}
+                alt={username}
+                className="rounded-lg w-10 h-10 [image-rendering:pixelated]"
+              />
+            )}
+            <div>
+              <p className="font-bold text-white text-[14px]">Connecté avec succès</p>
+              {username && (
+                <p className="text-[12px] text-[rgba(255,255,255,0.4)] mt-1">{username}</p>
+              )}
+            </div>
+            <p className="text-[10px] text-[rgba(255,255,255,0.25)]">Retour au launcher...</p>
+          </div>
+        )}
+
+        {step === 'error' && (
+          <div className="flex w-full flex-col gap-3">
+            <div className="rounded-xl px-3 py-2.5 bg-[rgba(200,50,50,0.12)] border border-[rgba(200,50,50,0.2)]">
+              <p className="text-[11px] text-[rgb(252,165,165)] break-all whitespace-pre-wrap">{error}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { navigator.clipboard.writeText(error); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                className={`rounded-xl px-3 py-2 text-[12px] transition-all duration-150 border ${copied ? 'text-[rgb(134,239,172)] border-[rgba(74,222,128,0.3)]' : 'text-[rgba(255,255,255,0.4)] border-[rgba(255,255,255,0.08)]'}`}
+              >
+                {copied ? 'Copié ✓' : 'Copier'}
+              </button>
+              <button
+                onClick={() => { exitOverlay(); setStep('idle') }}
+                className="flex-1 rounded-xl py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+
+      <PageHeader>
+        <PageHeaderSeparator />
         <div>
-          <h1 className="font-black text-white" style={{ fontSize: 16, letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+          <h1 className="font-black text-white text-[16px] tracking-[-0.01em] leading-[1.2]">
             Connexion
           </h1>
-          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 1 }}>
+          <p className="text-[10px] text-[rgba(255,255,255,0.28)] mt-px">
             Gérez vos comptes Minecraft (max 2)
           </p>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left — 3D skin viewer */}
-        <div
-          className="relative flex flex-shrink-0 flex-col"
-          style={{
-            width: '38%',
-            background: 'radial-gradient(ellipse at 50% 58%, rgba(75,63,207,0.22) 0%, transparent 72%)',
-            borderRight: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
+        <div className="relative flex flex-shrink-0 flex-col w-[38%] bg-[radial-gradient(ellipse_at_50%_58%,rgba(75,63,207,0.22)_0%,transparent_72%)] border-r border-r-[rgba(255,255,255,0.05)]">
           {/* shadow under feet */}
-          <div
-            className="absolute"
-            style={{
-              bottom: '18%',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: '28%',
-              height: 14,
-              background: 'rgba(75,63,207,0.55)',
-              borderRadius: '50%',
-              filter: 'blur(20px)',
-            }}
-          />
+          <div className="absolute bottom-[18%] left-1/2 -translate-x-1/2 w-[28%] h-[14px] bg-[rgba(75,63,207,0.55)] rounded-full blur-[20px]" />
 
           {/* Canvas fills all available height */}
           <div ref={canvasContainerRef} className="relative z-10 min-h-0 flex-1">
             <canvas
               ref={canvasRef}
-              style={{ background: 'transparent', display: 'block' }}
+              className="bg-transparent block"
             />
           </div>
 
           <div className="relative z-10 flex flex-shrink-0 flex-col items-center gap-0.5 py-3">
             {displayAccount ? (
               <>
-                <p className="font-bold text-white" style={{ fontSize: 13 }}>
+                <p className="font-bold text-white text-[13px]">
                   {displayAccount.username}
                 </p>
-                <p style={{
-                  fontSize: 10,
-                  color: displayAccount.uuid === uuid ? 'rgba(74,222,128,0.75)' : 'rgba(255,255,255,0.3)',
-                }}>
+                <p className={`text-[10px] ${displayAccount.uuid === uuid ? 'text-[rgba(74,222,128,0.75)]' : 'text-[rgba(255,255,255,0.3)]'}`}>
                   {displayAccount.uuid === uuid ? '● Actif' : '○ Aperçu'}
                 </p>
               </>
             ) : (
-              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>Aucun compte</p>
+              <p className="text-[10px] text-[rgba(255,255,255,0.2)]">Aucun compte</p>
             )}
           </div>
         </div>
@@ -226,12 +368,12 @@ export default function Login() {
           {/* Branding */}
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded-sm" style={{ background: '#4B3FCF' }} />
-              <span className="font-black text-white" style={{ fontSize: 22, letterSpacing: '-0.01em' }}>
+              <div className="h-4 w-4 rounded-sm bg-[#4B3FCF]" />
+              <span className="font-black text-white text-[22px] tracking-[-0.01em]">
                 YuyuFrame
               </span>
             </div>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)' }}>
+            <p className="text-[11px] text-[rgba(255,255,255,0.28)]">
               {accounts.length === 0
                 ? 'Connecte-toi pour jouer'
                 : accounts.length < 2
@@ -261,70 +403,48 @@ export default function Login() {
 
           {/* Auth flow panel */}
           {(step === 'loading' || step === 'polling' || step === 'error') && (
-            <div
-              className="rounded-2xl p-5"
-              style={{
-                background: 'rgba(255,255,255,0.025)',
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}
-            >
+            <div className="rounded-2xl p-5 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]">
               {step === 'loading' && (
                 <div className="flex items-center justify-center gap-3 py-2">
-                  <span
-                    className="h-4 w-4 animate-spin-slow rounded-full border-2"
-                    style={{ borderColor: 'rgba(255,255,255,0.15)', borderTopColor: '#4B3FCF' }}
-                  />
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Connexion en cours...</span>
+                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.15)] border-t-[#4B3FCF]" />
+                  <span className="text-[13px] text-[rgba(255,255,255,0.5)]">Connexion en cours...</span>
                 </div>
               )}
 
               {step === 'polling' && (
                 <div className="flex flex-col gap-4">
-                  <p className="text-center" style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+                  <p className="text-center text-[12px] text-[rgba(255,255,255,0.45)]">
                     Entre ce code sur la page Microsoft :
                   </p>
                   <button
                     onClick={() => { navigator.clipboard.writeText(userCode); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                    className="rounded-xl py-3 text-center transition-all duration-150"
-                    style={{
-                      background: copied ? 'rgba(74,222,128,0.08)' : 'rgba(0,0,0,0.4)',
-                      border: `1px solid ${copied ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.08)'}`,
-                    }}
+                    className={`rounded-xl py-3 text-center transition-all duration-150 border ${copied ? 'bg-[rgba(74,222,128,0.08)] border-[rgba(74,222,128,0.3)]' : 'bg-[rgba(0,0,0,0.4)] border-[rgba(255,255,255,0.08)]'}`}
                     title="Cliquer pour copier"
                   >
-                    <span className="font-mono font-black text-white" style={{ fontSize: 26, letterSpacing: '0.25em' }}>
+                    <span className="font-mono font-black text-white text-[26px] tracking-[0.25em]">
                       {userCode}
                     </span>
-                    <p style={{ fontSize: 10, marginTop: 4, color: copied ? 'rgb(134,239,172)' : 'rgba(255,255,255,0.2)' }}>
+                    <p className={`text-[10px] mt-1 ${copied ? 'text-[rgb(134,239,172)]' : 'text-[rgba(255,255,255,0.2)]'}`}>
                       {copied ? 'Copié !' : 'Cliquer pour copier'}
                     </p>
                   </button>
                   <div className="flex gap-2">
                     <button
                       onClick={() => open(verifyUrl)}
-                      className="flex-1 rounded-xl py-2 text-sm font-medium text-white transition-all duration-150"
-                      style={{ background: 'rgba(75,63,207,0.15)', border: '1px solid rgba(75,63,207,0.3)' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.3)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.15)' }}
+                      className="flex-1 rounded-xl py-2 text-sm font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
                     >
                       Ouvrir Microsoft →
                     </button>
                     <button
                       onClick={() => { stopPolling(); setStep('idle') }}
-                      className="rounded-xl px-4 py-2 text-sm transition-all duration-150"
-                      style={{ color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.07)' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.65)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.3)' }}
+                      className="rounded-xl px-4 py-2 text-sm transition-all duration-150 text-[rgba(255,255,255,0.3)] border border-[rgba(255,255,255,0.07)] hover:text-[rgba(255,255,255,0.65)]"
                     >
                       Annuler
                     </button>
                   </div>
                   <div className="flex items-center justify-center gap-2">
-                    <span
-                      className="h-3 w-3 animate-spin-slow rounded-full border"
-                      style={{ borderColor: 'rgba(255,255,255,0.12)', borderTopColor: '#4B3FCF' }}
-                    />
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                    <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
+                    <span className="text-[11px] text-[rgba(255,255,255,0.35)]">
                       En attente de confirmation...
                     </span>
                   </div>
@@ -333,26 +453,19 @@ export default function Login() {
 
               {step === 'error' && (
                 <div className="flex flex-col gap-3">
-                  <div
-                    className="rounded-xl px-4 py-3"
-                    style={{ background: 'rgba(200,50,50,0.12)', border: '1px solid rgba(200,50,50,0.2)' }}
-                  >
-                    <p style={{ fontSize: 11, color: 'rgb(252,165,165)', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{error}</p>
+                  <div className="rounded-xl px-4 py-3 bg-[rgba(200,50,50,0.12)] border border-[rgba(200,50,50,0.2)]">
+                    <p className="text-[11px] text-[rgb(252,165,165)] break-all whitespace-pre-wrap">{error}</p>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => { navigator.clipboard.writeText(error); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                      className="rounded-xl px-3 py-2 text-sm transition-all duration-150"
-                      style={{ color: copied ? 'rgb(134,239,172)' : 'rgba(255,255,255,0.4)', border: `1px solid ${copied ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.08)'}` }}
+                      className={`rounded-xl px-3 py-2 text-sm transition-all duration-150 border ${copied ? 'text-[rgb(134,239,172)] border-[rgba(74,222,128,0.3)]' : 'text-[rgba(255,255,255,0.4)] border-[rgba(255,255,255,0.08)]'}`}
                     >
                       {copied ? 'Copié ✓' : 'Copier'}
                     </button>
                     <button
                       onClick={() => setStep('idle')}
-                      className="flex-1 rounded-xl py-2 text-sm transition-all duration-150"
-                      style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(75,63,207,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)' }}
+                      className="flex-1 rounded-xl py-2 text-sm transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
                     >
                       Réessayer
                     </button>
@@ -381,14 +494,13 @@ function AccountRow({
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl p-3 transition-all duration-150"
-      style={{
-        background: isActive
-          ? 'rgba(75,63,207,0.08)'
-          : hovered ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.02)',
-        border: `1px solid ${isActive ? 'rgba(75,63,207,0.35)' : hovered ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.06)'}`,
-        boxShadow: isActive ? '0 0 24px rgba(75,63,207,0.1)' : 'none',
-      }}
+      className={`flex items-center gap-3 rounded-xl p-3 transition-all duration-150 border ${
+        isActive
+          ? 'bg-[rgba(75,63,207,0.08)] border-[rgba(75,63,207,0.35)] shadow-[0_0_24px_rgba(75,63,207,0.1)]'
+          : hovered
+            ? 'bg-[rgba(255,255,255,0.03)] border-[rgba(255,255,255,0.09)] shadow-none'
+            : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.06)] shadow-none'
+      }`}
       onMouseEnter={() => { setHovered(true); onHover() }}
       onMouseLeave={() => { setHovered(false); onLeave() }}
     >
@@ -397,32 +509,25 @@ function AccountRow({
         <img
           src={`https://mc-heads.net/avatar/${acc.uuid}/48`}
           alt={acc.username}
-          className="rounded-lg"
-          style={{ width: 44, height: 44, imageRendering: 'pixelated' }}
+          className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
           onError={(e) => {
             e.currentTarget.style.display = 'none'
             const fb = e.currentTarget.nextElementSibling as HTMLElement | null
             if (fb) fb.style.display = 'flex'
           }}
         />
-        <div
-          className="hidden items-center justify-center rounded-lg font-black text-white"
-          style={{ width: 44, height: 44, background: 'rgba(75,63,207,0.45)', fontFamily: 'monospace', fontSize: 18 }}
-        >
+        <div className="hidden items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
           {acc.username[0].toUpperCase()}
         </div>
         {isActive && (
-          <div
-            className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2"
-            style={{ background: '#22c55e', borderColor: '#09090D' }}
-          />
+          <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 bg-[#22c55e] border-[#09090D]" />
         )}
       </div>
 
       {/* Info */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <p className="truncate font-semibold text-white" style={{ fontSize: 13 }}>{acc.username}</p>
-        <p style={{ fontSize: 10, marginTop: 1, color: isActive ? 'rgba(74,222,128,0.7)' : 'rgba(255,255,255,0.3)' }}>
+        <p className="truncate font-semibold text-white text-[13px]">{acc.username}</p>
+        <p className={`text-[10px] mt-px ${isActive ? 'text-[rgba(74,222,128,0.7)]' : 'text-[rgba(255,255,255,0.3)]'}`}>
           {isActive ? '● Actif' : 'Compte sauvegardé'}
         </p>
       </div>
@@ -432,33 +537,24 @@ function AccountRow({
         {isActive ? (
           <button
             onClick={onSelect}
-            className="rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-150"
-            style={{ background: 'rgba(75,63,207,0.25)', border: '1px solid rgba(75,63,207,0.45)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.42)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(75,63,207,0.25)' }}
+            className="rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.25)] border border-[rgba(75,63,207,0.45)] hover:bg-[rgba(75,63,207,0.42)]"
           >
             Jouer →
           </button>
         ) : (
           <button
             onClick={onSelect}
-            className="rounded-lg px-3 py-1.5 text-sm transition-all duration-150"
-            style={{ color: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.08)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(75,63,207,0.45)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.45)' }}
+            className="rounded-lg px-3 py-1.5 text-sm transition-all duration-150 text-[rgba(255,255,255,0.45)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.45)] hover:text-[rgba(255,255,255,0.9)]"
           >
             Sélectionner
           </button>
         )}
         <button
           onClick={onRemove}
-          className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.05)', background: 'transparent' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgb(252,165,165)'; e.currentTarget.style.borderColor = 'rgba(200,50,50,0.3)'; e.currentTarget.style.background = 'rgba(200,50,50,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.background = 'transparent' }}
+          className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgb(252,165,165)] hover:border-[rgba(200,50,50,0.3)] hover:bg-[rgba(200,50,50,0.08)]"
           title="Déconnecter"
         >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 13, height: 13 }}>
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-[13px] h-[13px]">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
           </svg>
         </button>
@@ -471,34 +567,16 @@ function AddRow({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl p-3 transition-all duration-200"
-      style={{
-        background: 'rgba(255,255,255,0.015)',
-        border: '1.5px dashed rgba(255,255,255,0.08)',
-        color: 'rgba(255,255,255,0.3)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(75,63,207,0.4)'
-        e.currentTarget.style.color = 'rgba(140,130,240,0.8)'
-        e.currentTarget.style.background = 'rgba(75,63,207,0.05)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
-        e.currentTarget.style.color = 'rgba(255,255,255,0.3)'
-        e.currentTarget.style.background = 'rgba(255,255,255,0.015)'
-      }}
+      className="flex w-full items-center gap-3 rounded-xl p-3 transition-all duration-200 bg-[rgba(255,255,255,0.015)] border-[1.5px] border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(140,130,240,0.8)] hover:bg-[rgba(75,63,207,0.05)]"
     >
-      <div
-        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-      >
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path d="M12 5v14M5 12h14" strokeLinecap="round" />
         </svg>
       </div>
       <div className="text-left">
-        <p style={{ fontSize: 13, fontWeight: 600 }}>Ajouter un compte</p>
-        <p style={{ fontSize: 10, marginTop: 2, color: 'rgba(255,255,255,0.2)' }}>Connexion via Microsoft</p>
+        <p className="text-[13px] font-semibold">Ajouter un compte</p>
+        <p className="text-[10px] mt-0.5 text-[rgba(255,255,255,0.2)]">Connexion via Microsoft</p>
       </div>
     </button>
   )

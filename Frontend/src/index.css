@@ -2,22 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Chill theme (défaut) ── */
-:root,
-[data-theme='chill'] {
-  --bg-primary: 15 23 42;
-  --bg-secondary: 22 33 58;
-  --bg-card: 30 41 59;
-  --accent: 99 102 241;
-  --accent-hover: 129 140 248;
-  --txt-primary: 241 245 249;
-  --txt-secondary: 148 163 184;
-  --border: 51 65 85;
-  --glow: 99 102 241;
-}
-
-/* ── Gamer theme ── */
-[data-theme='gamer'] {
+:root {
   --bg-primary: 12 12 14;
   --bg-secondary: 19 19 21;
   --bg-card: 30 30 35;
@@ -53,14 +38,17 @@ body {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--border));
-  border-radius: 2px;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--border) / 0.8);
 }
 
 /* Glow effect */
@@ -85,4 +73,9 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease,
       box-shadow 0.3s ease;
   }
+}
+
+@keyframes errorToastIn {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }

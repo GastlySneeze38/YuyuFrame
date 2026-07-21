@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import termsMd from '@/assets/legal/TERMS.md?raw'
 import privacyMd from '@/assets/legal/PRIVACY.md?raw'
 import licenseTxt from '@/assets/legal/LICENSE.txt?raw'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 type TabId = 'conditions' | 'confidentialite' | 'licence'
 
@@ -22,7 +23,6 @@ const TABS: { id: TabId; label: string }[] = [
 // couverte par cette build).
 
 export default function Legal() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = (searchParams.get('tab') as TabId) || 'conditions'
   const [tab, setTab] = useState<TabId>(TABS.some((t) => t.id === initialTab) ? initialTab : 'conditions')
@@ -33,43 +33,21 @@ export default function Legal() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ background: '#09090D', color: 'white' }}>
+    <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-white">
 
-      {/* Header */}
-      <div
-        className="flex flex-shrink-0 items-center gap-3 px-6 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <button
-          onClick={() => navigate(-1)}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-          style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.04)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 15, height: 15 }}>
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-        </button>
-        <h1 className="font-black text-white" style={{ fontSize: 18, letterSpacing: '-0.01em' }}>Informations légales</h1>
-      </div>
+      <PageHeader backTo={-1}>
+        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">Informations légales</h1>
+      </PageHeader>
 
       {/* Tabs */}
       <div
-        className="flex flex-shrink-0 items-center gap-1 px-6 pt-4"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+        className="flex flex-shrink-0 items-center gap-1 px-6 pt-4 border-b border-[rgba(255,255,255,0.06)]"
       >
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => selectTab(t.id)}
-            className="px-4 pb-3 transition-colors duration-150"
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: tab === t.id ? 'white' : 'rgba(255,255,255,0.4)',
-              borderBottom: tab === t.id ? '2px solid #7c6ae8' : '2px solid transparent',
-            }}
+            className={`px-4 pb-3 transition-colors duration-150 text-[13px] font-semibold border-b-2 ${tab === t.id ? 'text-white border-[#7c6ae8]' : 'text-white/40 border-transparent'}`}
           >
             {t.label}
           </button>
@@ -104,20 +82,20 @@ function Markdown({ source }: { source: string }) {
         const lines = block.split('\n')
         const first = lines[0]
 
-        if (first.startsWith('### ')) return <h4 key={i} style={h4Style}>{inlineBold(first.slice(4))}</h4>
-        if (first.startsWith('## ')) return <h3 key={i} style={h3Style}>{inlineBold(first.slice(3))}</h3>
-        if (first.startsWith('# ')) return <h2 key={i} style={h2Style}>{inlineBold(first.slice(2))}</h2>
+        if (first.startsWith('### ')) return <h4 key={i} className={h4Classes}>{inlineBold(first.slice(4))}</h4>
+        if (first.startsWith('## ')) return <h3 key={i} className={h3Classes}>{inlineBold(first.slice(3))}</h3>
+        if (first.startsWith('# ')) return <h2 key={i} className={h2Classes}>{inlineBold(first.slice(2))}</h2>
         if (first.startsWith('**Dernière mise à jour') || first.startsWith('**Last updated')) {
-          return <p key={i} style={metaStyle}>{first.replace(/\*\*/g, '')}</p>
+          return <p key={i} className={metaClasses}>{first.replace(/\*\*/g, '')}</p>
         }
         if (lines.every((l) => l.trim().startsWith('- '))) {
           return (
-            <ul key={i} style={{ ...pStyle, paddingLeft: 18, listStyle: 'disc', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <ul key={i} className="text-[12.5px] leading-[1.7] text-white/50 pl-[18px] list-disc flex flex-col gap-1">
               {lines.map((l, j) => <li key={j}>{inlineBold(l.trim().slice(2))}</li>)}
             </ul>
           )
         }
-        return <p key={i} style={pStyle}>{inlineBold(lines.join(' '))}</p>
+        return <p key={i} className={pClasses}>{inlineBold(lines.join(' '))}</p>
       })}
     </>
   )
@@ -128,7 +106,7 @@ function inlineBold(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g)
   return parts.map((part, i) =>
     part.startsWith('**') && part.endsWith('**')
-      ? <strong key={i} style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>{part.slice(2, -2)}</strong>
+      ? <strong key={i} className="text-white/85 font-bold">{part.slice(2, -2)}</strong>
       : part
   )
 }
@@ -136,21 +114,14 @@ function inlineBold(text: string): React.ReactNode {
 /** Texte préformaté (LICENSE) — une licence se lit toujours telle quelle, jamais reformatée (convention universelle, voir GitHub/gnu.org). */
 function PlainText({ source }: { source: string }) {
   return (
-    <pre style={{
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-      fontSize: 11,
-      lineHeight: 1.6,
-      color: 'rgba(255,255,255,0.5)',
-      whiteSpace: 'pre-wrap',
-      wordBreak: 'break-word',
-    }}>
+    <pre className="font-[ui-monospace,SFMono-Regular,Menlo,monospace] text-[11px] leading-[1.6] text-white/50 whitespace-pre-wrap [word-break:break-word]">
       {source}
     </pre>
   )
 }
 
-const h2Style: React.CSSProperties = { fontSize: 20, fontWeight: 800, color: 'white', marginTop: 4 }
-const h3Style: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.85)', marginTop: 6 }
-const h4Style: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }
-const metaStyle: React.CSSProperties = { fontSize: 11, color: 'rgba(255,255,255,0.25)' }
-const pStyle: React.CSSProperties = { fontSize: 12.5, lineHeight: 1.7, color: 'rgba(255,255,255,0.5)' }
+const h2Classes = 'text-[20px] font-extrabold text-white mt-1'
+const h3Classes = 'text-[14px] font-bold text-white/85 mt-1.5'
+const h4Classes = 'text-[13px] font-bold text-white/70'
+const metaClasses = 'text-[11px] text-white/25'
+const pClasses = 'text-[12.5px] leading-[1.7] text-white/50'

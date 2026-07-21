@@ -40,7 +40,7 @@ export interface Mod {
 export type Loader = 'vanilla' | 'fabric' | 'forge'
 
 export interface DetectedSource {
-  kind: 'multimc_prism' | 'curseforge' | 'atlauncher' | 'unknown'
+  kind: 'multimc_prism' | 'curseforge' | 'atlauncher' | 'modrinth_app' | 'unknown'
   name: string | null
   mcVersion: string | null
   loader: string | null
@@ -48,14 +48,25 @@ export interface DetectedSource {
 
 export interface ScanResult {
   modsDir: string
+  sourceRoot: string
   source: DetectedSource
   mods: Mod[]
+  extraDirs: string[]
 }
 
 export interface ImportResult {
   instanceId: string
   imported: Mod[]
   skipped: string[]
+  extraCopied: number
+  extraSkipped: number
+}
+
+export interface ImportProgressEvent {
+  phase: 'mods' | 'extras'
+  current: number
+  total: number
+  label?: string
 }
 
 export interface Instance {
@@ -81,8 +92,6 @@ export interface ModpackMeta {
   categories: string[]
   mod_files: string[]
 }
-
-export type Theme = 'chill' | 'gamer'
 
 export interface Account {
   username: string

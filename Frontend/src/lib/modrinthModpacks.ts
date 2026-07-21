@@ -61,9 +61,3 @@ export function formatRelativeDate(iso: string | null): string {
   if (days < 365) return `il y a ${Math.floor(days / 30)} mois`
   return `il y a ${Math.floor(days / 365)} an(s)`
 }
-
-export function formatDownloads(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`
-  return String(n)
-}

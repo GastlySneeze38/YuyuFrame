@@ -1,6 +1,6 @@
 use tauri::{Emitter, Manager};
 
-use crate::commands::instances::instance_dir;
+use crate::commands::instance::crud::instance_dir;
 use crate::db;
 use crate::minecraft::{auth, launcher};
 use crate::state::{MinecraftSession, SharedState};
@@ -37,7 +37,7 @@ pub async fn launch_game(
             .map_err(|e| e.to_string())?
             .ok_or("Instance introuvable")?
     };
-    let instance = crate::commands::instances::Instance {
+    let instance = crate::commands::instance::crud::Instance {
         id: instance.id,
         name: instance.name,
         mc_version: instance.mc_version,
@@ -82,6 +82,17 @@ pub async fn launch_game(
         "instance_id": &instance_id,
     }));
 
+    // Discord Rich Presence — bascule sur "en jeu" (voir integrations/discord.rs). Clonés
+    // AVANT le move de `instance` dans le bloc async ci-dessous (sinon plus
+    // accessible ici). spawn_blocking : set_activity fait de l'IPC bloquante
+    // (écriture sur la pipe/socket Discord), jamais directement sur le
+    // runtime async.
+    {
+        let instance_name = instance.name.clone();
+        let mc_version = instance.mc_version.clone();
+        tokio::task::spawn_blocking(move || crate::integrations::discord::set_playing(instance_name, mc_version));
+    }
+
     let state_clone = state.inner().clone();
 
     tokio::spawn(async move {
@@ -111,7 +122,7 @@ pub async fn launch_game(
             .ok()
         };
 
-        if let Err(e) = launcher::download_and_launch(
+        match launcher::download_and_launch(
             &instance.mc_version,
             Some(&instance.loader),
             &session,
@@ -126,9 +137,23 @@ pub async fn launch_game(
         )
         .await
         {
-            if e.to_string() == launcher::LAUNCH_CANCELLED_MSG {
+            Ok(warnings) if !warnings.is_empty() => {
+                // Lancement réussi mais avec des libs/dépendances manquantes
+                // (voir orchestrator::LoaderSetup) — le jeu peut planter ou
+                // manquer une fonctionnalité sans que rien n'ait "échoué" au
+                // sens strict, donc pas d'événement launch_error ici, mais
+                // l'utilisateur doit quand même le savoir.
+                tracing::warn!("Lancement de {} avec avertissements : {:?}", instance_id, warnings);
+                let _ = app.emit("launch_warning", serde_json::json!({
+                    "instance_id": &instance_id,
+                    "warnings": warnings,
+                }));
+            }
+            Ok(_) => {}
+            Err(e) if e.to_string() == launcher::LAUNCH_CANCELLED_MSG => {
                 let _ = app.emit("launch_cancelled", &instance_id);
-            } else {
+            }
+            Err(e) => {
                 tracing::error!("Erreur de lancement: {}", e);
                 let _ = app.emit("launch_error", e.to_string());
             }
@@ -145,6 +170,14 @@ pub async fn launch_game(
             let mut s = state_clone.write().await;
             s.running_instances.remove(&instance_id);
             s.launch_cancel.remove(&instance_id);
+            // Discord Rich Presence — retour "dans le launcher" SEULEMENT si
+            // plus AUCUNE instance ne tourne (any_running(), voir state.rs) :
+            // plusieurs instances peuvent tourner en parallèle
+            // (running_instances est un Set), fermer l'une d'elles ne doit
+            // pas repasser la présence en idle si une autre est encore active.
+            if !s.any_running() {
+                tokio::task::spawn_blocking(crate::integrations::discord::set_idle);
+            }
         }
         let _ = app.emit("game_state", serde_json::json!({
             "running": false,
@@ -201,33 +234,17 @@ async fn refresh_if_needed(
 
     tracing::info!("Token MC expiré — rafraîchissement en cours...");
 
-    let (mc_access_token, mc_username, mc_uuid, new_refresh_token, expires_at) =
-        auth::refresh_session(&refresh_token)
-            .await
-            .map_err(|e| format!("Échec du rafraîchissement du token MC : {}", e))?;
-
-    let new_session = MinecraftSession {
-        username: mc_username,
-        uuid: mc_uuid,
-        access_token: mc_access_token,
-        refresh_token: Some(new_refresh_token.clone()),
-        expires_at,
-    };
+    let result = auth::refresh_session(&refresh_token)
+        .await
+        .map_err(|e| format!("Échec du rafraîchissement du token MC : {}", e))?;
 
     // Persist to state and DB
-    {
+    let new_session = {
         let s = state.read().await;
         let yuyu_user_id = s.current_yuyu_user_id().unwrap_or(0);
         let db = s.db.lock().await;
-        let _ = db::update_mc_tokens(
-            &db,
-            yuyu_user_id,
-            &new_session.uuid,
-            &new_session.access_token,
-            &new_refresh_token,
-            expires_at,
-        );
-    }
+        crate::commands::account::apply_refreshed_tokens(&db, yuyu_user_id, result)
+    };
     state.write().await.session = Some(new_session.clone());
 
     tracing::info!("Token MC rafraîchi — expire dans 24h");

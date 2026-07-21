@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { showError } from '@/stores/useErrorToast'
 import type { Account } from '@/types'
 
 type Mode = 'checking' | 'login' | 'register' | 'error'
@@ -15,7 +16,6 @@ export default function YuyuLogin() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     api.yuyu.status()
@@ -25,14 +25,13 @@ export default function YuyuLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
 
     if (mode === 'register' && password !== confirm) {
-      setError('Les mots de passe ne correspondent pas.')
+      showError('Les mots de passe ne correspondent pas.')
       return
     }
     if (password.length < 4) {
-      setError('Le mot de passe doit faire au moins 4 caractères.')
+      showError('Le mot de passe doit faire au moins 4 caractères.')
       return
     }
 
@@ -63,7 +62,7 @@ export default function YuyuLogin() {
 
       navigate('/home', { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur inconnue')
+      showError(err)
     } finally {
       setLoading(false)
     }
@@ -71,10 +70,9 @@ export default function YuyuLogin() {
 
   if (mode === 'checking') {
     return (
-      <div className="flex h-full items-center justify-center" style={{ background: '#09090D' }}>
+      <div className="flex h-full items-center justify-center bg-[#09090D]">
         <div
-          className="h-8 w-8 animate-spin-slow rounded-full border-2"
-          style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: '#4B3FCF' }}
+          className="h-8 w-8 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#4B3FCF]"
         />
       </div>
     )
@@ -82,15 +80,14 @@ export default function YuyuLogin() {
 
   if (mode === 'error') {
     return (
-      <div className="flex h-full items-center justify-center" style={{ background: '#09090D' }}>
+      <div className="flex h-full items-center justify-center bg-[#09090D]">
         <div className="flex flex-col items-center gap-4">
-          <p style={{ color: 'rgba(255,100,100,0.8)', fontSize: 13 }}>
+          <p className="text-[rgba(255,100,100,0.8)] text-[13px]">
             Impossible de contacter le backend.
           </p>
           <button
             onClick={() => { setMode('checking'); api.yuyu.status().then((s) => setMode(s.has_account ? 'login' : 'register')).catch(() => setMode('error')) }}
-            className="rounded-xl px-4 py-2 text-sm text-white transition-all"
-            style={{ background: 'rgba(75,63,207,0.2)', border: '1px solid rgba(75,63,207,0.4)' }}
+            className="rounded-xl px-4 py-2 text-sm text-white transition-all bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.4)]"
           >
             Réessayer
           </button>
@@ -102,12 +99,11 @@ export default function YuyuLogin() {
   const isRegister = mode === 'register'
 
   return (
-    <div className="flex h-full flex-col items-center justify-center overflow-hidden" style={{ background: '#09090D' }}>
+    <div className="flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D]">
 
       {/* Background glow */}
       <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse at 50% 60%, rgba(75,63,207,0.07) 0%, transparent 65%)' }}
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_60%,rgba(75,63,207,0.07)_0%,transparent_65%)]"
       />
 
       <div className="relative z-10 flex w-full max-w-sm flex-col gap-6 px-6">
@@ -115,12 +111,12 @@ export default function YuyuLogin() {
         {/* Branding */}
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="h-5 w-5 rounded-md" style={{ background: '#4B3FCF', boxShadow: '0 0 20px rgba(75,63,207,0.5)' }} />
-            <span className="font-black text-white" style={{ fontSize: 24, letterSpacing: '-0.02em' }}>
+            <div className="h-5 w-5 rounded-md bg-[#4B3FCF] shadow-[0_0_20px_rgba(75,63,207,0.5)]" />
+            <span className="font-black text-white text-[24px] tracking-[-0.02em]">
               YuyuFrame
             </span>
           </div>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
+          <p className="text-[11px] text-[rgba(255,255,255,0.3)] text-center">
             {isRegister
               ? 'Crée ton compte lanceur pour protéger tes sessions'
               : 'Entre ton mot de passe pour accéder au lanceur'}
@@ -129,17 +125,13 @@ export default function YuyuLogin() {
 
         {/* Card */}
         <div
-          className="flex flex-col gap-5 rounded-2xl p-6"
-          style={{
-            background: 'rgba(255,255,255,0.025)',
-            border: '1px solid rgba(255,255,255,0.07)',
-          }}
+          className="flex flex-col gap-5 rounded-2xl p-6 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]"
         >
           <div>
-            <h2 className="font-bold text-white" style={{ fontSize: 15 }}>
+            <h2 className="font-bold text-white text-[15px]">
               {isRegister ? 'Créer un compte' : 'Connexion'}
             </h2>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>
+            <p className="text-[11px] text-[rgba(255,255,255,0.3)] mt-0.5">
               {isRegister
                 ? 'Mot de passe chiffré avec Argon2 + salt'
                 : 'Compte protégé par Argon2'}
@@ -172,39 +164,15 @@ export default function YuyuLogin() {
               />
             )}
 
-            {error && (
-              <div
-                className="rounded-xl px-4 py-2.5 text-center"
-                style={{ background: 'rgba(200,50,50,0.12)', border: '1px solid rgba(200,50,50,0.2)' }}
-              >
-                <span style={{ fontSize: 12, color: 'rgb(252,165,165)' }}>{error}</span>
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading || !username || !password}
-              className="mt-1 w-full rounded-xl py-3 font-bold text-white transition-all duration-150 active:scale-95"
-              style={{
-                background: loading || !username || !password ? 'rgba(40,38,65,0.7)' : '#4B3FCF',
-                boxShadow: !loading && username && password ? '0 4px 24px rgba(75,63,207,0.38)' : 'none',
-                cursor: loading || !username || !password ? 'not-allowed' : 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading && username && password)
-                  e.currentTarget.style.background = '#6155e8'
-              }}
-              onMouseLeave={(e) => {
-                if (!loading && username && password)
-                  e.currentTarget.style.background = '#4B3FCF'
-              }}
+              className="mt-1 w-full rounded-xl py-3 font-bold text-white transition-all duration-150 active:scale-95 text-[14px] bg-[#4B3FCF] shadow-[0_4px_24px_rgba(75,63,207,0.38)] cursor-pointer enabled:hover:bg-[#6155e8] disabled:bg-[rgba(40,38,65,0.7)] disabled:shadow-none disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <span
-                    className="h-4 w-4 animate-spin-slow rounded-full border-2"
-                    style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'white' }}
+                    className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white"
                   />
                   {isRegister ? 'Création...' : 'Connexion...'}
                 </span>
@@ -217,13 +185,13 @@ export default function YuyuLogin() {
 
         {/* Toggle login / register */}
         <div className="flex items-center justify-center gap-1.5">
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+          <span className="text-[11px] text-[rgba(255,255,255,0.3)]">
             {isRegister ? 'Déjà un compte ?' : 'Pas encore de compte ?'}
           </span>
           <button
             type="button"
-            onClick={() => { setMode(isRegister ? 'login' : 'register'); setError(''); setConfirm('') }}
-            style={{ fontSize: 11, color: '#7B6EE8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            onClick={() => { setMode(isRegister ? 'login' : 'register'); setConfirm('') }}
+            className="text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
           >
             {isRegister ? 'Se connecter' : 'Créer un compte'}
           </button>
@@ -231,11 +199,11 @@ export default function YuyuLogin() {
 
         {/* Lock icon + security note */}
         <div className="flex items-center justify-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.18)' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[13px] h-[13px] text-[rgba(255,255,255,0.18)]">
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)' }}>
+          <span className="text-[10px] text-[rgba(255,255,255,0.18)]">
             Sessions Minecraft stockées localement, chiffrées en base SQLite
           </span>
         </div>
@@ -257,8 +225,7 @@ function YuyuInput({
   return (
     <div>
       <label
-        className="mb-1.5 block"
-        style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+        className="mb-1.5 block text-[10px] text-[rgba(255,255,255,0.4)] font-semibold tracking-[0.08em] uppercase"
       >
         {label}
       </label>
@@ -268,13 +235,7 @@ function YuyuInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-all duration-150"
-        style={{
-          background: 'rgba(0,0,0,0.4)',
-          border: '1px solid rgba(255,255,255,0.08)',
-        }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(75,63,207,0.55)' }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}
+        className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none transition-all duration-150 bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.55)]"
       />
     </div>
   )
