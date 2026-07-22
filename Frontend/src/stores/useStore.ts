@@ -108,6 +108,14 @@ interface Store {
   favoriteServers: Record<string, string[]>
   isServerFavorite: (instanceId: string, ip: string) => boolean
   toggleFavoriteServer: (instanceId: string, ip: string) => boolean
+
+  // ── Notes de patch en attente (persisté) — posé par UpdateChecker juste
+  // avant `relaunch()` (l'état mémoire ne survit pas au redémarrage complet
+  // du process), lu une fois par App.tsx au montage suivant puis effacé.
+  // Prend le pas sur le rappel compte hors ligne (voir App.tsx) : affiché
+  // en premier, le rappel ne s'affiche qu'une fois les notes fermées.
+  pendingPatchNotes: { version: string; notes: string } | null
+  setPendingPatchNotes: (v: { version: string; notes: string } | null) => void
 }
 
 export const useStore = create<Store>()(
@@ -279,6 +287,10 @@ export const useStore = create<Store>()(
         set((s) => ({ favoriteServers: { ...s.favoriteServers, [instanceId]: next } }))
         return true
       },
+
+      // Notes de patch en attente
+      pendingPatchNotes: null,
+      setPendingPatchNotes: (pendingPatchNotes) => set({ pendingPatchNotes }),
     }),
     {
       name: 'yuyuframe-store',
@@ -300,6 +312,7 @@ export const useStore = create<Store>()(
         pinnedMods: s.pinnedMods,
         launchPhaseDurations: s.launchPhaseDurations,
         favoriteServers: s.favoriteServers,
+        pendingPatchNotes: s.pendingPatchNotes,
       }),
     }
   )

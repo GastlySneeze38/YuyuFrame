@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
+import { useStore } from '@/stores/useStore'
 
 export function UpdateChecker() {
   const [update, setUpdate] = useState<Update | null>(null)
@@ -31,6 +32,13 @@ export function UpdateChecker() {
         } else if (event.event === 'Finished') {
           setStatus('installing')
         }
+      })
+      // L'état mémoire ne survit pas à relaunch() (process complètement
+      // redémarré) — persisté ici pour qu'App.tsx puisse afficher les notes
+      // de version une fois de retour (voir pendingPatchNotes, useStore.ts).
+      useStore.getState().setPendingPatchNotes({
+        version: update.version,
+        notes: update.body ?? '',
       })
       await relaunch()
     } catch {

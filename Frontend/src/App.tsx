@@ -5,6 +5,7 @@ import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
+import { PatchNotesModal } from '@/components/PatchNotesModal'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
@@ -51,14 +52,29 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes } = useStore()
+  const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
 
+  // Priorité aux notes de patch : si une mise à jour vient de se terminer
+  // (voir UpdateChecker → relaunch()), on les affiche d'abord — le rappel
+  // compte hors ligne, lui, n'apparaît qu'une fois les notes fermées
+  // (handleClosePatchNotes), jamais en même temps.
   useEffect(() => {
     if (isConsoleWindow) return
-    if (uuid && isOfflineAccount(uuid)) setShowOfflineReminder(true)
+    if (pendingPatchNotes) {
+      setShowPatchNotes(true)
+    } else if (uuid && isOfflineAccount(uuid)) {
+      setShowOfflineReminder(true)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleClosePatchNotes = () => {
+    setShowPatchNotes(false)
+    setPendingPatchNotes(null)
+    if (uuid && isOfflineAccount(uuid)) setShowOfflineReminder(true)
+  }
 
   useEffect(() => {
     if (isConsoleWindow) return
@@ -92,6 +108,13 @@ export default function App() {
       <ErrorToast />
       <TitleBar />
       <UpdateChecker />
+      {showPatchNotes && pendingPatchNotes && (
+        <PatchNotesModal
+          version={pendingPatchNotes.version}
+          notes={pendingPatchNotes.notes}
+          onClose={handleClosePatchNotes}
+        />
+      )}
       {showOfflineReminder && (
         <OfflinePurchaseReminderModal onClose={() => setShowOfflineReminder(false)} />
       )}
