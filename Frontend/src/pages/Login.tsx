@@ -8,6 +8,7 @@ import { useStore } from '@/stores/useStore'
 import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
+import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
 
@@ -18,7 +19,8 @@ const OVERLAY_MARGIN = 24
 
 export default function Login() {
   const navigate = useNavigate()
-  const { uuid, username, accounts, setAccounts, setUser, removeAccount } = useStore()
+  const { uuid, username, accounts, setAccounts, setUser, removeAccount, addAccount } = useStore()
+  const [showOfflineModal, setShowOfflineModal] = useState(false)
   const [step, setStep] = useState<Step>('idle')
   const [userCode, setUserCode] = useState('')
   const [verifyUrl, setVerifyUrl] = useState('')
@@ -366,7 +368,8 @@ export default function Login() {
         <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-8 py-7">
 
           {/* Branding */}
-          <div className="flex flex-col gap-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <div className="h-4 w-4 rounded-sm bg-[#4B3FCF]" />
               <span className="font-black text-white text-[22px] tracking-[-0.01em]">
@@ -380,6 +383,17 @@ export default function Login() {
                 ? 'Ajoute un deuxième compte ou continue'
                 : 'Sélectionne le compte avec lequel jouer'}
             </p>
+            </div>
+
+            <button
+              onClick={() => setShowOfflineModal(true)}
+              title="Compte hors ligne"
+              className="flex h-8 flex-shrink-0 items-center justify-center rounded-full border border-[rgba(255,255,255,0.15)] px-3.5 text-[rgba(255,255,255,0.35)] transition-colors hover:border-[rgba(255,255,255,0.4)] hover:text-white"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" width={13} height={13}>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
           </div>
 
           {/* Account rows */}
@@ -476,6 +490,13 @@ export default function Login() {
           )}
         </div>
       </div>
+
+      {showOfflineModal && (
+        <OfflineAccountModal
+          onClose={() => setShowOfflineModal(false)}
+          onAdded={(acc) => { addAccount(acc.username, acc.uuid); navigate('/home') }}
+        />
+      )}
     </div>
   )
 }

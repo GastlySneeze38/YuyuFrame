@@ -1,5 +1,6 @@
 pub mod microsoft;
 pub mod minecraft;
+pub mod offline;
 pub mod yuyu;
 
 /// Persiste en DB le résultat d'un `minecraft::auth::refresh_session` (tuple

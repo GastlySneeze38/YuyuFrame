@@ -148,6 +148,7 @@ pub fn run() {
             commands::account::minecraft::mc_list_accounts,
             commands::account::minecraft::mc_switch,
             commands::account::minecraft::mc_delete,
+            commands::account::offline::mc_add_offline,
             commands::system::versions::list_versions,
             commands::launch::launch_game,
             commands::launch::cancel_launch,

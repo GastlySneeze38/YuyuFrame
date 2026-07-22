@@ -91,6 +91,7 @@ export const api = {
     accounts: () => invoke<McAccountInfo[]>('mc_list_accounts'),
     switch: (uuid: string) => invoke<McAccountInfo>('mc_switch', { uuid }),
     delete: (uuid: string) => invoke<void>('mc_delete', { uuid }),
+    addOffline: (username: string) => invoke<McAccountInfo>('mc_add_offline', { username }),
   },
 
   launch: {
