@@ -1,0 +1,47 @@
+# ── Java Agent builds (build.bat) + PvP-Mod (Gradle) ──
+build/
+.gradle/
+
+### IDE ###
+.idea/
+.vscode/
+.claude/
+*.iml
+
+### OS ###
+.DS_Store
+
+# ── Frontend (Vite/React) ──
+Launcher-Client/Frontend/node_modules/
+Launcher-Client/Frontend/out/
+Launcher-Client/Frontend/dist/
+*.tsbuildinfo
+
+# ── Backend (Rust) ──
+Launcher-Client/Backend/target/
+target/
+*.db-shm
+*.db-wal
+*.db
+
+# ── YuyuFrame data ──
+session.json
+
+# ── Ancien launcher Java ──
+Old_YuyuFrame/
+
+# ── Copie OpenSource ──
+OpenSource/
+OpenSource/**
+
+# ── Graphify ──
+graphify-out/
+.graphifyignore
+
+# ── Mappings MC (générés localement) ──
+mappings/
+
+# ── Secrets ──
+.env
+!.env.example
+Launcher-Client/Backend/updater.key
