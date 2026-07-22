@@ -2,7 +2,7 @@ use tauri::{Emitter, Manager};
 
 use crate::commands::instance::crud::instance_dir;
 use crate::db;
-use crate::minecraft::{auth, launcher};
+use crate::minecraft::{auth, launcher, server_ping};
 use crate::state::{MinecraftSession, SharedState};
 
 #[tauri::command]
@@ -213,6 +213,13 @@ pub async fn launch_game(
 pub async fn list_saved_servers(instance_id: String) -> Result<Vec<launcher::SavedServer>, String> {
     let game_dir = instance_dir(&instance_id);
     launcher::read_saved_servers(&game_dir)
+}
+
+/// Server List Ping (voir `minecraft::server_ping`) — MOTD, joueurs en ligne,
+/// favicon et latence, affichés sur les cartes serveur de l'accueil.
+#[tauri::command]
+pub async fn ping_server(address: String) -> Result<server_ping::ServerPingInfo, String> {
+    server_ping::ping_server(&address).await
 }
 
 /// Demande l'annulation d'un lancement en cours — best-effort : coupe le

@@ -20,6 +20,15 @@ export interface SavedServer {
   ip: string
 }
 
+export interface ServerPingInfo {
+  motd: string
+  players_online: number
+  players_max: number
+  version_name: string
+  favicon: string | null
+  latency_ms: number
+}
+
 export interface YuyuPlanResp {
   plan: string
   plan_expires_at: number | null
@@ -95,6 +104,8 @@ export const api = {
       invoke<void>('cancel_launch', { instanceId }),
     listSavedServers: (instanceId: string) =>
       invoke<SavedServer[]>('list_saved_servers', { instanceId }),
+    pingServer: (address: string) =>
+      invoke<ServerPingInfo>('ping_server', { address }),
   },
 
   sync: {
