@@ -9,6 +9,8 @@ import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
 import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
+import { SkinPickerModal } from '@/components/account/SkinPickerModal'
+import { isOfflineAccount } from '@/lib/account'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
 
@@ -21,6 +23,7 @@ export default function Login() {
   const navigate = useNavigate()
   const { uuid, username, accounts, setAccounts, setUser, removeAccount, addAccount } = useStore()
   const [showOfflineModal, setShowOfflineModal] = useState(false)
+  const [skins, setSkins] = useState<Record<string, string>>({})
   const [step, setStep] = useState<Step>('idle')
   const [userCode, setUserCode] = useState('')
   const [verifyUrl, setVerifyUrl] = useState('')
@@ -107,6 +110,19 @@ export default function Login() {
       .catch(() => {})
   }, [])
 
+  // Charge le skin custom (voir OfflineAccountModal/skin.rs) des comptes hors
+  // ligne déjà connus — un seul appel par compte tant qu'il n'a pas encore
+  // été mis en cache (setSkin met aussi ce cache à jour directement).
+  useEffect(() => {
+    accounts
+      .filter((a) => isOfflineAccount(a.uuid) && !(a.uuid in skins))
+      .forEach((a) => {
+        api.mc.getSkin(a.uuid).then((dataUri) => {
+          if (dataUri) setSkins((s) => ({ ...s, [a.uuid]: dataUri }))
+        }).catch(() => {})
+      })
+  }, [accounts])
+
   useEffect(() => {
     if (!canvasRef.current || !canvasContainerRef.current) return
     const container = canvasContainerRef.current
@@ -142,12 +158,22 @@ export default function Login() {
     const viewer = viewerRef.current
     if (!viewer) return
     const displayUuid = previewUuid ?? uuid
-    if (displayUuid) {
+    if (displayUuid && isOfflineAccount(displayUuid)) {
+      // Pas de vrai skin Mojang pour un compte hors ligne — mc-heads.net n'a
+      // rien de pertinent pour cet UUID inventé, donc soit le skin custom
+      // (voir skins cache ci-dessus), soit rien du tout.
+      const custom = skins[displayUuid]
+      if (custom) {
+        ;(viewer.loadSkin(custom, { model: 'auto-detect' }) as Promise<void> | void)?.catch?.(() => {})
+      } else {
+        viewer.loadSkin(null)
+      }
+    } else if (displayUuid) {
       ;(viewer.loadSkin(`https://mc-heads.net/skin/${displayUuid}`, { model: 'auto-detect' }) as Promise<void> | void)?.catch?.(() => {})
     } else {
       viewer.loadSkin(null)
     }
-  }, [uuid, previewUuid])
+  }, [uuid, previewUuid, skins])
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -403,10 +429,12 @@ export default function Login() {
                 key={acc.uuid}
                 acc={acc}
                 isActive={acc.uuid === uuid}
+                skin={skins[acc.uuid]}
                 onSelect={() => handleSelect(acc)}
                 onRemove={() => handleRemove(acc)}
                 onHover={() => setPreviewUuid(acc.uuid)}
                 onLeave={() => setPreviewUuid(null)}
+                onSkinChange={(dataUri) => setSkins((s) => ({ ...s, [acc.uuid]: dataUri }))}
               />
             ))}
 
@@ -502,16 +530,20 @@ export default function Login() {
 }
 
 function AccountRow({
-  acc, isActive, onSelect, onRemove, onHover, onLeave,
+  acc, isActive, skin, onSelect, onRemove, onHover, onLeave, onSkinChange,
 }: {
   acc: Account
   isActive: boolean
+  skin?: string
   onSelect: () => void
   onRemove: () => void
   onHover: () => void
   onLeave: () => void
+  onSkinChange: (dataUri: string) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [showSkinPicker, setShowSkinPicker] = useState(false)
+  const offline = isOfflineAccount(acc.uuid)
 
   return (
     <div
@@ -525,21 +557,43 @@ function AccountRow({
       onMouseEnter={() => { setHovered(true); onHover() }}
       onMouseLeave={() => { setHovered(false); onLeave() }}
     >
-      {/* Avatar */}
+      {/* Avatar — les comptes hors ligne n'ont pas de vrai profil Mojang,
+          donc pas d'appel à mc-heads.net : soit la tête recadrée depuis le
+          skin custom (face 8×8 à l'offset (8,8) d'une texture 64×64), soit
+          la pastille avec l'initiale. */}
       <div className="relative flex-shrink-0">
-        <img
-          src={`https://mc-heads.net/avatar/${acc.uuid}/48`}
-          alt={acc.username}
-          className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-            const fb = e.currentTarget.nextElementSibling as HTMLElement | null
-            if (fb) fb.style.display = 'flex'
-          }}
-        />
-        <div className="hidden items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
-          {acc.username[0].toUpperCase()}
-        </div>
+        {offline ? (
+          skin ? (
+            <div
+              className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
+              style={{
+                backgroundImage: `url(${skin})`,
+                backgroundSize: '352px 352px',
+                backgroundPosition: '-44px -44px',
+              }}
+            />
+          ) : (
+            <div className="flex items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
+              {acc.username[0].toUpperCase()}
+            </div>
+          )
+        ) : (
+          <>
+            <img
+              src={`https://mc-heads.net/avatar/${acc.uuid}/48`}
+              alt={acc.username}
+              className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+                const fb = e.currentTarget.nextElementSibling as HTMLElement | null
+                if (fb) fb.style.display = 'flex'
+              }}
+            />
+            <div className="hidden items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
+              {acc.username[0].toUpperCase()}
+            </div>
+          </>
+        )}
         {isActive && (
           <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 bg-[#22c55e] border-[#09090D]" />
         )}
@@ -570,6 +624,17 @@ function AccountRow({
             Sélectionner
           </button>
         )}
+        {offline && (
+          <button
+            onClick={() => setShowSkinPicker(true)}
+            title="Changer de skin"
+            className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgba(255,255,255,0.7)] hover:border-[rgba(255,255,255,0.15)]"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="w-[13px] h-[13px]">
+              <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4V6z" />
+            </svg>
+          </button>
+        )}
         <button
           onClick={onRemove}
           className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgb(252,165,165)] hover:border-[rgba(200,50,50,0.3)] hover:bg-[rgba(200,50,50,0.08)]"
@@ -580,6 +645,14 @@ function AccountRow({
           </svg>
         </button>
       </div>
+
+      {showSkinPicker && (
+        <SkinPickerModal
+          uuid={acc.uuid}
+          onClose={() => setShowSkinPicker(false)}
+          onApplied={onSkinChange}
+        />
+      )}
     </div>
   )
 }

@@ -1,13 +1,15 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
+import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { BETA_TEST } from '@/config/beta'
+import { isOfflineAccount } from '@/lib/account'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -49,7 +51,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid } = useStore()
+  const [showOfflineReminder, setShowOfflineReminder] = useState(false)
+
+  useEffect(() => {
+    if (isConsoleWindow) return
+    if (uuid && isOfflineAccount(uuid)) setShowOfflineReminder(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (isConsoleWindow) return
@@ -83,6 +92,9 @@ export default function App() {
       <ErrorToast />
       <TitleBar />
       <UpdateChecker />
+      {showOfflineReminder && (
+        <OfflinePurchaseReminderModal onClose={() => setShowOfflineReminder(false)} />
+      )}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         <Suspense fallback={<RouteFallback />}>
           <Routes>

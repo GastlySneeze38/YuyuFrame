@@ -92,6 +92,10 @@ export const api = {
     switch: (uuid: string) => invoke<McAccountInfo>('mc_switch', { uuid }),
     delete: (uuid: string) => invoke<void>('mc_delete', { uuid }),
     addOffline: (username: string) => invoke<McAccountInfo>('mc_add_offline', { username }),
+    setSkin: (uuid: string, sourcePath: string) => invoke<string>('set_account_skin', { uuid, sourcePath }),
+    setSkinFromUrl: (uuid: string, url: string) => invoke<string>('set_account_skin_from_url', { uuid, url }),
+    getSkin: (uuid: string) => invoke<string | null>('get_account_skin', { uuid }),
+    removeSkin: (uuid: string) => invoke<void>('remove_account_skin', { uuid }),
   },
 
   launch: {
