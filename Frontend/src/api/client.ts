@@ -98,6 +98,15 @@ export const api = {
     removeSkin: (uuid: string) => invoke<void>('remove_account_skin', { uuid }),
   },
 
+  analytics: {
+    // Passerelle générique pour les événements sans contrepartie backend
+    // (clic, ouverture de modal, recherche...) — voir track_event côté Rust.
+    // Toujours résolu (jamais rejeté) : un échec d'envoi PostHog ne doit
+    // jamais faire planter l'action UI qui a déclenché le tracking.
+    track: (event: string, properties?: Record<string, unknown>) =>
+      invoke<void>('track_event', { event, properties }).catch(() => {}),
+  },
+
   launch: {
     start: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string) =>
       invoke<void>('launch_game', { instanceId, avoidBeta, showConsole, connectServer }),

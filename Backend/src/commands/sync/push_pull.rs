@@ -215,7 +215,11 @@ pub async fn sync_push_instance(
         label: "Synchronisé !".into(),
     }).ok();
 
-    data_resp.json::<SyncInstance>().await.map_err(|e| e.to_string())
+    let result: SyncInstance = data_resp.json().await.map_err(|e| e.to_string())?;
+    crate::integrations::analytics::capture("sync_push_succeeded", serde_json::json!({
+        "instance_id": &instance_id,
+    }));
+    Ok(result)
 }
 
 #[tauri::command]
@@ -360,6 +364,9 @@ pub async fn sync_pull_instance(
         }));
     }
 
+    crate::integrations::analytics::capture("sync_pull_succeeded", serde_json::json!({
+        "instance_id": &instance_id,
+    }));
     Ok(())
 }
 

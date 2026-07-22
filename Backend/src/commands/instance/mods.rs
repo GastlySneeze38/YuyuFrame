@@ -181,6 +181,9 @@ pub async fn mods_install(
         .await
         .unwrap_or_default();
 
+    crate::integrations::analytics::capture("mod_install_succeeded", serde_json::json!({
+        "instance_id": &instance_id,
+    }));
     Ok(ModInfo { name: safe_name, size: bytes.len() as u64, enabled: true, sha1 })
 }
 

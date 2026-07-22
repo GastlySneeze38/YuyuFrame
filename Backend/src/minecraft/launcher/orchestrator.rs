@@ -68,6 +68,13 @@ pub async fn download_and_launch(
     connect_server: Option<&str>,
     cancel: watch::Receiver<bool>,
 ) -> Result<Vec<String>> {
+    let launch_start = std::time::Instant::now();
+    crate::integrations::analytics::capture("download_started", serde_json::json!({
+        "instance_id": instance_id,
+        "mc_version": version_id,
+        "loader": loader.unwrap_or("vanilla"),
+    }));
+
     let mc_dir = minecraft_dir();
     tokio::fs::create_dir_all(game_dir).await?;
     let versions_dir = mc_dir.join("versions").join(version_id);
@@ -368,6 +375,10 @@ pub async fn download_and_launch(
     // frontend reconnaît ce palier pile pour démarrer sa propre estimation de
     // la phase de lancement (60-100%, voir Home.tsx).
     set_progress_monotonic(&app, &progress_floor, 100, 100, "Lancement de Minecraft...");
+    crate::integrations::analytics::capture("download_completed", serde_json::json!({
+        "instance_id": instance_id,
+        "mc_version": version_id,
+    }));
 
     let classpath_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
 
@@ -474,6 +485,10 @@ pub async fn download_and_launch(
                 if trimmed.contains("[YUYUFRAME_READY]")
                     && ready_sent_stdout.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
                 {
+                    crate::integrations::analytics::capture("launch_completed", serde_json::json!({
+                        "instance_id": &instance_id_out,
+                        "duration_ms": launch_start.elapsed().as_millis() as u64,
+                    }));
                     let _ = app_out.emit("game_ready", serde_json::json!({ "instance_id": &instance_id_out }));
                 }
                 // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
@@ -506,7 +521,7 @@ pub async fn download_and_launch(
     // avec la détection stdout ci-dessus, `ready_sent` partagé garantit qu'un
     // seul des trois canaux émet l'événement.
     let agent_log_path = launcher_agent_dir().join("logs").join("launcher-agent.log");
-    tokio::spawn(watch_agent_log_for_ready(agent_log_path, stop_flag_ready, ready_sent_file, app.clone(), instance_id.to_string()));
+    tokio::spawn(watch_agent_log_for_ready(agent_log_path, stop_flag_ready, ready_sent_file, app.clone(), instance_id.to_string(), launch_start));
 
     // Canal principal game_ready : Named Event Win32 (voir ready_event.rs) —
     // créé plus haut, avant le spawn, pour que son nom soit dans l'argument
@@ -515,7 +530,7 @@ pub async fn download_and_launch(
     match ready_event {
         Some((_, handle)) => {
             tracing::info!("[ReadyEvent] spawn de wait_for_ready_event (handle={:#x})", handle);
-            tokio::spawn(wait_for_ready_event(handle, stop_flag_event, ready_sent_event, app.clone(), instance_id.to_string()));
+            tokio::spawn(wait_for_ready_event(handle, stop_flag_event, ready_sent_event, app.clone(), instance_id.to_string(), launch_start));
         }
         None => tracing::info!("[ReadyEvent] pas d'event créé — repli sur stdout/fichier uniquement pour ce lancement"),
     }

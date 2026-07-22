@@ -111,6 +111,10 @@ pub async fn instance_create(
     let db = s.db.lock().await;
     db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description)
         .map_err(|e| e.to_string())?;
+    crate::integrations::analytics::capture("instance_created", serde_json::json!({
+        "mc_version": &mc_version,
+        "loader": &loader,
+    }));
     Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description })
 }
 

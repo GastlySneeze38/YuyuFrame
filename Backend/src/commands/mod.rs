@@ -1,4 +1,5 @@
 pub mod account;
+pub mod analytics;
 pub mod instance;
 pub mod launch;
 pub mod sync;

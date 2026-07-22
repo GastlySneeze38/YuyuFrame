@@ -22,6 +22,10 @@ function SyncContent() {
   const cloudLoaded = useRef(false)
 
   useEffect(() => {
+    api.analytics.track('sync_page_viewed')
+  }, [])
+
+  useEffect(() => {
     if (!yuyuToken || cloudLoaded.current) return
     cloudLoaded.current = true
     setCloudLoading(true)

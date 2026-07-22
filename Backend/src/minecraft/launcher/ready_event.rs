@@ -63,6 +63,7 @@ pub(super) async fn wait_for_ready_event(
     ready_sent: Arc<AtomicBool>,
     app: tauri::AppHandle,
     instance_id: String,
+    launch_start: std::time::Instant,
 ) {
     tracing::info!("[ReadyEvent] wait_for_ready_event démarré (handle={:#x}, instance={})", handle_raw, instance_id);
     let mut iterations: u64 = 0;
@@ -89,6 +90,10 @@ pub(super) async fn wait_for_ready_event(
         if code == WAIT_OBJECT_0 {
             tracing::info!("[ReadyEvent] WAIT_OBJECT_0 reçu après {} itérations — émission game_ready", iterations);
             if ready_sent.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+                crate::integrations::analytics::capture("launch_completed", serde_json::json!({
+                    "instance_id": &instance_id,
+                    "duration_ms": launch_start.elapsed().as_millis() as u64,
+                }));
                 let emit_result = app.emit("game_ready", serde_json::json!({ "instance_id": &instance_id }));
                 tracing::info!("[ReadyEvent] app.emit(game_ready) résultat : {:?}", emit_result);
             } else {
@@ -110,5 +115,6 @@ pub(super) async fn wait_for_ready_event(
     _ready_sent: Arc<AtomicBool>,
     _app: tauri::AppHandle,
     _instance_id: String,
+    _launch_start: std::time::Instant,
 ) {
 }

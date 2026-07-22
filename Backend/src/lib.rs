@@ -158,6 +158,7 @@ pub fn run() {
             commands::launch::cancel_launch,
             commands::launch::reload_agent,
             commands::launch::console_ready,
+            commands::analytics::track_event,
             commands::launch::list_saved_servers,
             commands::launch::ping_server,
             commands::instance::mods::mods_list,

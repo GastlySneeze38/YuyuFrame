@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
 import type { Instance, Loader } from '@/types'
 import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
@@ -74,6 +74,15 @@ export function CreateInstanceModal({
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Création...')
 
+  // Un id par ouverture de modal — partagé par tous les événements de cette
+  // tentative pour que PostHog puisse reconstituer le funnel de création
+  // proprement, même si l'utilisateur rouvre la modal plusieurs fois.
+  const flowId = useRef(crypto.randomUUID())
+
+  useEffect(() => {
+    api.analytics.track('instance_create_modal_opened', { flow_id: flowId.current })
+  }, [])
+
   useEffect(() => {
     if (versions.length > 0 && !mcVersion) setMcVersion(versions[0])
   }, [versions])
@@ -84,6 +93,7 @@ export function CreateInstanceModal({
     setMcVersion(preset.mcVersion)
     setLoader(preset.loader)
     setRam(preset.ramMb)
+    api.analytics.track('instance_create_preset_selected', { flow_id: flowId.current, preset_id: preset.id })
   }
 
   const handleSwitchMode = (m: 'blank' | 'preset') => {
@@ -95,13 +105,20 @@ export function CreateInstanceModal({
       setMcVersion(versions[0] ?? '')
       setLoader('vanilla')
       setRam(defaultRam)
+      api.analytics.track('instance_create_from_scratch_selected', { flow_id: flowId.current })
     }
+  }
+
+  const handleVersionChange = (v: string) => {
+    setMcVersion(v)
+    api.analytics.track('instance_create_version_changed', { flow_id: flowId.current, mc_version: v })
   }
 
   const handleCreate = async () => {
     if (!name.trim()) { showError('Nom requis'); return }
     if (!mcVersion) { showError('Sélectionne une version'); return }
     setLoading(true); setLoadingLabel('Création...')
+    api.analytics.track('instance_create_submitted', { flow_id: flowId.current, mc_version: mcVersion, loader })
     try {
       const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim())
       if (selectedPreset) {
@@ -149,13 +166,13 @@ export function CreateInstanceModal({
 
             {mode === 'blank' ? (
               <div className="flex gap-3">
-                <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} className="flex-1" />
+                <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} className="flex-1" />
                 <LoaderPicker value={loader} onChange={setLoader} />
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <div className="flex items-end gap-3">
-                  <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} className="flex-1" />
+                  <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} className="flex-1" />
                   <div className="flex h-[40px] items-center gap-1.5 rounded-xl px-3 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
                     <span className="text-[11px] font-semibold" style={{ color: loaderColor(loader) }}>{loader}</span>
                   </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { api } from '@/api/client'
 import type { Mod } from '@/types'
 import { formatBytes, formatDownloadCount } from '@/lib/format'
 import { Spinner } from '@/components/ui/Spinner'
@@ -36,6 +37,7 @@ export function ModDetailModal({
   const [installingId, setInstallingId] = useState<string | null>(null)
 
   useEffect(() => {
+    api.analytics.track('mod_detail_opened', { project_id: hit.project_id })
     fetchProjectDetail(hit.project_id).then(setDetail)
   }, [hit.project_id])
 

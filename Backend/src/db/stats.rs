@@ -42,6 +42,17 @@ pub fn session_start(
     Ok(conn.last_insert_rowid())
 }
 
+/// Nombre de sessions déjà enregistrées pour cette instance — 0 signifie
+/// qu'un lancement en cours sera le tout premier (voir capture analytics
+/// `instance_first_launch` dans commands/launch.rs).
+pub fn instance_session_count(conn: &Connection, instance_id: &str) -> Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM play_sessions WHERE instance_id = ?1",
+        [instance_id],
+        |r| r.get(0),
+    ).map_err(Into::into)
+}
+
 pub fn session_end(conn: &Connection, session_id: i64, duration_secs: i64) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(

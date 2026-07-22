@@ -52,6 +52,15 @@ pub async fn launch_game(
     let game_dir = instance_dir(&instance_id);
     tokio::fs::create_dir_all(&game_dir).await.map_err(|e| e.to_string())?;
 
+    crate::integrations::analytics::capture("launch_started", serde_json::json!({
+        "instance_id": &instance_id,
+        "mc_version": &instance.mc_version,
+        "loader": &instance.loader,
+        "p2p": p2p.unwrap_or(false),
+        "avoid_beta_dependencies": avoid_beta.unwrap_or(true),
+        "connect_server": connect_server.is_some(),
+    }));
+
     // Open or reopen the console window (label unique par instance) — sauf si
     // l'utilisateur a désactivé l'affichage de la console dans les réglages.
     // Le jeu se lance identiquement dans les deux cas (log_to_console tombe
@@ -126,6 +135,16 @@ pub async fn launch_game(
         let session_id: Option<i64> = {
             let s = state_clone.read().await;
             let db = s.db.lock().await;
+            // Vérifié AVANT session_start (qui insère la ligne courante) —
+            // sinon le count inclurait déjà ce lancement et ne serait jamais 0.
+            let is_first_launch = db::instance_session_count(&db, &instance.id).unwrap_or(1) == 0;
+            if is_first_launch {
+                crate::integrations::analytics::capture("instance_first_launch", serde_json::json!({
+                    "instance_id": &instance.id,
+                    "mc_version": &instance.mc_version,
+                    "loader": &instance.loader,
+                }));
+            }
             db::session_start(
                 &db,
                 yuyu_user_id,
@@ -168,10 +187,17 @@ pub async fn launch_game(
             }
             Ok(_) => {}
             Err(e) if e.to_string() == launcher::LAUNCH_CANCELLED_MSG => {
+                crate::integrations::analytics::capture("launch_cancelled", serde_json::json!({
+                    "instance_id": &instance_id,
+                }));
                 let _ = app.emit("launch_cancelled", &instance_id);
             }
             Err(e) => {
                 tracing::error!("Erreur de lancement: {}", e);
+                crate::integrations::analytics::capture("launch_error", serde_json::json!({
+                    "instance_id": &instance_id,
+                    "message": e.to_string(),
+                }));
                 let _ = app.emit("launch_error", e.to_string());
             }
         }

@@ -172,6 +172,7 @@ pub(super) async fn watch_agent_log_for_ready(
     ready_sent: Arc<AtomicBool>,
     app: tauri::AppHandle,
     instance_id: String,
+    launch_start: std::time::Instant,
 ) {
     let mut pos: u64 = tokio::fs::metadata(&log_path).await.map(|m| m.len()).unwrap_or(0);
 
@@ -194,6 +195,10 @@ pub(super) async fn watch_agent_log_for_ready(
                                     if line.contains("[YUYUFRAME_READY]")
                                         && ready_sent.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
                                     {
+                                        crate::integrations::analytics::capture("launch_completed", serde_json::json!({
+                                            "instance_id": &instance_id,
+                                            "duration_ms": launch_start.elapsed().as_millis() as u64,
+                                        }));
                                         let _ = app.emit("game_ready", serde_json::json!({ "instance_id": &instance_id }));
                                         return;
                                     }

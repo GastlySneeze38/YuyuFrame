@@ -235,6 +235,7 @@ export default function Home() {
   const handleLaunch = () => launch()
 
   const handleServerClick = (server: SavedServer) => {
+    api.analytics.track('server_card_clicked', { instance_id: selectedInstanceId })
     if (confirmServerLaunch) setPendingServer(server)
     else launch(server.ip)
   }

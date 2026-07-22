@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
@@ -46,6 +46,10 @@ export default function Plans() {
   const [checkoutState, setCheckoutState] = useState<'idle' | 'loading' | 'waiting' | 'success' | 'timeout' | 'error'>('idle')
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
+  useEffect(() => {
+    api.analytics.track('plans_page_viewed')
+  }, [])
+
   const handleRefresh = async () => {
     setRefreshing(true)
     setRefreshMsg(null)
@@ -74,6 +78,7 @@ export default function Plans() {
       }
       const { checkout_url } = await api.yuyu.createCheckout(planId)
       await open(checkout_url)
+      api.analytics.track('checkout_redirected', { plan: planId })
       setCheckoutState('waiting')
       // Polling toutes les 3s pendant 60s max
       for (let i = 0; i < 20; i++) {

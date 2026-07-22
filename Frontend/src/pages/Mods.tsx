@@ -326,6 +326,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const runSearch = async (q: string) => {
     setSearching(true)
+    if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim() })
     try {
       setResults(await fetchModrinthSearch(q, mcVersion, loader))
     } catch {

@@ -219,6 +219,16 @@ pub async fn yuyu_refresh_plan(state: tauri::State<'_, SharedState>) -> Result<P
     {
         let mut s = state.write().await;
         if let Some(session) = s.yuyu_session.as_mut() {
+            // Détecte une transition free → premium/ultimate pour approximer
+            // "checkout terminé" côté client — le webhook Lemon Squeezy qui
+            // confirme réellement le paiement arrive sur LauncherAPI, pas ici,
+            // donc ce launcher ne peut qu'observer le résultat après coup, au
+            // prochain refresh_plan (polling déjà en place côté Plans.tsx).
+            let was_free = session.plan != "premium" && session.plan != "ultimate";
+            let now_paid = data.plan == "premium" || data.plan == "ultimate";
+            if was_free && now_paid {
+                crate::integrations::analytics::capture("checkout_completed", serde_json::json!({ "plan": &data.plan }));
+            }
             session.plan = data.plan.clone();
             session.plan_expires_at = data.plan_expires_at;
         }
@@ -263,6 +273,7 @@ pub async fn yuyu_create_checkout(
     }
 
     let data: ApiCheckoutResp = resp.json().await.map_err(|e| e.to_string())?;
+    crate::integrations::analytics::capture("checkout_started", serde_json::json!({ "plan": &plan }));
     Ok(CheckoutResp { checkout_url: data.checkout_url })
 }
 

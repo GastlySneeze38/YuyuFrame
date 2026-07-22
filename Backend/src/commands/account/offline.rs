@@ -61,5 +61,6 @@ pub async fn mc_add_offline(
         expires_at: NEVER_EXPIRES,
     });
 
+    crate::integrations::analytics::capture("offline_account_created", serde_json::json!({}));
     Ok(AccountInfo { mc_username: username, mc_uuid: uuid, is_active: true })
 }

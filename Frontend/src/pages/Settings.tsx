@@ -1,4 +1,5 @@
 import { useStore } from '@/stores/useStore'
+import { api } from '@/api/client'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
 
@@ -100,7 +101,10 @@ export default function Settings() {
                     Remplace les cartes d'aperçu des fonctionnalités par un raccourci vers tes serveurs enregistrés (jusqu'à 3 favoris) pour l'instance sélectionnée
                   </p>
                 </div>
-                <Toggle checked={showHomeServers} onChange={() => setShowHomeServers(!showHomeServers)} />
+                <Toggle checked={showHomeServers} onChange={() => {
+                  setShowHomeServers(!showHomeServers)
+                  api.analytics.track(showHomeServers ? 'home_servers_setting_disabled' : 'home_servers_setting_enabled')
+                }} />
               </div>
 
               <div className="h-px bg-white/6" />

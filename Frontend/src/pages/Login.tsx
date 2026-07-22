@@ -412,7 +412,7 @@ export default function Login() {
             </div>
 
             <button
-              onClick={() => setShowOfflineModal(true)}
+              onClick={() => { setShowOfflineModal(true); api.analytics.track('offline_account_modal_opened') }}
               title="Compte hors ligne"
               className="flex h-8 flex-shrink-0 items-center justify-center rounded-full border border-[rgba(255,255,255,0.15)] px-3.5 text-[rgba(255,255,255,0.35)] transition-colors hover:border-[rgba(255,255,255,0.4)] hover:text-white"
             >
