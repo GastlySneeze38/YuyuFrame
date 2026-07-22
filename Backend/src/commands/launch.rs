@@ -13,6 +13,7 @@ pub async fn launch_game(
     p2p: Option<bool>,
     avoid_beta: Option<bool>,
     show_console: Option<bool>,
+    connect_server: Option<String>,
 ) -> Result<(), String> {
     let session = {
         let s = state.read().await;
@@ -148,6 +149,7 @@ pub async fn launch_game(
             avoid_beta.unwrap_or(true),
             &window_label,
             &instance_id,
+            connect_server.as_deref(),
             cancel_rx,
         )
         .await
@@ -201,6 +203,16 @@ pub async fn launch_game(
     });
 
     Ok(())
+}
+
+/// Liste les serveurs multijoueur enregistrés dans `servers.dat` de
+/// l'instance (voir `minecraft::launcher::servers`) — utilisé pour proposer
+/// un lancement direct sur l'un d'eux via `launch_game(connect_server: ...)`.
+/// Liste vide (pas d'erreur) si l'instance n'a encore aucun serveur enregistré.
+#[tauri::command]
+pub async fn list_saved_servers(instance_id: String) -> Result<Vec<launcher::SavedServer>, String> {
+    let game_dir = instance_dir(&instance_id);
+    launcher::read_saved_servers(&game_dir)
 }
 
 /// Demande l'annulation d'un lancement en cours — best-effort : coupe le

@@ -153,6 +153,7 @@ pub fn run() {
             commands::launch::cancel_launch,
             commands::launch::reload_agent,
             commands::launch::console_ready,
+            commands::launch::list_saved_servers,
             commands::instance::mods::mods_list,
             commands::instance::mods::mods_toggle,
             commands::instance::mods::mods_delete,

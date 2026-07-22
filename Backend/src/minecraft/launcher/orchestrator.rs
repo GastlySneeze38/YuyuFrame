@@ -20,6 +20,7 @@ use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, LoaderSetup};
 use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready};
 use super::ready_event::{create_ready_event, wait_for_ready_event};
+use super::servers::build_server_connect_args;
 
 /// Message d'erreur sentinelle renvoyé par `download_and_launch` quand l'arrêt
 /// vient d'une annulation demandée par l'utilisateur (`cancel_launch`), pour
@@ -64,6 +65,7 @@ pub async fn download_and_launch(
     avoid_beta: bool,
     console_label: &str,
     instance_id: &str,
+    connect_server: Option<&str>,
     cancel: watch::Receiver<bool>,
 ) -> Result<Vec<String>> {
     let mc_dir = minecraft_dir();
@@ -393,6 +395,10 @@ pub async fn download_and_launch(
     args.extend(["-cp".to_string(), classpath_str, main_class]);
     args.extend(build_game_args(&details, session, &mc_game_dir, &assets_dir, version_id));
     args.extend(extra_game_args);
+    if let Some(address) = connect_server {
+        log_to_console(&app, &console_label, &format!("Connexion directe au serveur {}...", address), "out");
+        args.extend(build_server_connect_args(version_id, address));
+    }
     // NB : pas de sleep ici avant de spawner Java. La synchro avec la fenêtre
     // console (attendre que Console.tsx ait attaché son listener game_log)
     // est déjà faite bien plus tôt, dans commands/launch.rs, via

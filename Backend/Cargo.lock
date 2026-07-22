@@ -1282,6 +1282,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
+name = "fastnbt"
+version = "2.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c075c8f2b92819bec6af26321830809f47574c72fd5b53ce81436bbac54bcea"
+dependencies = [
+ "byteorder",
+ "cesu8",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5050,6 +5062,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7891,6 +7913,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "discord-rich-presence",
+ "fastnbt",
  "futures",
  "libp2p",
  "rand 0.8.6",
