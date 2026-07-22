@@ -15,6 +15,11 @@ export interface YuyuLoginResp {
   accounts: McAccountInfo[]
 }
 
+export interface SavedServer {
+  name: string
+  ip: string
+}
+
 export interface YuyuPlanResp {
   plan: string
   plan_expires_at: number | null
@@ -80,14 +85,16 @@ export const api = {
   },
 
   launch: {
-    start: (instanceId: string, avoidBeta = true, showConsole = true) =>
-      invoke<void>('launch_game', { instanceId, avoidBeta, showConsole }),
-    startP2p: (instanceId: string, avoidBeta = true, showConsole = true) =>
-      invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta, showConsole }),
+    start: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string) =>
+      invoke<void>('launch_game', { instanceId, avoidBeta, showConsole, connectServer }),
+    startP2p: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string) =>
+      invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta, showConsole, connectServer }),
     reloadAgent: () =>
       invoke<void>('reload_agent'),
     cancel: (instanceId: string) =>
       invoke<void>('cancel_launch', { instanceId }),
+    listSavedServers: (instanceId: string) =>
+      invoke<SavedServer[]>('list_saved_servers', { instanceId }),
   },
 
   sync: {

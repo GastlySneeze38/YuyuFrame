@@ -7,6 +7,7 @@ export default function Settings() {
     brightness, setBrightness, defaultRam, setDefaultRam, closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
+    showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
   } = useStore()
 
   return (
@@ -87,6 +88,32 @@ export default function Settings() {
                   </p>
                 </div>
                 <Toggle checked={showConsole} onChange={() => setShowConsole(!showConsole)} />
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Raccourcis serveurs sur l'accueil */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Afficher mes serveurs sur l'accueil</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    Remplace les cartes d'aperçu des fonctionnalités par un raccourci vers tes serveurs enregistrés (jusqu'à 3 favoris) pour l'instance sélectionnée
+                  </p>
+                </div>
+                <Toggle checked={showHomeServers} onChange={() => setShowHomeServers(!showHomeServers)} />
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Confirmation avant lancement direct sur un serveur */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Confirmer avant de lancer sur un serveur</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    Demande confirmation avant de rejoindre directement un serveur enregistré depuis l'accueil
+                  </p>
+                </div>
+                <Toggle checked={confirmServerLaunch} onChange={() => setConfirmServerLaunch(!confirmServerLaunch)} />
               </div>
 
               <div className="h-px bg-white/6" />

@@ -8,6 +8,10 @@ import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
+import { ServerCard } from '@/components/servers/ServerCard'
+import { ServerManageModal } from '@/components/servers/ServerManageModal'
+import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
+import type { SavedServer } from '@/api/client'
 
 interface DownloadProgress {
   current: number
@@ -58,6 +62,9 @@ export default function Home() {
     avoidBetaDependencies,
     showConsole,
     launchPhaseDurations, recordLaunchPhaseDuration,
+    showHomeServers,
+    confirmServerLaunch,
+    favoriteServers, toggleFavoriteServer,
   } = useStore()
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
@@ -68,6 +75,9 @@ export default function Home() {
   const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
   const [bannerAnimating, setBannerAnimating] = useState(false)
+  const [savedServers, setSavedServers] = useState<SavedServer[]>([])
+  const [showServerManage, setShowServerManage] = useState(false)
+  const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
 
   const instance = selectedInstance()
 
@@ -108,6 +118,21 @@ export default function Home() {
       }
     }).catch(showError)
   }, [])
+
+  // Liste des serveurs enregistrés (servers.dat) de l'instance sélectionnée —
+  // seulement si le réglage "afficher mes serveurs sur l'accueil" est actif,
+  // pour ne pas faire cet appel IPC inutilement sinon (voir Settings.tsx).
+  useEffect(() => {
+    if (!showHomeServers || !selectedInstanceId) {
+      setSavedServers([])
+      return
+    }
+    let cancelled = false
+    api.launch.listSavedServers(selectedInstanceId).then((list) => {
+      if (!cancelled) setSavedServers(list)
+    }).catch(() => { if (!cancelled) setSavedServers([]) })
+    return () => { cancelled = true }
+  }, [showHomeServers, selectedInstanceId])
 
   useTauriEvent<DownloadProgress>('download_progress', (payload) => {
     setProgress(payload)
@@ -184,14 +209,14 @@ export default function Home() {
     setBannerAnimating((v) => !v)
   }
 
-  const handleLaunch = async () => {
+  const launch = async (connectServer?: string) => {
     if (!selectedInstanceId || gameRunning || !username) return
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
     setLaunchMsg('')
     try {
-      if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole)
-      else await api.launch.start(selectedInstanceId, avoidBetaDependencies, showConsole)
+      if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
+      else await api.launch.start(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
       setInstanceRunning(selectedInstanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
       if (closeOnLaunch) getCurrentWindow().hide()
@@ -204,6 +229,28 @@ export default function Home() {
       setLaunchMsg(message)
     }
   }
+
+  // Wrapper sans argument — passé tel quel à onClick du bouton principal, qui
+  // lui injecterait sinon l'événement du clic à la place de `connectServer`.
+  const handleLaunch = () => launch()
+
+  const handleServerClick = (server: SavedServer) => {
+    if (confirmServerLaunch) setPendingServer(server)
+    else launch(server.ip)
+  }
+
+  const handleToggleFavorite = (ip: string) => {
+    if (!selectedInstanceId) return
+    if (!toggleFavoriteServer(selectedInstanceId, ip)) {
+      showNotice('Maximum 3 serveurs épinglés — désépingle-en un d’abord')
+    }
+  }
+
+  const favoriteIps = selectedInstanceId ? favoriteServers[selectedInstanceId] ?? [] : []
+  const displayedServers = savedServers.length <= 3
+    ? savedServers
+    : savedServers.filter((s) => favoriteIps.includes(s.ip))
+  const serverSlots: (SavedServer | null)[] = Array.from({ length: 3 }, (_, i) => displayedServers[i] ?? null)
 
   const canLaunch = !!selectedInstanceId && !!username && !gameRunning
   const percent = progress && progress.total > 0
@@ -487,27 +534,68 @@ export default function Home() {
         {/* Zone principale — s'étire pour remplir l'espace disponible */}
         <div className="flex flex-1 flex-col gap-4">
 
-        {/* Feature cards — explicatif */}
+        {/* Feature cards — explicatif — remplacées par les raccourcis serveurs
+            si l'utilisateur a activé "Afficher mes serveurs sur l'accueil"
+            (voir Settings.tsx) : même gabarit (3 cartes flex-1), juste le
+            contenu qui change. */}
         <div className="flex items-stretch gap-2">
-          {FEATURES.map((f, i) => {
-            const betaLocked = BETA_TEST && (f.path === '/sync')
-            return (
-            <div
-              key={i}
-              onClick={f.path && !betaLocked ? () => navigate(f.path!) : undefined}
-              className={`flex flex-1 flex-col gap-1.5 rounded-xl px-3 py-2.5 transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${betaLocked ? 'cursor-not-allowed opacity-60' : f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path && !betaLocked ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
-            >
-              <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.35)]">
-                {f.icon}
-                <span className="text-[10px] font-bold text-[rgba(255,255,255,0.6)] whitespace-nowrap">
-                  {f.title}
-                </span>
+          {showHomeServers ? (
+            <>
+              {serverSlots.map((server, i) =>
+                server ? (
+                  <ServerCard
+                    key={server.ip}
+                    server={server}
+                    className="flex-1"
+                    onClick={() => handleServerClick(server)}
+                  />
+                ) : (
+                  <div
+                    key={`empty-${i}`}
+                    onClick={savedServers.length > 3 ? () => setShowServerManage(true) : undefined}
+                    className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-3 py-2.5 text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[9px] transition-all duration-200 ${savedServers.length > 3 ? 'cursor-pointer hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]' : ''}`}
+                  >
+                    {savedServers.length === 0
+                      ? 'Aucun serveur enregistré'
+                      : savedServers.length > 3
+                        ? 'Aucun serveur épinglé'
+                        : 'Aucun autre serveur'}
+                  </div>
+                )
+              )}
+              {savedServers.length > 3 && (
+                <button
+                  onClick={() => setShowServerManage(true)}
+                  title="Tous les serveurs"
+                  className="flex-shrink-0 flex items-center justify-center w-9 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)] hover:text-white"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                    <circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" />
+                  </svg>
+                </button>
+              )}
+            </>
+          ) : (
+            FEATURES.map((f, i) => {
+              const betaLocked = BETA_TEST && (f.path === '/sync')
+              return (
+              <div
+                key={i}
+                onClick={f.path && !betaLocked ? () => navigate(f.path!) : undefined}
+                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-3 py-2.5 transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${betaLocked ? 'cursor-not-allowed opacity-60' : f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path && !betaLocked ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
+              >
+                <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.35)]">
+                  {f.icon}
+                  <span className="text-[10px] font-bold text-[rgba(255,255,255,0.6)] whitespace-nowrap">
+                    {f.title}
+                  </span>
+                </div>
+                <p className="text-[9px] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
+                  {f.desc}
+                </p>
               </div>
-              <p className="text-[9px] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
-                {f.desc}
-              </p>
-            </div>
-          )})}
+            )})
+          )}
         </div>
 
         {/* Brand | Nav | Promo — 3 colonnes égales, alignées en haut */}
@@ -651,6 +739,24 @@ export default function Home() {
           selectedInstanceId={selectedInstanceId}
           onClose={() => setShowInstanceSwitch(false)}
           onSelect={setSelectedInstanceId}
+        />
+      )}
+
+      {showServerManage && (
+        <ServerManageModal
+          servers={savedServers}
+          favorites={favoriteIps}
+          onToggleFavorite={handleToggleFavorite}
+          onClose={() => setShowServerManage(false)}
+          onLaunch={(server) => handleServerClick(server)}
+        />
+      )}
+
+      {pendingServer && (
+        <ServerConfirmModal
+          server={pendingServer}
+          onClose={() => setPendingServer(null)}
+          onConfirm={() => { launch(pendingServer.ip); setPendingServer(null) }}
         />
       )}
     </div>

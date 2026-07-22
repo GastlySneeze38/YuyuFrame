@@ -69,6 +69,12 @@ interface Store {
   showConsole: boolean
   setShowConsole: (v: boolean) => void
 
+  showHomeServers: boolean
+  setShowHomeServers: (v: boolean) => void
+
+  confirmServerLaunch: boolean
+  setConfirmServerLaunch: (v: boolean) => void
+
   // ── Game state (par instance) ─────────────────────────────────────────────
   runningInstances: string[]
   isInstanceRunning: (id: string) => boolean
@@ -94,6 +100,14 @@ interface Store {
   // au lieu de la laisser figée pendant cette phase (voir Home.tsx).
   launchPhaseDurations: Record<string, number>
   recordLaunchPhaseDuration: (instanceId: string, ms: number) => void
+
+  // ── Serveurs épinglés sur l'accueil (persisté), par instance — voir
+  // ServerManageModal. Max 3 par instance (correspond aux 3 slots de la
+  // rangée sur Home.tsx) : toggleFavoriteServer renvoie `false` sans rien
+  // changer si on tente d'en épingler un 4ᵉ.
+  favoriteServers: Record<string, string[]>
+  isServerFavorite: (instanceId: string, ip: string) => boolean
+  toggleFavoriteServer: (instanceId: string, ip: string) => boolean
 }
 
 export const useStore = create<Store>()(
@@ -207,6 +221,12 @@ export const useStore = create<Store>()(
       showConsole: true,
       setShowConsole: (showConsole) => set({ showConsole }),
 
+      showHomeServers: false,
+      setShowHomeServers: (showHomeServers) => set({ showHomeServers }),
+
+      confirmServerLaunch: true,
+      setConfirmServerLaunch: (confirmServerLaunch) => set({ confirmServerLaunch }),
+
       // Game (multi-instance)
       runningInstances: [],
       isInstanceRunning: (id) => get().runningInstances.includes(id),
@@ -247,6 +267,18 @@ export const useStore = create<Store>()(
           const next = prev ? Math.round(prev * 0.7 + ms * 0.3) : ms
           return { launchPhaseDurations: { ...s.launchPhaseDurations, [instanceId]: next } }
         }),
+
+      // Serveurs épinglés
+      favoriteServers: {},
+      isServerFavorite: (instanceId, ip) => !!get().favoriteServers[instanceId]?.includes(ip),
+      toggleFavoriteServer: (instanceId, ip) => {
+        const current = get().favoriteServers[instanceId] ?? []
+        const isFav = current.includes(ip)
+        if (!isFav && current.length >= 3) return false
+        const next = isFav ? current.filter((x) => x !== ip) : [...current, ip]
+        set((s) => ({ favoriteServers: { ...s.favoriteServers, [instanceId]: next } }))
+        return true
+      },
     }),
     {
       name: 'yuyuframe-store',
@@ -260,11 +292,14 @@ export const useStore = create<Store>()(
         avoidBetaDependencies: s.avoidBetaDependencies,
         syncGameSettings: s.syncGameSettings,
         showConsole: s.showConsole,
+        showHomeServers: s.showHomeServers,
+        confirmServerLaunch: s.confirmServerLaunch,
         username: s.username,
         uuid: s.uuid,
         lastSession: s.lastSession,
         pinnedMods: s.pinnedMods,
         launchPhaseDurations: s.launchPhaseDurations,
+        favoriteServers: s.favoriteServers,
       }),
     }
   )
