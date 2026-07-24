@@ -123,6 +123,7 @@ pub async fn yuyu_login(
             mc_username: row.mc_username.clone(),
             mc_uuid: row.mc_uuid.clone(),
             is_active,
+            is_offline: row.is_offline,
         });
 
         if is_active {

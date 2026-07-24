@@ -42,6 +42,7 @@ export interface McAccountInfo {
   mc_username: string
   mc_uuid: string
   is_active: boolean
+  is_offline: boolean
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────

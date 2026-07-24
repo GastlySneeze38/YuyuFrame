@@ -15,7 +15,7 @@ export function OfflineAccountModal({
   onAdded,
 }: {
   onClose: () => void
-  onAdded: (acc: { username: string; uuid: string }) => void
+  onAdded: (acc: { username: string; uuid: string; is_offline: boolean }) => void
 }) {
   const [username, setUsername] = useState('')
   const [skinSource, setSkinSource] = useState<SkinSource | null>(null)
@@ -35,7 +35,7 @@ export function OfflineAccountModal({
           showError(e)
         }
       }
-      onAdded({ username: acc.mc_username, uuid: acc.mc_uuid })
+      onAdded({ username: acc.mc_username, uuid: acc.mc_uuid, is_offline: acc.is_offline })
       onClose()
     } catch (e) {
       showError(e)

@@ -10,7 +10,6 @@ import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { BETA_TEST } from '@/config/beta'
-import { isOfflineAccount } from '@/lib/account'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -52,7 +51,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
 
@@ -64,7 +63,7 @@ export default function App() {
     if (isConsoleWindow) return
     if (pendingPatchNotes) {
       setShowPatchNotes(true)
-    } else if (uuid && isOfflineAccount(uuid)) {
+    } else if (uuid && isOffline) {
       setShowOfflineReminder(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,7 +72,7 @@ export default function App() {
   const handleClosePatchNotes = () => {
     setShowPatchNotes(false)
     setPendingPatchNotes(null)
-    if (uuid && isOfflineAccount(uuid)) setShowOfflineReminder(true)
+    if (uuid && isOffline) setShowOfflineReminder(true)
   }
 
   useEffect(() => {

@@ -102,7 +102,7 @@ pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollRespo
             {
                 let s = state.read().await;
                 let conn = s.db.lock().await;
-                db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, &session.access_token, &ms_refresh, expires_at).ok();
+                db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, &session.access_token, &ms_refresh, expires_at, false).ok();
                 db::set_active_mc(&conn, yuyu_user_id, &uuid).ok();
             }
 

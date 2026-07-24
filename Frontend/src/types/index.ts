@@ -96,6 +96,7 @@ export interface ModpackMeta {
 export interface Account {
   username: string
   uuid: string
+  is_offline: boolean
 }
 
 export interface SyncInstance {

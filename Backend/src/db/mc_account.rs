@@ -8,6 +8,7 @@ pub struct McSessionRow {
     pub access_token: String,
     pub ms_refresh_token: String,
     pub expires_at: i64,
+    pub is_offline: bool,
 }
 
 pub fn upsert_mc_session(
@@ -18,26 +19,28 @@ pub fn upsert_mc_session(
     access_token: &str,
     ms_refresh_token: &str,
     expires_at: i64,
+    is_offline: bool,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(
         "INSERT INTO mc_sessions
-             (yuyu_user_id, mc_username, mc_uuid, access_token, ms_refresh_token, expires_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             (yuyu_user_id, mc_username, mc_uuid, access_token, ms_refresh_token, expires_at, is_offline, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(yuyu_user_id, mc_uuid) DO UPDATE SET
              mc_username      = excluded.mc_username,
              access_token     = excluded.access_token,
              ms_refresh_token = excluded.ms_refresh_token,
              expires_at       = excluded.expires_at,
+             is_offline       = excluded.is_offline,
              updated_at       = excluded.updated_at",
-        params![yuyu_user_id, mc_username, mc_uuid, access_token, ms_refresh_token, expires_at, now],
+        params![yuyu_user_id, mc_username, mc_uuid, access_token, ms_refresh_token, expires_at, is_offline as i32, now],
     )?;
     Ok(())
 }
 
 pub fn list_mc_sessions(conn: &Connection, yuyu_user_id: i64) -> Result<Vec<McSessionRow>> {
     let mut stmt = conn.prepare(
-        "SELECT mc_username, mc_uuid, access_token, ms_refresh_token, expires_at
+        "SELECT mc_username, mc_uuid, access_token, ms_refresh_token, expires_at, is_offline
          FROM mc_sessions WHERE yuyu_user_id = ?1",
     )?;
     let rows = stmt
@@ -48,6 +51,7 @@ pub fn list_mc_sessions(conn: &Connection, yuyu_user_id: i64) -> Result<Vec<McSe
                 access_token: r.get(2)?,
                 ms_refresh_token: r.get(3)?,
                 expires_at: r.get(4)?,
+                is_offline: r.get::<_, i32>(5)? != 0,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -60,7 +64,7 @@ pub fn get_mc_session(
     mc_uuid: &str,
 ) -> Result<Option<McSessionRow>> {
     let mut stmt = conn.prepare(
-        "SELECT mc_username, mc_uuid, access_token, ms_refresh_token, expires_at
+        "SELECT mc_username, mc_uuid, access_token, ms_refresh_token, expires_at, is_offline
          FROM mc_sessions WHERE yuyu_user_id = ?1 AND mc_uuid = ?2",
     )?;
     match stmt.query_row(params![yuyu_user_id, mc_uuid], |r| {
@@ -70,6 +74,7 @@ pub fn get_mc_session(
             access_token: r.get(2)?,
             ms_refresh_token: r.get(3)?,
             expires_at: r.get(4)?,
+            is_offline: r.get::<_, i32>(5)? != 0,
         })
     }) {
         Ok(r) => Ok(Some(r)),

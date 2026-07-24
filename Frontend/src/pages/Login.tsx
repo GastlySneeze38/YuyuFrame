@@ -10,7 +10,6 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
 import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
 import { SkinPickerModal } from '@/components/account/SkinPickerModal'
-import { isOfflineAccount } from '@/lib/account'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
 
@@ -102,10 +101,10 @@ export default function Login() {
   useEffect(() => {
     api.mc.accounts()
       .then((accs) => {
-        const mapped: Account[] = accs.map((a) => ({ username: a.mc_username, uuid: a.mc_uuid }))
+        const mapped: Account[] = accs.map((a) => ({ username: a.mc_username, uuid: a.mc_uuid, is_offline: a.is_offline }))
         setAccounts(mapped)
         const active = accs.find((a) => a.is_active)
-        if (active) setUser(active.mc_username, active.mc_uuid)
+        if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
       })
       .catch(() => {})
   }, [])
@@ -115,7 +114,7 @@ export default function Login() {
   // été mis en cache (setSkin met aussi ce cache à jour directement).
   useEffect(() => {
     accounts
-      .filter((a) => isOfflineAccount(a.uuid) && !(a.uuid in skins))
+      .filter((a) => a.is_offline && !(a.uuid in skins))
       .forEach((a) => {
         api.mc.getSkin(a.uuid).then((dataUri) => {
           if (dataUri) setSkins((s) => ({ ...s, [a.uuid]: dataUri }))
@@ -158,7 +157,8 @@ export default function Login() {
     const viewer = viewerRef.current
     if (!viewer) return
     const displayUuid = previewUuid ?? uuid
-    if (displayUuid && isOfflineAccount(displayUuid)) {
+    const displayAccount_ = accounts.find((a) => a.uuid === displayUuid)
+    if (displayUuid && displayAccount_?.is_offline) {
       // Pas de vrai skin Mojang pour un compte hors ligne — mc-heads.net n'a
       // rien de pertinent pour cet UUID inventé, donc soit le skin custom
       // (voir skins cache ci-dessus), soit rien du tout.
@@ -197,10 +197,10 @@ export default function Login() {
             setStep('confirmed')
             await growOverlayForConfirmation()
             const accs = await api.mc.accounts()
-            const mapped: Account[] = accs.map((a) => ({ username: a.mc_username, uuid: a.mc_uuid }))
+const mapped: Account[] = accs.map((a) => ({ username: a.mc_username, uuid: a.mc_uuid, is_offline: a.is_offline }))
             setAccounts(mapped)
             const active = accs.find((a) => a.is_active)
-            if (active) setUser(active.mc_username, active.mc_uuid)
+if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
             await new Promise((r) => setTimeout(r, 1400))
             await exitOverlay()
             navigate('/home', { replace: true })
@@ -225,7 +225,7 @@ export default function Login() {
   const handleSelect = async (acc: Account) => {
     try {
       await api.mc.switch(acc.uuid)
-      setUser(acc.username, acc.uuid)
+      setUser(acc.username, acc.uuid, acc.is_offline)
       navigate('/home')
     } catch (e) { showError(e) }
   }
@@ -522,7 +522,7 @@ export default function Login() {
       {showOfflineModal && (
         <OfflineAccountModal
           onClose={() => setShowOfflineModal(false)}
-          onAdded={(acc) => { addAccount(acc.username, acc.uuid); navigate('/home') }}
+          onAdded={(acc) => { addAccount(acc.username, acc.uuid, acc.is_offline); navigate('/home') }}
         />
       )}
     </div>
@@ -543,7 +543,7 @@ function AccountRow({
 }) {
   const [hovered, setHovered] = useState(false)
   const [showSkinPicker, setShowSkinPicker] = useState(false)
-  const offline = isOfflineAccount(acc.uuid)
+  const offline = acc.is_offline
 
   return (
     <div

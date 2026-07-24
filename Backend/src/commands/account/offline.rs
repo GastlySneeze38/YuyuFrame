@@ -48,7 +48,7 @@ pub async fn mc_add_offline(
     {
         let s = state.read().await;
         let conn = s.db.lock().await;
-        db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, "offline", "", NEVER_EXPIRES)
+        db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, "offline", "", NEVER_EXPIRES, true)
             .map_err(|e| e.to_string())?;
         db::set_active_mc(&conn, yuyu_user_id, &uuid).map_err(|e| e.to_string())?;
     }
@@ -62,5 +62,5 @@ pub async fn mc_add_offline(
     });
 
     crate::integrations::analytics::capture("offline_account_created", serde_json::json!({}));
-    Ok(AccountInfo { mc_username: username, mc_uuid: uuid, is_active: true })
+    Ok(AccountInfo { mc_username: username, mc_uuid: uuid, is_active: true, is_offline: true })
 }

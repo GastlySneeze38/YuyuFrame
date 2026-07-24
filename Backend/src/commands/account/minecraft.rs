@@ -7,6 +7,7 @@ pub struct AccountInfo {
     pub mc_username: String,
     pub mc_uuid: String,
     pub is_active: bool,
+    pub is_offline: bool,
 }
 
 #[tauri::command]
@@ -26,6 +27,7 @@ pub async fn mc_list_accounts(
             is_active: active_uuid.as_deref() == Some(&r.mc_uuid),
             mc_username: r.mc_username,
             mc_uuid: r.mc_uuid,
+            is_offline: r.is_offline,
         })
         .collect())
 }
@@ -81,6 +83,7 @@ pub async fn mc_switch(
         mc_username: mc_session.username.clone(),
         mc_uuid: mc_session.uuid.clone(),
         is_active: true,
+        is_offline: row.is_offline,
     };
     state.write().await.session = Some(mc_session);
     Ok(info)

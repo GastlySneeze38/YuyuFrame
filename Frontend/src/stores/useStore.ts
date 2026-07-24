@@ -19,7 +19,8 @@ interface Store {
   // ── Active Minecraft account ───────────────────────────────────────────────
   username: string | null
   uuid: string | null
-  setUser: (username: string, uuid: string) => void
+  isOffline: boolean
+  setUser: (username: string, uuid: string, isOffline: boolean) => void
   clearUser: () => void
 
   // ── Minecraft account list ─────────────────────────────────────────────────
@@ -147,23 +148,24 @@ export const useStore = create<Store>()(
       // Active MC account
       username: null,
       uuid: null,
-      setUser: (username, uuid) => set({ username, uuid }),
-      clearUser: () => set({ username: null, uuid: null }),
+      isOffline: false,
+      setUser: (username, uuid, isOffline) => set({ username, uuid, isOffline }),
+      clearUser: () => set({ username: null, uuid: null, isOffline: false }),
 
       // MC account list
       accounts: [],
       setAccounts: (accounts) => set({ accounts }),
-      addAccount: (username, uuid) => {
+      addAccount: (username, uuid, isOffline) => {
         const accounts = get().accounts
         const idx = accounts.findIndex((a) => a.uuid === uuid)
         const unlimited = get().isPremium()
         const next =
           idx >= 0
-            ? accounts.map((a, i) => (i === idx ? { username, uuid } : a))
+            ? accounts.map((a, i) => (i === idx ? { username, uuid, is_offline: isOffline } : a))
             : unlimited || accounts.length < 2
-            ? [...accounts, { username, uuid }]
+            ? [...accounts, { username, uuid, is_offline: isOffline }]
             : accounts
-        set({ accounts: next, username, uuid })
+        set({ accounts: next, username, uuid, isOffline })
       },
       removeAccount: (targetUuid) => {
         const accounts = get().accounts.filter((a) => a.uuid !== targetUuid)
@@ -176,7 +178,7 @@ export const useStore = create<Store>()(
       },
       switchAccount: (targetUuid) => {
         const account = get().accounts.find((a) => a.uuid === targetUuid)
-        if (account) set({ username: account.username, uuid: account.uuid })
+        if (account) set({ username: account.username, uuid: account.uuid, isOffline: account.is_offline })
       },
 
       // Versions
@@ -308,6 +310,7 @@ export const useStore = create<Store>()(
         confirmServerLaunch: s.confirmServerLaunch,
         username: s.username,
         uuid: s.uuid,
+        isOffline: s.isOffline,
         lastSession: s.lastSession,
         pinnedMods: s.pinnedMods,
         launchPhaseDurations: s.launchPhaseDurations,

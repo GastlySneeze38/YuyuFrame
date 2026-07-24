@@ -53,12 +53,13 @@ export default function YuyuLogin() {
       const accs: Account[] = resp.accounts.map((a) => ({
         username: a.mc_username,
         uuid: a.mc_uuid,
+        is_offline: a.is_offline,
       }))
       setAccounts(accs)
 
       // Set active account if one exists
       const active = resp.accounts.find((a) => a.is_active)
-      if (active) setUser(active.mc_username, active.mc_uuid)
+      if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
 
       navigate('/home', { replace: true })
     } catch (err) {

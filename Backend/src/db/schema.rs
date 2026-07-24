@@ -15,10 +15,11 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              mc_username      TEXT    NOT NULL,
              mc_uuid          TEXT    NOT NULL,
              access_token     TEXT    NOT NULL,
-             ms_refresh_token TEXT    NOT NULL,
-             expires_at       INTEGER NOT NULL,
-             updated_at       INTEGER NOT NULL,
-             UNIQUE(yuyu_user_id, mc_uuid)
+              ms_refresh_token TEXT    NOT NULL,
+              expires_at       INTEGER NOT NULL,
+              is_offline       INTEGER NOT NULL DEFAULT 0,
+              updated_at       INTEGER NOT NULL,
+              UNIQUE(yuyu_user_id, mc_uuid)
          );
 
          CREATE TABLE IF NOT EXISTS active_mc (
@@ -66,6 +67,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN plan_expires_at INTEGER", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN description TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN is_offline INTEGER NOT NULL DEFAULT 0", []);
 
     Ok(conn)
 }
