@@ -59,14 +59,46 @@ pub fn instance_mods_dir(id: &str) -> PathBuf {
     instance_dir(id).join("mods")
 }
 
-fn gen_id() -> String {
+/// Réduit un nom d'instance à un slug de dossier lisible (minuscules,
+/// alphanumérique uniquement, tirets comme séparateurs, tronqué). Les accents
+/// et autres caractères non-ASCII sont abandonnés plutôt que translittérés —
+/// suffisant pour un nom de dossier lisible, pas la peine d'une vraie
+/// translittération pour ce seul usage.
+fn slugify(name: &str) -> String {
+    let mut slug = String::new();
+    for c in name.trim().to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    slug.chars().take(24).collect()
+}
+
+/// Nom de dossier lisible : `<nom-slugifié>-<code>` plutôt qu'un code
+/// opaque seul — le suffixe aléatoire (8 caractères, largement suffisant vu
+/// qu'il est déjà désambiguïsé par le nom) garantit l'unicité même entre deux
+/// instances slugifiées à l'identique. Voir aussi `commands/launch.rs` qui
+/// utilise la FIN de l'id (le suffixe, jamais le nom) comme label de fenêtre
+/// console — ne jamais dépendre du début de l'id pour l'unicité.
+fn gen_id(name: &str) -> String {
     use rand::Rng;
-    rand::thread_rng()
+    let suffix: String = rand::thread_rng()
         .sample_iter(rand::distributions::Alphanumeric)
-        .take(12)
+        .take(8)
         .map(char::from)
         .collect::<String>()
-        .to_lowercase()
+        .to_lowercase();
+    let slug = slugify(name);
+    if slug.is_empty() {
+        suffix
+    } else {
+        format!("{}-{}", slug, suffix)
+    }
 }
 
 fn row_to_instance(r: db::InstanceRow) -> Instance {
@@ -100,11 +132,11 @@ pub async fn instance_create(
         return Err("Le nom de l'instance est requis".into());
     }
     let description = description.unwrap_or_default().trim().to_string();
-    let id = gen_id();
+    let name = name.trim().to_string();
+    let id = gen_id(&name);
     tokio::fs::create_dir_all(instance_dir(&id))
         .await
         .map_err(|e| e.to_string())?;
-    let name = name.trim().to_string();
     write_meta(&id, &name, &mc_version, &loader, ram_mb, &description);
     let s = state.read().await;
     let uid = user_id(&s);
@@ -201,7 +233,7 @@ pub async fn instance_duplicate(
         src.loader
     };
 
-    let new_id = gen_id();
+    let new_id = gen_id(&name);
     tokio::fs::create_dir_all(instance_dir(&new_id)).await.map_err(|e| e.to_string())?;
 
     let src_mods = instance_mods_dir(&source_id);
@@ -256,6 +288,14 @@ pub async fn instance_apply_settings(instance_id: String) -> Result<bool, String
     let dest = instance_dir(&instance_id).join("options.txt");
     tokio::fs::copy(&src, &dest).await.map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Ouvre le dossier de l'instance dans l'explorateur Windows — le crée
+/// d'abord si l'instance n'a encore jamais été lancée (ex: juste après
+/// import), sinon `explorer.exe` échoue silencieusement sur un chemin absent.
+#[tauri::command]
+pub async fn instance_open_folder(instance_id: String) -> Result<(), String> {
+    crate::paths::open_in_explorer(&instance_dir(&instance_id))
 }
 
 /// Synchronise la DB avec les dossiers réels au démarrage.

@@ -17,6 +17,7 @@ export const InstanceCard = memo(function InstanceCard({
   onDelete,
   onEdit,
   onDuplicate,
+  onOpenFolder,
 }: {
   instance: Instance
   selected: boolean
@@ -25,6 +26,7 @@ export const InstanceCard = memo(function InstanceCard({
   onDelete: (id: string) => void
   onEdit: (instance: Instance) => void
   onDuplicate: (instance: Instance) => void
+  onOpenFolder: (instance: Instance) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -126,6 +128,11 @@ export const InstanceCard = memo(function InstanceCard({
                         }}
                         label="Exporter mes paramètres"
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>}
+                      />
+                      <MenuItem
+                        onClick={() => { setMenuOpen(false); onOpenFolder(instance) }}
+                        label="Ouvrir le dossier"
+                        icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M20 6h-8l-2-2H4c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2z" /></svg>}
                       />
                       <MenuItem
                         onClick={() => setConfirm(true)}

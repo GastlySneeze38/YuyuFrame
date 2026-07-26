@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
+import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
+import { showError } from '@/stores/useErrorToast'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
 
 const CATEGORIES = [
   { id: 'lancement', label: 'Lancement' },
   { id: 'instances', label: 'Instances' },
+  { id: 'stockage', label: 'Stockage' },
   { id: 'serveurs', label: 'Serveurs' },
+  { id: 'confidentialite', label: 'Confidentialité' },
   { id: 'apparence', label: 'Apparence' },
   { id: 'apropos', label: 'À propos' },
 ] as const
@@ -23,6 +27,43 @@ export default function Settings() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [activeId, setActiveId] = useState<string>(CATEGORIES[0].id)
+
+  const [analyticsDisabled, setAnalyticsDisabledState] = useState(false)
+  useEffect(() => {
+    api.analytics.isDisabled().then(setAnalyticsDisabledState).catch(() => {})
+  }, [])
+  const toggleAnalytics = () => {
+    const next = !analyticsDisabled
+    setAnalyticsDisabledState(next)
+    api.analytics.setDisabled(next).catch(() => {})
+  }
+
+  const [dataRoot, setDataRoot] = useState<string | null>(null)
+  const [pendingParent, setPendingParent] = useState<string | null>(null)
+  const [movingData, setMovingData] = useState(false)
+  useEffect(() => {
+    api.system.getDataRoot().then(setDataRoot).catch(() => {})
+  }, [])
+
+  const pickDataRoot = async () => {
+    const picked = await openDirPicker({ directory: true })
+    if (!picked || Array.isArray(picked)) return
+    setPendingParent(picked)
+  }
+
+  const confirmMoveDataRoot = async () => {
+    if (!pendingParent) return
+    setMovingData(true)
+    try {
+      const newRoot = await api.system.setDataRoot(pendingParent)
+      setDataRoot(newRoot)
+      setPendingParent(null)
+    } catch (e) {
+      showError(e)
+    } finally {
+      setMovingData(false)
+    }
+  }
 
   const scrollToCategory = (id: string) => {
     setActiveId(id)
@@ -222,6 +263,72 @@ export default function Settings() {
           </SCard>
           </div>
 
+          {/* Stockage */}
+          <div id="stockage" ref={(el) => { sectionRefs.current.stockage = el }}>
+          <SCard
+            title="Stockage"
+            icon={
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                <path d="M20 6h-8l-2-2H4c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2z" />
+              </svg>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="text-sm font-medium text-white">Dossier des données YuyuFrame</p>
+                <p className="text-[11px] text-white/35 mt-0.5">
+                  Contient l'agent, les données P2P et .minecraft (instances, mods, comptes) — pas ta base de données ni tes paramètres
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+                <span className="flex-1 truncate font-mono text-[12px] text-white/60">
+                  {dataRoot ?? 'Chargement...'}
+                </span>
+                <button
+                  onClick={() => dataRoot && api.system.openFolder(dataRoot).catch(showError)}
+                  disabled={!dataRoot}
+                  className="flex-shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white/60 bg-white/5 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Ouvrir
+                </button>
+                <button
+                  onClick={pickDataRoot}
+                  disabled={movingData}
+                  className="flex-shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white bg-[rgba(75,63,207,0.4)] hover:bg-[rgba(75,63,207,0.6)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Changer...
+                </button>
+              </div>
+
+              {pendingParent && (
+                <div className="flex flex-col gap-3 rounded-xl px-4 py-3 bg-[rgba(250,204,21,0.06)] border border-[rgba(250,204,21,0.25)]">
+                  <p className="text-[12px] text-white/70">
+                    Déplacer toutes les données vers <span className="font-mono text-white">{pendingParent}\YuyuFrame</span> ?
+                    Cette opération copie tout, puis supprime l'ancien dossier — assure-toi qu'aucune instance n'est en cours de lancement.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={confirmMoveDataRoot}
+                      disabled={movingData}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold text-black bg-[#facc15] hover:bg-[#eab308] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {movingData ? 'Déplacement...' : 'Confirmer le déplacement'}
+                    </button>
+                    <button
+                      onClick={() => setPendingParent(null)}
+                      disabled={movingData}
+                      className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white/50 hover:text-white/80 disabled:cursor-not-allowed"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </SCard>
+          </div>
+
           {/* Serveurs */}
           <div id="serveurs" ref={(el) => { sectionRefs.current.serveurs = el }}>
           <SCard
@@ -258,6 +365,31 @@ export default function Settings() {
                   </p>
                 </div>
                 <Toggle checked={confirmServerLaunch} onChange={() => setConfirmServerLaunch(!confirmServerLaunch)} />
+              </div>
+            </div>
+          </SCard>
+          </div>
+
+          {/* Confidentialité */}
+          <div id="confidentialite" ref={(el) => { sectionRefs.current.confidentialite = el }}>
+          <SCard
+            title="Confidentialité"
+            icon={
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+              </svg>
+            }
+          >
+            <div className="flex flex-col gap-6">
+              {/* Opt-out PostHog */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Statistiques d'utilisation anonymes</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    Envoie des événements anonymes (PostHog) pour nous aider à identifier les bugs et prioriser les fonctionnalités — aucune donnée liée à ton compte ou tes fichiers
+                  </p>
+                </div>
+                <Toggle checked={!analyticsDisabled} onChange={toggleAnalytics} />
               </div>
             </div>
           </SCard>

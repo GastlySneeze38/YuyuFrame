@@ -54,6 +54,17 @@ export interface ScanResult {
   extraDirs: string[]
 }
 
+export interface DetectedInstance {
+  path: string
+  source: DetectedSource
+}
+
+export interface DetectedLauncher {
+  kind: string
+  displayName: string
+  instances: DetectedInstance[]
+}
+
 export interface ImportResult {
   instanceId: string
   imported: Mod[]

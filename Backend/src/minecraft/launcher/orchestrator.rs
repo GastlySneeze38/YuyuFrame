@@ -32,10 +32,7 @@ fn cancelled(cancel: &watch::Receiver<bool>) -> bool {
 }
 
 pub fn minecraft_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("YuyuFrame")
-        .join(".minecraft")
+    crate::paths::root().join(".minecraft")
 }
 
 /// `loader` — "vanilla" | "fabric" | "forge" (None treated as vanilla)

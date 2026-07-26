@@ -12,10 +12,7 @@ use base64::Engine as _;
 use std::path::PathBuf;
 
 fn skins_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("YuyuFrame")
-        .join("skins")
+    crate::paths::root().join("skins")
 }
 
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];

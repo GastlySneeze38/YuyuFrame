@@ -12,9 +12,45 @@
 // pointer vers un autre projet (ex: tests).
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 const DEFAULT_POSTHOG_API_KEY: &str = "phc_pFzmeuGWLt9Fcqb5AK4MqbHubjPerfhjzkeAU2eVtzvF";
+
+/// Marqueur de désactivation — simple fichier (comme `device_id`) plutôt
+/// qu'une entrée DB : lu une seule fois au démarrage puis mis en cache dans
+/// un AtomicBool, mis à jour immédiatement (fichier + cache) par
+/// `set_disabled` — pas besoin de redémarrer le launcher pour que l'opt-out
+/// prenne effet.
+fn opt_out_path() -> PathBuf {
+    crate::paths::root().join("analytics_opt_out")
+}
+
+fn disabled_flag() -> &'static AtomicBool {
+    static FLAG: OnceLock<AtomicBool> = OnceLock::new();
+    FLAG.get_or_init(|| AtomicBool::new(opt_out_path().exists()))
+}
+
+/// État actuel de l'opt-out — utilisé par `capture` et exposé au frontend
+/// (Settings.tsx) via la commande `analytics_get_disabled`.
+pub fn is_disabled() -> bool {
+    disabled_flag().load(Ordering::Relaxed)
+}
+
+/// Active/désactive l'envoi d'événements PostHog — persisté sur disque pour
+/// survivre à un redémarrage du launcher.
+pub fn set_disabled(disabled: bool) {
+    disabled_flag().store(disabled, Ordering::Relaxed);
+    let path = opt_out_path();
+    if disabled {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&path, "1");
+    } else {
+        let _ = std::fs::remove_file(&path);
+    }
+}
 
 fn api_key() -> Option<&'static str> {
     static KEY: OnceLock<Option<String>> = OnceLock::new();
@@ -34,10 +70,7 @@ fn host() -> String {
 }
 
 fn device_id_path() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("YuyuFrame")
-        .join("device_id")
+    crate::paths::root().join("device_id")
 }
 
 /// Identifiant anonyme persisté localement (aucun lien avec le compte
@@ -83,6 +116,9 @@ fn with_base_properties(mut properties: serde_json::Value) -> serde_json::Value 
 /// (ex: `serde_json::json!({ "instance_id": id, "loader": "fabric" })`) —
 /// `app_version`/`os` sont ajoutées automatiquement, pas besoin de les inclure.
 pub fn capture(event: &str, properties: serde_json::Value) {
+    if is_disabled() {
+        return;
+    }
     let Some(key) = api_key() else { return };
 
     let event = event.to_string();

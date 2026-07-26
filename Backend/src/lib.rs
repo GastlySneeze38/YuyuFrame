@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod integrations;
 mod minecraft;
+mod paths;
 mod state;
 
 /// Miroir de `Frontend/src/config/beta.ts` — pendant la beta, le frontend
@@ -24,12 +25,13 @@ pub fn run() {
     // s'affichaient en dev étaient invisibles en prod, rendant tout bug
     // spécifique au build buildé impossible à diagnostiquer. On écrit
     // maintenant aussi dans un fichier `yuyuframe.log`, en plus du stdout
-    // pour le dev. Toujours dans %APPDATA%\YuyuFrame\.minecraft (jamais dans
+    // pour le dev. Toujours dans <racine YuyuFrame>\.minecraft (jamais dans
     // CARGO_MANIFEST_DIR) : en dev ce dossier est surveillé par `cargo
     // watch`, donc chaque écriture de log déclenchait un rebuild en boucle.
-    let log_dir = dirs::data_dir()
-        .map(|d| d.join("YuyuFrame").join(".minecraft"))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    // `paths::root()` respecte un éventuel déplacement (Settings.tsx, section
+    // Stockage) — lu directement depuis le fichier ancre, pas de state Tauri
+    // disponible à ce stade, avant même `tauri::Builder`.
+    let log_dir = paths::root().join(".minecraft");
     std::fs::create_dir_all(&log_dir).ok();
     let file_appender = tracing_appender::rolling::never(&log_dir, "yuyuframe.log");
     let (non_blocking, _log_guard) = tracing_appender::non_blocking(file_appender);
@@ -110,6 +112,11 @@ pub fn run() {
 
             app.manage(app_state);
 
+            // Garantit que .minecraft/agent/p2p existent tous, même vides —
+            // voir Settings.tsx section Stockage : avant ça, `p2p/`
+            // n'apparaissait qu'à la toute première session P2P.
+            paths::ensure_structure();
+
             // Déploie le LauncherAgent (jar + libs) embarqué dans l'installateur
             // vers %AppData%\YuyuFrame\agent\ — voir minecraft::launcher pour le
             // pourquoi (avant ça, un beta testeur n'avait jamais ces fichiers).
@@ -159,6 +166,8 @@ pub fn run() {
             commands::launch::reload_agent,
             commands::launch::console_ready,
             commands::analytics::track_event,
+            commands::analytics::analytics_get_disabled,
+            commands::analytics::analytics_set_disabled,
             commands::launch::list_saved_servers,
             commands::launch::ping_server,
             commands::instance::mods::mods_list,
@@ -168,6 +177,7 @@ pub fn run() {
             commands::instance::mods::mods_upload,
             commands::instance::mods::mod_icon,
             commands::instance::mods::mods_check_update_safety,
+            commands::instance::import::import_detect_launchers,
             commands::instance::import::import_scan_folder,
             commands::instance::import::import_check_duplicates,
             commands::instance::import::import_apply,
@@ -186,6 +196,7 @@ pub fn run() {
             commands::instance::crud::instance_startup_sync,
             commands::instance::crud::instance_export_settings,
             commands::instance::crud::instance_apply_settings,
+            commands::instance::crud::instance_open_folder,
             commands::sync::push_pull::sync_list_instances,
             commands::sync::push_pull::sync_list_saves,
             commands::sync::push_pull::sync_push_instance,
@@ -193,6 +204,9 @@ pub fn run() {
             commands::sync::push_pull::sync_delete_instance,
             commands::sync::stats::stats_get,
             commands::system::info::system_memory_info,
+            commands::system::storage::data_root_get,
+            commands::system::storage::data_root_set,
+            commands::system::storage::open_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

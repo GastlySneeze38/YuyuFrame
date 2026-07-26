@@ -17,13 +17,11 @@ pub const SIGNALING_PORT: u16 = 8765;
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 
-/// Dossier P2P dans AppData/YuyuFrame/p2p/
+/// Dossier P2P dans <racine YuyuFrame>/p2p/ (voir crate::paths — configurable
+/// via Settings.tsx, section Stockage).
 /// Doit contenir : p2p-agent.jar, mixin.jar, rust_core.dll
 pub fn p2p_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("YuyuFrame")
-        .join("p2p")
+    crate::paths::root().join("p2p")
 }
 
 // ── Signaling server ──────────────────────────────────────────────────────────

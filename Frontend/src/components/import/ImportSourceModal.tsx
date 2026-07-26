@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
-import { LOADERS, clampLoader } from '@/lib/loader'
+import { LOADERS, clampLoader, loaderColor } from '@/lib/loader'
 import { formatBytes, RAM_OPTIONS } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { showError } from '@/stores/useErrorToast'
-import type { DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
+import type { DetectedLauncher, DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
 
 const EXTRA_DIR_LABELS: Record<string, string> = {
   config: 'Configs des mods',
@@ -37,6 +37,8 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
   const releaseVersions = versions.filter((v) => v.version_type === 'release').map((v) => v.id)
 
   const [step, setStep] = useState<'pick' | 'review' | 'done'>('pick')
+  const [launchers, setLaunchers] = useState<DetectedLauncher[]>([])
+  const [detectingLaunchers, setDetectingLaunchers] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -73,12 +75,24 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
     }
   }
 
-  const handlePickFolder = async () => {
-    const picked = await open({ directory: true })
-    if (!picked || Array.isArray(picked)) return
+  // Détection best-effort des launchers tiers installés (Prism/MultiMC/
+  // CurseForge/ATLauncher/Modrinth App/GDLauncher) — évite à l'utilisateur de
+  // devoir naviguer manuellement jusqu'à un dossier d'instance souvent
+  // profond. Le sélecteur de dossier manuel (handlePickFolder) reste le repli
+  // pour tout ce qui n'est pas détecté (installation portable, launcher non
+  // listé). Silencieux en cas d'échec : cette détection n'est qu'un confort,
+  // jamais bloquante pour l'import manuel.
+  useEffect(() => {
+    api.importSource.detectLaunchers()
+      .then(setLaunchers)
+      .catch(() => setLaunchers([]))
+      .finally(() => setDetectingLaunchers(false))
+  }, [])
+
+  const scanPath = async (path: string) => {
     setScanning(true)
     try {
-      const res = await api.importSource.scanFolder(picked)
+      const res = await api.importSource.scanFolder(path)
       setScan(res)
       setSelected(new Set(res.mods.map((m) => m.name)))
       setExtraDirsSelected(new Set(res.extraDirs))
@@ -95,6 +109,12 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
     } finally {
       setScanning(false)
     }
+  }
+
+  const handlePickFolder = async () => {
+    const picked = await open({ directory: true })
+    if (!picked || Array.isArray(picked)) return
+    scanPath(picked)
   }
 
   const handleDestModeChange = (m: 'new' | 'existing') => {
@@ -178,17 +198,59 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
     >
 
         {step === 'pick' && (
-          <div className="flex flex-col items-center gap-4 py-6">
-            <p className="text-[12px] text-[rgba(255,255,255,0.4)] text-center">
-              Choisis le dossier d'une instance d'un autre launcher (Modrinth App, CurseForge, MultiMC/Prism, ATLauncher, Feather, Lunar Client...) ou n'importe quel dossier contenant un sous-dossier <code>mods</code>.
-            </p>
-            <button
-              onClick={handlePickFolder}
-              disabled={scanning}
-              className={`flex items-center gap-2 rounded-xl px-5 font-bold text-white transition-all duration-150 active:scale-95 h-[42px] text-[13px] ${scanning ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
-            >
-              {scanning ? 'Analyse...' : 'Choisir un dossier'}
-            </button>
+          <div className="flex flex-1 flex-col gap-3 overflow-hidden py-4">
+            {detectingLaunchers && (
+              <p className="text-[11.5px] text-[rgba(255,255,255,0.35)] text-center">Recherche des launchers installés...</p>
+            )}
+
+            {!detectingLaunchers && launchers.length > 0 && (
+              <div className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">
+                {launchers.map((l) => (
+                  <div key={l.kind} className="flex flex-col gap-1.5">
+                    <p className="text-[10px] text-[rgba(255,255,255,0.35)] tracking-[0.1em] uppercase font-semibold">
+                      {l.displayName}
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {l.instances.map((inst) => (
+                        <button
+                          key={inst.path}
+                          onClick={() => scanPath(inst.path)}
+                          disabled={scanning}
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] transition-colors hover:border-[rgba(75,63,207,0.4)]"
+                        >
+                          <span className="flex-1 truncate text-[12.5px] font-semibold text-[rgba(255,255,255,0.85)]">
+                            {inst.source.name ?? inst.path.split(/[\\/]/).pop()}
+                          </span>
+                          {inst.source.loader && (
+                            <span className="text-[10px] font-bold flex-shrink-0" style={{ color: loaderColor(inst.source.loader) }}>
+                              {inst.source.loader}
+                            </span>
+                          )}
+                          {inst.source.mcVersion && (
+                            <span className="text-[10.5px] text-[rgba(255,255,255,0.3)] flex-shrink-0">{inst.source.mcVersion}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-shrink-0 flex-col items-center gap-3 py-2">
+              {!detectingLaunchers && launchers.length === 0 && (
+                <p className="text-[12px] text-[rgba(255,255,255,0.4)] text-center">
+                  Aucun launcher détecté automatiquement. Choisis le dossier d'une instance (Modrinth App, CurseForge, MultiMC/Prism, ATLauncher, Feather, Lunar Client...) ou n'importe quel dossier contenant un sous-dossier <code>mods</code>.
+                </p>
+              )}
+              <button
+                onClick={handlePickFolder}
+                disabled={scanning}
+                className={`flex items-center gap-2 rounded-xl px-5 font-bold text-white transition-all duration-150 active:scale-95 h-[42px] text-[13px] ${scanning ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
+              >
+                {scanning ? 'Analyse...' : launchers.length > 0 ? 'Autre dossier...' : 'Choisir un dossier'}
+              </button>
+            </div>
           </div>
         )}
 

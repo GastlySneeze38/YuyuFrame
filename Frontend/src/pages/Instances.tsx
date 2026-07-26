@@ -64,6 +64,10 @@ export default function Instances() {
     } catch (e) { showError(e) }
   }, [updateInstance])
 
+  const handleOpenFolder = useCallback((inst: Instance) => {
+    api.instances.openFolder(inst.id).catch(showError)
+  }, [])
+
   function renderCard(inst: Instance) {
     return (
       <InstanceCard
@@ -75,6 +79,7 @@ export default function Instances() {
         onDelete={handleDelete}
         onEdit={setEditTarget}
         onDuplicate={setDuplicateSource}
+        onOpenFolder={handleOpenFolder}
       />
     )
   }

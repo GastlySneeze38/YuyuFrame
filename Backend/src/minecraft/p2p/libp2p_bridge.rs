@@ -271,9 +271,7 @@ fn relay_addr_for_peer(target: &PeerId) -> Option<Multiaddr> {
 }
 
 fn load_or_generate_keypair() -> Result<libp2p::identity::Keypair> {
-    let key_path: PathBuf = dirs::data_dir()
-        .unwrap_or_default()
-        .join("YuyuFrame").join("p2p").join("keypair.bin");
+    let key_path: PathBuf = super::manager::p2p_dir().join("keypair.bin");
 
     if key_path.exists() {
         let bytes = std::fs::read(&key_path)?;

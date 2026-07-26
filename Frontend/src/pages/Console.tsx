@@ -107,7 +107,11 @@ export default function Console() {
         }
       }),
       listen<{ running: boolean; instance_id: string }>('game_state', (e) => {
-        if (!e.payload.running && e.payload.instance_id.startsWith(myShortId)) {
+        // `game_state.instance_id` est l'id complet, `myShortId` la FIN de cet
+        // id (voir launch.rs — le label de fenêtre utilise la fin, pas le
+        // début, depuis que l'id embarque le nom de l'instance et que deux
+        // instances au nom similaire partageraient sinon le même préfixe).
+        if (!e.payload.running && e.payload.instance_id.endsWith(myShortId)) {
           setRunning(false)
         }
       }),

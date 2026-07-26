@@ -5,10 +5,7 @@ use tauri::Manager;
 /// AppData/YuyuFrame/p2p/ (voir docs/LauncherAgent/index.md).
 /// Doit contenir : launcher-agent.jar, content_core.dll, libs/ (mixin.jar, asm-*.jar, jna*.jar)
 pub(super) fn launcher_agent_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("YuyuFrame")
-        .join("agent")
+    crate::paths::root().join("agent")
 }
 
 /// Sous-dossier libs/ de launcher_agent_dir() — mixin.jar + asm-*.jar, séparés

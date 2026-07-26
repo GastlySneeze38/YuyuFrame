@@ -154,6 +154,127 @@ fn detect_source(root: &Path) -> DetectedSource {
     }
 }
 
+// ── Détection automatique des launchers installés ──────────────────────────
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedInstance {
+    pub path: String,
+    pub source: DetectedSource,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedLauncher {
+    pub kind: String,
+    pub display_name: String,
+    pub instances: Vec<DetectedInstance>,
+}
+
+/// Emplacement par défaut d'un launcher tiers sur Windows — vérifié en direct
+/// contre chaque launcher (pas deviné) : Prism/MultiMC sous `%APPDATA%`,
+/// CurseForge directement sous le profil utilisateur (pas `%APPDATA%`),
+/// Modrinth App sous son nom de package interne `com.modrinth.theseus`
+/// (confirmé via support.modrinth.com). Tous permettent une installation
+/// "portable" à un chemin custom — ce scan reste donc best-effort, le bouton
+/// "Choisir un dossier" existant couvrant les cas non détectés.
+struct LauncherLocation {
+    kind: &'static str,
+    display_name: &'static str,
+    instances_dir: fn() -> Option<PathBuf>,
+}
+
+const LAUNCHER_LOCATIONS: &[LauncherLocation] = &[
+    LauncherLocation {
+        kind: "prism",
+        display_name: "Prism Launcher",
+        instances_dir: || Some(dirs::data_dir()?.join("PrismLauncher").join("instances")),
+    },
+    LauncherLocation {
+        kind: "multimc",
+        display_name: "MultiMC",
+        instances_dir: || Some(dirs::data_dir()?.join("MultiMC").join("instances")),
+    },
+    LauncherLocation {
+        kind: "curseforge",
+        display_name: "CurseForge",
+        instances_dir: || Some(dirs::home_dir()?.join("curseforge").join("minecraft").join("Instances")),
+    },
+    LauncherLocation {
+        kind: "atlauncher",
+        display_name: "ATLauncher",
+        instances_dir: || Some(dirs::data_dir()?.join("ATLauncher").join("instances")),
+    },
+    LauncherLocation {
+        kind: "modrinth_app",
+        display_name: "Modrinth App",
+        // Anciennement `com.modrinth.theseus` (ancien nom de package interne,
+        // encore documenté sur support.modrinth.com) — vérifié en direct sur
+        // une install réelle : le dossier s'appelle maintenant `ModrinthApp`.
+        // Note aussi : les versions récentes de l'app ne posent plus de
+        // `profile.json` par profil (stocké dans `app.db`, SQLite interne non
+        // documenté) — chaque profil est donc listé mais retombe sur
+        // `detect_source`'s "unknown" (juste le nom de dossier), comme
+        // Feather/Lunar Client déjà aujourd'hui. Toujours détecté et
+        // importable, juste sans version/loader préremplis.
+        instances_dir: || Some(dirs::data_dir()?.join("ModrinthApp").join("profiles")),
+    },
+    LauncherLocation {
+        kind: "gdlauncher",
+        display_name: "GDLauncher",
+        instances_dir: || Some(dirs::data_dir()?.join("gdlauncher_next").join("data").join("instances")),
+    },
+];
+
+/// Liste les sous-dossiers d'un dossier "instances/profiles" de launcher qui
+/// contiennent vraiment un dossier de mods (réutilise `find_mods_dir` — pas
+/// de nouvelle heuristique) et les décrit via `detect_source` (déjà là pour
+/// l'import manuel). `None` si le launcher n'est pas installé (dossier de
+/// base absent) ou n'a aucune instance valide.
+fn scan_launcher(loc: &LauncherLocation) -> Option<DetectedLauncher> {
+    let base = (loc.instances_dir)()?;
+    if !base.is_dir() {
+        return None;
+    }
+
+    let mut instances = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&base) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() || find_mods_dir(&path).is_none() {
+                continue;
+            }
+            instances.push(DetectedInstance {
+                path: path.to_string_lossy().to_string(),
+                source: detect_source(&path),
+            });
+        }
+    }
+
+    if instances.is_empty() {
+        return None;
+    }
+    instances.sort_by(|a, b| a.source.name.cmp(&b.source.name));
+
+    Some(DetectedLauncher {
+        kind: loc.kind.to_string(),
+        display_name: loc.display_name.to_string(),
+        instances,
+    })
+}
+
+/// Scanne les emplacements par défaut des launchers tiers connus — best-effort,
+/// ne bloque jamais l'import manuel (voir `import_scan_folder`) qui reste le
+/// repli pour toute installation portable ou launcher non listé ici.
+#[tauri::command]
+pub async fn import_detect_launchers() -> Result<Vec<DetectedLauncher>, String> {
+    tokio::task::spawn_blocking(|| {
+        LAUNCHER_LOCATIONS.iter().filter_map(scan_launcher).collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Sous-dossiers optionnels (à côté de `mods/`) qu'on propose de reprendre en
 /// plus des mods — beaucoup de mods ne fonctionnent pas correctement (ou
 /// plantent) sans leur config par défaut, d'où l'intérêt de les proposer.

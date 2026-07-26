@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AuthStatus, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +65,7 @@ export const api = {
     startupSync: (mode: string) => invoke<void>('instance_startup_sync', { mode }),
     exportSettings: (instanceId: string) => invoke<void>('instance_export_settings', { instanceId }),
     applySettings: (instanceId: string) => invoke<boolean>('instance_apply_settings', { instanceId }),
+    openFolder: (instanceId: string) => invoke<void>('instance_open_folder', { instanceId }),
   },
 
   yuyu: {
@@ -106,6 +107,8 @@ export const api = {
     // jamais faire planter l'action UI qui a déclenché le tracking.
     track: (event: string, properties?: Record<string, unknown>) =>
       invoke<void>('track_event', { event, properties }).catch(() => {}),
+    isDisabled: () => invoke<boolean>('analytics_get_disabled'),
+    setDisabled: (disabled: boolean) => invoke<void>('analytics_set_disabled', { disabled }),
   },
 
   launch: {
@@ -141,6 +144,9 @@ export const api = {
 
   system: {
     memoryInfo: () => invoke<SystemMemoryInfo>('system_memory_info'),
+    getDataRoot: () => invoke<string>('data_root_get'),
+    setDataRoot: (newParent: string) => invoke<string>('data_root_set', { newParent }),
+    openFolder: (path: string) => invoke<void>('open_folder', { path }),
   },
 
   mods: {
@@ -197,6 +203,7 @@ export const api = {
   },
 
   importSource: {
+    detectLaunchers: () => invoke<DetectedLauncher[]>('import_detect_launchers'),
     scanFolder: (path: string) => invoke<ScanResult>('import_scan_folder', { path }),
     checkDuplicates: (sourceModsDir: string, targetInstanceId: string) =>
       invoke<string[]>('import_check_duplicates', { sourceModsDir, targetInstanceId }),

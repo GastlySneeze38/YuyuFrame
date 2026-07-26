@@ -65,7 +65,14 @@ pub async fn launch_game(
     // l'utilisateur a désactivé l'affichage de la console dans les réglages.
     // Le jeu se lance identiquement dans les deux cas (log_to_console tombe
     // simplement en broadcast si aucune fenêtre n'écoute, voir progress.rs).
-    let window_label = format!("mc-console-{}", &instance_id[..8.min(instance_id.len())]);
+    //
+    // Fin de l'id (pas le début) : depuis que l'id est `<nom-slugifié>-<code>`
+    // (voir crud.rs gen_id), deux instances au nom similaire partagent le même
+    // début (ex: "modpack-" pour "Modpack 1" et "Modpack 2") — prendre les 8
+    // premiers caractères aurait fait collisionner leurs labels de fenêtre.
+    // La fin est toujours le suffixe aléatoire, garanti unique.
+    let tail_len = 8.min(instance_id.len());
+    let window_label = format!("mc-console-{}", &instance_id[instance_id.len() - tail_len..]);
     let show_console = show_console.unwrap_or(true);
     let console_ready = if show_console {
         if let Some(existing) = app.get_webview_window(&window_label) {
