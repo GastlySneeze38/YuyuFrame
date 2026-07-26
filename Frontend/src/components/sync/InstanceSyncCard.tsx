@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import type { Instance, SaveInfo, SyncInstance, SyncProgress } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
+import { loaderColor } from '@/lib/loader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError } from '@/stores/useErrorToast'
 import { ProgressBar } from './ProgressBar'
@@ -161,7 +162,8 @@ export function InstanceSyncCard({
               {instance.name}
             </p>
             <span
-              className={`text-[10px] font-bold bg-[rgba(255,255,255,0.05)] px-1.5 py-px rounded flex-shrink-0 ${instance.loader === 'fabric' ? 'text-[#b5a0ff]' : instance.loader === 'forge' ? 'text-[#f0a040]' : 'text-[rgba(255,255,255,0.4)]'}`}
+              className="text-[10px] font-bold bg-[rgba(255,255,255,0.05)] px-1.5 py-px rounded flex-shrink-0"
+              style={{ color: loaderColor(instance.loader) }}
             >
               {instance.mc_version}
             </span>

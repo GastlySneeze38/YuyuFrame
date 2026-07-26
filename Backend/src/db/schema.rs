@@ -68,6 +68,14 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN description TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN is_offline INTEGER NOT NULL DEFAULT 0", []);
+    // Backfill pour les comptes hors ligne créés avant l'ajout de la colonne
+    // ci-dessus (feature déjà là depuis 2 jours, cf. mc_add_offline) : sans
+    // ça, l'ALTER TABLE les remet tous à `is_offline = 0` (perte du badge +
+    // du rappel d'achat, mais rien de fonctionnel puisque le refresh token
+    // reste de toute façon sauté via `expires_at` = NEVER_EXPIRES). Le
+    // littéral "offline" posé par mc_add_offline comme access_token n'est
+    // jamais celui d'un vrai token Microsoft, donc marqueur fiable à 100%.
+    let _ = conn.execute("UPDATE mc_sessions SET is_offline = 1 WHERE access_token = 'offline' AND is_offline = 0", []);
 
     Ok(conn)
 }

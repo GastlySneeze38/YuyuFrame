@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-dialog'
+import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
-import type { Instance, Mod, ModpackMeta } from '@/types'
+import { formatBytes } from '@/lib/format'
+import type { Instance, Mod, ModInstallProgress, ModpackInstallProgress, ModpackMeta } from '@/types'
 import { searchModrinthModpacks, resolveModpackFile, type ModpackHit } from '@/lib/modrinthModpacks'
 import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { ImportChoiceModal } from '@/components/import/ImportChoiceModal'
@@ -61,6 +63,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [results, setResults] = useState<ModrinthHit[]>([])
   const [searching, setSearching] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
+  const [installProgress, setInstallProgress] = useState<{ percent: number; label: string } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [modSearch, setModSearch] = useState('')
@@ -84,6 +87,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [packResults, setPackResults] = useState<ModpackHit[]>([])
   const [packSearching, setPackSearching] = useState(false)
   const [packInstalling, setPackInstalling] = useState<string | null>(null)
+  const [packInstallProgress, setPackInstallProgress] = useState<{ percent: number; label: string } | null>(null)
   const packDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -113,6 +117,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const handleInstallModpack = async (hit: ModpackHit) => {
     setPackInstalling(hit.project_id)
+    setPackInstallProgress({ percent: 0, label: 'Téléchargement du modpack...' })
+    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
+      const { current, total, label } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
+      setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
+    })
     try {
       const file = await resolveModpackFile(hit.project_id)
       if (!file) throw new Error('Aucun fichier .mrpack disponible')
@@ -137,7 +147,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
     } catch (e) {
       showError(e)
     } finally {
+      unlisten()
       setPackInstalling(null)
+      setPackInstallProgress(null)
     }
   }
 
@@ -348,6 +360,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const handleInstall = async (hit: ModrinthHit) => {
     setInstalling(hit.project_id)
+    setInstallProgress({ percent: 0, label: 'Préparation...' })
+    const unlisten = await listen<ModInstallProgress>('mod_install_progress', (e) => {
+      const { downloaded, total } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0
+      const label = total > 0 ? `${formatBytes(downloaded)} / ${formatBytes(total)}` : formatBytes(downloaded)
+      setInstallProgress({ percent, label })
+    })
     try {
       const version = await fetchLatestVersion(hit.slug, mcVersion, loader)
       if (!version) throw new Error('Aucune version compatible')
@@ -363,7 +382,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
     } catch (e) {
       showError(e)
     } finally {
+      unlisten()
       setInstalling(null)
+      setInstallProgress(null)
     }
   }
 
@@ -422,10 +443,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
         <div className="flex flex-1 items-center gap-1">
           <button
             onClick={() => setTab('installed')}
-            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150 border ${
+            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150 border border-[rgba(75,63,207,0.35)] ${
               tab === 'installed'
                 ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)] border-[rgba(75,63,207,0.5)]'
-                : 'bg-transparent text-[rgba(255,255,255,0.35)] border-transparent'
+                : 'bg-transparent text-[rgba(255,255,255,0.35)]'
             }`}
           >
             {`Installés (${mods.length})`}
@@ -585,6 +606,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             results={results}
             searching={searching}
             installing={installing}
+            installProgress={installProgress}
             isInstalled={isInstalled}
             isPlugin={isPlugin}
             onQueryChange={handleQueryChange}
@@ -597,6 +619,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             results={packResults}
             searching={packSearching}
             installing={packInstalling}
+            installProgress={packInstallProgress}
             onQueryChange={handlePackQueryChange}
             onInstall={handleInstallModpack}
           />

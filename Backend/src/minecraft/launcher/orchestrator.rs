@@ -17,7 +17,7 @@ use super::java::ensure_java;
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
-use super::loader_setup::{setup_fabric, setup_forge, LoaderSetup};
+use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
 use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready};
 use super::ready_event::{create_ready_event, wait_for_ready_event};
 use super::servers::build_server_connect_args;
@@ -323,7 +323,9 @@ pub async fn download_and_launch(
 
     let loader_setup = match loader.unwrap_or("vanilla") {
         "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor).await?,
+        "quilt" => setup_quilt(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor).await?,
         "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor).await?,
+        "neoforge" => setup_neoforge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor).await?,
         _ => LoaderSetup { main_class: details.main_class.clone(), ..Default::default() },
     };
     let (main_class, extra_classpath, extra_game_args, extra_jvm_args) = (

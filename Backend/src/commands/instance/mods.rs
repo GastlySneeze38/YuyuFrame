@@ -144,10 +144,14 @@ pub async fn mods_delete(instance_id: String, name: String) -> Result<(), String
 
 #[tauri::command]
 pub async fn mods_install(
+    app: tauri::AppHandle,
     instance_id: String,
     url: String,
     filename: String,
 ) -> Result<ModInfo, String> {
+    use futures::StreamExt;
+    use tauri::Emitter;
+
     if !url.starts_with("https://cdn.modrinth.com/") {
         return Err("URL non autorisée".into());
     }
@@ -174,7 +178,25 @@ pub async fn mods_install(
         return Err(format!("Téléchargement échoué: {}", resp.status()));
     }
 
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    // Téléchargement en flux plutôt qu'en un bloc (`bytes()`) pour pouvoir
+    // publier une vraie progression (utile sur les mods volumineux comme
+    // Sodium/embeddium — sur les petits mods, la barre passe juste très vite
+    // à 100%).
+    let total = resp.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        bytes.extend_from_slice(&chunk);
+        let _ = app.emit("mod_install_progress", serde_json::json!({
+            "filename": &safe_name,
+            "downloaded": downloaded,
+            "total": total,
+        }));
+    }
+
     let dest = dir.join(&safe_name);
     tokio::fs::write(&dest, &bytes).await.map_err(|e| e.to_string())?;
     let sha1 = tokio::task::spawn_blocking(move || sha1_cached(&dest))

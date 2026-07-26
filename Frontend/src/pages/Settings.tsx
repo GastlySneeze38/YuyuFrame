@@ -1,7 +1,16 @@
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
+
+const CATEGORIES = [
+  { id: 'lancement', label: 'Lancement' },
+  { id: 'instances', label: 'Instances' },
+  { id: 'serveurs', label: 'Serveurs' },
+  { id: 'apparence', label: 'Apparence' },
+  { id: 'apropos', label: 'À propos' },
+] as const
 
 export default function Settings() {
   const {
@@ -10,6 +19,31 @@ export default function Settings() {
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
   } = useStore()
+
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [activeId, setActiveId] = useState<string>(CATEGORIES[0].id)
+
+  const scrollToCategory = (id: string) => {
+    setActiveId(id)
+    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting)
+        if (visible.length === 0) return
+        const top = visible.reduce((a, b) => (a.boundingClientRect.top < b.boundingClientRect.top ? a : b))
+        setActiveId(top.target.id)
+      },
+      { root, rootMargin: '0px 0px -70% 0px', threshold: 0 }
+    )
+    Object.values(sectionRefs.current).forEach((el) => el && observer.observe(el))
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
@@ -27,12 +61,38 @@ export default function Settings() {
       </PageHeader>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* Sidebar de navigation — pleine hauteur, fixe (ne scrolle pas avec le contenu) */}
+        <div className="flex w-[220px] shrink-0 flex-col border-r border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
+          <div className="px-5 py-4 text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
+            Catégories
+          </div>
+          {CATEGORIES.map(({ id, label }) => {
+            const active = activeId === id
+            return (
+              <button
+                key={id}
+                onClick={() => scrollToCategory(id)}
+                className={
+                  active
+                    ? 'flex w-full items-center text-left px-5 py-3 text-[14px] font-semibold cursor-pointer bg-[rgba(75,63,207,0.16)] border-l-2 border-l-[#7b72e9] text-white'
+                    : 'flex w-full items-center text-left px-5 py-3 text-[14px] font-semibold cursor-pointer bg-transparent border-l-2 border-l-transparent text-[rgba(255,255,255,0.5)] transition-colors duration-150 hover:bg-white/[0.03] hover:text-white/70'
+                }
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-8">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
 
-          {/* Launcher */}
+          {/* Lancement */}
+          <div id="lancement" ref={(el) => { sectionRefs.current.lancement = el }}>
           <SCard
-            title="Launcher"
+            title="Lancement"
             icon={
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
                 <path d="M8 5v14l11-7z" />
@@ -90,38 +150,21 @@ export default function Settings() {
                 </div>
                 <Toggle checked={showConsole} onChange={() => setShowConsole(!showConsole)} />
               </div>
+            </div>
+          </SCard>
+          </div>
 
-              <div className="h-px bg-white/6" />
-
-              {/* Raccourcis serveurs sur l'accueil */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-white">Afficher mes serveurs sur l'accueil</p>
-                  <p className="text-[11px] text-white/35 mt-0.5">
-                    Remplace les cartes d'aperçu des fonctionnalités par un raccourci vers tes serveurs enregistrés (jusqu'à 3 favoris) pour l'instance sélectionnée
-                  </p>
-                </div>
-                <Toggle checked={showHomeServers} onChange={() => {
-                  setShowHomeServers(!showHomeServers)
-                  api.analytics.track(showHomeServers ? 'home_servers_setting_disabled' : 'home_servers_setting_enabled')
-                }} />
-              </div>
-
-              <div className="h-px bg-white/6" />
-
-              {/* Confirmation avant lancement direct sur un serveur */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-white">Confirmer avant de lancer sur un serveur</p>
-                  <p className="text-[11px] text-white/35 mt-0.5">
-                    Demande confirmation avant de rejoindre directement un serveur enregistré depuis l'accueil
-                  </p>
-                </div>
-                <Toggle checked={confirmServerLaunch} onChange={() => setConfirmServerLaunch(!confirmServerLaunch)} />
-              </div>
-
-              <div className="h-px bg-white/6" />
-
+          {/* Instances */}
+          <div id="instances" ref={(el) => { sectionRefs.current.instances = el }}>
+          <SCard
+            title="Instances"
+            icon={
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
+              </svg>
+            }
+          >
+            <div className="flex flex-col gap-6">
               {/* Dépendances beta */}
               <div className="flex items-center justify-between">
                 <div>
@@ -177,8 +220,51 @@ export default function Settings() {
               </div>
             </div>
           </SCard>
+          </div>
+
+          {/* Serveurs */}
+          <div id="serveurs" ref={(el) => { sectionRefs.current.serveurs = el }}>
+          <SCard
+            title="Serveurs"
+            icon={
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                <path d="M4 1h16a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1zm3 2.5a1 1 0 100 2 1 1 0 000-2zM4 9h16a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4a1 1 0 011-1zm3 2.5a1 1 0 100 2 1 1 0 000-2zM4 17h16a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4a1 1 0 011-1zm3 2.5a1 1 0 100 2 1 1 0 000-2z" />
+              </svg>
+            }
+          >
+            <div className="flex flex-col gap-6">
+              {/* Raccourcis serveurs sur l'accueil */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Afficher mes serveurs sur l'accueil</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    Remplace les cartes d'aperçu des fonctionnalités par un raccourci vers tes serveurs enregistrés (jusqu'à 3 favoris) pour l'instance sélectionnée
+                  </p>
+                </div>
+                <Toggle checked={showHomeServers} onChange={() => {
+                  setShowHomeServers(!showHomeServers)
+                  api.analytics.track(showHomeServers ? 'home_servers_setting_disabled' : 'home_servers_setting_enabled')
+                }} />
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Confirmation avant lancement direct sur un serveur */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">Confirmer avant de lancer sur un serveur</p>
+                  <p className="text-[11px] text-white/35 mt-0.5">
+                    Demande confirmation avant de rejoindre directement un serveur enregistré depuis l'accueil
+                  </p>
+                </div>
+                <Toggle checked={confirmServerLaunch} onChange={() => setConfirmServerLaunch(!confirmServerLaunch)} />
+              </div>
+            </div>
+          </SCard>
+          </div>
 
           {/* Apparence */}
+          <div id="apparence" ref={(el) => { sectionRefs.current.apparence = el }}>
           <SCard
             title="Apparence"
             icon={
@@ -242,8 +328,10 @@ export default function Settings() {
               </div>
             </div>
           </SCard>
+          </div>
 
           {/* À propos */}
+          <div id="apropos" ref={(el) => { sectionRefs.current.apropos = el }}>
           <SCard
             title="À propos"
             icon={
@@ -258,7 +346,9 @@ export default function Settings() {
               <IRow label="Auteur" value="Ghasty" />
             </div>
           </SCard>
+          </div>
 
+        </div>
         </div>
       </div>
     </div>

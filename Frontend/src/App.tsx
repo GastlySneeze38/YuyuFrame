@@ -51,7 +51,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, setUser } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
 
@@ -59,13 +59,32 @@ export default function App() {
   // (voir UpdateChecker → relaunch()), on les affiche d'abord — le rappel
   // compte hors ligne, lui, n'apparaît qu'une fois les notes fermées
   // (handleClosePatchNotes), jamais en même temps.
+  //
+  // `isOffline` du store est un instantané persisté (voir partialize dans
+  // useStore.ts) qui n'est resynchronisé qu'en repassant par Login/YuyuLogin
+  // — au démarrage normal, l'app route direct vers /home sans jamais
+  // revalider ce flag. Un `isOffline: true` persisté un jour (test du
+  // compte hors ligne, switch antérieur...) redéclenchait donc le rappel à
+  // chaque lancement même une fois de retour sur un compte Microsoft en
+  // ligne. On revalide contre le compte actif réel avant de décider.
   useEffect(() => {
     if (isConsoleWindow) return
-    if (pendingPatchNotes) {
-      setShowPatchNotes(true)
-    } else if (uuid && isOffline) {
-      setShowOfflineReminder(true)
-    }
+    api.mc.accounts()
+      .then((accs) => {
+        const active = accs.find((a) => a.is_active)
+        if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
+        if (pendingPatchNotes) {
+          setShowPatchNotes(true)
+        } else if (active?.is_offline) {
+          setShowOfflineReminder(true)
+        }
+      })
+      .catch(() => {
+        // Repli sur l'instantané persisté si la revalidation échoue (ex: pas
+        // encore authentifié) — mieux que rien, moins fiable que le fetch.
+        if (pendingPatchNotes) setShowPatchNotes(true)
+        else if (uuid && isOffline) setShowOfflineReminder(true)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

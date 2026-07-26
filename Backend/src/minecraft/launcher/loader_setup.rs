@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-use crate::minecraft::loaders::{deps, fabric, forge};
+use crate::minecraft::loaders::{deps, fabric, forge, neoforge, quilt};
 use super::jvm_args::extract_tweak_class_args;
 use super::progress::set_progress_monotonic;
 
@@ -14,6 +14,29 @@ use super::progress::set_progress_monotonic;
 /// (objets conditionnels de règles OS, non gérés ici).
 fn json_str_array(values: &[serde_json::Value]) -> Vec<String> {
     values.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+}
+
+/// Substitue les placeholders propres au version json de Forge moderne
+/// (>= ~1.17, vérifié empiriquement sur le JSON réel de 1.20.1-47.2.20) et
+/// absents du vanilla : `${library_directory}`, `${classpath_separator}`,
+/// `${version_name}`. Sans ça, l'argument `-p <module-path>` de
+/// `cpw.mods.bootstraplauncher.BootstrapLauncher` (le vrai main class Forge
+/// moderne) contient des chemins littéralement `${library_directory}/...`
+/// qui ne résolvent à rien : le module `cpw.mods.securejarhandler` ne se
+/// charge jamais, et `--add-opens ...=cpw.mods.securejarhandler` fait
+/// planter la JVM au tout premier démarrage (avant même d'ouvrir une
+/// fenêtre) — la cause du "Forge ne se lance pas" en 1.20.1 et probablement
+/// toute version moderne (le Forge legacy pré-1.13 n'a pas ce bloc
+/// `arguments` du tout, voir `minecraft_arguments`/tweakClass plus bas).
+fn substitute_forge_placeholders(args: Vec<String>, version_id: &str, libraries_dir: &Path) -> Vec<String> {
+    let classpath_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+    let lib_dir = libraries_dir.to_string_lossy();
+    args.into_iter()
+        .map(|s| s
+            .replace("${library_directory}", &lib_dir)
+            .replace("${classpath_separator}", classpath_sep)
+            .replace("${version_name}", version_id))
+        .collect()
 }
 
 #[derive(Default)]
@@ -114,6 +137,86 @@ pub(super) async fn setup_fabric(
     })
 }
 
+/// Miroir de `setup_fabric`, sans l'auto-install de Fabric API : QSL (Quilt
+/// Standard Libraries) n'est pas systématiquement requis comme l'est Fabric
+/// API pour la quasi-totalité des mods Fabric. `deps::resolve_and_install_deps`
+/// reste appelé tel quel (déjà générique par chaîne de loader).
+pub(super) async fn setup_quilt(
+    mc_version: &str,
+    libraries_dir: &Path,
+    mods_dir: &Path,
+    app: &tauri::AppHandle,
+    avoid_beta: bool,
+    progress_floor: &AtomicU64,
+) -> Result<LoaderSetup> {
+    set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Quilt Loader...");
+
+    let profile = quilt::get_latest_profile(mc_version).await?;
+    let mut warnings = Vec::new();
+
+    set_progress_monotonic(app, progress_floor, 74, 100, "Résolution des dépendances des mods...");
+    match deps::resolve_and_install_deps(mc_version, "quilt", mods_dir, app, avoid_beta, progress_floor).await {
+        Ok(failed) => warnings.extend(
+            failed.into_iter().map(|id| format!("Dépendance de mod manquante : {id}")),
+        ),
+        Err(e) => {
+            tracing::warn!("Résolution des dépendances échouée: {}", e);
+            warnings.push(format!("Résolution des dépendances de mods échouée : {e}"));
+        }
+    }
+
+    let total = profile.libraries.len() as u64;
+    let quilt_sem = Arc::new(Semaphore::new(16));
+    let mut quilt_tasks: JoinSet<(String, Option<PathBuf>)> = JoinSet::new();
+    for lib in profile.libraries {
+        let sem = quilt_sem.clone();
+        let libraries_dir = libraries_dir.to_path_buf();
+        quilt_tasks.spawn(async move {
+            let _permit = sem.acquire().await.unwrap();
+            let name = lib.name.clone();
+            // Réutilise fabric::download_library : même format de lib
+            // ({name, url}), aucune logique spécifique à "Fabric" dedans.
+            let path = fabric::download_library(&lib, &libraries_dir).await;
+            (name, path)
+        });
+    }
+
+    let mut quilt_cp = Vec::new();
+    let mut done = 0u64;
+    while let Some(result) = quilt_tasks.join_next().await {
+        let (name, path) = result.map_err(|e| anyhow!("Tâche lib Quilt : {}", e))?;
+        match path {
+            Some(path) => quilt_cp.push(path.to_string_lossy().to_string()),
+            None => warnings.push(format!("Bibliothèque Quilt manquante : {}", name)),
+        }
+        done += 1;
+        if done.is_multiple_of(5) || done == total {
+            set_progress_monotonic(app, progress_floor, 72 + done * 20 / total.max(1), 100, &format!("Quilt libs {}/{}", done, total));
+        }
+    }
+
+    let extra_jvm: Vec<String> = profile
+        .arguments
+        .as_ref()
+        .and_then(|a| a.jvm.as_ref())
+        .map(|jvm| json_str_array(jvm))
+        .unwrap_or_default();
+    let extra_game: Vec<String> = profile
+        .arguments
+        .as_ref()
+        .and_then(|a| a.game.as_ref())
+        .map(|game| json_str_array(game))
+        .unwrap_or_default();
+
+    Ok(LoaderSetup {
+        main_class: profile.main_class,
+        classpath: quilt_cp,
+        extra_game_args: extra_game,
+        extra_jvm_args: extra_jvm,
+        warnings,
+    })
+}
+
 pub(super) async fn setup_forge(
     mc_version: &str,
     mc_dir: &Path,
@@ -173,7 +276,7 @@ pub(super) async fn setup_forge(
 
     let extra_game: Vec<String> = forge_json
         .arguments.as_ref().and_then(|a| a.game.as_ref())
-        .map(|g| json_str_array(g))
+        .map(|g| substitute_forge_placeholders(json_str_array(g), &version_id, libraries_dir))
         .unwrap_or_else(|| {
             // Legacy Forge (pré-1.13) : pas de bloc "arguments", seulement une
             // "minecraftArguments" à plat dont on extrait juste --tweakClass
@@ -183,7 +286,7 @@ pub(super) async fn setup_forge(
 
     let mut extra_jvm: Vec<String> = forge_json
         .arguments.as_ref().and_then(|a| a.jvm.as_ref())
-        .map(|j| json_str_array(j))
+        .map(|j| substitute_forge_placeholders(json_str_array(j), &version_id, libraries_dir))
         .unwrap_or_default();
 
     // Forge legacy (pré-1.13, pas de bloc "arguments") : FML revérifie par défaut
@@ -201,6 +304,89 @@ pub(super) async fn setup_forge(
     Ok(LoaderSetup {
         main_class: forge_json.main_class,
         classpath: forge_cp,
+        extra_game_args: extra_game,
+        extra_jvm_args: extra_jvm,
+        warnings,
+    })
+}
+
+/// Miroir de `setup_forge`, mais NeoForge n'a jamais eu de format legacy
+/// (toujours "moderne", jamais de `minecraftArguments`) donc pas besoin de la
+/// branche de repli tweakClass. Le version json produit par l'installeur
+/// NeoForge a la MÊME forme que celui du Forge moderne (vérifié sur un
+/// installeur réel : même `mainClass: cpw.mods.bootstraplauncher.BootstrapLauncher`,
+/// même bloc `libraries[].downloads.artifact`, mêmes placeholders
+/// `${library_directory}`/`${classpath_separator}`/`${version_name}`) — on
+/// réutilise donc directement `forge::read_version_json`/`forge::download_library`
+/// (aucune logique spécifique au nom "Forge" dedans) et `substitute_forge_placeholders`
+/// plutôt que de dupliquer ce code.
+pub(super) async fn setup_neoforge(
+    mc_version: &str,
+    mc_dir: &Path,
+    libraries_dir: &Path,
+    java: &str,
+    app: &tauri::AppHandle,
+    progress_floor: &AtomicU64,
+) -> Result<LoaderSetup> {
+    set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version NeoForge...");
+
+    let neoforge_ver = neoforge::fetch_latest_version(mc_version).await?;
+    tracing::info!("NeoForge {} pour MC {}", neoforge_ver, mc_version);
+
+    let version_id = match neoforge::find_installed(&neoforge_ver, mc_dir) {
+        Some(id) => id,
+        None => {
+            set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur NeoForge...");
+            neoforge::install(&neoforge_ver, mc_dir, java).await?
+        }
+    };
+
+    let mut neoforge_json = forge::read_version_json(&version_id, mc_dir)?;
+    let mut neoforge_cp = Vec::new();
+    let mut warnings = Vec::new();
+
+    if let Some(libs) = neoforge_json.libraries.take() {
+        let total = libs.len() as u64;
+        let neoforge_sem = Arc::new(Semaphore::new(16));
+        let mut neoforge_tasks: JoinSet<(String, Option<PathBuf>)> = JoinSet::new();
+        for lib in libs {
+            let sem = neoforge_sem.clone();
+            let libraries_dir = libraries_dir.to_path_buf();
+            neoforge_tasks.spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+                let name = lib.name.clone();
+                let path = forge::download_library(&lib, &libraries_dir).await;
+                (name, path)
+            });
+        }
+
+        let mut done = 0u64;
+        while let Some(result) = neoforge_tasks.join_next().await {
+            let (name, path) = result.map_err(|e| anyhow!("Tâche lib NeoForge : {}", e))?;
+            match path {
+                Some(path) => neoforge_cp.push(path.to_string_lossy().to_string()),
+                None => warnings.push(format!("Bibliothèque NeoForge manquante : {}", name)),
+            }
+            done += 1;
+            if done.is_multiple_of(5) || done == total {
+                set_progress_monotonic(app, progress_floor, 80 + done * 12 / total.max(1), 100, &format!("NeoForge libs {}/{}", done, total));
+            }
+        }
+    }
+
+    let extra_game: Vec<String> = neoforge_json
+        .arguments.as_ref().and_then(|a| a.game.as_ref())
+        .map(|g| substitute_forge_placeholders(json_str_array(g), &version_id, libraries_dir))
+        .unwrap_or_default();
+
+    let extra_jvm: Vec<String> = neoforge_json
+        .arguments.as_ref().and_then(|a| a.jvm.as_ref())
+        .map(|j| substitute_forge_placeholders(json_str_array(j), &version_id, libraries_dir))
+        .unwrap_or_default();
+
+    Ok(LoaderSetup {
+        main_class: neoforge_json.main_class,
+        classpath: neoforge_cp,
         extra_game_args: extra_game,
         extra_jvm_args: extra_jvm,
         warnings,

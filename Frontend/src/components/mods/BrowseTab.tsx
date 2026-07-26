@@ -5,13 +5,14 @@ import type { ModrinthHit } from './modUtils'
 import { ModrinthCard } from './ModrinthCard'
 
 export function BrowseTab({
-  query, results, searching, installing, isInstalled, isPlugin,
+  query, results, searching, installing, installProgress, isInstalled, isPlugin,
   onQueryChange, onInstall, onOpenDetail,
 }: {
   query: string
   results: ModrinthHit[]
   searching: boolean
   installing: string | null
+  installProgress?: { percent: number; label: string } | null
   isInstalled: (slug: string) => boolean
   isPlugin: boolean
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -54,6 +55,7 @@ export function BrowseTab({
             hit={hit}
             installed={isInstalled(hit.slug)}
             loading={installing === hit.project_id}
+            progress={installing === hit.project_id ? installProgress : null}
             onInstall={() => onInstall(hit)}
             onOpenDetail={() => onOpenDetail(hit)}
           />

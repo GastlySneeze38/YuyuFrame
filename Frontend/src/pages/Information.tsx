@@ -15,6 +15,10 @@ const FEATURES = [
   'Téléchargement automatique de Minecraft et des loaders',
 ]
 
+const BETA_TESTERS: string[] = [
+  'Hyroky', 'Wiliking', 'SucreNormal', 'SarodayNest', 'Pumba', 'MedicalNew', 'Lpz2903', 'Smiouw',
+]
+
 export default function Information() {
   const [info, setInfo] = useState<AppInfo | null>(null)
 
@@ -85,6 +89,29 @@ export default function Information() {
                 </div>
               ))}
             </div>
+          </Section>
+
+          {/* Beta testeurs */}
+          <Section title="Beta testeurs">
+            {BETA_TESTERS.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {BETA_TESTERS.map((name) => (
+                  <span
+                    key={name}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[rgba(120,110,230,0.9)] bg-[rgba(75,63,207,0.12)] border border-[rgba(75,63,207,0.3)]"
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}>
+                      <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                    </svg>
+                    {name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+                <p className="text-[12px] text-white/30">Liste à venir</p>
+              </div>
+            )}
           </Section>
 
           {/* Auteur */}

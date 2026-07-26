@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { SyncInstance } from '@/types'
 import { formatDateTime } from '@/lib/format'
+import { loaderColor } from '@/lib/loader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloudContentSummary } from './CloudContentSummary'
 
@@ -32,7 +33,7 @@ export function OrphanCloudCard({ ci, onRestore, onDelete }: {
             {ci.instance_name}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className={`text-[11px] font-semibold ${ci.loader === 'fabric' ? 'text-[#b5a0ff]' : ci.loader === 'forge' ? 'text-[#f0a040]' : 'text-[rgba(255,255,255,0.4)]'}`}>{ci.loader}</span>
+            <span className="text-[11px] font-semibold" style={{ color: loaderColor(ci.loader) }}>{ci.loader}</span>
             <span className="text-[11px] text-[rgba(255,255,255,0.2)]">{ci.mc_version}</span>
             <span className="text-[11px] text-[rgba(255,255,255,0.15)]">{formatDateTime(ci.updated_at)}</span>
           </div>

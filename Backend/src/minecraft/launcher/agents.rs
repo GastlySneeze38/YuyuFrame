@@ -79,7 +79,7 @@ pub(super) async fn setup_p2p(
     // dès le bootstrap, même sans activer les checks — son absence provoque un
     // NoClassDefFoundError immédiat (vu en 1.20.4 vanilla, pas en Fabric où Fabric
     // Loader apporte déjà sa copie complète d'ASM).
-    let is_fabric = matches!(loader, Some("fabric"));
+    let is_fabric = matches!(loader, Some("fabric") | Some("quilt"));
     let mut extra_cp: Vec<String> = Vec::new();
     if !is_fabric {
         for jar in [&asm_jar, &asm_tree_jar, &asm_util_jar, &asm_analysis_jar, &asm_commons_jar] {
@@ -193,7 +193,7 @@ pub(super) async fn setup_launcher_agent(
     // d'ASM si Fabric en apporte déjà une (conflit "duplicate ASM classes"
     // sinon — voir docs/LauncherAgent/index.md). CheckClassAdapter
     // (asm-util) est requis dès le bootstrap Mixin.
-    let is_fabric = matches!(loader, Some("fabric"));
+    let is_fabric = matches!(loader, Some("fabric") | Some("quilt"));
     let mut extra_cp: Vec<String> = Vec::new();
     if !is_fabric {
         for jar in [&asm_jar, &asm_tree_jar, &asm_util_jar, &asm_analysis_jar, &asm_commons_jar] {

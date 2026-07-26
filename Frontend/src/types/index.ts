@@ -37,7 +37,7 @@ export interface Mod {
   sha1: string
 }
 
-export type Loader = 'vanilla' | 'fabric' | 'forge'
+export type Loader = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'
 
 export interface DetectedSource {
   kind: 'multimc_prism' | 'curseforge' | 'atlauncher' | 'modrinth_app' | 'unknown'
@@ -120,6 +120,18 @@ export interface SaveInfo {
 export interface SyncProgress {
   phase: 'resolving_mods' | 'compressing' | 'uploading' | 'downloading' | 'installing_mods' | 'done'
   percent: number
+  label: string
+}
+
+export interface ModInstallProgress {
+  filename: string
+  downloaded: number
+  total: number
+}
+
+export interface ModpackInstallProgress {
+  current: number
+  total: number
   label: string
 }
 

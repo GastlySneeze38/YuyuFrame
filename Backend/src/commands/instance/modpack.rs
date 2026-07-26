@@ -105,9 +105,13 @@ pub struct ModpackIndexInfo {
 }
 
 fn loader_from_dependencies(deps: &std::collections::HashMap<String, String>) -> String {
-    if deps.contains_key("fabric-loader") || deps.contains_key("quilt-loader") {
+    if deps.contains_key("quilt-loader") {
+        "quilt".to_string()
+    } else if deps.contains_key("fabric-loader") {
         "fabric".to_string()
-    } else if deps.contains_key("forge") || deps.contains_key("neoforge") {
+    } else if deps.contains_key("neoforge") {
+        "neoforge".to_string()
+    } else if deps.contains_key("forge") {
         "forge".to_string()
     } else {
         "vanilla".to_string()
@@ -206,7 +210,9 @@ fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<Stri
 }
 
 #[tauri::command]
-pub async fn modpack_install(input: ModpackInstallInput) -> Result<ModpackMeta, String> {
+pub async fn modpack_install(app: tauri::AppHandle, input: ModpackInstallInput) -> Result<ModpackMeta, String> {
+    use tauri::Emitter;
+
     let bytes = download_mrpack(&input.file_url).await?;
 
     let dir = instance_dir(&input.instance_id);
@@ -241,7 +247,14 @@ pub async fn modpack_install(input: ModpackInstallInput) -> Result<ModpackMeta, 
         .map_err(|e| e.to_string())?;
     let mut backed_up: Vec<String> = Vec::new();
     let mut failed_files: Vec<String> = Vec::new();
-    for file in &index.files {
+    let total_files = index.files.len();
+    for (i, file) in index.files.iter().enumerate() {
+        let _ = app.emit("modpack_install_progress", serde_json::json!({
+            "current": i,
+            "total": total_files,
+            "label": file.path.rsplit('/').next().unwrap_or(&file.path),
+        }));
+
         let Some(url) = file.downloads.first() else {
             tracing::warn!("[Modpack] aucune URL de téléchargement pour {}", file.path);
             failed_files.push(file.path.clone());
@@ -305,6 +318,12 @@ pub async fn modpack_install(input: ModpackInstallInput) -> Result<ModpackMeta, 
             }
         }
     }
+
+    let _ = app.emit("modpack_install_progress", serde_json::json!({
+        "current": total_files,
+        "total": total_files,
+        "label": "Finalisation...",
+    }));
 
     if !backed_up.is_empty() {
         let json = serde_json::to_string_pretty(&ModpackBackup { files: backed_up }).map_err(|e| e.to_string())?;
