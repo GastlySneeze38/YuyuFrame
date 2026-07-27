@@ -52,7 +52,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, setUser, setInstanceRunning } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, setUser, setInstanceRunning, applyInstanceIdMigrations } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
 
@@ -108,10 +108,23 @@ export default function App() {
 
   useEffect(() => {
     if (isConsoleWindow) return
-    api.instances.startupSync(instanceSyncMode)
-      .then(() => api.instances.list())
-      .then(setInstances)
-      .catch(showError)
+    // Migration one-shot des ids d'instance legacy → nouveau format lisible
+    // (voir migrate_legacy_instance_ids côté backend, lib.rs) — remappe les
+    // clés persistées ici (favoris, mods épinglés...) qui référencent encore
+    // l'ancien id, AVANT de charger la liste d'instances : sans ça,
+    // `selectedInstanceId` ne correspondrait plus à rien dans la liste
+    // fraîchement rechargée et l'accueil se retrouverait sans instance
+    // sélectionnée après la mise à jour. Best-effort : une erreur ici ne
+    // bloque jamais le chargement des instances qui suit.
+    api.instances.getIdMigrations()
+      .then(applyInstanceIdMigrations)
+      .catch(() => {})
+      .finally(() => {
+        api.instances.startupSync(instanceSyncMode)
+          .then(() => api.instances.list())
+          .then(setInstances)
+          .catch(showError)
+      })
 
     // Rafraîchit le token Minecraft au démarrage et périodiquement — sinon
     // le seul refresh qui se produisait était celui déclenché par

@@ -120,3 +120,34 @@ pub fn instance_claim_unclaimed(conn: &Connection, user_id: i64) -> Result<()> {
     )?;
     Ok(())
 }
+
+/// Ancien format d'id (avant l'introduction du slug de nom, voir
+/// `crud::gen_id`) : exactement 12 caractères alphanumériques, jamais de
+/// tiret. Le nouveau format contient toujours un tiret, sauf pour un nom
+/// entièrement non-alphanumérique où le suffixe seul fait 8 caractères —
+/// jamais 12. Distinction sans ambiguïté dans les deux sens.
+fn is_legacy_id(id: &str) -> bool {
+    id.len() == 12 && !id.contains('-') && id.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Instances (tous users confondus) dont l'id est encore au format legacy —
+/// utilisé une seule fois au démarrage pour migrer vers le nouveau format
+/// lisible (voir `migrate_legacy_instance_ids` dans lib.rs).
+pub fn instance_legacy_ids(conn: &Connection) -> Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare("SELECT id, name FROM instances")?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows.into_iter().filter(|(id, _)| is_legacy_id(id)).collect())
+}
+
+/// Répercute un renommage d'id d'instance dans la ligne `instances`
+/// elle-même et dans l'historique `play_sessions` (sinon les stats de jeu
+/// passées de l'instance se retrouvent orphelines, scindées de l'instance
+/// renommée). Ne touche PAS au dossier disque — responsabilité de l'appelant,
+/// qui a accès à `minecraft_dir()` (pas disponible depuis `db/`).
+pub fn instance_rename_id(conn: &Connection, old_id: &str, new_id: &str) -> Result<()> {
+    conn.execute("UPDATE instances SET id = ?1 WHERE id = ?2", params![new_id, old_id])?;
+    conn.execute("UPDATE play_sessions SET instance_id = ?1 WHERE instance_id = ?2", params![new_id, old_id])?;
+    Ok(())
+}

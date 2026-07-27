@@ -65,6 +65,12 @@ pub struct AppState {
     /// y envoie `true` pour demander l'arrêt (téléchargement en cours ou JVM déjà lancée).
     pub launch_cancel: std::collections::HashMap<String, tokio::sync::watch::Sender<bool>>,
     pub auth_device_code: Option<AuthDeviceCode>,
+    /// Migration one-shot des ids d'instance legacy → nouveau format lisible,
+    /// calculée une fois au démarrage (voir `migrate_legacy_instance_ids` dans
+    /// lib.rs) — jamais modifiée ensuite pendant la session. Consommée par le
+    /// frontend via la commande `instance_id_migrations` pour remapper ses
+    /// propres clés persistées qui référencent encore l'ancien id.
+    pub instance_id_migrations: Vec<(String, String)>,
 }
 
 impl AppState {

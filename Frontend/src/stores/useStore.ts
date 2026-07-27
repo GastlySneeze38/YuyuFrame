@@ -121,6 +121,13 @@ interface Store {
   // en premier, le rappel ne s'affiche qu'une fois les notes fermées.
   pendingPatchNotes: { version: string; notes: string } | null
   setPendingPatchNotes: (v: { version: string; notes: string } | null) => void
+
+  // ── Migration one-shot des ids d'instance (voir instance_id_migrations côté
+  // backend, lib.rs) — remappe les clés persistées ci-dessus qui référencent
+  // encore un ancien id d'instance renommé au nouveau format lisible.
+  // Purement une histoire de confort perdu sinon (favoris, épingles, calibrage
+  // de barre de progression) — jamais de fichier/mod/save touché.
+  applyInstanceIdMigrations: (migrations: { oldId: string; newId: string }[]) => void
 }
 
 export const useStore = create<Store>()(
@@ -300,6 +307,38 @@ export const useStore = create<Store>()(
       // Notes de patch en attente
       pendingPatchNotes: null,
       setPendingPatchNotes: (pendingPatchNotes) => set({ pendingPatchNotes }),
+
+      // Migration ids d'instance
+      applyInstanceIdMigrations: (migrations) => {
+        if (migrations.length === 0) return
+        set((s) => {
+          const pinnedMods = { ...s.pinnedMods }
+          const launchPhaseDurations = { ...s.launchPhaseDurations }
+          const favoriteServers = { ...s.favoriteServers }
+          let selectedInstanceId = s.selectedInstanceId
+
+          for (const { oldId, newId } of migrations) {
+            const oldPrefix = `${oldId}:`
+            for (const key of Object.keys(pinnedMods)) {
+              if (key.startsWith(oldPrefix)) {
+                pinnedMods[`${newId}:${key.slice(oldPrefix.length)}`] = pinnedMods[key]
+                delete pinnedMods[key]
+              }
+            }
+            if (oldId in launchPhaseDurations) {
+              launchPhaseDurations[newId] = launchPhaseDurations[oldId]
+              delete launchPhaseDurations[oldId]
+            }
+            if (oldId in favoriteServers) {
+              favoriteServers[newId] = favoriteServers[oldId]
+              delete favoriteServers[oldId]
+            }
+            if (selectedInstanceId === oldId) selectedInstanceId = newId
+          }
+
+          return { pinnedMods, launchPhaseDurations, favoriteServers, selectedInstanceId }
+        })
+      },
     }),
     {
       name: 'yuyuframe-store',

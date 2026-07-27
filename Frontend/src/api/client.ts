@@ -80,6 +80,13 @@ export const api = {
 
   instances: {
     list: () => invoke<Instance[]>('instance_list'),
+    // Le backend renvoie des tuples Rust `(String, String)`, sérialisés par
+    // serde comme des arrays JSON `[oldId, newId]` — mappés ici en objets
+    // nommés pour rester lisible côté appelant (voir applyInstanceIdMigrations).
+    getIdMigrations: async () => {
+      const pairs = await invoke<[string, string][]>('instance_id_migrations')
+      return pairs.map(([oldId, newId]) => ({ oldId, newId }))
+    },
     create: (name: string, mc_version: string, loader: string, ram_mb: number, description?: string) =>
       invoke<Instance>('instance_create', { name, mcVersion: mc_version, loader, ramMb: ram_mb, description }),
     delete: (id: string) => invoke<void>('instance_delete', { id }),

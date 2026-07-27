@@ -85,7 +85,7 @@ fn slugify(name: &str) -> String {
 /// instances slugifiées à l'identique. Voir aussi `commands/launch.rs` qui
 /// utilise la FIN de l'id (le suffixe, jamais le nom) comme label de fenêtre
 /// console — ne jamais dépendre du début de l'id pour l'unicité.
-fn gen_id(name: &str) -> String {
+pub(crate) fn gen_id(name: &str) -> String {
     use rand::Rng;
     let suffix: String = rand::thread_rng()
         .sample_iter(rand::distributions::Alphanumeric)
@@ -107,6 +107,16 @@ fn row_to_instance(r: db::InstanceRow) -> Instance {
 
 fn user_id(s: &crate::state::AppState) -> i64 {
     s.current_yuyu_user_id().unwrap_or(0)
+}
+
+/// Migration one-shot des ids legacy vers `<nom-slugifié>-<code>` (voir
+/// `migrate_legacy_instance_ids` dans lib.rs) — calculée une fois au démarrage
+/// et stockée dans l'état partagé, consommée par le frontend pour remapper ses
+/// propres clés persistées (serveurs favoris, mods épinglés...) qui référencent
+/// encore l'ancien id.
+#[tauri::command]
+pub async fn instance_id_migrations(state: tauri::State<'_, SharedState>) -> Result<Vec<(String, String)>, String> {
+    Ok(state.read().await.instance_id_migrations.clone())
 }
 
 #[tauri::command]

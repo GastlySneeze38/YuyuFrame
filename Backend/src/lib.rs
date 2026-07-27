@@ -19,6 +19,68 @@ use tokio::sync::{Mutex, RwLock};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+/// Renomme une seule fois les instances créées avant l'introduction du nouvel
+/// id lisible (`<nom-slugifié>-<code>`, voir `commands::instance::crud::gen_id`)
+/// — l'id sert à la fois de clé primaire DB et de nom de dossier disque
+/// (`instance_dir()`), donc renommer l'un sans l'autre laisserait l'instance
+/// introuvable. Best-effort et sûr : un dossier verrouillé/permissions
+/// refusées laisse l'instance sur son ancien id, retentée au prochain
+/// démarrage plutôt que de risquer une instance perdue. Retourne les paires
+/// (ancien id, nouvel id) — le frontend les récupère via la commande
+/// `instance_id_migrations` pour remapper ses propres clés persistées
+/// (serveurs favoris, mods épinglés...) qui référencent encore l'ancien id.
+fn migrate_legacy_instance_ids(conn: &rusqlite::Connection) -> Vec<(String, String)> {
+    let legacy = match db::instance_legacy_ids(conn) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("Migration ids instances : lecture échouée : {}", e);
+            return Vec::new();
+        }
+    };
+    if legacy.is_empty() {
+        return Vec::new();
+    }
+
+    let instances_root = paths::root().join(".minecraft").join("instances");
+    let mut migrated = Vec::new();
+
+    for (old_id, name) in legacy {
+        let new_id = commands::instance::crud::gen_id(&name);
+        let old_dir = instances_root.join(&old_id);
+        let new_dir = instances_root.join(&new_id);
+
+        if !old_dir.is_dir() || new_dir.exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::rename(&old_dir, &new_dir) {
+            tracing::warn!("Migration instance {} → {} : renommage du dossier échoué : {}", old_id, new_id, e);
+            continue;
+        }
+        if let Err(e) = db::instance_rename_id(conn, &old_id, &new_id) {
+            tracing::warn!("Migration instance {} → {} : mise à jour DB échouée, restauration du dossier : {}", old_id, new_id, e);
+            let _ = std::fs::rename(&new_dir, &old_dir);
+            continue;
+        }
+
+        // meta.json embarque aussi l'id (repli "disk_wins" de instance_startup_sync)
+        // — best-effort, une erreur ici ne remet pas en cause le renommage déjà validé en DB.
+        let meta_path = new_dir.join("meta.json");
+        if let Ok(json) = std::fs::read_to_string(&meta_path) {
+            if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&json) {
+                v["id"] = serde_json::Value::String(new_id.clone());
+                if let Ok(pretty) = serde_json::to_string_pretty(&v) {
+                    let _ = std::fs::write(&meta_path, pretty);
+                }
+            }
+        }
+
+        tracing::info!("Instance renommée : {} → {}", old_id, new_id);
+        migrated.push((old_id, new_id));
+    }
+
+    migrated
+}
+
 pub fn run() {
     // Le build release tourne en `windows_subsystem = "windows"` (cf.
     // main.rs) — aucune console n'est attachée, donc tous les logs qui
@@ -100,6 +162,8 @@ pub fn run() {
                 })
             })();
 
+            let instance_id_migrations = migrate_legacy_instance_ids(&conn);
+
             let app_state: state::SharedState = Arc::new(RwLock::new(state::AppState {
                 db: Arc::new(Mutex::new(conn)),
                 yuyu_session,
@@ -108,6 +172,7 @@ pub fn run() {
                 running_instances: std::collections::HashSet::new(),
                 launch_cancel: std::collections::HashMap::new(),
                 auth_device_code: None,
+                instance_id_migrations,
             }));
 
             app.manage(app_state);
@@ -189,6 +254,7 @@ pub fn run() {
             commands::instance::modpack::modpack_remove,
             commands::instance::modpack::modpack_rename_file,
             commands::instance::modpack::modpack_get_meta,
+            commands::instance::crud::instance_id_migrations,
             commands::instance::crud::instance_list,
             commands::instance::crud::instance_create,
             commands::instance::crud::instance_delete,
