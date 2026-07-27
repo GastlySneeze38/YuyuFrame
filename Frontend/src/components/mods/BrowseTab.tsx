@@ -1,6 +1,7 @@
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { useT } from '@/i18n'
 import type { ModrinthHit } from './modUtils'
 import { ModrinthCard } from './ModrinthCard'
 
@@ -19,6 +20,7 @@ export function BrowseTab({
   onInstall: (hit: ModrinthHit) => void
   onOpenDetail: (hit: ModrinthHit) => void
 }) {
+  const t = useT()
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
@@ -28,7 +30,7 @@ export function BrowseTab({
         </svg>
         <input
           type="text"
-          placeholder={isPlugin ? 'Rechercher un plugin...' : 'Rechercher un mod...'}
+          placeholder={isPlugin ? t('mods.searchPluginPlaceholder') : t('mods.searchModPlaceholder')}
           value={query}
           onChange={onQueryChange}
           className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
@@ -41,10 +43,10 @@ export function BrowseTab({
       {!searching && results.length === 0 && (
         <EmptyState
           icon={<SearchIcon size={28} color="rgba(255,255,255,0.15)" />}
-          title="Aucun résultat"
+          title={t('mods.noResults')}
           subtitle={isPlugin
-            ? 'Essayez un autre terme de recherche'
-            : 'Essayez un autre terme ou changez la version MC'}
+            ? t('mods.tryAnotherSearchTerm')
+            : t('mods.tryAnotherTermOrVersion')}
         />
       )}
 

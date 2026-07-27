@@ -11,6 +11,7 @@ import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
+import { useT } from '@/i18n'
 import type { SavedServer } from '@/api/client'
 
 interface DownloadProgress {
@@ -19,26 +20,28 @@ interface DownloadProgress {
   message: string
 }
 
-const FEATURES = [
-  {
-    title: 'Sync P2P',
-    desc: 'Synchronise configurations, mods et instances entre toutes tes machines en connexion directe. Aucun cloud, aucun serveur tiers — tes données restent chez toi.',
-    icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>,
-    path: '/sync',
-  },
-  {
-    title: 'Statistiques avancées',
-    desc: 'Suivi du temps de session, historique détaillé par instance et graphiques hebdomadaires. Visualise tes habitudes de jeu et compare tes performances dans le temps.',
-    icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" /></svg>,
-    path: '/stats',
-  },
-  {
-    title: 'Accès Pro',
-    desc: 'Fonctionnalités réservées aux abonnés : limites augmentées, accès anticipé aux nouvelles fonctions et support prioritaire en cas de problème.',
-    icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93-2.67-1.14-5-4.43-5-7.93V7.18L12 5z" /></svg>,
-    path: null,
-  },
-]
+function useFeatures(t: ReturnType<typeof useT>) {
+  return [
+    {
+      title: t('home.features.syncTitle'),
+      desc: t('home.features.syncDesc'),
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>,
+      path: '/sync',
+    },
+    {
+      title: t('home.features.statsTitle'),
+      desc: t('home.features.statsDesc'),
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" /></svg>,
+      path: '/stats',
+    },
+    {
+      title: t('home.features.proTitle'),
+      desc: t('home.features.proDesc'),
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93-2.67-1.14-5-4.43-5-7.93V7.18L12 5z" /></svg>,
+      path: null,
+    },
+  ] as const
+}
 
 const STARS = Array.from({ length: 55 }, (_, i) => ({
   x: (i * 37 + ((i * 7 + 13) % 100) * 1.7) % 100,
@@ -50,6 +53,8 @@ const STARS = Array.from({ length: 55 }, (_, i) => ({
 export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
+  const t = useT()
+  const FEATURES = useFeatures(t)
   const {
     username, uuid, isOffline,
     clearUser,
@@ -136,7 +141,7 @@ export default function Home() {
       if (!phase2StartRef.current) return
       const elapsed = Date.now() - phase2StartRef.current
       const frac = Math.min(0.975, elapsed / remembered)
-      setProgress({ current: 60 + Math.round(frac * 40), total: 100, message: 'Démarrage de Minecraft...' })
+      setProgress({ current: 60 + Math.round(frac * 40), total: 100, message: t('home.startingMinecraft') })
     }, 250)
   }
 
@@ -200,7 +205,7 @@ export default function Home() {
       recordLaunchPhaseDuration(payload.instance_id, Date.now() - phase2StartRef.current)
     }
     clearPhase2()
-    setProgress({ current: 100, total: 100, message: 'Minecraft prêt !' })
+    setProgress({ current: 100, total: 100, message: t('home.minecraftReady') })
     setTimeout(() => setProgress(null), 900)
   }, [selectedInstanceId])
 
@@ -213,7 +218,7 @@ export default function Home() {
   }, [selectedInstanceId])
 
   useTauriEvent<string>('launch_cancelled', () => {
-    showNotice('Lancement annulé')
+    showNotice(t('home.launchCancelled'))
     clearPhase2()
     setProgress(null)
     setCancelling(false)
@@ -258,7 +263,7 @@ export default function Home() {
       // quand une commande Rust renvoie Err(String) — sans ce cas, le vrai
       // message d'erreur était masqué par un texte générique inutile pour
       // diagnostiquer le problème (cf. même bug corrigé sur Login.tsx).
-      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Erreur de lancement'
+      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : t('home.launchError')
       setLaunchMsg(message)
     }
   }
@@ -276,7 +281,7 @@ export default function Home() {
   const handleToggleFavorite = (ip: string) => {
     if (!selectedInstanceId) return
     if (!toggleFavoriteServer(selectedInstanceId, ip)) {
-      showNotice('Maximum 3 serveurs épinglés — désépingle-en un d’abord')
+      showNotice(t('home.maxPinnedServers'))
     }
   }
 
@@ -355,7 +360,7 @@ export default function Home() {
               <svg viewBox="0 0 10 10" fill="white" width={9} height={9}><polygon points="1,1 9,5 1,9" /></svg>
             )}
             <span className="text-xs font-medium text-white">
-              {bannerAnimating ? 'Stop' : 'Play'}
+              {bannerAnimating ? t('home.stop') : t('home.play')}
             </span>
           </button>
 
@@ -388,7 +393,7 @@ export default function Home() {
           {/* Avatar */}
           <div className="flex flex-col items-center gap-2">
             {username ? (
-              <button onClick={() => navigate('/login')} className="flex flex-col items-center gap-2 group" title="Gérer les comptes">
+              <button onClick={() => navigate('/login')} className="flex flex-col items-center gap-2 group" title={t('home.manageAccounts')}>
                 <div className="relative">
                   {uuid && (
                     <img
@@ -432,7 +437,7 @@ export default function Home() {
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-[28%] h-[28%]">
                   <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" />
                 </svg>
-                <span className="text-[clamp(8px,1.3vh,10px)] tracking-[0.1em] font-semibold">SE CONNECTER</span>
+                <span className="text-[clamp(8px,1.3vh,10px)] tracking-[0.1em] font-semibold">{t('home.connect')}</span>
               </button>
             )}
           </div>
@@ -449,14 +454,14 @@ export default function Home() {
           <div className="w-full flex flex-col gap-[clamp(3px,1.05vh,8px)]">
             <div className="flex items-center justify-between">
               <label className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">
-                Instance
+                {t('home.instance')}
               </label>
               <button
                 onClick={() => navigate('/instances')}
                 className="flex items-center gap-1 transition-colors duration-150 text-[clamp(8px,1.3vh,10px)] text-[rgba(75,63,207,0.7)] font-semibold hover:text-[#7872e8]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
-                Gérer
+                {t('home.manage')}
               </button>
             </div>
 
@@ -465,7 +470,7 @@ export default function Home() {
                 onClick={() => navigate('/instances')}
                 className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200 h-[clamp(30px,6vh,45px)] border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[12px] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
               >
-                Créer une instance
+                {t('home.createInstance')}
               </button>
             ) : (
               <button
@@ -473,7 +478,7 @@ export default function Home() {
                 className="relative w-full flex items-center justify-between rounded-xl px-3 text-sm font-medium text-white outline-none h-[clamp(30px,6vh,45px)] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)] transition-all duration-150 hover:border-[rgba(75,63,207,0.4)]"
               >
                 <span className="truncate">
-                  {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : 'Choisir une instance'}
+                  {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : t('home.chooseInstance')}
                 </span>
                 <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="flex-shrink-0 opacity-[0.45]">
                   <path d="M0 0l5 6 5-6z" />
@@ -495,12 +500,12 @@ export default function Home() {
                 <button
                   onClick={() => !gameRunning && !BETA_TEST && setP2pEnabled(!p2pEnabled)}
                   disabled={gameRunning || BETA_TEST}
-                  title={BETA_TEST ? 'P2P non disponible en beta' : undefined}
+                  title={BETA_TEST ? t('home.p2pDisabledInBeta') : undefined}
                   className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${BETA_TEST ? 'opacity-60' : 'opacity-100'} ${p2pToggleClasses}`}
                 >
                   <span className="flex items-center gap-1.5 text-[clamp(8px,1.3vh,10px)] font-semibold text-[rgba(255,255,255,0.25)]">
                     <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
-                    P2P {BETA_TEST && <span className="text-[9px] opacity-60">(bêta)</span>}
+                    {t('home.p2p')} {BETA_TEST && <span className="text-[9px] opacity-60">{t('home.p2pBeta')}</span>}
                   </span>
                   <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)] flex-shrink-0">
                     <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />
@@ -526,14 +531,14 @@ export default function Home() {
                 )}
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white" />
-                  EN JEU...
+                  {t('home.launching')}
                 </span>
                 <button
                   onClick={handleCancelLaunch}
                   disabled={cancelling}
                   className={`relative z-10 rounded-full px-4 py-1 text-[10px] font-semibold transition-all duration-150 border ${cancelling ? 'text-[rgba(255,255,255,0.3)] border-[rgba(255,255,255,0.08)] bg-transparent cursor-not-allowed' : 'text-[rgba(252,165,165,0.9)] border-[rgba(248,113,113,0.35)] bg-[rgba(200,50,50,0.14)] cursor-pointer hover:bg-[rgba(200,50,50,0.26)]'}`}
                 >
-                  {cancelling ? 'Annulation...' : 'Annuler'}
+                  {cancelling ? t('home.cancelling') : t('home.cancel')}
                 </button>
               </div>
             ) : (
@@ -555,9 +560,9 @@ export default function Home() {
                   </span>
                 ) : (
                   <span className="relative z-10">
-                    {!username ? 'SE CONNECTER'
-                      : !selectedInstanceId ? 'AUCUNE INSTANCE'
-                      : `LANCER ${instance?.name ?? ''}`}
+                    {!username ? t('home.connect')
+                      : !selectedInstanceId ? t('home.noInstance')
+                      : t('home.launch', { name: instance?.name ?? '' })}
                   </span>
                 )}
               </button>
@@ -606,17 +611,17 @@ export default function Home() {
                     className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 ${savedServers.length > 3 ? 'cursor-pointer hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]' : ''}`}
                   >
                     {savedServers.length === 0
-                      ? 'Aucun serveur enregistré'
+                      ? t('home.noServerRegistered')
                       : savedServers.length > 3
-                        ? 'Aucun serveur épinglé'
-                        : 'Aucun autre serveur'}
+                        ? t('home.noServerPinned')
+                        : t('home.noOtherServer')}
                   </div>
                 )
               )}
               {savedServers.length > 3 && (
                 <button
                   onClick={() => setShowServerManage(true)}
-                  title="Tous les serveurs"
+                  title={t('home.allServers')}
                   className="flex-shrink-0 flex items-center justify-center w-9 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.35)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)] hover:text-white"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
@@ -660,7 +665,7 @@ export default function Home() {
               YuyuFrame
             </span>
             <span className="text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-normal">
-              Le launcher Minecraft open-source.
+              {t('home.brandTagline')}
             </span>
             <div className="flex items-center mt-1">
               {username ? (
@@ -668,7 +673,7 @@ export default function Home() {
                   <button
                     onClick={() => navigate('/login')}
                     className="flex items-center gap-2 h-full pl-2.5 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.14)]"
-                    title="Gérer le compte"
+                    title={t('home.manageAccount')}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] flex-shrink-0 inline-block" />
                     {uuid && (
@@ -685,7 +690,7 @@ export default function Home() {
                   <button
                     onClick={handleLogout}
                     className="flex items-center justify-center h-full px-2.5 transition-all duration-150 text-[rgba(255,255,255,0.28)] hover:bg-[rgba(200,50,50,0.14)] hover:text-[rgb(248,113,113)]"
-                    title="Déconnexion"
+                    title={t('home.logout')}
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
                       <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
@@ -698,7 +703,7 @@ export default function Home() {
                   className="flex items-center gap-1.5 rounded-xl px-4 font-semibold transition-all duration-200 h-8 text-[11px] bg-[#4B3FCF] text-white hover:bg-[#6155e8]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}><path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" /></svg>
-                  Se connecter
+                  {t('home.login')}
                 </button>
               )}
             </div>
@@ -706,25 +711,25 @@ export default function Home() {
 
           {/* CENTER — Nav pyramid */}
           <div className="flex min-w-0 items-center justify-center gap-2 w-full [container-type:inline-size]">
-            <NavLink label="Instances" path="/instances" onClick={() => navigate('/instances')} currentPath={location.pathname} distance={3}>
+            <NavLink label={t('home.nav.instances')} path="/instances" onClick={() => navigate('/instances')} currentPath={location.pathname} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
             </NavLink>
-            <NavLink label="Réglages" path="/settings" onClick={() => navigate('/settings')} currentPath={location.pathname} distance={2}>
+            <NavLink label={t('home.nav.settings')} path="/settings" onClick={() => navigate('/settings')} currentPath={location.pathname} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
             </NavLink>
-            <NavLink label="Sync" path="/sync" onClick={() => navigate('/sync')} currentPath={location.pathname} distance={1} accent disabled={BETA_TEST}>
+            <NavLink label={t('home.nav.sync')} path="/sync" onClick={() => navigate('/sync')} currentPath={location.pathname} distance={1} accent disabled={BETA_TEST}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
             </NavLink>
-            <NavLink label="Plans" path="/plans" onClick={() => navigate('/plans')} currentPath={location.pathname} distance={0} plans disabled={BETA_TEST}>
+            <NavLink label={t('home.nav.plans')} path="/plans" onClick={() => navigate('/plans')} currentPath={location.pathname} distance={0} plans disabled={BETA_TEST}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
             </NavLink>
-            <NavLink label="Stats" path="/stats" onClick={() => navigate('/stats')} currentPath={location.pathname} distance={1} accent>
+            <NavLink label={t('home.nav.stats')} path="/stats" onClick={() => navigate('/stats')} currentPath={location.pathname} distance={1} accent>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" /></svg>
             </NavLink>
-            <NavLink label="Compte" path="/login" onClick={() => navigate('/login')} currentPath={location.pathname} distance={2}>
+            <NavLink label={t('home.nav.account')} path="/login" onClick={() => navigate('/login')} currentPath={location.pathname} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" /></svg>
             </NavLink>
-            <NavLink label="Serveur" path="/server" onClick={() => navigate('/server')} currentPath={location.pathname} distance={3} disabled={BETA_TEST}>
+            <NavLink label={t('home.nav.server')} path="/server" onClick={() => navigate('/server')} currentPath={location.pathname} distance={3} disabled={BETA_TEST}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
             </NavLink>
           </div>
@@ -735,18 +740,18 @@ export default function Home() {
               YuyuFrame <span className="text-[#a78bfa]">Pro</span>
             </span>
             <span className="text-right text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-[1.6]">
-              Sync illimité · Stats avancées
+              {t('home.proTagline')}
             </span>
             {/* Pill pleine largeur : bouton | séparateur | -50% */}
             <div className="flex items-center overflow-hidden mt-1 h-8 rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]">
               <button
                 onClick={() => navigate('/plans')}
                 className="flex items-center gap-2 h-full pl-3 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.2)]"
-                title="Voir les plans Pro"
+                title={t('home.proSeePlansTitle')}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="text-[#a78bfa] flex-shrink-0"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
                 <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.82)] whitespace-nowrap">
-                  Voir les plans
+                  {t('home.proSeePlans')}
                 </span>
               </button>
               <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] flex-shrink-0" />
@@ -765,13 +770,13 @@ export default function Home() {
         {/* Copyright + legal */}
         <div className="flex items-center justify-between">
           <span className="text-[clamp(9px,1.2vh,11px)] text-[rgba(255,255,255,0.15)] font-medium">
-            © 2025 YuyuFrame — Tous droits réservés
+            {t('home.copyright')}
           </span>
           <div className="flex items-center gap-4">
             {[
-              { lbl: 'Licence', tab: 'licence' },
-              { lbl: 'Confidentialité', tab: 'confidentialite' },
-              { lbl: 'Conditions', tab: 'conditions' },
+              { lbl: t('home.legal.licence'), tab: 'licence' },
+              { lbl: t('home.legal.confidentialite'), tab: 'confidentialite' },
+              { lbl: t('home.legal.conditions'), tab: 'conditions' },
             ].map(({ lbl, tab }) => (
               <button
                 key={lbl}
@@ -834,6 +839,7 @@ const NAV_ICON_CLASSES = [
 function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPath, disabled, children }: {
   label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number; path?: string; currentPath?: string; disabled?: boolean; children: React.ReactNode
 }) {
+  const t = useT()
   // Tailles relatives à la fenêtre via clamp — s'adaptent à toutes les largeurs
   // Unités cqw : relatives à la largeur réellement disponible pour la nav (container query),
   // plutôt qu'à la largeur de toute la fenêtre — la nav s'adapte donc à la place qui lui est laissée.
@@ -855,7 +861,7 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      title={disabled ? 'Non disponible en bêta' : undefined}
+      title={disabled ? t('home.navDisabledInBeta') : undefined}
       className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap disabled:cursor-not-allowed cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${disabled ? 'opacity-60' : 'opacity-100'} ${hoverClasses}`}
     >
       <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>

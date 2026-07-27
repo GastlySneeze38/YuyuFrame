@@ -11,8 +11,10 @@ import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstance
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 
 export default function Instances() {
+  const t = useT()
   const {
     versions, setVersions,
     instances, setInstances, addInstance, updateInstance, removeInstance,
@@ -88,7 +90,7 @@ export default function Instances() {
     <div className="flex h-full flex-col bg-[#09090D] text-white">
 
       <PageHeader px={5}>
-        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">Instances</h1>
+        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">{t('instancesPage.title')}</h1>
       </PageHeader>
 
       {/* Body: sidebar + mods panel */}
@@ -107,14 +109,14 @@ export default function Instances() {
             ) : instances.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2">
                 <div className="text-[32px]">🧱</div>
-                <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">Aucune instance</p>
+                <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">{t('instancesPage.noInstance')}</p>
               </div>
             ) : (
               <>
                 {favorites.length > 0 && (
                   <div className="mb-1">
                     <p className="px-1 pb-1.5 text-xs font-semibold text-[#facc15] tracking-[0.08em] uppercase">
-                      ★ Favoris
+                      ★ {t('instancesPage.favorites')}
                     </p>
                     <div className="flex flex-col gap-2">
                       {favorites.map(renderCard)}
@@ -135,7 +137,7 @@ export default function Instances() {
                         <path d="M8 5v14l11-7z" />
                       </svg>
                       <p className="text-xs font-semibold text-[rgba(255,255,255,0.3)] tracking-[0.08em] uppercase">
-                        Autres ({others.length})
+                        {t('instancesPage.others', { count: others.length })}
                       </p>
                     </button>
                     {othersExpanded && (
@@ -158,7 +160,7 @@ export default function Instances() {
               <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}>
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
               </svg>
-              Nouvelle instance
+              {t('instancesPage.newInstance')}
             </button>
             <button
               onClick={() => setShowImport(true)}
@@ -167,7 +169,7 @@ export default function Instances() {
               <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
                 <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
               </svg>
-              Importer une instance
+              {t('instancesPage.importInstance')}
             </button>
           </div>
         </div>
@@ -180,10 +182,10 @@ export default function Instances() {
             <div className="flex flex-1 flex-col items-center justify-center gap-3">
               <div className="text-[32px] opacity-40">←</div>
               <p className="text-[14px] text-[rgba(255,255,255,0.3)] font-semibold">
-                Sélectionne une instance
+                {t('instancesPage.selectInstance')}
               </p>
               <p className="text-[12px] text-[rgba(255,255,255,0.15)]">
-                Les mods s'afficheront ici
+                {t('instancesPage.modsWillAppearHere')}
               </p>
             </div>
           )}

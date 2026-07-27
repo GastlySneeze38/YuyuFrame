@@ -16,6 +16,7 @@ import { BrowseTab } from '@/components/mods/BrowseTab'
 import { ModDetailModal } from '@/components/mods/ModDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
   fetchProjectDetail, _modrinthCache, _iconCache,
@@ -27,6 +28,7 @@ export { updateModsForNewVersion } from '@/components/mods/modUtils'
 // ── ModsContent — embeddable in any page ──────────────────────────────────────
 
 export function ModsContent({ instance }: { instance: Instance }) {
+  const t = useT()
   const instanceId = instance.id
   const mcVersion = instance.mc_version
   const loader = instance.loader
@@ -103,7 +105,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     try {
       setPackResults(await searchModrinthModpacks(q))
     } catch {
-      showError('Impossible de joindre Modrinth')
+      showError(t('mods.cannotReachModrinth'))
     } finally {
       setPackSearching(false)
     }
@@ -118,7 +120,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const handleInstallModpack = async (hit: ModpackHit) => {
     setPackInstalling(hit.project_id)
-    setPackInstallProgress({ percent: 0, label: 'Téléchargement du modpack...' })
+    setPackInstallProgress({ percent: 0, label: t('mods.downloadingModpack') })
     const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
       const { current, total, label } = e.payload
       const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
@@ -126,7 +128,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     })
     try {
       const file = await resolveModpackFile(hit.project_id)
-      if (!file) throw new Error('Aucun fichier .mrpack disponible')
+      if (!file) throw new Error(t('mods.noMrpackAvailable'))
       const meta = await api.modpacks.install({
         instanceId,
         fileUrl: file.url,
@@ -163,7 +165,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     // via la modal "Importer" (ImportChoiceModal), pas seulement depuis ici.
     setTab('modpack')
     setPackImportingFile(true)
-    setPackInstallProgress({ percent: 0, label: 'Installation du modpack...' })
+    setPackInstallProgress({ percent: 0, label: t('mods.installingModpack') })
     const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
       const { current, total, label } = e.payload
       const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
@@ -257,7 +259,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
         })
       }
     } catch {
-      setModsError('Impossible de charger les mods')
+      setModsError(t('mods.cannotLoadMods'))
     } finally {
       setLoadingMods(false)
     }
@@ -358,7 +360,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
         delete _modrinthCache[instanceId]
       }
       if (result.skipped.length > 0) {
-        setImportNotice(`${result.skipped.length} mod(s) déjà présent(s) ignoré(s)`)
+        setImportNotice(t('mods.skippedAlreadyPresent', { count: result.skipped.length }))
       }
     } catch (e) {
       showError(e)
@@ -373,7 +375,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     try {
       setResults(await fetchModrinthSearch(q, mcVersion, loader))
     } catch {
-      showError('Impossible de joindre Modrinth')
+      showError(t('mods.cannotReachModrinth'))
     } finally {
       setSearching(false)
     }
@@ -388,7 +390,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   const handleInstall = async (hit: ModrinthHit) => {
     setInstalling(hit.project_id)
-    setInstallProgress({ percent: 0, label: 'Préparation...' })
+    setInstallProgress({ percent: 0, label: t('mods.preparing') })
     const unlisten = await listen<ModInstallProgress>('mod_install_progress', (e) => {
       const { downloaded, total } = e.payload
       const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0
@@ -397,9 +399,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
     })
     try {
       const version = await fetchLatestVersion(hit.slug, mcVersion, loader)
-      if (!version) throw new Error('Aucune version compatible')
+      if (!version) throw new Error(t('mods.noCompatibleVersion'))
       const file = version.files.find((f) => f.primary) ?? version.files[0]
-      if (!file) throw new Error('Aucun fichier disponible')
+      if (!file) throw new Error(t('mods.noFileAvailable'))
       const newMod = await api.mods.install(instanceId, file.url, file.filename)
       setMods((prev) =>
         [...prev.filter((m) => m.name !== newMod.name), newMod]
@@ -481,13 +483,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
                 : 'bg-transparent text-[rgba(255,255,255,0.35)]'
             }`}
           >
-            {`Installés (${mods.length})`}
+            {t('mods.installedCount', { count: mods.length })}
           </button>
           {tab === 'installed' && extraUpdatesCount > 0 && (
             <button
               onClick={handleUpdateAll}
               disabled={updatingAll}
-              title="Tout mettre à jour (contenu supplémentaire uniquement)"
+              title={t('mods.updateAllTitle')}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all duration-150 border border-[rgba(250,204,21,0.28)] ${
                 updatingAll
                   ? 'bg-[rgba(255,255,255,0.04)] text-[rgba(255,255,255,0.25)] cursor-not-allowed'
@@ -515,7 +517,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
-            {isPlugin ? 'Parcourir les plugins' : 'Parcourir Modrinth'}
+            {isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth')}
           </button>
           <button
             onClick={() => setTab('modpack')}
@@ -528,7 +530,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
             </svg>
-            {modpackMeta ? 'Remplacer le modpack' : 'Installer un modpack'}
+            {modpackMeta ? t('mods.replaceModpack') : t('mods.installModpack')}
           </button>
           <button
             onClick={() => setShowImportChoice(true)}
@@ -542,7 +544,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
             </svg>
-            {uploading ? 'Import...' : 'Importer'}
+            {uploading ? t('mods.importing') : t('mods.import')}
           </button>
         </div>
 
@@ -652,7 +654,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
           <div className="flex flex-col gap-3">
             {packImportingFile && packInstallProgress && (
               <div className="flex flex-col gap-1.5 rounded-2xl px-4 py-3 bg-[rgba(75,63,207,0.1)] border border-[rgba(75,63,207,0.3)]">
-                <p className="text-[12px] font-semibold text-white">Import du modpack local...</p>
+                <p className="text-[12px] font-semibold text-white">{t('mods.importingLocalModpack')}</p>
                 <div className="flex items-center gap-2">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
                     <div
@@ -686,6 +688,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
 export default function Mods() {
   const navigate = useNavigate()
+  const t = useT()
   const { selectedInstance } = useStore()
   const instance = selectedInstance()
 
@@ -693,12 +696,12 @@ export default function Mods() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] text-white">
         <div className="text-[36px]">🧱</div>
-        <p className="text-[14px] text-[rgba(255,255,255,0.4)] font-semibold">Aucune instance sélectionnée</p>
+        <p className="text-[14px] text-[rgba(255,255,255,0.4)] font-semibold">{t('mods.noInstanceSelected')}</p>
         <button
           onClick={() => navigate('/instances')}
           className="font-semibold transition-all duration-200 active:scale-95 h-[38px] px-5 rounded-[10px] text-[13px] bg-[#4B3FCF] text-white"
         >
-          Gérer les instances
+          {t('mods.manageInstances')}
         </button>
       </div>
     )
@@ -707,7 +710,7 @@ export default function Mods() {
   return (
     <div className="flex h-full flex-col bg-[#09090D] text-white">
       <PageHeader>
-        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">Mods</h1>
+        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('mods.pageTitle')}</h1>
       </PageHeader>
       <ModsContent instance={instance} />
     </div>

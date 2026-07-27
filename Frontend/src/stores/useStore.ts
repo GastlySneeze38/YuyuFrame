@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Instance, Version, Account } from '@/types'
 
 export type YuyuPlan = 'free' | 'premium' | 'ultimate'
+export type Lang = 'fr' | 'en'
 
 interface Store {
   // ── YuyuFrame session (NOT persisted — requires password on each start) ──
@@ -75,6 +76,9 @@ interface Store {
 
   confirmServerLaunch: boolean
   setConfirmServerLaunch: (v: boolean) => void
+
+  language: Lang
+  setLanguage: (l: Lang) => void
 
   // ── Game state (par instance) ─────────────────────────────────────────────
   runningInstances: string[]
@@ -237,6 +241,9 @@ export const useStore = create<Store>()(
       confirmServerLaunch: true,
       setConfirmServerLaunch: (confirmServerLaunch) => set({ confirmServerLaunch }),
 
+      language: 'fr',
+      setLanguage: (language) => set({ language }),
+
       // Game (multi-instance)
       runningInstances: [],
       isInstanceRunning: (id) => get().runningInstances.includes(id),
@@ -308,6 +315,7 @@ export const useStore = create<Store>()(
         showConsole: s.showConsole,
         showHomeServers: s.showHomeServers,
         confirmServerLaunch: s.confirmServerLaunch,
+        language: s.language,
         username: s.username,
         uuid: s.uuid,
         isOffline: s.isOffline,
