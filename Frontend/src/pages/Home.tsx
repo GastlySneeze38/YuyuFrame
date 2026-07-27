@@ -51,7 +51,7 @@ export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
   const {
-    username, uuid,
+    username, uuid, isOffline,
     clearUser,
     instances, setInstances,
     selectedInstanceId, setSelectedInstanceId, selectedInstance,
@@ -78,8 +78,40 @@ export default function Home() {
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
+  const [customFaceUri, setCustomFaceUri] = useState<string | null>(null)
 
   const instance = selectedInstance()
+
+  // Avatar d'un compte hors ligne : mc-heads.net n'a rien pour un UUID inventé
+  // (voir Login.tsx pour le même souci sur l'aperçu 3D), donc les deux avatars
+  // ci-dessous restaient sur le rendu de repli (initiale/icône) même après
+  // avoir défini un skin custom. On recadre nous-mêmes la zone "visage" du PNG
+  // 64×64 (8,8)-(16,16) + son calque "hat" (40,8)-(48,16) — même position dans
+  // le template quel que soit le format (64×64 moderne ou 64×32 legacy, la
+  // tête ne change jamais) — pour obtenir un carré affichable comme
+  // `mc-heads.net/avatar` le ferait pour un vrai compte.
+  useEffect(() => {
+    if (!uuid || !isOffline) { setCustomFaceUri(null); return }
+    let cancelled = false
+    api.mc.getSkin(uuid).then((dataUri) => {
+      if (cancelled || !dataUri) { if (!cancelled) setCustomFaceUri(null); return }
+      const img = new Image()
+      img.onload = () => {
+        if (cancelled) return
+        const canvas = document.createElement('canvas')
+        canvas.width = 64
+        canvas.height = 64
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.imageSmoothingEnabled = false
+        ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 64, 64)
+        ctx.drawImage(img, 40, 8, 8, 8, 0, 0, 64, 64)
+        setCustomFaceUri(canvas.toDataURL('image/png'))
+      }
+      img.src = dataUri
+    }).catch(() => { if (!cancelled) setCustomFaceUri(null) })
+    return () => { cancelled = true }
+  }, [uuid, isOffline])
 
   // Phase 2 ("lancement", 60-100%) — les téléchargements (backend) s'arrêtent
   // pile à 60%, le reste (démarrage JVM + chargement interne Minecraft
@@ -344,12 +376,12 @@ export default function Home() {
 
           <button
             onClick={() => navigate('/information')}
-            className="absolute top-[8px] right-[8px] w-[clamp(24px,4.5vh,36px)] h-[clamp(24px,4.5vh,36px)] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
+            className="absolute top-[8px] right-[8px] w-[clamp(24px,4.8vh,36px)] h-[clamp(24px,4.8vh,36px)] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-[55%] h-[55%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
           </button>
 
-          <h1 className="text-center font-black text-white leading-none text-[clamp(16px,4.5vh,64px)] [text-shadow:0_0_40px_rgba(75,63,207,0.60)] tracking-[-0.01em]">
+          <h1 className="text-center font-black text-white leading-none text-[clamp(16px,6vh,64px)] [text-shadow:0_0_40px_rgba(75,63,207,0.60)] tracking-[-0.01em]">
             YuyuFrame
           </h1>
 
@@ -360,9 +392,18 @@ export default function Home() {
                 <div className="relative">
                   {uuid && (
                     <img
-                      src={`https://mc-heads.net/avatar/${uuid}/200`}
+                      src={customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/150`}
                       alt={username}
-                      className="rounded-xl transition-all duration-200 group-hover:brightness-75 w-[clamp(40px,11vh,150px)] h-[clamp(40px,11vh,150px)] [image-rendering:pixelated] shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
+                      // Pas de image-rendering:pixelated ici — l'avatar est
+                      // redimensionné en continu par clamp() entre 40 et 150px
+                      // (voir le panneau de droite, dimensionné en vh) : le
+                      // nearest-neighbor de "pixelated" produit des blocs de
+                      // taille inégale à un ratio de downscale non entier,
+                      // visible comme un rendu "mal scallé" à certaines tailles
+                      // de fenêtre. Un lissage classique reste net à toutes les
+                      // tailles ; demander la source à 150 (= le max du clamp)
+                      // évite aussi un downscale inutilement agressif.
+                      className="rounded-xl transition-all duration-200 group-hover:brightness-75 w-[clamp(45px,calc(-151px_+_35vh),150px)] h-[clamp(45px,calc(-151px_+_35vh),150px)] object-cover shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none'
                         const fb = e.currentTarget.nextElementSibling as HTMLElement | null
@@ -371,7 +412,7 @@ export default function Home() {
                     />
                   )}
                   <div
-                    className={`items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75 w-[clamp(40px,11vh,150px)] h-[clamp(40px,11vh,150px)] text-[clamp(14px,5vh,56px)] bg-[rgba(75,63,207,0.60)] [font-family:monospace] ${uuid ? 'hidden' : 'flex'}`}
+                    className={`items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75 w-[clamp(45px,calc(-151px_+_35vh),150px)] h-[clamp(45px,calc(-151px_+_35vh),150px)] text-[clamp(14px,6.8vh,56px)] bg-[rgba(75,63,207,0.60)] [font-family:monospace] ${uuid ? 'hidden' : 'flex'}`}
                   >
                     {username[0].toUpperCase()}
                   </div>
@@ -386,7 +427,7 @@ export default function Home() {
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200 w-[clamp(40px,11vh,150px)] h-[clamp(40px,11vh,150px)] border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.25)] hover:border-[rgba(75,63,207,0.5)] hover:text-[rgba(120,110,230,0.7)]"
+                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200 w-[clamp(45px,calc(-151px_+_35vh),150px)] h-[clamp(45px,calc(-151px_+_35vh),150px)] border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.25)] hover:border-[rgba(75,63,207,0.5)] hover:text-[rgba(120,110,230,0.7)]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-[28%] h-[28%]">
                   <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" />
@@ -402,10 +443,10 @@ export default function Home() {
               ne flotte pas dans un espace résiduel géré par le justify-between
               du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
               pour former une pyramide inversée. */}
-          <div className="w-full flex flex-col gap-[clamp(6px,1.5vh,16px)]">
+          <div className="w-full flex flex-col gap-[clamp(6px,2.1vh,16px)]">
 
           {/* Instance selector */}
-          <div className="w-full flex flex-col gap-[clamp(3px,0.8vh,8px)]">
+          <div className="w-full flex flex-col gap-[clamp(3px,1.05vh,8px)]">
             <div className="flex items-center justify-between">
               <label className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">
                 Instance
@@ -631,7 +672,7 @@ export default function Home() {
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] flex-shrink-0 inline-block" />
                     {uuid && (
-                      <img src={`https://mc-heads.net/avatar/${uuid}/32`} alt={username}
+                      <img src={customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/32`} alt={username}
                         className="w-4 h-4 [image-rendering:pixelated] rounded-[3px] flex-shrink-0"
                         onError={(e) => { e.currentTarget.style.display = 'none' }}
                       />
