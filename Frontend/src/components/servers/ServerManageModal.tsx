@@ -24,12 +24,12 @@ export function ServerManageModal({
 }) {
   const t = useT()
   return (
-    <ModalShell title={t('servers.manageTitle')} onClose={onClose} maxWidth="max-w-2xl">
-      <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-2">
+    <ModalShell title={t('servers.manageTitle')} onClose={onClose} maxWidth="max-w-4xl">
+      <div className="flex flex-col gap-3 max-h-[70vh] overflow-y-auto pr-2">
         <p className="px-1 text-[10px] text-[rgba(255,255,255,0.35)]">
           {t('servers.manageHint')}
         </p>
-        <div className="grid grid-cols-3 items-start gap-3">
+        <div className="grid grid-cols-3 items-start gap-4">
           {servers.map((s) => (
             <ServerCard
               key={s.ip}

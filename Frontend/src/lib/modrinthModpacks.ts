@@ -38,7 +38,8 @@ export async function searchModrinthModpacks(query: string, filters?: ModrinthSe
     sort: filters?.sort,
     limit: 20,
   })
-  return res.hits as ModpackHit[]
+  // Voir modUtils.ts::fetchModrinthSearch pour la même remarque sur ce cast.
+  return res.hits as unknown as ModpackHit[]
 }
 
 /// Résout la dernière version .mrpack disponible pour un modpack donné.

@@ -344,7 +344,11 @@ export async function fetchModrinthSearch(
     sort: filters?.sort,
     limit: 20,
   })
-  return res.hits as ModrinthHit[]
+  // Le backend renvoie du JSON brut (Record<string, unknown>) — cast via
+  // `unknown` assumé : le champs qu'on utilise (project_id, slug, title...)
+  // sont bien présents dans la vraie réponse Modrinth, juste non déclarés
+  // dans ce Record générique côté TypeScript.
+  return res.hits as unknown as ModrinthHit[]
 }
 
 export async function fetchLatestVersion(

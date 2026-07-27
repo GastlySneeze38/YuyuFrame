@@ -1,15 +1,17 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
+import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { BETA_TEST } from '@/config/beta'
+import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
@@ -52,9 +54,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, setUser, setInstanceRunning, applyInstanceIdMigrations } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
+  const [showReconnect, setShowReconnect] = useState(false)
+  // Calculé une seule fois au montage (avant tout re-render) — comparé puis
+  // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
+  const needsReconnectRef = useRef(authSystemVersion < AUTH_SYSTEM_VERSION)
 
   // Monté pour toute la durée de vie de la fenêtre principale — contrairement
   // à l'ancien listener posé uniquement dans Home.tsx, qui se désabonnait dès
@@ -81,12 +87,19 @@ export default function App() {
   // ligne. On revalide contre le compte actif réel avant de décider.
   useEffect(() => {
     if (isConsoleWindow) return
+    // Marqué comme vu tout de suite (best-effort, comme pendingPatchNotes) —
+    // un crash entre ce marquage et l'affichage effectif de la modale plus
+    // bas ne redéclenchera pas ReconnectModal au prochain lancement, mais
+    // évite surtout de la répéter à chaque démarrage une fois vue une fois.
+    if (needsReconnectRef.current) setAuthSystemVersion(AUTH_SYSTEM_VERSION)
     api.mc.accounts()
       .then((accs) => {
         const active = accs.find((a) => a.is_active)
         if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
         if (pendingPatchNotes) {
           setShowPatchNotes(true)
+        } else if (needsReconnectRef.current && active) {
+          setShowReconnect(true)
         } else if (active?.is_offline) {
           setShowOfflineReminder(true)
         }
@@ -95,6 +108,7 @@ export default function App() {
         // Repli sur l'instantané persisté si la revalidation échoue (ex: pas
         // encore authentifié) — mieux que rien, moins fiable que le fetch.
         if (pendingPatchNotes) setShowPatchNotes(true)
+        else if (needsReconnectRef.current && uuid) setShowReconnect(true)
         else if (uuid && isOffline) setShowOfflineReminder(true)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,6 +117,13 @@ export default function App() {
   const handleClosePatchNotes = () => {
     setShowPatchNotes(false)
     setPendingPatchNotes(null)
+    if (needsReconnectRef.current && uuid) setShowReconnect(true)
+    else if (uuid && isOffline) setShowOfflineReminder(true)
+  }
+
+  const handleCloseReconnect = () => {
+    setShowReconnect(false)
+    needsReconnectRef.current = false
     if (uuid && isOffline) setShowOfflineReminder(true)
   }
 
@@ -157,6 +178,9 @@ export default function App() {
           notes={pendingPatchNotes.notes}
           onClose={handleClosePatchNotes}
         />
+      )}
+      {showReconnect && (
+        <ReconnectModal onClose={handleCloseReconnect} />
       )}
       {showOfflineReminder && (
         <OfflinePurchaseReminderModal onClose={() => setShowOfflineReminder(false)} />

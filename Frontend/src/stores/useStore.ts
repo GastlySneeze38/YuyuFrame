@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Instance, Version, Account } from '@/types'
+import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 
 export type YuyuPlan = 'free' | 'premium' | 'ultimate'
 export type Lang = 'fr' | 'en'
@@ -27,7 +28,7 @@ interface Store {
   // ── Minecraft account list ─────────────────────────────────────────────────
   accounts: Account[]
   setAccounts: (accounts: Account[]) => void
-  addAccount: (username: string, uuid: string) => void
+  addAccount: (username: string, uuid: string, isOffline: boolean) => void
   removeAccount: (uuid: string) => void
   switchAccount: (uuid: string) => void
 
@@ -121,6 +122,15 @@ interface Store {
   // en premier, le rappel ne s'affiche qu'une fois les notes fermées.
   pendingPatchNotes: { version: string; notes: string } | null
   setPendingPatchNotes: (v: { version: string; notes: string } | null) => void
+
+  // ── Version du système de connexion vue par cet utilisateur (persisté) —
+  // comparée à AUTH_SYSTEM_VERSION (config/authVersion.ts) au démarrage par
+  // App.tsx : si en retard, ReconnectModal s'affiche une fois puis cette
+  // valeur est remise à jour. Défaut = version actuelle (pas de faux
+  // déclenchement pour les utilisateurs déjà installés au moment où ce champ
+  // a été introduit) ; seule une future hausse de la constante déclenche.
+  authSystemVersion: number
+  setAuthSystemVersion: (v: number) => void
 
   // ── Migration one-shot des ids d'instance (voir instance_id_migrations côté
   // backend, lib.rs) — remappe les clés persistées ci-dessus qui référencent
@@ -308,6 +318,10 @@ export const useStore = create<Store>()(
       pendingPatchNotes: null,
       setPendingPatchNotes: (pendingPatchNotes) => set({ pendingPatchNotes }),
 
+      // Version du système de connexion
+      authSystemVersion: AUTH_SYSTEM_VERSION,
+      setAuthSystemVersion: (authSystemVersion) => set({ authSystemVersion }),
+
       // Migration ids d'instance
       applyInstanceIdMigrations: (migrations) => {
         if (migrations.length === 0) return
@@ -363,6 +377,7 @@ export const useStore = create<Store>()(
         launchPhaseDurations: s.launchPhaseDurations,
         favoriteServers: s.favoriteServers,
         pendingPatchNotes: s.pendingPatchNotes,
+        authSystemVersion: s.authSystemVersion,
       }),
     }
   )

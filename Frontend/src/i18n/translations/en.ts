@@ -515,6 +515,13 @@ export const en: TranslationSchema = {
     url: 'URL',
     choosePngFile: 'Choose a PNG file (64×64)',
   },
+  reconnect: {
+    title: 'Reconnection required',
+    description: 'The login system was updated. Reconnect your Microsoft account to keep playing normally.',
+    button: 'Reconnect',
+    reconnecting: 'Reconnecting...',
+    later: 'Later',
+  },
   servers: {
     offline: 'Server offline',
     pingInProgress: 'Pinging...',

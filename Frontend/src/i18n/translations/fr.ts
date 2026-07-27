@@ -513,6 +513,13 @@ export const fr = {
     url: 'URL',
     choosePngFile: 'Choisir un fichier PNG (64×64)',
   },
+  reconnect: {
+    title: 'Reconnexion nécessaire',
+    description: 'Le système de connexion a été mis à jour. Reconnecte ton compte Microsoft pour continuer à jouer normalement.',
+    button: 'Se reconnecter',
+    reconnecting: 'Reconnexion...',
+    later: 'Plus tard',
+  },
   servers: {
     offline: 'Serveur hors ligne',
     pingInProgress: 'Ping en cours...',

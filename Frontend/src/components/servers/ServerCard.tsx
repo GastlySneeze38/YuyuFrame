@@ -94,7 +94,9 @@ export function ServerCard({
       // Nécessaire car ces cartes sont côte à côte (flex-1) : un `vh` (essayé
       // avant) ne réagit qu'aux changements de HAUTEUR de fenêtre, jamais
       // quand c'est la largeur qui écrase les cartes (3 par ligne).
-      className={`group flex flex-col overflow-hidden rounded-xl cursor-pointer transition-all duration-150 border [container-type:inline-size] ${
+      className={`group relative flex flex-col overflow-hidden rounded-xl cursor-pointer transition-all duration-150 border [container-type:inline-size] ${
+        onToggleFavorite ? 'pb-[24px]' : ''
+      } ${
         favorite
           ? 'bg-[rgba(75,63,207,0.12)] border-[rgba(120,100,255,0.4)]'
           : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.05)] hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]'
@@ -136,25 +138,25 @@ export function ServerCard({
         </p>
       </div>
 
-      {/* Bouton d'épinglage — hors du contenu de la carte : une bande dépliée
-          sous la carte au survol (grid 0fr → 1fr) plutôt qu'un bouton posé
-          par-dessus le contenu, qui finissait toujours par en chevaucher un
-          bout (favicon, signal, ip...) quel que soit son emplacement. */}
+      {/* Bouton d'épinglage — espace fixe (pb-[24px] sur la carte) réservé en
+          permanence pour qu'il ne fasse jamais varier la hauteur de la carte
+          (seule l'opacité change au survol) : dans une grille, une carte qui
+          grandit au survol pousse les cartes des rangées suivantes — voir la
+          modal ServerManageModal. Overlay posé par-dessus le contenu écarté
+          plus haut pour la même raison (chevauchait favicon/signal/ip). */}
       {onToggleFavorite && (
-        <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out group-hover:grid-rows-[1fr]">
-          <div className="overflow-hidden">
-            <button
-              onClick={(e) => { e.stopPropagation(); onToggleFavorite() }}
-              className={`flex w-full items-center justify-center border-t py-1.5 text-[9px] font-semibold transition-colors ${
-                favorite
-                  ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(120,100,255,0.3)] text-white hover:bg-[rgba(75,63,207,0.5)]'
-                  : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.1)]'
-              }`}
-            >
-              {favorite ? t('servers.removeFromHome') : t('servers.addToHome')}
-            </button>
-          </div>
-        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite() }}
+          className={`absolute inset-x-0 bottom-0 flex h-[24px] items-center justify-center border-t text-[9px] font-semibold transition-opacity duration-150 ${
+            favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          } ${
+            favorite
+              ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(120,100,255,0.3)] text-white hover:bg-[rgba(75,63,207,0.5)]'
+              : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.1)]'
+          }`}
+        >
+          {favorite ? t('servers.removeFromHome') : t('servers.addToHome')}
+        </button>
       )}
     </div>
   )
