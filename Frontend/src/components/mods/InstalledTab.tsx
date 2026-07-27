@@ -61,8 +61,13 @@ export function InstalledTab({
     </div>
   )
 
-  const renderRow = (mod: Mod) => {
-    const update = updates.find((u) => u.mod.sha1 === mod.sha1) ?? null
+  // Pas de mise à jour individuelle affichée pour un mod du pack (isPack) —
+  // un modpack est un ensemble curé/testé par son auteur, y toucher mod par
+  // mod cassait silencieusement la cohérence que le pack garantit. Voir
+  // ModpackBanner pour la détection de nouvelle version du pack lui-même,
+  // qui remplace ce mécanisme.
+  const renderRow = (mod: Mod, isPack: boolean) => {
+    const update = isPack ? null : updates.find((u) => u.mod.sha1 === mod.sha1) ?? null
     return (
       <ModRow
         key={mod.name}
@@ -112,7 +117,7 @@ export function InstalledTab({
           <div className="mb-5">
             <p className={sectionHdrClass}>{t('mods.modpackContent', { count: packMods.length })}</p>
             {renderHeader()}
-            <div className="flex flex-col gap-2">{packMods.map(renderRow)}</div>
+            <div className="flex flex-col gap-2">{packMods.map((m) => renderRow(m, true))}</div>
           </div>
         )}
 
@@ -147,7 +152,7 @@ export function InstalledTab({
           ) : (
             <>
               {renderHeader()}
-              <div className="flex flex-col gap-2">{extraMods.map(renderRow)}</div>
+              <div className="flex flex-col gap-2">{extraMods.map((m) => renderRow(m, false))}</div>
             </>
           )}
         </div>
@@ -177,7 +182,7 @@ export function InstalledTab({
 
       {filtered.length > 0 && renderHeader()}
 
-      <div className="flex flex-col gap-2">{filtered.map(renderRow)}</div>
+      <div className="flex flex-col gap-2">{filtered.map((m) => renderRow(m, false))}</div>
     </div>
   )
 }

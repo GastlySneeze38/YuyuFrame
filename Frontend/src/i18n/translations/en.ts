@@ -75,7 +75,8 @@ export const en: TranslationSchema = {
     cancelShort: 'Cancel',
     hidePackContent: 'Hide content',
     showPackContent: 'Show content',
-    updatePack: 'Update pack',
+    packNewVersion: 'New version {{version}}',
+    packUpdating: 'Updating...',
     removeModpack: 'Remove modpack (uninstalls its mods)',
     installedVersion: 'Installed: {{version}}',
     hideFullDescription: 'Hide full description',
@@ -127,6 +128,9 @@ export const en: TranslationSchema = {
     repository: 'Repository',
     legalNotices: 'Legal notices',
     legalText: 'YuyuFrame is an unofficial launcher and is not affiliated with Mojang Studios or Microsoft. Minecraft is a trademark of Microsoft Corporation.',
+    forgeTitle: 'Minecraft Forge',
+    forgeText: 'YuyuFrame uses Minecraft Forge to load mods. Forge is a free open-source project maintained on a volunteer basis — if you can afford to, consider supporting its development.',
+    forgeLink: 'Support Forge on Patreon →',
   },
 
   sync: {
@@ -299,6 +303,9 @@ export const en: TranslationSchema = {
     duplicateButton: 'Duplicate',
     othersHeader: 'Others',
     modsCount: '{{count}} mods',
+    continueButton: 'Continue',
+    backButton: 'Back',
+    selectPresetFirst: 'Choose a modpack to continue',
   },
 
   settings: {
@@ -487,6 +494,7 @@ export const en: TranslationSchema = {
     nameRequired: 'Name required',
     chooseInstance: 'Choose an instance',
     selectAtLeastOne: 'Select at least one mod or folder',
+    continueButton: 'Continue',
   },
   account: {
     offlineTitle: 'Offline account',

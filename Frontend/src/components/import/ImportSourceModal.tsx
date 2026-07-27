@@ -3,9 +3,12 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
-import { LOADERS, clampLoader, loaderColor } from '@/lib/loader'
-import { formatBytes, RAM_OPTIONS } from '@/lib/format'
+import { clampLoader, loaderColor } from '@/lib/loader'
+import { formatBytes } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
+import { RamPicker } from '@/components/ui/RamPicker'
+import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
+import { NameInput, VersionSelect, LoaderPicker } from '@/components/instances/InstanceFormFields'
 import { showError } from '@/stores/useErrorToast'
 import type { DetectedLauncher, DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
 import { useT } from '@/i18n'
@@ -40,9 +43,10 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
   const { instances, versions, defaultRam } = useStore()
   const releaseVersions = versions.filter((v) => v.version_type === 'release').map((v) => v.id)
 
-  const [step, setStep] = useState<'pick' | 'review' | 'done'>('pick')
+  const [step, setStep] = useState<'pick' | 'config' | 'mods' | 'done'>('pick')
   const [launchers, setLaunchers] = useState<DetectedLauncher[]>([])
   const [detectingLaunchers, setDetectingLaunchers] = useState(true)
+  const [expandedLaunchers, setExpandedLaunchers] = useState<Set<string>>(new Set())
   const [scanning, setScanning] = useState(false)
   const [scan, setScan] = useState<ScanResult | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -104,7 +108,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
       setName(res.source.name ?? '')
       setMcVersion(res.source.mcVersion ?? releaseVersions[0] ?? '')
       setLoader(clampLoader(res.source.loader))
-      setStep('review')
+      setStep('config')
       if (fixedInstanceId) {
         runDuplicateCheck(res.modsDir, fixedInstanceId)
       }
@@ -113,6 +117,15 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
     } finally {
       setScanning(false)
     }
+  }
+
+  const toggleLauncherExpanded = (kind: string) => {
+    setExpandedLaunchers((prev) => {
+      const next = new Set(prev)
+      if (next.has(kind)) next.delete(kind)
+      else next.add(kind)
+      return next
+    })
   }
 
   const handlePickFolder = async () => {
@@ -156,6 +169,12 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
       else next.add(dir)
       return next
     })
+  }
+
+  const handleContinueToMods = () => {
+    if (destMode === 'new' && !name.trim()) { showError(t('import.nameRequired')); return }
+    if (destMode === 'existing' && !targetInstanceId) { showError(t('import.chooseInstance')); return }
+    setStep('mods')
   }
 
   const handleApply = async () => {
@@ -208,36 +227,50 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
             )}
 
             {!detectingLaunchers && launchers.length > 0 && (
-              <div className="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">
-                {launchers.map((l) => (
-                  <div key={l.kind} className="flex flex-col gap-1.5">
-                    <p className="text-[10px] text-[rgba(255,255,255,0.35)] tracking-[0.1em] uppercase font-semibold">
-                      {l.displayName}
-                    </p>
-                    <div className="flex flex-col gap-1">
-                      {l.instances.map((inst) => (
-                        <button
-                          key={inst.path}
-                          onClick={() => scanPath(inst.path)}
-                          disabled={scanning}
-                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] transition-colors hover:border-[rgba(75,63,207,0.4)]"
+              <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-1">
+                {launchers.map((l) => {
+                  const expanded = expandedLaunchers.has(l.kind)
+                  return (
+                    <div key={l.kind} className="flex flex-col gap-1.5">
+                      <button
+                        onClick={() => toggleLauncherExpanded(l.kind)}
+                        className="flex items-center gap-1.5 py-0.5 text-[10px] text-[rgba(255,255,255,0.35)] tracking-[0.1em] uppercase font-semibold transition-colors hover:text-[rgba(255,255,255,0.6)]"
+                      >
+                        <svg
+                          viewBox="0 0 10 6" fill="currentColor" width={8} height={5}
+                          className={`flex-shrink-0 transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`}
                         >
-                          <span className="flex-1 truncate text-[12.5px] font-semibold text-[rgba(255,255,255,0.85)]">
-                            {inst.source.name ?? inst.path.split(/[\\/]/).pop()}
-                          </span>
-                          {inst.source.loader && (
-                            <span className="text-[10px] font-bold flex-shrink-0" style={{ color: loaderColor(inst.source.loader) }}>
-                              {inst.source.loader}
-                            </span>
-                          )}
-                          {inst.source.mcVersion && (
-                            <span className="text-[10.5px] text-[rgba(255,255,255,0.3)] flex-shrink-0">{inst.source.mcVersion}</span>
-                          )}
-                        </button>
-                      ))}
+                          <path d="M0 0l5 6 5-6z" />
+                        </svg>
+                        {l.displayName} ({l.instances.length})
+                      </button>
+                      {expanded && (
+                        <div className="flex flex-col gap-1">
+                          {l.instances.map((inst) => (
+                            <button
+                              key={inst.path}
+                              onClick={() => scanPath(inst.path)}
+                              disabled={scanning}
+                              className="flex items-center gap-2 rounded-xl px-3 py-2 text-left bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] transition-colors hover:border-[rgba(75,63,207,0.4)]"
+                            >
+                              <span className="flex-1 truncate text-[12.5px] font-semibold text-[rgba(255,255,255,0.85)]">
+                                {inst.source.name ?? inst.path.split(/[\\/]/).pop()}
+                              </span>
+                              {inst.source.loader && (
+                                <span className="text-[10px] font-bold flex-shrink-0" style={{ color: loaderColor(inst.source.loader) }}>
+                                  {inst.source.loader}
+                                </span>
+                              )}
+                              {inst.source.mcVersion && (
+                                <span className="text-[10.5px] text-[rgba(255,255,255,0.3)] flex-shrink-0">{inst.source.mcVersion}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
@@ -258,8 +291,16 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
           </div>
         )}
 
-        {step === 'review' && scan && (
-          <div className="flex flex-1 flex-col gap-3 overflow-hidden">
+        {step === 'config' && scan && (
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1">
+            <button
+              onClick={() => setStep('pick')}
+              className="flex items-center gap-1.5 self-start text-[12px] font-medium text-[rgba(255,255,255,0.35)] transition-colors hover:text-[rgba(255,255,255,0.7)]"
+            >
+              <BackArrowIcon size={12} />
+              {t('import.back')}
+            </button>
+
             <div className="flex-shrink-0 rounded-xl px-3 py-2 bg-[rgba(75,63,207,0.12)] border border-[rgba(75,63,207,0.3)]">
               <p className="text-[11.5px] text-[rgba(255,255,255,0.7)] font-semibold">{sourceLabel(t, scan.source)}</p>
               <p className="text-[10.5px] text-[rgba(255,255,255,0.35)]">{scan.modsDir}</p>
@@ -280,44 +321,15 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
             )}
 
             {destMode === 'new' ? (
-              <div className="flex flex-shrink-0 flex-col gap-2">
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t('import.instanceNamePlaceholder')}
-                  className="w-full rounded-xl px-3 text-sm font-medium text-white outline-none h-[38px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)]"
+              <div className="flex flex-shrink-0 flex-col gap-4">
+                <NameInput value={name} onChange={setName} onEnter={handleContinueToMods} />
+                <VersionSelect
+                  versions={mcVersion && !releaseVersions.includes(mcVersion) ? [mcVersion, ...releaseVersions] : releaseVersions}
+                  value={mcVersion}
+                  onChange={setMcVersion}
                 />
-                <div className="flex gap-2">
-                  <select
-                    value={mcVersion}
-                    onChange={(e) => setMcVersion(e.target.value)}
-                    className="flex-1 rounded-xl px-2 text-xs font-medium text-white outline-none h-[34px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)]"
-                  >
-                    {(mcVersion && !releaseVersions.includes(mcVersion) ? [mcVersion, ...releaseVersions] : releaseVersions).map((v) => (
-                      <option key={v} value={v} className="bg-[#111118]">{v}</option>
-                    ))}
-                  </select>
-                  <div className="flex gap-1">
-                    {LOADERS.map((l) => (
-                      <button
-                        key={l}
-                        onClick={() => setLoader(l)}
-                        className={`rounded-xl text-xs font-semibold h-[34px] px-2.5 py-0 border ${loader === l ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(75,63,207,0.7)] text-[rgba(255,255,255,0.95)]' : 'bg-[rgba(0,0,0,0.35)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.35)]'}`}
-                      >
-                        {l.charAt(0).toUpperCase() + l.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                  <select
-                    value={ram}
-                    onChange={(e) => setRam(Number(e.target.value))}
-                    className="rounded-xl px-2 text-xs font-medium text-white outline-none h-[34px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)]"
-                  >
-                    {RAM_OPTIONS.map((r) => (
-                      <option key={r} value={r} className="bg-[#111118]">{r >= 1024 ? `${r / 1024} Go` : `${r} Mo`}</option>
-                    ))}
-                  </select>
-                </div>
+                <LoaderPicker value={loader} onChange={setLoader} />
+                <RamPicker value={ram} onChange={setRam} />
               </div>
             ) : (
               <select
@@ -330,6 +342,26 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                 ))}
               </select>
             )}
+
+            <button
+              onClick={handleContinueToMods}
+              className="mt-auto flex-shrink-0 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] bg-[#4B3FCF] hover:bg-[#6155e8]"
+            >
+              {t('import.continueButton')}
+            </button>
+          </div>
+        )}
+
+        {step === 'mods' && scan && (
+          <div className="flex flex-1 flex-col gap-3 overflow-hidden">
+            <button
+              onClick={() => setStep('config')}
+              disabled={applying}
+              className="flex flex-shrink-0 items-center gap-1.5 self-start text-[12px] font-medium text-[rgba(255,255,255,0.35)] transition-colors hover:text-[rgba(255,255,255,0.7)] disabled:cursor-not-allowed"
+            >
+              <BackArrowIcon size={12} />
+              {t('import.back')}
+            </button>
 
             {scan.extraDirs.length > 0 && (
               <div className="flex flex-shrink-0 flex-wrap gap-2">
@@ -394,22 +426,13 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
               </div>
             )}
 
-            <div className="flex flex-shrink-0 gap-2">
-              <button
-                onClick={() => setStep('pick')}
-                disabled={applying}
-                className="rounded-xl px-4 text-xs font-semibold h-10 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.5)]"
-              >
-                {t('import.back')}
-              </button>
-              <button
-                onClick={handleApply}
-                disabled={applying}
-                className={`flex-1 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${applying ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
-              >
-                {applying ? t('import.importing') : t('import.importCount', { count: selected.size })}
-              </button>
-            </div>
+            <button
+              onClick={handleApply}
+              disabled={applying}
+              className={`flex-shrink-0 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${applying ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
+            >
+              {applying ? t('import.importing') : t('import.importCount', { count: selected.size })}
+            </button>
           </div>
         )}
 

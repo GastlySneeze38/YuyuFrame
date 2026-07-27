@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
+import { open } from '@tauri-apps/plugin-shell'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useT } from '@/i18n'
+
+const FORGE_PATREON_URL = 'https://www.patreon.com/LexManos'
 
 interface AppInfo {
   name: string
@@ -120,6 +123,21 @@ export default function Information() {
             <InfoRow label={t('information.author')} value="Ghasty" />
             <InfoRow label={t('information.licence')} value={t('information.openSource')} />
             <InfoRow label={t('information.repository')} value="github.com/Ghasty/YuyuFrame" dim />
+          </Section>
+
+          {/* Minecraft Forge */}
+          <Section title={t('information.forgeTitle')}>
+            <div className="flex flex-col gap-3 rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+              <p className="text-[12px] text-white/40 leading-[1.6]">
+                {t('information.forgeText')}
+              </p>
+              <button
+                onClick={() => open(FORGE_PATREON_URL)}
+                className="self-start text-[12px] font-semibold text-[rgba(180,170,255,0.9)] transition-colors hover:text-[rgba(200,190,255,1)]"
+              >
+                {t('information.forgeLink')}
+              </button>
+            </div>
           </Section>
 
           {/* Mentions légales */}

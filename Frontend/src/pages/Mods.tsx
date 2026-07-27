@@ -6,7 +6,7 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { formatBytes } from '@/lib/format'
 import type { Instance, Mod, ModInstallProgress, ModpackInstallProgress, ModpackMeta } from '@/types'
-import { searchModrinthModpacks, resolveModpackFile, type ModpackHit } from '@/lib/modrinthModpacks'
+import { searchModrinthModpacks, resolveModpackFile, type ModpackHit, type ResolvedModpackFile } from '@/lib/modrinthModpacks'
 import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { ImportChoiceModal } from '@/components/import/ImportChoiceModal'
 import { InstalledTab } from '@/components/mods/InstalledTab'
@@ -53,7 +53,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [updates, setUpdates] = useState<ModUpdate[]>([])
   const [updatingMods, setUpdatingMods] = useState<Set<string>>(new Set())
   const [updatingAll, setUpdatingAll] = useState(false)
-  const [updatingPackAll, setUpdatingPackAll] = useState(false)
   const [importNotice, setImportNotice] = useState('')
   const [showImportChoice, setShowImportChoice] = useState(false)
   const [showImportFolder, setShowImportFolder] = useState(false)
@@ -86,7 +85,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [modpackMeta, setModpackMeta] = useState<ModpackMeta | null>(null)
   const [modpackMenuOpen, setModpackMenuOpen] = useState(false)
   const [showPackContent, setShowPackContent] = useState(false)
+  const [packVersionUpdate, setPackVersionUpdate] = useState<ResolvedModpackFile | null>(null)
+  const [updatingPackVersion, setUpdatingPackVersion] = useState(false)
   const [packQuery, setPackQuery] = useState('')
+  const [packFilters, setPackFilters] = useState<ModrinthSearchFilters>({})
   const [packResults, setPackResults] = useState<ModpackHit[]>([])
   const [packSearching, setPackSearching] = useState(false)
   const [packInstalling, setPackInstalling] = useState<string | null>(null)
@@ -98,13 +100,32 @@ export function ModsContent({ instance }: { instance: Instance }) {
     api.modpacks.getMeta(instanceId).then(setModpackMeta).catch(() => setModpackMeta(null))
   }, [instanceId])
 
+  // Détection d'une nouvelle version du modpack lui-même publiée sur
+  // Modrinth (compare le version_id installé au dernier publié) — remplace
+  // l'ancienne mise à jour "mod par mod" à l'intérieur du pack : un modpack
+  // est un ensemble curé/testé par son auteur, y toucher mod par mod cassait
+  // silencieusement la cohérence que le pack garantit. `project_id` vide =
+  // pack importé depuis un fichier .mrpack local, pas de projet Modrinth à
+  // vérifier. Best-effort : une erreur réseau laisse juste l'indicateur absent.
+  useEffect(() => {
+    setPackVersionUpdate(null)
+    if (!modpackMeta?.project_id) return
+    let cancelled = false
+    resolveModpackFile(modpackMeta.project_id).then((file) => {
+      if (!cancelled && file && file.versionId !== modpackMeta.version_id) {
+        setPackVersionUpdate(file)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [modpackMeta?.project_id, modpackMeta?.version_id])
+
   const packFileSet = new Set((modpackMeta?.mod_files ?? []).map((f) => f.toLowerCase()))
   const isPackMod = (name: string) => packFileSet.has(baseFilename(name).toLowerCase())
 
-  const runPackSearch = async (q: string) => {
+  const runPackSearch = async (q: string, filters: ModrinthSearchFilters = packFilters) => {
     setPackSearching(true)
     try {
-      setPackResults(await searchModrinthModpacks(q))
+      setPackResults(await searchModrinthModpacks(q, filters))
     } catch {
       showError(t('mods.cannotReachModrinth'))
     } finally {
@@ -117,6 +138,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setPackQuery(q)
     if (packDebounceRef.current) clearTimeout(packDebounceRef.current)
     packDebounceRef.current = setTimeout(() => runPackSearch(q), 450)
+  }
+
+  const handlePackFiltersChange = (filters: ModrinthSearchFilters) => {
+    setPackFilters(filters)
+    if (packDebounceRef.current) clearTimeout(packDebounceRef.current)
+    runPackSearch(packQuery, filters)
   }
 
   const handleInstallModpack = async (hit: ModpackHit) => {
@@ -331,13 +358,42 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setUpdatingAll(false)
   }
 
-  const handleUpdateAllPack = async () => {
-    if (updatingPackAll) return
+  const handleUpdatePackVersion = async () => {
+    if (updatingPackVersion || !packVersionUpdate || !modpackMeta) return
     setModpackMenuOpen(false)
-    setUpdatingPackAll(true)
-    const pending = updates.filter((u) => u.blockedBy.length === 0 && isPackMod(u.mod.name))
-    for (const update of pending) await handleUpdateMod(update)
-    setUpdatingPackAll(false)
+    setUpdatingPackVersion(true)
+    setPackInstallProgress({ percent: 0, label: t('mods.downloadingModpack') })
+    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
+      const { current, total, label } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
+      setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
+    })
+    try {
+      const meta = await api.modpacks.install({
+        instanceId,
+        fileUrl: packVersionUpdate.url,
+        projectId: modpackMeta.project_id,
+        versionId: packVersionUpdate.versionId,
+        name: modpackMeta.name,
+        author: modpackMeta.author,
+        summary: modpackMeta.summary,
+        iconUrl: modpackMeta.icon_url,
+        versionNumber: packVersionUpdate.versionNumber,
+        downloads: modpackMeta.downloads,
+        dateModified: modpackMeta.date_modified,
+        categories: modpackMeta.categories,
+      })
+      setModpackMeta(meta)
+      setPackVersionUpdate(null)
+      delete _modrinthCache[instanceId]
+      await loadMods()
+    } catch (e) {
+      showError(e)
+    } finally {
+      unlisten()
+      setUpdatingPackVersion(false)
+      setPackInstallProgress(null)
+    }
   }
 
   const handlePickJars = async () => {
@@ -468,7 +524,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
   }
 
   const extraUpdatesCount = updates.filter((u) => u.blockedBy.length === 0 && !isPackMod(u.mod.name)).length
-  const packUpdatesCount = updates.filter((u) => u.blockedBy.length === 0 && isPackMod(u.mod.name)).length
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -610,13 +665,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
             meta={modpackMeta}
             menuOpen={modpackMenuOpen}
             showPackContent={showPackContent}
-            packUpdatesCount={packUpdatesCount}
-            updatingPackAll={updatingPackAll}
+            packVersionUpdate={packVersionUpdate}
+            updatingPackVersion={updatingPackVersion}
             onToggleMenu={() => setModpackMenuOpen((v) => !v)}
             onReplace={handleReplaceModpack}
             onRemove={handleRemoveModpack}
             onToggleShowContent={handleToggleShowPackContent}
-            onUpdateAllPack={handleUpdateAllPack}
+            onUpdatePackVersion={handleUpdatePackVersion}
           />
         )}
 
@@ -683,8 +738,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
               searching={packSearching}
               installing={packInstalling}
               installProgress={packInstallProgress}
+              filters={packFilters}
               onQueryChange={handlePackQueryChange}
               onInstall={handleInstallModpack}
+              onFiltersChange={handlePackFiltersChange}
             />
           </div>
         )}

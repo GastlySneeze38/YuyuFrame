@@ -1,3 +1,8 @@
+import { api } from '@/api/client'
+import type { ModrinthSearchFilters } from '@/components/mods/modUtils'
+
+export type { ModrinthSearchFilters }
+
 export interface ModpackHit {
   project_id: string
   slug: string
@@ -18,18 +23,22 @@ export interface ResolvedModpackFile {
   versionNumber: string
 }
 
-export async function searchModrinthModpacks(query: string): Promise<ModpackHit[]> {
-  const params = new URLSearchParams({
+/** Recherche de modpacks via le backend (`mods_search_advanced`, voir
+ * commands/modrinth.rs) — même chemin que la recherche de mods/plugins, avec
+ * `projectType: 'modpack'` et les mêmes filtres avancés (catégories propres
+ * aux modpacks, environnement, licence, open source, tri). */
+export async function searchModrinthModpacks(query: string, filters?: ModrinthSearchFilters): Promise<ModpackHit[]> {
+  const res = await api.mods.searchAdvanced({
     query,
-    facets: JSON.stringify([['project_type:modpack']]),
-    limit: '20',
+    projectType: 'modpack',
+    categories: filters?.categories,
+    environment: filters?.environment,
+    license: filters?.license,
+    openSourceOnly: filters?.openSourceOnly,
+    sort: filters?.sort,
+    limit: 20,
   })
-  const res = await fetch(`https://api.modrinth.com/v2/search?${params}`, {
-    headers: { 'User-Agent': 'YuyuFrame/1.0' },
-  })
-  if (!res.ok) throw new Error(`Modrinth: ${res.status}`)
-  const data = await res.json()
-  return data.hits as ModpackHit[]
+  return res.hits as ModpackHit[]
 }
 
 /// Résout la dernière version .mrpack disponible pour un modpack donné.

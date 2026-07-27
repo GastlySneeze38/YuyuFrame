@@ -5,6 +5,7 @@ import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker } from '@/components/ui/RamPicker'
+import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { PresetCard } from './PresetCard'
@@ -65,6 +66,7 @@ export function CreateInstanceModal({
   onCreate: (instance: Instance) => void
 }) {
   const t = useT()
+  const [step, setStep] = useState<'choose' | 'configure'>('choose')
   const [mode, setMode] = useState<'blank' | 'preset'>('blank')
   const [selectedPreset, setSelectedPreset] = useState<InstancePreset | null>(null)
 
@@ -111,6 +113,12 @@ export function CreateInstanceModal({
     }
   }
 
+  const handleContinue = () => {
+    if (mode === 'preset' && !selectedPreset) { showError(t('instancesPage.selectPresetFirst')); return }
+    if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
+    setStep('configure')
+  }
+
   const handleVersionChange = (v: string) => {
     setMcVersion(v)
     api.analytics.track('instance_create_version_changed', { flow_id: flowId.current, mc_version: v })
@@ -140,35 +148,50 @@ export function CreateInstanceModal({
   return (
     <ModalShell title={t('instancesPage.newInstance')} onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <div className="flex gap-1 rounded-xl p-1 bg-[rgba(0,0,0,0.3)]">
-          {(['blank', 'preset'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => handleSwitchMode(m)}
-              className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-[32px] ${
-                mode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'
-              }`}
-            >
-              {m === 'blank' ? t('instancesPage.blank') : 'Modpack'}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'preset' && (
-          <div className="grid grid-cols-1 gap-2 max-h-[320px] overflow-y-auto pr-1">
-            {INSTANCE_PRESETS.map((p) => (
-              <PresetCard key={p.id} preset={p} selected={selectedPreset?.id === p.id} onSelect={() => handleSelectPreset(p)} />
-            ))}
-          </div>
-        )}
-
-        {(mode === 'blank' || selectedPreset) && (
+        {step === 'choose' ? (
           <>
-            <NameInput value={name} onChange={setName} onEnter={handleCreate} />
+            <div className="flex gap-1 rounded-xl p-1 bg-[rgba(0,0,0,0.3)]">
+              {(['blank', 'preset'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => handleSwitchMode(m)}
+                  className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-[32px] ${
+                    mode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'
+                  }`}
+                >
+                  {m === 'blank' ? t('instancesPage.blank') : 'Modpack'}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'preset' && (
+              <div className="grid grid-cols-1 gap-2 max-h-[320px] overflow-y-auto pr-1">
+                {INSTANCE_PRESETS.map((p) => (
+                  <PresetCard key={p.id} preset={p} selected={selectedPreset?.id === p.id} onSelect={() => handleSelectPreset(p)} />
+                ))}
+              </div>
+            )}
+
+            {(mode === 'blank' || selectedPreset) && (
+              <>
+                <NameInput value={name} onChange={setName} onEnter={handleContinue} />
+                <SubmitButton loading={false} label={t('instancesPage.continueButton')} loadingLabel="" onClick={handleContinue} />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setStep('choose')}
+              className="flex items-center gap-1.5 self-start text-[12px] font-medium text-[rgba(255,255,255,0.35)] transition-colors hover:text-[rgba(255,255,255,0.7)]"
+            >
+              <BackArrowIcon size={12} />
+              {t('instancesPage.backButton')}
+            </button>
 
             {mode === 'blank' ? (
-              <div className="flex gap-3">
-                <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} className="flex-1" />
+              <div className="flex flex-col gap-4">
+                <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} />
                 <LoaderPicker value={loader} onChange={setLoader} />
               </div>
             ) : (

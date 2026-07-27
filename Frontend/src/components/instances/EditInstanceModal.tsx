@@ -50,10 +50,8 @@ export function EditInstanceModal({
       <div className="flex flex-col gap-4">
         <NameInput value={name} onChange={setName} onEnter={handleSave} />
 
-        <div className="flex gap-3">
-          <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} className="flex-1" />
-          <LoaderPicker value={loader} onChange={setLoader} />
-        </div>
+        <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} />
+        <LoaderPicker value={loader} onChange={setLoader} />
 
         <RamPicker value={ram} onChange={setRam} />
 
