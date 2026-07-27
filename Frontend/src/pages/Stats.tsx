@@ -10,8 +10,10 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 
 export default function Stats() {
+  const t = useT()
   const navigate = useNavigate()
   const { isPremium, yuyuPlan } = useStore()
   const premium = isPremium()
@@ -57,12 +59,12 @@ export default function Stats() {
         {!premium ? (
           <PremiumGate
             onUpgrade={() => navigate('/plans')}
-            description="Les stats & analytics détaillées sont réservées aux abonnés Premium et Ultimate."
+            description={t('stats.gateDescription')}
             features={[
-              'Temps de jeu total & par modpack',
-              'Historique des 20 dernières sessions',
-              'Activité sur les 14 derniers jours',
-              'Modpack et session favorites',
+              t('stats.gateFeature1'),
+              t('stats.gateFeature2'),
+              t('stats.gateFeature3'),
+              t('stats.gateFeature4'),
             ]}
           />
         ) : loading ? (
@@ -71,35 +73,35 @@ export default function Stats() {
           </div>
         ) : !stats ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <p className="text-[13px] text-white/30">Impossible de charger les statistiques</p>
+            <p className="text-[13px] text-white/30">{t('stats.cannotLoadStats')}</p>
           </div>
         ) : (
           <>
             {/* Top stat cards */}
             <div className="grid grid-cols-3 gap-4">
               <StatCard
-                label="Temps de jeu total"
+                label={t('stats.totalPlaytime')}
                 value={formatDuration(stats.total_secs)}
-                sub={stats.total_sessions === 0 ? 'Aucune session' : `${stats.total_sessions} session${stats.total_sessions > 1 ? 's' : ''}`}
+                sub={stats.total_sessions === 0 ? t('stats.noSession') : t('stats.sessionsCount', { count: stats.total_sessions, s: stats.total_sessions > 1 ? 's' : '' })}
                 color="#818cf8"
               />
               <StatCard
-                label="Moyenne par session"
+                label={t('stats.averagePerSession')}
                 value={stats.total_sessions > 0 ? formatDuration(Math.round(stats.total_secs / stats.total_sessions)) : '—'}
-                sub="Durée moyenne"
+                sub={t('stats.averageDuration')}
                 color="#818cf8"
               />
               <StatCard
-                label="Modpack favori"
+                label={t('stats.favoriteModpack')}
                 value={stats.per_instance[0]?.instance_name ?? '—'}
-                sub={stats.per_instance[0] ? formatDuration(stats.per_instance[0].total_secs) : 'Aucune donnée'}
+                sub={stats.per_instance[0] ? formatDuration(stats.per_instance[0].total_secs) : t('stats.noData')}
                 color="#f59e0b"
               />
             </div>
 
             {/* 14-day activity */}
             <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
-              <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">ACTIVITÉ — 14 DERNIERS JOURS</span>
+              <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.activity14Days')}</span>
               <div className="flex items-end gap-1.5 h-20">
                 {days.map((day) => {
                   const secs = dailyMap.get(day) ?? 0
@@ -132,7 +134,7 @@ export default function Stats() {
 
               {/* Per-instance breakdown */}
               <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
-                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">PAR MODPACK</span>
+                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.byModpack')}</span>
                 {stats.per_instance.length === 0 ? (
                   <EmptyState
                     compact
@@ -141,8 +143,8 @@ export default function Stats() {
                         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z" />
                       </svg>
                     }
-                    title="Aucune session enregistrée"
-                    subtitle="Lance une partie pour commencer"
+                    title={t('stats.noSessionRecorded')}
+                    subtitle={t('stats.launchToStart')}
                   />
                 ) : (
                   <div className="flex flex-col gap-4">
@@ -163,7 +165,7 @@ export default function Stats() {
                           />
                         </div>
                         <span className="text-[10px] text-white/25">
-                          {inst.sessions} session{inst.sessions > 1 ? 's' : ''}
+                          {t('stats.sessionsCount', { count: inst.sessions, s: inst.sessions > 1 ? 's' : '' })}
                         </span>
                       </div>
                     ))}
@@ -173,7 +175,7 @@ export default function Stats() {
 
               {/* Recent sessions */}
               <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
-                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">SESSIONS RÉCENTES</span>
+                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.recentSessions')}</span>
                 {stats.recent_sessions.length === 0 ? (
                   <EmptyState
                     compact
@@ -182,8 +184,8 @@ export default function Stats() {
                         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z" />
                       </svg>
                     }
-                    title="Aucune session enregistrée"
-                    subtitle="Lance une partie pour commencer"
+                    title={t('stats.noSessionRecorded')}
+                    subtitle={t('stats.launchToStart')}
                   />
                 ) : (
                   <div className="flex flex-col gap-2 overflow-auto max-h-[280px]">
@@ -197,7 +199,7 @@ export default function Stats() {
                           <div className="flex items-center gap-1.5">
                             <span className="text-[9px] font-bold" style={{ color: loaderColor(s.loader) }}>{s.loader}</span>
                             <span className="text-[9px] text-white/20">·</span>
-                            <span className="text-[9px] text-white/30">{formatShortDate(s.started_at)} à {formatTime(s.started_at)}</span>
+                            <span className="text-[9px] text-white/30">{t('stats.dateAtTime', { date: formatShortDate(s.started_at), time: formatTime(s.started_at) })}</span>
                           </div>
                         </div>
                         <span

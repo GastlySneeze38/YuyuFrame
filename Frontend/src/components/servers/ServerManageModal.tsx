@@ -1,6 +1,7 @@
 import { ModalShell } from '@/components/ui/ModalShell'
 import { ServerCard } from './ServerCard'
 import type { SavedServer } from '@/api/client'
+import { useT } from '@/i18n'
 
 /** Liste tous les serveurs enregistrés (servers.dat) de l'instance
  * sélectionnée — ouverte depuis Home.tsx uniquement quand il y en a plus de
@@ -21,11 +22,12 @@ export function ServerManageModal({
   onClose: () => void
   onLaunch: (server: SavedServer) => void
 }) {
+  const t = useT()
   return (
-    <ModalShell title="Serveurs enregistrés" onClose={onClose} maxWidth="max-w-2xl">
+    <ModalShell title={t('servers.manageTitle')} onClose={onClose} maxWidth="max-w-2xl">
       <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-2">
         <p className="px-1 text-[10px] text-[rgba(255,255,255,0.35)]">
-          Survole une carte pour l'épingler — jusqu'à 3 serveurs affichés directement sur l'accueil.
+          {t('servers.manageHint')}
         </p>
         <div className="grid grid-cols-3 items-start gap-3">
           {servers.map((s) => (

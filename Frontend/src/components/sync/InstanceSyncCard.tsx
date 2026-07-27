@@ -9,6 +9,7 @@ import { showError } from '@/stores/useErrorToast'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
 import { SaveSelector } from './SaveSelector'
+import { useT } from '@/i18n'
 
 interface InstanceSyncCardProps {
   instance: Instance
@@ -21,6 +22,7 @@ interface InstanceSyncCardProps {
 export function InstanceSyncCard({
   instance, cloudEntry, maxSaves, onCloudUpdate, onCloudDelete,
 }: InstanceSyncCardProps) {
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const [saves, setSaves] = useState<SaveInfo[]>([])
   const [selectedSaves, setSelectedSaves] = useState<Set<string>>(new Set())
@@ -82,7 +84,7 @@ export function InstanceSyncCard({
 
   const handlePush = async () => {
     setPushing(true)
-    setProgress({ phase: 'resolving_mods', percent: 0, label: 'Démarrage...' })
+    setProgress({ phase: 'resolving_mods', percent: 0, label: t('sync.starting') })
 
     const unlisten = await listen<SyncProgress>('sync_progress', (ev) => {
       setProgress(ev.payload)
@@ -92,7 +94,7 @@ export function InstanceSyncCard({
     try {
       const updated = await api.sync.push(instance.id, Array.from(selectedSaves))
       onCloudUpdate(updated)
-      flash('Sauvegardé dans le cloud !')
+      flash(t('sync.savedToCloud'))
     } catch (e) {
       showError(e)
     } finally {
@@ -106,7 +108,7 @@ export function InstanceSyncCard({
   const handlePull = async () => {
     if (!cloudEntry) return
     setPulling(true)
-    setProgress({ phase: 'downloading', percent: 0, label: 'Démarrage de la restauration...' })
+    setProgress({ phase: 'downloading', percent: 0, label: t('sync.restoreStarting') })
 
     const unlisten = await listen<SyncProgress>('sync_progress', (ev) => {
       setProgress(ev.payload)
@@ -115,7 +117,7 @@ export function InstanceSyncCard({
 
     try {
       await api.sync.pull(cloudEntry.id, instance.id)
-      flash('Données restaurées !')
+      flash(t('sync.dataRestored'))
     } catch (e) {
       showError(e)
     } finally {
@@ -171,14 +173,14 @@ export function InstanceSyncCard({
           <p className="text-[11px] mt-0.5">
             {cloudEntry?.has_data
               ? <span className="text-[rgba(74,222,128,0.7)]">
-                  ✓ Sauvegardé {formatRelativeTime(cloudEntry.updated_at)}
+                  {t('sync.savedTimeAgo', { time: formatRelativeTime(cloudEntry.updated_at) })}
                   {cloudEntry.save_names.length > 0 && (
                     <span className="text-[rgba(255,255,255,0.2)] ml-1.5">
-                      · {cloudEntry.save_names.length} save{cloudEntry.save_names.length > 1 ? 's' : ''}
+                      {t('sync.saveCountSuffix', { count: cloudEntry.save_names.length, s: cloudEntry.save_names.length > 1 ? 's' : '' })}
                     </span>
                   )}
                 </span>
-              : <span className="text-[rgba(255,255,255,0.22)]">Jamais sauvegardé</span>
+              : <span className="text-[rgba(255,255,255,0.22)]">{t('sync.neverSaved')}</span>
             }
           </p>
         </div>
@@ -210,7 +212,7 @@ export function InstanceSyncCard({
           {savesLoading ? (
             <div className="flex items-center gap-2 py-1">
               <ButtonSpinner size={14} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.08)" />
-              <span className="text-[12px] text-[rgba(255,255,255,0.25)]">Chargement des saves...</span>
+              <span className="text-[12px] text-[rgba(255,255,255,0.25)]">{t('sync.loadingSaves')}</span>
             </div>
           ) : (
             <SaveSelector
@@ -243,7 +245,7 @@ export function InstanceSyncCard({
                   ? <ButtonSpinner size={14} />
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="rotate-180 flex-shrink-0"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
                 }
-                Restaurer
+                {t('sync.restore')}
               </button>
             )}
 
@@ -258,10 +260,10 @@ export function InstanceSyncCard({
                 : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="flex-shrink-0"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
               }
               {pushing
-                ? 'Sauvegarde...'
+                ? t('sync.saving')
                 : hasSynced
-                  ? `Mettre à jour${selectedSaves.size > 0 ? ` (${selectedSaves.size} save${selectedSaves.size > 1 ? 's' : ''})` : ''}`
-                  : `Sauvegarder${selectedSaves.size > 0 ? ` (${selectedSaves.size} save${selectedSaves.size > 1 ? 's' : ''})` : ''}`
+                  ? `${t('sync.updateLabel')}${selectedSaves.size > 0 ? t('sync.saveCountParen', { count: selectedSaves.size, s: selectedSaves.size > 1 ? 's' : '' }) : ''}`
+                  : `${t('sync.saveLabel')}${selectedSaves.size > 0 ? t('sync.saveCountParen', { count: selectedSaves.size, s: selectedSaves.size > 1 ? 's' : '' }) : ''}`
               }
             </button>
 
@@ -270,7 +272,7 @@ export function InstanceSyncCard({
               <button
                 onClick={handleDelete}
                 disabled={busy}
-                title="Supprimer la sauvegarde cloud"
+                title={t('sync.deleteCloudBackup')}
                 className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150 bg-[rgba(255,255,255,0.04)] ${busy ? 'text-[rgba(255,255,255,0.18)] cursor-not-allowed' : 'text-[rgba(255,255,255,0.18)] cursor-pointer hover:text-[rgb(248,113,113)] hover:bg-[rgba(200,50,50,0.12)]'}`}
               >
                 {deleting

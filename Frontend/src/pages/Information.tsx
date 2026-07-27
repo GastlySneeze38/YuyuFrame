@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getName, getVersion, getTauriVersion } from '@tauri-apps/api/app'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useT } from '@/i18n'
 
 interface AppInfo {
   name: string
@@ -8,18 +9,18 @@ interface AppInfo {
   tauriVersion: string
 }
 
-const FEATURES = [
-  'Lancer Minecraft avec plusieurs instances indépendantes',
-  'Installer et gérer des mods via Modrinth ou en .jar',
-  'Authentification Microsoft & gestion de comptes',
-  'Téléchargement automatique de Minecraft et des loaders',
-]
-
 const BETA_TESTERS: string[] = [
   'HYROKY', 'Wiliking', 'SucreNormal', 'SarodayNest', 'Pumba', 'MedicalNew', 'Lpz2903', 'Smiouw',
 ]
 
 export default function Information() {
+  const t = useT()
+  const FEATURES = [
+    t('information.feature1'),
+    t('information.feature2'),
+    t('information.feature3'),
+    t('information.feature4'),
+  ]
   const [info, setInfo] = useState<AppInfo | null>(null)
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export default function Information() {
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-white">
 
       <PageHeader>
-        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">Informations</h1>
+        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('information.title')}</h1>
       </PageHeader>
 
       {/* Content */}
@@ -53,7 +54,7 @@ export default function Information() {
                 YuyuFrame
               </h2>
               <p className="text-[13px] text-white/40 mt-1">
-                Le launcher Minecraft open-source
+                {t('home.brandTagline')}
               </p>
             </div>
             {info && (
@@ -69,15 +70,15 @@ export default function Information() {
 
           {/* Version détails */}
           {info && (
-            <Section title="Version">
-              <InfoRow label="Application" value={`${info.name} v${info.version}`} />
-              <InfoRow label="Tauri" value={`v${info.tauriVersion}`} />
-              <InfoRow label="Plateforme" value="Windows" />
+            <Section title={t('information.version')}>
+              <InfoRow label={t('information.application')} value={`${info.name} v${info.version}`} />
+              <InfoRow label={t('information.tauri')} value={`v${info.tauriVersion}`} />
+              <InfoRow label={t('information.platform')} value="Windows" />
             </Section>
           )}
 
           {/* Fonctionnalités */}
-          <Section title="Fonctionnalités">
+          <Section title={t('information.features')}>
             <div className="flex flex-col gap-2">
               {FEATURES.map((f) => (
                 <div
@@ -92,7 +93,7 @@ export default function Information() {
           </Section>
 
           {/* Beta testeurs */}
-          <Section title="Beta testeurs">
+          <Section title={t('information.betaTesters')}>
             {BETA_TESTERS.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {BETA_TESTERS.map((name) => (
@@ -109,26 +110,25 @@ export default function Information() {
               </div>
             ) : (
               <div className="rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-                <p className="text-[12px] text-white/30">Liste à venir</p>
+                <p className="text-[12px] text-white/30">{t('information.listComingSoon')}</p>
               </div>
             )}
           </Section>
 
           {/* Auteur */}
-          <Section title="Développeur">
-            <InfoRow label="Auteur" value="Ghasty" />
-            <InfoRow label="Licence" value="Open-source" />
-            <InfoRow label="Dépôt" value="github.com/Ghasty/YuyuFrame" dim />
+          <Section title={t('information.developer')}>
+            <InfoRow label={t('information.author')} value="Ghasty" />
+            <InfoRow label={t('information.licence')} value={t('information.openSource')} />
+            <InfoRow label={t('information.repository')} value="github.com/Ghasty/YuyuFrame" dim />
           </Section>
 
           {/* Mentions légales */}
-          <Section title="Mentions légales">
+          <Section title={t('information.legalNotices')}>
             <p className="text-[12px] text-white/30 leading-[1.7]">
-              YuyuFrame est un launcher non-officiel et n'est pas affilié à Mojang Studios ou Microsoft.
-              Minecraft est une marque déposée de Microsoft Corporation.
+              {t('information.legalText')}
             </p>
             <p className="text-[11px] text-white/18 mt-2">
-              © 2025 YuyuFrame — Tous droits réservés
+              {t('home.copyright')}
             </p>
           </Section>
 

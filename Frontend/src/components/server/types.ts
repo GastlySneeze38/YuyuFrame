@@ -32,11 +32,5 @@ export interface OwnershipData {
   peers_reported?: OwnershipData[]
 }
 
-export const TABS = [
-  { id: 'apercu', label: 'Aperçu' },
-  { id: 'performance', label: 'Performance' },
-  { id: 'reseau', label: 'Réseau' },
-  { id: 'sync', label: 'Synchronisation' },
-  { id: 'diagnostic', label: 'Diagnostic' },
-] as const
-export type TabId = typeof TABS[number]['id']
+export const TAB_IDS = ['apercu', 'performance', 'reseau', 'sync', 'diagnostic'] as const
+export type TabId = typeof TAB_IDS[number]

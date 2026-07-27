@@ -1,6 +1,8 @@
 import type { ModpackMeta } from '@/types'
 import { formatRelativeDate } from '@/lib/modrinthModpacks'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
+import { useT } from '@/i18n'
+import { useStore } from '@/stores/useStore'
 
 export function ModpackBanner({
   meta, menuOpen, showPackContent, packUpdatesCount, updatingPackAll,
@@ -17,6 +19,8 @@ export function ModpackBanner({
   onToggleShowContent: () => void
   onUpdateAllPack: () => void
 }) {
+  const t = useT()
+  const { language } = useStore()
   return (
     <div className="relative mb-4 rounded-2xl px-4 py-3.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]">
       <div className="flex items-start gap-3">
@@ -32,7 +36,7 @@ export function ModpackBanner({
           <div className="flex items-center gap-2 mt-2">
             <span className="flex items-center gap-1 text-[11px] text-[rgba(255,255,255,0.3)]">
               <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-              {meta.downloads.toLocaleString('fr-FR')}
+              {meta.downloads.toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')}
             </span>
             {meta.categories.slice(0, 3).map((c) => (
               <span key={c} className="rounded-full px-2 py-0.5 text-[10px] bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.4)]">{c}</span>
@@ -49,7 +53,7 @@ export function ModpackBanner({
           {menuOpen && (
             <div className="absolute right-0 top-9 z-20 flex flex-col gap-0.5 rounded-xl p-1 w-[190px] bg-[#191923] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_30px_rgba(0,0,0,0.5)]">
               <button onClick={onToggleShowContent} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
-                {showPackContent ? 'Masquer le contenu' : 'Afficher le contenu'}
+                {showPackContent ? t('mods.hidePackContent') : t('mods.showPackContent')}
               </button>
               {packUpdatesCount > 0 && (
                 <button onClick={onUpdateAllPack} disabled={updatingPackAll} className={`flex items-center justify-between rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] ${
@@ -57,15 +61,15 @@ export function ModpackBanner({
                     ? 'text-[rgba(255,255,255,0.3)] cursor-not-allowed'
                     : 'text-[rgba(250,204,21,0.9)] cursor-pointer hover:bg-[rgba(250,204,21,0.1)]'
                 }`}>
-                  <span>Mettre à jour le pack</span>
+                  <span>{t('mods.updatePack')}</span>
                   <span className="font-bold">{updatingPackAll ? '...' : packUpdatesCount}</span>
                 </button>
               )}
               <button onClick={onReplace} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
-                Remplacer le modpack
+                {t('mods.replaceModpack')}
               </button>
               <button onClick={onRemove} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgb(248,113,113)] hover:bg-[rgba(200,50,50,0.12)]">
-                Retirer le modpack (désinstalle ses mods)
+                {t('mods.removeModpack')}
               </button>
             </div>
           )}

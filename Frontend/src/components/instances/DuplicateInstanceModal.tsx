@@ -7,6 +7,7 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, SubmitButton, VersionSelect } from './InstanceFormFields'
+import { useT } from '@/i18n'
 
 export function DuplicateInstanceModal({
   source,
@@ -19,19 +20,20 @@ export function DuplicateInstanceModal({
   onClose: () => void
   onDuplicate: (instance: Instance) => void
 }) {
-  const [name, setName] = useState(`Copie de ${source.name}`)
+  const t = useT()
+  const [name, setName] = useState(t('instancesPage.copyOf', { name: source.name }))
   const [mcVersion, setMcVersion] = useState(source.mc_version)
   const [ram, setRam] = useState(source.ram_mb)
   const [loading, setLoading] = useState(false)
-  const [loadingLabel, setLoadingLabel] = useState('Duplication...')
+  const [loadingLabel, setLoadingLabel] = useState(t('instancesPage.duplicating'))
 
   const handleDuplicate = async () => {
-    if (!name.trim()) { showError('Nom requis'); return }
-    setLoading(true); setLoadingLabel('Duplication...')
+    if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
+    setLoading(true); setLoadingLabel(t('instancesPage.duplicating'))
     try {
       const instance = await api.instances.duplicate(source.id, name.trim(), mcVersion, ram)
       if (mcVersion !== source.mc_version) {
-        setLoadingLabel('Mise à jour des mods...')
+        setLoadingLabel(t('instancesPage.updatingMods'))
         await updateModsForNewVersion(instance.id, mcVersion, source.loader)
       }
       onDuplicate(instance)
@@ -44,7 +46,7 @@ export function DuplicateInstanceModal({
   }
 
   return (
-    <ModalShell title="Dupliquer l'instance" onClose={onClose}>
+    <ModalShell title={t('instancesPage.duplicateInstance')} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <NameInput value={name} onChange={setName} onEnter={handleDuplicate} />
 
@@ -57,14 +59,14 @@ export function DuplicateInstanceModal({
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
           </svg>
           <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
-            Loader <span className="font-semibold" style={{ color: loaderColor(source.loader) }}>{source.loader}</span> conservé —{' '}
+            {t('instancesPage.loaderKeptPrefix')} <span className="font-semibold" style={{ color: loaderColor(source.loader) }}>{source.loader}</span> {t('instancesPage.loaderKeptSuffix')}{' '}
             {mcVersion !== source.mc_version
-              ? <>les mods compatibles seront mis à jour pour <span className="text-[rgba(120,110,230,0.9)] font-semibold">{mcVersion}</span>.</>
-              : 'les mods seront copiés.'}
+              ? <>{t('instancesPage.modsWillUpdateForLower')} <span className="text-[rgba(120,110,230,0.9)] font-semibold">{mcVersion}</span>.</>
+              : t('instancesPage.modsWillCopy')}
           </p>
         </div>
 
-        <SubmitButton loading={loading} label="Dupliquer" loadingLabel={loadingLabel} onClick={handleDuplicate} />
+        <SubmitButton loading={loading} label={t('instancesPage.duplicateButton')} loadingLabel={loadingLabel} onClick={handleDuplicate} />
       </div>
     </ModalShell>
   )

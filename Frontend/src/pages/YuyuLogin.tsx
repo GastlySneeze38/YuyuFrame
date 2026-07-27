@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 import type { Account } from '@/types'
 
 type Mode = 'checking' | 'login' | 'register' | 'error'
 
 export default function YuyuLogin() {
+  const t = useT()
   const navigate = useNavigate()
   const { setYuyuSession, setAccounts, setUser } = useStore()
 
@@ -27,11 +29,11 @@ export default function YuyuLogin() {
     e.preventDefault()
 
     if (mode === 'register' && password !== confirm) {
-      showError('Les mots de passe ne correspondent pas.')
+      showError(t('yuyuLogin.passwordsDontMatch'))
       return
     }
     if (password.length < 4) {
-      showError('Le mot de passe doit faire au moins 4 caractères.')
+      showError(t('yuyuLogin.passwordTooShort'))
       return
     }
 
@@ -84,13 +86,13 @@ export default function YuyuLogin() {
       <div className="flex h-full items-center justify-center bg-[#09090D]">
         <div className="flex flex-col items-center gap-4">
           <p className="text-[rgba(255,100,100,0.8)] text-[13px]">
-            Impossible de contacter le backend.
+            {t('yuyuLogin.cannotContactBackend')}
           </p>
           <button
             onClick={() => { setMode('checking'); api.yuyu.status().then((s) => setMode(s.has_account ? 'login' : 'register')).catch(() => setMode('error')) }}
             className="rounded-xl px-4 py-2 text-sm text-white transition-all bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.4)]"
           >
-            Réessayer
+            {t('yuyuLogin.retry')}
           </button>
         </div>
       </div>
@@ -119,8 +121,8 @@ export default function YuyuLogin() {
           </div>
           <p className="text-[11px] text-[rgba(255,255,255,0.3)] text-center">
             {isRegister
-              ? 'Crée ton compte lanceur pour protéger tes sessions'
-              : 'Entre ton mot de passe pour accéder au lanceur'}
+              ? t('yuyuLogin.registerTagline')
+              : t('yuyuLogin.loginTagline')}
           </p>
         </div>
 
@@ -130,26 +132,26 @@ export default function YuyuLogin() {
         >
           <div>
             <h2 className="font-bold text-white text-[15px]">
-              {isRegister ? 'Créer un compte' : 'Connexion'}
+              {isRegister ? t('yuyuLogin.createAccount') : t('yuyuLogin.login')}
             </h2>
             <p className="text-[11px] text-[rgba(255,255,255,0.3)] mt-0.5">
               {isRegister
-                ? 'Mot de passe chiffré avec Argon2 + salt'
-                : 'Compte protégé par Argon2'}
+                ? t('yuyuLogin.registerEncrypted')
+                : t('yuyuLogin.loginEncrypted')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <YuyuInput
-              label="Nom d'utilisateur"
+              label={t('yuyuLogin.username')}
               type="text"
               value={username}
               onChange={setUsername}
-              placeholder="ex: Gastly"
+              placeholder={t('yuyuLogin.usernamePlaceholder')}
               autoFocus
             />
             <YuyuInput
-              label="Mot de passe"
+              label={t('yuyuLogin.password')}
               type="password"
               value={password}
               onChange={setPassword}
@@ -157,7 +159,7 @@ export default function YuyuLogin() {
             />
             {isRegister && (
               <YuyuInput
-                label="Confirmer le mot de passe"
+                label={t('yuyuLogin.confirmPassword')}
                 type="password"
                 value={confirm}
                 onChange={setConfirm}
@@ -175,10 +177,10 @@ export default function YuyuLogin() {
                   <span
                     className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.2)] border-t-white"
                   />
-                  {isRegister ? 'Création...' : 'Connexion...'}
+                  {isRegister ? t('yuyuLogin.creating') : t('yuyuLogin.connecting')}
                 </span>
               ) : (
-                isRegister ? 'Créer le compte' : 'Se connecter'
+                isRegister ? t('yuyuLogin.createAccountButton') : t('yuyuLogin.signIn')
               )}
             </button>
           </form>
@@ -187,14 +189,14 @@ export default function YuyuLogin() {
         {/* Toggle login / register */}
         <div className="flex items-center justify-center gap-1.5">
           <span className="text-[11px] text-[rgba(255,255,255,0.3)]">
-            {isRegister ? 'Déjà un compte ?' : 'Pas encore de compte ?'}
+            {isRegister ? t('yuyuLogin.alreadyHaveAccount') : t('yuyuLogin.noAccountYet')}
           </span>
           <button
             type="button"
             onClick={() => { setMode(isRegister ? 'login' : 'register'); setConfirm('') }}
             className="text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
           >
-            {isRegister ? 'Se connecter' : 'Créer un compte'}
+            {isRegister ? t('yuyuLogin.signIn') : t('yuyuLogin.createAccount')}
           </button>
         </div>
 
@@ -205,7 +207,7 @@ export default function YuyuLogin() {
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
           <span className="text-[10px] text-[rgba(255,255,255,0.18)]">
-            Sessions Minecraft stockées localement, chiffrées en base SQLite
+            {t('yuyuLogin.securityNote')}
           </span>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { displayName, baseFilename, type ModrinthInfo, type ModUpdate } from './modUtils'
 import { ModRow } from './ModRow'
+import { useT } from '@/i18n'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
@@ -33,6 +34,7 @@ export function InstalledTab({
   onBrowseExtra: () => void
   onUploadExtra: () => void
 }) {
+  const t = useT()
   if (loading) return <Spinner />
   if (error) return <ErrorState message={error} onRetry={onReload} />
 
@@ -48,13 +50,13 @@ export function InstalledTab({
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="w-9 flex-shrink-0" />
-        <div className="min-w-0 flex-1"><span className={hdrClass}>Mod</span></div>
+        <div className="min-w-0 flex-1"><span className={hdrClass}>{t('mods.colMod')}</span></div>
       </div>
       <div className="flex-shrink-0 w-[110px] text-center px-2">
-        <span className={hdrClass}>Version</span>
+        <span className={hdrClass}>{t('mods.colVersion')}</span>
       </div>
       <div className="flex items-center justify-end gap-2 flex-1">
-        <span className={hdrClass}>Action</span>
+        <span className={hdrClass}>{t('mods.colAction')}</span>
       </div>
     </div>
   )
@@ -88,7 +90,7 @@ export function InstalledTab({
       </svg>
       <input
         type="text"
-        placeholder="Filtrer les mods..."
+        placeholder={t('mods.filterModsPlaceholder')}
         value={modSearch}
         onChange={(e) => onModSearch(e.target.value)}
         className="w-full rounded-xl pl-8 pr-4 text-sm text-white outline-none h-9 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
@@ -108,22 +110,22 @@ export function InstalledTab({
 
         {showPackContent && packMods.length > 0 && (
           <div className="mb-5">
-            <p className={sectionHdrClass}>Contenu du modpack ({packMods.length})</p>
+            <p className={sectionHdrClass}>{t('mods.modpackContent', { count: packMods.length })}</p>
             {renderHeader()}
             <div className="flex flex-col gap-2">{packMods.map(renderRow)}</div>
           </div>
         )}
 
         <div>
-          <p className={sectionHdrClass}>Contenu supplémentaire ({extraMods.length})</p>
+          <p className={sectionHdrClass}>{t('mods.extraContent', { count: extraMods.length })}</p>
           {extraMods.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-4 rounded-2xl py-12 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)]">
               <div className="w-14 h-14 rounded-2xl bg-[rgba(255,255,255,0.04)] flex items-center justify-center">
                 <PlugIcon size={26} color="rgba(255,255,255,0.15)" />
               </div>
               <div className="text-center">
-                <p className="font-semibold text-[rgba(255,255,255,0.5)] text-[14px]">Aucun contenu supplémentaire</p>
-                <p className="text-[rgba(255,255,255,0.2)] text-[12px] mt-1">Ajoutez du contenu en plus de ce modpack</p>
+                <p className="font-semibold text-[rgba(255,255,255,0.5)] text-[14px]">{t('mods.noExtraContent')}</p>
+                <p className="text-[rgba(255,255,255,0.2)] text-[12px] mt-1">{t('mods.addContentBeyondModpack')}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -131,14 +133,14 @@ export function InstalledTab({
                   className="flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 h-[34px] px-[14px] text-[12px] bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] border border-[rgba(255,255,255,0.1)]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
-                  Importer un fichier
+                  {t('mods.importFile')}
                 </button>
                 <button
                   onClick={onBrowseExtra}
                   className="flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 h-[34px] px-[14px] text-[12px] bg-[rgba(75,63,207,0.3)] text-white border border-[rgba(75,63,207,0.5)]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>
-                  Parcourir le contenu
+                  {t('mods.browseContent')}
                 </button>
               </div>
             </div>
@@ -161,15 +163,15 @@ export function InstalledTab({
       {filtered.length === 0 && mods.length === 0 && (
         <EmptyState
           icon={<PlugIcon size={28} color="rgba(75,63,207,0.55)" />}
-          title={isPlugin ? 'Aucun plugin installé' : 'Aucun mod installé'}
+          title={isPlugin ? t('mods.noPluginInstalled') : t('mods.noModInstalled')}
           subtitle={isPlugin
-            ? 'Importez un .jar ou parcourez les plugins'
-            : 'Cliquez sur "Importer un mod" ou parcourez Modrinth'}
+            ? t('mods.importJarOrBrowsePlugins')
+            : t('mods.clickImportModOrBrowse')}
         />
       )}
       {filtered.length === 0 && mods.length > 0 && (
         <p className="text-[13px] text-[rgba(255,255,255,0.3)] text-center mt-8">
-          Aucun mod ne correspond à « {modSearch} »
+          {t('mods.noModMatches', { query: modSearch })}
         </p>
       )}
 

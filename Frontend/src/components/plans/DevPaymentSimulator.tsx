@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useT } from '@/i18n'
 
 export function DevPaymentSimulator({ onSimulate }: { onSimulate: (plan: string) => Promise<void> }) {
+  const t = useT()
   const [simulating, setSimulating] = useState(false)
   const [simMsg, setSimMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -9,7 +11,7 @@ export function DevPaymentSimulator({ onSimulate }: { onSimulate: (plan: string)
     setSimMsg(null)
     try {
       await onSimulate(plan)
-      setSimMsg({ ok: true, text: `✓ Plan ${plan} activé (simulation)` })
+      setSimMsg({ ok: true, text: t('plans.devSimulator.activated', { plan }) })
     } catch (e) {
       setSimMsg({ ok: false, text: String(e) })
     } finally {
@@ -25,7 +27,7 @@ export function DevPaymentSimulator({ onSimulate }: { onSimulate: (plan: string)
           DEV ONLY
         </span>
         <span className="text-[12px] text-[rgba(255,255,255,0.4)] font-medium">
-          Simuler un paiement Lemon Squeezy
+          {t('plans.devSimulator.simulatePayment')}
         </span>
       </div>
       <div className="flex gap-2">

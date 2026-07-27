@@ -4,14 +4,9 @@ import termsMd from '@/assets/legal/TERMS.md?raw'
 import privacyMd from '@/assets/legal/PRIVACY.md?raw'
 import licenseTxt from '@/assets/legal/LICENSE.txt?raw'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useT } from '@/i18n'
 
 type TabId = 'conditions' | 'confidentialite' | 'licence'
-
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'conditions', label: "Conditions d'utilisation" },
-  { id: 'confidentialite', label: 'Confidentialité' },
-  { id: 'licence', label: 'Licence' },
-]
 
 // Contenu chargé DEPUIS les fichiers du dépôt public (src/assets/legal/,
 // copiés de TERMS.md/PRIVACY.md/LICENSE à la racine de YuyuFrame-v2) — cette
@@ -23,6 +18,12 @@ const TABS: { id: TabId; label: string }[] = [
 // couverte par cette build).
 
 export default function Legal() {
+  const t = useT()
+  const TABS: { id: TabId; label: string }[] = [
+    { id: 'conditions', label: t('legal.termsTab') },
+    { id: 'confidentialite', label: t('legal.privacyTab') },
+    { id: 'licence', label: t('legal.licenceTab') },
+  ]
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = (searchParams.get('tab') as TabId) || 'conditions'
   const [tab, setTab] = useState<TabId>(TABS.some((t) => t.id === initialTab) ? initialTab : 'conditions')
@@ -36,20 +37,20 @@ export default function Legal() {
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D] text-white">
 
       <PageHeader backTo={-1}>
-        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">Informations légales</h1>
+        <h1 className="font-black text-white text-[18px] tracking-[-0.01em]">{t('legal.title')}</h1>
       </PageHeader>
 
       {/* Tabs */}
       <div
         className="flex flex-shrink-0 items-center gap-1 px-6 pt-4 border-b border-[rgba(255,255,255,0.06)]"
       >
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.id}
-            onClick={() => selectTab(t.id)}
-            className={`px-4 pb-3 transition-colors duration-150 text-[13px] font-semibold border-b-2 ${tab === t.id ? 'text-white border-[#7c6ae8]' : 'text-white/40 border-transparent'}`}
+            key={tb.id}
+            onClick={() => selectTab(tb.id)}
+            className={`px-4 pb-3 transition-colors duration-150 text-[13px] font-semibold border-b-2 ${tab === tb.id ? 'text-white border-[#7c6ae8]' : 'text-white/40 border-transparent'}`}
           >
-            {t.label}
+            {tb.label}
           </button>
         ))}
       </div>

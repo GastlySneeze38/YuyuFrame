@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
 import type { SavedServer, ServerPingInfo } from '@/api/client'
+import { useT } from '@/i18n'
 
 function pingColor(ms: number): string {
   return ms <= 100 ? '#4ade80' : ms <= 300 ? '#facc15' : '#f87171'
@@ -14,12 +15,13 @@ function pingBars(ms: number): number {
  * latence mesurée par le ping/pong (voir ServerPingInfo.latency_ms), grises
  * tant que le ping n'a pas répondu, rouge plein si le serveur est injoignable. */
 function SignalBars({ ping, failed }: { ping: ServerPingInfo | null; failed: boolean }) {
+  const t = useT()
   const active = failed ? 0 : ping ? pingBars(ping.latency_ms) : 0
   const color = failed ? '#f87171' : ping ? pingColor(ping.latency_ms) : 'rgba(255,255,255,0.15)'
   return (
     <div
       className="flex items-end gap-[1.5px] h-[9px] flex-shrink-0"
-      title={failed ? 'Serveur hors ligne' : ping ? `${ping.latency_ms} ms` : 'Ping en cours...'}
+      title={failed ? t('servers.offline') : ping ? `${ping.latency_ms} ms` : t('servers.pingInProgress')}
     >
       {[3, 5, 7, 9].map((h, i) => (
         <span key={i} className="w-[2px] rounded-[1px]" style={{ height: h, background: i < active ? color : 'rgba(255,255,255,0.12)' }} />
@@ -48,6 +50,7 @@ export function ServerCard({
   onToggleFavorite?: () => void
   className?: string
 }) {
+  const t = useT()
   const [ping, setPing] = useState<ServerPingInfo | null>(null)
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -77,10 +80,10 @@ export function ServerCard({
 
   const motdLine = ping?.motd.split('\n')[0]?.trim()
   const statusLine = failed
-    ? 'Serveur hors ligne'
+    ? t('servers.offline')
     : ping
       ? `${motdLine || '—'} · ${ping.players_online}/${ping.players_max}`
-      : 'Connexion...'
+      : t('servers.connecting')
 
   return (
     <div
@@ -110,13 +113,13 @@ export function ServerCard({
             </svg>
           )}
           <span className="text-[clamp(8px,4cqw,10px)] font-bold text-[rgba(255,255,255,0.6)] truncate flex-1">
-            {server.name || 'Serveur'}
+            {server.name || t('servers.defaultName')}
           </span>
           <SignalBars ping={ping} failed={failed} />
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); refreshPing() }}
-          title="Actualiser le ping"
+          title={t('servers.refreshPing')}
           className="absolute bottom-1 right-1 flex items-center justify-center w-[clamp(16px,10cqw,28px)] h-[clamp(16px,10cqw,28px)] rounded-lg text-[rgba(255,255,255,0.35)] transition-colors hover:bg-[rgba(255,255,255,0.08)] hover:text-white"
         >
           <svg
@@ -148,7 +151,7 @@ export function ServerCard({
                   : 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.1)]'
               }`}
             >
-              {favorite ? 'Retirer de la page d’accueil' : "Mettre sur la page d'accueil"}
+              {favorite ? t('servers.removeFromHome') : t('servers.addToHome')}
             </button>
           </div>
         </div>

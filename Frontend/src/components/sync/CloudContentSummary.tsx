@@ -1,7 +1,9 @@
 import type { SyncInstance } from '@/types'
 import { formatDateTime } from '@/lib/format'
+import { useT } from '@/i18n'
 
 export function CloudContentSummary({ cloudEntry }: { cloudEntry: SyncInstance }) {
+  const t = useT()
   const chips = [
     { label: 'mods/', icon: '📦' },
     { label: 'config/', icon: '⚙️' },
@@ -12,7 +14,7 @@ export function CloudContentSummary({ cloudEntry }: { cloudEntry: SyncInstance }
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold text-[rgba(255,255,255,0.28)] tracking-[0.1em] uppercase">
-          Contenu dans le cloud
+          {t('sync.cloudContent')}
         </span>
         <span className="text-[10px] text-[rgba(255,255,255,0.2)]">
           {formatDateTime(cloudEntry.updated_at)}

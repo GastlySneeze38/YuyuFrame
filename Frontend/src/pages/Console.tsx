@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
+import { useT } from '@/i18n'
 
 interface LogLine {
   id: number
@@ -53,6 +54,7 @@ function lineClassName(line: string, level: 'out' | 'err'): string {
 const MAX_LINES = 3000
 
 export default function Console() {
+  const t = useT()
   const [logs, setLogs] = useState<LogLine[]>([])
   const [running, setRunning] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -155,14 +157,14 @@ export default function Console() {
             className={`w-1.5 h-1.5 rounded-full ${running ? 'bg-[#4ade80] shadow-[0_0_5px_#4ade80]' : 'bg-[rgba(255,255,255,0.2)] shadow-none'}`}
           />
           <span className={`text-[11px] ${running ? 'text-[rgba(255,255,255,0.5)]' : 'text-[rgba(255,255,255,0.25)]'}`}>
-            {running ? 'Minecraft en cours...' : 'Jeu terminé'}
+            {running ? t('console.minecraftRunning') : t('console.gameEnded')}
           </span>
           {sessionId && (
             <span className="text-[11px] text-[rgba(255,255,255,0.3)] font-semibold">
               {sessionId}
             </span>
           )}
-          <span className="text-[11px] text-[rgba(255,255,255,0.15)]">{logs.length} lignes</span>
+          <span className="text-[11px] text-[rgba(255,255,255,0.15)]">{t('console.lineCount', { count: logs.length })}</span>
         </div>
 
         {/* Boutons — hors drag region (pointer-events explicite) */}
@@ -172,7 +174,7 @@ export default function Console() {
             disabled={logs.length === 0}
             className={`[background:none] border rounded text-[11px] py-px px-2 mr-1.5 disabled:cursor-default cursor-pointer border-[rgba(255,255,255,0.12)] ${copied ? 'text-[#4ade80]' : 'text-[rgba(255,255,255,0.4)]'}`}
           >
-            {copied ? '✓ Copié' : 'Copier'}
+            {copied ? t('console.copied') : t('console.copy')}
           </button>
           <button
             onClick={() => getCurrentWindow().minimize()}
@@ -195,7 +197,7 @@ export default function Console() {
       <div className="selectable min-h-0 flex-1 overflow-y-auto px-4 py-3 [overflow-anchor:none]">
         {logs.length === 0 && (
           <p className="text-[12px] text-[rgba(255,255,255,0.18)] m-0">
-            En attente des logs...
+            {t('console.waitingForLogs')}
           </p>
         )}
         {logs.map((log) => (

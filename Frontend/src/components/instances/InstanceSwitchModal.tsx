@@ -3,6 +3,7 @@ import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
+import { useT } from '@/i18n'
 
 /** Grille des instances (toutes les infos DB) ouverte depuis Home au lieu du
  * <select> natif — favoris séparés des autres (même découpage que la page
@@ -18,6 +19,7 @@ export function InstanceSwitchModal({
   onClose: () => void
   onSelect: (id: string) => void
 }) {
+  const t = useT()
   const navigate = useNavigate()
   const favorites = instances.filter((i) => i.favorite)
   const others = instances.filter((i) => !i.favorite)
@@ -75,16 +77,16 @@ export function InstanceSwitchModal({
       <svg viewBox="0 0 24 24" fill="currentColor" width={22} height={22}>
         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
       </svg>
-      <span className="text-[11px] font-semibold">Nouvelle instance</span>
+      <span className="text-[11px] font-semibold">{t('instancesPage.newInstance')}</span>
     </button>
   )
 
   return (
-    <ModalShell title="Choisir une instance" onClose={onClose} maxWidth="max-w-2xl">
+    <ModalShell title={t('instancesPage.chooseInstance')} onClose={onClose} maxWidth="max-w-2xl">
       <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-4">
         {favorites.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#facc15]">★ Favoris</p>
+            <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#facc15]">★ {t('instancesPage.favorites')}</p>
             <div className="grid grid-cols-3 gap-3">
               {favorites.map(renderCard)}
               {others.length === 0 && createCard}
@@ -95,7 +97,7 @@ export function InstanceSwitchModal({
         {(others.length > 0 || favorites.length === 0) && (
           <div className="flex flex-col gap-2">
             {favorites.length > 0 && (
-              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[rgba(255,255,255,0.3)]">Autres</p>
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[rgba(255,255,255,0.3)]">{t('instancesPage.othersHeader')}</p>
             )}
             <div className="grid grid-cols-3 gap-3">
               {others.map(renderCard)}

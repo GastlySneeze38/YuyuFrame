@@ -9,8 +9,10 @@ import { Sparkline } from './Sparkline'
 import { Chart } from './Chart'
 import { PeersTable } from './PeersTable'
 import { HealthBadge } from './HealthBadge'
+import { useT } from '@/i18n'
 
 export function AgentDetail({ data, error, label, showPeers, tab }: { data: OwnershipData | null; error?: boolean; label: string; showPeers?: boolean; tab: TabId }) {
+  const t = useT()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [copied, setCopied] = useState(false)
 
@@ -184,7 +186,7 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
         <div className="flex items-center gap-2 flex-wrap">
           <div className={error ? 'w-[6px] h-[6px] rounded-full bg-[#ef4444] shadow-[0_0_5px_#ef4444]' : 'w-[6px] h-[6px] rounded-full bg-[#22c55e] shadow-[0_0_5px_#22c55e]'} />
           <span className="text-[11px] text-[rgba(255,255,255,0.45)] font-mono">
-            {error ? 'Agent P2P inaccessible (port 3849)' : label}
+            {error ? t('server.agentUnreachablePort') : label}
           </span>
           {data && (
             <span className="text-[10px] text-[rgba(120,110,230,0.7)] font-mono font-semibold">
@@ -201,7 +203,7 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
               : 'text-[10px] font-semibold font-mono tracking-[0.3px] px-[9px] py-[3px] rounded-[5px] cursor-pointer disabled:cursor-default transition-all duration-150 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.4)]'
           }
         >
-          {copied ? 'Copié ✓' : '{ } Copier en JSON'}
+          {copied ? t('server.copied') : t('server.copyJson')}
         </button>
       </div>
 
@@ -222,10 +224,10 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
             </div>
             <div className="flex flex-col gap-1 min-w-0">
               <span className="font-mono text-[13px] font-semibold text-[rgba(255,255,255,0.7)]">
-                {error ? 'Agent P2P inaccessible' : (data ? data.peer_name : '—')}
+                {error ? t('server.agentUnreachable') : (data ? data.peer_name : '—')}
               </span>
               <span className="font-mono text-[11px] text-[rgba(255,255,255,0.3)]">
-                {data ? `${data.peer_id} · ${data.pc} pair(s) connecté(s)` : 'En attente de données…'}
+                {data ? `${data.peer_id} · ${data.pc} ${t('server.connectedPeersSuffix')}` : t('server.waitingData')}
               </span>
               <div className="flex items-baseline gap-2 mt-[8px]">
                 <span className="font-mono text-[38px] font-bold" style={{ color: data ? tpsColor(data.tps) : 'rgba(255,255,255,0.25)' }}>
@@ -238,25 +240,25 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
 
           <div className="border border-[rgba(255,255,255,0.08)] rounded-xl overflow-hidden">
             <div className="px-[12px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] font-mono uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
-              Pairs & ping
+              {t('server.peersAndPing')}
             </div>
             <div className="flex flex-col px-[12px] py-[6px]">
               {data ? [data, ...(data.peers_reported ?? [])].map((p, i) => (
                 <div key={p.peer_id} className={`flex items-center justify-between gap-3 py-[6px] ${i > 0 ? 'border-t border-[rgba(255,255,255,0.05)]' : ''}`}>
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-[9px] h-[9px] rounded-sm shrink-0" style={{ background: ownerColor(i) }} />
-                    <span className="font-mono text-[11px] text-[rgba(255,255,255,0.5)]">{i === 0 ? 'Moi' : p.peer_name}</span>
+                    <span className="font-mono text-[11px] text-[rgba(255,255,255,0.5)]">{i === 0 ? t('server.me') : p.peer_name}</span>
                   </div>
                   <span className="font-mono text-[11px]" style={{ color: i === 0 ? 'rgba(255,255,255,0.3)' : latencyColor(p.latency_ms) }}>
                     {i === 0 ? '—' : p.latency_ms >= 0 ? `${p.latency_ms} ms` : '—'}
                   </span>
                 </div>
               )) : (
-                <div className="py-[8px] font-mono text-[11px] text-[rgba(255,255,255,0.3)]">En attente de données…</div>
+                <div className="py-[8px] font-mono text-[11px] text-[rgba(255,255,255,0.3)]">{t('server.waitingData')}</div>
               )}
               {(data?.pc ?? 0) - 1 - (data?.peers_reported?.length ?? 0) > 0 && (
                 <div className="py-[6px] border-t border-[rgba(255,255,255,0.05)] font-mono text-[10px] text-[rgba(255,255,255,0.3)]">
-                  +{(data?.pc ?? 0) - 1 - (data?.peers_reported?.length ?? 0)} pair(s) distant(s) non détaillé(s)
+                  +{(data?.pc ?? 0) - 1 - (data?.peers_reported?.length ?? 0)} {t('server.remotePeersUndetailed')}
                 </div>
               )}
             </div>
@@ -269,11 +271,11 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
         <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(340px,1fr))]">
           <Chart title="TPS" data={h.tps} color={data ? tpsColor(data.tps) : '#818cf8'} />
           <Chart title="MSPT" data={h.mspt} color="#818cf8" unit="ms" />
-          <Chart title="Latence" data={h.latency} color={data ? latencyColor(data.latency_ms) : '#818cf8'} unit="ms" />
-          <Chart title="Blocs envoyés / s" data={h.blocksSentRate} color="#818cf8" />
-          <Chart title="Blocs appliqués / s" data={h.liveBlocksAppliedRate} color="#22c55e" />
-          <Chart title="File sortante" data={h.queueOut} color="#f59e0b" />
-          <Chart title="File entrante" data={h.queueIn} color="#f59e0b" />
+          <Chart title={t('server.thLatency')} data={h.latency} color={data ? latencyColor(data.latency_ms) : '#818cf8'} unit="ms" />
+          <Chart title={t('server.chartBlocksSentPerSec')} data={h.blocksSentRate} color="#818cf8" />
+          <Chart title={t('server.chartBlocksAppliedPerSec')} data={h.liveBlocksAppliedRate} color="#22c55e" />
+          <Chart title={t('server.outgoingQueue')} data={h.queueOut} color="#f59e0b" />
+          <Chart title={t('server.incomingQueue')} data={h.queueIn} color="#f59e0b" />
         </div>
       )}
 
@@ -282,12 +284,12 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
         <div className="flex flex-col gap-3">
           {showPeers && data ? <PeersTable self={data} /> : (
             <div className="p-[14px] text-[11px] text-[rgba(255,255,255,0.3)] font-mono border border-[rgba(255,255,255,0.08)] rounded-lg">
-              La table des pairs n'est disponible que sur l'agent local (propriétaire de l'agrégation).
+              {t('server.peersOnlyLocal')}
             </div>
           )}
           <div className="border border-[rgba(255,255,255,0.08)] rounded-lg overflow-hidden">
             <div className="px-[10px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
-              Carte d'ownership
+              {t('server.ownershipMap')}
             </div>
             <div className="flex justify-center p-[14px]">
               <div className="max-w-full border border-[rgba(255,255,255,0.08)] rounded-md overflow-hidden" style={{ width: CANVAS }}>
@@ -304,26 +306,26 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-mono uppercase tracking-[1px] text-[rgba(255,255,255,0.35)]">
-                Snapshot initial
+                {t('server.initialSnapshot')}
               </div>
-              <div className="text-[10px] font-mono text-[rgba(255,255,255,0.3)]">Handshake unique à la connexion (J1 → J2)</div>
+              <div className="text-[10px] font-mono text-[rgba(255,255,255,0.3)]">{t('server.initialSnapshotHint')}</div>
             </div>
             <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-              <StatBox title="Réception (chez moi)">
-                <StatRow label="Chunks" value={data?.baseline_chunks_applied ?? 0} />
-                <StatRow label="Blocs" value={data?.baseline_blocks_applied ?? 0} />
-                <StatRow label="Vitesse" value={`${(h.baselineBlocksAppliedRate.at(-1) ?? 0).toFixed(1)} /s`} />
+              <StatBox title={t('server.reception')}>
+                <StatRow label={t('server.chunks')} value={data?.baseline_chunks_applied ?? 0} />
+                <StatRow label={t('server.blocks')} value={data?.baseline_blocks_applied ?? 0} />
+                <StatRow label={t('server.speed')} value={`${(h.baselineBlocksAppliedRate.at(-1) ?? 0).toFixed(1)} /s`} />
                 <Sparkline data={h.baselineBlocksAppliedRate} color="#f97316" />
-                <StatRow label="File" value={data?.baseline_queue ?? 0} />
+                <StatRow label={t('server.queue')} value={data?.baseline_queue ?? 0} />
               </StatBox>
-              <StatBox title="Émission (vers le pair)">
-                <StatRow label="Chunks" value={data?.baseline_chunks_sent ?? 0} />
-                <StatRow label="Volume" value={formatBytes(data?.baseline_bytes_sent ?? 0)} />
-                <StatRow label="Streams actifs" value={data?.baseline_active_streams ?? 0} />
+              <StatBox title={t('server.emission')}>
+                <StatRow label={t('server.chunks')} value={data?.baseline_chunks_sent ?? 0} />
+                <StatRow label={t('server.volume')} value={formatBytes(data?.baseline_bytes_sent ?? 0)} />
+                <StatRow label={t('server.activeStreams')} value={data?.baseline_active_streams ?? 0} />
               </StatBox>
-              <StatBox title="Ownership détaillé">
-                <StatRow label="Chunks simulés" value={data?.chunks_computed ?? 0} />
-                <StatRow label="Chunks ignorés" value={data?.chunks_skipped ?? 0} />
+              <StatBox title={t('server.ownershipDetailed')}>
+                <StatRow label={t('server.simulatedChunks')} value={data?.chunks_computed ?? 0} />
+                <StatRow label={t('server.skippedChunks')} value={data?.chunks_skipped ?? 0} />
               </StatBox>
             </div>
           </div>
@@ -331,23 +333,23 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-mono uppercase tracking-[1px] text-[rgba(255,255,255,0.35)]">
-                Delta temps réel
+                {t('server.realtimeDelta')}
               </div>
-              <div className="text-[10px] font-mono text-[rgba(255,255,255,0.3)]">Flux continu pendant la partie</div>
+              <div className="text-[10px] font-mono text-[rgba(255,255,255,0.3)]">{t('server.realtimeDeltaHint')}</div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <HealthBadge label="tickChunk hook (ownership)" ok={(data?.hook_calls ?? 0) > 0} />
-              <HealthBadge label="send() hook (delta sortant)" ok={(data?.send_hook_calls ?? 0) > 0} />
+              <HealthBadge label={t('server.tickChunkHook')} ok={(data?.hook_calls ?? 0) > 0} />
+              <HealthBadge label={t('server.sendHook')} ok={(data?.send_hook_calls ?? 0) > 0} />
             </div>
             <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-              <StatBox title="Reçu (chez moi)">
-                <StatRow label="Blocs appliqués" value={data?.live_blocks_applied ?? 0} />
-                <StatRow label="File entrante" value={data?.live_queue ?? 0} />
+              <StatBox title={t('server.received')}>
+                <StatRow label={t('server.appliedBlocks')} value={data?.live_blocks_applied ?? 0} />
+                <StatRow label={t('server.incomingQueue')} value={data?.live_queue ?? 0} />
               </StatBox>
-              <StatBox title="Émis (vers le pair)">
-                <StatRow label="Blocs envoyés" value={data?.live_blocks_sent ?? 0} />
-                <StatRow label="Entités envoyées" value={data?.live_entities_sent ?? 0} />
-                <StatRow label="File sortante" value={data?.live_queue_out ?? 0} />
+              <StatBox title={t('server.sent')}>
+                <StatRow label={t('server.sentBlocks')} value={data?.live_blocks_sent ?? 0} />
+                <StatRow label={t('server.sentEntities')} value={data?.live_entities_sent ?? 0} />
+                <StatRow label={t('server.outgoingQueue')} value={data?.live_queue_out ?? 0} />
               </StatBox>
             </div>
           </div>
@@ -357,10 +359,10 @@ export function AgentDetail({ data, error, label, showPeers, tab }: { data: Owne
       {/* ── Diagnostic ── */}
       {tab === 'diagnostic' && (
         <div className="flex flex-col gap-3">
-          <DiagLine title="Diagnostic ASM tickChunk" value={data?.tick_chunk_diag} />
-          <DiagLine title="Diagnostic pause (isPaused)" value={data?.is_paused_diag} />
-          <DiagLine title="Diagnostic liste joueurs vide" value={data?.player_list_empty_diag} />
-          <DiagLine title="Diagnostic ASM send() (delta sortant)" value={data?.send_hook_diag} />
+          <DiagLine title={t('server.diagTickChunk')} value={data?.tick_chunk_diag} />
+          <DiagLine title={t('server.diagPause')} value={data?.is_paused_diag} />
+          <DiagLine title={t('server.diagEmptyPlayerList')} value={data?.player_list_empty_diag} />
+          <DiagLine title={t('server.diagSend')} value={data?.send_hook_diag} />
         </div>
       )}
     </div>

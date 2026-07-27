@@ -9,6 +9,7 @@ import { Toggle } from '@/components/ui/Toggle'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
+import { useT } from '@/i18n'
 import {
   fetchProjectDetail, fetchProjectVersions, stripMarkdown, versionTypeBadge, formatGameVersions,
   type ModrinthHit, type ModrinthProjectDetail, type ModrinthVersionEntry,
@@ -26,6 +27,7 @@ export function ModDetailModal({
   onClose: () => void
   onInstall: (file: { url: string; filename: string }) => Promise<void>
 }) {
+  const t = useT()
   const isModPinned = useStore((s) => s.isModPinned)
   const setModPinned = useStore((s) => s.setModPinned)
   const pinned = !!installedMod && isModPinned(instanceId, hit.project_id)
@@ -92,7 +94,7 @@ export function ModDetailModal({
               ))}
               {installedVersionNumber && (
                 <span className="rounded-full px-2 py-0.5 font-semibold text-[10px] bg-[rgba(75,63,207,0.2)] text-[rgba(179,163,255,0.9)]">
-                  Installé : {installedVersionNumber}
+                  {t('mods.installedVersion', { version: installedVersionNumber })}
                 </span>
               )}
             </div>
@@ -107,7 +109,7 @@ export function ModDetailModal({
               onClick={() => setShowFullBody((v) => !v)}
               className="text-[11.5px] text-[rgba(179,163,255,0.9)] font-semibold"
             >
-              {showFullBody ? 'Masquer la description complète' : 'Voir la description complète'}
+              {showFullBody ? t('mods.hideFullDescription') : t('mods.showFullDescription')}
             </button>
             {showFullBody && (
               <div
@@ -124,7 +126,7 @@ export function ModDetailModal({
         {/* Versions */}
         <div className="flex flex-shrink-0 items-center justify-between">
           <p className="text-[11px] font-bold text-[rgba(255,255,255,0.4)] uppercase tracking-[0.06em]">
-            Versions disponibles
+            {t('mods.availableVersions')}
           </p>
           <button
             onClick={() => setShowAllVersions((v) => !v)}
@@ -132,7 +134,7 @@ export function ModDetailModal({
               showAllVersions ? 'bg-[rgba(75,63,207,0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
             }`}
           >
-            {showAllVersions ? `Toutes versions` : `Compatibles ${mcVersion}`}
+            {showAllVersions ? t('mods.allVersions') : t('mods.compatibleWith', { version: mcVersion })}
           </button>
         </div>
 
@@ -141,7 +143,7 @@ export function ModDetailModal({
             <Spinner />
           ) : versions.length === 0 ? (
             <p className="text-[12px] text-[rgba(255,255,255,0.3)] text-center py-4">
-              Aucune version {showAllVersions ? '' : `compatible avec ${mcVersion}`}
+              {t('mods.noVersion')} {showAllVersions ? '' : t('mods.compatibleWithVersion', { version: mcVersion })}
             </p>
           ) : (
             versions.map((v) => {
@@ -184,7 +186,7 @@ export function ModDetailModal({
                   >
                     {installing ? (
                       <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
-                    ) : isInstalledVersion ? '✓ Installée' : installedMod ? 'Basculer' : 'Installer'}
+                    ) : isInstalledVersion ? t('mods.installedBadge') : installedMod ? t('mods.switchButton') : t('mods.installButton')}
                   </button>
                 </div>
               )
@@ -195,9 +197,9 @@ export function ModDetailModal({
         {installedMod && (
           <div className="flex flex-shrink-0 items-center justify-between rounded-xl px-3.5 py-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
             <div>
-              <p className="text-[12px] font-semibold text-[rgba(255,255,255,0.75)]">Ignorer les mises à jour</p>
+              <p className="text-[12px] font-semibold text-[rgba(255,255,255,0.75)]">{t('mods.ignoreUpdates')}</p>
               <p className="text-[10.5px] text-[rgba(255,255,255,0.3)] mt-0.5">
-                Ne propose plus de mise à jour pour ce mod tant que c'est activé
+                {t('mods.ignoreUpdatesDesc')}
               </p>
             </div>
             <Toggle checked={pinned} onChange={() => setModPinned(instanceId, hit.project_id, !pinned)} size="sm" />

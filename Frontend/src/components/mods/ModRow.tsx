@@ -5,6 +5,7 @@ import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { Toggle } from '@/components/ui/Toggle'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { displayName, type ModUpdate } from './modUtils'
+import { useT } from '@/i18n'
 
 /** Mémoïsé : rendu en liste (potentiellement des dizaines de mods) — les
  * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
@@ -26,6 +27,7 @@ export const ModRow = memo(function ModRow({
   onUpdate: (update: ModUpdate) => void
   onSwitchVersion: (mod: Mod) => void
 }) {
+  const t = useT()
   const [confirm, setConfirm] = useState(false)
   return (
     <div
@@ -70,8 +72,8 @@ export const ModRow = memo(function ModRow({
               disabled={updating || blocked}
               title={
                 blocked
-                  ? `Mise à jour bloquée : casserait ${update.blockedBy.join(', ')}`
-                  : `Mettre à jour → ${update.newVersion}`
+                  ? t('mods.updateBlockedBy', { list: update.blockedBy.join(', ') })
+                  : t('mods.updateTo', { version: update.newVersion })
               }
               className={`flex h-7 flex-shrink-0 items-center gap-1 rounded-lg px-2 transition-all duration-150 text-[10px] font-bold border ${
                 blocked
@@ -100,7 +102,7 @@ export const ModRow = memo(function ModRow({
           <button
             onClick={() => onSwitchVersion(mod)}
             disabled={switchingVersion}
-            title="Changer de version"
+            title={t('mods.switchVersion')}
             className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150 ${
               switchingVersion
                 ? 'text-[rgba(255,255,255,0.15)] cursor-not-allowed'
@@ -116,11 +118,11 @@ export const ModRow = memo(function ModRow({
             )}
           </button>
         )}
-        <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} size="sm" title={mod.enabled ? 'Désactiver' : 'Activer'} />
+        <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} size="sm" title={mod.enabled ? t('mods.disable') : t('mods.enable')} />
         {confirm ? (
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={() => { onDelete(mod.name); setConfirm(false) }} className="text-[10px] font-semibold text-[rgb(248,113,113)] bg-[rgba(200,50,50,0.15)] rounded-[7px] py-[3px] px-[7px]">Suppr.</button>
-            <button onClick={() => setConfirm(false)} className="text-[10px] text-[rgba(255,255,255,0.4)] bg-[rgba(255,255,255,0.06)] rounded-[7px] py-[3px] px-[7px]">Ann.</button>
+            <button onClick={() => { onDelete(mod.name); setConfirm(false) }} className="text-[10px] font-semibold text-[rgb(248,113,113)] bg-[rgba(200,50,50,0.15)] rounded-[7px] py-[3px] px-[7px]">{t('mods.deleteShort')}</button>
+            <button onClick={() => setConfirm(false)} className="text-[10px] text-[rgba(255,255,255,0.4)] bg-[rgba(255,255,255,0.06)] rounded-[7px] py-[3px] px-[7px]">{t('mods.cancelShort')}</button>
           </div>
         ) : (
           <button onClick={() => setConfirm(true)}

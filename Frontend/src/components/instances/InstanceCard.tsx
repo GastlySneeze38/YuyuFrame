@@ -4,6 +4,7 @@ import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 import { MenuItem } from './MenuItem'
 
 /** Mémoïsé : rendu en liste — les callbacks reçoivent l'id/l'instance pour
@@ -28,6 +29,7 @@ export const InstanceCard = memo(function InstanceCard({
   onDuplicate: (instance: Instance) => void
   onOpenFolder: (instance: Instance) => void
 }) {
+  const t = useT()
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -83,7 +85,7 @@ export const InstanceCard = memo(function InstanceCard({
                     ? 'text-[#facc15] hover:text-[#fde047]'
                     : 'text-[rgba(255,255,255,0.18)] hover:text-[rgba(255,255,255,0.5)]'
                 }`}
-                title={instance.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                title={instance.favorite ? t('instancesPage.removeFromFavorites') : t('instancesPage.addToFavorites')}
               >
                 <svg viewBox="0 0 24 24" fill={instance.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={instance.favorite ? 0 : 1.8} width={13} height={13}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
@@ -97,7 +99,7 @@ export const InstanceCard = memo(function InstanceCard({
                     ? 'text-[rgba(255,255,255,0.85)] bg-[rgba(255,255,255,0.1)]'
                     : 'text-[rgba(255,255,255,0.25)] bg-transparent hover:text-[rgba(255,255,255,0.6)]'
                 }`}
-                title="Plus d'actions"
+                title={t('instancesPage.moreActions')}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
                   <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
@@ -113,12 +115,12 @@ export const InstanceCard = memo(function InstanceCard({
                     <>
                       <MenuItem
                         onClick={() => { setMenuOpen(false); onEdit(instance) }}
-                        label="Modifier l'instance"
+                        label={t('instancesPage.editInstance')}
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>}
                       />
                       <MenuItem
                         onClick={() => { setMenuOpen(false); onDuplicate(instance) }}
-                        label="Dupliquer"
+                        label={t('instancesPage.duplicate')}
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>}
                       />
                       <MenuItem
@@ -126,36 +128,36 @@ export const InstanceCard = memo(function InstanceCard({
                           setMenuOpen(false)
                           api.instances.exportSettings(instance.id).catch(showError)
                         }}
-                        label="Exporter mes paramètres"
+                        label={t('instancesPage.exportSettings')}
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>}
                       />
                       <MenuItem
                         onClick={() => { setMenuOpen(false); onOpenFolder(instance) }}
-                        label="Ouvrir le dossier"
+                        label={t('instancesPage.openFolder')}
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M20 6h-8l-2-2H4c-1.1 0-2 .89-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.11-.9-2-2-2z" /></svg>}
                       />
                       <MenuItem
                         onClick={() => setConfirm(true)}
-                        label="Supprimer définitivement"
+                        label={t('instancesPage.deleteForever')}
                         danger
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>}
                       />
                     </>
                   ) : (
                     <div className="flex flex-col gap-1.5 p-1">
-                      <p className="text-[11px] text-[rgba(255,255,255,0.5)]">Supprimer définitivement cette instance ?</p>
+                      <p className="text-[11px] text-[rgba(255,255,255,0.5)]">{t('instancesPage.confirmDeleteInstance')}</p>
                       <div className="flex gap-1.5">
                         <button
                           onClick={() => { setMenuOpen(false); onDelete(instance.id) }}
                           className="flex-1 rounded-lg text-[11px] font-semibold text-[rgb(248,113,113)] bg-[rgba(200,50,50,0.15)] py-[5px]"
                         >
-                          Supprimer
+                          {t('common.delete')}
                         </button>
                         <button
                           onClick={() => setConfirm(false)}
                           className="flex-1 rounded-lg text-[11px] text-[rgba(255,255,255,0.5)] bg-[rgba(255,255,255,0.06)] py-[5px]"
                         >
-                          Annuler
+                          {t('common.cancel')}
                         </button>
                       </div>
                     </div>

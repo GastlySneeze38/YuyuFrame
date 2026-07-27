@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
+import { useT } from '@/i18n'
 
 export type SkinSource = { type: 'file'; path: string } | { type: 'url'; url: string }
 
@@ -22,6 +23,7 @@ export function SkinSourceInput({
   value: SkinSource | null
   onChange: (source: SkinSource | null) => void
 }) {
+  const t = useT()
   const [mode, setMode] = useState<'file' | 'url'>(value?.type === 'url' ? 'url' : 'file')
 
   const pickFile = async () => {
@@ -40,7 +42,7 @@ export function SkinSourceInput({
               mode === m ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
             }`}
           >
-            {m === 'file' ? 'Fichier' : 'URL'}
+            {m === 'file' ? t('account.file') : t('account.url')}
           </button>
         ))}
       </div>
@@ -54,7 +56,7 @@ export function SkinSourceInput({
             <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4V6z" />
           </svg>
           <span className="truncate">
-            {value?.type === 'file' ? value.path.split(/[\\/]/).pop() : 'Choisir un fichier PNG (64×64)'}
+            {value?.type === 'file' ? value.path.split(/[\\/]/).pop() : t('account.choosePngFile')}
           </span>
         </button>
       ) : (

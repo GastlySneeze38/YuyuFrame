@@ -8,6 +8,7 @@ import { RamPicker } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { PresetCard } from './PresetCard'
+import { useT } from '@/i18n'
 
 /// Trouve le fichier de la dernière version Modrinth d'un mod compatible avec
 /// la version MC + loader donnés. Best-effort : un slug introuvable est ignoré.
@@ -63,6 +64,7 @@ export function CreateInstanceModal({
   onClose: () => void
   onCreate: (instance: Instance) => void
 }) {
+  const t = useT()
   const [mode, setMode] = useState<'blank' | 'preset'>('blank')
   const [selectedPreset, setSelectedPreset] = useState<InstancePreset | null>(null)
 
@@ -72,7 +74,7 @@ export function CreateInstanceModal({
   const [loader, setLoader] = useState<Loader>('vanilla')
   const [ram, setRam] = useState(defaultRam)
   const [loading, setLoading] = useState(false)
-  const [loadingLabel, setLoadingLabel] = useState('Création...')
+  const [loadingLabel, setLoadingLabel] = useState(t('instancesPage.creating'))
 
   // Un id par ouverture de modal — partagé par tous les événements de cette
   // tentative pour que PostHog puisse reconstituer le funnel de création
@@ -115,15 +117,15 @@ export function CreateInstanceModal({
   }
 
   const handleCreate = async () => {
-    if (!name.trim()) { showError('Nom requis'); return }
-    if (!mcVersion) { showError('Sélectionne une version'); return }
-    setLoading(true); setLoadingLabel('Création...')
+    if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
+    if (!mcVersion) { showError(t('instancesPage.selectVersion')); return }
+    setLoading(true); setLoadingLabel(t('instancesPage.creating'))
     api.analytics.track('instance_create_submitted', { flow_id: flowId.current, mc_version: mcVersion, loader })
     try {
       const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim())
       if (selectedPreset) {
         await installPresetMods(instance.id, selectedPreset, mcVersion, (done, total) => {
-          setLoadingLabel(`Installation des mods (${done}/${total})...`)
+          setLoadingLabel(t('instancesPage.installingModsProgress', { done, total }))
         })
       }
       onCreate(instance)
@@ -136,7 +138,7 @@ export function CreateInstanceModal({
   }
 
   return (
-    <ModalShell title="Nouvelle instance" onClose={onClose}>
+    <ModalShell title={t('instancesPage.newInstance')} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="flex gap-1 rounded-xl p-1 bg-[rgba(0,0,0,0.3)]">
           {(['blank', 'preset'] as const).map((m) => (
@@ -147,7 +149,7 @@ export function CreateInstanceModal({
                 mode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'
               }`}
             >
-              {m === 'blank' ? 'Vierge' : 'Modpack'}
+              {m === 'blank' ? t('instancesPage.blank') : 'Modpack'}
             </button>
           ))}
         </div>
@@ -179,7 +181,7 @@ export function CreateInstanceModal({
                 </div>
                 {mcVersion !== selectedPreset!.mcVersion && (
                   <p className="text-[10px] text-[rgba(250,204,21,0.75)]">
-                    Version différente du preset ({selectedPreset!.mcVersion}) — certains mods pourraient ne pas avoir de version compatible.
+                    {t('instancesPage.versionDifferentFromPreset', { preset: selectedPreset!.mcVersion })}
                   </p>
                 )}
               </div>
@@ -189,7 +191,7 @@ export function CreateInstanceModal({
 
             <DescriptionInput value={description} onChange={setDescription} />
 
-            <SubmitButton loading={loading} label="Créer l'instance" loadingLabel={loadingLabel} onClick={handleCreate} />
+            <SubmitButton loading={loading} label={t('instancesPage.createInstanceButton')} loadingLabel={loadingLabel} onClick={handleCreate} />
           </>
         )}
       </div>

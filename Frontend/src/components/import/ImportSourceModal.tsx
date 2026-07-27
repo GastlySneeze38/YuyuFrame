@@ -8,20 +8,23 @@ import { formatBytes, RAM_OPTIONS } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { showError } from '@/stores/useErrorToast'
 import type { DetectedLauncher, DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
+import { useT } from '@/i18n'
+import type { t as tFn } from '@/i18n'
 
-const EXTRA_DIR_LABELS: Record<string, string> = {
-  config: 'Configs des mods',
-  resourcepacks: 'Packs de ressources',
-  shaderpacks: 'Shaders',
+function extraDirLabel(t: typeof tFn, dir: string): string {
+  if (dir === 'config') return t('import.extraConfig')
+  if (dir === 'resourcepacks') return t('import.extraResourcepacks')
+  if (dir === 'shaderpacks') return t('import.extraShaderpacks')
+  return dir
 }
 
-function sourceLabel(source: DetectedSource) {
+function sourceLabel(t: typeof tFn, source: DetectedSource) {
   switch (source.kind) {
-    case 'multimc_prism': return 'MultiMC / Prism Launcher détecté'
-    case 'curseforge': return 'CurseForge détecté'
-    case 'atlauncher': return 'ATLauncher détecté'
-    case 'modrinth_app': return 'Modrinth App détecté'
-    default: return 'Dossier de mods trouvé'
+    case 'multimc_prism': return t('import.sourceMultimc')
+    case 'curseforge': return t('import.sourceCurseforge')
+    case 'atlauncher': return t('import.sourceAtlauncher')
+    case 'modrinth_app': return t('import.sourceModrinthApp')
+    default: return t('import.sourceGeneric')
   }
 }
 
@@ -33,6 +36,7 @@ interface ImportSourceModalProps {
 }
 
 export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: ImportSourceModalProps) {
+  const t = useT()
   const { instances, versions, defaultRam } = useStore()
   const releaseVersions = versions.filter((v) => v.version_type === 'release').map((v) => v.id)
 
@@ -156,9 +160,9 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
 
   const handleApply = async () => {
     if (!scan) return
-    if (destMode === 'new' && !name.trim()) { showError('Nom requis'); return }
-    if (destMode === 'existing' && !targetInstanceId) { showError('Choisis une instance'); return }
-    if (selected.size === 0 && extraDirsSelected.size === 0) { showError('Sélectionne au moins un mod ou un dossier'); return }
+    if (destMode === 'new' && !name.trim()) { showError(t('import.nameRequired')); return }
+    if (destMode === 'existing' && !targetInstanceId) { showError(t('import.chooseInstance')); return }
+    if (selected.size === 0 && extraDirsSelected.size === 0) { showError(t('import.selectAtLeastOne')); return }
 
     setApplying(true)
     setProgress({ phase: 'mods', current: 0, total: selected.size })
@@ -191,7 +195,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
 
   return (
     <ModalShell
-      title="Importer depuis un autre launcher"
+      title={t('import.fromOtherLauncherTitle')}
       onClose={onClose}
       maxWidth="max-w-lg"
       cardStyle={{ maxHeight: '85vh' }}
@@ -200,7 +204,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
         {step === 'pick' && (
           <div className="flex flex-1 flex-col gap-3 overflow-hidden py-4">
             {detectingLaunchers && (
-              <p className="text-[11.5px] text-[rgba(255,255,255,0.35)] text-center">Recherche des launchers installés...</p>
+              <p className="text-[11.5px] text-[rgba(255,255,255,0.35)] text-center">{t('import.searchingLaunchers')}</p>
             )}
 
             {!detectingLaunchers && launchers.length > 0 && (
@@ -240,7 +244,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
             <div className="flex flex-shrink-0 flex-col items-center gap-3 py-2">
               {!detectingLaunchers && launchers.length === 0 && (
                 <p className="text-[12px] text-[rgba(255,255,255,0.4)] text-center">
-                  Aucun launcher détecté automatiquement. Choisis le dossier d'une instance (Modrinth App, CurseForge, MultiMC/Prism, ATLauncher, Feather, Lunar Client...) ou n'importe quel dossier contenant un sous-dossier <code>mods</code>.
+                  {t('import.noLauncherDetected')} <code>mods</code>.
                 </p>
               )}
               <button
@@ -248,7 +252,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                 disabled={scanning}
                 className={`flex items-center gap-2 rounded-xl px-5 font-bold text-white transition-all duration-150 active:scale-95 h-[42px] text-[13px] ${scanning ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
               >
-                {scanning ? 'Analyse...' : launchers.length > 0 ? 'Autre dossier...' : 'Choisir un dossier'}
+                {scanning ? t('import.analyzing') : launchers.length > 0 ? t('import.otherFolder') : t('import.chooseFolder')}
               </button>
             </div>
           </div>
@@ -257,7 +261,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
         {step === 'review' && scan && (
           <div className="flex flex-1 flex-col gap-3 overflow-hidden">
             <div className="flex-shrink-0 rounded-xl px-3 py-2 bg-[rgba(75,63,207,0.12)] border border-[rgba(75,63,207,0.3)]">
-              <p className="text-[11.5px] text-[rgba(255,255,255,0.7)] font-semibold">{sourceLabel(scan.source)}</p>
+              <p className="text-[11.5px] text-[rgba(255,255,255,0.7)] font-semibold">{sourceLabel(t, scan.source)}</p>
               <p className="text-[10.5px] text-[rgba(255,255,255,0.35)]">{scan.modsDir}</p>
             </div>
 
@@ -269,7 +273,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                     onClick={() => handleDestModeChange(m)}
                     className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-8 ${destMode === m ? 'bg-[rgba(75,63,207,0.4)] text-white' : 'bg-transparent text-[rgba(255,255,255,0.4)]'}`}
                   >
-                    {m === 'new' ? 'Nouvelle instance' : 'Instance existante'}
+                    {m === 'new' ? t('import.newInstance') : t('import.existingInstance')}
                   </button>
                 ))}
               </div>
@@ -280,7 +284,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Nom de l'instance"
+                  placeholder={t('import.instanceNamePlaceholder')}
                   className="w-full rounded-xl px-3 text-sm font-medium text-white outline-none h-[38px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)]"
                 />
                 <div className="flex gap-2">
@@ -336,7 +340,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                   >
                     <input type="checkbox" checked={extraDirsSelected.has(dir)} onChange={() => toggleExtraDir(dir)} />
                     <span className="text-[11px] text-[rgba(255,255,255,0.75)] font-semibold">
-                      {EXTRA_DIR_LABELS[dir] ?? dir}
+                      {extraDirLabel(t, dir)}
                     </span>
                   </label>
                 ))}
@@ -345,17 +349,17 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
 
             <div className="flex flex-shrink-0 items-center justify-between">
               <p className="text-[11px] text-[rgba(255,255,255,0.4)] font-semibold">
-                {selected.size} / {scan.mods.length} mods sélectionnés
-                {checkingDuplicates ? ' · vérification des doublons...' : ''}
+                {t('import.modsSelected', { selected: selected.size, total: scan.mods.length })}
+                {checkingDuplicates ? t('import.checkingDuplicates') : ''}
               </p>
               <button onClick={toggleAll} className="text-[11px] text-[rgba(179,163,255,0.9)] font-semibold">
-                {selected.size === scan.mods.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                {selected.size === scan.mods.length ? t('import.deselectAll') : t('import.selectAll')}
               </button>
             </div>
 
             <div className="flex flex-1 flex-col gap-1 overflow-y-auto rounded-xl p-2 bg-[rgba(0,0,0,0.25)] min-h-[120px]">
               {scan.mods.length === 0 && (
-                <p className="text-[12px] text-[rgba(255,255,255,0.3)] text-center py-4 px-0">Aucun .jar trouvé</p>
+                <p className="text-[12px] text-[rgba(255,255,255,0.3)] text-center py-4 px-0">{t('import.noJarFound')}</p>
               )}
               {scan.mods.map((m) => {
                 const isDuplicate = duplicates.has(m.name)
@@ -364,7 +368,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                     <input type="checkbox" checked={selected.has(m.name)} onChange={() => toggleMod(m.name)} />
                     <span className={`flex-1 truncate text-[12px] ${isDuplicate ? 'text-[rgba(255,255,255,0.4)]' : 'text-[rgba(255,255,255,0.85)]'}`}>{m.name}</span>
                     {isDuplicate && (
-                      <span className="text-[9.5px] text-[rgba(179,163,255,0.8)] font-semibold">déjà présent</span>
+                      <span className="text-[9.5px] text-[rgba(179,163,255,0.8)] font-semibold">{t('import.alreadyPresent')}</span>
                     )}
                     <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{formatBytes(m.size)}</span>
                   </label>
@@ -384,8 +388,8 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                 </div>
                 <p className="text-[10.5px] text-[rgba(255,255,255,0.4)]">
                   {progress.phase === 'mods'
-                    ? `Copie des mods... ${progress.current}/${progress.total}`
-                    : `Copie de ${progress.label ?? 'fichiers additionnels'}...`}
+                    ? t('import.copyingMods', { current: progress.current, total: progress.total })
+                    : t('import.copyingFiles', { label: progress.label ?? t('import.additionalFiles') })}
                 </p>
               </div>
             )}
@@ -396,14 +400,14 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                 disabled={applying}
                 className="rounded-xl px-4 text-xs font-semibold h-10 bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.5)]"
               >
-                Retour
+                {t('import.back')}
               </button>
               <button
                 onClick={handleApply}
                 disabled={applying}
                 className={`flex-1 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${applying ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[#4B3FCF]'}`}
               >
-                {applying ? 'Import...' : `Importer (${selected.size})`}
+                {applying ? t('import.importing') : t('import.importCount', { count: selected.size })}
               </button>
             </div>
           </div>
@@ -413,15 +417,15 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
           <div className="flex flex-col items-center gap-3 py-6">
             <div className="text-[32px]">✅</div>
             <p className="text-[13px] text-white font-semibold text-center">
-              {result.imported} mod(s) importé(s)
-              {result.skipped > 0 ? `, ${result.skipped} déjà présent(s) ignoré(s)` : ''}
-              {result.extraCopied > 0 ? ` · ${result.extraCopied} fichier(s) de config/resourcepacks/shaders repris` : ''}
+              {t('import.modsImported', { count: result.imported })}
+              {result.skipped > 0 ? t('import.modsSkipped', { count: result.skipped }) : ''}
+              {result.extraCopied > 0 ? t('import.extraCopied', { count: result.extraCopied }) : ''}
             </p>
             <button
               onClick={onClose}
               className="rounded-xl px-5 font-bold text-white h-10 bg-[#4B3FCF] text-[13px]"
             >
-              Fermer
+              {t('import.close')}
             </button>
           </div>
         )}

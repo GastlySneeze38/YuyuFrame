@@ -1,11 +1,13 @@
 import type { Loader } from '@/types'
 import { LOADERS } from '@/lib/loader'
+import { useT } from '@/i18n'
 
 export function NameInput({ value, onChange, onEnter }: { value: string; onChange: (v: string) => void; onEnter?: () => void }) {
+  const t = useT()
   return (
     <input
       type="text"
-      placeholder="Nom de l'instance..."
+      placeholder={t('instancesPage.namePlaceholder')}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}
@@ -16,13 +18,14 @@ export function NameInput({ value, onChange, onEnter }: { value: string; onChang
 }
 
 export function DescriptionInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT()
   return (
     <div>
       <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">
-        Description <span className="normal-case tracking-normal font-normal text-[rgba(255,255,255,0.25)]">(optionnel)</span>
+        {t('instancesPage.description')} <span className="normal-case tracking-normal font-normal text-[rgba(255,255,255,0.25)]">{t('instancesPage.optional')}</span>
       </label>
       <textarea
-        placeholder="Ex : modpack survie 1.20, save perso..."
+        placeholder={t('instancesPage.descriptionPlaceholder')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={2}
@@ -50,9 +53,10 @@ export function SubmitButton({ loading, label, loadingLabel, onClick }: { loadin
 }
 
 export function VersionSelect({ versions, value, onChange, className = '' }: { versions: string[]; value: string; onChange: (v: string) => void; className?: string }) {
+  const t = useT()
   return (
     <div className={className}>
-      <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">Version MC</label>
+      <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">{t('instancesPage.versionMc')}</label>
       <div className="relative mt-1">
         <select
           value={value}

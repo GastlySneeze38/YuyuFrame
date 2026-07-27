@@ -1,12 +1,14 @@
 import type { InstancePreset } from '@/data/presets'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
+import { useT } from '@/i18n'
 
 function modLabel(entry: InstancePreset['mods'][number]): string {
   return typeof entry === 'string' ? entry : entry.filename.replace(/\.jar$/, '')
 }
 
 export function PresetCard({ preset, selected, onSelect }: { preset: InstancePreset; selected: boolean; onSelect: () => void }) {
+  const t = useT()
   return (
     <button
       onClick={onSelect}
@@ -27,7 +29,7 @@ export function PresetCard({ preset, selected, onSelect }: { preset: InstancePre
         <span className="text-[9.5px] text-[rgba(255,255,255,0.15)]">·</span>
         <span className="text-[9.5px] text-[rgba(255,255,255,0.25)]">{formatRam(preset.ramMb)}</span>
         <span className="text-[9.5px] text-[rgba(255,255,255,0.15)]">·</span>
-        <span className="text-[9.5px] text-[rgba(255,255,255,0.2)]">{preset.mods.length} mods</span>
+        <span className="text-[9.5px] text-[rgba(255,255,255,0.2)]">{t('instancesPage.modsCount', { count: preset.mods.length })}</span>
       </div>
 
       {preset.mods.length > 0 && (

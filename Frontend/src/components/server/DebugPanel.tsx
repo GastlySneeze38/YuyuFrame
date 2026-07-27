@@ -3,8 +3,10 @@ import type { OwnershipData, TabId } from './types'
 import { OWNERSHIP_API, POLL_MS } from './utils'
 import { ServerSidebar } from './ServerSidebar'
 import { AgentDetail } from './AgentDetail'
+import { useT } from '@/i18n'
 
 export function DebugPanel() {
+  const t = useT()
   const [data, setData] = useState<OwnershipData | null>(null)
   const [error, setError] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
@@ -49,7 +51,7 @@ export function DebugPanel() {
         <AgentDetail
           data={active}
           error={error && agents.length === 0}
-          label={isLocal ? 'Agent local' : 'Agent rapporté (autre instance locale)'}
+          label={isLocal ? t('server.localAgentLabel') : t('server.reportedAgentLabel')}
           showPeers={isLocal}
           tab={tab}
         />

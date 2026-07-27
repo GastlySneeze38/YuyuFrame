@@ -2,6 +2,7 @@ pub mod account;
 pub mod analytics;
 pub mod instance;
 pub mod launch;
+pub mod modrinth;
 pub mod sync;
 pub mod system;
 

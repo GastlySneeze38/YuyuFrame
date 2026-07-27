@@ -1,4 +1,5 @@
 import { ModalShell } from '@/components/ui/ModalShell'
+import { useT } from '@/i18n'
 
 /** Point d'entrée unique du bouton "Importer" de la toolbar Mods — remplace
  * les deux boutons séparés (fichiers .jar / dossier autre launcher) par une
@@ -16,8 +17,9 @@ export function ImportChoiceModal({
   onPickModpack: () => void
   isPlugin: boolean
 }) {
+  const t = useT()
   return (
-    <ModalShell title="Importer" onClose={onClose} maxWidth="max-w-md">
+    <ModalShell title={t('import.title')} onClose={onClose} maxWidth="max-w-md">
       <div className="flex flex-col gap-2">
         <button
           onClick={() => { onClose(); onPickJars() }}
@@ -30,10 +32,10 @@ export function ImportChoiceModal({
           </div>
           <div>
             <p className="font-semibold text-white text-[13px]">
-              {isPlugin ? 'Fichiers .jar (plugin)' : 'Fichiers .jar (mod)'}
+              {isPlugin ? t('import.jarsPlugin') : t('import.jarsMod')}
             </p>
             <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
-              Sélectionne un ou plusieurs fichiers directement
+              {t('import.jarsDesc')}
             </p>
           </div>
         </button>
@@ -48,9 +50,9 @@ export function ImportChoiceModal({
             </svg>
           </div>
           <div>
-            <p className="font-semibold text-white text-[13px]">Dossier / autre launcher</p>
+            <p className="font-semibold text-white text-[13px]">{t('import.folderTitle')}</p>
             <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
-              CurseForge, MultiMC, Prism, ATLauncher, Modrinth App...
+              {t('import.folderDesc')}
             </p>
           </div>
         </button>
@@ -65,9 +67,9 @@ export function ImportChoiceModal({
             </svg>
           </div>
           <div>
-            <p className="font-semibold text-white text-[13px]">Modpack (.mrpack)</p>
+            <p className="font-semibold text-white text-[13px]">{t('import.modpackTitle')}</p>
             <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
-              Fichier modpack Modrinth déjà téléchargé
+              {t('import.modpackDesc')}
             </p>
           </div>
         </button>

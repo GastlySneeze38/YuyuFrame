@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { showError } from '@/stores/useErrorToast'
 import { SkinSourceInput, applySkinSource, type SkinSource } from '@/components/account/SkinSourceInput'
+import { useT } from '@/i18n'
 
 /** Changement de skin sur un compte hors ligne déjà créé (voir le bouton
  * dédié dans AccountRow, Login.tsx) — applique immédiatement, contrairement
@@ -16,6 +17,7 @@ export function SkinPickerModal({
   onClose: () => void
   onApplied: (dataUri: string) => void
 }) {
+  const t = useT()
   const [source, setSource] = useState<SkinSource | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -34,7 +36,7 @@ export function SkinPickerModal({
   }
 
   return (
-    <ModalShell title="Changer de skin" onClose={onClose} maxWidth="max-w-sm">
+    <ModalShell title={t('account.changeSkin')} onClose={onClose} maxWidth="max-w-sm">
       <div className="flex flex-col gap-4">
         <SkinSourceInput value={source} onChange={setSource} />
 
@@ -43,7 +45,7 @@ export function SkinPickerModal({
           disabled={!source || submitting}
           className="h-10 rounded-xl text-[13px] font-semibold text-white transition-colors bg-[#4B3FCF] hover:bg-[#6155e8] disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {submitting ? 'Application...' : 'Appliquer'}
+          {submitting ? t('account.applying') : t('account.apply')}
         </button>
       </div>
     </ModalShell>

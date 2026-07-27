@@ -1,6 +1,7 @@
 import { formatDownloadCount } from '@/lib/format'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { useT } from '@/i18n'
 import type { ModrinthHit } from './modUtils'
 
 export function ModrinthCard({ hit, installed, loading, progress, onInstall, onOpenDetail }: {
@@ -11,6 +12,7 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
   onInstall: () => void
   onOpenDetail: () => void
 }) {
+  const t = useT()
   return (
     <div
       onClick={onOpenDetail}
@@ -27,7 +29,7 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-white text-[13px]">{hit.title}</p>
           <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.description}</p>
-          <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloads)} téléchargements</p>
+          <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloads)} {t('mods.downloads')}</p>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onInstall() }}
@@ -42,7 +44,7 @@ export function ModrinthCard({ hit, installed, loading, progress, onInstall, onO
         >
           {loading ? (
             <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
-          ) : installed ? '✓ Installé' : 'Installer'}
+          ) : installed ? t('mods.installedButton') : t('mods.installButton')}
         </button>
       </div>
 

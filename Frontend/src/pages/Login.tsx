@@ -10,6 +10,7 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
 import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
 import { SkinPickerModal } from '@/components/account/SkinPickerModal'
+import { useT } from '@/i18n'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
 
@@ -19,6 +20,7 @@ const OVERLAY_CONFIRM_HEIGHT = 460
 const OVERLAY_MARGIN = 24
 
 export default function Login() {
+  const t = useT()
   const navigate = useNavigate()
   const { uuid, username, accounts, setAccounts, setUser, removeAccount, addAccount } = useStore()
   const [showOfflineModal, setShowOfflineModal] = useState(false)
@@ -206,7 +208,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
             navigate('/home', { replace: true })
           } else if (poll.status === 'error') {
             stopPolling()
-            setError(poll.error ?? 'Erreur inconnue')
+            setError(poll.error ?? t('login.unknownError'))
             setStep('error')
           }
         } catch { /* keep polling */ }
@@ -216,7 +218,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
       // quand une commande Rust renvoie Err(String) — sans ce cas, le vrai
       // message ("Non authentifié sur YuyuFrame", etc.) était masqué par un
       // message générique inutile pour diagnostiquer le problème.
-      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Erreur de connexion au backend'
+      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : t('login.backendConnectionError')
       setError(message)
       setStep('error')
     }
@@ -257,18 +259,18 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
         {step === 'polling' && (
           <div className="flex w-full flex-col gap-3">
             <p className="text-center text-[11px] text-[rgba(255,255,255,0.45)]">
-              Entre ce code sur la page Microsoft :
+              {t('login.enterCodeOnMicrosoft')}
             </p>
             <button
               onClick={() => { navigator.clipboard.writeText(userCode); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
               className={`rounded-xl py-2.5 text-center transition-all duration-150 border ${copied ? 'bg-[rgba(74,222,128,0.08)] border-[rgba(74,222,128,0.3)]' : 'bg-[rgba(0,0,0,0.4)] border-[rgba(255,255,255,0.08)]'}`}
-              title="Cliquer pour copier"
+              title={t('login.clickToCopy')}
             >
               <span className="font-mono font-black text-white text-[22px] tracking-[0.2em]">
                 {userCode}
               </span>
               <p className={`text-[10px] mt-1 ${copied ? 'text-[rgb(134,239,172)]' : 'text-[rgba(255,255,255,0.2)]'}`}>
-                {copied ? 'Copié !' : 'Cliquer pour copier'}
+                {copied ? t('login.copiedExclaim') : t('login.clickToCopy')}
               </p>
             </button>
             <div className="flex gap-2">
@@ -276,19 +278,19 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                 onClick={() => open(verifyUrl)}
                 className="flex-1 rounded-xl py-2 text-[12px] font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
               >
-                Ouvrir Microsoft →
+                {t('login.openMicrosoft')}
               </button>
               <button
                 onClick={() => { stopPolling(); exitOverlay(); setStep('idle') }}
                 className="rounded-xl px-3 py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.3)] border border-[rgba(255,255,255,0.07)] hover:text-[rgba(255,255,255,0.65)]"
               >
-                Annuler
+                {t('common.cancel')}
               </button>
             </div>
             <div className="flex items-center justify-center gap-2">
               <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
               <span className="text-[10px] text-[rgba(255,255,255,0.35)]">
-                En attente de confirmation...
+                {t('login.waitingForConfirmation')}
               </span>
             </div>
           </div>
@@ -309,12 +311,12 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
               />
             )}
             <div>
-              <p className="font-bold text-white text-[14px]">Connecté avec succès</p>
+              <p className="font-bold text-white text-[14px]">{t('login.connectedSuccessfully')}</p>
               {username && (
                 <p className="text-[12px] text-[rgba(255,255,255,0.4)] mt-1">{username}</p>
               )}
             </div>
-            <p className="text-[10px] text-[rgba(255,255,255,0.25)]">Retour au launcher...</p>
+            <p className="text-[10px] text-[rgba(255,255,255,0.25)]">{t('login.backToLauncher')}</p>
           </div>
         )}
 
@@ -328,13 +330,13 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                 onClick={() => { navigator.clipboard.writeText(error); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
                 className={`rounded-xl px-3 py-2 text-[12px] transition-all duration-150 border ${copied ? 'text-[rgb(134,239,172)] border-[rgba(74,222,128,0.3)]' : 'text-[rgba(255,255,255,0.4)] border-[rgba(255,255,255,0.08)]'}`}
               >
-                {copied ? 'Copié ✓' : 'Copier'}
+                {copied ? t('login.copiedCheck') : t('console.copy')}
               </button>
               <button
                 onClick={() => { exitOverlay(); setStep('idle') }}
                 className="flex-1 rounded-xl py-2 text-[12px] transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
               >
-                Réessayer
+                {t('login.retry')}
               </button>
             </div>
           </div>
@@ -350,10 +352,10 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
         <PageHeaderSeparator />
         <div>
           <h1 className="font-black text-white text-[16px] tracking-[-0.01em] leading-[1.2]">
-            Connexion
+            {t('login.title')}
           </h1>
           <p className="text-[10px] text-[rgba(255,255,255,0.28)] mt-px">
-            Gérez vos comptes Minecraft (max 2)
+            {t('login.subtitle')}
           </p>
         </div>
       </PageHeader>
@@ -381,11 +383,11 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                   {displayAccount.username}
                 </p>
                 <p className={`text-[10px] ${displayAccount.uuid === uuid ? 'text-[rgba(74,222,128,0.75)]' : 'text-[rgba(255,255,255,0.3)]'}`}>
-                  {displayAccount.uuid === uuid ? '● Actif' : '○ Aperçu'}
+                  {displayAccount.uuid === uuid ? t('login.active') : t('login.preview')}
                 </p>
               </>
             ) : (
-              <p className="text-[10px] text-[rgba(255,255,255,0.2)]">Aucun compte</p>
+              <p className="text-[10px] text-[rgba(255,255,255,0.2)]">{t('login.noAccount')}</p>
             )}
           </div>
         </div>
@@ -404,16 +406,16 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
             </div>
             <p className="text-[11px] text-[rgba(255,255,255,0.28)]">
               {accounts.length === 0
-                ? 'Connecte-toi pour jouer'
+                ? t('login.connectToPlay')
                 : accounts.length < 2
-                ? 'Ajoute un deuxième compte ou continue'
-                : 'Sélectionne le compte avec lequel jouer'}
+                ? t('login.addSecondAccount')
+                : t('login.selectAccountToPlay')}
             </p>
             </div>
 
             <button
               onClick={() => { setShowOfflineModal(true); api.analytics.track('offline_account_modal_opened') }}
-              title="Compte hors ligne"
+              title={t('login.offlineAccount')}
               className="flex h-8 flex-shrink-0 items-center justify-center rounded-full border border-[rgba(255,255,255,0.15)] px-3.5 text-[rgba(255,255,255,0.35)] transition-colors hover:border-[rgba(255,255,255,0.4)] hover:text-white"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" width={13} height={13}>
@@ -449,25 +451,25 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
               {step === 'loading' && (
                 <div className="flex items-center justify-center gap-3 py-2">
                   <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.15)] border-t-[#4B3FCF]" />
-                  <span className="text-[13px] text-[rgba(255,255,255,0.5)]">Connexion en cours...</span>
+                  <span className="text-[13px] text-[rgba(255,255,255,0.5)]">{t('login.connecting')}</span>
                 </div>
               )}
 
               {step === 'polling' && (
                 <div className="flex flex-col gap-4">
                   <p className="text-center text-[12px] text-[rgba(255,255,255,0.45)]">
-                    Entre ce code sur la page Microsoft :
+                    {t('login.enterCodeOnMicrosoft')}
                   </p>
                   <button
                     onClick={() => { navigator.clipboard.writeText(userCode); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
                     className={`rounded-xl py-3 text-center transition-all duration-150 border ${copied ? 'bg-[rgba(74,222,128,0.08)] border-[rgba(74,222,128,0.3)]' : 'bg-[rgba(0,0,0,0.4)] border-[rgba(255,255,255,0.08)]'}`}
-                    title="Cliquer pour copier"
+                    title={t('login.clickToCopy')}
                   >
                     <span className="font-mono font-black text-white text-[26px] tracking-[0.25em]">
                       {userCode}
                     </span>
                     <p className={`text-[10px] mt-1 ${copied ? 'text-[rgb(134,239,172)]' : 'text-[rgba(255,255,255,0.2)]'}`}>
-                      {copied ? 'Copié !' : 'Cliquer pour copier'}
+                      {copied ? t('login.copiedExclaim') : t('login.clickToCopy')}
                     </p>
                   </button>
                   <div className="flex gap-2">
@@ -475,19 +477,19 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                       onClick={() => open(verifyUrl)}
                       className="flex-1 rounded-xl py-2 text-sm font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.15)] border border-[rgba(75,63,207,0.3)] hover:bg-[rgba(75,63,207,0.3)]"
                     >
-                      Ouvrir Microsoft →
+                      {t('login.openMicrosoft')}
                     </button>
                     <button
                       onClick={() => { stopPolling(); setStep('idle') }}
                       className="rounded-xl px-4 py-2 text-sm transition-all duration-150 text-[rgba(255,255,255,0.3)] border border-[rgba(255,255,255,0.07)] hover:text-[rgba(255,255,255,0.65)]"
                     >
-                      Annuler
+                      {t('common.cancel')}
                     </button>
                   </div>
                   <div className="flex items-center justify-center gap-2">
                     <span className="h-3 w-3 animate-spin-slow rounded-full border border-[rgba(255,255,255,0.12)] border-t-[#4B3FCF]" />
                     <span className="text-[11px] text-[rgba(255,255,255,0.35)]">
-                      En attente de confirmation...
+                      {t('login.waitingForConfirmation')}
                     </span>
                   </div>
                 </div>
@@ -503,13 +505,13 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                       onClick={() => { navigator.clipboard.writeText(error); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
                       className={`rounded-xl px-3 py-2 text-sm transition-all duration-150 border ${copied ? 'text-[rgb(134,239,172)] border-[rgba(74,222,128,0.3)]' : 'text-[rgba(255,255,255,0.4)] border-[rgba(255,255,255,0.08)]'}`}
                     >
-                      {copied ? 'Copié ✓' : 'Copier'}
+                      {copied ? t('login.copiedCheck') : t('console.copy')}
                     </button>
                     <button
                       onClick={() => setStep('idle')}
                       className="flex-1 rounded-xl py-2 text-sm transition-all duration-150 text-[rgba(255,255,255,0.4)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.7)]"
                     >
-                      Réessayer
+                      {t('login.retry')}
                     </button>
                   </div>
                 </div>
@@ -541,6 +543,7 @@ function AccountRow({
   onLeave: () => void
   onSkinChange: (dataUri: string) => void
 }) {
+  const t = useT()
   const [hovered, setHovered] = useState(false)
   const [showSkinPicker, setShowSkinPicker] = useState(false)
   const offline = acc.is_offline
@@ -603,7 +606,7 @@ function AccountRow({
       <div className="flex min-w-0 flex-1 flex-col">
         <p className="truncate font-semibold text-white text-[13px]">{acc.username}</p>
         <p className={`text-[10px] mt-px ${isActive ? 'text-[rgba(74,222,128,0.7)]' : 'text-[rgba(255,255,255,0.3)]'}`}>
-          {isActive ? '● Actif' : 'Compte sauvegardé'}
+          {isActive ? t('login.active') : t('login.savedAccount')}
         </p>
       </div>
 
@@ -614,20 +617,20 @@ function AccountRow({
             onClick={onSelect}
             className="rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.25)] border border-[rgba(75,63,207,0.45)] hover:bg-[rgba(75,63,207,0.42)]"
           >
-            Jouer →
+            {t('login.play')}
           </button>
         ) : (
           <button
             onClick={onSelect}
             className="rounded-lg px-3 py-1.5 text-sm transition-all duration-150 text-[rgba(255,255,255,0.45)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.45)] hover:text-[rgba(255,255,255,0.9)]"
           >
-            Sélectionner
+            {t('login.select')}
           </button>
         )}
         {offline && (
           <button
             onClick={() => setShowSkinPicker(true)}
-            title="Changer de skin"
+            title={t('login.changeSkin')}
             className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgba(255,255,255,0.7)] hover:border-[rgba(255,255,255,0.15)]"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="w-[13px] h-[13px]">
@@ -638,7 +641,7 @@ function AccountRow({
         <button
           onClick={onRemove}
           className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgb(252,165,165)] hover:border-[rgba(200,50,50,0.3)] hover:bg-[rgba(200,50,50,0.08)]"
-          title="Déconnecter"
+          title={t('login.disconnect')}
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="w-[13px] h-[13px]">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
@@ -658,6 +661,7 @@ function AccountRow({
 }
 
 function AddRow({ onClick }: { onClick: () => void }) {
+  const t = useT()
   return (
     <button
       onClick={onClick}
@@ -669,8 +673,8 @@ function AddRow({ onClick }: { onClick: () => void }) {
         </svg>
       </div>
       <div className="text-left">
-        <p className="text-[13px] font-semibold">Ajouter un compte</p>
-        <p className="text-[10px] mt-0.5 text-[rgba(255,255,255,0.2)]">Connexion via Microsoft</p>
+        <p className="text-[13px] font-semibold">{t('login.addAccount')}</p>
+        <p className="text-[10px] mt-0.5 text-[rgba(255,255,255,0.2)]">{t('login.connectViaMicrosoft')}</p>
       </div>
     </button>
   )

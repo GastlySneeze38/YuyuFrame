@@ -1,5 +1,6 @@
 import type { SaveInfo } from '@/types'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { useT } from '@/i18n'
 
 export function SaveSelector({
   saves,
@@ -16,10 +17,11 @@ export function SaveSelector({
   onToggle: (name: string) => void
   onSelectAll: () => void
 }) {
+  const t = useT()
   if (saves.length === 0) {
     return (
       <p className="text-[12px] text-[rgba(255,255,255,0.22)]">
-        Aucune save — mods/ et config/ seront synchronisés
+        {t('sync.noSaveMessage')}
       </p>
     )
   }
@@ -28,7 +30,7 @@ export function SaveSelector({
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold text-[rgba(255,255,255,0.28)] tracking-[0.1em] uppercase">
-          Saves à inclure
+          {t('sync.savesToInclude')}
         </span>
         <div className="flex items-center gap-2">
           <span className={`text-[10px] ${selected.size >= maxSaves ? 'text-[rgba(255,180,0,0.7)]' : 'text-[rgba(255,255,255,0.2)]'}`}>
@@ -40,7 +42,7 @@ export function SaveSelector({
               disabled={disabled}
               className={`text-[10px] font-semibold ${disabled ? 'text-[rgba(75,63,207,0.8)] cursor-not-allowed' : 'text-[rgba(75,63,207,0.8)] cursor-pointer hover:text-[#818cf8]'}`}
             >
-              {selected.size === Math.min(saves.length, maxSaves) ? 'Tout désélectionner' : 'Tout sélectionner'}
+              {selected.size === Math.min(saves.length, maxSaves) ? t('sync.deselectAll') : t('sync.selectAll')}
             </button>
           )}
         </div>

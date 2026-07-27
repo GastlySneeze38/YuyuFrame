@@ -177,6 +177,7 @@ pub fn run() {
             commands::instance::mods::mods_upload,
             commands::instance::mods::mod_icon,
             commands::instance::mods::mods_check_update_safety,
+            commands::modrinth::mods_search_advanced,
             commands::instance::import::import_detect_launchers,
             commands::instance::import::import_scan_folder,
             commands::instance::import::import_check_duplicates,

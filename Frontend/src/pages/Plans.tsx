@@ -5,7 +5,7 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { YuyuPlan } from '@/stores/useStore'
 import { BETA_TEST } from '@/config/beta'
-import { PLANS } from '@/data/plans'
+import { getPlans } from '@/data/plans'
 import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PlanIcon } from '@/components/plans/PlanIcon'
 import { DevPaymentSimulator } from '@/components/plans/DevPaymentSimulator'
@@ -13,10 +13,12 @@ import { UpgradeModal } from '@/components/plans/UpgradeModal'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 
 export default function Plans() {
   const navigate = useNavigate()
-  const { yuyuPlanExpiresAt, yuyuUsername, isPremium, isUltimate, setYuyuPlan } = useStore()
+  const t = useT()
+  const { yuyuPlanExpiresAt, yuyuUsername, isPremium, isUltimate, setYuyuPlan, language } = useStore()
 
   if (BETA_TEST) {
     return (
@@ -24,19 +26,21 @@ export default function Plans() {
         <div className="opacity-[0.15]">
           <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
         </div>
-        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">Plans non disponibles en bêta</p>
+        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">{t('plans.betaUnavailable')}</p>
         <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
-          Le système d'abonnement sera accessible dans une prochaine version.
+          {t('plans.betaUnavailableDesc')}
         </p>
         <button
           onClick={() => navigate('/home')}
           className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
         >
-          Retour
+          {t('plans.back')}
         </button>
       </div>
     )
   }
+
+  const PLANS = getPlans(t)
 
   const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
 
@@ -56,10 +60,10 @@ export default function Plans() {
     try {
       const resp = await api.yuyu.refreshPlan()
       setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-      setRefreshMsg(`Plan mis à jour : ${resp.plan}`)
+      setRefreshMsg(t('plans.planUpdated', { plan: resp.plan }))
       setTimeout(() => setRefreshMsg(null), 4000)
     } catch (e) {
-      showError('Impossible de contacter le serveur')
+      showError(t('plans.serverUnreachable'))
     } finally {
       setRefreshing(false)
     }
@@ -109,15 +113,15 @@ export default function Plans() {
             className="flex items-center gap-2 transition-colors duration-150 text-[12px] text-[rgba(255,255,255,0.3)] font-medium hover:text-[rgba(255,255,255,0.7)]"
           >
             <BackArrowIcon size={14} />
-            Retour
+            {t('plans.back')}
           </button>
 
           <div className="flex flex-col items-center gap-1">
             <h1 className="font-black text-white text-[30px] tracking-[-0.02em] [text-shadow:0_0_40px_rgba(75,63,207,0.5)]">
-              Plans YuyuFrame
+              {t('plans.title')}
             </h1>
             <p className="text-[13px] text-[rgba(255,255,255,0.35)]">
-              Choisissez l'expérience qui vous correspond
+              {t('plans.subtitle')}
             </p>
           </div>
 
@@ -126,7 +130,7 @@ export default function Plans() {
             {yuyuUsername && (
               <>
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-medium">Votre plan</span>
+                  <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-medium">{t('plans.yourPlan')}</span>
                   <PlanBadge plan={effectivePlan} />
                 </div>
                 <button
@@ -141,7 +145,7 @@ export default function Plans() {
                       <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
                     </svg>
                   )}
-                  Rafraîchir
+                  {t('plans.refresh')}
                 </button>
               </>
             )}
@@ -164,9 +168,9 @@ export default function Plans() {
               <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
             </svg>
             <p className="text-[12px] text-[rgba(255,255,255,0.55)] leading-[1.5]">
-              Votre abonnement <span className="text-[#f59e0b] font-semibold">{effectivePlan}</span> expire le{' '}
+              {t('plans.expiresOnPrefix')} <span className="text-[#f59e0b] font-semibold">{effectivePlan}</span> {t('plans.expiresOnSuffix')}{' '}
               <span className="text-[rgba(255,255,255,0.8)] font-semibold">
-                {new Date(yuyuPlanExpiresAt * 1000).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                {new Date(yuyuPlanExpiresAt * 1000).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'long', year: 'numeric' })}
               </span>.
             </p>
           </div>
@@ -178,8 +182,8 @@ export default function Plans() {
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
           </svg>
           <p className="text-[12px] text-[rgba(255,255,255,0.55)] leading-[1.5]">
-            <span className="text-[#818cf8] font-semibold">Toutes les fonctionnalités sont gratuites pour l'instant.</span>{' '}
-            YuyuFrame est en cours de développement — la facturation sera activée lors du lancement officiel.
+            <span className="text-[#818cf8] font-semibold">{t('plans.freeNoticeHighlight')}</span>{' '}
+            {t('plans.freeNoticeRest')}
           </p>
         </div>
 
@@ -208,7 +212,7 @@ export default function Plans() {
                     className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[0.06em]"
                     style={{ background: plan.badgeBg, color: plan.badgeColor }}
                   >
-                    ACTUEL
+                    {t('plans.current')}
                   </div>
                 )}
 
@@ -227,9 +231,9 @@ export default function Plans() {
                         <span className="font-black text-[32px] text-white tracking-[-0.03em]">
                           {plan.price}€
                         </span>
-                        <span className="text-[12px] text-[rgba(255,255,255,0.3)] font-medium">/mois</span>
+                        <span className="text-[12px] text-[rgba(255,255,255,0.3)] font-medium">{t('plans.perMonth')}</span>
                         <span className="ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-[#4ade80] bg-[rgba(74,222,128,0.1)] tracking-[0.05em]">
-                          GRATUIT
+                          {t('plans.free')}
                         </span>
                       </div>
                     ) : (
@@ -237,7 +241,7 @@ export default function Plans() {
                         <span className="font-black text-[32px] text-white tracking-[-0.03em]">
                           0€
                         </span>
-                        <span className="text-[12px] text-[rgba(255,255,255,0.3)] font-medium">/mois</span>
+                        <span className="text-[12px] text-[rgba(255,255,255,0.3)] font-medium">{t('plans.perMonth')}</span>
                       </div>
                     )}
                   </div>
@@ -283,7 +287,7 @@ export default function Plans() {
                     disabled={isCurrent || !plan.price}
                     onClick={() => { if (!isCurrent && plan.price) setUpgradeTarget(plan.id) }}
                   >
-                    {isCurrent ? 'Plan actuel' : plan.price ? `Passer à ${plan.name}` : 'Plan gratuit'}
+                    {isCurrent ? t('plans.currentPlan') : plan.price ? t('plans.upgradeTo', { name: plan.name }) : t('plans.freePlan')}
                   </button>
                 </div>
               </div>
@@ -295,16 +299,16 @@ export default function Plans() {
         <div className="rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.07)]">
           <div className="px-6 py-4 bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.06)]">
             <span className="text-[13px] font-bold text-[rgba(255,255,255,0.6)] tracking-[0.05em]">
-              COMPARAISON DES QUOTAS
+              {t('plans.quotasComparison')}
             </span>
           </div>
           <div className="divide-y divide-[rgba(255,255,255,0.05)]">
             {[
-              { label: 'Comptes Minecraft', free: '2 max', premium: 'Illimités', ultimate: 'Illimités' },
-              { label: 'Stats & analytics', free: 'Basiques', premium: 'Avancées', ultimate: 'Avancées' },
-              { label: 'Instances locales', free: 'Illimitées', premium: 'Illimitées', ultimate: 'Illimitées' },
-              { label: 'Instances synchronisées', free: '—', premium: '3 avec saves / 4 sans', ultimate: '10' },
-              { label: 'Saves synchronisées (total)', free: '—', premium: '3', ultimate: '10' },
+              { label: t('plans.rowMcAccounts'), free: t('plans.max2'), premium: t('plans.unlimited'), ultimate: t('plans.unlimited') },
+              { label: t('plans.rowStats'), free: t('plans.basic'), premium: t('plans.advanced'), ultimate: t('plans.advanced') },
+              { label: t('plans.rowLocalInstances'), free: t('plans.unlimitedFem'), premium: t('plans.unlimitedFem'), ultimate: t('plans.unlimitedFem') },
+              { label: t('plans.rowSyncedInstances'), free: '—', premium: t('plans.premiumSyncQuota'), ultimate: '10' },
+              { label: t('plans.rowSyncedSaves'), free: '—', premium: '3', ultimate: '10' },
             ].map((row, i) => (
               <div key={i} className="grid grid-cols-4 px-6 py-3.5">
                 <span className="text-[12px] text-[rgba(255,255,255,0.45)] font-medium">{row.label}</span>
@@ -340,8 +344,8 @@ export default function Plans() {
         {/* Footer note */}
         <div className="text-center pb-4">
           <p className="text-[11px] text-[rgba(255,255,255,0.2)] leading-[1.6]">
-            YuyuFrame est un projet open-source en cours de développement.<br />
-            Les abonnements seront activés lors du lancement officiel. Aucune carte bancaire requise pour l'instant.
+            {t('plans.footerNote')}<br />
+            {t('plans.footerNote2')}
           </p>
         </div>
 

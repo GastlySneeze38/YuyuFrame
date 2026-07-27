@@ -6,9 +6,11 @@ import { BETA_TEST } from '@/config/beta'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { DebugPanel } from '@/components/server/DebugPanel'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
+import { useT } from '@/i18n'
 
 export default function Server() {
   const navigate = useNavigate()
+  const t = useT()
   const { selectedInstanceId, selectedInstance, isInstanceRunning, setInstanceRunning } = useStore()
 
   if (BETA_TEST) {
@@ -17,15 +19,15 @@ export default function Server() {
         <div className="text-[32px] opacity-[0.15]">
           <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
         </div>
-        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">P2P non disponible en bêta</p>
+        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">{t('server.betaUnavailable')}</p>
         <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
-          Le serveur P2P sera accessible dans une prochaine version.
+          {t('server.betaUnavailableDesc')}
         </p>
         <button
           onClick={() => navigate('/home')}
           className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
         >
-          Retour
+          {t('server.back')}
         </button>
       </div>
     )
@@ -58,13 +60,13 @@ export default function Server() {
         <PageHeaderSeparator />
         <div>
           <h1 className="font-black text-white text-[16px] tracking-[-0.01em] leading-[1.2]">
-            Serveur P2P
+            {t('server.title')}
           </h1>
           <p className="text-[10px] text-[rgba(255,255,255,0.28)] mt-[1px]">
             {instance ? (
               <span className="text-[rgba(120,110,230,0.7)] font-semibold">{instance.name} — {instance.mc_version}</span>
             ) : (
-              <span className="text-[rgba(255,100,100,0.6)]">Aucune instance sélectionnée</span>
+              <span className="text-[rgba(255,100,100,0.6)]">{t('server.noInstanceSelected')}</span>
             )}
           </p>
         </div>
@@ -83,13 +85,13 @@ export default function Server() {
               }
             >
               {reloadStatus === 'sent'
-                ? 'Rechargement envoyé ✓'
+                ? t('server.reloadSent')
                 : reloadStatus === 'error'
-                  ? 'Erreur d’écriture'
-                  : 'Recharger l’agent P2P'}
+                  ? t('server.reloadError')
+                  : t('server.reloadAgent')}
             </button>
             <p className="text-[9px] text-[rgba(255,255,255,0.18)]">
-              Relit p2p-agent.properties sans relancer Minecraft
+              {t('server.reloadHint')}
             </p>
           </div>
         )}

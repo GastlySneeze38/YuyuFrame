@@ -9,10 +9,12 @@ import { OrphanCloudCard } from '@/components/sync/OrphanCloudCard'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError } from '@/stores/useErrorToast'
+import { useT } from '@/i18n'
 
 // ── Sync content ──────────────────────────────────────────────────────────────
 
 function SyncContent() {
+  const t = useT()
   const { instances, yuyuToken, isUltimate, addInstance } = useStore()
   const userIsUltimate = isUltimate()
   const QUOTA_SAVES = userIsUltimate ? 10 : 3
@@ -92,7 +94,7 @@ function SyncContent() {
       <div className="flex flex-col items-center gap-2 py-8">
         <div className="text-[24px] opacity-[0.18]">🧱</div>
         <p className="text-[12px] text-[rgba(255,255,255,0.2)] text-center">
-          Crée une instance pour commencer<br />à synchroniser.
+          {t('sync.createInstanceLine1')}<br />{t('sync.createInstanceLine2')}
         </p>
       </div>
     )
@@ -116,7 +118,7 @@ function SyncContent() {
       {orphanCloud.length > 0 && (
         <div className="flex flex-col gap-2 mt-2">
           <p className="text-[10px] font-bold text-[rgba(255,255,255,0.18)] tracking-[0.1em] uppercase">
-            Dans le cloud · sans instance locale
+            {t('sync.cloudNoLocalInstance')}
           </p>
           {orphanCloud.map((ci) => (
             <OrphanCloudCard
@@ -130,7 +132,7 @@ function SyncContent() {
       )}
 
       <p className="text-[10px] text-[rgba(255,255,255,0.1)] text-center mt-1">
-        mods/ + config/ + saves sélectionnées · {QUOTA_SAVES} saves max · Premium
+        {t('sync.quotaFooter', { quota: QUOTA_SAVES })}
       </p>
     </div>
   )
@@ -139,6 +141,7 @@ function SyncContent() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Sync() {
+  const t = useT()
   const navigate = useNavigate()
   const { yuyuToken, isPremium, yuyuPlan } = useStore()
 
@@ -148,7 +151,7 @@ export default function Sync() {
     <div className="flex h-full flex-col bg-[#09090D] text-white">
       <PageHeader px={5}>
         <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
-          Synchronisation
+          {t('sync.title')}
         </h1>
         {yuyuToken && isPremium() && (
           <span
@@ -168,18 +171,18 @@ export default function Sync() {
           <div className="flex flex-col items-center justify-center gap-3 py-10">
             <div className="text-[28px] opacity-20">🔒</div>
             <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">
-              Connecte-toi à YuyuFrame<br />pour synchroniser tes instances
+              {t('sync.loginToSyncLine1')}<br />{t('sync.loginToSyncLine2')}
             </p>
           </div>
         ) : !isPremium() ? (
           <PremiumGate
             compact
             onUpgrade={() => navigate('/plans')}
-            description="La synchronisation multi-PC est réservée aux abonnés Premium et Ultimate."
+            description={t('sync.gateDescription')}
             features={[
-              'Sync mods, configs & saves entre tes PCs',
-              "Jusqu'à 3 saves cloud (10 en Ultimate)",
-              'Détail de ce qui est sauvegardé par instance',
+              t('sync.gateFeature1'),
+              t('sync.gateFeature2'),
+              t('sync.gateFeature3'),
             ]}
           />
         ) : (

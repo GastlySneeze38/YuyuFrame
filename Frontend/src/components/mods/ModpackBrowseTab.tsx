@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { useT } from '@/i18n'
 
 export function ModpackBrowseTab({ query, results, searching, installing, installProgress, onQueryChange, onInstall }: {
   query: string
@@ -14,6 +15,7 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onInstall: (hit: ModpackHit) => void
 }) {
+  const t = useT()
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
@@ -23,7 +25,7 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
         </svg>
         <input
           type="text"
-          placeholder="Rechercher un modpack..."
+          placeholder={t('mods.searchModpackPlaceholder')}
           value={query}
           onChange={onQueryChange}
           className="w-full rounded-xl pl-9 pr-4 text-sm text-white outline-none h-10 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] focus:border-[rgba(75,63,207,0.6)]"
@@ -36,8 +38,8 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
       {!searching && results.length === 0 && (
         <EmptyState
           icon={<SearchIcon size={28} color="rgba(255,255,255,0.15)" />}
-          title="Aucun résultat"
-          subtitle="Essayez un autre terme de recherche"
+          title={t('mods.noResults')}
+          subtitle={t('mods.tryAnotherSearchTerm')}
         />
       )}
 
@@ -53,7 +55,7 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-white text-[13px]">{hit.title}</p>
                   <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.description}</p>
-                  <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">par {hit.author} · {formatDownloadCount(hit.downloads)} téléchargements</p>
+                  <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{t('mods.byAuthor', { author: hit.author })} · {formatDownloadCount(hit.downloads)} {t('mods.downloads')}</p>
                 </div>
                 <button
                   onClick={() => onInstall(hit)}
@@ -64,7 +66,7 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
                 >
                   {isInstallingThis ? (
                     <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
-                  ) : 'Installer'}
+                  ) : t('mods.installButton')}
                 </button>
               </div>
 

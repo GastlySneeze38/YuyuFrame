@@ -1,5 +1,6 @@
 import type { OwnershipData } from './types'
 import { ownerColor, tpsColor, latencyColor } from './utils'
+import { useT } from '@/i18n'
 
 const thClass = 'text-left px-[10px] py-[7px] text-[rgba(255,255,255,0.35)] text-[9px] uppercase tracking-[0.5px] font-semibold'
 const tdBase = 'px-[10px] py-[7px] align-middle'
@@ -11,13 +12,14 @@ const tdColor = 'text-[rgba(255,255,255,0.7)]'
  * (pas de latence/débit par pair distant) — comptés honnêtement en ligne "non détaillés".
  */
 export function PeersTable({ self }: { self: OwnershipData }) {
+  const t = useT()
   const rows = [self, ...(self.peers_reported ?? [])]
   const undetailed = Math.max(0, (self.pc ?? 0) - rows.length)
 
   return (
     <div className="border border-[rgba(255,255,255,0.08)] rounded-lg overflow-hidden">
       <div className="px-[10px] py-[8px] border-b border-[rgba(255,255,255,0.06)] text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
-        Pairs connectés
+        {t('server.peersConnected')}
       </div>
       {/* overflow-x-auto isolé du cadre arrondi (overflow-hidden au-dessus) —
           sur un écran étroit, le tableau scrolle horizontalement au lieu de
@@ -27,12 +29,12 @@ export function PeersTable({ self }: { self: OwnershipData }) {
           <thead>
             <tr className="bg-[rgba(255,255,255,0.04)]">
               <th className={thClass}></th>
-              <th className={thClass}>Pair</th>
-              <th className={thClass}>Position</th>
-              <th className={thClass}>TPS</th>
-              <th className={thClass}>Latence</th>
-              <th className={thClass}>Quads</th>
-              <th className={thClass}>Blocs env.</th>
+              <th className={thClass}>{t('server.thPeer')}</th>
+              <th className={thClass}>{t('server.thPosition')}</th>
+              <th className={thClass}>{t('server.thTps')}</th>
+              <th className={thClass}>{t('server.thLatency')}</th>
+              <th className={thClass}>{t('server.thQuads')}</th>
+              <th className={thClass}>{t('server.thBlocksSent')}</th>
             </tr>
           </thead>
           <tbody>
@@ -56,7 +58,7 @@ export function PeersTable({ self }: { self: OwnershipData }) {
             {undetailed > 0 && (
               <tr className="border-t border-[rgba(255,255,255,0.05)]">
                 <td colSpan={7} className={`${tdBase} text-[rgba(255,255,255,0.3)] italic`}>
-                  + {undetailed} pair(s) distant(s) non détaillé(s) — pas de métriques par pair distant côté agent
+                  + {undetailed} {t('server.remotePeersUndetailedFull')}
                 </td>
               </tr>
             )}

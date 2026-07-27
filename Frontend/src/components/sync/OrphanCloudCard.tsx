@@ -4,12 +4,14 @@ import { formatDateTime } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloudContentSummary } from './CloudContentSummary'
+import { useT } from '@/i18n'
 
 export function OrphanCloudCard({ ci, onRestore, onDelete }: {
   ci: SyncInstance
   onRestore: (ci: SyncInstance) => Promise<void>
   onDelete: (id: number) => Promise<void>
 }) {
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -64,7 +66,7 @@ export function OrphanCloudCard({ ci, onRestore, onDelete }: {
                   ? <ButtonSpinner size={14} />
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="rotate-180 flex-shrink-0"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
                 }
-                Télécharger l'instance
+                {t('sync.downloadInstance')}
               </button>
             )}
             <button

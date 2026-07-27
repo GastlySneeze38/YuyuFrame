@@ -1,6 +1,7 @@
 import { ModalShell } from '@/components/ui/ModalShell'
 import { useStore } from '@/stores/useStore'
 import type { SavedServer } from '@/api/client'
+import { useT } from '@/i18n'
 
 /** Confirmation avant un lancement direct sur un serveur — visible seulement
  * si useStore.confirmServerLaunch est actif (réglage activé par défaut). Le
@@ -15,14 +16,15 @@ export function ServerConfirmModal({
   onConfirm: () => void
   onClose: () => void
 }) {
+  const t = useT()
   const confirmServerLaunch = useStore((s) => s.confirmServerLaunch)
   const setConfirmServerLaunch = useStore((s) => s.setConfirmServerLaunch)
 
   return (
-    <ModalShell title="Lancer sur ce serveur ?" onClose={onClose} maxWidth="max-w-sm">
+    <ModalShell title={t('servers.confirmTitle')} onClose={onClose} maxWidth="max-w-sm">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <p className="font-bold text-white text-[14px] truncate">{server.name || 'Serveur'}</p>
+          <p className="font-bold text-white text-[14px] truncate">{server.name || t('servers.defaultName')}</p>
           <p className="text-[11px] text-[rgba(255,255,255,0.4)] truncate">{server.ip}</p>
         </div>
 
@@ -33,7 +35,7 @@ export function ServerConfirmModal({
             onChange={(e) => setConfirmServerLaunch(e.target.checked)}
             className="accent-[#4B3FCF]"
           />
-          <span className="text-[11px] text-[rgba(255,255,255,0.5)]">Toujours demander confirmation</span>
+          <span className="text-[11px] text-[rgba(255,255,255,0.5)]">{t('servers.alwaysAsk')}</span>
         </label>
 
         <div className="flex gap-2">
@@ -41,13 +43,13 @@ export function ServerConfirmModal({
             onClick={onClose}
             className="flex-1 h-9 rounded-lg text-[12px] font-semibold text-[rgba(255,255,255,0.6)] bg-[rgba(255,255,255,0.05)] transition-colors hover:bg-[rgba(255,255,255,0.09)]"
           >
-            Annuler
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
             className="flex-1 h-9 rounded-lg text-[12px] font-semibold text-white bg-[#4B3FCF] transition-colors hover:bg-[#6155e8]"
           >
-            Lancer
+            {t('servers.launch')}
           </button>
         </div>
       </div>
