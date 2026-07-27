@@ -20,7 +20,7 @@ import { useT } from '@/i18n'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
   fetchProjectDetail, _modrinthCache, _iconCache,
-  type ModrinthInfo, type ModUpdate, type ModrinthHit, type Tab,
+  type ModrinthInfo, type ModUpdate, type ModrinthHit, type ModrinthSearchFilters, type Tab,
 } from '@/components/mods/modUtils'
 
 export { updateModsForNewVersion } from '@/components/mods/modUtils'
@@ -66,6 +66,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [searching, setSearching] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
   const [installProgress, setInstallProgress] = useState<{ percent: number; label: string } | null>(null)
+  const [searchFilters, setSearchFilters] = useState<ModrinthSearchFilters>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [modSearch, setModSearch] = useState('')
@@ -369,11 +370,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
-  const runSearch = async (q: string) => {
+  const runSearch = async (q: string, filters: ModrinthSearchFilters = searchFilters) => {
     setSearching(true)
     if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim() })
     try {
-      setResults(await fetchModrinthSearch(q, mcVersion, loader))
+      setResults(await fetchModrinthSearch(q, mcVersion, loader, filters))
     } catch {
       showError(t('mods.cannotReachModrinth'))
     } finally {
@@ -386,6 +387,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setQuery(q)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => runSearch(q), 450)
+  }
+
+  const handleFiltersChange = (filters: ModrinthSearchFilters) => {
+    setSearchFilters(filters)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    runSearch(query, filters)
   }
 
   const handleInstall = async (hit: ModrinthHit) => {
@@ -646,9 +653,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
             installProgress={installProgress}
             isInstalled={(hit) => !!installedByProject[hit.project_id]}
             isPlugin={isPlugin}
+            filters={searchFilters}
             onQueryChange={handleQueryChange}
             onInstall={handleInstall}
             onOpenDetail={setDetailHit}
+            onFiltersChange={handleFiltersChange}
           />
         ) : (
           <div className="flex flex-col gap-3">

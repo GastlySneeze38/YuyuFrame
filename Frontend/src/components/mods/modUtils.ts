@@ -28,6 +28,20 @@ export interface ModrinthHit {
   icon_url: string | null
   downloads: number
   categories: string[]
+  // Présents dans la réponse Modrinth réelle mais pas systématiquement utilisés
+  // ailleurs dans l'UI — optionnels pour rester compatibles avec les hits déjà
+  // consommés tels quels dans le code existant.
+  client_side?: string
+  server_side?: string
+  license?: string
+}
+
+export interface ModrinthSearchFilters {
+  categories?: string[]
+  environment?: 'client' | 'server'
+  license?: string
+  openSourceOnly?: boolean
+  sort?: 'relevance' | 'downloads' | 'follows' | 'newest' | 'updated'
 }
 
 export interface ModrinthVersion {
@@ -309,28 +323,28 @@ export async function updateModsForNewVersion(
   } catch { /* ignore */ }
 }
 
+/** Recherche Modrinth via le backend (`mods_search_advanced`, voir
+ * commands/modrinth.rs) plutôt qu'un fetch direct côté frontend — permet les
+ * filtres avancés (catégories de contenu, environnement client/serveur,
+ * licence, open source uniquement, tri) en plus de query/version/loader. */
 export async function fetchModrinthSearch(
   query: string,
   gameVersion: string,
   loader: string,
+  filters?: ModrinthSearchFilters,
 ): Promise<ModrinthHit[]> {
-  const isPlugin = loader === 'vanilla'
-  const facets: string[][] = [[`project_type:${isPlugin ? 'plugin' : 'mod'}`]]
-  if (gameVersion) facets.push([`versions:${gameVersion}`])
-  if (!isPlugin) facets.push([`categories:${loader}`])
-
-  const params = new URLSearchParams({
+  const res = await api.mods.searchAdvanced({
     query,
-    facets: JSON.stringify(facets),
-    limit: '20',
+    gameVersion: gameVersion || undefined,
+    loader,
+    categories: filters?.categories,
+    environment: filters?.environment,
+    license: filters?.license,
+    openSourceOnly: filters?.openSourceOnly,
+    sort: filters?.sort,
+    limit: 20,
   })
-
-  const res = await fetch(`https://api.modrinth.com/v2/search?${params}`, {
-    headers: { 'User-Agent': 'YuyuFrame/1.0' },
-  })
-  if (!res.ok) throw new Error(`Modrinth: ${res.status}`)
-  const data = await res.json()
-  return data.hits as ModrinthHit[]
+  return res.hits as ModrinthHit[]
 }
 
 export async function fetchLatestVersion(

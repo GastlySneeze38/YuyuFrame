@@ -45,6 +45,32 @@ export interface McAccountInfo {
   is_offline: boolean
 }
 
+export interface ModrinthAdvancedSearchInput {
+  query: string
+  gameVersion?: string
+  loader?: string
+  /// Vrais tags de contenu Modrinth (technology, magic, adventure...), PAS le
+  /// loader (déjà géré séparément par `loader`).
+  categories?: string[]
+  environment?: 'client' | 'server'
+  license?: string
+  openSourceOnly?: boolean
+  sort?: 'relevance' | 'downloads' | 'follows' | 'newest' | 'updated'
+  limit?: number
+  offset?: number
+  projectType?: string
+}
+
+export interface ModrinthSearchResponse {
+  // Champs bruts Modrinth (project_id, slug, title, categories, client_side,
+  // server_side, license, downloads, icon_url...) — pas de type strict ici,
+  // voir modUtils.ts pour le mapping vers `ModrinthHit`.
+  hits: Record<string, unknown>[]
+  offset: number
+  limit: number
+  total_hits: number
+}
+
 // ── API ──────────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -177,6 +203,9 @@ export const api = {
     ) => invoke<Array<{ name: string; safe: boolean; blockedBy: string[] }>>(
       'mods_check_update_safety', { instanceId, mcVersion, loader, candidates },
     ),
+
+    searchAdvanced: (input: ModrinthAdvancedSearchInput) =>
+      invoke<ModrinthSearchResponse>('mods_search_advanced', { input }),
   },
 
   modpacks: {
