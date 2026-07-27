@@ -16,7 +16,7 @@ const FEATURES = [
 ]
 
 const BETA_TESTERS: string[] = [
-  'Hyroky', 'Wiliking', 'SucreNormal', 'SarodayNest', 'Pumba', 'MedicalNew', 'Lpz2903', 'Smiouw',
+  'HYROKY', 'Wiliking', 'SucreNormal', 'SarodayNest', 'Pumba', 'MedicalNew', 'Lpz2903', 'Smiouw',
 ]
 
 export default function Information() {

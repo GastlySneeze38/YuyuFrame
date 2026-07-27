@@ -14,8 +14,8 @@
         "title": "YuyuFrame",
         "width": 1280,
         "height": 760,
-        "minWidth": 1024,
-        "minHeight": 640,
+        "minWidth": 900,
+        "minHeight": 560,
         "decorations": false
       }
     ],

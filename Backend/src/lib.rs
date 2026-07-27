@@ -184,6 +184,7 @@ pub fn run() {
             commands::instance::import::mods_import_paths,
             commands::instance::modpack::modpack_fetch_index,
             commands::instance::modpack::modpack_install,
+            commands::instance::modpack::modpack_install_from_path,
             commands::instance::modpack::modpack_remove,
             commands::instance::modpack::modpack_rename_file,
             commands::instance::modpack::modpack_get_meta,

@@ -95,7 +95,7 @@ export default function Settings() {
           <h1 className="font-black text-white text-[16px] tracking-[-0.01em] leading-[1.2]">
             Paramètres
           </h1>
-          <p className="text-[10px] text-white/28 mt-px">
+          <p className="text-[10px] text-[rgba(255,255,255,0.28)] mt-px">
             Configuration de YuyuFrame
           </p>
         </div>
@@ -127,7 +127,7 @@ export default function Settings() {
           })}
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-8">
+        <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto p-8">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
 
           {/* Lancement */}

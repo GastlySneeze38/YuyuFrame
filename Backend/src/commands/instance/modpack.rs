@@ -93,6 +93,12 @@ struct IndexFile {
 
 #[derive(Deserialize)]
 struct ModrinthIndex {
+    #[serde(default)]
+    name: String,
+    #[serde(default, rename = "versionId")]
+    version_id: String,
+    #[serde(default)]
+    summary: String,
     files: Vec<IndexFile>,
     #[serde(default)]
     dependencies: std::collections::HashMap<String, String>,
@@ -178,6 +184,16 @@ pub struct ModpackInstallInput {
     pub categories: Vec<String>,
 }
 
+/// Extrait `overrides/`/`client-overrides/` puis retourne les noms de fichiers
+/// `mods/` du pack. Chaque entrée est best-effort (log + on passe à la
+/// suivante) plutôt que `?` — avant, un seul fichier "overrides" problématique
+/// (nom invalide sous Windows, chemin bizarre généré par un outil tiers...)
+/// faisait échouer TOUT l'install avec `Err`, alors que les mods eux-mêmes
+/// étaient déjà téléchargés avec succès juste avant (voir `install_pack`) et
+/// que `modpack.json` n'était donc jamais écrit : le pack "s'installait"
+/// (mods présents) mais n'était plus jamais reconnu comme modpack ensuite.
+/// Même philosophie que le téléchargement des mods juste au-dessus, qui gère
+/// déjà ses échecs individuels via `failed_files` sans jamais tout annuler.
 fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<String>, String> {
     let cursor = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
@@ -185,7 +201,13 @@ fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<Stri
     // overrides/ d'abord, client-overrides/ ensuite pour qu'il ait la priorité.
     for prefix in ["overrides/", "client-overrides/"] {
         for i in 0..archive.len() {
-            let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+            let mut entry = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(e) => {
+                    tracing::warn!("[Modpack] entrée d'archive #{} illisible : {}", i, e);
+                    continue;
+                }
+            };
             let name = entry.name().to_string();
             let Some(rel) = name.strip_prefix(prefix) else { continue };
             if rel.is_empty() || name.ends_with('/') {
@@ -193,10 +215,21 @@ fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<Stri
             }
             let dest = rel.split('/').fold(dir.to_path_buf(), |acc, c| acc.join(c));
             if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    tracing::warn!("[Modpack] création du dossier pour {} échouée : {}", name, e);
+                    continue;
+                }
             }
-            let mut out = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
-            std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+            let mut out = match std::fs::File::create(&dest) {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::warn!("[Modpack] écriture de {} échouée : {}", name, e);
+                    continue;
+                }
+            };
+            if let Err(e) = std::io::copy(&mut entry, &mut out) {
+                tracing::warn!("[Modpack] copie de {} échouée : {}", name, e);
+            }
         }
     }
 
@@ -211,11 +244,74 @@ fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<Stri
 
 #[tauri::command]
 pub async fn modpack_install(app: tauri::AppHandle, input: ModpackInstallInput) -> Result<ModpackMeta, String> {
+    let bytes = download_mrpack(&input.file_url).await?;
+    install_pack(
+        &app, &input.instance_id, bytes,
+        input.project_id, input.version_id, input.name, input.author, input.summary,
+        input.icon_url, input.version_number, input.downloads, input.date_modified, input.categories,
+    ).await
+}
+
+/// Importe un `.mrpack` déjà présent sur disque (téléchargé manuellement
+/// depuis modrinth.com, partagé par quelqu'un...) au lieu d'un pack trouvé
+/// via la recherche in-app — seule différence avec `modpack_install` : pas de
+/// métadonnées de recherche Modrinth disponibles (project_id/author/downloads...),
+/// donc `name`/`summary`/`version_number` sont repris du `modrinth.index.json`
+/// lui-même (best-effort, souvent minimal) plutôt que de l'API. Les fichiers
+/// référencés par le pack (mods, resourcepacks...) restent téléchargés depuis
+/// Modrinth comme d'habitude — seul le `.mrpack` conteneur est local, pas son
+/// contenu (le format `.mrpack` ne référence jamais les jars en pièce jointe).
+#[tauri::command]
+pub async fn modpack_install_from_path(
+    app: tauri::AppHandle,
+    instance_id: String,
+    file_path: String,
+) -> Result<ModpackMeta, String> {
+    let bytes = tokio::fs::read(&file_path).await.map_err(|e| format!("Lecture du fichier : {}", e))?;
+
+    let index = {
+        let bytes = bytes.clone();
+        tokio::task::spawn_blocking(move || read_index(&bytes))
+            .await
+            .map_err(|e| e.to_string())??
+    };
+
+    let name = if index.name.trim().is_empty() {
+        std::path::Path::new(&file_path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Modpack importé".to_string())
+    } else {
+        index.name.clone()
+    };
+
+    install_pack(
+        &app, &instance_id, bytes,
+        String::new(), index.version_id.clone(), name,
+        "Import local".to_string(), index.summary.clone(), None,
+        index.version_id, 0, None, Vec::new(),
+    ).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn install_pack(
+    app: &tauri::AppHandle,
+    instance_id: &str,
+    bytes: Vec<u8>,
+    project_id: String,
+    version_id: String,
+    name: String,
+    author: String,
+    summary: String,
+    icon_url: Option<String>,
+    version_number: String,
+    downloads: u64,
+    date_modified: Option<String>,
+    categories: Vec<String>,
+) -> Result<ModpackMeta, String> {
     use tauri::Emitter;
 
-    let bytes = download_mrpack(&input.file_url).await?;
-
-    let dir = instance_dir(&input.instance_id);
+    let dir = instance_dir(instance_id);
     tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
 
     // Remplacement d'un pack précédent : on restaure d'abord les extras qu'il
@@ -337,16 +433,16 @@ pub async fn modpack_install(app: tauri::AppHandle, input: ModpackInstallInput) 
         .map_err(|e| e.to_string())??;
 
     let meta = ModpackMeta {
-        project_id: input.project_id,
-        version_id: input.version_id,
-        name: input.name,
-        author: input.author,
-        summary: input.summary,
-        icon_url: input.icon_url,
-        version_number: input.version_number,
-        downloads: input.downloads,
-        date_modified: input.date_modified,
-        categories: input.categories,
+        project_id,
+        version_id,
+        name,
+        author,
+        summary,
+        icon_url,
+        version_number,
+        downloads,
+        date_modified,
+        categories,
         mod_files,
         failed_files,
     };

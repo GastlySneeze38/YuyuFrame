@@ -13,7 +13,7 @@ export function BrowseTab({
   searching: boolean
   installing: string | null
   installProgress?: { percent: number; label: string } | null
-  isInstalled: (slug: string) => boolean
+  isInstalled: (hit: ModrinthHit) => boolean
   isPlugin: boolean
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onInstall: (hit: ModrinthHit) => void
@@ -53,7 +53,7 @@ export function BrowseTab({
           <ModrinthCard
             key={hit.project_id}
             hit={hit}
-            installed={isInstalled(hit.slug)}
+            installed={isInstalled(hit)}
             loading={installing === hit.project_id}
             progress={installing === hit.project_id ? installProgress : null}
             onInstall={() => onInstall(hit)}

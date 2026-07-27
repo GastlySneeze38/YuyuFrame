@@ -10,6 +10,7 @@ import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { BETA_TEST } from '@/config/beta'
+import { useTauriEvent } from '@/hooks/useTauriEvent'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -51,9 +52,20 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, setUser } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, setUser, setInstanceRunning } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
+
+  // Monté pour toute la durée de vie de la fenêtre principale — contrairement
+  // à l'ancien listener posé uniquement dans Home.tsx, qui se désabonnait dès
+  // qu'on naviguait ailleurs (Instances, Réglages...). Le jeu pouvait alors se
+  // fermer pendant qu'on était sur une autre page : personne ne recevait
+  // `game_state`, le store gardait `running: true` indéfiniment et le bouton
+  // "EN JEU..." restait bloqué jusqu'à un F5 complet qui réinitialise le store.
+  useTauriEvent<{ running: boolean; instance_id: string }>('game_state', ({ running, instance_id }) => {
+    setInstanceRunning(instance_id, running)
+    if (!running) getCurrentWindow().show()
+  })
 
   // Priorité aux notes de patch : si une mise à jour vient de se terminer
   // (voir UpdateChecker → relaunch()), on les affiche d'abord — le rappel

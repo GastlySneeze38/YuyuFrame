@@ -196,6 +196,8 @@ export const api = {
       dateModified: string | null
       categories: string[]
     }) => invoke<ModpackMeta>('modpack_install', { input }),
+    installFromPath: (instanceId: string, filePath: string) =>
+      invoke<ModpackMeta>('modpack_install_from_path', { instanceId, filePath }),
     getMeta: (instanceId: string) => invoke<ModpackMeta | null>('modpack_get_meta', { instanceId }),
     remove: (instanceId: string) => invoke<void>('modpack_remove', { instanceId }),
     renameFile: (instanceId: string, oldName: string, newName: string) =>

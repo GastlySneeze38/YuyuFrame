@@ -96,7 +96,7 @@ export default function Instances() {
 
         {/* Left sidebar — instance list */}
         <div
-          className="flex flex-col overflow-hidden w-[22%] min-w-[320px] flex-shrink-0 border-r border-[rgba(255,255,255,0.06)]"
+          className="flex flex-col overflow-hidden w-[22%] min-w-[240px] max-w-[320px] flex-shrink-0 border-r border-[rgba(255,255,255,0.06)]"
         >
           {/* Scrollable list */}
           <div className="flex flex-1 flex-col overflow-y-auto p-3">
@@ -173,7 +173,7 @@ export default function Instances() {
         </div>
 
         {/* Right panel — mods */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {selectedInstance ? (
             <ModsContent key={`${selectedInstance.id}-${selectedInstance.mc_version}`} instance={selectedInstance} />
           ) : (

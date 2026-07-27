@@ -88,6 +88,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [packSearching, setPackSearching] = useState(false)
   const [packInstalling, setPackInstalling] = useState<string | null>(null)
   const [packInstallProgress, setPackInstallProgress] = useState<{ percent: number; label: string } | null>(null)
+  const [packImportingFile, setPackImportingFile] = useState(false)
   const packDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -149,6 +150,36 @@ export function ModsContent({ instance }: { instance: Instance }) {
     } finally {
       unlisten()
       setPackInstalling(null)
+      setPackInstallProgress(null)
+    }
+  }
+
+  const handleImportModpackFile = async () => {
+    const picked = await open({ filters: [{ name: 'Modpack Modrinth', extensions: ['mrpack'] }] })
+    if (!picked || Array.isArray(picked)) return
+
+    // Bascule sur l'onglet modpack pour que la barre de progression ci-dessous
+    // soit visible — l'import peut être déclenché depuis n'importe quel onglet
+    // via la modal "Importer" (ImportChoiceModal), pas seulement depuis ici.
+    setTab('modpack')
+    setPackImportingFile(true)
+    setPackInstallProgress({ percent: 0, label: 'Installation du modpack...' })
+    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
+      const { current, total, label } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
+      setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
+    })
+    try {
+      const meta = await api.modpacks.installFromPath(instanceId, picked)
+      setModpackMeta(meta)
+      setTab('installed')
+      delete _modrinthCache[instanceId]
+      await loadMods()
+    } catch (e) {
+      showError(e)
+    } finally {
+      unlisten()
+      setPackImportingFile(false)
       setPackInstallProgress(null)
     }
   }
@@ -355,9 +386,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
     debounceRef.current = setTimeout(() => runSearch(q), 450)
   }
 
-  const isInstalled = (slug: string) =>
-    mods.some((m) => displayName(m.name).toLowerCase().includes(slug.toLowerCase()))
-
   const handleInstall = async (hit: ModrinthHit) => {
     setInstalling(hit.project_id)
     setInstallProgress({ percent: 0, label: 'Préparation...' })
@@ -435,12 +463,16 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Sub-header: 3 zones — gauche/centre/droite */}
+      {/* Sub-header: 3 zones — gauche/centre/droite. `overflow-x-auto` en
+          filet de sécurité : sur un écran trop étroit pour les 3 zones (le
+          groupe de boutons du centre ne rétrécit pas en dessous de son
+          contenu), la ligne devient scrollable au lieu de clipper des
+          boutons devenus inaccessibles. */}
       <div
-        className="flex flex-shrink-0 items-center px-6 py-3 border-b border-b-[rgba(255,255,255,0.05)]"
+        className="flex flex-shrink-0 items-center gap-3 overflow-x-auto px-6 py-3 border-b border-b-[rgba(255,255,255,0.05)]"
       >
         {/* Gauche : tab Installés + badge mises à jour */}
-        <div className="flex flex-1 items-center gap-1">
+        <div className="flex flex-1 items-center gap-1 min-w-max">
           <button
             onClick={() => setTab('installed')}
             className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150 border border-[rgba(75,63,207,0.35)] ${
@@ -471,7 +503,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
         </div>
 
         {/* Centre : boutons d'ajout groupés */}
-        <div className="flex items-center border border-[rgba(75,63,207,0.35)] rounded-[10px] overflow-hidden">
+        <div className="flex flex-shrink-0 items-center border border-[rgba(75,63,207,0.35)] rounded-[10px] overflow-hidden">
           <button
             onClick={() => setTab('browse')}
             className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
@@ -514,12 +546,14 @@ export function ModsContent({ instance }: { instance: Instance }) {
           </button>
         </div>
 
-        {/* Droite : informations de l'instance */}
-        <div className="flex flex-1 items-center justify-end gap-3">
+        {/* Droite : informations de l'instance — min-w-0 + truncate pour que
+            le nom d'instance cède la place aux boutons plutôt que de forcer
+            un débordement (voir overflow-x-auto ci-dessus). */}
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
           {importNotice && (
-            <span className="text-[10.5px] text-[rgba(179,163,255,0.9)]">{importNotice}</span>
+            <span className="flex-shrink-0 text-[10.5px] text-[rgba(179,163,255,0.9)]">{importNotice}</span>
           )}
-          <span className="text-[11px] text-[rgba(255,255,255,0.25)]">
+          <span className="truncate text-[11px] text-[rgba(255,255,255,0.25)]">
             {instance.name} · {mcVersion} · {loader}
           </span>
         </div>
@@ -531,6 +565,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
           onClose={() => setShowImportChoice(false)}
           onPickJars={handlePickJars}
           onPickFolder={() => setShowImportFolder(true)}
+          onPickModpack={handleImportModpackFile}
         />
       )}
 
@@ -607,22 +642,40 @@ export function ModsContent({ instance }: { instance: Instance }) {
             searching={searching}
             installing={installing}
             installProgress={installProgress}
-            isInstalled={isInstalled}
+            isInstalled={(hit) => !!installedByProject[hit.project_id]}
             isPlugin={isPlugin}
             onQueryChange={handleQueryChange}
             onInstall={handleInstall}
             onOpenDetail={setDetailHit}
           />
         ) : (
-          <ModpackBrowseTab
-            query={packQuery}
-            results={packResults}
-            searching={packSearching}
-            installing={packInstalling}
-            installProgress={packInstallProgress}
-            onQueryChange={handlePackQueryChange}
-            onInstall={handleInstallModpack}
-          />
+          <div className="flex flex-col gap-3">
+            {packImportingFile && packInstallProgress && (
+              <div className="flex flex-col gap-1.5 rounded-2xl px-4 py-3 bg-[rgba(75,63,207,0.1)] border border-[rgba(75,63,207,0.3)]">
+                <p className="text-[12px] font-semibold text-white">Import du modpack local...</p>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+                    <div
+                      className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"
+                      style={{ width: `${packInstallProgress.percent}%` }}
+                    />
+                  </div>
+                  <span className="max-w-[160px] flex-shrink-0 truncate text-[10.5px] text-[rgba(255,255,255,0.5)]">
+                    {packInstallProgress.label}
+                  </span>
+                </div>
+              </div>
+            )}
+            <ModpackBrowseTab
+              query={packQuery}
+              results={packResults}
+              searching={packSearching}
+              installing={packInstalling}
+              installProgress={packInstallProgress}
+              onQueryChange={handlePackQueryChange}
+              onInstall={handleInstallModpack}
+            />
+          </div>
         )}
       </div>
     </div>

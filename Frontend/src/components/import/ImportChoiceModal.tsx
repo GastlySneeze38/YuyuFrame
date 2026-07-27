@@ -7,11 +7,13 @@ export function ImportChoiceModal({
   onClose,
   onPickJars,
   onPickFolder,
+  onPickModpack,
   isPlugin,
 }: {
   onClose: () => void
   onPickJars: () => void
   onPickFolder: () => void
+  onPickModpack: () => void
   isPlugin: boolean
 }) {
   return (
@@ -49,6 +51,23 @@ export function ImportChoiceModal({
             <p className="font-semibold text-white text-[13px]">Dossier / autre launcher</p>
             <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
               CurseForge, MultiMC, Prism, ATLauncher, Modrinth App...
+            </p>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { onClose(); onPickModpack() }}
+          className="flex items-center gap-3 rounded-xl p-3.5 text-left transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(75,63,207,0.1)] hover:border-[rgba(75,63,207,0.35)]"
+        >
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.18)] text-[rgba(180,170,255,0.9)]">
+            <svg viewBox="0 0 24 24" fill="currentColor" width={17} height={17}>
+              <path d="M12 2 3 7v10l9 5 9-5V7l-9-5zm0 2.3 6.2 3.4L12 11.4 5.8 8l6.2-3.7zM5 9.7l6 3.4v6.9l-6-3.3V9.7zm8 10.3v-6.9l6-3.4v6.9l-6 3.4z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-semibold text-white text-[13px]">Modpack (.mrpack)</p>
+            <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
+              Fichier modpack Modrinth déjà téléchargé
             </p>
           </div>
         </button>

@@ -23,19 +23,19 @@ const FEATURES = [
   {
     title: 'Sync P2P',
     desc: 'Synchronise configurations, mods et instances entre toutes tes machines en connexion directe. Aucun cloud, aucun serveur tiers — tes données restent chez toi.',
-    icon: <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>,
+    icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>,
     path: '/sync',
   },
   {
     title: 'Statistiques avancées',
     desc: 'Suivi du temps de session, historique détaillé par instance et graphiques hebdomadaires. Visualise tes habitudes de jeu et compare tes performances dans le temps.',
-    icon: <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" /></svg>,
+    icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" /></svg>,
     path: '/stats',
   },
   {
     title: 'Accès Pro',
     desc: 'Fonctionnalités réservées aux abonnés : limites augmentées, accès anticipé aux nouvelles fonctions et support prioritaire en cas de problème.',
-    icon: <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93-2.67-1.14-5-4.43-5-7.93V7.18L12 5z" /></svg>,
+    icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93-2.67-1.14-5-4.43-5-7.93V7.18L12 5z" /></svg>,
     path: null,
   },
 ]
@@ -143,14 +143,15 @@ export default function Home() {
     }
   }, [selectedInstanceId])
 
+  // La mise à jour du store (setInstanceRunning) et le show() de la fenêtre
+  // sont gérés globalement dans App.tsx (survit à la navigation hors de cette
+  // page) — ici on ne garde que les resets propres à l'UI de lancement de
+  // cette page (barre de progression, bouton Annuler).
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', (payload) => {
-    const { running, instance_id } = payload
-    setInstanceRunning(instance_id, running)
-    if (!running) {
+    if (!payload.running) {
       clearPhase2()
       setProgress(null)
       setCancelling(false)
-      getCurrentWindow().show()
     }
   })
 
@@ -335,17 +336,20 @@ export default function Home() {
           )}
         </div>
 
-        {/* RIGHT: Launcher panel */}
-        <div className="relative flex w-[28%] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-5">
+        {/* RIGHT: Launcher panel — pas de scroll : tout est dimensionné en
+            clamp(vh) pour rétrécir avec la HAUTEUR de fenêtre (pas vw comme
+            avant — ce panneau empile ses éléments verticalement, c'est la
+            hauteur disponible qui le contraint, pas la largeur). */}
+        <div className="relative flex w-[28%] min-w-[220px] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-[clamp(6px,2.5vh,20px)]">
 
           <button
             onClick={() => navigate('/information')}
-            className="absolute top-[8px] right-[8px] w-[36px] h-[36px] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
+            className="absolute top-[8px] right-[8px] w-[clamp(24px,4.5vh,36px)] h-[clamp(24px,4.5vh,36px)] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={20} height={20}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-[55%] h-[55%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
           </button>
 
-          <h1 className="text-center font-black text-white leading-none text-[clamp(28px,3.5vw,64px)] [text-shadow:0_0_40px_rgba(75,63,207,0.60)] tracking-[-0.01em]">
+          <h1 className="text-center font-black text-white leading-none text-[clamp(16px,4.5vh,64px)] [text-shadow:0_0_40px_rgba(75,63,207,0.60)] tracking-[-0.01em]">
             YuyuFrame
           </h1>
 
@@ -358,7 +362,7 @@ export default function Home() {
                     <img
                       src={`https://mc-heads.net/avatar/${uuid}/200`}
                       alt={username}
-                      className="rounded-xl transition-all duration-200 group-hover:brightness-75 w-[clamp(80px,9vw,150px)] h-[clamp(80px,9vw,150px)] [image-rendering:pixelated] shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
+                      className="rounded-xl transition-all duration-200 group-hover:brightness-75 w-[clamp(40px,11vh,150px)] h-[clamp(40px,11vh,150px)] [image-rendering:pixelated] shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none'
                         const fb = e.currentTarget.nextElementSibling as HTMLElement | null
@@ -367,27 +371,27 @@ export default function Home() {
                     />
                   )}
                   <div
-                    className={`items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75 w-[clamp(80px,9vw,150px)] h-[clamp(80px,9vw,150px)] text-[clamp(28px,4vw,56px)] bg-[rgba(75,63,207,0.60)] [font-family:monospace] ${uuid ? 'hidden' : 'flex'}`}
+                    className={`items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75 w-[clamp(40px,11vh,150px)] h-[clamp(40px,11vh,150px)] text-[clamp(14px,5vh,56px)] bg-[rgba(75,63,207,0.60)] [font-family:monospace] ${uuid ? 'hidden' : 'flex'}`}
                   >
                     {username[0].toUpperCase()}
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6 opacity-90">
+                    <svg viewBox="0 0 24 24" fill="white" className="w-[30%] h-[30%] opacity-90">
                       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
                     </svg>
                   </div>
                 </div>
-                <span className="text-[11px] text-[rgba(255,255,255,0.4)] font-medium">{username}</span>
+                <span className="text-[clamp(9px,1.4vh,11px)] text-[rgba(255,255,255,0.4)] font-medium">{username}</span>
               </button>
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200 w-[clamp(80px,9vw,150px)] h-[clamp(80px,9vw,150px)] border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.25)] hover:border-[rgba(75,63,207,0.5)] hover:text-[rgba(120,110,230,0.7)]"
+                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200 w-[clamp(40px,11vh,150px)] h-[clamp(40px,11vh,150px)] border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.25)] hover:border-[rgba(75,63,207,0.5)] hover:text-[rgba(120,110,230,0.7)]"
               >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-[28%] h-[28%]">
                   <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" />
                 </svg>
-                <span className="text-[10px] tracking-[0.1em] font-semibold">SE CONNECTER</span>
+                <span className="text-[clamp(8px,1.3vh,10px)] tracking-[0.1em] font-semibold">SE CONNECTER</span>
               </button>
             )}
           </div>
@@ -398,17 +402,17 @@ export default function Home() {
               ne flotte pas dans un espace résiduel géré par le justify-between
               du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
               pour former une pyramide inversée. */}
-          <div className="w-full flex flex-col gap-4">
+          <div className="w-full flex flex-col gap-[clamp(6px,1.5vh,16px)]">
 
           {/* Instance selector */}
-          <div className="w-full flex flex-col gap-2">
+          <div className="w-full flex flex-col gap-[clamp(3px,0.8vh,8px)]">
             <div className="flex items-center justify-between">
-              <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">
+              <label className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">
                 Instance
               </label>
               <button
                 onClick={() => navigate('/instances')}
-                className="flex items-center gap-1 transition-colors duration-150 text-[10px] text-[rgba(75,63,207,0.7)] font-semibold hover:text-[#7872e8]"
+                className="flex items-center gap-1 transition-colors duration-150 text-[clamp(8px,1.3vh,10px)] text-[rgba(75,63,207,0.7)] font-semibold hover:text-[#7872e8]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
                 Gérer
@@ -418,14 +422,14 @@ export default function Home() {
             {instances.length === 0 ? (
               <button
                 onClick={() => navigate('/instances')}
-                className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200 h-[45px] border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[12px] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
+                className="w-full flex items-center justify-center gap-2 rounded-xl transition-all duration-200 h-[clamp(30px,6vh,45px)] border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[12px] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]"
               >
                 Créer une instance
               </button>
             ) : (
               <button
                 onClick={() => setShowInstanceSwitch(true)}
-                className="relative w-full flex items-center justify-between rounded-xl px-3 text-sm font-medium text-white outline-none h-[45px] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)] transition-all duration-150 hover:border-[rgba(75,63,207,0.4)]"
+                className="relative w-full flex items-center justify-between rounded-xl px-3 text-sm font-medium text-white outline-none h-[clamp(30px,6vh,45px)] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)] transition-all duration-150 hover:border-[rgba(75,63,207,0.4)]"
               >
                 <span className="truncate">
                   {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : 'Choisir une instance'}
@@ -438,26 +442,26 @@ export default function Home() {
 
             {/* Instance info pill */}
             {instance && (
-              <div className="w-[92%] mx-auto flex flex-col gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
+              <div className="w-[92%] mx-auto flex flex-col gap-[clamp(3px,0.8vh,6px)] px-3 py-[clamp(4px,1vh,6px)] rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
-                  <span className="text-[10px] text-[rgba(255,255,255,0.25)]">·</span>
-                  <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>
-                  <span className="text-[10px] text-[rgba(255,255,255,0.25)]">·</span>
-                  <span className="text-[10px] text-[rgba(255,255,255,0.3)]">{instance.ram_mb >= 1024 ? `${instance.ram_mb / 1024}Go` : `${instance.ram_mb}Mo`}</span>
+                  <span className="text-[clamp(8px,1.3vh,10px)] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
+                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.25)]">·</span>
+                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>
+                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.25)]">·</span>
+                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.3)]">{instance.ram_mb >= 1024 ? `${instance.ram_mb / 1024}Go` : `${instance.ram_mb}Mo`}</span>
                 </div>
 
                 <button
                   onClick={() => !gameRunning && !BETA_TEST && setP2pEnabled(!p2pEnabled)}
                   disabled={gameRunning || BETA_TEST}
                   title={BETA_TEST ? 'P2P non disponible en beta' : undefined}
-                  className={`flex items-center justify-between transition-all duration-150 h-[26px] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${BETA_TEST ? 'opacity-60' : 'opacity-100'} ${p2pToggleClasses}`}
+                  className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${BETA_TEST ? 'opacity-60' : 'opacity-100'} ${p2pToggleClasses}`}
                 >
-                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[rgba(255,255,255,0.25)]">
+                  <span className="flex items-center gap-1.5 text-[clamp(8px,1.3vh,10px)] font-semibold text-[rgba(255,255,255,0.25)]">
                     <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
                     P2P {BETA_TEST && <span className="text-[9px] opacity-60">(bêta)</span>}
                   </span>
-                  <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)]">
+                  <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)] flex-shrink-0">
                     <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />
                   </span>
                 </button>
@@ -495,7 +499,7 @@ export default function Home() {
               <button
                 onClick={username ? handleLaunch : () => navigate('/login')}
                 disabled={!!username && !selectedInstanceId}
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[52px] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[clamp(34px,7vh,52px)] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -529,11 +533,15 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── Footer ── */}
-      <div className="flex flex-shrink-0 flex-col px-6 py-4 flex-[0_0_30%] min-h-[250px] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-3">
+      {/* ── Footer ── plus de scrollbar : hauteur dictée par son propre
+          contenu (flex-shrink-0, pas de min-h/pourcentage forcé), qui
+          rétrécit lui-même via les clamp() vh ci-dessous. C'est la zone
+          principale (banner + panneau de lancement, au-dessus) qui absorbe
+          l'espace restant et scrolle si besoin — jamais le footer. */}
+      <div className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]">
 
         {/* Zone principale — s'étire pour remplir l'espace disponible */}
-        <div className="flex flex-1 flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-[clamp(8px,1.6vh,16px)]">
 
         {/* Feature cards — explicatif — remplacées par les raccourcis serveurs
             si l'utilisateur a activé "Afficher mes serveurs sur l'accueil"
@@ -554,7 +562,7 @@ export default function Home() {
                   <div
                     key={`empty-${i}`}
                     onClick={savedServers.length > 3 ? () => setShowServerManage(true) : undefined}
-                    className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-3 py-2.5 text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[9px] transition-all duration-200 ${savedServers.length > 3 ? 'cursor-pointer hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]' : ''}`}
+                    className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 ${savedServers.length > 3 ? 'cursor-pointer hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]' : ''}`}
                   >
                     {savedServers.length === 0
                       ? 'Aucun serveur enregistré'
@@ -583,15 +591,15 @@ export default function Home() {
               <div
                 key={i}
                 onClick={f.path && !betaLocked ? () => navigate(f.path!) : undefined}
-                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-3 py-2.5 transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${betaLocked ? 'cursor-not-allowed opacity-60' : f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path && !betaLocked ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
+                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${betaLocked ? 'cursor-not-allowed opacity-60' : f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path && !betaLocked ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
               >
                 <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.35)]">
-                  {f.icon}
-                  <span className="text-[10px] font-bold text-[rgba(255,255,255,0.6)] whitespace-nowrap">
+                  <span className="flex-shrink-0 text-[clamp(12px,1.6vh,16px)]">{f.icon}</span>
+                  <span className="text-[clamp(9px,1.3vh,11px)] font-bold text-[rgba(255,255,255,0.6)] whitespace-nowrap">
                     {f.title}
                   </span>
                 </div>
-                <p className="text-[9px] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
+                <p className="text-[clamp(8px,1.15vh,10px)] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
                   {f.desc}
                 </p>
               </div>
@@ -599,15 +607,18 @@ export default function Home() {
           )}
         </div>
 
-        {/* Brand | Nav | Promo — 3 colonnes égales, alignées en haut */}
-        <div className="my-auto grid gap-8 grid-cols-[auto_1fr_auto] items-center">
+        {/* Brand | Nav | Promo — 3 colonnes égales, alignées en haut.
+            overflow-x-auto en filet de sécurité : si les 7 liens de nav ne
+            tiennent plus même à leur taille clamp() minimale, la ligne
+            devient scrollable au lieu de couper les derniers liens. */}
+        <div className="my-auto grid gap-4 grid-cols-[auto_1fr_auto] items-center overflow-x-auto">
 
           {/* LEFT — Brand + compte */}
           <div className="flex flex-col gap-2">
-            <span className="font-black text-white text-[15px] tracking-[-0.01em]">
+            <span className="font-black text-white text-[clamp(13px,1.9vh,17px)] tracking-[-0.01em]">
               YuyuFrame
             </span>
-            <span className="text-[10px] text-[rgba(255,255,255,0.22)] leading-normal">
+            <span className="text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-normal">
               Le launcher Minecraft open-source.
             </span>
             <div className="flex items-center mt-1">
@@ -653,7 +664,7 @@ export default function Home() {
           </div>
 
           {/* CENTER — Nav pyramid */}
-          <div className="flex items-center justify-center gap-2 w-full [container-type:inline-size]">
+          <div className="flex min-w-0 items-center justify-center gap-2 w-full [container-type:inline-size]">
             <NavLink label="Instances" path="/instances" onClick={() => navigate('/instances')} currentPath={location.pathname} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
             </NavLink>
@@ -679,10 +690,10 @@ export default function Home() {
 
           {/* RIGHT — YuyuFrame Pro, miroir du LEFT aligné à droite */}
           <div className="flex flex-col gap-2 items-end">
-            <span className="font-black text-white text-right text-[15px] tracking-[-0.01em]">
+            <span className="font-black text-white text-right text-[clamp(13px,1.9vh,17px)] tracking-[-0.01em]">
               YuyuFrame <span className="text-[#a78bfa]">Pro</span>
             </span>
-            <span className="text-right text-[10px] text-[rgba(255,255,255,0.22)] leading-[1.6]">
+            <span className="text-right text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-[1.6]">
               Sync illimité · Stats avancées
             </span>
             {/* Pill pleine largeur : bouton | séparateur | -50% */}
@@ -712,7 +723,7 @@ export default function Home() {
 
         {/* Copyright + legal */}
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-[rgba(255,255,255,0.15)] font-medium">
+          <span className="text-[clamp(9px,1.2vh,11px)] text-[rgba(255,255,255,0.15)] font-medium">
             © 2025 YuyuFrame — Tous droits réservés
           </span>
           <div className="flex items-center gap-4">
@@ -724,7 +735,7 @@ export default function Home() {
               <button
                 key={lbl}
                 onClick={() => navigate(`/legal?tab=${tab}`)}
-                className="transition-colors duration-150 text-[10px] text-[rgba(255,255,255,0.18)] font-medium hover:text-[rgba(255,255,255,0.5)]"
+                className="transition-colors duration-150 text-[clamp(9px,1.2vh,11px)] text-[rgba(255,255,255,0.18)] font-medium hover:text-[rgba(255,255,255,0.5)]"
               >
                 {lbl}
               </button>
