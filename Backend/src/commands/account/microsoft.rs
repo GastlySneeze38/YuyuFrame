@@ -102,8 +102,17 @@ pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollRespo
             {
                 let s = state.read().await;
                 let conn = s.db.lock().await;
+                // Vérifié AVANT l'upsert — sinon un simple re-login (token expiré,
+                // reconnexion manuelle) sur un compte Microsoft déjà connu
+                // compterait comme un nouvel ajout à chaque fois (voir
+                // offline_account_created dans offline.rs, qui n'a pas ce
+                // problème car chaque appel y est une vraie création).
+                let is_new_account = db::get_mc_session(&conn, yuyu_user_id, &uuid).ok().flatten().is_none();
                 db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, &session.access_token, &ms_refresh, expires_at, false).ok();
                 db::set_active_mc(&conn, yuyu_user_id, &uuid).ok();
+                if is_new_account {
+                    crate::integrations::analytics::capture("microsoft_account_added", serde_json::json!({}));
+                }
             }
 
             let mut w = state.write().await;

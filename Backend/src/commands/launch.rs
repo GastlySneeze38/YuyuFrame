@@ -59,6 +59,9 @@ pub async fn launch_game(
         "p2p": p2p.unwrap_or(false),
         "avoid_beta_dependencies": avoid_beta.unwrap_or(true),
         "connect_server": connect_server.is_some(),
+        // "offline" = compte hors ligne (crack), "microsoft" = compte authentifié
+        // Mojang/Microsoft — voir mc_add_offline (access_token sentinelle "offline").
+        "account_type": if session.access_token == "offline" { "offline" } else { "microsoft" },
     }));
 
     // Open or reopen the console window (label unique par instance) — sauf si
