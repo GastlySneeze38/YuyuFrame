@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -30,7 +31,29 @@ static CURRENT_STATE: Mutex<PresenceState> = Mutex::new(PresenceState::Idle);
 #[derive(Clone)]
 enum PresenceState {
     Idle,
-    Playing { instance_name: String, details: String, started_at: i64 },
+    Playing { instance_name: String, details: String, started_at: i64, join_url: Option<String> },
+}
+
+/// Base du site de redirection "Rejoindre" (LauncherAPI, route `/join/{payload}`
+/// — voir `LauncherAPI/src/routes/join.rs`) : Discord n'accepte que des URLs
+/// `https://` sur les boutons d'activité, jamais un schéma custom directement
+/// (voir `yuyuframe://`, enregistré côté OS pour le launcher lui-même) — cette
+/// page fait le pont entre les deux.
+fn join_base_url() -> String {
+    std::env::var("YUYU_API_URL").unwrap_or_else(|_| "http://localhost:3000".into())
+}
+
+/// Encode `{ip, mc_version, loader}` en base64 URL-safe pour la route
+/// `/join/{payload}` de LauncherAPI — stateless : pas besoin de stocker quoi
+/// que ce soit côté serveur, la page de redirection réutilise ce même payload
+/// tel quel pour construire le lien `yuyuframe://join?data=...` (voir
+/// join.rs) : mêmes caractères des deux côtés, jamais besoin de
+/// ré-encoder/échapper quoi que ce soit. Retourne `None` si le JSON échoue à
+/// sérialiser (ne devrait jamais arriver avec ces trois chaînes).
+pub fn build_join_url(ip: &str, mc_version: &str, loader: &str) -> Option<String> {
+    let payload = serde_json::json!({ "ip": ip, "mc_version": mc_version, "loader": loader });
+    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload.to_string());
+    Some(format!("{}/join/{}", join_base_url(), encoded))
 }
 
 /// Construit l'activité Discord correspondant à `state` et l'envoie sur
@@ -49,10 +72,18 @@ fn apply_state(client: &mut DiscordIpcClient, state: &PresenceState) {
             // pas encore).
             // .assets(activity::Assets::new().large_image("yuyuframe_logo"))
             .timestamps(activity::Timestamps::new().start(chrono::Utc::now().timestamp())),
-        PresenceState::Playing { instance_name, details, started_at } => activity::Activity::new()
-            .state(instance_name)
-            .details(details)
-            .timestamps(activity::Timestamps::new().start(*started_at)),
+        PresenceState::Playing { instance_name, details, started_at, join_url } => {
+            let mut act = activity::Activity::new()
+                .state(instance_name)
+                .details(details)
+                .timestamps(activity::Timestamps::new().start(*started_at));
+            // Bouton "Rejoindre" — seulement si le lancement s'est fait avec une
+            // IP de serveur connue (voir set_playing / commands::launch).
+            if let Some(url) = join_url {
+                act = act.buttons(vec![activity::Button::new("Rejoindre", url)]);
+            }
+            act
+        }
     };
 
     if let Err(e) = client.set_activity(activity) {
@@ -128,7 +159,11 @@ fn set_state(state: PresenceState) {
 /// connexion aboutira. `instance_name`/`mc_version` pris par valeur (pas de
 /// lifetime à gérer) : appelée depuis `tokio::task::spawn_blocking`, donc
 /// déjà dans une closure `'static`.
-pub fn set_playing(instance_name: String, mc_version: String) {
+pub fn set_playing(instance_name: String, mc_version: String, server_ip: Option<String>, loader: String) {
+    // Bouton "Rejoindre" seulement si on connaît l'IP du serveur rejoint au
+    // lancement (voir `connect_server` dans commands::launch) — sans IP, rien
+    // à proposer à un ami qui cliquerait dessus.
+    let join_url = server_ip.and_then(|ip| build_join_url(&ip, &mc_version, &loader));
     set_state(PresenceState::Playing {
         details: format!("Joue à Minecraft {mc_version}"),
         instance_name,
@@ -138,6 +173,7 @@ pub fn set_playing(instance_name: String, mc_version: String) {
         // 0 à chaque nouvelle partie plutôt que de continuer à courir
         // depuis l'ouverture du launcher.
         started_at: chrono::Utc::now().timestamp(),
+        join_url,
     });
 }
 

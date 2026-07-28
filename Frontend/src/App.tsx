@@ -7,12 +7,14 @@ import { ErrorToast } from '@/components/ui/ErrorToast'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
+import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { BETA_TEST } from '@/config/beta'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
+import { parseJoinUrl } from '@/lib/joinLink'
 
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
@@ -58,6 +60,7 @@ export default function App() {
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
   const [showReconnect, setShowReconnect] = useState(false)
+  const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
   const needsReconnectRef = useRef(authSystemVersion < AUTH_SYSTEM_VERSION)
@@ -71,6 +74,26 @@ export default function App() {
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', ({ running, instance_id }) => {
     setInstanceRunning(instance_id, running)
     if (!running) getCurrentWindow().show()
+  })
+
+  // Lien yuyuframe://join?... — bouton "Rejoindre" de la Rich Presence
+  // Discord d'un ami (voir discord.rs::build_join_url). Deux chemins
+  // d'arrivée, voir commands::deep_link côté Rust :
+  // - app pas encore ouverte : l'URL était dans les arguments de lancement,
+  //   récupérée ici au montage via take_pending_deep_link (mailbox one-shot,
+  //   pas un event, pour ne pas dépendre d'un timing de montage React) ;
+  // - app déjà ouverte : `tauri_plugin_single_instance` réémet directement
+  //   l'event `deep_link_join` (pas de risque de le perdre, ce listener est
+  //   monté depuis longtemps).
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.deepLink.takePending().then((url) => {
+      if (url) setJoinRequest(parseJoinUrl(url))
+    }).catch(() => {})
+  }, [])
+
+  useTauriEvent<string>('deep_link_join', (url) => {
+    setJoinRequest(parseJoinUrl(url))
   })
 
   // Priorité aux notes de patch : si une mise à jour vient de se terminer
@@ -184,6 +207,9 @@ export default function App() {
       )}
       {showOfflineReminder && (
         <OfflinePurchaseReminderModal onClose={() => setShowOfflineReminder(false)} />
+      )}
+      {joinRequest && (
+        <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
       )}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         <Suspense fallback={<RouteFallback />}>

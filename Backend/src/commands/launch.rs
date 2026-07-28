@@ -121,7 +121,9 @@ pub async fn launch_game(
     {
         let instance_name = instance.name.clone();
         let mc_version = instance.mc_version.clone();
-        tokio::task::spawn_blocking(move || crate::integrations::discord::set_playing(instance_name, mc_version));
+        let loader = instance.loader.clone();
+        let server_ip = connect_server.clone();
+        tokio::task::spawn_blocking(move || crate::integrations::discord::set_playing(instance_name, mc_version, server_ip, loader));
     }
 
     let state_clone = state.inner().clone();

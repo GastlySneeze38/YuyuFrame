@@ -45,6 +45,11 @@
     "shell": {
       "open": true
     },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["yuyuframe"]
+      }
+    },
     "updater": {
       "active": true,
       "endpoints": [

@@ -14,7 +14,7 @@ mod state;
 pub const BETA_TEST: bool = true;
 
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::{Mutex, RwLock};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -104,11 +104,45 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        // Doit être le tout premier plugin enregistré (contrainte de la crate) :
+        // un clic sur un lien yuyuframe:// alors que l'app tourne déjà relance
+        // un second process côté OS — ce hook capte ses arguments dans le
+        // process déjà ouvert au lieu de laisser un second process inutile se
+        // lancer, et ramène la fenêtre principale au premier plan.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(url) = argv.iter().find(|a| a.starts_with("yuyuframe://")) {
+                let _ = app.emit("deep_link_join", url.clone());
+            }
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // Premier lancement (app pas encore ouverte) : l'OS a passé l'URL
+            // en argument de commande — voir commands::deep_link pour pourquoi
+            // ça ne peut pas être émis directement ici (frontend pas encore monté).
+            if let Some(url) = std::env::args().find(|a| a.starts_with("yuyuframe://")) {
+                commands::deep_link::set_pending(url);
+            }
+
+            // Enregistrement du scheme yuyuframe:// — en prod l'installeur
+            // NSIS/WiX s'en charge automatiquement (plugin déclaré dans
+            // tauri.conf.json), mais rien ne l'enregistre en dev (`cargo tauri
+            // dev`, jamais installé) : sans cet appel, un lien yuyuframe://
+            // cliqué pendant le dev n'ouvrirait jamais rien.
+            #[cfg(dev)]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register("yuyuframe") {
+                    tracing::warn!("Enregistrement du scheme yuyuframe:// (dev) échoué : {}", e);
+                }
+            }
+
             let db_path = if cfg!(dev) {
                 // Dev : garde la DB dans Backend/ à côté du code source
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("yuyu.db")
@@ -233,6 +267,7 @@ pub fn run() {
             commands::analytics::track_event,
             commands::analytics::analytics_get_disabled,
             commands::analytics::analytics_set_disabled,
+            commands::deep_link::take_pending_deep_link,
             commands::launch::list_saved_servers,
             commands::launch::ping_server,
             commands::instance::mods::mods_list,

@@ -1,5 +1,6 @@
 pub mod account;
 pub mod analytics;
+pub mod deep_link;
 pub mod instance;
 pub mod launch;
 pub mod modrinth;

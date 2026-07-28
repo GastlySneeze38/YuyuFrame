@@ -133,6 +133,16 @@ export const api = {
     removeSkin: (uuid: string) => invoke<void>('remove_account_skin', { uuid }),
   },
 
+  deepLink: {
+    // Lien yuyuframe://join?... reçu à un tout premier lancement (app pas
+    // encore ouverte quand l'OS a passé l'URL en argument) — voir
+    // commands::deep_link côté Rust pour pourquoi ça ne peut pas être un
+    // simple event émis directement (frontend pas encore monté à ce moment).
+    // Le cas "app déjà ouverte" arrive lui via l'event `deep_link_join`
+    // (voir useTauriEvent dans App.tsx).
+    takePending: () => invoke<string | null>('take_pending_deep_link'),
+  },
+
   analytics: {
     // Passerelle générique pour les événements sans contrepartie backend
     // (clic, ouverture de modal, recherche...) — voir track_event côté Rust.
