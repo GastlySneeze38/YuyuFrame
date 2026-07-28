@@ -125,15 +125,25 @@ export default function Information() {
             <InfoRow label={t('information.repository')} value="github.com/Ghasty/YuyuFrame" dim />
           </Section>
 
-          {/* Minecraft Forge */}
+          {/* Minecraft Forge — mis en évidence avec la palette violette
+              standard de l'app (même accent que la carte Branding en haut de
+              page), pour rester cohérent tout en se détachant des sections
+              neutres environnantes. */}
           <Section title={t('information.forgeTitle')}>
-            <div className="flex flex-col gap-3 rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
-              <p className="text-[12px] text-white/40 leading-[1.6]">
-                {t('information.forgeText')}
-              </p>
+            <div className="flex flex-col gap-3 rounded-xl px-4 py-3.5 bg-[rgba(75,63,207,0.1)] border border-[rgba(75,63,207,0.3)]">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[rgba(75,63,207,0.2)]">
+                  <svg viewBox="0 0 24 24" fill="#818cf8" width={16} height={16}>
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                  </svg>
+                </div>
+                <p className="text-[12px] text-white/65 leading-[1.6]">
+                  {t('information.forgeText')}
+                </p>
+              </div>
               <button
                 onClick={() => open(FORGE_PATREON_URL)}
-                className="self-start text-[12px] font-semibold text-[rgba(180,170,255,0.9)] transition-colors hover:text-[rgba(200,190,255,1)]"
+                className="flex h-9 items-center justify-center rounded-lg text-[12px] font-bold text-white bg-[#4B3FCF] transition-colors hover:bg-[#6155e8]"
               >
                 {t('information.forgeLink')}
               </button>
