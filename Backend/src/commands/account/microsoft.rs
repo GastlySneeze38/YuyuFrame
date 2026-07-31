@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::{db, minecraft::auth, state::SharedState, BETA_TEST};
+use crate::{db, minecraft::auth, state::SharedState};
 
 #[derive(Serialize)]
 pub struct DeviceAuthResponse {
@@ -27,7 +27,7 @@ pub struct PollResponse {
 pub async fn auth_start_device(
     state: tauri::State<'_, SharedState>,
 ) -> Result<DeviceAuthResponse, String> {
-    if !BETA_TEST && state.read().await.yuyu_session.is_none() {
+    if state.read().await.yuyu_session.is_none() {
         return Err("Non authentifié sur YuyuFrame".into());
     }
 
@@ -56,10 +56,6 @@ pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollRespo
         let s = state.read().await;
         match &s.yuyu_session {
             Some(y) => y.user_id,
-            // En beta, pas de compte YuyuFrame requis — 0 est déjà le
-            // placeholder "pas de compte" utilisé par le schéma (cf. table
-            // `instances`, colonne yuyu_user_id DEFAULT 0).
-            None if BETA_TEST => 0,
             None => {
                 return Ok(PollResponse {
                     status: "error".into(),
@@ -169,8 +165,7 @@ pub async fn auth_status(state: tauri::State<'_, SharedState>) -> Result<AuthSta
 #[tauri::command]
 pub async fn auth_logout(state: tauri::State<'_, SharedState>) -> Result<(), String> {
     // Pas de garde sur `yuyu_session` : se déconnecter du compte Minecraft
-    // n'a jamais nécessité d'être connecté à YuyuFrame, et en BETA_TEST ce
-    // garde bloquait carrément la déconnexion (yuyu_session toujours None).
+    // n'a jamais nécessité d'être connecté à YuyuFrame.
     state.write().await.session = None;
     Ok(())
 }

@@ -59,7 +59,7 @@ pub async fn yuyu_register(
     username: String,
     password: String,
 ) -> Result<LoginResp, String> {
-    let client = reqwest::Client::new();
+    let client = state.read().await.http.clone();
     let resp = client
         .post(format!("{}/auth/register", api_base()))
         .json(&serde_json::json!({ "username": username, "password": password }))
@@ -87,7 +87,7 @@ pub async fn yuyu_login(
     use crate::minecraft::auth as mc_auth;
     use crate::state::MinecraftSession;
 
-    let client = reqwest::Client::new();
+    let client = state.read().await.http.clone();
     let resp = client
         .post(format!("{}/auth/login", api_base()))
         .json(&serde_json::json!({ "username": username, "password": password }))
@@ -180,16 +180,16 @@ pub async fn yuyu_logout(state: tauri::State<'_, SharedState>) -> Result<(), Str
 
 #[tauri::command]
 pub async fn yuyu_refresh_plan(state: tauri::State<'_, SharedState>) -> Result<PlanResp, String> {
-    let token = {
+    let (token, client) = {
         let s = state.read().await;
-        s.yuyu_session
+        let token = s.yuyu_session
             .as_ref()
             .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
             .token
-            .clone()
+            .clone();
+        (token, s.http.clone())
     };
 
-    let client = reqwest::Client::new();
     let resp = client
         .get(format!("{}/auth/me", api_base()))
         .header("Authorization", format!("Bearer {}", token))
@@ -245,16 +245,16 @@ pub async fn yuyu_create_checkout(
     state: tauri::State<'_, SharedState>,
     plan: String,
 ) -> Result<CheckoutResp, String> {
-    let token = {
+    let (token, client) = {
         let s = state.read().await;
-        s.yuyu_session
+        let token = s.yuyu_session
             .as_ref()
             .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
             .token
-            .clone()
+            .clone();
+        (token, s.http.clone())
     };
 
-    let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/payments/create-checkout", api_base()))
         .header("Authorization", format!("Bearer {}", token))
@@ -285,16 +285,16 @@ pub async fn yuyu_dev_simulate_payment(
     state: tauri::State<'_, SharedState>,
     plan: String,
 ) -> Result<PlanResp, String> {
-    let token = {
+    let (token, client) = {
         let s = state.read().await;
-        s.yuyu_session
+        let token = s.yuyu_session
             .as_ref()
             .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
             .token
-            .clone()
+            .clone();
+        (token, s.http.clone())
     };
 
-    let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/dev/simulate-payment", api_base()))
         .header("Authorization", format!("Bearer {}", token))

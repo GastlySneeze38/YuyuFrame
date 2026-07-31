@@ -11,7 +11,6 @@ import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServ
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
-import { BETA_TEST } from '@/config/beta'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseJoinUrl } from '@/lib/joinLink'
@@ -46,7 +45,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { yuyuToken } = useStore()
 
   useEffect(() => {
-    if (BETA_TEST) return
     if (!yuyuToken && pathname !== '/yuyu') {
       navigate('/yuyu', { replace: true })
     }
@@ -214,8 +212,7 @@ export default function App() {
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            {/* YuyuFrame account gate — skipped in beta */}
-            <Route path="/yuyu" element={BETA_TEST ? <Navigate to="/home" replace /> : <YuyuLogin />} />
+            <Route path="/yuyu" element={<YuyuLogin />} />
 
             {/* Protected routes */}
             <Route

@@ -42,13 +42,12 @@ pub async fn sync_list_saves(instance_id: String) -> Result<Vec<SaveInfo>, Strin
 pub async fn sync_list_instances(
     state: tauri::State<'_, SharedState>,
 ) -> Result<Vec<SyncInstance>, String> {
-    let token = {
+    let (token, client) = {
         let s = state.read().await;
         require_premium(&s)?;
-        get_token(&s)?
+        (get_token(&s)?, s.http.clone())
     };
 
-    let client = reqwest::Client::new();
     let resp = client
         .get(format!("{}/sync/instances", api_base()))
         .bearer_auth(&token)
@@ -72,7 +71,7 @@ pub async fn sync_push_instance(
 ) -> Result<SyncInstance, String> {
     use crate::db;
 
-    let (token, instance) = {
+    let (token, instance, client) = {
         let s = state.read().await;
         require_premium(&s)?;
         let token = get_token(&s)?;
@@ -81,13 +80,8 @@ pub async fn sync_push_instance(
         let row = db::instance_get(&conn, &instance_id, user_id)
             .map_err(|e| e.to_string())?
             .ok_or("Instance introuvable")?;
-        (token, row)
+        (token, row, s.http.clone())
     };
-
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
 
     // ── Étape 1 : Construire le manifest des mods ─────────────────────────────
     app.emit("sync_progress", SyncProgressEvent {
@@ -196,10 +190,14 @@ pub async fn sync_push_instance(
         label: "Envoi vers le cloud...".into(),
     }).ok();
 
+    // Timeout par requête plus large que le défaut du client partagé (30s) :
+    // ce transfert peut atteindre 200 Mo, largement au-delà de ce qu'un appel
+    // API classique (auth, métadonnées) doit jamais prendre.
     let data_resp = client
         .post(format!("{}/sync/instances/{}/data", api_base(), sync_id))
         .bearer_auth(&token)
         .header("Content-Type", "application/octet-stream")
+        .timeout(std::time::Duration::from_secs(300))
         .body(zip_bytes)
         .send()
         .await
@@ -229,10 +227,10 @@ pub async fn sync_pull_instance(
     sync_id: i64,
     instance_id: String,
 ) -> Result<(), String> {
-    let token = {
+    let (token, client) = {
         let s = state.read().await;
         require_premium(&s)?;
-        get_token(&s)?
+        (get_token(&s)?, s.http.clone())
     };
 
     // ── Étape 1 : Télécharger le ZIP ─────────────────────────────────────────
@@ -242,14 +240,12 @@ pub async fn sync_pull_instance(
         label: "Téléchargement depuis le cloud...".into(),
     }).ok();
 
-    let client = reqwest::Client::builder()
-        .user_agent("YuyuFrame/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
-
+    // Timeout par requête plus large que le défaut du client partagé (30s) —
+    // même raison que sync_push_instance : jusqu'à 200 Mo à transférer.
     let resp = client
         .get(format!("{}/sync/instances/{}/data", api_base(), sync_id))
         .bearer_auth(&token)
+        .timeout(std::time::Duration::from_secs(300))
         .send()
         .await
         .map_err(|e| format!("Serveur inaccessible : {e}"))?;
@@ -375,13 +371,12 @@ pub async fn sync_delete_instance(
     state: tauri::State<'_, SharedState>,
     sync_id: i64,
 ) -> Result<(), String> {
-    let token = {
+    let (token, client) = {
         let s = state.read().await;
         require_premium(&s)?;
-        get_token(&s)?
+        (get_token(&s)?, s.http.clone())
     };
 
-    let client = reqwest::Client::new();
     let resp = client
         .delete(format!("{}/sync/instances/{}", api_base(), sync_id))
         .bearer_auth(&token)

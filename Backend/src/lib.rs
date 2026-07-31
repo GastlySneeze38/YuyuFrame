@@ -5,14 +5,6 @@ mod minecraft;
 mod paths;
 mod state;
 
-/// Miroir de `Frontend/src/config/beta.ts` — pendant la beta, le frontend
-/// saute l'écran de connexion YuyuFrame, mais le backend l'ignorait
-/// totalement et continuait à exiger un `yuyu_session` valide pour lier un
-/// compte Minecraft (auth_start_device/auth_poll), bloquant tout le monde en
-/// beta. Garder les deux flags synchronisés à la main (pas de mécanisme de
-/// partage Frontend/Backend pour cette constante).
-pub const BETA_TEST: bool = true;
-
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::{Mutex, RwLock};
@@ -173,15 +165,12 @@ pub fn run() {
                     }
                 });
 
-            // Restaurer la session MC active depuis la DB. En BETA_TEST il n'y a
-            // jamais de `yuyu_session` (login YuyuFrame skippé), donc gater cette
-            // restauration sur sa présence faisait que `session` restait toujours
-            // `None` au démarrage — le jeu refusait de se lancer depuis Home tant
-            // qu'on n'était pas passé par mc_switch (page Login) pour le repeupler
-            // en mémoire. Même règle que `state::AppState::current_yuyu_user_id`
-            // (dupliquée ici car l'`AppState` n'existe pas encore à ce stade du
-            // setup) : 0 est le placeholder "pas de compte" déjà utilisé dans le
-            // schéma (cf. table `instances`, colonne yuyu_user_id DEFAULT 0).
+            // Restaurer la session MC active depuis la DB, sous le même id
+            // YuyuFrame que `state::AppState::current_yuyu_user_id` (dupliqué
+            // ici car l'`AppState` n'existe pas encore à ce stade du setup) : 0
+            // est le placeholder "pas de compte" déjà utilisé dans le schéma
+            // (cf. table `instances`, colonne yuyu_user_id DEFAULT 0), utilisé
+            // tant qu'aucune session YuyuFrame n'est restaurée.
             let mc_yuyu_user_id = yuyu_session.as_ref().map(|ys| ys.user_id).unwrap_or(0);
             let mc_session = (|| {
                 let active_uuid = db::get_active_mc_uuid(&conn, mc_yuyu_user_id).ok().flatten()?;
@@ -198,8 +187,22 @@ pub fn run() {
 
             let instance_id_migrations = migrate_legacy_instance_ids(&conn);
 
+            // Timeout par défaut généreux mais fini : les appels LauncherAPI
+            // classiques (auth, métadonnées sync) répondent en dessous de la
+            // seconde, mais sans timeout une API down/pool DB saturé bloque la
+            // commande Tauri indéfiniment sans jamais remonter d'erreur au
+            // frontend. Les uploads/téléchargements de sync (jusqu'à 200 Mo)
+            // passent leur propre timeout plus large par requête.
+            let http = reqwest::Client::builder()
+                .user_agent("YuyuFrame/1.0")
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("Impossible de construire le client HTTP");
+
             let app_state: state::SharedState = Arc::new(RwLock::new(state::AppState {
                 db: Arc::new(Mutex::new(conn)),
+                http,
                 yuyu_session,
                 session: mc_session,
                 download_progress: None,

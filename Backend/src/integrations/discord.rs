@@ -40,7 +40,7 @@ enum PresenceState {
 /// (voir `yuyuframe://`, enregistré côté OS pour le launcher lui-même) — cette
 /// page fait le pont entre les deux.
 fn join_base_url() -> String {
-    std::env::var("YUYU_API_URL").unwrap_or_else(|_| "http://localhost:3000".into())
+    std::env::var("YUYU_API_URL").unwrap_or_else(|_| "https://api.yuyuframe.eu".into())
 }
 
 /// Encode `{ip, mc_version, loader}` en base64 URL-safe pour la route

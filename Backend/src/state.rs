@@ -57,6 +57,12 @@ pub struct AuthDeviceCode {
 
 pub struct AppState {
     pub db: Arc<Mutex<Connection>>,
+    /// Client HTTP partagé pour tous les appels à la LauncherAPI (auth, sync,
+    /// paiement) — construit une seule fois au démarrage (voir `lib.rs`) pour
+    /// garder les connexions TCP/TLS vivantes entre les appels au lieu de
+    /// renégocier une poignée de main complète à chaque commande (mesurable
+    /// depuis que l'API tourne en `https://` sur le VPS et plus en local).
+    pub http: reqwest::Client,
     pub yuyu_session: Option<YuyuSession>,
     pub session: Option<MinecraftSession>,
     pub download_progress: Option<DownloadProgress>,
@@ -82,19 +88,9 @@ impl AppState {
     }
 
     /// Id à utiliser pour les requêtes DB/state liées à un compte YuyuFrame.
-    /// En `BETA_TEST`, il n'y a jamais de `yuyu_session` (le login YuyuFrame
-    /// est skippé) — 0 est le placeholder "pas de compte" déjà utilisé dans
-    /// le schéma (cf. table `instances`, colonne yuyu_user_id DEFAULT 0).
-    /// Source unique de vérité : avant l'introduction de ce helper, ce même
-    /// garde était dupliqué à la main dans `auth.rs`/`mc.rs`, et certains
-    /// endroits (restauration de session au démarrage, `auth_logout`)
-    /// l'oubliaient, bloquant des fonctionnalités entières en beta.
+    /// `None` tant qu'aucune session YuyuFrame n'est active.
     pub fn current_yuyu_user_id(&self) -> Option<i64> {
-        match &self.yuyu_session {
-            Some(y) => Some(y.user_id),
-            None if crate::BETA_TEST => Some(0),
-            None => None,
-        }
+        self.yuyu_session.as_ref().map(|y| y.user_id)
     }
 }
 

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { BETA_TEST } from '@/config/beta'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { loaderColor } from '@/lib/loader'
@@ -296,11 +295,9 @@ export default function Home() {
     ? Math.round(progress.current / progress.total * 100)
     : 0
 
-  const p2pToggleClasses = BETA_TEST
-    ? 'bg-[rgba(255,255,255,0.01)] border border-[rgba(255,255,255,0.04)]'
-    : p2pEnabled
-      ? 'bg-[rgba(75,63,207,0.18)] border border-[rgba(120,100,255,0.35)]'
-      : 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]'
+  const p2pToggleClasses = p2pEnabled
+    ? 'bg-[rgba(75,63,207,0.18)] border border-[rgba(120,100,255,0.35)]'
+    : 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]'
 
   const launchBtnBg = canLaunch
     ? 'bg-[#4B3FCF] hover:bg-[#6155e8]'
@@ -498,14 +495,13 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => !gameRunning && !BETA_TEST && setP2pEnabled(!p2pEnabled)}
-                  disabled={gameRunning || BETA_TEST}
-                  title={BETA_TEST ? t('home.p2pDisabledInBeta') : undefined}
-                  className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${BETA_TEST ? 'opacity-60' : 'opacity-100'} ${p2pToggleClasses}`}
+                  onClick={() => !gameRunning && setP2pEnabled(!p2pEnabled)}
+                  disabled={gameRunning}
+                  className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer opacity-100 ${p2pToggleClasses}`}
                 >
                   <span className="flex items-center gap-1.5 text-[clamp(8px,1.3vh,10px)] font-semibold text-[rgba(255,255,255,0.25)]">
                     <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
-                    {t('home.p2p')} {BETA_TEST && <span className="text-[9px] opacity-60">{t('home.p2pBeta')}</span>}
+                    {t('home.p2p')}
                   </span>
                   <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)] flex-shrink-0">
                     <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />
@@ -631,13 +627,11 @@ export default function Home() {
               )}
             </>
           ) : (
-            FEATURES.map((f, i) => {
-              const betaLocked = BETA_TEST && (f.path === '/sync')
-              return (
+            FEATURES.map((f, i) => (
               <div
                 key={i}
-                onClick={f.path && !betaLocked ? () => navigate(f.path!) : undefined}
-                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${betaLocked ? 'cursor-not-allowed opacity-60' : f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path && !betaLocked ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
+                onClick={f.path ? () => navigate(f.path!) : undefined}
+                className={`flex flex-1 flex-col gap-1.5 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
               >
                 <div className="flex items-center gap-1.5 text-[rgba(255,255,255,0.35)]">
                   <span className="flex-shrink-0 text-[clamp(12px,1.6vh,16px)]">{f.icon}</span>
@@ -649,7 +643,7 @@ export default function Home() {
                   {f.desc}
                 </p>
               </div>
-            )})
+            ))
           )}
         </div>
 
@@ -717,10 +711,10 @@ export default function Home() {
             <NavLink label={t('home.nav.settings')} path="/settings" onClick={() => navigate('/settings')} currentPath={location.pathname} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.sync')} path="/sync" onClick={() => navigate('/sync')} currentPath={location.pathname} distance={1} accent disabled={BETA_TEST}>
+            <NavLink label={t('home.nav.sync')} path="/sync" onClick={() => navigate('/sync')} currentPath={location.pathname} distance={1} accent>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.plans')} path="/plans" onClick={() => navigate('/plans')} currentPath={location.pathname} distance={0} plans disabled={BETA_TEST}>
+            <NavLink label={t('home.nav.plans')} path="/plans" onClick={() => navigate('/plans')} currentPath={location.pathname} distance={0} plans>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
             </NavLink>
             <NavLink label={t('home.nav.stats')} path="/stats" onClick={() => navigate('/stats')} currentPath={location.pathname} distance={1} accent>
@@ -729,7 +723,7 @@ export default function Home() {
             <NavLink label={t('home.nav.account')} path="/login" onClick={() => navigate('/login')} currentPath={location.pathname} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.server')} path="/server" onClick={() => navigate('/server')} currentPath={location.pathname} distance={3} disabled={BETA_TEST}>
+            <NavLink label={t('home.nav.server')} path="/server" onClick={() => navigate('/server')} currentPath={location.pathname} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
             </NavLink>
           </div>
@@ -836,10 +830,9 @@ const NAV_ICON_CLASSES = [
   'w-[clamp(11px,1.7cqw,14px)] h-[clamp(11px,1.7cqw,14px)]',
 ]
 
-function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPath, disabled, children }: {
-  label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number; path?: string; currentPath?: string; disabled?: boolean; children: React.ReactNode
+function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPath, children }: {
+  label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number; path?: string; currentPath?: string; children: React.ReactNode
 }) {
-  const t = useT()
   // Tailles relatives à la fenêtre via clamp — s'adaptent à toutes les largeurs
   // Unités cqw : relatives à la largeur réellement disponible pour la nav (container query),
   // plutôt qu'à la largeur de toute la fenêtre — la nav s'adapte donc à la place qui lui est laissée.
@@ -849,20 +842,16 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
   const bgBorderShadow = plans
     ? 'bg-[rgba(75,63,207,0.1)] border border-[rgba(120,100,255,0.22)] shadow-[0_0_18px_rgba(75,63,207,0.12)_inset]'
     : 'bg-transparent border border-transparent shadow-none'
-  const hoverClasses = disabled
-    ? ''
-    : plans
-      ? 'hover:text-[#e9d5ff] hover:bg-[rgba(75,63,207,0.22)] hover:border-[rgba(139,92,246,0.48)]'
-      : accent
-        ? 'hover:text-[#c4b5fd] hover:bg-[rgba(139,92,246,0.22)] hover:border-[rgba(139,92,246,0.60)]'
-        : 'hover:text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.06)]'
+  const hoverClasses = plans
+    ? 'hover:text-[#e9d5ff] hover:bg-[rgba(75,63,207,0.22)] hover:border-[rgba(139,92,246,0.48)]'
+    : accent
+      ? 'hover:text-[#c4b5fd] hover:bg-[rgba(139,92,246,0.22)] hover:border-[rgba(139,92,246,0.60)]'
+      : 'hover:text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.06)]'
 
   return (
     <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={disabled ? t('home.navDisabledInBeta') : undefined}
-      className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap disabled:cursor-not-allowed cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${disabled ? 'opacity-60' : 'opacity-100'} ${hoverClasses}`}
+      onClick={onClick}
+      className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} opacity-100 ${hoverClasses}`}
     >
       <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
       {label}

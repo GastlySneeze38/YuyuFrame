@@ -4,7 +4,6 @@ import { open } from '@tauri-apps/plugin-shell'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { YuyuPlan } from '@/stores/useStore'
-import { BETA_TEST } from '@/config/beta'
 import { getPlans } from '@/data/plans'
 import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PlanIcon } from '@/components/plans/PlanIcon'
@@ -19,26 +18,6 @@ export default function Plans() {
   const navigate = useNavigate()
   const t = useT()
   const { yuyuPlanExpiresAt, yuyuUsername, isPremium, isUltimate, setYuyuPlan, language } = useStore()
-
-  if (BETA_TEST) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D]">
-        <div className="opacity-[0.15]">
-          <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
-        </div>
-        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">{t('plans.betaUnavailable')}</p>
-        <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
-          {t('plans.betaUnavailableDesc')}
-        </p>
-        <button
-          onClick={() => navigate('/home')}
-          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
-        >
-          {t('plans.back')}
-        </button>
-      </div>
-    )
-  }
 
   const PLANS = getPlans(t)
 
