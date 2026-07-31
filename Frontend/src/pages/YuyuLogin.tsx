@@ -73,7 +73,8 @@ export default function YuyuLogin() {
 
   if (mode === 'checking') {
     return (
-      <div className="flex h-full items-center justify-center bg-[#09090D]">
+      <div className="relative flex h-full items-center justify-center bg-[#09090D]">
+        <BackButton onClick={() => navigate('/home')} />
         <div
           className="h-8 w-8 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.1)] border-t-[#4B3FCF]"
         />
@@ -83,7 +84,8 @@ export default function YuyuLogin() {
 
   if (mode === 'error') {
     return (
-      <div className="flex h-full items-center justify-center bg-[#09090D]">
+      <div className="relative flex h-full items-center justify-center bg-[#09090D]">
+        <BackButton onClick={() => navigate('/home')} />
         <div className="flex flex-col items-center gap-4">
           <p className="text-[rgba(255,100,100,0.8)] text-[13px]">
             {t('yuyuLogin.cannotContactBackend')}
@@ -102,7 +104,8 @@ export default function YuyuLogin() {
   const isRegister = mode === 'register'
 
   return (
-    <div className="flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D]">
+      <BackButton onClick={() => navigate('/home')} />
 
       {/* Background glow */}
       <div
@@ -212,6 +215,19 @@ export default function YuyuLogin() {
         </div>
       </div>
     </div>
+  )
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  const t = useT()
+  return (
+    <button
+      onClick={onClick}
+      className="absolute left-5 top-5 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-[rgba(255,255,255,0.4)] transition-all duration-150 hover:bg-[rgba(255,255,255,0.05)] hover:text-white"
+    >
+      <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" /></svg>
+      {t('yuyuLogin.back')}
+    </button>
   )
 }
 

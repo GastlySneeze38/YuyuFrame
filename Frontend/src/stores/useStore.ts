@@ -18,6 +18,13 @@ interface Store {
   isPremium: () => boolean
   isUltimate: () => boolean
 
+  // ── Connectivité LauncherAPI (jamais persistée — revérifiée à chaque
+  // démarrage) — `null` tant qu'aucun check n'a encore abouti, pour ne pas
+  // afficher le badge hors-ligne une fraction de seconde avant le tout
+  // premier ping. Purement indicatif : ne bloque jamais rien (voir App.tsx).
+  apiOnline: boolean | null
+  setApiOnline: (v: boolean | null) => void
+
   // ── Active Minecraft account ───────────────────────────────────────────────
   username: string | null
   uuid: string | null
@@ -165,6 +172,9 @@ export const useStore = create<Store>()(
         const notExpired = yuyuPlanExpiresAt === null || yuyuPlanExpiresAt > Date.now() / 1000
         return yuyuPlan === 'ultimate' && notExpired
       },
+
+      apiOnline: null,
+      setApiOnline: (apiOnline) => set({ apiOnline }),
 
       // Active MC account
       username: null,

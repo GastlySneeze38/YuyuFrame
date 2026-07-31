@@ -103,6 +103,7 @@ export const api = {
 
   yuyu: {
     status: () => invoke<YuyuStatusResp>('yuyu_status'),
+    ping: () => invoke<boolean>('yuyu_ping'),
     register: (username: string, password: string) =>
       invoke<YuyuLoginResp>('yuyu_register', { username, password }),
     login: (username: string, password: string) =>

@@ -1,10 +1,12 @@
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useStore } from '@/stores/useStore'
+import { useT } from '@/i18n'
 
 const win = getCurrentWindow()
 
 export function TitleBar() {
-  const { username } = useStore()
+  const t = useT()
+  const { username, apiOnline } = useStore()
 
   const minimize = () => win.minimize()
   const maximize = () => win.toggleMaximize()
@@ -21,6 +23,17 @@ export function TitleBar() {
         <span className="text-xs font-bold tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
           YUYUFRAME
         </span>
+        {apiOnline === false && (
+          <span
+            title={t('titleBar.apiOffline')}
+            className="flex items-center justify-center"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width={11} height={11} className="text-[rgba(255,160,60,0.55)]">
+              <path d="M8.5 16.5a5 5 0 0 1 7 0M5 13a9.5 9.5 0 0 1 14 0M12 20h.01" strokeLinecap="round" />
+              <line x1="3" y1="3" x2="21" y2="21" strokeLinecap="round" />
+            </svg>
+          </span>
+        )}
       </div>
 
       {/* Center: user info + theme toggle */}

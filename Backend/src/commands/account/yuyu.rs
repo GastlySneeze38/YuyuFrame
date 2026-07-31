@@ -53,6 +53,25 @@ pub async fn yuyu_status(state: tauri::State<'_, SharedState>) -> Result<StatusR
     Ok(StatusResp { has_account: s.yuyu_session.is_some() })
 }
 
+/// Ping léger de la LauncherAPI (`GET /health`) pour l'indicateur de
+/// connectivité du frontend — ne renvoie jamais d'erreur (une panne réseau
+/// donne juste `false`), volontairement : ce check ne doit jamais déclencher
+/// de toast d'erreur, juste un petit badge discret côté UI. Timeout court
+/// (5s, largement sous celui du client partagé) pour ne pas retarder le
+/// prochain check périodique si l'API traîne à répondre.
+#[tauri::command]
+pub async fn yuyu_ping(state: tauri::State<'_, SharedState>) -> Result<bool, ()> {
+    let client = state.read().await.http.clone();
+    let ok = client
+        .get(format!("{}/health", api_base()))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false);
+    Ok(ok)
+}
+
 #[tauri::command]
 pub async fn yuyu_register(
     state: tauri::State<'_, SharedState>,

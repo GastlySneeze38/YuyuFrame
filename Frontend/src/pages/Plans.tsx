@@ -106,6 +106,14 @@ export default function Plans() {
 
           {/* Current plan badge + refresh */}
           <div className="flex flex-col items-end gap-2 w-[100px]">
+            {!yuyuUsername && (
+              <button
+                onClick={() => navigate('/yuyu')}
+                className="rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+              >
+                {t('plans.loginCta')}
+              </button>
+            )}
             {yuyuUsername && (
               <>
                 <div className="flex flex-col items-end gap-0.5">

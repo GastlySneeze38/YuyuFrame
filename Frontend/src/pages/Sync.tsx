@@ -173,6 +173,12 @@ export default function Sync() {
             <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">
               {t('sync.loginToSyncLine1')}<br />{t('sync.loginToSyncLine2')}
             </p>
+            <button
+              onClick={() => navigate('/yuyu')}
+              className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+            >
+              {t('sync.loginCta')}
+            </button>
           </div>
         ) : !isPremium() ? (
           <PremiumGate

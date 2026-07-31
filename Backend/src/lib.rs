@@ -244,6 +244,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::account::yuyu::yuyu_status,
+            commands::account::yuyu::yuyu_ping,
             commands::account::yuyu::yuyu_register,
             commands::account::yuyu::yuyu_login,
             commands::account::yuyu::yuyu_logout,

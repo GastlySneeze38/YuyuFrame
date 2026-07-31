@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Navigate, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
@@ -39,22 +39,8 @@ function RouteFallback() {
 const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const { yuyuToken } = useStore()
-
-  useEffect(() => {
-    if (!yuyuToken && pathname !== '/yuyu') {
-      navigate('/yuyu', { replace: true })
-    }
-  }, [yuyuToken, pathname])
-
-  return <>{children}</>
-}
-
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
   const [showReconnect, setShowReconnect] = useState(false)
@@ -179,6 +165,18 @@ export default function App() {
     return () => clearInterval(interval)
   }, [])
 
+  // Connectivité LauncherAPI — purement indicative (petit badge dans la
+  // TitleBar, voir apiOnline dans useStore), jamais de blocage ni de toast :
+  // `yuyu_ping` ne rejette jamais (voir commands::account::yuyu::yuyu_ping),
+  // donc pas de .catch() nécessaire ici.
+  useEffect(() => {
+    if (isConsoleWindow) return
+    const ping = () => api.yuyu.ping().then(setApiOnline)
+    ping()
+    const interval = setInterval(ping, 45 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   if (isConsoleWindow) {
     return (
       <Suspense fallback={<RouteFallback />}>
@@ -213,29 +211,18 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/yuyu" element={<YuyuLogin />} />
-
-            {/* Protected routes */}
-            <Route
-              path="/*"
-              element={
-                <AuthGuard>
-                  <Routes>
-                    <Route path="/" element={<Navigate to="/home" replace />} />
-                    <Route path="/home" element={<Home />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/instances" element={<Instances />} />
-                    <Route path="/mods" element={<Mods />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/information" element={<Information />} />
-                    <Route path="/legal" element={<Legal />} />
-                    <Route path="/sync" element={<Sync />} />
-                    <Route path="/plans" element={<Plans />} />
-                    <Route path="/stats" element={<Stats />} />
-                    <Route path="/server" element={<Server />} />
-                  </Routes>
-                </AuthGuard>
-              }
-            />
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/instances" element={<Instances />} />
+            <Route path="/mods" element={<Mods />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/information" element={<Information />} />
+            <Route path="/legal" element={<Legal />} />
+            <Route path="/sync" element={<Sync />} />
+            <Route path="/plans" element={<Plans />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/server" element={<Server />} />
           </Routes>
         </Suspense>
       </div>

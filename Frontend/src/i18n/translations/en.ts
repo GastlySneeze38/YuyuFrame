@@ -4,6 +4,9 @@ import type { TranslationSchema } from './fr'
 // même imbrication) que fr.ts. Si une clé manque ici, i18n/index.ts retombe
 // automatiquement sur le français plutôt que d'afficher la clé brute.
 export const en: TranslationSchema = {
+  titleBar: {
+    apiOffline: 'YuyuFrame server unreachable — local instances and gameplay remain available',
+  },
   common: {
     open: 'Open',
     change: 'Change...',
@@ -141,6 +144,7 @@ export const en: TranslationSchema = {
     quotaFooter: 'mods/ + config/ + selected saves · {{quota}} saves max · Premium',
     loginToSyncLine1: 'Sign in to YuyuFrame',
     loginToSyncLine2: 'to sync your instances',
+    loginCta: 'Log in',
     gateDescription: 'Multi-PC sync is reserved for Premium and Ultimate subscribers.',
     gateFeature1: 'Sync mods, configs & saves across your PCs',
     gateFeature2: 'Up to 3 cloud saves (10 on Ultimate)',
@@ -194,6 +198,7 @@ export const en: TranslationSchema = {
     passwordTooShort: 'Password must be at least 4 characters.',
     cannotContactBackend: 'Could not reach the backend.',
     retry: 'Retry',
+    back: 'Back',
     registerTagline: 'Create your launcher account to protect your sessions',
     loginTagline: 'Enter your password to access the launcher',
     createAccount: 'Create an account',
@@ -606,6 +611,7 @@ export const en: TranslationSchema = {
   },
   plans: {
     back: 'Back',
+    loginCta: 'Log in',
     title: 'YuyuFrame Plans',
     subtitle: 'Choose the experience that suits you',
     yourPlan: 'Your plan',

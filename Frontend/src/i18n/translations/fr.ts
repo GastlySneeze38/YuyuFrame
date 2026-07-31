@@ -2,6 +2,9 @@
 // filet de secours (voir i18n/index.ts) si une clé manque dans une autre
 // langue : toujours tenir ce fichier à jour en premier.
 export const fr = {
+  titleBar: {
+    apiOffline: 'Serveur YuyuFrame injoignable — instances et jeu en local restent utilisables',
+  },
   common: {
     open: 'Ouvrir',
     change: 'Changer...',
@@ -139,6 +142,7 @@ export const fr = {
     quotaFooter: 'mods/ + config/ + saves sélectionnées · {{quota}} saves max · Premium',
     loginToSyncLine1: 'Connecte-toi à YuyuFrame',
     loginToSyncLine2: 'pour synchroniser tes instances',
+    loginCta: 'Se connecter',
     gateDescription: 'La synchronisation multi-PC est réservée aux abonnés Premium et Ultimate.',
     gateFeature1: 'Sync mods, configs & saves entre tes PCs',
     gateFeature2: "Jusqu'à 3 saves cloud (10 en Ultimate)",
@@ -192,6 +196,7 @@ export const fr = {
     passwordTooShort: 'Le mot de passe doit faire au moins 4 caractères.',
     cannotContactBackend: 'Impossible de contacter le backend.',
     retry: 'Réessayer',
+    back: 'Retour',
     registerTagline: 'Crée ton compte lanceur pour protéger tes sessions',
     loginTagline: 'Entre ton mot de passe pour accéder au lanceur',
     createAccount: 'Créer un compte',
@@ -604,6 +609,7 @@ export const fr = {
   },
   plans: {
     back: 'Retour',
+    loginCta: 'Se connecter',
     title: 'Plans YuyuFrame',
     subtitle: 'Choisissez l\'expérience qui vous correspond',
     yourPlan: 'Votre plan',
