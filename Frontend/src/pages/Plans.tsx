@@ -7,7 +7,6 @@ import type { YuyuPlan } from '@/stores/useStore'
 import { getPlans } from '@/data/plans'
 import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PlanIcon } from '@/components/plans/PlanIcon'
-import { DevPaymentSimulator } from '@/components/plans/DevPaymentSimulator'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
@@ -53,14 +52,15 @@ export default function Plans() {
     setCheckoutState('loading')
     setCheckoutError(null)
     try {
-      if (import.meta.env.DEV) {
-        const resp = await api.yuyu.devSimulatePayment(planId)
-        setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-        setCheckoutState('success')
-        setTimeout(() => { setUpgradeTarget(null); setCheckoutState('idle') }, 2500)
-        return
-      }
       const { checkout_url } = await api.yuyu.createCheckout(planId)
+      // Défense en profondeur : n'ouvrir que des URLs https — au cas où la
+      // réponse serait un jour corrompue/interceptée (API compromise,
+      // YUYU_API_URL pointé vers un serveur non fiable), on n'ouvre jamais
+      // aveuglément un schéma arbitraire (file://, javascript:, etc.) via le
+      // shell de l'OS.
+      if (!checkout_url.startsWith('https://')) {
+        throw t('plans.invalidCheckoutUrl')
+      }
       await open(checkout_url)
       api.analytics.track('checkout_redirected', { plan: planId })
       setCheckoutState('waiting')
@@ -164,17 +164,6 @@ export default function Plans() {
           </div>
         )}
 
-        {/* Free notice banner */}
-        <div className="flex items-center gap-3 rounded-2xl px-5 py-3 bg-[rgba(75,63,207,0.1)] border border-[rgba(75,63,207,0.25)]">
-          <svg viewBox="0 0 24 24" fill="#818cf8" width={16} height={16}>
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-          </svg>
-          <p className="text-[12px] text-[rgba(255,255,255,0.55)] leading-[1.5]">
-            <span className="text-[#818cf8] font-semibold">{t('plans.freeNoticeHighlight')}</span>{' '}
-            {t('plans.freeNoticeRest')}
-          </p>
-        </div>
-
         {/* Cards */}
         <div className="grid grid-cols-3 gap-5">
           {PLANS.map((plan) => {
@@ -182,7 +171,7 @@ export default function Plans() {
             return (
               <div
                 key={plan.id}
-                className="relative flex flex-col rounded-2xl overflow-hidden transition-[border-color,box-shadow] duration-200"
+                className={`relative flex flex-col rounded-2xl overflow-hidden transition-[border-color,box-shadow] duration-200 ${plan.comingSoon ? 'opacity-60 grayscale' : ''}`}
                 style={{
                   background: `linear-gradient(145deg, rgba(255,255,255,0.03) 0%, ${plan.glowColor} 100%)`,
                   border: `1px solid ${isCurrent ? plan.borderColor : 'rgba(255,255,255,0.07)'}`,
@@ -201,6 +190,13 @@ export default function Plans() {
                     style={{ background: plan.badgeBg, color: plan.badgeColor }}
                   >
                     {t('plans.current')}
+                  </div>
+                )}
+
+                {/* Coming soon badge */}
+                {plan.comingSoon && !isCurrent && (
+                  <div className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[0.06em] bg-[rgba(245,158,11,0.15)] text-[#f59e0b]">
+                    {t('plans.comingSoon')}
                   </div>
                 )}
 
@@ -272,10 +268,10 @@ export default function Plans() {
                         ? (plan.price ? plan.borderColor : 'rgba(255,255,255,0.1)')
                         : undefined,
                     }}
-                    disabled={isCurrent || !plan.price}
-                    onClick={() => { if (!isCurrent && plan.price) setUpgradeTarget(plan.id) }}
+                    disabled={isCurrent || !plan.price || plan.comingSoon}
+                    onClick={() => { if (!isCurrent && plan.price && !plan.comingSoon) setUpgradeTarget(plan.id) }}
                   >
-                    {isCurrent ? t('plans.currentPlan') : plan.price ? t('plans.upgradeTo', { name: plan.name }) : t('plans.freePlan')}
+                    {isCurrent ? t('plans.currentPlan') : plan.comingSoon ? t('plans.comingSoon') : plan.price ? t('plans.upgradeTo', { name: plan.name }) : t('plans.freePlan')}
                   </button>
                 </div>
               </div>
@@ -292,7 +288,6 @@ export default function Plans() {
           </div>
           <div className="divide-y divide-[rgba(255,255,255,0.05)]">
             {[
-              { label: t('plans.rowMcAccounts'), free: t('plans.max2'), premium: t('plans.unlimited'), ultimate: t('plans.unlimited') },
               { label: t('plans.rowStats'), free: t('plans.basic'), premium: t('plans.advanced'), ultimate: t('plans.advanced') },
               { label: t('plans.rowLocalInstances'), free: t('plans.unlimitedFem'), premium: t('plans.unlimitedFem'), ultimate: t('plans.unlimitedFem') },
               { label: t('plans.rowSyncedInstances'), free: '—', premium: t('plans.premiumSyncQuota'), ultimate: '10' },
@@ -319,21 +314,10 @@ export default function Plans() {
           </div>
         </div>
 
-        {/* Dev simulator — visible uniquement en mode développement Vite */}
-        {import.meta.env.DEV && (
-          <DevPaymentSimulator
-            onSimulate={async (planId) => {
-              const resp = await api.yuyu.devSimulatePayment(planId)
-              setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-            }}
-          />
-        )}
-
         {/* Footer note */}
         <div className="text-center pb-4">
           <p className="text-[11px] text-[rgba(255,255,255,0.2)] leading-[1.6]">
-            {t('plans.footerNote')}<br />
-            {t('plans.footerNote2')}
+            {t('plans.footerNote')}
           </p>
         </div>
 

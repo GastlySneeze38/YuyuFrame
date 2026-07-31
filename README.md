@@ -4,14 +4,15 @@ Launcher Minecraft premium avec synchronisation cloud, gestion avancée des inst
 
 ## Plans d'abonnement
 
-| Feature | Free | Premium 7.99€/mois | Ultimate 15.99€/mois |
+| Feature | Free | Premium 3.99€/mois | Ultimate 7.99€/mois (bientôt disponible) |
 |---------|------|--------------------|----------------------|
 | Instances Minecraft | Illimitées | Illimitées | Illimitées |
-| Comptes Minecraft | 2 max | Illimité | Illimité |
+| Comptes Minecraft | Illimité | Illimité | Illimité |
+| Restauration cloud | — | ✓ | ✓ |
 | Sync cloud (saves) | — | 3 saves max | 10 saves max |
 | Instances synchronisées | — | 4 max | 10 max |
-| Restauration cloud | — | ✓ | ✓ |
-| Mode P2P | — | ✓ | ✓ |
+| Statistiques avancées | — | ✓ | ✓ |
+| Grade décoratif en jeu | — | ✓ | ✓ |
 | Serveur 1 clic | — | — | ✓ |
 
 ## Fonctionnalités

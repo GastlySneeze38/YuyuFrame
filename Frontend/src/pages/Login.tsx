@@ -440,7 +440,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
               />
             ))}
 
-            {accounts.length < 2 && step === 'idle' && (
+            {step === 'idle' && (
               <AddRow onClick={startLogin} />
             )}
           </div>

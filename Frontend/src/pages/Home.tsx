@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { loaderColor } from '@/lib/loader'
@@ -252,7 +253,7 @@ export default function Home() {
     setTimeout(() => setBannerPulse(false), 900)
     setLaunchMsg('')
     try {
-      if (p2pEnabled) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
+      if (p2pEnabled && P2P_ENABLED) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
       else await api.launch.start(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
       setInstanceRunning(selectedInstanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
@@ -295,9 +296,11 @@ export default function Home() {
     ? Math.round(progress.current / progress.total * 100)
     : 0
 
-  const p2pToggleClasses = p2pEnabled
-    ? 'bg-[rgba(75,63,207,0.18)] border border-[rgba(120,100,255,0.35)]'
-    : 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]'
+  const p2pToggleClasses = !P2P_ENABLED
+    ? 'bg-[rgba(255,255,255,0.01)] border border-[rgba(255,255,255,0.04)]'
+    : p2pEnabled
+      ? 'bg-[rgba(75,63,207,0.18)] border border-[rgba(120,100,255,0.35)]'
+      : 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]'
 
   const launchBtnBg = canLaunch
     ? 'bg-[#4B3FCF] hover:bg-[#6155e8]'
@@ -495,13 +498,14 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => !gameRunning && setP2pEnabled(!p2pEnabled)}
-                  disabled={gameRunning}
-                  className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer opacity-100 ${p2pToggleClasses}`}
+                  onClick={() => !gameRunning && P2P_ENABLED && setP2pEnabled(!p2pEnabled)}
+                  disabled={gameRunning || !P2P_ENABLED}
+                  title={!P2P_ENABLED ? t('home.p2pComingSoon') : undefined}
+                  className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${P2P_ENABLED ? 'opacity-100' : 'opacity-60'} ${p2pToggleClasses}`}
                 >
                   <span className="flex items-center gap-1.5 text-[clamp(8px,1.3vh,10px)] font-semibold text-[rgba(255,255,255,0.25)]">
                     <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
-                    {t('home.p2p')}
+                    {t('home.p2p')} {!P2P_ENABLED && <span className="text-[9px] opacity-60">{t('home.p2pSoon')}</span>}
                   </span>
                   <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)] flex-shrink-0">
                     <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />

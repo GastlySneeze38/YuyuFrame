@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { P2P_ENABLED } from '@/config/features'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { DebugPanel } from '@/components/server/DebugPanel'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -8,7 +10,28 @@ import { useT } from '@/i18n'
 
 export default function Server() {
   const t = useT()
+  const navigate = useNavigate()
   const { selectedInstanceId, selectedInstance, isInstanceRunning, setInstanceRunning } = useStore()
+
+  if (!P2P_ENABLED) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D]">
+        <div className="text-[32px] opacity-[0.15]">
+          <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
+        </div>
+        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">{t('server.comingSoon')}</p>
+        <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
+          {t('server.comingSoonDesc')}
+        </p>
+        <button
+          onClick={() => navigate('/home')}
+          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+        >
+          {t('server.back')}
+        </button>
+      </div>
+    )
+  }
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
   const instance = selectedInstance()

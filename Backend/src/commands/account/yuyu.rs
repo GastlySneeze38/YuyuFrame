@@ -297,61 +297,6 @@ pub async fn yuyu_create_checkout(
     Ok(CheckoutResp { checkout_url: data.checkout_url })
 }
 
-// ── Dev : simulation de paiement ──────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn yuyu_dev_simulate_payment(
-    state: tauri::State<'_, SharedState>,
-    plan: String,
-) -> Result<PlanResp, String> {
-    let (token, client) = {
-        let s = state.read().await;
-        let token = s.yuyu_session
-            .as_ref()
-            .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
-            .token
-            .clone();
-        (token, s.http.clone())
-    };
-
-    let resp = client
-        .post(format!("{}/dev/simulate-payment", api_base()))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "plan": plan }))
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        let msg = resp.text().await.unwrap_or_default();
-        return Err(msg);
-    }
-
-    #[derive(Deserialize)]
-    struct SimResp {
-        plan: String,
-        plan_expires_at: Option<i64>,
-    }
-
-    let data: SimResp = resp.json().await.map_err(|e| e.to_string())?;
-
-    {
-        let s = state.read().await;
-        let conn = s.db.lock().await;
-        db::update_yuyu_plan(&conn, &data.plan, data.plan_expires_at)
-            .map_err(|e| e.to_string())?;
-    }
-    {
-        let mut s = state.write().await;
-        if let Some(session) = s.yuyu_session.as_mut() {
-            session.plan = data.plan.clone();
-            session.plan_expires_at = data.plan_expires_at;
-        }
-    }
-
-    Ok(PlanResp { plan: data.plan, plan_expires_at: data.plan_expires_at })
-}
-
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 async fn save_session(

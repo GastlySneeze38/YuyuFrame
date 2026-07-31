@@ -250,7 +250,6 @@ pub fn run() {
             commands::account::yuyu::yuyu_logout,
             commands::account::yuyu::yuyu_refresh_plan,
             commands::account::yuyu::yuyu_create_checkout,
-            commands::account::yuyu::yuyu_dev_simulate_payment,
             commands::account::microsoft::auth_start_device,
             commands::account::microsoft::auth_poll,
             commands::account::microsoft::auth_status,
