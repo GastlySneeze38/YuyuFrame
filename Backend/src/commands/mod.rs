@@ -23,3 +23,20 @@ pub(crate) fn api_base() -> String {
 pub(crate) fn network_err(e: impl std::fmt::Display) -> String {
     format!("Serveur inaccessible : {e}")
 }
+
+/// Préfixe reconnu côté frontend (`lib/apiError.ts::isSessionExpiredError`)
+/// pour un 401 renvoyé par la LauncherAPI sur un appel authentifié (Bearer
+/// token) — distingue "ta session a expiré" (le frontend doit vider
+/// `yuyuToken` et proposer de se reconnecter) d'un 401 attendu ailleurs
+/// (identifiants incorrects sur /auth/login, qui n'a jamais de session à
+/// invalider). Ne JAMAIS changer ce texte sans mettre à jour
+/// `SESSION_EXPIRED_PREFIX` côté frontend.
+pub(crate) async fn bearer_call_error(resp: reqwest::Response) -> String {
+    let status = resp.status();
+    let msg = resp.text().await.unwrap_or_default();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        format!("Session expirée : {msg}")
+    } else {
+        msg
+    }
+}

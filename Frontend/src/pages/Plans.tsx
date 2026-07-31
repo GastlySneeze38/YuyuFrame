@@ -17,7 +17,7 @@ import { useT } from '@/i18n'
 export default function Plans() {
   const navigate = useNavigate()
   const t = useT()
-  const { yuyuPlanExpiresAt, yuyuUsername, isPremium, isUltimate, setYuyuPlan, language } = useStore()
+  const { yuyuPlanExpiresAt, yuyuUsername, isPremium, isUltimate, setYuyuPlan, clearYuyuSession, language } = useStore()
 
   const PLANS = getPlans(t)
 
@@ -32,6 +32,13 @@ export default function Plans() {
   useEffect(() => {
     api.analytics.track('plans_page_viewed')
   }, [])
+
+  const handleLogout = async () => {
+    // yuyu_logout est purement local (JWT stateless, rien à révoquer côté
+    // serveur) — vide la session locale (DB + mémoire) côté Backend.
+    await api.yuyu.logout().catch(() => {})
+    clearYuyuSession()
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true)

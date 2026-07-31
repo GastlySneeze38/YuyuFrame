@@ -12,3 +12,17 @@ export function isNetworkError(e: unknown): boolean {
   const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e)
   return message.startsWith(NETWORK_ERROR_PREFIX)
 }
+
+/**
+ * Un 401 renvoyé par la LauncherAPI sur un appel authentifié (Bearer token) —
+ * la session YuyuFrame doit être vidée et l'utilisateur invité à se
+ * reconnecter, plutôt que de laisser chaque appel suivant échouer en boucle
+ * avec le même message brut. Doit rester identique à `SESSION_EXPIRED_PREFIX`
+ * (`bearer_call_error()` dans `Backend/src/commands/mod.rs`).
+ */
+const SESSION_EXPIRED_PREFIX = 'Session expirée : '
+
+export function isSessionExpiredError(e: unknown): boolean {
+  const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e)
+  return message.startsWith(SESSION_EXPIRED_PREFIX)
+}

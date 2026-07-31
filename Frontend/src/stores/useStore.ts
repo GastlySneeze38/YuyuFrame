@@ -7,7 +7,10 @@ export type YuyuPlan = 'free' | 'premium' | 'ultimate'
 export type Lang = 'fr' | 'en'
 
 interface Store {
-  // ── YuyuFrame session (NOT persisted — requires password on each start) ──
+  // ── YuyuFrame session (persisté — le JWT dure 30 jours côté serveur, pas
+  // besoin de se reconnecter à chaque lancement ; un token invalide/expiré
+  // est détecté au premier appel API et la session est vidée automatiquement,
+  // voir showApiError/isSessionExpiredError) ──
   yuyuToken: string | null
   yuyuUsername: string | null
   yuyuPlan: YuyuPlan
@@ -364,6 +367,10 @@ export const useStore = create<Store>()(
     {
       name: 'yuyuframe-store',
       partialize: (s) => ({
+        yuyuToken: s.yuyuToken,
+        yuyuUsername: s.yuyuUsername,
+        yuyuPlan: s.yuyuPlan,
+        yuyuPlanExpiresAt: s.yuyuPlanExpiresAt,
         selectedInstanceId: s.selectedInstanceId,
         defaultRam: s.defaultRam,
         closeOnLaunch: s.closeOnLaunch,

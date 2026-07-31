@@ -20,6 +20,7 @@ export const en: TranslationSchema = {
     save: 'Save',
     delete: 'Delete',
     serverUnreachable: 'Server unreachable — try again later',
+    sessionExpired: 'Your session expired — log back in to YuyuFrame',
   },
 
   mods: {

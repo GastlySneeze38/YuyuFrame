@@ -217,8 +217,7 @@ pub async fn yuyu_refresh_plan(state: tauri::State<'_, SharedState>) -> Result<P
         .map_err(network_err)?;
 
     if !resp.status().is_success() {
-        let msg = resp.text().await.unwrap_or_default();
-        return Err(msg);
+        return Err(crate::commands::bearer_call_error(resp).await);
     }
 
     #[derive(Deserialize)]
@@ -283,8 +282,7 @@ pub async fn yuyu_create_checkout(
         .map_err(network_err)?;
 
     if !resp.status().is_success() {
-        let msg = resp.text().await.unwrap_or_default();
-        return Err(msg);
+        return Err(crate::commands::bearer_call_error(resp).await);
     }
 
     #[derive(Deserialize)]

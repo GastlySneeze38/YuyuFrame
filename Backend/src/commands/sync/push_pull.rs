@@ -1,6 +1,6 @@
 use tauri::Emitter;
 
-use crate::commands::network_err;
+use crate::commands::{bearer_call_error, network_err};
 use crate::state::SharedState;
 use super::super::instance::crud::instance_dir;
 use super::archive::{
@@ -57,7 +57,7 @@ pub async fn sync_list_instances(
         .map_err(network_err)?;
 
     if !resp.status().is_success() {
-        return Err(resp.text().await.unwrap_or_default());
+        return Err(bearer_call_error(resp).await);
     }
 
     resp.json::<Vec<SyncInstance>>().await.map_err(|e| e.to_string())
@@ -158,7 +158,7 @@ pub async fn sync_push_instance(
         .map_err(network_err)?;
 
     if !meta_resp.status().is_success() {
-        return Err(meta_resp.text().await.unwrap_or_default());
+        return Err(bearer_call_error(meta_resp).await);
     }
 
     let sync_inst: SyncInstance = meta_resp.json().await.map_err(|e| e.to_string())?;
@@ -205,7 +205,7 @@ pub async fn sync_push_instance(
         .map_err(network_err)?;
 
     if !data_resp.status().is_success() {
-        return Err(data_resp.text().await.unwrap_or_default());
+        return Err(bearer_call_error(data_resp).await);
     }
 
     app.emit("sync_progress", SyncProgressEvent {
@@ -252,7 +252,7 @@ pub async fn sync_pull_instance(
         .map_err(network_err)?;
 
     if !resp.status().is_success() {
-        return Err(resp.text().await.unwrap_or_default());
+        return Err(bearer_call_error(resp).await);
     }
 
     let zip_bytes = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
@@ -386,7 +386,7 @@ pub async fn sync_delete_instance(
         .map_err(network_err)?;
 
     if !resp.status().is_success() {
-        return Err(resp.text().await.unwrap_or_default());
+        return Err(bearer_call_error(resp).await);
     }
 
     Ok(())

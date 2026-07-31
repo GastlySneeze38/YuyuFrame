@@ -18,6 +18,7 @@ export const fr = {
     premiumFeature: 'Fonctionnalité Premium',
     seePlans: 'Voir les plans',
     serverUnreachable: 'Serveur injoignable — réessaie plus tard',
+    sessionExpired: 'Ta session a expiré — reconnecte-toi à YuyuFrame',
   },
 
   mods: {

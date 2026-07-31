@@ -1,5 +1,7 @@
 import { create } from 'zustand'
-import { isNetworkError } from '@/lib/apiError'
+import { isNetworkError, isSessionExpiredError } from '@/lib/apiError'
+import { useStore } from '@/stores/useStore'
+import { t } from '@/i18n'
 
 type ToastVariant = 'error' | 'notice'
 
@@ -52,7 +54,16 @@ export function showNotice(message: string): void {
 export function showApiError(e: unknown, unreachableMessage: string): void {
   if (isNetworkError(e)) {
     useErrorToast.getState().show(unreachableMessage, 'notice')
-  } else {
-    showError(e)
+    return
   }
+  // Session YuyuFrame invalide/expirée (401 sur un appel authentifié) — on la
+  // vide tout de suite plutôt que de laisser chaque appel suivant échouer en
+  // boucle avec le même message brut ; l'UI retombe naturellement sur l'état
+  // "non connecté" (bouton de connexion) dès le prochain rendu.
+  if (isSessionExpiredError(e)) {
+    useStore.getState().clearYuyuSession()
+    useErrorToast.getState().show(t('common.sessionExpired'), 'notice')
+    return
+  }
+  showError(e)
 }
