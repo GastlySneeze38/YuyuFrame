@@ -17,6 +17,8 @@ export interface PlanMeta {
   features: PlanFeature[]
   /** Vendu sur le site comme "Bientôt disponible" — pas encore achetable. */
   comingSoon?: boolean
+  /** Mis en avant visuellement, comme le badge "Populaire" du site. */
+  featured?: boolean
 }
 
 export function getPlans(t: typeof tFn): PlanMeta[] {
@@ -35,7 +37,6 @@ export function getPlans(t: typeof tFn): PlanMeta[] {
         { label: t('plans.features.freeUnlimitedInstances'), ok: true },
         { label: t('plans.features.freeModManagement'), ok: true },
         { label: t('plans.features.freeConsole'), ok: true },
-        { label: t('plans.features.freeCloudSync'), ok: false },
       ],
     },
     {
@@ -47,6 +48,7 @@ export function getPlans(t: typeof tFn): PlanMeta[] {
       badgeBg: 'rgba(75,63,207,0.25)',
       badgeColor: '#818cf8',
       glowColor: 'rgba(75,63,207,0.08)',
+      featured: true,
       features: [
         { label: t('plans.features.premiumAllFree'), ok: true },
         { label: t('plans.features.premiumCloudSync'), ok: true },

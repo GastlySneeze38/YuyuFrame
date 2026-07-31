@@ -137,6 +137,9 @@ export const fr = {
 
   sync: {
     title: 'Synchronisation',
+    comingSoon: 'Sync cloud bientôt disponible',
+    comingSoonDesc: 'La synchronisation est temporairement désactivée le temps de finir une optimisation côté serveur.',
+    back: 'Retour',
     createInstanceLine1: 'Crée une instance pour commencer',
     createInstanceLine2: 'à synchroniser.',
     cloudNoLocalInstance: 'Dans le cloud · sans instance locale',
@@ -624,9 +627,9 @@ export const fr = {
     expiresOnSuffix: 'expire le',
     current: 'ACTUEL',
     perMonth: '/mois',
-    free: 'GRATUIT',
     currentPlan: 'Plan actuel',
     comingSoon: 'Bientôt disponible',
+    popular: 'Populaire',
     invalidCheckoutUrl: 'Lien de paiement invalide reçu du serveur — réessaie plus tard',
     freePlan: 'Plan gratuit',
     upgradeTo: 'Passer à {{name}}',

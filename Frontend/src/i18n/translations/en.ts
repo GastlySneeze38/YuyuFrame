@@ -139,6 +139,9 @@ export const en: TranslationSchema = {
 
   sync: {
     title: 'Synchronization',
+    comingSoon: 'Cloud sync coming back soon',
+    comingSoonDesc: 'Sync is temporarily disabled while we finish a server-side optimization.',
+    back: 'Back',
     createInstanceLine1: 'Create an instance to start',
     createInstanceLine2: 'syncing.',
     cloudNoLocalInstance: 'In the cloud · no local instance',
@@ -626,9 +629,9 @@ export const en: TranslationSchema = {
     expiresOnSuffix: 'subscription expires on',
     current: 'CURRENT',
     perMonth: '/month',
-    free: 'FREE',
     currentPlan: 'Current plan',
     comingSoon: 'Coming soon',
+    popular: 'Popular',
     invalidCheckoutUrl: 'Invalid checkout link received from the server — try again later',
     freePlan: 'Free plan',
     upgradeTo: 'Switch to {{name}}',

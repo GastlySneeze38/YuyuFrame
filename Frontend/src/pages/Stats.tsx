@@ -47,9 +47,11 @@ export default function Stats() {
           Stats & Analytics
         </h1>
 
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tracking-[0.05em] ${planClasses}`}>
-          {planLabel}
-        </span>
+        {premium && (
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tracking-[0.05em] transition-transform duration-200 hover:scale-105 ${planClasses}`}>
+            {planLabel}
+          </span>
+        )}
       </PageHeader>
 
       <div className="flex-1 overflow-auto">
@@ -80,18 +82,22 @@ export default function Stats() {
             {/* Top stat cards */}
             <div className="grid grid-cols-3 gap-4">
               <StatCard
+                delay={0}
                 label={t('stats.totalPlaytime')}
                 value={formatDuration(stats.total_secs)}
                 sub={stats.total_sessions === 0 ? t('stats.noSession') : t('stats.sessionsCount', { count: stats.total_sessions, s: stats.total_sessions > 1 ? 's' : '' })}
                 color="#818cf8"
               />
               <StatCard
+                delay={70}
                 label={t('stats.averagePerSession')}
                 value={stats.total_sessions > 0 ? formatDuration(Math.round(stats.total_secs / stats.total_sessions)) : '—'}
                 sub={t('stats.averageDuration')}
                 color="#818cf8"
               />
               <StatCard
+                delay={140}
+                compact
                 label={t('stats.favoriteModpack')}
                 value={stats.per_instance[0]?.instance_name ?? '—'}
                 sub={stats.per_instance[0] ? formatDuration(stats.per_instance[0].total_secs) : t('stats.noData')}
@@ -100,24 +106,27 @@ export default function Stats() {
             </div>
 
             {/* 14-day activity */}
-            <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
+            <div
+              className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-colors duration-200 hover:border-[rgba(255,255,255,0.12)] animate-fade-in-up"
+              style={{ animationDelay: '210ms' }}
+            >
               <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.activity14Days')}</span>
               <div className="flex items-end gap-1.5 h-20">
-                {days.map((day) => {
+                {days.map((day, i) => {
                   const secs = dailyMap.get(day) ?? 0
                   const heightPct = secs > 0 ? Math.max(8, Math.round((secs / maxDaySecs) * 100)) : 0
                   const isToday = day === new Date().toISOString().split('T')[0]
                   const barClasses = isToday
                     ? 'bg-gradient-to-b from-[#818cf8] to-[rgba(75,63,207,0.6)]'
                     : secs > 0
-                    ? 'bg-[rgba(129,140,248,0.45)]'
+                    ? 'bg-[rgba(129,140,248,0.45)] group-hover/bar:bg-[rgba(129,140,248,0.7)]'
                     : 'bg-[rgba(255,255,255,0.04)]'
                   return (
-                    <div key={day} className="flex flex-1 flex-col items-center gap-1" title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}>
+                    <div key={day} className="group/bar flex flex-1 flex-col items-center gap-1" title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}>
                       <div className="w-full flex items-end h-16">
                         <div
-                          className={`w-full rounded-sm transition-all duration-300 ${secs > 0 ? 'min-h-1' : 'min-h-0'} ${barClasses}`}
-                          style={{ height: `${heightPct}%` }}
+                          className={`w-full origin-bottom animate-grow-y rounded-sm transition-colors duration-200 ${secs > 0 ? 'min-h-1' : 'min-h-0'} ${barClasses}`}
+                          style={{ height: `${heightPct}%`, animationDelay: `${260 + i * 25}ms` }}
                         />
                       </div>
                       <span className={`text-[8px] ${isToday ? 'text-[#818cf8] font-bold' : 'text-white/20 font-normal'}`}>
@@ -133,7 +142,10 @@ export default function Stats() {
             <div className="grid grid-cols-2 gap-5">
 
               {/* Per-instance breakdown */}
-              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
+              <div
+                className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-colors duration-200 hover:border-[rgba(255,255,255,0.12)] animate-fade-in-up"
+                style={{ animationDelay: '280ms' }}
+              >
                 <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.byModpack')}</span>
                 {stats.per_instance.length === 0 ? (
                   <EmptyState
@@ -148,20 +160,20 @@ export default function Stats() {
                   />
                 ) : (
                   <div className="flex flex-col gap-4">
-                    {stats.per_instance.map((inst) => (
+                    {stats.per_instance.map((inst, i) => (
                       <div key={inst.instance_id} className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[12px] font-semibold text-white/80">{inst.instance_name}</span>
-                            <span className="text-[9px] font-bold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
-                            <span className="text-[9px] text-white/25">{inst.mc_version}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-[12px] font-semibold text-white/80" title={inst.instance_name}>{inst.instance_name}</span>
+                            <span className="flex-shrink-0 text-[9px] font-bold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
+                            <span className="flex-shrink-0 text-[9px] text-white/25">{inst.mc_version}</span>
                           </div>
-                          <span className="text-[11px] font-semibold text-[#818cf8]">{formatDuration(inst.total_secs)}</span>
+                          <span className="flex-shrink-0 text-[11px] font-semibold text-[#818cf8]">{formatDuration(inst.total_secs)}</span>
                         </div>
                         <div className="h-1.5 w-full rounded-full overflow-hidden bg-[rgba(255,255,255,0.06)]">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-[rgba(75,63,207,0.8)] to-[#818cf8] transition-[width] duration-[400ms] ease-[ease]"
-                            style={{ width: `${Math.round((inst.total_secs / maxInstanceSecs) * 100)}%` }}
+                            className="h-full origin-left animate-grow-x rounded-full bg-gradient-to-r from-[rgba(75,63,207,0.8)] to-[#818cf8]"
+                            style={{ width: `${Math.round((inst.total_secs / maxInstanceSecs) * 100)}%`, animationDelay: `${340 + i * 60}ms` }}
                           />
                         </div>
                         <span className="text-[10px] text-white/25">
@@ -174,7 +186,10 @@ export default function Stats() {
               </div>
 
               {/* Recent sessions */}
-              <div className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]">
+              <div
+                className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-colors duration-200 hover:border-[rgba(255,255,255,0.12)] animate-fade-in-up"
+                style={{ animationDelay: '280ms' }}
+              >
                 <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.recentSessions')}</span>
                 {stats.recent_sessions.length === 0 ? (
                   <EmptyState
@@ -192,14 +207,14 @@ export default function Stats() {
                     {stats.recent_sessions.map((s, i) => (
                       <div
                         key={i}
-                        className="flex items-center justify-between rounded-xl px-3 py-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]"
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] transition-all duration-150 hover:bg-[rgba(255,255,255,0.05)] hover:border-[rgba(129,140,248,0.25)] hover:translate-x-0.5"
                       >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[12px] font-semibold text-white/75">{s.instance_name}</span>
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="truncate text-[12px] font-semibold text-white/75" title={s.instance_name}>{s.instance_name}</span>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-bold" style={{ color: loaderColor(s.loader) }}>{s.loader}</span>
-                            <span className="text-[9px] text-white/20">·</span>
-                            <span className="text-[9px] text-white/30">{t('stats.dateAtTime', { date: formatShortDate(s.started_at), time: formatTime(s.started_at) })}</span>
+                            <span className="flex-shrink-0 text-[9px] font-bold" style={{ color: loaderColor(s.loader) }}>{s.loader}</span>
+                            <span className="flex-shrink-0 text-[9px] text-white/20">·</span>
+                            <span className="truncate text-[9px] text-white/30">{t('stats.dateAtTime', { date: formatShortDate(s.started_at), time: formatTime(s.started_at) })}</span>
                           </div>
                         </div>
                         <span
@@ -224,14 +239,21 @@ export default function Stats() {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+function StatCard({ label, value, sub, color, delay = 0, compact = false }: { label: string; value: string; sub: string; color: string; delay?: number; compact?: boolean }) {
   return (
     <div
-      className="flex flex-col gap-2 rounded-2xl p-5 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)]"
+      className="flex min-w-0 flex-col gap-2 rounded-2xl p-5 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.14)] animate-fade-in-up"
+      style={{ animationDelay: `${delay}ms` }}
     >
-      <span className="text-[10px] font-bold text-white/35 tracking-[0.08em] uppercase">{label}</span>
-      <span className="font-black text-[26px] tracking-[-0.02em] leading-none" style={{ color }}>{value}</span>
-      <span className="text-[11px] text-white/30">{sub}</span>
+      <span className="text-[10px] font-bold text-white/35 tracking-[0.08em] uppercase truncate">{label}</span>
+      <span
+        className={`block truncate font-black tracking-[-0.02em] leading-tight ${compact ? 'text-[19px]' : 'text-[28px] leading-none'}`}
+        style={{ color }}
+        title={value}
+      >
+        {value}
+      </span>
+      <span className="text-[11px] text-white/30 truncate">{sub}</span>
     </div>
   )
 }

@@ -31,11 +31,26 @@ module.exports = {
         'banner-glow': 'bannerGlow 2s ease-in-out infinite',
         'terrain-float': 'terrainFloat 3s ease-in-out infinite',
         'star-pulse': 'starPulse 2s ease-in-out infinite',
+        'fade-in-up': 'fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'grow-x': 'growX 0.6s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'grow-y': 'growY 0.6s cubic-bezier(0.16, 1, 0.3, 1) both',
       },
       keyframes: {
         float: {
           '0%, 100%': { transform: 'translateY(0px)' },
           '50%': { transform: 'translateY(-10px)' },
+        },
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        growX: {
+          '0%': { transform: 'scaleX(0)' },
+          '100%': { transform: 'scaleX(1)' },
+        },
+        growY: {
+          '0%': { transform: 'scaleY(0)' },
+          '100%': { transform: 'scaleY(1)' },
         },
         bannerFlash: {
           '0%': { opacity: '0' },

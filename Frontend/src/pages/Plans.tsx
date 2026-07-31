@@ -87,7 +87,7 @@ export default function Plans() {
       <div className="mx-auto w-full max-w-5xl px-6 py-10 flex flex-col gap-10">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between animate-fade-in-up">
           <button
             onClick={() => navigate('/home')}
             className="flex items-center gap-2 transition-colors duration-150 text-[12px] text-[rgba(255,255,255,0.3)] font-medium hover:text-[rgba(255,255,255,0.7)]"
@@ -165,22 +165,40 @@ export default function Plans() {
         )}
 
         {/* Cards */}
-        <div className="grid grid-cols-3 gap-5">
-          {PLANS.map((plan) => {
+        <div className="grid grid-cols-3 gap-5 items-start">
+          {PLANS.map((plan, planIndex) => {
             const isCurrent = plan.id === effectivePlan
+            const isFeatured = plan.featured && !plan.comingSoon
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col rounded-2xl overflow-hidden transition-[border-color,box-shadow] duration-200 ${plan.comingSoon ? 'opacity-60 grayscale' : ''}`}
+                className={`group relative flex flex-col rounded-2xl overflow-hidden transition-all duration-300 animate-fade-in-up ${plan.comingSoon ? 'opacity-60 grayscale' : 'hover:-translate-y-1.5'} ${isFeatured ? '-translate-y-2' : ''}`}
                 style={{
-                  background: `linear-gradient(145deg, rgba(255,255,255,0.03) 0%, ${plan.glowColor} 100%)`,
-                  border: `1px solid ${isCurrent ? plan.borderColor : 'rgba(255,255,255,0.07)'}`,
-                  boxShadow: isCurrent ? `0 0 0 1px ${plan.borderColor}, 0 8px 40px ${plan.glowColor}` : 'none',
+                  animationDelay: `${planIndex * 90}ms`,
+                  background: isFeatured
+                    ? `linear-gradient(160deg, rgba(75,63,207,0.14) 0%, ${plan.glowColor} 100%)`
+                    : `linear-gradient(145deg, rgba(255,255,255,0.03) 0%, ${plan.glowColor} 100%)`,
+                  border: `1px solid ${isCurrent || isFeatured ? plan.borderColor : 'rgba(255,255,255,0.07)'}`,
+                  boxShadow: isFeatured
+                    ? `0 0 0 1px ${plan.borderColor}, 0 20px 60px rgba(75,63,207,0.25)`
+                    : isCurrent
+                      ? `0 0 0 1px ${plan.borderColor}, 0 8px 40px ${plan.glowColor}`
+                      : 'none',
                 }}
               >
                 {/* Top accent line */}
                 {plan.price && (
-                  <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, transparent, ${plan.color}, transparent)` }} />
+                  <div
+                    className={`w-full transition-all duration-300 ${isFeatured ? 'h-[3px]' : 'h-0.5'}`}
+                    style={{ background: `linear-gradient(90deg, transparent, ${plan.color}, transparent)` }}
+                  />
+                )}
+
+                {/* Populaire badge */}
+                {isFeatured && !isCurrent && (
+                  <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[9px] font-bold tracking-[0.08em] shadow-[0_4px_16px_rgba(75,63,207,0.5)] animate-pulse-slow bg-[#4B3FCF] text-white">
+                    {t('plans.popular').toUpperCase()}
+                  </div>
                 )}
 
                 {/* Current badge */}
@@ -200,54 +218,55 @@ export default function Plans() {
                   </div>
                 )}
 
-                <div className="flex flex-col gap-6 p-6">
+                <div className={`flex flex-col gap-6 transition-all duration-300 ${isFeatured ? 'p-7' : 'p-6'} ${!plan.price ? 'opacity-80' : ''}`}>
                   {/* Plan name & price */}
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <PlanIcon plan={plan.id} color={plan.color} />
-                      <span className="font-bold text-[16px]" style={{ color: plan.price ? plan.color : 'rgba(255,255,255,0.7)' }}>
+                      <span className={`font-bold ${isFeatured ? 'text-[17px]' : 'text-[15px]'}`} style={{ color: plan.price ? plan.color : 'rgba(255,255,255,0.55)' }}>
                         {plan.name}
                       </span>
                     </div>
 
                     {plan.price ? (
                       <div className="flex items-baseline gap-1">
-                        <span className="font-black text-[32px] text-white tracking-[-0.03em]">
+                        <span className={`font-black text-white tracking-[-0.03em] ${isFeatured ? 'text-[38px]' : 'text-[30px]'}`}>
                           {plan.price}€
                         </span>
                         <span className="text-[12px] text-[rgba(255,255,255,0.3)] font-medium">{t('plans.perMonth')}</span>
-                        <span className="ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-[#4ade80] bg-[rgba(74,222,128,0.1)] tracking-[0.05em]">
-                          {t('plans.free')}
-                        </span>
                       </div>
                     ) : (
                       <div className="flex items-baseline gap-1">
-                        <span className="font-black text-[32px] text-white tracking-[-0.03em]">
+                        <span className="font-black text-[26px] text-[rgba(255,255,255,0.5)] tracking-[-0.03em]">
                           0€
                         </span>
-                        <span className="text-[12px] text-[rgba(255,255,255,0.3)] font-medium">{t('plans.perMonth')}</span>
+                        <span className="text-[12px] text-[rgba(255,255,255,0.25)] font-medium">{t('plans.perMonth')}</span>
                       </div>
                     )}
                   </div>
 
                   {/* Features */}
-                  <div className="flex flex-col gap-2.5">
+                  <div className={`flex flex-col ${isFeatured ? 'gap-3' : 'gap-2'}`}>
                     {plan.features.map((feat, i) => (
-                      <div key={i} className="flex items-start gap-2.5">
+                      <div
+                        key={i}
+                        className="flex items-start gap-2.5 animate-fade-in-up"
+                        style={{ animationDelay: `${planIndex * 90 + 120 + i * 40}ms` }}
+                      >
                         <div className="mt-0.5 flex-shrink-0">
                           {feat.ok ? (
-                            <svg viewBox="0 0 16 16" fill="none" width={14} height={14}>
+                            <svg viewBox="0 0 16 16" fill="none" width={isFeatured ? 15 : 13} height={isFeatured ? 15 : 13}>
                               <circle cx="8" cy="8" r="7" fill={plan.price ? plan.badgeBg : 'rgba(255,255,255,0.06)'} />
                               <path d="M4.5 8l2.5 2.5 4.5-5" stroke={plan.price ? plan.color : 'rgba(255,255,255,0.4)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           ) : (
-                            <svg viewBox="0 0 16 16" fill="none" width={14} height={14}>
+                            <svg viewBox="0 0 16 16" fill="none" width={13} height={13}>
                               <circle cx="8" cy="8" r="7" fill="rgba(255,255,255,0.03)" />
                               <path d="M5.5 10.5l5-5M10.5 10.5l-5-5" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round" />
                             </svg>
                           )}
                         </div>
-                        <span className={`text-[12px] leading-[1.4] ${feat.ok ? 'text-[rgba(255,255,255,0.65)]' : 'text-[rgba(255,255,255,0.22)]'}`}>
+                        <span className={`leading-[1.4] ${isFeatured ? 'text-[13px]' : 'text-[12px]'} ${feat.ok ? (isFeatured ? 'text-white/80 font-medium' : 'text-white/55') : 'text-white/20'}`}>
                           {feat.label}
                         </span>
                       </div>
@@ -256,7 +275,7 @@ export default function Plans() {
 
                   {/* CTA */}
                   <button
-                    className={`w-full rounded-xl font-bold transition-all duration-200 active:scale-95 h-10 text-[13px] cursor-pointer disabled:cursor-default enabled:hover:brightness-110 ${isCurrent ? 'border' : 'border-0'}`}
+                    className={`w-full rounded-xl font-bold transition-all duration-200 active:scale-95 cursor-pointer disabled:cursor-default enabled:hover:brightness-110 ${isFeatured ? 'h-12 text-[14px] shadow-[0_8px_28px_rgba(75,63,207,0.4)]' : 'h-9 text-[12px]'} ${isCurrent ? 'border' : 'border-0'}`}
                     style={{
                       background: isCurrent
                         ? (plan.price ? plan.badgeBg : 'rgba(255,255,255,0.06)')
@@ -280,12 +299,30 @@ export default function Plans() {
         </div>
 
         {/* Comparison table */}
-        <div className="rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.07)]">
+        <div className="rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.07)] animate-fade-in-up" style={{ animationDelay: '300ms' }}>
           <div className="px-6 py-4 bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.06)]">
             <span className="text-[13px] font-bold text-[rgba(255,255,255,0.6)] tracking-[0.05em]">
               {t('plans.quotasComparison')}
             </span>
           </div>
+
+          {/* Plan headers */}
+          <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] px-6 pt-4 pb-3 bg-[rgba(255,255,255,0.015)] border-b border-[rgba(255,255,255,0.06)]">
+            <span />
+            {[
+              { id: 'free', name: 'Free', color: 'rgba(255,255,255,0.5)' },
+              { id: 'premium', name: 'Premium', color: '#818cf8' },
+              { id: 'ultimate', name: 'Ultimate', color: '#f59e0b' },
+            ].map((p) => (
+              <div key={p.id} className="flex flex-col items-center gap-1">
+                <PlanIcon plan={p.id} color={p.color} />
+                <span className="text-[10px] font-bold tracking-[0.06em]" style={{ color: p.color }}>
+                  {p.name.toUpperCase()}
+                </span>
+              </div>
+            ))}
+          </div>
+
           <div className="divide-y divide-[rgba(255,255,255,0.05)]">
             {[
               { label: t('plans.rowStats'), free: t('plans.basic'), premium: t('plans.advanced'), ultimate: t('plans.advanced') },
@@ -293,23 +330,12 @@ export default function Plans() {
               { label: t('plans.rowSyncedInstances'), free: '—', premium: t('plans.premiumSyncQuota'), ultimate: '10' },
               { label: t('plans.rowSyncedSaves'), free: '—', premium: '3', ultimate: '10' },
             ].map((row, i) => (
-              <div key={i} className="grid grid-cols-4 px-6 py-3.5">
+              <div key={i} className="grid grid-cols-[1.4fr_1fr_1fr_1fr] items-center px-6 py-3.5 transition-colors duration-150 hover:bg-[rgba(255,255,255,0.02)]">
                 <span className="text-[12px] text-[rgba(255,255,255,0.45)] font-medium">{row.label}</span>
                 <span className="text-[12px] text-[rgba(255,255,255,0.3)] text-center">{row.free}</span>
-                <span className="text-[12px] text-[#818cf8] text-center font-medium">{row.premium}</span>
-                <span className="text-[12px] text-[#f59e0b] text-center font-medium">{row.ultimate}</span>
+                <span className="text-[12px] text-[#818cf8] text-center font-semibold">{row.premium}</span>
+                <span className="text-[12px] text-[#f59e0b] text-center font-semibold">{row.ultimate}</span>
               </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-4 px-6 py-2 bg-[rgba(255,255,255,0.02)] border-t border-[rgba(255,255,255,0.06)]">
-            <span className="text-[10px] text-[rgba(255,255,255,0.18)]" />
-            {['Free', 'Premium', 'Ultimate'].map((name, i) => (
-              <span
-                key={i}
-                className={`text-[10px] text-center font-bold tracking-[0.06em] ${i === 0 ? 'text-[rgba(255,255,255,0.25)]' : i === 1 ? 'text-[#818cf8]' : 'text-[#f59e0b]'}`}
-              >
-                {name.toUpperCase()}
-              </span>
             ))}
           </div>
         </div>

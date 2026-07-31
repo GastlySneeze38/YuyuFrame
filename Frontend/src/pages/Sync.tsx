@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError, showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
+import { SYNC_ENABLED } from '@/config/features'
 import { useT } from '@/i18n'
 
 // ── Sync content ──────────────────────────────────────────────────────────────
@@ -151,6 +152,26 @@ export default function Sync() {
   const { yuyuToken, isPremium, yuyuPlan } = useStore()
 
   const planLabel = yuyuPlan === 'ultimate' ? 'ULTIMATE' : 'PREMIUM'
+
+  if (!SYNC_ENABLED) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D]">
+        <div className="text-[32px] opacity-[0.15]">
+          <svg viewBox="0 0 24 24" fill="white" width={48} height={48}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
+        </div>
+        <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">{t('sync.comingSoon')}</p>
+        <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
+          {t('sync.comingSoonDesc')}
+        </p>
+        <button
+          onClick={() => navigate('/home')}
+          className="rounded-xl px-5 py-2 text-sm font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
+        >
+          {t('sync.back')}
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col bg-[#09090D] text-white">
