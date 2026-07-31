@@ -8,7 +8,8 @@ import { InstanceSyncCard } from '@/components/sync/InstanceSyncCard'
 import { OrphanCloudCard } from '@/components/sync/OrphanCloudCard'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showApiError } from '@/stores/useErrorToast'
+import { isNetworkError } from '@/lib/apiError'
 import { useT } from '@/i18n'
 
 // ── Sync content ──────────────────────────────────────────────────────────────
@@ -33,7 +34,11 @@ function SyncContent() {
     setCloudLoading(true)
     api.sync.list()
       .then(setCloudInstances)
-      .catch(showError)
+      // Chargement automatique au montage — une panne réseau est déjà
+      // signalée par le badge de la TitleBar, pas la peine d'un toast en plus
+      // à chaque visite de la page hors-ligne. Les vraies erreurs restent
+      // remontées normalement.
+      .catch((e) => { if (!isNetworkError(e)) showError(e) })
       .finally(() => setCloudLoading(false))
   }, [yuyuToken])
 
@@ -66,7 +71,7 @@ function SyncContent() {
     try {
       await api.sync.delete(id)
       handleCloudDelete(id)
-    } catch (e) { showError(e) }
+    } catch (e) { showApiError(e, t('common.serverUnreachable')) }
   }
 
   const handleRestore = async (ci: SyncInstance) => {
@@ -74,7 +79,7 @@ function SyncContent() {
       const newInstance = await api.instances.create(ci.instance_name, ci.mc_version, ci.loader, ci.ram_mb)
       addInstance(newInstance)
       await api.sync.pull(ci.id, newInstance.id)
-    } catch (e) { showError(e) }
+    } catch (e) { showApiError(e, t('common.serverUnreachable')) }
   }
 
   const orphanCloud = cloudInstances.filter(

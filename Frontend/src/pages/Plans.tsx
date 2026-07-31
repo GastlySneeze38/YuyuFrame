@@ -11,7 +11,8 @@ import { DevPaymentSimulator } from '@/components/plans/DevPaymentSimulator'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
-import { showError } from '@/stores/useErrorToast'
+import { showApiError } from '@/stores/useErrorToast'
+import { isNetworkError } from '@/lib/apiError'
 import { useT } from '@/i18n'
 
 export default function Plans() {
@@ -42,7 +43,7 @@ export default function Plans() {
       setRefreshMsg(t('plans.planUpdated', { plan: resp.plan }))
       setTimeout(() => setRefreshMsg(null), 4000)
     } catch (e) {
-      showError(t('plans.serverUnreachable'))
+      showApiError(e, t('common.serverUnreachable'))
     } finally {
       setRefreshing(false)
     }
@@ -76,7 +77,7 @@ export default function Plans() {
       }
       setCheckoutState('timeout')
     } catch (e) {
-      setCheckoutError(String(e))
+      setCheckoutError(isNetworkError(e) ? t('common.serverUnreachable') : String(e))
       setCheckoutState('error')
     }
   }

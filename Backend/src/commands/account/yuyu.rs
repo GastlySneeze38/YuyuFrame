@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::commands::api_base;
+use crate::commands::{api_base, network_err};
 use crate::{db, state::SharedState};
 use super::minecraft::AccountInfo;
 
@@ -84,7 +84,7 @@ pub async fn yuyu_register(
         .json(&serde_json::json!({ "username": username, "password": password }))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         let msg = resp.text().await.unwrap_or_default();
@@ -112,7 +112,7 @@ pub async fn yuyu_login(
         .json(&serde_json::json!({ "username": username, "password": password }))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         let msg = resp.text().await.unwrap_or_default();
@@ -214,7 +214,7 @@ pub async fn yuyu_refresh_plan(state: tauri::State<'_, SharedState>) -> Result<P
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         let msg = resp.text().await.unwrap_or_default();
@@ -280,7 +280,7 @@ pub async fn yuyu_create_checkout(
         .json(&serde_json::json!({ "plan": plan }))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         let msg = resp.text().await.unwrap_or_default();
@@ -320,7 +320,7 @@ pub async fn yuyu_dev_simulate_payment(
         .json(&serde_json::json!({ "plan": plan }))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         let msg = resp.text().await.unwrap_or_default();

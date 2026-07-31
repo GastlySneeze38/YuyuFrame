@@ -17,6 +17,7 @@ export const fr = {
     retry: 'Réessayer',
     premiumFeature: 'Fonctionnalité Premium',
     seePlans: 'Voir les plans',
+    serverUnreachable: 'Serveur injoignable — réessaie plus tard',
   },
 
   mods: {
@@ -615,7 +616,6 @@ export const fr = {
     yourPlan: 'Votre plan',
     refresh: 'Rafraîchir',
     planUpdated: 'Plan mis à jour : {{plan}}',
-    serverUnreachable: 'Impossible de contacter le serveur',
     expiresOnPrefix: 'Votre abonnement',
     expiresOnSuffix: 'expire le',
     freeNoticeHighlight: 'Toutes les fonctionnalités sont gratuites pour l\'instant.',

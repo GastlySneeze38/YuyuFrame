@@ -1,5 +1,6 @@
 use tauri::Emitter;
 
+use crate::commands::network_err;
 use crate::state::SharedState;
 use super::super::instance::crud::instance_dir;
 use super::archive::{
@@ -53,7 +54,7 @@ pub async fn sync_list_instances(
         .bearer_auth(&token)
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         return Err(resp.text().await.unwrap_or_default());
@@ -154,7 +155,7 @@ pub async fn sync_push_instance(
         }))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !meta_resp.status().is_success() {
         return Err(meta_resp.text().await.unwrap_or_default());
@@ -201,7 +202,7 @@ pub async fn sync_push_instance(
         .body(zip_bytes)
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !data_resp.status().is_success() {
         return Err(data_resp.text().await.unwrap_or_default());
@@ -248,7 +249,7 @@ pub async fn sync_pull_instance(
         .timeout(std::time::Duration::from_secs(300))
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         return Err(resp.text().await.unwrap_or_default());
@@ -382,7 +383,7 @@ pub async fn sync_delete_instance(
         .bearer_auth(&token)
         .send()
         .await
-        .map_err(|e| format!("Serveur inaccessible : {e}"))?;
+        .map_err(network_err)?;
 
     if !resp.status().is_success() {
         return Err(resp.text().await.unwrap_or_default());

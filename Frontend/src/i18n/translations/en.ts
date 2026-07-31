@@ -19,6 +19,7 @@ export const en: TranslationSchema = {
     close: 'Close',
     save: 'Save',
     delete: 'Delete',
+    serverUnreachable: 'Server unreachable — try again later',
   },
 
   mods: {
@@ -617,7 +618,6 @@ export const en: TranslationSchema = {
     yourPlan: 'Your plan',
     refresh: 'Refresh',
     planUpdated: 'Plan updated: {{plan}}',
-    serverUnreachable: 'Could not reach the server',
     expiresOnPrefix: 'Your',
     expiresOnSuffix: 'subscription expires on',
     freeNoticeHighlight: 'All features are free for now.',

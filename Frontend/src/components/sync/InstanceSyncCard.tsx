@@ -5,7 +5,8 @@ import type { Instance, SaveInfo, SyncInstance, SyncProgress } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showApiError } from '@/stores/useErrorToast'
+import { isNetworkError } from '@/lib/apiError'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
 import { SaveSelector } from './SaveSelector'
@@ -56,7 +57,9 @@ export function InstanceSyncCard({
           : list.slice(0, maxSaves).map((s) => s.name)
         setSelectedSaves(new Set(auto))
       })
-      .catch((e) => { showError(e); setSavesLoaded(true) })
+      // Chargement automatique à l'expansion de la carte — pas de toast pour
+      // une panne réseau (badge TitleBar déjà là), juste pour les vraies erreurs.
+      .catch((e) => { if (!isNetworkError(e)) showError(e); setSavesLoaded(true) })
       .finally(() => setSavesLoading(false))
   }, [expanded])
 
@@ -96,7 +99,7 @@ export function InstanceSyncCard({
       onCloudUpdate(updated)
       flash(t('sync.savedToCloud'))
     } catch (e) {
-      showError(e)
+      showApiError(e, t('common.serverUnreachable'))
     } finally {
       unlisten()
       unlistenRef.current = null
@@ -119,7 +122,7 @@ export function InstanceSyncCard({
       await api.sync.pull(cloudEntry.id, instance.id)
       flash(t('sync.dataRestored'))
     } catch (e) {
-      showError(e)
+      showApiError(e, t('common.serverUnreachable'))
     } finally {
       unlisten()
       unlistenRef.current = null
@@ -136,7 +139,7 @@ export function InstanceSyncCard({
       onCloudDelete(cloudEntry.id)
       setExpanded(false)
     } catch (e) {
-      showError(e)
+      showApiError(e, t('common.serverUnreachable'))
     } finally {
       setDeleting(false)
     }

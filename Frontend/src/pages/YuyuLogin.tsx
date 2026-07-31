@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showApiError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import type { Account } from '@/types'
 
@@ -65,7 +65,7 @@ export default function YuyuLogin() {
 
       navigate('/home', { replace: true })
     } catch (err) {
-      showError(err)
+      showApiError(err, t('common.serverUnreachable'))
     } finally {
       setLoading(false)
     }
