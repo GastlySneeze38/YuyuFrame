@@ -23,7 +23,12 @@ export function CurseforgeCard({ hit, installed, loading, progress, onInstall }:
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-white text-[13px]">{hit.name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate font-semibold text-white text-[13px]">{hit.name}</p>
+            <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] bg-[rgba(242,113,28,0.15)] text-[rgba(242,148,86,0.9)]">
+              {t('mods.curseforgeBadge')}
+            </span>
+          </div>
           <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.summary}</p>
           <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloadCount)} {t('mods.downloads')}</p>
         </div>

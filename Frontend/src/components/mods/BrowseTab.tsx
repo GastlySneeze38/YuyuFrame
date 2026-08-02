@@ -4,10 +4,14 @@ import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import type { ModrinthHit, ModrinthSearchFilters } from './modUtils'
+import type { CurseforgeHit } from './curseforgeUtils'
 import { ModrinthCard } from './ModrinthCard'
+import { CurseforgeCard } from './CurseforgeCard'
 
 // Tags de contenu Modrinth réels (distincts du loader, déjà géré séparément) —
 // vocabulaire Modrinth lui-même, affiché tel quel (pas de traduction par tag).
+// Ne s'applique qu'à la partie Modrinth de la recherche fusionnée ci-dessous
+// (CurseForge n'a pas le même référentiel de catégories).
 const CONTENT_CATEGORIES = [
   'adventure', 'cursed', 'decoration', 'economy', 'equipment', 'food',
   'game-mechanics', 'library', 'magic', 'management', 'minigame', 'mobs',
@@ -23,22 +27,35 @@ function isFiltersActive(f: ModrinthSearchFilters): boolean {
   return !!(f.categories?.length || f.environment || f.license || f.openSourceOnly || (f.sort && f.sort !== 'relevance'))
 }
 
+/// Résultat de recherche fusionné Modrinth + CurseForge — un seul mod du même nom présent
+/// dans les deux sources n'apparaît qu'une fois (voir dédoublonnage dans Mods.tsx, qui garde
+/// toujours la version Modrinth). La preview au clic (`onOpenDetail`) n'existe que côté
+/// Modrinth — un hit CurseForge n'est identifié que par le petit badge sur sa carte.
+export type MergedHit =
+  | { source: 'modrinth'; hit: ModrinthHit }
+  | { source: 'curseforge'; hit: CurseforgeHit }
+
 export function BrowseTab({
-  query, results, searching, installing, installProgress, isInstalled, isPlugin,
-  filters, onQueryChange, onInstall, onOpenDetail, onFiltersChange,
+  query, results, searching, isPlugin, filters, onQueryChange, onFiltersChange,
+  installingModrinth, installProgressModrinth, isInstalledModrinth, onInstallModrinth, onOpenDetail,
+  installingCurseforge, installProgressCurseforge, isInstalledCurseforge, onInstallCurseforge,
 }: {
   query: string
-  results: ModrinthHit[]
+  results: MergedHit[]
   searching: boolean
-  installing: string | null
-  installProgress?: { percent: number; label: string } | null
-  isInstalled: (hit: ModrinthHit) => boolean
   isPlugin: boolean
   filters: ModrinthSearchFilters
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onInstall: (hit: ModrinthHit) => void
-  onOpenDetail: (hit: ModrinthHit) => void
   onFiltersChange: (f: ModrinthSearchFilters) => void
+  installingModrinth: string | null
+  installProgressModrinth?: { percent: number; label: string } | null
+  isInstalledModrinth: (hit: ModrinthHit) => boolean
+  onInstallModrinth: (hit: ModrinthHit) => void
+  onOpenDetail: (hit: ModrinthHit) => void
+  installingCurseforge: number | null
+  installProgressCurseforge?: { percent: number; label: string } | null
+  isInstalledCurseforge: (hit: CurseforgeHit) => boolean
+  onInstallCurseforge: (hit: CurseforgeHit) => void
 }) {
   const t = useT()
   const [showFilters, setShowFilters] = useState(false)
@@ -185,15 +202,24 @@ export function BrowseTab({
       )}
 
       <div className="flex flex-col gap-2">
-        {results.map((hit) => (
+        {results.map((r) => r.source === 'modrinth' ? (
           <ModrinthCard
-            key={hit.project_id}
-            hit={hit}
-            installed={isInstalled(hit)}
-            loading={installing === hit.project_id}
-            progress={installing === hit.project_id ? installProgress : null}
-            onInstall={() => onInstall(hit)}
-            onOpenDetail={() => onOpenDetail(hit)}
+            key={`mr-${r.hit.project_id}`}
+            hit={r.hit}
+            installed={isInstalledModrinth(r.hit)}
+            loading={installingModrinth === r.hit.project_id}
+            progress={installingModrinth === r.hit.project_id ? installProgressModrinth : null}
+            onInstall={() => onInstallModrinth(r.hit)}
+            onOpenDetail={() => onOpenDetail(r.hit)}
+          />
+        ) : (
+          <CurseforgeCard
+            key={`cf-${r.hit.id}`}
+            hit={r.hit}
+            installed={isInstalledCurseforge(r.hit)}
+            loading={installingCurseforge === r.hit.id}
+            progress={installingCurseforge === r.hit.id ? installProgressCurseforge : null}
+            onInstall={() => onInstallCurseforge(r.hit)}
           />
         ))}
       </div>

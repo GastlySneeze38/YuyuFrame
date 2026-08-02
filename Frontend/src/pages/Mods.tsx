@@ -12,11 +12,10 @@ import { ImportChoiceModal } from '@/components/import/ImportChoiceModal'
 import { InstalledTab } from '@/components/mods/InstalledTab'
 import { ModpackBanner } from '@/components/mods/ModpackBanner'
 import { ModpackBrowseTab } from '@/components/mods/ModpackBrowseTab'
-import { BrowseTab } from '@/components/mods/BrowseTab'
-import { CurseforgeBrowseTab } from '@/components/mods/CurseforgeBrowseTab'
+import { BrowseTab, type MergedHit } from '@/components/mods/BrowseTab'
 import {
   fetchCurseforgeSearch, fetchCurseforgeFiles, findFileForLoader, fetchCurseforgeInstalled, fetchCurseforgeModDetail,
-  _curseforgeCache, type CurseforgeHit, type CurseforgeSearchFilters, type CurseforgeMatch,
+  _curseforgeCache, type CurseforgeHit, type CurseforgeMatch,
 } from '@/components/mods/curseforgeUtils'
 import { ModDetailModal } from '@/components/mods/ModDetailModal'
 import { CurseforgeDetailModal } from '@/components/mods/CurseforgeDetailModal'
@@ -74,24 +73,36 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [searchFilters, setSearchFilters] = useState<ModrinthSearchFilters>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // CurseForge — panneau séparé, pas encore fusionné avec la recherche
-  // Modrinth ci-dessus (voir commentaire dans CurseforgeBrowseTab.tsx).
-  const [cfQuery, setCfQuery] = useState('')
+  // CurseForge — résultats de recherche fusionnés avec ceux de Modrinth dans le même
+  // onglet "Parcourir" (voir mergedResults ci-dessous et BrowseTab.tsx) : une seule
+  // barre de recherche déclenche les deux sources, avec dédoublonnage par nom.
   const [cfResults, setCfResults] = useState<CurseforgeHit[]>([])
   const [cfSearching, setCfSearching] = useState(false)
   const [cfInstalling, setCfInstalling] = useState<number | null>(null)
   const [cfInstallProgress, setCfInstallProgress] = useState<{ percent: number; label: string } | null>(null)
-  const [cfFilters, setCfFilters] = useState<CurseforgeSearchFilters>({})
   const [cfInstalledModIds, setCfInstalledModIds] = useState<Set<number>>(new Set())
   const [cfMatchByModName, setCfMatchByModName] = useState<Record<string, CurseforgeMatch>>({})
   const [cfUpdates, setCfUpdates] = useState<ModUpdate[]>([])
-  const cfDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cfModIdByName = useMemo(() => {
     const map: Record<string, number> = {}
     for (const [name, m] of Object.entries(cfMatchByModName)) map[name] = m.modId
     return map
   }, [cfMatchByModName])
+
+  /// Fusionne les deux sources de recherche dans une seule liste — Modrinth toujours
+  /// affiché en premier (c'est la source "preview"), puis CurseForge en complément. Un
+  /// mod CurseForge dont le nom correspond (insensible à la casse) à un résultat Modrinth
+  /// déjà présent est retiré : on garde uniquement la version Modrinth (a une preview,
+  /// des métadonnées plus riches), jamais les deux pour le même mod.
+  const mergedResults = useMemo<MergedHit[]>(() => {
+    const modrinthNames = new Set(results.map((r) => r.title.trim().toLowerCase()))
+    const cfDeduped = cfResults.filter((r) => !modrinthNames.has(r.name.trim().toLowerCase()))
+    return [
+      ...results.map((hit): MergedHit => ({ source: 'modrinth', hit })),
+      ...cfDeduped.map((hit): MergedHit => ({ source: 'curseforge', hit })),
+    ]
+  }, [results, cfResults])
 
   const pinnedCfModIds = useMemo(() => {
     const prefix = `${instanceId}:cf:`
@@ -356,6 +367,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
     if (tab === 'browse' && results.length === 0 && !searching) {
       runSearch(query)
     }
+    if (tab === 'browse' && cfResults.length === 0 && !cfSearching) {
+      runCfSearch(query)
+    }
     if (tab === 'modpack' && packResults.length === 0 && !packSearching) {
       runPackSearch(packQuery)
     }
@@ -512,7 +526,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
     const q = e.target.value
     setQuery(q)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => runSearch(q), 450)
+    // Une seule barre de recherche déclenche les deux sources en parallèle — voir
+    // mergedResults pour la fusion + dédoublonnage des résultats obtenus.
+    debounceRef.current = setTimeout(() => { runSearch(q); runCfSearch(q) }, 450)
   }
 
   const handleFiltersChange = (filters: ModrinthSearchFilters) => {
@@ -551,31 +567,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
-  // ── CurseForge (panneau séparé, voir CurseforgeBrowseTab.tsx) ────────────────
+  // ── CurseForge — résultats fusionnés avec Modrinth dans le même onglet (mergedResults) ──
 
-  const runCfSearch = async (q: string, filters: CurseforgeSearchFilters = cfFilters) => {
+  const runCfSearch = async (q: string) => {
     setCfSearching(true)
     if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim(), source: 'curseforge' })
     try {
-      setCfResults(await fetchCurseforgeSearch(q, mcVersion, filters))
+      setCfResults(await fetchCurseforgeSearch(q, mcVersion))
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {
       setCfSearching(false)
     }
-  }
-
-  const handleCfQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const q = e.target.value
-    setCfQuery(q)
-    if (cfDebounceRef.current) clearTimeout(cfDebounceRef.current)
-    cfDebounceRef.current = setTimeout(() => runCfSearch(q), 450)
-  }
-
-  const handleCfFiltersChange = (filters: CurseforgeSearchFilters) => {
-    setCfFilters(filters)
-    if (cfDebounceRef.current) clearTimeout(cfDebounceRef.current)
-    runCfSearch(cfQuery, filters)
   }
 
   const handleCfInstall = async (hit: CurseforgeHit) => {
@@ -732,19 +735,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
             {isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth')}
           </button>
           <button
-            onClick={() => setTab('curseforge')}
-            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
-              tab === 'curseforge'
-                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
-                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-              <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
-            </svg>
-            {t('mods.browseCurseforge')}
-          </button>
-          <button
             onClick={() => setTab('modpack')}
             className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
               tab === 'modpack'
@@ -882,30 +872,21 @@ export function ModsContent({ instance }: { instance: Instance }) {
         ) : tab === 'browse' ? (
           <BrowseTab
             query={query}
-            results={results}
-            searching={searching}
-            installing={installing}
-            installProgress={installProgress}
-            isInstalled={(hit) => !!installedByProject[hit.project_id]}
+            results={mergedResults}
+            searching={searching || cfSearching}
             isPlugin={isPlugin}
             filters={searchFilters}
             onQueryChange={handleQueryChange}
-            onInstall={handleInstall}
-            onOpenDetail={setDetailHit}
             onFiltersChange={handleFiltersChange}
-          />
-        ) : tab === 'curseforge' ? (
-          <CurseforgeBrowseTab
-            query={cfQuery}
-            results={cfResults}
-            searching={cfSearching}
-            installing={cfInstalling}
-            installProgress={cfInstallProgress}
-            isInstalled={(hit) => cfInstalledModIds.has(hit.id)}
-            filters={cfFilters}
-            onQueryChange={handleCfQueryChange}
-            onInstall={handleCfInstall}
-            onFiltersChange={handleCfFiltersChange}
+            installingModrinth={installing}
+            installProgressModrinth={installProgress}
+            isInstalledModrinth={(hit) => !!installedByProject[hit.project_id]}
+            onInstallModrinth={handleInstall}
+            onOpenDetail={setDetailHit}
+            installingCurseforge={cfInstalling}
+            installProgressCurseforge={cfInstallProgress}
+            isInstalledCurseforge={(hit) => cfInstalledModIds.has(hit.id)}
+            onInstallCurseforge={handleCfInstall}
           />
         ) : (
           <div className="flex flex-col gap-3">
