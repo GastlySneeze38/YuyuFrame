@@ -621,11 +621,10 @@ export const en: TranslationSchema = {
   plans: {
     back: 'Back',
     loginCta: 'Log in',
+    logout: 'Log out',
     title: 'YuyuFrame Plans',
     subtitle: 'Choose the experience that suits you',
-    yourPlan: 'Your plan',
     refresh: 'Refresh',
-    planUpdated: 'Plan updated: {{plan}}',
     expiresOnPrefix: 'Your',
     expiresOnSuffix: 'subscription expires on',
     current: 'CURRENT',

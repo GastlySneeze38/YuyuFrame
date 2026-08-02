@@ -5,10 +5,9 @@ import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { YuyuPlan } from '@/stores/useStore'
 import { getPlans } from '@/data/plans'
-import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PlanIcon } from '@/components/plans/PlanIcon'
 import { UpgradeModal } from '@/components/plans/UpgradeModal'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { HeaderAccountBadge } from '@/components/ui/HeaderAccountBadge'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
@@ -17,14 +16,13 @@ import { useT } from '@/i18n'
 export default function Plans() {
   const navigate = useNavigate()
   const t = useT()
-  const { yuyuPlanExpiresAt, yuyuUsername, isPremium, isUltimate, setYuyuPlan, clearYuyuSession, language } = useStore()
+  const { yuyuPlanExpiresAt, isPremium, isUltimate, setYuyuPlan, language } = useStore()
 
   const PLANS = getPlans(t)
 
   const effectivePlan = isUltimate() ? 'ultimate' : isPremium() ? 'premium' : 'free'
 
   const [refreshing, setRefreshing] = useState(false)
-  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
   const [upgradeTarget, setUpgradeTarget] = useState<string | null>(null)
   const [checkoutState, setCheckoutState] = useState<'idle' | 'loading' | 'waiting' | 'success' | 'timeout' | 'error'>('idle')
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
@@ -33,21 +31,14 @@ export default function Plans() {
     api.analytics.track('plans_page_viewed')
   }, [])
 
-  const handleLogout = async () => {
-    // yuyu_logout est purement local (JWT stateless, rien à révoquer côté
-    // serveur) — vide la session locale (DB + mémoire) côté Backend.
-    await api.yuyu.logout().catch(() => {})
-    clearYuyuSession()
-  }
-
+  // Utilisé par le bouton "Rafraîchir mon plan" de UpgradeModal (après un
+  // timeout d'attente de paiement) — le rafraîchissement depuis l'en-tête se
+  // fait maintenant via HeaderAccountBadge, plus besoin de le dupliquer ici.
   const handleRefresh = async () => {
     setRefreshing(true)
-    setRefreshMsg(null)
     try {
       const resp = await api.yuyu.refreshPlan()
       setYuyuPlan(resp.plan as YuyuPlan, resp.plan_expires_at)
-      setRefreshMsg(t('plans.planUpdated', { plan: resp.plan }))
-      setTimeout(() => setRefreshMsg(null), 4000)
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {
@@ -93,17 +84,22 @@ export default function Plans() {
     <div className="flex h-full flex-col overflow-auto bg-[#09090D] text-white">
       <div className="mx-auto w-full max-w-5xl px-6 py-10 flex flex-col gap-10">
 
-        {/* Header */}
-        <div className="flex items-center justify-between animate-fade-in-up">
-          <button
-            onClick={() => navigate('/home')}
-            className="flex items-center gap-2 transition-colors duration-150 text-[12px] text-[rgba(255,255,255,0.3)] font-medium hover:text-[rgba(255,255,255,0.7)]"
-          >
-            <BackArrowIcon size={14} />
-            {t('plans.back')}
-          </button>
+        {/* Header — les deux côtés sont en flex-1 pour que le titre reste
+            géométriquement centré quel que soit la largeur du bouton retour
+            vs celle du badge compte (avant, un `justify-between` avec une
+            largeur fixe à droite ne recentrait le titre que par coïncidence). */}
+        <div className="flex items-center animate-fade-in-up">
+          <div className="flex flex-1 items-center">
+            <button
+              onClick={() => navigate('/home')}
+              className="flex items-center gap-2 transition-colors duration-150 text-[12px] text-[rgba(255,255,255,0.3)] font-medium hover:text-[rgba(255,255,255,0.7)]"
+            >
+              <BackArrowIcon size={14} />
+              {t('plans.back')}
+            </button>
+          </div>
 
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-shrink-0 flex-col items-center gap-1">
             <h1 className="font-black text-white text-[30px] tracking-[-0.02em] [text-shadow:0_0_40px_rgba(75,63,207,0.5)]">
               {t('plans.title')}
             </h1>
@@ -112,49 +108,10 @@ export default function Plans() {
             </p>
           </div>
 
-          {/* Current plan badge + refresh */}
-          <div className="flex flex-col items-end gap-2 w-[100px]">
-            {!yuyuUsername && (
-              <button
-                onClick={() => navigate('/yuyu')}
-                className="rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all duration-150 bg-[rgba(75,63,207,0.18)] border border-[rgba(75,63,207,0.35)] text-[rgba(180,170,255,0.9)] hover:bg-[rgba(75,63,207,0.3)]"
-              >
-                {t('plans.loginCta')}
-              </button>
-            )}
-            {yuyuUsername && (
-              <>
-                <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-[10px] text-[rgba(255,255,255,0.25)] font-medium">{t('plans.yourPlan')}</span>
-                  <PlanBadge plan={effectivePlan} />
-                </div>
-                <button
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className={`flex items-center gap-1.5 transition-colors duration-150 text-[10px] font-semibold ${refreshing ? 'text-[rgba(255,255,255,0.2)] cursor-not-allowed' : 'text-[rgba(75,63,207,0.7)] cursor-pointer hover:text-[#818cf8]'}`}
-                >
-                  {refreshing ? (
-                    <ButtonSpinner size={12} color="rgba(75,63,207,0.6)" trackColor="rgba(255,255,255,0.1)" />
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="currentColor" width={10} height={10}>
-                      <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-                    </svg>
-                  )}
-                  {t('plans.refresh')}
-                </button>
-              </>
-            )}
+          <div className="flex flex-1 items-center justify-end">
+            <HeaderAccountBadge />
           </div>
         </div>
-
-        {/* Refresh feedback */}
-        {refreshMsg && (
-          <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 bg-[rgba(74,222,128,0.07)] border border-[rgba(74,222,128,0.2)]">
-            <span className="text-[12px] text-[rgb(74,222,128)] font-semibold">
-              {refreshMsg}
-            </span>
-          </div>
-        )}
 
         {/* Plan expiry warning */}
         {yuyuPlanExpiresAt && effectivePlan !== 'free' && (

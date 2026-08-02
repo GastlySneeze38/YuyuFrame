@@ -15,12 +15,8 @@ import { useT } from '@/i18n'
 export default function Stats() {
   const t = useT()
   const navigate = useNavigate()
-  const { isPremium, yuyuPlan } = useStore()
+  const { isPremium } = useStore()
   const premium = isPremium()
-  const planLabel = yuyuPlan === 'ultimate' ? 'ULTIMATE' : 'PREMIUM'
-  const planClasses = yuyuPlan === 'ultimate'
-    ? 'text-[#f59e0b] bg-[rgba(245,158,11,0.15)]'
-    : 'text-[#818cf8] bg-[rgba(75,63,207,0.18)]'
 
   const [stats, setStats] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,12 +42,6 @@ export default function Stats() {
         <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
           Stats & Analytics
         </h1>
-
-        {premium && (
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tracking-[0.05em] transition-transform duration-200 hover:scale-105 ${planClasses}`}>
-            {planLabel}
-          </span>
-        )}
       </PageHeader>
 
       <div className="flex-1 overflow-auto">

@@ -619,11 +619,10 @@ export const fr = {
   plans: {
     back: 'Retour',
     loginCta: 'Se connecter',
+    logout: 'Se déconnecter',
     title: 'Plans YuyuFrame',
     subtitle: 'Choisissez l\'expérience qui vous correspond',
-    yourPlan: 'Votre plan',
     refresh: 'Rafraîchir',
-    planUpdated: 'Plan mis à jour : {{plan}}',
     expiresOnPrefix: 'Votre abonnement',
     expiresOnSuffix: 'expire le',
     current: 'ACTUEL',

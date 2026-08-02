@@ -72,7 +72,7 @@ export default function Server() {
         </div>
 
         {gameRunning && (
-          <div className="ml-auto flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-1">
             <button
               onClick={handleReloadAgent}
               disabled={reloadStatus !== 'idle'}

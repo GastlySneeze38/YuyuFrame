@@ -149,9 +149,7 @@ function SyncContent() {
 export default function Sync() {
   const t = useT()
   const navigate = useNavigate()
-  const { yuyuToken, isPremium, yuyuPlan } = useStore()
-
-  const planLabel = yuyuPlan === 'ultimate' ? 'ULTIMATE' : 'PREMIUM'
+  const { yuyuToken, isPremium } = useStore()
 
   if (!SYNC_ENABLED) {
     return (
@@ -179,17 +177,6 @@ export default function Sync() {
         <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
           {t('sync.title')}
         </h1>
-        {yuyuToken && isPremium() && (
-          <span
-            className={
-              yuyuPlan === 'ultimate'
-                ? 'text-[10px] font-bold text-[#f59e0b] bg-[rgba(245,158,11,0.15)] px-2 py-0.5 rounded-md tracking-[0.05em]'
-                : 'text-[10px] font-bold text-[#818cf8] bg-[rgba(75,63,207,0.18)] px-2 py-0.5 rounded-md tracking-[0.05em]'
-            }
-          >
-            {planLabel}
-          </span>
-        )}
       </PageHeader>
 
       <div className="flex-1 overflow-y-auto p-5">
