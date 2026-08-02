@@ -199,6 +199,8 @@ export const api = {
       invoke<void>('mods_delete', { instanceId, name }),
     install: (instanceId: string, url: string, filename: string) =>
       invoke<Mod>('mods_install', { instanceId, url, filename }),
+    installCurseforge: (instanceId: string, url: string, filename: string) =>
+      invoke<Mod>('curseforge_mod_install', { instanceId, url, filename }),
 
     upload: async (instanceId: string, file: File): Promise<Mod> => {
       const data = Array.from(new Uint8Array(await file.arrayBuffer()))

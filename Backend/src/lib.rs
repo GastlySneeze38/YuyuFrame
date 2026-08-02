@@ -284,6 +284,7 @@ pub fn run() {
             commands::curseforge::curseforge_search,
             commands::curseforge::curseforge_mod_details,
             commands::curseforge::curseforge_mod_files,
+            commands::curseforge::curseforge_mod_install,
             commands::instance::import::import_detect_launchers,
             commands::instance::import::import_scan_folder,
             commands::instance::import::import_check_duplicates,

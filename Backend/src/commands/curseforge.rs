@@ -82,3 +82,80 @@ pub async fn curseforge_mod_files(
     if let Some(gv) = game_version { params.push(("game_version", gv)); }
     get_json(&client, &token, format!("{}/curseforge/mods/{}/files", api_base(), mod_id), &params).await
 }
+
+/// Téléchargement direct depuis le CDN CurseForge (`downloadUrl` renvoyé par
+/// `curseforge_mod_files`) — ne repasse PAS par LauncherAPI, ce domaine ne
+/// nécessite pas la clé API. Miroir de `instance::mods::mods_install`
+/// (même découpage streaming + event de progression) avec une whitelist de
+/// domaines CurseForge à la place de celle de Modrinth.
+#[tauri::command]
+pub async fn curseforge_mod_install(
+    app: tauri::AppHandle,
+    instance_id: String,
+    url: String,
+    filename: String,
+) -> Result<super::instance::mods::ModInfo, String> {
+    use futures::StreamExt;
+    use tauri::Emitter;
+
+    use super::instance::crud::instance_mods_dir;
+    use super::instance::mods::{sha1_cached, ModInfo};
+    use crate::minecraft::mod_files::is_enabled_jar;
+
+    const ALLOWED_HOSTS: [&str; 3] = [
+        "https://edge.forgecdn.net/",
+        "https://media.forgecdn.net/",
+        "https://mediafilez.forgecdn.net/",
+    ];
+    if !ALLOWED_HOSTS.iter().any(|prefix| url.starts_with(prefix)) {
+        return Err("URL non autorisée".into());
+    }
+
+    let safe_name = std::path::Path::new(&filename)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "mod.jar".to_string());
+
+    if !is_enabled_jar(&safe_name) {
+        return Err("Seuls les fichiers .jar sont acceptés".into());
+    }
+
+    let dir = instance_mods_dir(&instance_id);
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("YuyuFrame/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Téléchargement échoué : {}", resp.status()));
+    }
+
+    let total = resp.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        bytes.extend_from_slice(&chunk);
+        let _ = app.emit("mod_install_progress", serde_json::json!({
+            "filename": &safe_name,
+            "downloaded": downloaded,
+            "total": total,
+        }));
+    }
+
+    let dest = dir.join(&safe_name);
+    tokio::fs::write(&dest, &bytes).await.map_err(|e| e.to_string())?;
+    let sha1 = tokio::task::spawn_blocking(move || sha1_cached(&dest))
+        .await
+        .unwrap_or_default();
+
+    crate::integrations::analytics::capture("curseforge_mod_install_succeeded", serde_json::json!({
+        "instance_id": &instance_id,
+    }));
+    Ok(ModInfo { name: safe_name, size: bytes.len() as u64, enabled: true, sha1 })
+}

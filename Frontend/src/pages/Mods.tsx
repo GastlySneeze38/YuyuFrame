@@ -13,9 +13,11 @@ import { InstalledTab } from '@/components/mods/InstalledTab'
 import { ModpackBanner } from '@/components/mods/ModpackBanner'
 import { ModpackBrowseTab } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab } from '@/components/mods/BrowseTab'
+import { CurseforgeBrowseTab } from '@/components/mods/CurseforgeBrowseTab'
+import { fetchCurseforgeSearch, fetchCurseforgeFiles, type CurseforgeHit } from '@/components/mods/curseforgeUtils'
 import { ModDetailModal } from '@/components/mods/ModDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { showError } from '@/stores/useErrorToast'
+import { showError, showApiError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
@@ -67,6 +69,15 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [installProgress, setInstallProgress] = useState<{ percent: number; label: string } | null>(null)
   const [searchFilters, setSearchFilters] = useState<ModrinthSearchFilters>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // CurseForge — panneau séparé, pas encore fusionné avec la recherche
+  // Modrinth ci-dessus (voir commentaire dans CurseforgeBrowseTab.tsx).
+  const [cfQuery, setCfQuery] = useState('')
+  const [cfResults, setCfResults] = useState<CurseforgeHit[]>([])
+  const [cfSearching, setCfSearching] = useState(false)
+  const [cfInstalling, setCfInstalling] = useState<number | null>(null)
+  const [cfInstallProgress, setCfInstallProgress] = useState<{ percent: number; label: string } | null>(null)
+  const cfDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [modSearch, setModSearch] = useState('')
   const [logoCache, setLogoCache] = useState<Record<string, string | null>>({})
@@ -481,6 +492,54 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
+  // ── CurseForge (panneau séparé, voir CurseforgeBrowseTab.tsx) ────────────────
+
+  const runCfSearch = async (q: string) => {
+    setCfSearching(true)
+    if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim(), source: 'curseforge' })
+    try {
+      setCfResults(await fetchCurseforgeSearch(q, mcVersion))
+    } catch (e) {
+      showApiError(e, t('common.serverUnreachable'))
+    } finally {
+      setCfSearching(false)
+    }
+  }
+
+  const handleCfQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const q = e.target.value
+    setCfQuery(q)
+    if (cfDebounceRef.current) clearTimeout(cfDebounceRef.current)
+    cfDebounceRef.current = setTimeout(() => runCfSearch(q), 450)
+  }
+
+  const handleCfInstall = async (hit: CurseforgeHit) => {
+    setCfInstalling(hit.id)
+    setCfInstallProgress({ percent: 0, label: t('mods.preparing') })
+    const unlisten = await listen<ModInstallProgress>('mod_install_progress', (e) => {
+      const { downloaded, total } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((downloaded / total) * 100)) : 0
+      const label = total > 0 ? `${formatBytes(downloaded)} / ${formatBytes(total)}` : formatBytes(downloaded)
+      setCfInstallProgress({ percent, label })
+    })
+    try {
+      const files = await fetchCurseforgeFiles(hit.id, mcVersion)
+      const file = files.find((f) => f.downloadUrl)
+      if (!file?.downloadUrl) throw new Error(t('mods.noFileAvailable'))
+      const newMod = await api.mods.installCurseforge(instanceId, file.downloadUrl, file.fileName)
+      setMods((prev) =>
+        [...prev.filter((m) => m.name !== newMod.name), newMod]
+          .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+      )
+    } catch (e) {
+      showApiError(e, t('common.serverUnreachable'))
+    } finally {
+      unlisten()
+      setCfInstalling(null)
+      setCfInstallProgress(null)
+    }
+  }
+
   /// Installe un fichier de version précis choisi dans le panneau de détail — remplace le
   /// jar existant du même projet Modrinth s'il y en a un (permet de changer de version,
   /// contrairement à `handleInstall` qui refuse les mods déjà installés).
@@ -580,6 +639,19 @@ export function ModsContent({ instance }: { instance: Instance }) {
               <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
             {isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth')}
+          </button>
+          <button
+            onClick={() => setTab('curseforge')}
+            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
+              tab === 'curseforge'
+                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
+                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+              <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
+            </svg>
+            {t('mods.browseCurseforge')}
           </button>
           <button
             onClick={() => setTab('modpack')}
@@ -713,6 +785,16 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onInstall={handleInstall}
             onOpenDetail={setDetailHit}
             onFiltersChange={handleFiltersChange}
+          />
+        ) : tab === 'curseforge' ? (
+          <CurseforgeBrowseTab
+            query={cfQuery}
+            results={cfResults}
+            searching={cfSearching}
+            installing={cfInstalling}
+            installProgress={cfInstallProgress}
+            onQueryChange={handleCfQueryChange}
+            onInstall={handleCfInstall}
           />
         ) : (
           <div className="flex flex-col gap-3">

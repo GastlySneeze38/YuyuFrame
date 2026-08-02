@@ -40,6 +40,7 @@ export const en: TranslationSchema = {
     updateAllTitle: 'Update all (extra content only)',
     browsePlugins: 'Browse plugins',
     browseModrinth: 'Browse Modrinth',
+    browseCurseforge: 'Browse CurseForge',
     replaceModpack: 'Replace modpack',
     installModpack: 'Install a modpack',
     importing: 'Importing...',

@@ -38,6 +38,7 @@ export const fr = {
     updateAllTitle: 'Tout mettre à jour (contenu supplémentaire uniquement)',
     browsePlugins: 'Parcourir les plugins',
     browseModrinth: 'Parcourir Modrinth',
+    browseCurseforge: 'Parcourir CurseForge',
     replaceModpack: 'Remplacer le modpack',
     installModpack: 'Installer un modpack',
     importing: 'Import...',

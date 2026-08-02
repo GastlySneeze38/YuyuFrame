@@ -78,7 +78,7 @@ export interface ModrinthVersionEntry {
   files: ModrinthVersionFile[]
 }
 
-export type Tab = 'installed' | 'browse' | 'modpack'
+export type Tab = 'installed' | 'browse' | 'curseforge' | 'modpack'
 
 // Cache module-level : évite de rappeler Modrinth à chaque ouverture du panel
 export const _modrinthCache: Record<string, {
