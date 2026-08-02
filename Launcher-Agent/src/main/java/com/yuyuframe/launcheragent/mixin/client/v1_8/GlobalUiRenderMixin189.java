@@ -65,7 +65,18 @@ public abstract class GlobalUiRenderMixin189 {
             // non (ex: FOV forcé, voir FovModule) — équivalent de TickEvent
             // côté Forge, mais ici juste "cette même méthode s'exécute à
             // chaque frame" (suffisant, pas besoin d'un hook de tick séparé).
-            ModuleRegistry.tickAll();
+            //
+            // BUG TROUVÉ : voir GlobalUiRenderMixin (1.21+) pour le détail
+            // complet — sans son propre try/catch, un module en échec
+            // d'init statique bloquait PERMANENTEMENT (NoClassDefFoundError
+            // à chaque frame) tout le reste de la méthode, y compris le test
+            // d'ouverture du menu plus bas — plus aucune touche n'ouvrait
+            // jamais le menu. Isolé ici.
+            try {
+                ModuleRegistry.tickAll();
+            } catch (Throwable t) {
+                LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: ModuleRegistry.tickAll() a levé: " + t);
+            }
 
             Object currentScreen = getCurrentScreen(mc);
 

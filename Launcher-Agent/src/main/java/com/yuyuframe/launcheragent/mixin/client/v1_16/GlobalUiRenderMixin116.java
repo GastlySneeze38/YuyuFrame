@@ -81,7 +81,16 @@ public abstract class GlobalUiRenderMixin116 {
                 GlobalUiSettings.INSTANCE.onConfigChanged();
             }
             inputPoller.poll();
-            ModuleRegistry.tickAll();
+            // BUG TROUVÉ : voir GlobalUiRenderMixin (1.21+) pour le détail
+            // complet — sans son propre try/catch, un module en échec d'init
+            // statique bloquait PERMANENTEMENT (NoClassDefFoundError à chaque
+            // frame) tout le reste de la méthode, y compris le test
+            // d'ouverture du menu plus bas. Isolé ici.
+            try {
+                ModuleRegistry.tickAll();
+            } catch (Throwable t) {
+                LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin116: ModuleRegistry.tickAll() a levé: " + t);
+            }
 
             Object currentScreen = ScreenBridge116.getCurrentScreen(mc);
             if (currentScreen == null) {

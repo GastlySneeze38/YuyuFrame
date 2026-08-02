@@ -105,7 +105,24 @@ public abstract class GlobalUiRenderMixin {
             // non (ex: FOV forcé, voir FovModule) — équivalent de TickEvent
             // côté Forge, mais ici juste "cette même méthode s'exécute à
             // chaque frame" (suffisant, pas besoin d'un hook de tick séparé).
-            ModuleRegistry.tickAll();
+            //
+            // BUG TROUVÉ : ce tickAll() n'avait pas son propre try/catch —
+            // si un seul module échoue à son initialisation statique
+            // (exception dans <clinit>, p.ex. constructeur d'un module),
+            // ModuleRegistry est marqué en erreur PERMANENTE par la JVM
+            // (NoClassDefFoundError relancé à chaque référence future) :
+            // tickAll() levait alors à CHAQUE frame, pour toujours, avant
+            // d'atteindre le test d'ouverture du menu juste en dessous (le
+            // catch global de la méthode arrêtait tout AVANT ce test) — plus
+            // AUCUNE touche n'ouvrait jamais le menu, silencieusement, sans
+            // que rien d'autre ne plante. Isolé ici pour que le reste de la
+            // méthode (l'ouverture du menu) continue quoi qu'il arrive au
+            // moteur de modules.
+            try {
+                ModuleRegistry.tickAll();
+            } catch (Throwable t) {
+                LauncherLog.err("[LauncherAgent] ModuleRegistry.tickAll() a levé: " + t);
+            }
 
             // Ouverture du menu SEULEMENT (le dessin réel, y compris le HUD
             // permanent affiché quand aucun écran n'est ouvert, se fait dans

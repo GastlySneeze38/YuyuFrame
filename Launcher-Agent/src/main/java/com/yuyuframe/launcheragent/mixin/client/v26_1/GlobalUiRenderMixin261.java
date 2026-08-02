@@ -48,7 +48,20 @@ public abstract class GlobalUiRenderMixin261 {
             }
             GlobalUiRenderBridge261.inputPoller.poll();
 
-            ModuleRegistry.tickAll();
+            // BUG TROUVÉ : voir GlobalUiRenderMixin (bracket 1.21.11) pour le
+            // détail complet — tickAll() sans son propre try/catch pouvait,
+            // si un module échouait à son init statique, bloquer
+            // PERMANENTEMENT le test d'ouverture du menu juste en dessous
+            // (NoClassDefFoundError relancé à chaque frame par
+            // ModuleRegistry, catché par le catch global de la méthode AVANT
+            // d'atteindre ce test). Isolé ici pour que la touche de menu
+            // reste toujours accessible quoi qu'il arrive au reste du moteur
+            // de modules.
+            try {
+                ModuleRegistry.tickAll();
+            } catch (Throwable t) {
+                LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261: ModuleRegistry.tickAll() a levé: " + t);
+            }
 
             Object currentScreen = GlobalUiRenderBridge261.getCurrentScreen(mc);
             // Voir GlobalUiRenderBridge261.isMouseGrabbed() : empêche notre
