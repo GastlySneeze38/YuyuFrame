@@ -225,7 +225,7 @@ export const en: TranslationSchema = {
 
   login: {
     title: 'Login',
-    subtitle: 'Manage your Minecraft accounts (max 2)',
+    subtitle: 'Manage your Minecraft accounts',
     unknownError: 'Unknown error',
     backendConnectionError: 'Backend connection error',
     enterCodeOnMicrosoft: 'Enter this code on the Microsoft page:',

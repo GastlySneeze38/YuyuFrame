@@ -224,6 +224,24 @@ export const api = {
       invoke<ModrinthSearchResponse>('mods_search_advanced', { input }),
   },
 
+  // Passe par le proxy LauncherAPI (voir Server/LauncherAPI/src/routes/curseforge.rs)
+  // — la clé CurseForge n'est jamais côté client. Réponses en JSON brut (pas
+  // de type strict) : la forme exacte des payloads CurseForge sera affinée
+  // une fois le premier écran de recherche câblé dessus.
+  curseforge: {
+    search: (query: string, opts?: { gameVersion?: string; classId?: string; pageSize?: number; index?: number }) =>
+      invoke<unknown>('curseforge_search', {
+        query,
+        gameVersion: opts?.gameVersion,
+        classId: opts?.classId,
+        pageSize: opts?.pageSize,
+        index: opts?.index,
+      }),
+    modDetails: (modId: number) => invoke<unknown>('curseforge_mod_details', { modId }),
+    modFiles: (modId: number, gameVersion?: string) =>
+      invoke<unknown>('curseforge_mod_files', { modId, gameVersion }),
+  },
+
   modpacks: {
     fetchIndex: (fileUrl: string) =>
       invoke<{ mc_version: string | null; loader: string }>('modpack_fetch_index', { fileUrl }),

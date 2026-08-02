@@ -223,7 +223,7 @@ export const fr = {
 
   login: {
     title: 'Connexion',
-    subtitle: 'Gérez vos comptes Minecraft (max 2)',
+    subtitle: 'Gérez vos comptes Minecraft',
     unknownError: 'Erreur inconnue',
     backendConnectionError: 'Erreur de connexion au backend',
     enterCodeOnMicrosoft: 'Entre ce code sur la page Microsoft :',
