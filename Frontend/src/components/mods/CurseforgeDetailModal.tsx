@@ -44,13 +44,22 @@ export function CurseforgeDetailModal({
   const pinned = !!installedMod && isModPinned(instanceId, pinKey)
   const [files, setFiles] = useState<CurseforgeFile[]>([])
   const [loadingFiles, setLoadingFiles] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [showAllVersions, setShowAllVersions] = useState(false)
   const [installingId, setInstallingId] = useState<number | null>(null)
 
   useEffect(() => {
     setLoadingFiles(true)
-    fetchCurseforgeFiles(hit.id, showAllVersions ? '' : mcVersion)
-      .then((all) => setFiles(filterFilesForLoader(all, loader)))
+    setLoadError('')
+    // Toujours récupérer TOUS les fichiers (pas de `gameVersion` passé à l'API CurseForge) et
+    // filtrer côté client — le filtrage serveur via `gameVersion` s'est avéré peu fiable
+    // (renvoyait vide pour des versions MC pourtant présentes dans la liste complète).
+    fetchCurseforgeFiles(hit.id, '')
+      .then((all) => setFiles(filterFilesForLoader(all, loader, showAllVersions ? undefined : mcVersion)))
+      .catch((e) => {
+        console.error('fetchCurseforgeFiles failed', hit.id, e)
+        setLoadError(e instanceof Error ? e.message : String(e))
+      })
       .finally(() => setLoadingFiles(false))
   }, [hit.id, loader, mcVersion, showAllVersions])
 
@@ -115,6 +124,10 @@ export function CurseforgeDetailModal({
         <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto">
           {loadingFiles ? (
             <Spinner />
+          ) : loadError ? (
+            <p className="text-[12px] text-[rgba(248,113,113,0.8)] text-center py-4">
+              {loadError}
+            </p>
           ) : files.length === 0 ? (
             <p className="text-[12px] text-[rgba(255,255,255,0.3)] text-center py-4">
               {t('mods.noVersion')} {showAllVersions ? '' : t('mods.compatibleWithVersion', { version: mcVersion })}

@@ -7,6 +7,12 @@ use std::time::Duration;
 /// ID de l'application Discord YuyuFrame (https://discord.com/developers/applications).
 const DISCORD_APP_ID: &str = "1357094158103347301";
 
+/// Coupe tout le pipeline Discord (Rich Presence + funnel "Rejoindre") sans retirer le code —
+/// `false` = `connect_and_announce` ne tente jamais la connexion IPC, `set_playing`/`set_idle`
+/// restent no-op (ils mettent juste `CURRENT_STATE` à jour, jamais poussé nulle part puisque
+/// `DISCORD_CLIENT` n'est jamais initialisé). Remettre à `true` pour réactiver.
+const DISCORD_ENABLED: bool = false;
+
 /// Délai entre deux tentatives de connexion tant que Discord n'a pas répondu
 /// (pas encore lancé au démarrage du launcher, lancé après coup par
 /// l'utilisateur, etc.) — voir `connect_and_announce`.
@@ -108,6 +114,10 @@ fn apply_state(client: &mut DiscordIpcClient, state: &PresenceState) {
 /// Discord n'est pas disponible — jamais bloquant/fatal pour le reste du
 /// démarrage du launcher, ce thread lui est entièrement dédié.
 pub fn connect_and_announce() {
+    if !DISCORD_ENABLED {
+        return;
+    }
+
     loop {
         // BUG TROUVÉ (voir cargo check) : contrairement à ce que suggérait la
         // doc générale du crate, `DiscordIpcClient::new` en v1.1.0 renvoie

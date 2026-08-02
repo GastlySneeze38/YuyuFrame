@@ -173,15 +173,22 @@ const KNOWN_LOADER_TAGS = ['forge', 'fabric', 'quilt', 'neoforge', 'liteloader',
 /// exclut ici seulement les fichiers explicitement tagués pour un AUTRE loader — exiger un tag
 /// EXACT pour notre loader viderait la liste dans la plupart des cas, beaucoup de fichiers
 /// CurseForge ne taguant simplement aucun loader dans `gameVersions`.
-export function filterFilesForLoader(files: CurseforgeFile[], loader: string): CurseforgeFile[] {
+///
+/// `mcVersion` filtre en plus par version MC — appliqué CÔTÉ CLIENT plutôt que via le paramètre
+/// `gameVersion` de l'API CurseForge (côté serveur) : ce dernier s'est avéré peu fiable (renvoie
+/// vide pour des versions MC pourtant bien présentes dans la liste complète des fichiers), donc
+/// on ne fait plus confiance qu'au filtrage client, déjà éprouvé pour le loader.
+export function filterFilesForLoader(files: CurseforgeFile[], loader: string, mcVersion?: string): CurseforgeFile[] {
   const withUrl = files.filter((f) => !!f.downloadUrl)
-  if (loader === 'vanilla') return withUrl
   const wanted = loader.toLowerCase()
-  return withUrl.filter((f) => {
+  const byLoader = loader === 'vanilla' ? withUrl : withUrl.filter((f) => {
     const versions = f.gameVersions.map((v) => v.toLowerCase())
     const taggedForOtherLoader = versions.some((v) => KNOWN_LOADER_TAGS.includes(v) && v !== wanted)
     return !taggedForOtherLoader
   })
+  if (!mcVersion) return byLoader
+  const wantedVersion = mcVersion.toLowerCase()
+  return byLoader.filter((f) => f.gameVersions.some((v) => v.toLowerCase() === wantedVersion))
 }
 
 /// Variante stricte pour les suggestions de mise à jour automatiques : contrairement à
