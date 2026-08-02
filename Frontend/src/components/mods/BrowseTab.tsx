@@ -37,8 +37,8 @@ export type MergedHit =
 
 export function BrowseTab({
   query, results, searching, isPlugin, filters, onQueryChange, onFiltersChange,
-  installingModrinth, installProgressModrinth, isInstalledModrinth, onInstallModrinth, onOpenDetail,
-  installingCurseforge, installProgressCurseforge, isInstalledCurseforge, onInstallCurseforge,
+  installingModrinth, installProgressModrinth, isInstalledModrinth, onInstallModrinth, onOpenDetailModrinth,
+  installingCurseforge, installProgressCurseforge, isInstalledCurseforge, onInstallCurseforge, onOpenDetailCurseforge,
 }: {
   query: string
   results: MergedHit[]
@@ -51,11 +51,12 @@ export function BrowseTab({
   installProgressModrinth?: { percent: number; label: string } | null
   isInstalledModrinth: (hit: ModrinthHit) => boolean
   onInstallModrinth: (hit: ModrinthHit) => void
-  onOpenDetail: (hit: ModrinthHit) => void
+  onOpenDetailModrinth: (hit: ModrinthHit) => void
   installingCurseforge: number | null
   installProgressCurseforge?: { percent: number; label: string } | null
   isInstalledCurseforge: (hit: CurseforgeHit) => boolean
   onInstallCurseforge: (hit: CurseforgeHit) => void
+  onOpenDetailCurseforge: (hit: CurseforgeHit) => void
 }) {
   const t = useT()
   const [showFilters, setShowFilters] = useState(false)
@@ -210,7 +211,7 @@ export function BrowseTab({
             loading={installingModrinth === r.hit.project_id}
             progress={installingModrinth === r.hit.project_id ? installProgressModrinth : null}
             onInstall={() => onInstallModrinth(r.hit)}
-            onOpenDetail={() => onOpenDetail(r.hit)}
+            onOpenDetail={() => onOpenDetailModrinth(r.hit)}
           />
         ) : (
           <CurseforgeCard
@@ -220,6 +221,7 @@ export function BrowseTab({
             loading={installingCurseforge === r.hit.id}
             progress={installingCurseforge === r.hit.id ? installProgressCurseforge : null}
             onInstall={() => onInstallCurseforge(r.hit)}
+            onOpenDetail={() => onOpenDetailCurseforge(r.hit)}
           />
         ))}
       </div>

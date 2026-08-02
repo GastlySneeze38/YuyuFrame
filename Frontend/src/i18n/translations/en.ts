@@ -41,6 +41,7 @@ export const en: TranslationSchema = {
     browsePlugins: 'Browse plugins',
     browseModrinth: 'Browse mods',
     curseforgeBadge: 'CurseForge',
+    modrinthBadge: 'Modrinth',
     replaceModpack: 'Replace modpack',
     installModpack: 'Install a modpack',
     importing: 'Importing...',

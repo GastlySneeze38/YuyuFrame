@@ -90,6 +90,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
     return map
   }, [cfMatchByModName])
 
+  const cfVersionByName = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const [name, m] of Object.entries(cfMatchByModName)) map[name] = m.fileName
+    return map
+  }, [cfMatchByModName])
+
   /// Fusionne les deux sources de recherche dans une seule liste — Modrinth toujours
   /// affiché en premier (c'est la source "preview"), puis CurseForge en complément. Un
   /// mod CurseForge dont le nom correspond (insensible à la casse) à un résultat Modrinth
@@ -344,7 +350,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
           setCfMatchByModName(result.matchByModName)
           setCfUpdates(result.updates)
           _curseforgeCache[instanceId] = result
-        }).catch(() => {})
+        }).catch((e) => {
+          console.error('fetchCurseforgeInstalled failed', e)
+          showApiError(e, t('common.serverUnreachable'))
+        })
       } else {
         setCfInstalledModIds(new Set())
         setCfMatchByModName({})
@@ -595,11 +604,19 @@ export function ModsContent({ instance }: { instance: Instance }) {
       const file = findFileForLoader(files, loader)
       if (!file?.downloadUrl) throw new Error(t('mods.noFileAvailable'))
       const newMod = await api.mods.installCurseforge(instanceId, file.downloadUrl, file.fileName)
-      setMods((prev) =>
-        [...prev.filter((m) => m.name !== newMod.name), newMod]
-          .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-      )
+      const updatedMods = [...mods.filter((m) => m.name !== newMod.name), newMod]
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+      setMods(updatedMods)
       delete _curseforgeCache[instanceId]
+      // Rafraîchit tout de suite la détection "déjà installé" pour CE mod, sans attendre un
+      // rechargement complet de l'instance — sinon le mod qu'on vient d'installer continue
+      // d'apparaître "non installé" dans la recherche tant qu'on n'a pas changé d'onglet/instance.
+      fetchCurseforgeInstalled(instanceId, updatedMods, mcVersion, loader, pinnedCfModIds).then((result) => {
+        setCfInstalledModIds(result.installedModIds)
+        setCfMatchByModName(result.matchByModName)
+        setCfUpdates(result.updates)
+        _curseforgeCache[instanceId] = result
+      }).catch((e) => console.error('fetchCurseforgeInstalled failed', e))
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {
@@ -636,12 +653,20 @@ export function ModsContent({ instance }: { instance: Instance }) {
     if (existing && existing.name !== newMod.name) {
       await api.mods.delete(instanceId, existing.name).catch(() => {})
     }
-    setMods((prev) => {
-      const withoutOld = existing ? prev.filter((m) => m.name !== existing.name) : prev
-      return [...withoutOld.filter((m) => m.name !== newMod.name), newMod]
-        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-    })
+    const withoutOld = existing ? mods.filter((m) => m.name !== existing.name) : mods
+    const updatedMods = [...withoutOld.filter((m) => m.name !== newMod.name), newMod]
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+    setMods(updatedMods)
     delete _curseforgeCache[instanceId]
+    // Même raison que dans handleCfInstall : sans ce refetch immédiat, le fichier tout juste
+    // choisi dans le panneau de switch resterait affiché comme "non installé" jusqu'au
+    // prochain rechargement complet.
+    fetchCurseforgeInstalled(instanceId, updatedMods, mcVersion, loader, pinnedCfModIds).then((result) => {
+      setCfInstalledModIds(result.installedModIds)
+      setCfMatchByModName(result.matchByModName)
+      setCfUpdates(result.updates)
+      _curseforgeCache[instanceId] = result
+    }).catch((e) => console.error('fetchCurseforgeInstalled failed', e))
   }
 
   /// Ouvre directement le sélecteur de version d'un mod déjà installé (liste
@@ -857,6 +882,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             logoCache={logoCache}
             versionMap={versionMap}
             cfModIdByName={cfModIdByName}
+            cfVersionByName={cfVersionByName}
             updates={allUpdates}
             updatingMods={updatingMods}
             updatingAll={updatingAll}
@@ -882,11 +908,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
             installProgressModrinth={installProgress}
             isInstalledModrinth={(hit) => !!installedByProject[hit.project_id]}
             onInstallModrinth={handleInstall}
-            onOpenDetail={setDetailHit}
+            onOpenDetailModrinth={setDetailHit}
             installingCurseforge={cfInstalling}
             installProgressCurseforge={cfInstallProgress}
             isInstalledCurseforge={(hit) => cfInstalledModIds.has(hit.id)}
             onInstallCurseforge={handleCfInstall}
+            onOpenDetailCurseforge={setCfDetailHit}
           />
         ) : (
           <div className="flex flex-col gap-3">

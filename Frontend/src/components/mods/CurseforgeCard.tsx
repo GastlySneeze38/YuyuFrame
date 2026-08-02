@@ -4,16 +4,20 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import type { CurseforgeHit } from './curseforgeUtils'
 
-export function CurseforgeCard({ hit, installed, loading, progress, onInstall }: {
+export function CurseforgeCard({ hit, installed, loading, progress, onInstall, onOpenDetail }: {
   hit: CurseforgeHit
   installed: boolean
   loading: boolean
   progress?: { percent: number; label: string } | null
   onInstall: () => void
+  onOpenDetail: () => void
 }) {
   const t = useT()
   return (
-    <div className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+    <div
+      onClick={onOpenDetail}
+      className="flex cursor-pointer flex-col gap-2.5 rounded-2xl px-4 py-3 transition-all duration-150 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.05)]"
+    >
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
           {hit.logoUrl ? (
@@ -33,7 +37,7 @@ export function CurseforgeCard({ hit, installed, loading, progress, onInstall }:
           <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloadCount)} {t('mods.downloads')}</p>
         </div>
         <button
-          onClick={onInstall}
+          onClick={(e) => { e.stopPropagation(); onInstall() }}
           disabled={installed || loading}
           className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border ${
             installed
@@ -50,7 +54,7 @@ export function CurseforgeCard({ hit, installed, loading, progress, onInstall }:
       </div>
 
       {loading && progress && (
-        <div className="flex items-center gap-2 pl-[56px]">
+        <div className="flex items-center gap-2 pl-[56px]" onClick={(e) => e.stopPropagation()}>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
             <div
               className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"

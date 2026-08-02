@@ -39,6 +39,7 @@ export const fr = {
     browsePlugins: 'Parcourir les plugins',
     browseModrinth: 'Parcourir les mods',
     curseforgeBadge: 'CurseForge',
+    modrinthBadge: 'Modrinth',
     replaceModpack: 'Remplacer le modpack',
     installModpack: 'Installer un modpack',
     importing: 'Import...',

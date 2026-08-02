@@ -9,8 +9,8 @@ import { useT } from '@/i18n'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
-  cfModIdByName, updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod, onSwitchVersion,
-  switchingModName, onBrowseExtra, onUploadExtra,
+  cfModIdByName, cfVersionByName, updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod,
+  onSwitchVersion, switchingModName, onBrowseExtra, onUploadExtra,
 }: {
   mods: Mod[]
   modpackMeta: ModpackMeta | null
@@ -23,6 +23,7 @@ export function InstalledTab({
   logoCache: Record<string, string | null>
   versionMap: Record<string, ModrinthInfo>
   cfModIdByName: Record<string, number>
+  cfVersionByName: Record<string, string>
   updates: ModUpdate[]
   updatingMods: Set<string>
   updatingAll: boolean
@@ -73,7 +74,7 @@ export function InstalledTab({
       <ModRow
         key={mod.name}
         mod={mod}
-        version={versionMap[mod.sha1]?.version ?? null}
+        version={versionMap[mod.sha1]?.version ?? cfVersionByName[mod.name] ?? null}
         modrinthName={versionMap[mod.sha1]?.modrinthName || null}
         projectId={versionMap[mod.sha1]?.projectId ?? null}
         cfModId={cfModIdByName[mod.name] ?? null}

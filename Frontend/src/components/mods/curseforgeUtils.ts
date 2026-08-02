@@ -112,7 +112,8 @@ export async function fetchCurseforgeModDetail(modId: number): Promise<Curseforg
   try {
     const data = (await api.curseforge.modDetails(modId)) as { data?: CurseforgeApiMod }
     return data?.data ? toCurseforgeHit(data.data) : null
-  } catch {
+  } catch (e) {
+    console.error('fetchCurseforgeModDetail failed', modId, e)
     return null
   }
 }
@@ -121,7 +122,8 @@ export async function fetchCurseforgeCategories(): Promise<CurseforgeCategory[]>
   try {
     const data = (await api.curseforge.categories()) as { data?: CurseforgeApiCategory[] }
     return (data?.data ?? []).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
-  } catch {
+  } catch (e) {
+    console.error('fetchCurseforgeCategories failed', e)
     return []
   }
 }
@@ -159,15 +161,27 @@ export function findFileForLoader(files: CurseforgeFile[], loader: string): Curs
   )
 }
 
+/// Tags loader connus pouvant apparaître dans `gameVersions` — sert à distinguer "ce fichier
+/// est explicitement tagué pour un AUTRE loader" de "ce fichier n'est tagué pour aucun loader
+/// en particulier" (beaucoup de fichiers plus anciens n'ont tout simplement pas de tag loader
+/// du tout dans `gameVersions`, sans que ça signifie qu'ils sont incompatibles).
+const KNOWN_LOADER_TAGS = ['forge', 'fabric', 'quilt', 'neoforge', 'liteloader', 'cauldron', 'rift']
+
 /// Variante qui garde TOUTE la liste (pas juste le premier match) — utilisée par l'écran de
 /// switch de version, qui doit lister plusieurs fichiers compatibles plutôt qu'en choisir un
-/// seul automatiquement. Contrairement à `findFileForLoader`, pas de repli sur les fichiers
-/// non filtrés : un fichier au mauvais loader n'a rien à faire dans cette liste.
+/// seul automatiquement. Contrairement à `findFileForLoader` (repli sur le 1er fichier), on
+/// exclut ici seulement les fichiers explicitement tagués pour un AUTRE loader — exiger un tag
+/// EXACT pour notre loader viderait la liste dans la plupart des cas, beaucoup de fichiers
+/// CurseForge ne taguant simplement aucun loader dans `gameVersions`.
 export function filterFilesForLoader(files: CurseforgeFile[], loader: string): CurseforgeFile[] {
   const withUrl = files.filter((f) => !!f.downloadUrl)
   if (loader === 'vanilla') return withUrl
   const wanted = loader.toLowerCase()
-  return withUrl.filter((f) => f.gameVersions.some((gv) => gv.toLowerCase() === wanted))
+  return withUrl.filter((f) => {
+    const versions = f.gameVersions.map((v) => v.toLowerCase())
+    const taggedForOtherLoader = versions.some((v) => KNOWN_LOADER_TAGS.includes(v) && v !== wanted)
+    return !taggedForOtherLoader
+  })
 }
 
 /// Variante stricte pour les suggestions de mise à jour automatiques : contrairement à
@@ -181,7 +195,9 @@ function findExactUpdateCandidate(files: CurseforgeFile[], mcVersion: string, lo
   return files.find((f) => {
     if (!f.downloadUrl) return false
     const versions = f.gameVersions.map((v) => v.toLowerCase())
-    return versions.includes(wantedVersion) && (loader === 'vanilla' || versions.includes(wantedLoader))
+    if (!versions.includes(wantedVersion)) return false
+    const taggedForOtherLoader = versions.some((v) => KNOWN_LOADER_TAGS.includes(v) && v !== wantedLoader)
+    return loader === 'vanilla' || !taggedForOtherLoader
   })
 }
 
@@ -194,6 +210,9 @@ interface CurseforgeFingerprintMatch {
 export interface CurseforgeMatch {
   modId: number
   fileId: number
+  /// Nom d'affichage du fichier actuellement installé — CurseForge n'a pas de numéro de
+  /// version sémantique comme Modrinth, c'est ce qu'on affiche dans la colonne "Version".
+  fileName: string
 }
 
 // Cache module-level : évite de recalculer les fingerprints locaux + de
@@ -227,6 +246,11 @@ export async function fetchCurseforgeInstalled(
     data?: { exactMatches?: CurseforgeFingerprintMatch[] }
   }
   const matches = raw?.data?.exactMatches ?? []
+  // Diagnostic — la détection "déjà installé" dépend entièrement de ce que CurseForge
+  // renvoie ici : si `matches` reste vide alors que des .jar CurseForge sont bien présents
+  // dans le dossier mods/, le problème vient du calcul du fingerprint local ou de la
+  // correspondance côté CurseForge, pas de l'UI (voir ces logs pour trancher).
+  console.debug('[curseforge] fingerprints locaux calculés :', locals.length, '— matches reçus :', matches.length)
 
   const installedModIds = new Set<number>()
   const matchByModName: Record<string, CurseforgeMatch> = {}
@@ -236,9 +260,12 @@ export async function fetchCurseforgeInstalled(
 
     const localName = m.file?.fileFingerprint != null ? nameByFingerprint.get(m.file.fileFingerprint) : undefined
     const mod = localName ? byName.get(localName) : undefined
-    if (!mod) continue
+    if (!mod) {
+      console.debug('[curseforge] match sans correspondance locale (fingerprint renvoyé introuvable) :', m.id, m.file?.fileFingerprint)
+      continue
+    }
 
-    matchByModName[mod.name] = { modId: m.id, fileId: m.file.id }
+    matchByModName[mod.name] = { modId: m.id, fileId: m.file.id, fileName: m.file.displayName || m.file.fileName }
 
     if (pinnedModIds.has(m.id)) continue // downgrade délibéré via l'écran de switch — ne pas re-proposer
     const candidates = (m.latestFiles ?? []).map(toCurseforgeFile)
