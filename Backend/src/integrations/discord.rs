@@ -7,11 +7,23 @@ use std::time::Duration;
 /// ID de l'application Discord YuyuFrame (https://discord.com/developers/applications).
 const DISCORD_APP_ID: &str = "1357094158103347301";
 
+/// Même URL que `DOWNLOAD_URL` dans `Server/LauncherAPI/src/routes/join.rs` —
+/// dupliquée ici plutôt que partagée (crates séparées, pas de dépendance
+/// entre le launcher et le serveur), à garder synchronisée manuellement si
+/// jamais elle change. Le site plutôt qu'un lien GitHub direct : meilleure
+/// vitrine (page d'accueil soignée) qu'une page de releases brute.
+const DOWNLOAD_URL: &str = "https://yuyuframe.eu";
+
+/// Page-pont LauncherAPI qui tente `yuyuframe://` nu (ramène juste le
+/// launcher au premier plan) et bascule sur `DOWNLOAD_URL` si rien ne s'est
+/// ouvert — voir `Server/LauncherAPI/src/routes/open.rs`.
+const OPEN_URL: &str = "https://api.yuyuframe.eu/open";
+
 /// Coupe tout le pipeline Discord (Rich Presence + funnel "Rejoindre") sans retirer le code —
 /// `false` = `connect_and_announce` ne tente jamais la connexion IPC, `set_playing`/`set_idle`
 /// restent no-op (ils mettent juste `CURRENT_STATE` à jour, jamais poussé nulle part puisque
 /// `DISCORD_CLIENT` n'est jamais initialisé). Remettre à `true` pour réactiver.
-const DISCORD_ENABLED: bool = false;
+const DISCORD_ENABLED: bool = true;
 
 /// Délai entre deux tentatives de connexion tant que Discord n'a pas répondu
 /// (pas encore lancé au démarrage du launcher, lancé après coup par
@@ -66,29 +78,51 @@ pub fn build_join_url(ip: &str, mc_version: &str, loader: &str) -> Option<String
 /// `client`. Factorisé pour être appelé à la fois lors d'un changement d'état
 /// (`set_playing`/`set_idle`) et lors d'une (re)connexion, qui doit rejouer le
 /// dernier état demandé plutôt que de toujours repartir sur idle.
+/// Discord limite à 2 boutons max par activité. Design retenu : un bouton FIXE
+/// (téléchargement direct, ne dépend jamais de l'état — celui-là ne ment
+/// jamais, tout le monde peut télécharger) + un bouton qui change selon l'état
+/// (rejoindre le serveur en jeu, ou lancer le launcher au repos). Contrairement
+/// à un unique bouton "générique", ce découpage évite le dilemme "Ouvrir" vs
+/// "Télécharger" (voir historique) : le bouton fixe est toujours honnête, et le
+/// bouton dynamique délègue la détection installé/pas installé à la page-pont
+/// (`/open` ou `/join/{payload}`, voir Server/LauncherAPI/src/routes/), qui,
+/// elle, peut réagir en JS (blur/visibilitychange) — impossible à faire
+/// depuis Discord lui-même (juste un lien statique, aucun JS exécuté).
+fn download_button() -> activity::Button<'static> {
+    activity::Button::new("Télécharger YuyuFrame", DOWNLOAD_URL)
+}
+
+/// Asset uploadé dans Discord Developer Portal > Rich Presence > Art Assets
+/// sous cette clé exacte — affiché dans les deux états (idle et en jeu), le
+/// logo représente l'app elle-même, pas une activité en particulier.
+fn logo_assets() -> activity::Assets<'static> {
+    activity::Assets::new().large_image("yuyuframe_logo")
+}
+
 fn apply_state(client: &mut DiscordIpcClient, state: &PresenceState) {
     let activity = match state {
         PresenceState::Idle => activity::Activity::new()
             .state("Dans le launcher")
             .details("YuyuFrame")
-            // Nécessite un asset uploadé sous cette clé exacte dans Discord
-            // Developer Portal > Rich Presence > Art Assets — décommenter une
-            // fois l'image ajoutée là-bas (sinon Discord ignore juste l'image,
-            // sans erreur, mais autant ne pas référencer une clé qui n'existe
-            // pas encore).
-            // .assets(activity::Assets::new().large_image("yuyuframe_logo"))
-            .timestamps(activity::Timestamps::new().start(chrono::Utc::now().timestamp())),
+            .assets(logo_assets())
+            .timestamps(activity::Timestamps::new().start(chrono::Utc::now().timestamp()))
+            .buttons(vec![download_button(), activity::Button::new("Lancer YuyuFrame", OPEN_URL)]),
         PresenceState::Playing { instance_name, details, started_at, join_url } => {
-            let mut act = activity::Activity::new()
+            // "Rejoindre" seulement si le lancement s'est fait avec une IP de
+            // serveur connue (voir set_playing / commands::launch) — sinon
+            // (singleplayer, IP inconnue) rien à proposer à un ami qui
+            // cliquerait dessus, donc repli sur le même bouton "Lancer" que
+            // l'état idle plutôt que de n'afficher qu'un seul bouton.
+            let second = match join_url {
+                Some(url) => activity::Button::new("Rejoindre", url),
+                None => activity::Button::new("Lancer YuyuFrame", OPEN_URL),
+            };
+            activity::Activity::new()
                 .state(instance_name)
                 .details(details)
-                .timestamps(activity::Timestamps::new().start(*started_at));
-            // Bouton "Rejoindre" — seulement si le lancement s'est fait avec une
-            // IP de serveur connue (voir set_playing / commands::launch).
-            if let Some(url) = join_url {
-                act = act.buttons(vec![activity::Button::new("Rejoindre", url)]);
-            }
-            act
+                .assets(logo_assets())
+                .timestamps(activity::Timestamps::new().start(*started_at))
+                .buttons(vec![download_button(), second])
         }
     };
 
