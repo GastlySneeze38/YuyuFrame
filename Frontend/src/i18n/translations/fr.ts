@@ -110,6 +110,7 @@ export const fr = {
     sortFollows: 'Abonnés',
     sortNewest: 'Plus récents',
     sortUpdated: 'Mis à jour récemment',
+    sortName: 'Nom',
   },
 
   information: {

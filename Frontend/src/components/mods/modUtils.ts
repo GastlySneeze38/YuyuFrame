@@ -18,6 +18,11 @@ export interface ModUpdate {
   filename: string
   /// Mods dont la dépendance déclarée (fabric.mod.json) serait cassée par cette mise à jour.
   blockedBy: string[]
+  /// Absent = Modrinth (par défaut, historique) — `fileUrl` détermine quelle commande Tauri
+  /// peut télécharger le fichier (chacune n'autorise que le domaine CDN de sa source, voir
+  /// `mods_install`/`curseforge_mod_install` côté Rust), donc le call site doit savoir laquelle
+  /// utiliser plutôt que de deviner depuis l'URL.
+  source?: 'curseforge'
 }
 
 export interface ModrinthHit {

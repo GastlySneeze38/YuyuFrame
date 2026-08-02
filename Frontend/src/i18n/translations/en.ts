@@ -112,6 +112,7 @@ export const en: TranslationSchema = {
     sortFollows: 'Follows',
     sortNewest: 'Newest',
     sortUpdated: 'Recently updated',
+    sortName: 'Name',
   },
 
   information: {

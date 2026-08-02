@@ -14,8 +14,12 @@ import { ModpackBanner } from '@/components/mods/ModpackBanner'
 import { ModpackBrowseTab } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab } from '@/components/mods/BrowseTab'
 import { CurseforgeBrowseTab } from '@/components/mods/CurseforgeBrowseTab'
-import { fetchCurseforgeSearch, fetchCurseforgeFiles, type CurseforgeHit } from '@/components/mods/curseforgeUtils'
+import {
+  fetchCurseforgeSearch, fetchCurseforgeFiles, findFileForLoader, fetchCurseforgeInstalled, fetchCurseforgeModDetail,
+  _curseforgeCache, type CurseforgeHit, type CurseforgeSearchFilters, type CurseforgeMatch,
+} from '@/components/mods/curseforgeUtils'
 import { ModDetailModal } from '@/components/mods/ModDetailModal'
+import { CurseforgeDetailModal } from '@/components/mods/CurseforgeDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { showError, showApiError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
@@ -77,12 +81,32 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [cfSearching, setCfSearching] = useState(false)
   const [cfInstalling, setCfInstalling] = useState<number | null>(null)
   const [cfInstallProgress, setCfInstallProgress] = useState<{ percent: number; label: string } | null>(null)
+  const [cfFilters, setCfFilters] = useState<CurseforgeSearchFilters>({})
+  const [cfInstalledModIds, setCfInstalledModIds] = useState<Set<number>>(new Set())
+  const [cfMatchByModName, setCfMatchByModName] = useState<Record<string, CurseforgeMatch>>({})
+  const [cfUpdates, setCfUpdates] = useState<ModUpdate[]>([])
   const cfDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cfModIdByName = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const [name, m] of Object.entries(cfMatchByModName)) map[name] = m.modId
+    return map
+  }, [cfMatchByModName])
+
+  const pinnedCfModIds = useMemo(() => {
+    const prefix = `${instanceId}:cf:`
+    return new Set(
+      Object.keys(pinnedMods)
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => Number(k.slice(prefix.length))),
+    )
+  }, [pinnedMods, instanceId])
 
   const [modSearch, setModSearch] = useState('')
   const [logoCache, setLogoCache] = useState<Record<string, string | null>>({})
   const [detailHit, setDetailHit] = useState<ModrinthHit | null>(null)
-  const [switchingSha1, setSwitchingSha1] = useState<string | null>(null)
+  const [cfDetailHit, setCfDetailHit] = useState<CurseforgeHit | null>(null)
+  const [switchingModName, setSwitchingModName] = useState<string | null>(null)
 
   const installedByProject = useMemo(() => {
     const map: Record<string, Mod> = {}
@@ -297,6 +321,24 @@ export function ModsContent({ instance }: { instance: Instance }) {
           })
         })
       }
+
+      const cfCached = _curseforgeCache[instanceId]
+      if (cfCached) {
+        setCfInstalledModIds(cfCached.installedModIds)
+        setCfMatchByModName(cfCached.matchByModName)
+        setCfUpdates(cfCached.updates)
+      } else if (loaded.length > 0) {
+        fetchCurseforgeInstalled(instanceId, loaded, mcVersion, loader, pinnedCfModIds).then((result) => {
+          setCfInstalledModIds(result.installedModIds)
+          setCfMatchByModName(result.matchByModName)
+          setCfUpdates(result.updates)
+          _curseforgeCache[instanceId] = result
+        }).catch(() => {})
+      } else {
+        setCfInstalledModIds(new Set())
+        setCfMatchByModName({})
+        setCfUpdates([])
+      }
     } catch {
       setModsError(t('mods.cannotLoadMods'))
     } finally {
@@ -304,7 +346,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
-  useEffect(() => { setVersionMap({}); setUpdates([]); loadMods() }, [instanceId])
+  useEffect(() => {
+    setVersionMap({}); setUpdates([])
+    setCfInstalledModIds(new Set()); setCfMatchByModName({}); setCfUpdates([])
+    loadMods()
+  }, [instanceId])
 
   useEffect(() => {
     if (tab === 'browse' && results.length === 0 && !searching) {
@@ -327,13 +373,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
       await api.mods.delete(instanceId, name)
       setMods((prev) => prev.filter((m) => m.name !== name))
       delete _modrinthCache[instanceId]
+      delete _curseforgeCache[instanceId]
     } catch (e) { showError(e) }
   }, [instanceId])
 
   const handleUpdateMod = useCallback(async (update: ModUpdate) => {
     setUpdatingMods((prev) => new Set([...prev, update.mod.sha1]))
     try {
-      const newMod = await api.mods.install(instanceId, update.fileUrl, update.filename)
+      // `mods_install` (Modrinth) et `curseforge_mod_install` n'autorisent chacun que le
+      // domaine CDN de leur propre source côté Rust — il faut appeler la bonne commande.
+      const newMod = update.source === 'curseforge'
+        ? await api.mods.installCurseforge(instanceId, update.fileUrl, update.filename)
+        : await api.mods.install(instanceId, update.fileUrl, update.filename)
       if (newMod.name !== update.mod.name) {
         await api.mods.delete(instanceId, update.mod.name).catch(() => {})
         setMods((prev) =>
@@ -344,8 +395,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
         setMods((prev) => prev.map((m) => m.name === update.mod.name ? newMod : m))
       }
       setUpdates((prev) => prev.filter((u) => u.mod.sha1 !== update.mod.sha1))
+      setCfUpdates((prev) => prev.filter((u) => u.mod.sha1 !== update.mod.sha1))
       fetchVersionsByHash([newMod.sha1]).then(mergeVersions)
       delete _modrinthCache[instanceId]
+      delete _curseforgeCache[instanceId]
 
       // Si ce mod fait partie du modpack, on garde la référence à jour dans
       // modpack.json (sinon le nouveau fichier "tombe" hors du pack).
@@ -361,10 +414,15 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }, [instanceId, modpackMeta, mergeVersions])
 
+  // Mises à jour Modrinth + CurseForge fusionnées dans une seule liste — le
+  // mécanisme d'installation (`api.mods.install`) est source-agnostique, donc
+  // la même UI (badge, bouton par mod, "tout mettre à jour") sert les deux.
+  const allUpdates = useMemo(() => [...updates, ...cfUpdates], [updates, cfUpdates])
+
   const handleUpdateAll = async () => {
     if (updatingAll) return
     setUpdatingAll(true)
-    const pending = updates.filter((u) => u.blockedBy.length === 0 && !isPackMod(u.mod.name))
+    const pending = allUpdates.filter((u) => u.blockedBy.length === 0 && !isPackMod(u.mod.name))
     for (const update of pending) await handleUpdateMod(update)
     setUpdatingAll(false)
   }
@@ -426,6 +484,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
         })
         fetchVersionsByHash(result.imported.map((m) => m.sha1)).then(mergeVersions)
         delete _modrinthCache[instanceId]
+        delete _curseforgeCache[instanceId]
       }
       if (result.skipped.length > 0) {
         setImportNotice(t('mods.skippedAlreadyPresent', { count: result.skipped.length }))
@@ -494,11 +553,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   // ── CurseForge (panneau séparé, voir CurseforgeBrowseTab.tsx) ────────────────
 
-  const runCfSearch = async (q: string) => {
+  const runCfSearch = async (q: string, filters: CurseforgeSearchFilters = cfFilters) => {
     setCfSearching(true)
     if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim(), source: 'curseforge' })
     try {
-      setCfResults(await fetchCurseforgeSearch(q, mcVersion))
+      setCfResults(await fetchCurseforgeSearch(q, mcVersion, filters))
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {
@@ -513,6 +572,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
     cfDebounceRef.current = setTimeout(() => runCfSearch(q), 450)
   }
 
+  const handleCfFiltersChange = (filters: CurseforgeSearchFilters) => {
+    setCfFilters(filters)
+    if (cfDebounceRef.current) clearTimeout(cfDebounceRef.current)
+    runCfSearch(cfQuery, filters)
+  }
+
   const handleCfInstall = async (hit: CurseforgeHit) => {
     setCfInstalling(hit.id)
     setCfInstallProgress({ percent: 0, label: t('mods.preparing') })
@@ -524,13 +589,14 @@ export function ModsContent({ instance }: { instance: Instance }) {
     })
     try {
       const files = await fetchCurseforgeFiles(hit.id, mcVersion)
-      const file = files.find((f) => f.downloadUrl)
+      const file = findFileForLoader(files, loader)
       if (!file?.downloadUrl) throw new Error(t('mods.noFileAvailable'))
       const newMod = await api.mods.installCurseforge(instanceId, file.downloadUrl, file.fileName)
       setMods((prev) =>
         [...prev.filter((m) => m.name !== newMod.name), newMod]
           .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
       )
+      delete _curseforgeCache[instanceId]
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {
@@ -558,31 +624,56 @@ export function ModsContent({ instance }: { instance: Instance }) {
     delete _modrinthCache[instanceId]
   }
 
+  /// Installe un fichier CurseForge précis choisi dans le panneau de détail — mirroir
+  /// CurseForge de `handleInstallVersion` (Modrinth) : remplace le jar existant du même
+  /// mod s'il y en a un, ce qui permet de changer de version.
+  const handleInstallCfVersion = async (hit: CurseforgeHit, file: { url: string; filename: string }) => {
+    const existing = mods.find((m) => cfModIdByName[m.name] === hit.id)
+    const newMod = await api.mods.installCurseforge(instanceId, file.url, file.filename)
+    if (existing && existing.name !== newMod.name) {
+      await api.mods.delete(instanceId, existing.name).catch(() => {})
+    }
+    setMods((prev) => {
+      const withoutOld = existing ? prev.filter((m) => m.name !== existing.name) : prev
+      return [...withoutOld.filter((m) => m.name !== newMod.name), newMod]
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+    })
+    delete _curseforgeCache[instanceId]
+  }
+
   /// Ouvre directement le sélecteur de version d'un mod déjà installé (liste
   /// Installés) — avant, il fallait le rechercher à nouveau dans l'onglet
-  /// Parcourir pour accéder à la liste des versions.
+  /// Parcourir pour accéder à la liste des versions. Fonctionne aussi bien pour un
+  /// mod d'origine Modrinth que CurseForge (chacun ouvre son propre écran de switch).
   const handleSwitchVersion = async (mod: Mod) => {
     const projectId = versionMap[mod.sha1]?.projectId
-    if (!projectId) return
-    setSwitchingSha1(mod.sha1)
+    const cfModId = cfModIdByName[mod.name]
+    if (!projectId && !cfModId) return
+    setSwitchingModName(mod.name)
     try {
-      const detail = await fetchProjectDetail(projectId)
-      if (!detail) { showError('Impossible de joindre Modrinth'); return }
-      setDetailHit({
-        project_id: detail.id,
-        slug: detail.id,
-        title: detail.title,
-        description: detail.description,
-        icon_url: detail.icon_url,
-        downloads: detail.downloads,
-        categories: detail.categories,
-      })
+      if (projectId) {
+        const detail = await fetchProjectDetail(projectId)
+        if (!detail) { showError('Impossible de joindre Modrinth'); return }
+        setDetailHit({
+          project_id: detail.id,
+          slug: detail.id,
+          title: detail.title,
+          description: detail.description,
+          icon_url: detail.icon_url,
+          downloads: detail.downloads,
+          categories: detail.categories,
+        })
+      } else {
+        const hit = await fetchCurseforgeModDetail(cfModId)
+        if (!hit) { showError('Impossible de joindre CurseForge'); return }
+        setCfDetailHit(hit)
+      }
     } finally {
-      setSwitchingSha1(null)
+      setSwitchingModName(null)
     }
   }
 
-  const extraUpdatesCount = updates.filter((u) => u.blockedBy.length === 0 && !isPackMod(u.mod.name)).length
+  const extraUpdatesCount = allUpdates.filter((u) => u.blockedBy.length === 0 && !isPackMod(u.mod.name)).length
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -730,6 +821,22 @@ export function ModsContent({ instance }: { instance: Instance }) {
         />
       )}
 
+      {cfDetailHit && (() => {
+        const installedMod = mods.find((m) => cfModIdByName[m.name] === cfDetailHit.id) ?? null
+        return (
+          <CurseforgeDetailModal
+            hit={cfDetailHit}
+            instanceId={instanceId}
+            mcVersion={mcVersion}
+            loader={loader}
+            installedMod={installedMod}
+            installedFileId={installedMod ? cfMatchByModName[installedMod.name]?.fileId ?? null : null}
+            onClose={() => setCfDetailHit(null)}
+            onInstall={(file) => handleInstallCfVersion(cfDetailHit, file)}
+          />
+        )
+      })()}
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-3">
         {modpackMeta && (
@@ -759,7 +866,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onModSearch={setModSearch}
             logoCache={logoCache}
             versionMap={versionMap}
-            updates={updates}
+            cfModIdByName={cfModIdByName}
+            updates={allUpdates}
             updatingMods={updatingMods}
             updatingAll={updatingAll}
             onReload={loadMods}
@@ -767,7 +875,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onDelete={handleDelete}
             onUpdateMod={handleUpdateMod}
             onSwitchVersion={handleSwitchVersion}
-            switchingSha1={switchingSha1}
+            switchingModName={switchingModName}
             onBrowseExtra={() => setTab('modpack')}
             onUploadExtra={handlePickJars}
           />
@@ -793,8 +901,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
             searching={cfSearching}
             installing={cfInstalling}
             installProgress={cfInstallProgress}
+            isInstalled={(hit) => cfInstalledModIds.has(hit.id)}
+            filters={cfFilters}
             onQueryChange={handleCfQueryChange}
             onInstall={handleCfInstall}
+            onFiltersChange={handleCfFiltersChange}
           />
         ) : (
           <div className="flex flex-col gap-3">

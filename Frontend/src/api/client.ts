@@ -231,17 +231,28 @@ export const api = {
   // de type strict) : la forme exacte des payloads CurseForge sera affinée
   // une fois le premier écran de recherche câblé dessus.
   curseforge: {
-    search: (query: string, opts?: { gameVersion?: string; classId?: string; pageSize?: number; index?: number }) =>
+    search: (query: string, opts?: {
+      gameVersion?: string; classId?: string; pageSize?: number; index?: number
+      categoryId?: string; sortField?: string; sortOrder?: string
+    }) =>
       invoke<unknown>('curseforge_search', {
         query,
         gameVersion: opts?.gameVersion,
         classId: opts?.classId,
         pageSize: opts?.pageSize,
         index: opts?.index,
+        categoryId: opts?.categoryId,
+        sortField: opts?.sortField,
+        sortOrder: opts?.sortOrder,
       }),
     modDetails: (modId: number) => invoke<unknown>('curseforge_mod_details', { modId }),
     modFiles: (modId: number, gameVersion?: string) =>
       invoke<unknown>('curseforge_mod_files', { modId, gameVersion }),
+    categories: () => invoke<unknown>('curseforge_categories'),
+    localFingerprints: (instanceId: string) =>
+      invoke<Array<{ name: string; fingerprint: number }>>('curseforge_local_fingerprints', { instanceId }),
+    fingerprintMatches: (fingerprints: number[]) =>
+      invoke<unknown>('curseforge_fingerprint_matches', { fingerprints }),
   },
 
   modpacks: {

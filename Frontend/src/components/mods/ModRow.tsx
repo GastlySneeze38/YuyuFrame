@@ -11,13 +11,14 @@ import { useT } from '@/i18n'
  * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
  * des références stables (useCallback) au lieu d'une closure par ligne. */
 export const ModRow = memo(function ModRow({
-  mod, version, modrinthName, projectId, update, updating, switchingVersion, logoUrl,
+  mod, version, modrinthName, projectId, cfModId, update, updating, switchingVersion, logoUrl,
   onToggle, onDelete, onUpdate, onSwitchVersion,
 }: {
   mod: Mod
   version: string | null
   modrinthName: string | null
   projectId: string | null
+  cfModId: number | null
   update: ModUpdate | null
   updating: boolean
   switchingVersion: boolean
@@ -98,7 +99,7 @@ export const ModRow = memo(function ModRow({
             </button>
           )
         })()}
-        {projectId && (
+        {(projectId || cfModId) && (
           <button
             onClick={() => onSwitchVersion(mod)}
             disabled={switchingVersion}

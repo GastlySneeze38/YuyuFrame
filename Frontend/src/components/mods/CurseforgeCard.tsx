@@ -4,8 +4,9 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
 import type { CurseforgeHit } from './curseforgeUtils'
 
-export function CurseforgeCard({ hit, loading, progress, onInstall }: {
+export function CurseforgeCard({ hit, installed, loading, progress, onInstall }: {
   hit: CurseforgeHit
+  installed: boolean
   loading: boolean
   progress?: { percent: number; label: string } | null
   onInstall: () => void
@@ -28,14 +29,18 @@ export function CurseforgeCard({ hit, loading, progress, onInstall }: {
         </div>
         <button
           onClick={onInstall}
-          disabled={loading}
+          disabled={installed || loading}
           className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border ${
-            loading
-              ? 'bg-[rgba(40,38,65,0.7)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
-              : 'bg-[rgba(75,63,207,0.3)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(75,63,207,0.5)]'
+            installed
+              ? 'bg-[rgba(255,255,255,0.05)] border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
+              : loading
+                ? 'bg-[rgba(40,38,65,0.7)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-not-allowed'
+                : 'bg-[rgba(75,63,207,0.3)] border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] cursor-pointer hover:bg-[rgba(75,63,207,0.5)]'
           }`}
         >
-          {loading ? <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" /> : t('mods.installButton')}
+          {loading ? (
+            <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
+          ) : installed ? t('mods.installedButton') : t('mods.installButton')}
         </button>
       </div>
 

@@ -9,8 +9,8 @@ import { useT } from '@/i18n'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
-  updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod, onSwitchVersion, switchingSha1,
-  onBrowseExtra, onUploadExtra,
+  cfModIdByName, updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod, onSwitchVersion,
+  switchingModName, onBrowseExtra, onUploadExtra,
 }: {
   mods: Mod[]
   modpackMeta: ModpackMeta | null
@@ -22,6 +22,7 @@ export function InstalledTab({
   onModSearch: (v: string) => void
   logoCache: Record<string, string | null>
   versionMap: Record<string, ModrinthInfo>
+  cfModIdByName: Record<string, number>
   updates: ModUpdate[]
   updatingMods: Set<string>
   updatingAll: boolean
@@ -30,7 +31,7 @@ export function InstalledTab({
   onDelete: (name: string) => void
   onUpdateMod: (u: ModUpdate) => void
   onSwitchVersion: (mod: Mod) => void
-  switchingSha1: string | null
+  switchingModName: string | null
   onBrowseExtra: () => void
   onUploadExtra: () => void
 }) {
@@ -75,9 +76,10 @@ export function InstalledTab({
         version={versionMap[mod.sha1]?.version ?? null}
         modrinthName={versionMap[mod.sha1]?.modrinthName || null}
         projectId={versionMap[mod.sha1]?.projectId ?? null}
+        cfModId={cfModIdByName[mod.name] ?? null}
         update={update}
         updating={updatingMods.has(mod.sha1) || updatingAll}
-        switchingVersion={switchingSha1 === mod.sha1}
+        switchingVersion={switchingModName === mod.name}
         logoUrl={logoCache[displayName(mod.name)] ?? null}
         onToggle={onToggle}
         onDelete={onDelete}
