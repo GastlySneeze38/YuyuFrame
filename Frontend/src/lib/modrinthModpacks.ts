@@ -26,11 +26,21 @@ export interface ResolvedModpackFile {
 /** Recherche de modpacks via le backend (`mods_search_advanced`, voir
  * commands/modrinth.rs) — même chemin que la recherche de mods/plugins, avec
  * `projectType: 'modpack'` et les mêmes filtres avancés (catégories propres
- * aux modpacks, environnement, licence, open source, tri). */
-export async function searchModrinthModpacks(query: string, filters?: ModrinthSearchFilters): Promise<ModpackHit[]> {
+ * aux modpacks, environnement, licence, open source, tri). `gameVersion`/
+ * `loader` manquaient jusqu'ici : un modpack Forge/Fabric/NeoForge apparaissait
+ * pour n'importe quelle instance, quel que soit son loader ou sa version MC —
+ * même filtre `categories:<loader>` que la recherche de mods côté backend. */
+export async function searchModrinthModpacks(
+  query: string,
+  gameVersion?: string,
+  loader?: string,
+  filters?: ModrinthSearchFilters,
+): Promise<ModpackHit[]> {
   const res = await api.mods.searchAdvanced({
     query,
     projectType: 'modpack',
+    gameVersion: gameVersion || undefined,
+    loader,
     categories: filters?.categories,
     environment: filters?.environment,
     license: filters?.license,

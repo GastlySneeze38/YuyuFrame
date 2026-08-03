@@ -224,7 +224,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const runPackSearch = async (q: string, filters: ModrinthSearchFilters = packFilters) => {
     setPackSearching(true)
     try {
-      setPackResults(await searchModrinthModpacks(q, filters))
+      setPackResults(await searchModrinthModpacks(q, mcVersion, loader, filters))
     } catch {
       showError(t('mods.cannotReachModrinth'))
     } finally {
@@ -235,7 +235,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const runCfPackSearch = async (q: string) => {
     setCfPackSearching(true)
     try {
-      setCfPackResults(await searchCurseforgeModpacks(q, mcVersion))
+      setCfPackResults(await searchCurseforgeModpacks(q, mcVersion, loader))
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {

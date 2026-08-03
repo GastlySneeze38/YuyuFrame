@@ -88,8 +88,9 @@ const SORT_FIELD: Record<string, string> = {
 /// modLoaderType CurseForge (voir `/v1/mods/search`), distinct de sortField —
 /// sans lui, CurseForge renvoie des mods de tous les loaders mélangés (ex: du
 /// NeoForge proposé sur une instance Fabric). LiteLoader/Cauldron omis, jamais
-/// utilisés par ce launcher.
-const MOD_LOADER_TYPE: Record<string, string> = {
+/// utilisés par ce launcher. Exporté : réutilisé tel quel par
+/// curseforgeModpacks.ts (même enum côté CurseForge, mods ou modpacks).
+export const MOD_LOADER_TYPE: Record<string, string> = {
   forge: '1',
   fabric: '4',
   quilt: '5',

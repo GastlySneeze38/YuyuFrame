@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { MOD_LOADER_TYPE } from '@/components/mods/curseforgeUtils'
 
 // Miroir de modrinthModpacks.ts côté CurseForge — fichier séparé car les deux
 // API n'ont pas le même schéma (id numérique vs project_id string, pas de
@@ -50,7 +51,7 @@ function toModpackHit(m: CfApiModpack): CurseforgeModpackHit {
   }
 }
 
-export async function searchCurseforgeModpacks(query: string, gameVersion?: string): Promise<CurseforgeModpackHit[]> {
+export async function searchCurseforgeModpacks(query: string, gameVersion?: string, loader?: string): Promise<CurseforgeModpackHit[]> {
   if (!query.trim()) return []
   const data = (await api.curseforge.search(query, {
     gameVersion: gameVersion || undefined,
@@ -61,6 +62,9 @@ export async function searchCurseforgeModpacks(query: string, gameVersion?: stri
     // recherche de mods.
     sortField: '2',
     sortOrder: 'desc',
+    // Sans ça, un modpack Forge/NeoForge apparaît aussi bien pour une instance
+    // Fabric que Forge — même filtre que fetchCurseforgeSearch (mods).
+    modLoaderType: loader && loader !== 'vanilla' ? MOD_LOADER_TYPE[loader] : undefined,
   })) as { data?: CfApiModpack[] }
   return (data?.data ?? []).map(toModpackHit)
 }
