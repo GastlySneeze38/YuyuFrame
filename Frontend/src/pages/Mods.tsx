@@ -96,19 +96,52 @@ export function ModsContent({ instance }: { instance: Instance }) {
     return map
   }, [cfMatchByModName])
 
-  /// Fusionne les deux sources de recherche dans une seule liste — Modrinth toujours
-  /// affiché en premier (c'est la source "preview"), puis CurseForge en complément. Un
-  /// mod CurseForge dont le nom correspond (insensible à la casse) à un résultat Modrinth
-  /// déjà présent est retiré : on garde uniquement la version Modrinth (a une preview,
-  /// des métadonnées plus riches), jamais les deux pour le même mod.
+  /// Classe un hit par qualité de correspondance avec le texte tapé (0 =
+  /// meilleur). Calculé côté client car ni Modrinth ni CurseForge n'exposent
+  /// un score de pertinence comparable entre les deux API — c'est le seul
+  /// critère qu'on peut appliquer uniformément aux deux sources.
+  const matchTier = (name: string, q: string): number => {
+    const query = q.trim().toLowerCase()
+    if (!query) return 0
+    const n = name.trim().toLowerCase()
+    if (n === query) return 0
+    if (n.startsWith(query)) return 1
+    if (n.includes(query)) return 2
+    return 3
+  }
+
+  /// Fusionne les deux sources de recherche par pertinence plutôt que par simple
+  /// concaténation (Modrinth-puis-CurseForge) — sinon un mod CurseForge très pertinent
+  /// pour la requête (Forge, où CurseForge concentre le plus de mods) atterrissait après
+  /// TOUS les résultats Modrinth, même les moins pertinents. Tri en 2 temps : d'abord
+  /// `matchTier` (qualité du nom vs texte tapé), puis les téléchargements en repli — seul
+  /// terrain d'entente numérique entre les deux API. Uniquement en mode "pertinence"
+  /// (par défaut) : un tri explicite (téléchargements, mis à jour...) reste géré par
+  /// chaque API elle-même, pas re-mélangé ici.
+  /// Un mod CurseForge dont le nom correspond (insensible à la casse) à un résultat
+  /// Modrinth déjà présent est retiré : on garde uniquement la version Modrinth (a une
+  /// preview, des métadonnées plus riches), jamais les deux pour le même mod.
   const mergedResults = useMemo<MergedHit[]>(() => {
     const modrinthNames = new Set(results.map((r) => r.title.trim().toLowerCase()))
     const cfDeduped = cfResults.filter((r) => !modrinthNames.has(r.name.trim().toLowerCase()))
-    return [
+    const merged: MergedHit[] = [
       ...results.map((hit): MergedHit => ({ source: 'modrinth', hit })),
       ...cfDeduped.map((hit): MergedHit => ({ source: 'curseforge', hit })),
     ]
-  }, [results, cfResults])
+
+    const isRelevanceSort = !searchFilters.sort || searchFilters.sort === 'relevance'
+    if (!isRelevanceSort) return merged
+
+    return merged.sort((a, b) => {
+      const nameA = a.source === 'modrinth' ? a.hit.title : a.hit.name
+      const nameB = b.source === 'modrinth' ? b.hit.title : b.hit.name
+      const tierDiff = matchTier(nameA, query) - matchTier(nameB, query)
+      if (tierDiff !== 0) return tierDiff
+      const downloadsA = a.source === 'modrinth' ? a.hit.downloads : a.hit.downloadCount
+      const downloadsB = b.source === 'modrinth' ? b.hit.downloads : b.hit.downloadCount
+      return downloadsB - downloadsA
+    })
+  }, [results, cfResults, query, searchFilters.sort])
 
   const pinnedCfModIds = useMemo(() => {
     const prefix = `${instanceId}:cf:`
