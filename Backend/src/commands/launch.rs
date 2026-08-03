@@ -288,6 +288,14 @@ pub async fn console_ready(console_label: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Best-effort : un token MC expiré (ou son rafraîchissement en panne, hors
+/// ligne...) ne doit JAMAIS empêcher un lancement solo. Minecraft n'a besoin
+/// d'un token à jour que pour rejoindre un serveur en ligne ou récupérer un
+/// skin — jamais pour charger une sauvegarde locale déjà présente sur le
+/// disque. Avant ce correctif, un rafraîchissement raté (typiquement : pas de
+/// connexion) faisait échouer TOUT le lancement avec `?`, alors que rien
+/// d'autre dans `download_and_launch` n'a besoin du réseau une fois les
+/// fichiers déjà en cache (voir les caches version/assets/libs juste après).
 async fn refresh_if_needed(
     session: MinecraftSession,
     state: &tauri::State<'_, SharedState>,
@@ -298,29 +306,31 @@ async fn refresh_if_needed(
         return Ok(session);
     }
 
-    let refresh_token = session
-        .refresh_token
-        .as_deref()
-        .ok_or("Token MC expiré mais pas de refresh_token — reconnectez-vous")?
-        .to_string();
+    let Some(refresh_token) = session.refresh_token.clone() else {
+        tracing::warn!("Token MC expiré et pas de refresh_token — lancement quand même (solo uniquement, reconnectez-vous pour le multijoueur)");
+        return Ok(session);
+    };
 
     tracing::info!("Token MC expiré — rafraîchissement en cours...");
 
-    let result = auth::refresh_session(&refresh_token)
-        .await
-        .map_err(|e| format!("Échec du rafraîchissement du token MC : {}", e))?;
-
-    // Persist to state and DB
-    let new_session = {
-        let s = state.read().await;
-        let yuyu_user_id = s.current_yuyu_user_id().unwrap_or(0);
-        let db = s.db.lock().await;
-        crate::commands::account::apply_refreshed_tokens(&db, yuyu_user_id, result)
-    };
-    state.write().await.session = Some(new_session.clone());
-
-    tracing::info!("Token MC rafraîchi — expire dans 24h");
-    Ok(new_session)
+    match auth::refresh_session(&refresh_token).await {
+        Ok(result) => {
+            // Persist to state and DB
+            let new_session = {
+                let s = state.read().await;
+                let yuyu_user_id = s.current_yuyu_user_id().unwrap_or(0);
+                let db = s.db.lock().await;
+                crate::commands::account::apply_refreshed_tokens(&db, yuyu_user_id, result)
+            };
+            state.write().await.session = Some(new_session.clone());
+            tracing::info!("Token MC rafraîchi — expire dans 24h");
+            Ok(new_session)
+        }
+        Err(e) => {
+            tracing::warn!("Échec du rafraîchissement du token MC (hors ligne ?) — lancement avec l'ancien token : {}", e);
+            Ok(session)
+        }
+    }
 }
 
 #[tauri::command]
