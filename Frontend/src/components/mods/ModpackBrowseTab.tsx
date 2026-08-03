@@ -1,11 +1,19 @@
 import { useState } from 'react'
 import type { ModpackHit, ModrinthSearchFilters } from '@/lib/modrinthModpacks'
+import type { CurseforgeModpackHit } from '@/lib/curseforgeModpacks'
 import { formatDownloadCount } from '@/lib/format'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
+
+/// Résultat de recherche modpack fusionné Modrinth + CurseForge — même principe
+/// que `MergedHit` dans BrowseTab.tsx (mods), pas de dédoublonnage ici : les
+/// modpacks n'ont pas de nom canonique fiable à comparer entre les deux sources.
+export type MergedModpackHit =
+  | { source: 'modrinth'; hit: ModpackHit }
+  | { source: 'curseforge'; hit: CurseforgeModpackHit }
 
 // Tags de modpack réels côté Modrinth (distincts des tags de mod).
 const MODPACK_CATEGORIES = [
@@ -21,15 +29,21 @@ function isFiltersActive(f: ModrinthSearchFilters): boolean {
   return !!(f.categories?.length || f.environment || f.license || f.openSourceOnly || (f.sort && f.sort !== 'relevance'))
 }
 
-export function ModpackBrowseTab({ query, results, searching, installing, installProgress, filters, onQueryChange, onInstall, onFiltersChange }: {
+export function ModpackBrowseTab({
+  query, results, searching, installing, installProgress, cfInstalling, cfInstallProgress,
+  filters, onQueryChange, onInstall, onInstallCurseforge, onFiltersChange,
+}: {
   query: string
-  results: ModpackHit[]
+  results: MergedModpackHit[]
   searching: boolean
   installing: string | null
   installProgress?: { percent: number; label: string } | null
+  cfInstalling: number | null
+  cfInstallProgress?: { percent: number; label: string } | null
   filters: ModrinthSearchFilters
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onInstall: (hit: ModpackHit) => void
+  onInstallCurseforge: (hit: CurseforgeModpackHit) => void
   onFiltersChange: (f: ModrinthSearchFilters) => void
 }) {
   const t = useT()
@@ -173,21 +187,38 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
       )}
 
       <div className="flex flex-col gap-2">
-        {results.map((hit) => {
-          const isInstallingThis = installing === hit.project_id
+        {results.map((r) => {
+          const isModrinth = r.source === 'modrinth'
+          const key = isModrinth ? `mr-${r.hit.project_id}` : `cf-${r.hit.id}`
+          const isInstallingThis = isModrinth ? installing === r.hit.project_id : cfInstalling === r.hit.id
+          const progress = isModrinth ? installProgress : cfInstallProgress
+          const title = isModrinth ? r.hit.title : r.hit.name
+          const description = isModrinth ? r.hit.description : r.hit.summary
+          const author = isModrinth ? r.hit.author : r.hit.author
+          const downloads = isModrinth ? r.hit.downloads : r.hit.downloadCount
+          const iconUrl = isModrinth ? r.hit.icon_url : r.hit.logoUrl
+          const handleInstall = () => isModrinth ? onInstall(r.hit) : onInstallCurseforge(r.hit)
+
           return (
-            <div key={hit.project_id} className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+            <div key={key} className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
-                  {hit.icon_url ? <img src={hit.icon_url} alt={hit.title} className="w-full h-full object-cover" /> : <PlugIcon size={20} color="rgba(255,255,255,0.2)" />}
+                  {iconUrl ? <img src={iconUrl} alt={title} className="w-full h-full object-cover" /> : <PlugIcon size={20} color="rgba(255,255,255,0.2)" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-white text-[13px]">{hit.title}</p>
-                  <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.description}</p>
-                  <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{t('mods.byAuthor', { author: hit.author })} · {formatDownloadCount(hit.downloads)} {t('mods.downloads')}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-semibold text-white text-[13px]">{title}</p>
+                    {!isModrinth && (
+                      <span className="flex-shrink-0 rounded-md px-1.5 py-[1px] text-[9px] font-bold text-[#f16436] bg-[rgba(241,100,54,0.15)] border border-[rgba(241,100,54,0.35)]">
+                        CURSEFORGE
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{description}</p>
+                  <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{t('mods.byAuthor', { author })} · {formatDownloadCount(downloads)} {t('mods.downloads')}</p>
                 </div>
                 <button
-                  onClick={() => onInstall(hit)}
+                  onClick={handleInstall}
                   disabled={isInstallingThis}
                   className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] ${
                     isInstallingThis ? 'bg-[rgba(40,38,65,0.7)] cursor-not-allowed' : 'bg-[rgba(75,63,207,0.3)] cursor-pointer'
@@ -199,16 +230,16 @@ export function ModpackBrowseTab({ query, results, searching, installing, instal
                 </button>
               </div>
 
-              {isInstallingThis && installProgress && (
+              {isInstallingThis && progress && (
                 <div className="flex items-center gap-2 pl-[56px]">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
                     <div
                       className="h-full rounded-full bg-[#4B3FCF] transition-all duration-200"
-                      style={{ width: `${installProgress.percent}%` }}
+                      style={{ width: `${progress.percent}%` }}
                     />
                   </div>
                   <span className="max-w-[140px] flex-shrink-0 truncate text-[10px] text-[rgba(255,255,255,0.35)]">
-                    {installProgress.label}
+                    {progress.label}
                   </span>
                 </div>
               )}

@@ -2,8 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 
 use super::crud::instance_dir;
+use crate::commands::api_base;
+use crate::commands::curseforge::{post_json, require_token};
 use crate::minecraft::mod_files::is_jar_file;
 use crate::minecraft::versions::predicate::read_fabric_mod_json;
+use crate::state::SharedState;
 
 /// Indexe les mods déjà présents par leur id `fabric.mod.json` — sert à détecter
 /// les doublons (ex: "Fabric API" déjà installé en extra + ré-installé par le pack).
@@ -167,6 +170,341 @@ pub async fn modpack_fetch_index(file_url: String) -> Result<ModpackIndexInfo, S
     })
 }
 
+// ── CurseForge (manifest.json + overrides/) ─────────────────────────────────
+// Format distinct de Modrinth : le manifest ne référence chaque mod que par
+// `{projectID, fileID}`, jamais une URL directe — il faut résoudre ces ids en
+// URLs de téléchargement via l'API CurseForge (voir `resolve_cf_files`), et
+// TOUS les fichiers vont dans `mods/` (contrairement à l'index Modrinth qui
+// donne un chemin explicite par fichier).
+
+const CF_CDN_HOSTS: [&str; 3] = [
+    "https://edge.forgecdn.net/",
+    "https://media.forgecdn.net/",
+    "https://mediafilez.forgecdn.net/",
+];
+
+fn check_cf_cdn_url(url: &str) -> Result<(), String> {
+    if !CF_CDN_HOSTS.iter().any(|prefix| url.starts_with(prefix)) {
+        return Err("URL non autorisée".into());
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct CfManifestFile {
+    #[serde(rename = "projectID")]
+    project_id: u64,
+    #[serde(rename = "fileID")]
+    file_id: u64,
+}
+
+// `version`/`mod_loaders` jamais lus pour l'instant : contrairement à Modrinth
+// (`modpack_fetch_index`), on n'auto-configure pas encore la version/loader de
+// l'instance depuis un pack CurseForge — l'install se fait dans l'instance
+// déjà ouverte, comme le reste du flux modpack actuel. Gardés pour fidélité au
+// schéma du manifest et un futur câblage.
+#[derive(Deserialize, Default)]
+#[allow(dead_code)]
+struct CfManifestMinecraft {
+    #[serde(default)]
+    version: String,
+    #[serde(default, rename = "modLoaders")]
+    mod_loaders: Vec<serde_json::Value>,
+}
+
+fn default_cf_overrides() -> String {
+    "overrides".to_string()
+}
+
+#[derive(Deserialize)]
+struct CfManifest {
+    #[serde(default)]
+    #[allow(dead_code)]
+    minecraft: CfManifestMinecraft,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    version: String,
+    #[serde(default)]
+    author: String,
+    files: Vec<CfManifestFile>,
+    #[serde(default = "default_cf_overrides")]
+    overrides: String,
+}
+
+fn read_cf_manifest(bytes: &[u8]) -> Result<CfManifest, String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
+    let mut entry = archive
+        .by_name("manifest.json")
+        .map_err(|_| "manifest.json introuvable dans l'archive".to_string())?;
+    let mut content = String::new();
+    entry.read_to_string(&mut content).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CfFileMeta {
+    id: u64,
+    mod_id: u64,
+    file_name: String,
+    download_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CfFilesResponse {
+    data: Vec<CfFileMeta>,
+}
+
+/// Résout en un seul appel batch (voir Server/LauncherAPI `/curseforge/files`)
+/// les métadonnées de tous les fichiers référencés par un manifest — un appel
+/// par mod serait beaucoup trop lent (un modpack référence souvent 100+ mods).
+async fn resolve_cf_files(
+    state: &tauri::State<'_, SharedState>,
+    file_ids: &[u64],
+) -> Result<Vec<CfFileMeta>, String> {
+    if file_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (token, client) = require_token(state).await?;
+    let body = serde_json::json!({ "file_ids": file_ids });
+    let value = post_json(&client, &token, format!("{}/curseforge/files", api_base()), &body).await?;
+    let parsed: CfFilesResponse = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    Ok(parsed.data)
+}
+
+/// Extrait un dossier `prefix/` (ex: `overrides/`) directement dans `dir` —
+/// même logique best-effort que `extract_into_instance` (une entrée illisible
+/// ne doit jamais faire échouer tout l'install), généralisée pour accepter
+/// n'importe quel nom de dossier (CurseForge n'a qu'un seul `overrides`,
+/// configurable via `manifest.json`, contrairement au overrides/client-overrides
+/// fixes de Modrinth).
+fn extract_prefixed_dir(bytes: &[u8], prefix_name: &str, dir: &std::path::Path) -> Result<(), String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
+    let prefix = format!("{}/", prefix_name.trim_matches('/'));
+
+    for i in 0..archive.len() {
+        let mut entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("[Modpack CF] entrée d'archive #{} illisible : {}", i, e);
+                continue;
+            }
+        };
+        let name = entry.name().to_string();
+        let Some(rel) = name.strip_prefix(&prefix) else { continue };
+        if rel.is_empty() || name.ends_with('/') {
+            continue;
+        }
+        let dest = rel.split('/').fold(dir.to_path_buf(), |acc, c| acc.join(c));
+        if let Some(parent) = dest.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                tracing::warn!("[Modpack CF] création du dossier pour {} échouée : {}", name, e);
+                continue;
+            }
+        }
+        let mut out = match std::fs::File::create(&dest) {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!("[Modpack CF] écriture de {} échouée : {}", name, e);
+                continue;
+            }
+        };
+        if let Err(e) = std::io::copy(&mut entry, &mut out) {
+            tracing::warn!("[Modpack CF] copie de {} échouée : {}", name, e);
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn install_curseforge_pack(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, SharedState>,
+    instance_id: &str,
+    bytes: Vec<u8>,
+    project_id: String,
+    version_id: String,
+    name: String,
+    author: String,
+    summary: String,
+    icon_url: Option<String>,
+    version_number: String,
+    downloads: u64,
+    date_modified: Option<String>,
+    categories: Vec<String>,
+) -> Result<ModpackMeta, String> {
+    use tauri::Emitter;
+
+    let dir = instance_dir(instance_id);
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
+    let mods_dir = dir.join("mods");
+    tokio::fs::create_dir_all(&mods_dir).await.map_err(|e| e.to_string())?;
+
+    let manifest = {
+        let bytes = bytes.clone();
+        tokio::task::spawn_blocking(move || read_cf_manifest(&bytes))
+            .await
+            .map_err(|e| e.to_string())??
+    };
+
+    let file_ids: Vec<u64> = manifest.files.iter().map(|f| f.file_id).collect();
+    let resolved = resolve_cf_files(state, &file_ids).await?;
+    let by_file_id: std::collections::HashMap<u64, CfFileMeta> =
+        resolved.into_iter().map(|f| (f.id, f)).collect();
+
+    let client = reqwest::Client::builder()
+        .user_agent("YuyuFrame/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut mod_files: Vec<String> = Vec::new();
+    let mut failed_files: Vec<String> = Vec::new();
+    let total = manifest.files.len();
+
+    for (i, f) in manifest.files.iter().enumerate() {
+        let label = by_file_id.get(&f.file_id).map(|m| m.file_name.clone()).unwrap_or_default();
+        let _ = app.emit("modpack_install_progress", serde_json::json!({
+            "current": i, "total": total, "label": label,
+        }));
+
+        let Some(meta) = by_file_id.get(&f.file_id) else {
+            tracing::warn!("[Modpack CF] fichier introuvable côté CurseForge : project {} / file {}", f.project_id, f.file_id);
+            failed_files.push(format!("{}:{}", f.project_id, f.file_id));
+            continue;
+        };
+        let Some(url) = &meta.download_url else {
+            // Auteur ayant désactivé la distribution via l'API tierce (voir
+            // curseforge_mod_files côté commands/curseforge.rs) — non installable.
+            tracing::warn!("[Modpack CF] pas d'URL de téléchargement pour {}", meta.file_name);
+            failed_files.push(meta.file_name.clone());
+            continue;
+        };
+        if check_cf_cdn_url(url).is_err() {
+            tracing::warn!("[Modpack CF] URL hors CDN CurseForge ignorée pour {} : {}", meta.file_name, url);
+            failed_files.push(meta.file_name.clone());
+            continue;
+        }
+
+        let safe_name = std::path::Path::new(&meta.file_name)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("{}.jar", meta.mod_id));
+        if !is_jar_file(&safe_name) {
+            failed_files.push(safe_name);
+            continue;
+        }
+
+        let resp = match client.get(url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("[Modpack CF] téléchargement de {} échoué : {}", safe_name, e);
+                failed_files.push(safe_name);
+                continue;
+            }
+        };
+        if !resp.status().is_success() {
+            tracing::warn!("[Modpack CF] téléchargement de {} échoué : HTTP {}", safe_name, resp.status());
+            failed_files.push(safe_name);
+            continue;
+        }
+        let data = match resp.bytes().await {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::warn!("[Modpack CF] lecture du corps de réponse pour {} échouée : {}", safe_name, e);
+                failed_files.push(safe_name);
+                continue;
+            }
+        };
+        if let Err(e) = tokio::fs::write(mods_dir.join(&safe_name), &data).await {
+            tracing::warn!("[Modpack CF] écriture de {} échouée : {}", safe_name, e);
+            failed_files.push(safe_name);
+            continue;
+        }
+        mod_files.push(safe_name);
+    }
+
+    let _ = app.emit("modpack_install_progress", serde_json::json!({
+        "current": total, "total": total, "label": "Finalisation...",
+    }));
+
+    let overrides_name = manifest.overrides.clone();
+    let dir_clone = dir.clone();
+    let bytes_clone = bytes.clone();
+    tokio::task::spawn_blocking(move || extract_prefixed_dir(&bytes_clone, &overrides_name, &dir_clone))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    let meta = ModpackMeta {
+        project_id,
+        version_id,
+        name: if name.trim().is_empty() { manifest.name.clone() } else { name },
+        author: if author.trim().is_empty() { manifest.author.clone() } else { author },
+        summary,
+        icon_url,
+        version_number: if version_number.trim().is_empty() { manifest.version.clone() } else { version_number },
+        downloads,
+        date_modified,
+        categories,
+        mod_files,
+        failed_files,
+    };
+
+    let json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    tokio::fs::write(dir.join("modpack.json"), json)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(meta)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModpackInstallCurseforgeInput {
+    pub instance_id: String,
+    pub file_url: String,
+    pub mod_id: u64,
+    pub file_id: u64,
+    pub name: String,
+    pub author: String,
+    pub summary: String,
+    pub icon_url: Option<String>,
+    pub version_number: String,
+    pub downloads: u64,
+    pub date_modified: Option<String>,
+    pub categories: Vec<String>,
+}
+
+/// Installe un modpack CurseForge trouvé via la recherche in-app (mêmes
+/// principes que `modpack_install` côté Modrinth : télécharge le zip du pack
+/// lui-même, puis `install_curseforge_pack` s'occupe de résoudre et
+/// télécharger chaque mod référencé par son `manifest.json`.
+#[tauri::command]
+pub async fn modpack_install_curseforge(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, SharedState>,
+    input: ModpackInstallCurseforgeInput,
+) -> Result<ModpackMeta, String> {
+    check_cf_cdn_url(&input.file_url)?;
+    let client = reqwest::Client::builder()
+        .user_agent("YuyuFrame/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&input.file_url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Téléchargement échoué: {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
+
+    install_curseforge_pack(
+        &app, &state, &input.instance_id, bytes,
+        input.mod_id.to_string(), input.file_id.to_string(), input.name, input.author, input.summary,
+        input.icon_url, input.version_number, input.downloads, input.date_modified, input.categories,
+    ).await
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModpackInstallInput {
@@ -252,45 +590,193 @@ pub async fn modpack_install(app: tauri::AppHandle, input: ModpackInstallInput) 
     ).await
 }
 
-/// Importe un `.mrpack` déjà présent sur disque (téléchargé manuellement
-/// depuis modrinth.com, partagé par quelqu'un...) au lieu d'un pack trouvé
-/// via la recherche in-app — seule différence avec `modpack_install` : pas de
-/// métadonnées de recherche Modrinth disponibles (project_id/author/downloads...),
-/// donc `name`/`summary`/`version_number` sont repris du `modrinth.index.json`
-/// lui-même (best-effort, souvent minimal) plutôt que de l'API. Les fichiers
-/// référencés par le pack (mods, resourcepacks...) restent téléchargés depuis
-/// Modrinth comme d'habitude — seul le `.mrpack` conteneur est local, pas son
-/// contenu (le format `.mrpack` ne référence jamais les jars en pièce jointe).
+/// Résultat d'un import local : `Structured` pour un pack reconnu (Modrinth/
+/// CurseForge, avec bannière + métadonnées comme un install depuis la
+/// recherche), `Generic` pour toute autre structure (pack "classique" avec
+/// `mods/`/`config/` directement à la racine, instance complète exportée,
+/// etc.) — dans ce cas il n'y a ni id de projet ni version à afficher, juste
+/// un nombre de fichiers extraits, comme un import de dossier classique.
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ModpackImportResult {
+    Structured { meta: ModpackMeta },
+    Generic { imported: usize, failed: usize },
+}
+
+fn zip_has_entry(bytes: &[u8], name: &str) -> bool {
+    let cursor = std::io::Cursor::new(bytes);
+    match zip::ZipArchive::new(cursor) {
+        Ok(mut archive) => archive.by_name(name).is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Structure la plus répandue en dehors des formats Modrinth/CurseForge : un
+/// zip avec `mods/`/`config/`/etc. directement à sa racine ("pack classique"),
+/// éventuellement enveloppé dans un unique dossier parent (export "instance
+/// complète" fait à la main), ou séparé en `client/`+`server/` (on ne garde
+/// que `client/`, ce launcher ne lance jamais de serveur). Pas de téléchargement
+/// réseau : tout le contenu est déjà dans le zip, on l'extrait tel quel dans
+/// l'instance, best-effort fichier par fichier comme les autres extractions.
+fn extract_generic_pack(bytes: &[u8], dir: &std::path::Path) -> Result<(usize, usize), String> {
+    let cursor = std::io::Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
+
+    // Dossier racine effectif : soit un couple client/+server/ (on ne garde que
+    // client/), soit un unique dossier enveloppant tout le reste, soit rien.
+    let names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|e| e.name().to_string()))
+        .collect();
+    let has_client_server = names.iter().any(|n| n.starts_with("client/"))
+        && names.iter().any(|n| n.starts_with("server/"));
+    let effective_root: String = if has_client_server {
+        "client/".to_string()
+    } else {
+        let top_level: std::collections::HashSet<&str> = names
+            .iter()
+            .filter_map(|n| n.split('/').next())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if top_level.len() == 1 && names.iter().all(|n| n.starts_with(&format!("{}/", top_level.iter().next().unwrap()))) {
+            format!("{}/", top_level.into_iter().next().unwrap())
+        } else {
+            String::new()
+        }
+    };
+
+    let mut imported = 0usize;
+    let mut failed = 0usize;
+    for i in 0..archive.len() {
+        let mut entry = match archive.by_index(i) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("[Modpack générique] entrée d'archive #{} illisible : {}", i, e);
+                failed += 1;
+                continue;
+            }
+        };
+        let name = entry.name().to_string();
+        let rel = if effective_root.is_empty() {
+            name.as_str()
+        } else {
+            match name.strip_prefix(effective_root.as_str()) {
+                Some(r) => r,
+                None => continue, // hors racine effective (ex: server/ quand on garde client/)
+            }
+        };
+        if rel.is_empty() || name.ends_with('/') {
+            continue;
+        }
+        let dest = rel.split('/').fold(dir.to_path_buf(), |acc, c| acc.join(c));
+        if let Some(parent) = dest.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                tracing::warn!("[Modpack générique] création du dossier pour {} échouée : {}", name, e);
+                failed += 1;
+                continue;
+            }
+        }
+        let mut out = match std::fs::File::create(&dest) {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!("[Modpack générique] écriture de {} échouée : {}", name, e);
+                failed += 1;
+                continue;
+            }
+        };
+        if let Err(e) = std::io::copy(&mut entry, &mut out) {
+            tracing::warn!("[Modpack générique] copie de {} échouée : {}", name, e);
+            failed += 1;
+            continue;
+        }
+        imported += 1;
+    }
+    Ok((imported, failed))
+}
+
+/// Importe un pack déjà présent sur disque, quelle que soit sa structure —
+/// détectée automatiquement plutôt que de supposer un `.mrpack` Modrinth :
+/// 1. `modrinth.index.json` à la racine → pack Modrinth (comme avant).
+/// 2. sinon `manifest.json` à la racine → pack CurseForge (`files` +
+///    `overrides/`, résolu via l'API CurseForge comme un install depuis la
+///    recherche).
+/// 3. sinon structure générique (pack "classique" mods/config/ à la racine,
+///    instance complète exportée, client/+server/ séparés...) — tout est déjà
+///    dans le zip, extrait tel quel sans aucun appel réseau.
+/// Pour 1 et 2 : pas de métadonnées de recherche disponibles (project_id/
+/// author/downloads...), donc `name`/`summary`/`version` sont repris du
+/// fichier d'index lui-même (best-effort, souvent minimal) plutôt que de
+/// l'API — même logique déjà en place pour Modrinth avant cette généralisation.
 #[tauri::command]
 pub async fn modpack_install_from_path(
     app: tauri::AppHandle,
+    state: tauri::State<'_, SharedState>,
     instance_id: String,
     file_path: String,
-) -> Result<ModpackMeta, String> {
+) -> Result<ModpackImportResult, String> {
     let bytes = tokio::fs::read(&file_path).await.map_err(|e| format!("Lecture du fichier : {}", e))?;
+    let file_stem = std::path::Path::new(&file_path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Modpack importé".to_string());
 
-    let index = {
+    let is_modrinth = {
         let bytes = bytes.clone();
-        tokio::task::spawn_blocking(move || read_index(&bytes))
+        tokio::task::spawn_blocking(move || zip_has_entry(&bytes, "modrinth.index.json"))
             .await
-            .map_err(|e| e.to_string())??
+            .map_err(|e| e.to_string())?
     };
+    if is_modrinth {
+        let index = {
+            let bytes = bytes.clone();
+            tokio::task::spawn_blocking(move || read_index(&bytes))
+                .await
+                .map_err(|e| e.to_string())??
+        };
+        let name = if index.name.trim().is_empty() { file_stem } else { index.name.clone() };
+        let meta = install_pack(
+            &app, &instance_id, bytes,
+            String::new(), index.version_id.clone(), name,
+            "Import local".to_string(), index.summary.clone(), None,
+            index.version_id, 0, None, Vec::new(),
+        ).await?;
+        return Ok(ModpackImportResult::Structured { meta });
+    }
 
-    let name = if index.name.trim().is_empty() {
-        std::path::Path::new(&file_path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "Modpack importé".to_string())
-    } else {
-        index.name.clone()
+    let is_curseforge = {
+        let bytes = bytes.clone();
+        tokio::task::spawn_blocking(move || zip_has_entry(&bytes, "manifest.json"))
+            .await
+            .map_err(|e| e.to_string())?
     };
+    if is_curseforge {
+        let manifest = {
+            let bytes = bytes.clone();
+            tokio::task::spawn_blocking(move || read_cf_manifest(&bytes))
+                .await
+                .map_err(|e| e.to_string())?
+        };
+        // manifest.json existe mais ne correspond pas au schéma CurseForge attendu
+        // (ex: un manifest maison d'un autre outil) → repli sur la structure générique.
+        if let Ok(manifest) = manifest {
+            let name = if manifest.name.trim().is_empty() { file_stem } else { manifest.name.clone() };
+            let author = manifest.author.clone();
+            let version = manifest.version.clone();
+            let meta = install_curseforge_pack(
+                &app, &state, &instance_id, bytes,
+                String::new(), String::new(), name, author, String::new(), None, version,
+                0, None, Vec::new(),
+            ).await?;
+            return Ok(ModpackImportResult::Structured { meta });
+        }
+    }
 
-    install_pack(
-        &app, &instance_id, bytes,
-        String::new(), index.version_id.clone(), name,
-        "Import local".to_string(), index.summary.clone(), None,
-        index.version_id, 0, None, Vec::new(),
-    ).await
+    let dir = instance_dir(&instance_id);
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
+    let dir_clone = dir.clone();
+    let (imported, failed) = tokio::task::spawn_blocking(move || extract_generic_pack(&bytes, &dir_clone))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(ModpackImportResult::Generic { imported, failed })
 }
 
 #[allow(clippy::too_many_arguments)]

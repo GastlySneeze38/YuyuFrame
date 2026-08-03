@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackImportResult, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -273,8 +273,22 @@ export const api = {
       dateModified: string | null
       categories: string[]
     }) => invoke<ModpackMeta>('modpack_install', { input }),
+    installCurseforge: (input: {
+      instanceId: string
+      fileUrl: string
+      modId: number
+      fileId: number
+      name: string
+      author: string
+      summary: string
+      iconUrl: string | null
+      versionNumber: string
+      downloads: number
+      dateModified: string | null
+      categories: string[]
+    }) => invoke<ModpackMeta>('modpack_install_curseforge', { input }),
     installFromPath: (instanceId: string, filePath: string) =>
-      invoke<ModpackMeta>('modpack_install_from_path', { instanceId, filePath }),
+      invoke<ModpackImportResult>('modpack_install_from_path', { instanceId, filePath }),
     getMeta: (instanceId: string) => invoke<ModpackMeta | null>('modpack_get_meta', { instanceId }),
     remove: (instanceId: string) => invoke<void>('modpack_remove', { instanceId }),
     renameFile: (instanceId: string, oldName: string, newName: string) =>

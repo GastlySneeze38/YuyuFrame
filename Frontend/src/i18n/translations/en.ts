@@ -31,6 +31,7 @@ export const en: TranslationSchema = {
     noMrpackAvailable: 'No .mrpack file available',
     downloadingModpack: 'Downloading modpack...',
     installingModpack: 'Installing modpack...',
+    genericPackImported: '{{count}} file(s) imported from the pack',
     cannotLoadMods: 'Could not load mods',
     skippedAlreadyPresent: '{{count}} mod(s) already present, skipped',
     preparing: 'Preparing...',

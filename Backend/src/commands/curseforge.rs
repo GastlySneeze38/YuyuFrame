@@ -10,7 +10,7 @@ use crate::state::SharedState;
 /// Récupère le token YuyuFrame courant — toutes les routes /curseforge/*
 /// exigent une session valide côté serveur (juste pour éviter qu'un appelant
 /// anonyme cram le quota partagé, pas une histoire de plan payant).
-async fn require_token(state: &tauri::State<'_, SharedState>) -> Result<(String, reqwest::Client), String> {
+pub(crate) async fn require_token(state: &tauri::State<'_, SharedState>) -> Result<(String, reqwest::Client), String> {
     let s = state.read().await;
     let token = s
         .yuyu_session
@@ -42,7 +42,7 @@ async fn get_json(
     resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
 }
 
-async fn post_json(
+pub(crate) async fn post_json(
     client: &reqwest::Client,
     token: &str,
     url: String,

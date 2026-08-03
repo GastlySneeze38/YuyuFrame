@@ -104,6 +104,13 @@ export interface ModpackMeta {
   mod_files: string[]
 }
 
+/// Résultat d'un import de pack local (`modpack_install_from_path`) — la structure
+/// du zip est détectée automatiquement côté backend (Modrinth/CurseForge reconnus
+/// vs pack "générique" sans métadonnées exploitables, voir modpack.rs).
+export type ModpackImportResult =
+  | { kind: 'structured'; meta: ModpackMeta }
+  | { kind: 'generic'; imported: number; failed: number }
+
 export interface Account {
   username: string
   uuid: string

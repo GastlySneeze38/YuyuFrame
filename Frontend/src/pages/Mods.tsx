@@ -7,11 +7,12 @@ import { useStore } from '@/stores/useStore'
 import { formatBytes } from '@/lib/format'
 import type { Instance, Mod, ModInstallProgress, ModpackInstallProgress, ModpackMeta } from '@/types'
 import { searchModrinthModpacks, resolveModpackFile, type ModpackHit, type ResolvedModpackFile } from '@/lib/modrinthModpacks'
+import { searchCurseforgeModpacks, resolveCurseforgeModpackFile, type CurseforgeModpackHit } from '@/lib/curseforgeModpacks'
 import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { ImportChoiceModal } from '@/components/import/ImportChoiceModal'
 import { InstalledTab } from '@/components/mods/InstalledTab'
 import { ModpackBanner } from '@/components/mods/ModpackBanner'
-import { ModpackBrowseTab } from '@/components/mods/ModpackBrowseTab'
+import { ModpackBrowseTab, type MergedModpackHit } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab, type MergedHit } from '@/components/mods/BrowseTab'
 import {
   fetchCurseforgeSearch, fetchCurseforgeFiles, findFileForLoader, fetchCurseforgeInstalled, fetchCurseforgeModDetail,
@@ -181,6 +182,19 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [packImportingFile, setPackImportingFile] = useState(false)
   const packDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // CurseForge — même principe que cfResults/cfSearching pour les mods (voir
+  // plus haut) : une seule barre de recherche déclenche les deux sources,
+  // fusionnées dans mergedPackResults ci-dessous.
+  const [cfPackResults, setCfPackResults] = useState<CurseforgeModpackHit[]>([])
+  const [cfPackSearching, setCfPackSearching] = useState(false)
+  const [cfPackInstalling, setCfPackInstalling] = useState<number | null>(null)
+  const [cfPackInstallProgress, setCfPackInstallProgress] = useState<{ percent: number; label: string } | null>(null)
+
+  const mergedPackResults = useMemo<MergedModpackHit[]>(() => [
+    ...packResults.map((hit): MergedModpackHit => ({ source: 'modrinth', hit })),
+    ...cfPackResults.map((hit): MergedModpackHit => ({ source: 'curseforge', hit })),
+  ], [packResults, cfPackResults])
+
   useEffect(() => {
     api.modpacks.getMeta(instanceId).then(setModpackMeta).catch(() => setModpackMeta(null))
   }, [instanceId])
@@ -218,11 +232,22 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
+  const runCfPackSearch = async (q: string) => {
+    setCfPackSearching(true)
+    try {
+      setCfPackResults(await searchCurseforgeModpacks(q, mcVersion))
+    } catch (e) {
+      showApiError(e, t('common.serverUnreachable'))
+    } finally {
+      setCfPackSearching(false)
+    }
+  }
+
   const handlePackQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
     setPackQuery(q)
     if (packDebounceRef.current) clearTimeout(packDebounceRef.current)
-    packDebounceRef.current = setTimeout(() => runPackSearch(q), 450)
+    packDebounceRef.current = setTimeout(() => { runPackSearch(q); runCfPackSearch(q) }, 450)
   }
 
   const handlePackFiltersChange = (filters: ModrinthSearchFilters) => {
@@ -269,8 +294,50 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
+  const handleInstallCfModpack = async (hit: CurseforgeModpackHit) => {
+    setCfPackInstalling(hit.id)
+    setCfPackInstallProgress({ percent: 0, label: t('mods.downloadingModpack') })
+    const unlisten = await listen<ModpackInstallProgress>('modpack_install_progress', (e) => {
+      const { current, total, label } = e.payload
+      const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0
+      setCfPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
+    })
+    try {
+      const file = await resolveCurseforgeModpackFile(hit.id, mcVersion)
+      if (!file) throw new Error(t('mods.noMrpackAvailable'))
+      const meta = await api.modpacks.installCurseforge({
+        instanceId,
+        fileUrl: file.url,
+        modId: hit.id,
+        fileId: file.fileId,
+        name: hit.name,
+        author: hit.author,
+        summary: hit.summary,
+        iconUrl: hit.logoUrl,
+        versionNumber: file.displayName,
+        downloads: hit.downloadCount,
+        dateModified: hit.dateModified,
+        categories: [],
+      })
+      setModpackMeta(meta)
+      setTab('installed')
+      delete _modrinthCache[instanceId]
+      delete _curseforgeCache[instanceId]
+      await loadMods()
+    } catch (e) {
+      showError(e)
+    } finally {
+      unlisten()
+      setCfPackInstalling(null)
+      setCfPackInstallProgress(null)
+    }
+  }
+
   const handleImportModpackFile = async () => {
-    const picked = await open({ filters: [{ name: 'Modpack Modrinth', extensions: ['mrpack'] }] })
+    // Accepte aussi bien un .mrpack Modrinth qu'un .zip CurseForge (manifest.json
+    // + overrides/) ou n'importe quelle autre structure de pack — détectée
+    // automatiquement côté backend (voir modpack_install_from_path).
+    const picked = await open({ filters: [{ name: 'Modpack', extensions: ['mrpack', 'zip'] }] })
     if (!picked || Array.isArray(picked)) return
 
     // Bascule sur l'onglet modpack pour que la barre de progression ci-dessous
@@ -285,10 +352,17 @@ export function ModsContent({ instance }: { instance: Instance }) {
       setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
     })
     try {
-      const meta = await api.modpacks.installFromPath(instanceId, picked)
-      setModpackMeta(meta)
-      setTab('installed')
+      const result = await api.modpacks.installFromPath(instanceId, picked)
       delete _modrinthCache[instanceId]
+      delete _curseforgeCache[instanceId]
+      if (result.kind === 'structured') {
+        setModpackMeta(result.meta)
+      } else {
+        // Structure non reconnue (Modrinth/CurseForge) : pack "générique"
+        // extrait tel quel, pas de bannière modpack ni de projet à suivre.
+        setImportNotice(t('mods.genericPackImported', { count: result.imported }))
+      }
+      setTab('installed')
       await loadMods()
     } catch (e) {
       showError(e)
@@ -457,6 +531,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
     if (tab === 'modpack' && packResults.length === 0 && !packSearching) {
       runPackSearch(packQuery)
+    }
+    if (tab === 'modpack' && cfPackResults.length === 0 && !cfPackSearching) {
+      runCfPackSearch(packQuery)
     }
   }, [tab])
 
@@ -1029,13 +1106,16 @@ export function ModsContent({ instance }: { instance: Instance }) {
             )}
             <ModpackBrowseTab
               query={packQuery}
-              results={packResults}
-              searching={packSearching}
+              results={mergedPackResults}
+              searching={packSearching || cfPackSearching}
               installing={packInstalling}
               installProgress={packInstallProgress}
+              cfInstalling={cfPackInstalling}
+              cfInstallProgress={cfPackInstallProgress}
               filters={packFilters}
               onQueryChange={handlePackQueryChange}
               onInstall={handleInstallModpack}
+              onInstallCurseforge={handleInstallCfModpack}
               onFiltersChange={handlePackFiltersChange}
             />
           </div>
