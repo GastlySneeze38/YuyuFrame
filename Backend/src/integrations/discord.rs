@@ -30,6 +30,18 @@ const DISCORD_ENABLED: bool = true;
 /// l'utilisateur, etc.) — voir `connect_and_announce`.
 const RETRY_DELAY: Duration = Duration::from_secs(30);
 
+/// Intervalle de réaffirmation périodique de l'activité une fois connecté.
+/// Discord n'a aucune notion de "priorité" entre apps : il affiche l'activité
+/// la plus récemment mise à jour parmi toutes les connexions IPC locales
+/// (client_id différent par app). Des mods comme `essential` (voir
+/// `PvP-Mod/README.md`) ont leur propre Rich Presence et la poussent pendant
+/// la partie — sans réémission régulière ici, la présence YuyuFrame envoyée
+/// une seule fois au lancement se fait silencieusement écraser dès qu'un
+/// autre client republie la sienne, pour le reste de la session. 15s reste
+/// sous la limite de rate-limit de l'IPC Discord (~5 updates/20s) tout en
+/// reprenant la main assez vite face à des mods qui republient aussi souvent.
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
+
 /// Client IPC gardé en vie pour toute la durée du process — le crate ferme
 /// la connexion dès que le client est droppé, donc un simple appel local
 /// dans `setup()` sans le stocker quelque part afficherait la présence une
@@ -146,7 +158,9 @@ fn apply_state(client: &mut DiscordIpcClient, state: &PresenceState) {
 /// PAS `tokio::spawn` : le crate fait de l'IPC bloquante, pas async) : le
 /// handshake peut prendre un instant et cette boucle peut tourner tant que
 /// Discord n'est pas disponible — jamais bloquant/fatal pour le reste du
-/// démarrage du launcher, ce thread lui est entièrement dédié.
+/// démarrage du launcher, ce thread lui est entièrement dédié. Une fois
+/// connecté, ce même thread reste vivant pour porter le heartbeat (voir
+/// `HEARTBEAT_INTERVAL`) plutôt que de rendre la main.
 pub fn connect_and_announce() {
     if !DISCORD_ENABLED {
         return;
@@ -170,7 +184,7 @@ pub fn connect_and_announce() {
                 // voir lib.rs), mais autant ignorer proprement plutôt que
                 // paniquer sur un double appel futur.
                 let _ = DISCORD_CLIENT.set(Mutex::new(client));
-                return;
+                break;
             }
             Err(e) => {
                 tracing::warn!(
@@ -180,6 +194,19 @@ pub fn connect_and_announce() {
                 std::thread::sleep(RETRY_DELAY);
             }
         }
+    }
+
+    // Heartbeat : réémet l'activité courante à intervalle régulier pour
+    // reprendre la main sur l'affichage face aux autres apps/mods qui
+    // republient la leur (voir HEARTBEAT_INTERVAL). `continue` plutôt que de
+    // paniquer si le mutex est empoisonné ou le client pas encore posé —
+    // jamais fatal pour le reste du launcher.
+    loop {
+        std::thread::sleep(HEARTBEAT_INTERVAL);
+        let Some(mutex) = DISCORD_CLIENT.get() else { continue };
+        let Ok(mut client) = mutex.lock() else { continue };
+        let state = CURRENT_STATE.lock().unwrap().clone();
+        apply_state(&mut client, &state);
     }
 }
 
