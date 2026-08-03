@@ -132,6 +132,7 @@ export const fr = {
     licence: 'Licence',
     openSource: 'Open-source',
     repository: 'Dépôt',
+    website: 'Site web',
     legalNotices: 'Mentions légales',
     legalText: "YuyuFrame est un launcher non-officiel et n'est pas affilié à Mojang Studios ou Microsoft. Minecraft est une marque déposée de Microsoft Corporation.",
     forgeTitle: 'Minecraft Forge',

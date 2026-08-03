@@ -473,6 +473,24 @@ export function ModsContent({ instance }: { instance: Instance }) {
       setMods((prev) => prev.filter((m) => m.name !== name))
       delete _modrinthCache[instanceId]
       delete _curseforgeCache[instanceId]
+      // `_curseforgeCache` n'est qu'un cache pour le PROCHAIN loadMods() — sans
+      // mise à jour immédiate de `cfInstalledModIds`/`cfMatchByModName`
+      // (contrairement à `installedByProject`, un useMemo dérivé de `mods` en
+      // direct), le badge "installé" CurseForge restait affiché en recherche
+      // jusqu'à ce qu'un autre install refasse tourner fetchCurseforgeInstalled
+      // en entier. Modrinth n'a pas ce souci, son état "installé" recalcule
+      // toujours en direct depuis `mods`.
+      setCfMatchByModName((prev) => {
+        const match = prev[name]
+        if (!match) return prev
+        setCfInstalledModIds((ids) => {
+          const next = new Set(ids)
+          next.delete(match.modId)
+          return next
+        })
+        const { [name]: _removed, ...rest } = prev
+        return rest
+      })
     } catch (e) { showError(e) }
   }, [instanceId])
 

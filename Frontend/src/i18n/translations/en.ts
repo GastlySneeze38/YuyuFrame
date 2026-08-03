@@ -134,6 +134,7 @@ export const en: TranslationSchema = {
     licence: 'License',
     openSource: 'Open-source',
     repository: 'Repository',
+    website: 'Website',
     legalNotices: 'Legal notices',
     legalText: 'YuyuFrame is an unofficial launcher and is not affiliated with Mojang Studios or Microsoft. Minecraft is a trademark of Microsoft Corporation.',
     forgeTitle: 'Minecraft Forge',

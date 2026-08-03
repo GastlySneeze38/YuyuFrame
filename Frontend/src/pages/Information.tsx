@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { useT } from '@/i18n'
 
 const FORGE_PATREON_URL = 'https://www.patreon.com/LexManos'
+const WEBSITE_URL = 'https://yuyuframe.eu'
 
 interface AppInfo {
   name: string
@@ -123,6 +124,7 @@ export default function Information() {
             <InfoRow label={t('information.author')} value="Ghasty" />
             <InfoRow label={t('information.licence')} value={t('information.openSource')} />
             <InfoRow label={t('information.repository')} value="github.com/Ghasty/YuyuFrame" dim />
+            <InfoRow label={t('information.website')} value="yuyuframe.eu" onClick={() => open(WEBSITE_URL)} />
           </Section>
 
           {/* Minecraft Forge — mis en évidence avec la palette violette
@@ -177,13 +179,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function InfoRow({ label, value, dim }: { label: string; value: string; dim?: boolean }) {
+function InfoRow({ label, value, dim, onClick }: { label: string; value: string; dim?: boolean; onClick?: () => void }) {
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div
-      className="flex items-center justify-between rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]"
+    <Tag
+      onClick={onClick}
+      className={`flex w-full items-center justify-between rounded-xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] ${
+        onClick ? 'transition-colors hover:bg-[rgba(75,63,207,0.1)] hover:border-[rgba(75,63,207,0.3)] cursor-pointer' : ''
+      }`}
     >
       <span className="text-[13px] text-white/40">{label}</span>
-      <span className={`text-[13px] font-semibold ${dim ? 'text-white/25' : 'text-white/75'}`}>{value}</span>
-    </div>
+      <span className={`text-[13px] font-semibold ${onClick ? 'text-[rgba(120,110,230,0.9)]' : dim ? 'text-white/25' : 'text-white/75'}`}>
+        {value}
+      </span>
+    </Tag>
   )
 }
