@@ -16,9 +16,11 @@ import type { MergedModpackHit } from './ModpackBrowseTab'
  * depuis le fichier du pack lui-même (voir modpack_fetch_index/_curseforge_index),
  * pas depuis les métadonnées de recherche qui ne les contiennent pas. */
 export function ModpackDetailModal({
-  hit, installing, installProgress, onClose, onInstall,
+  hit, mcVersion, loader, installing, installProgress, onClose, onInstall,
 }: {
   hit: MergedModpackHit
+  mcVersion: string
+  loader: string
   installing: boolean
   installProgress?: { percent: number; label: string } | null
   onClose: () => void
@@ -39,12 +41,16 @@ export function ModpackDetailModal({
       try {
         const idx = hit.source === 'modrinth'
           ? await (async () => {
-            const file = await resolveModpackFile(hit.hit.project_id)
+            // Même fichier que celui qui serait réellement installé (voir
+            // resolveModpackFile) — sans le filtre version/loader, l'aperçu
+            // pouvait afficher les infos d'un tout autre build que celui qu'on
+            // installerait vraiment (ex: MC 26.2 affiché sur une instance 26.1.2).
+            const file = await resolveModpackFile(hit.hit.project_id, mcVersion, loader)
             if (!file) throw new Error('Aucun fichier disponible')
             return api.modpacks.fetchIndex(file.url)
           })()
           : await (async () => {
-            const file = await resolveCurseforgeModpackFile(hit.hit.id)
+            const file = await resolveCurseforgeModpackFile(hit.hit.id, mcVersion)
             if (!file) throw new Error('Aucun fichier disponible')
             return api.modpacks.fetchCurseforgeIndex(file.url)
           })()
@@ -57,7 +63,7 @@ export function ModpackDetailModal({
     }
     run()
     return () => { cancelled = true }
-  }, [hit])
+  }, [hit, mcVersion, loader])
 
   const title = hit.source === 'modrinth' ? hit.hit.title : hit.hit.name
   const description = hit.source === 'modrinth' ? hit.hit.description : hit.hit.summary

@@ -213,7 +213,11 @@ export function ModpackBrowseTab({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate font-semibold text-white text-[13px]">{title}</p>
-                    {!isModrinth && (
+                    {isModrinth ? (
+                      <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.03em] bg-[rgba(30,209,102,0.15)] text-[rgba(94,224,152,0.9)]">
+                        {t('mods.modrinthBadge')}
+                      </span>
+                    ) : (
                       <span className="flex-shrink-0 rounded-md px-1.5 py-[1px] text-[9px] font-bold text-[#f16436] bg-[rgba(241,100,54,0.15)] border border-[rgba(241,100,54,0.35)]">
                         CURSEFORGE
                       </span>

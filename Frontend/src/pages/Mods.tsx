@@ -212,7 +212,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setPackVersionUpdate(null)
     if (!modpackMeta?.project_id) return
     let cancelled = false
-    resolveModpackFile(modpackMeta.project_id).then((file) => {
+    resolveModpackFile(modpackMeta.project_id, mcVersion, loader).then((file) => {
       if (!cancelled && file && file.versionId !== modpackMeta.version_id) {
         setPackVersionUpdate(file)
       }
@@ -267,7 +267,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       setPackInstallProgress({ percent, label: `${label} (${current}/${total})` })
     })
     try {
-      const file = await resolveModpackFile(hit.project_id)
+      const file = await resolveModpackFile(hit.project_id, mcVersion, loader)
       if (!file) throw new Error(t('mods.noMrpackAvailable'))
       const meta = await api.modpacks.install({
         instanceId,
@@ -789,7 +789,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
         setCfMatchByModName(result.matchByModName)
         setCfUpdates(result.updates)
         _curseforgeCache[instanceId] = result
-      }).catch((e) => console.error('fetchCurseforgeInstalled failed', e))
+      }).catch((e) => {
+        console.error('fetchCurseforgeInstalled failed', e)
+        showApiError(e, t('common.serverUnreachable'))
+      })
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {
@@ -839,7 +842,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
       setCfMatchByModName(result.matchByModName)
       setCfUpdates(result.updates)
       _curseforgeCache[instanceId] = result
-    }).catch((e) => console.error('fetchCurseforgeInstalled failed', e))
+    }).catch((e) => {
+      console.error('fetchCurseforgeInstalled failed', e)
+      showApiError(e, t('common.serverUnreachable'))
+    })
   }
 
   /// Ouvre directement le sélecteur de version d'un mod déjà installé (liste
@@ -1028,6 +1034,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
       {packDetailHit && (
         <ModpackDetailModal
           hit={packDetailHit}
+          mcVersion={mcVersion}
+          loader={loader}
           installing={
             packDetailHit.source === 'modrinth'
               ? packInstalling === packDetailHit.hit.project_id

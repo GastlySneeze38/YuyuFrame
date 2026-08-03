@@ -52,9 +52,17 @@ export async function searchModrinthModpacks(
   return res.hits as unknown as ModpackHit[]
 }
 
-/// Résout la dernière version .mrpack disponible pour un modpack donné.
-export async function resolveModpackFile(projectId: string): Promise<ResolvedModpackFile | null> {
-  const res = await fetch(`https://api.modrinth.com/v2/project/${projectId}/version`, {
+/// Résout la dernière version .mrpack disponible pour un modpack donné, compatible
+/// avec la version MC/loader donnés — sans `gameVersion`/`loader`, l'API renvoyait la
+/// toute dernière version publiée du projet, même si l'auteur a depuis sorti un build
+/// pour une version MC plus récente (ex: 26.2) que celle de l'instance courante (26.1.2) :
+/// la recherche filtrait correctement, mais l'install prenait quand même le mauvais
+/// fichier. Même filtre que fetchLatestVersion côté mods.
+export async function resolveModpackFile(projectId: string, gameVersion?: string, loader?: string): Promise<ResolvedModpackFile | null> {
+  const params = new URLSearchParams()
+  if (gameVersion) params.set('game_versions', JSON.stringify([gameVersion]))
+  if (loader && loader !== 'vanilla') params.set('loaders', JSON.stringify([loader]))
+  const res = await fetch(`https://api.modrinth.com/v2/project/${projectId}/version?${params}`, {
     headers: { 'User-Agent': 'YuyuFrame/1.0' },
   })
   if (!res.ok) return null
