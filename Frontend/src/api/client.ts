@@ -233,7 +233,7 @@ export const api = {
   curseforge: {
     search: (query: string, opts?: {
       gameVersion?: string; classId?: string; pageSize?: number; index?: number
-      categoryId?: string; sortField?: string; sortOrder?: string
+      categoryId?: string; sortField?: string; sortOrder?: string; modLoaderType?: string
     }) =>
       invoke<unknown>('curseforge_search', {
         query,
@@ -244,6 +244,7 @@ export const api = {
         categoryId: opts?.categoryId,
         sortField: opts?.sortField,
         sortOrder: opts?.sortOrder,
+        modLoaderType: opts?.modLoaderType,
       }),
     modDetails: (modId: number) => invoke<unknown>('curseforge_mod_details', { modId }),
     modFiles: (modId: number, gameVersion?: string) =>

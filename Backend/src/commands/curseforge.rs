@@ -74,6 +74,7 @@ pub async fn curseforge_search(
     category_id: Option<String>,
     sort_field: Option<String>,
     sort_order: Option<String>,
+    mod_loader_type: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let (token, client) = require_token(&state).await?;
 
@@ -85,6 +86,7 @@ pub async fn curseforge_search(
     if let Some(cat) = category_id { params.push(("category_id", cat)); }
     if let Some(sf) = sort_field { params.push(("sort_field", sf)); }
     if let Some(so) = sort_order { params.push(("sort_order", so)); }
+    if let Some(mlt) = mod_loader_type { params.push(("mod_loader_type", mlt)); }
 
     get_json(&client, &token, format!("{}/curseforge/search", api_base()), &params).await
 }

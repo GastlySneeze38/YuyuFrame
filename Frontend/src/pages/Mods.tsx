@@ -615,7 +615,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     setCfSearching(true)
     if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim(), source: 'curseforge' })
     try {
-      setCfResults(await fetchCurseforgeSearch(q, mcVersion))
+      setCfResults(await fetchCurseforgeSearch(q, mcVersion, loader))
     } catch (e) {
       showApiError(e, t('common.serverUnreachable'))
     } finally {

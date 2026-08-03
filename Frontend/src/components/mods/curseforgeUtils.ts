@@ -85,9 +85,21 @@ const SORT_FIELD: Record<string, string> = {
   name: '4',
 }
 
+/// modLoaderType CurseForge (voir `/v1/mods/search`), distinct de sortField —
+/// sans lui, CurseForge renvoie des mods de tous les loaders mélangés (ex: du
+/// NeoForge proposé sur une instance Fabric). LiteLoader/Cauldron omis, jamais
+/// utilisés par ce launcher.
+const MOD_LOADER_TYPE: Record<string, string> = {
+  forge: '1',
+  fabric: '4',
+  quilt: '5',
+  neoforge: '6',
+}
+
 export async function fetchCurseforgeSearch(
   query: string,
   gameVersion: string,
+  loader: string,
   filters: CurseforgeSearchFilters = {},
 ): Promise<CurseforgeHit[]> {
   if (!query.trim()) return []
@@ -98,6 +110,9 @@ export async function fetchCurseforgeSearch(
     categoryId: filters.categoryId ? String(filters.categoryId) : undefined,
     sortField: SORT_FIELD[filters.sort ?? 'relevance'],
     sortOrder: 'desc',
+    // "vanilla" n'a pas d'équivalent modLoaderType côté CurseForge (classId=6
+    // = mods, jamais des plugins) — pas de filtre à poser dans ce cas.
+    modLoaderType: loader !== 'vanilla' ? MOD_LOADER_TYPE[loader] : undefined,
   })) as { data?: CurseforgeApiMod[] }
 
   return (data?.data ?? []).map(toCurseforgeHit)

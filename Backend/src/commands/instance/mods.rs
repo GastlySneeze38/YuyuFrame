@@ -210,7 +210,13 @@ pub async fn mods_install(
 }
 
 /// Extrait l'icône d'un mod directement depuis son JAR et la retourne en data URL base64.
-/// Lit le champ `icon` de fabric.mod.json, avec repli sur pack.png.
+/// Lit le champ `icon` de fabric.mod.json (Fabric/Quilt) ou `logoFile` de
+/// META-INF/mods.toml (Forge/NeoForge, même format pour les deux), avec repli
+/// sur pack.png. Avant l'ajout de mods.toml, tous les mods Forge/NeoForge
+/// tombaient systématiquement sur "Pas d'icône" puisqu'ils n'ont jamais de
+/// fabric.mod.json ni, en général, de pack.png à la racine du jar — l'icône
+/// n'apparaissait alors qu'en recherche (métadonnées distantes Modrinth/
+/// CurseForge), jamais une fois le mod installé localement.
 #[tauri::command]
 pub async fn mod_icon(instance_id: String, name: String) -> Result<String, String> {
     let dir = instance_mods_dir(&instance_id);
@@ -229,19 +235,42 @@ fn mod_icon_blocking(path: &std::path::Path) -> Result<String, String> {
 
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
 
-    // Lire fabric.mod.json pour trouver le chemin de l'icône
+    // Lire fabric.mod.json (Fabric/Quilt) ou META-INF/mods.toml (Forge/NeoForge)
+    // pour trouver le chemin de l'icône déclaré par le mod.
     let icon_path: Option<String> = {
         let cursor = std::io::Cursor::new(&bytes);
         if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
+            let mut found: Option<String> = None;
+
             if let Ok(mut entry) = archive.by_name("fabric.mod.json") {
                 let mut content = String::new();
                 let _ = entry.read_to_string(&mut content);
-                serde_json::from_str::<serde_json::Value>(&content)
+                found = serde_json::from_str::<serde_json::Value>(&content)
                     .ok()
-                    .and_then(|v| v.get("icon").and_then(|i| i.as_str()).map(|s| s.to_string()))
-            } else {
-                None
+                    .and_then(|v| v.get("icon").and_then(|i| i.as_str()).map(|s| s.to_string()));
             }
+
+            // Séparé du `if` précédent (pas de `else if`) : `archive.by_name`
+            // emprunte `archive` mutablement, et un `else if` chaîné garde le
+            // premier emprunt vivant jusqu'à la fin de toute la chaîne aux yeux
+            // du borrow checker — deux `if` distincts referment chacun leur
+            // emprunt à leur propre accolade fermante.
+            if found.is_none() {
+                if let Ok(mut entry) = archive.by_name("META-INF/mods.toml") {
+                    let mut content = String::new();
+                    let _ = entry.read_to_string(&mut content);
+                    found = toml::from_str::<toml::Value>(&content).ok().and_then(|v| {
+                        v.get("mods")
+                            .and_then(|m| m.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|m| m.get("logoFile"))
+                            .and_then(|i| i.as_str())
+                            .map(|s| s.to_string())
+                    });
+                }
+            }
+
+            found
         } else {
             None
         }
