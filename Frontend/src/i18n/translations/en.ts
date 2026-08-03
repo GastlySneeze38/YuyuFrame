@@ -32,6 +32,8 @@ export const en: TranslationSchema = {
     downloadingModpack: 'Downloading modpack...',
     installingModpack: 'Installing modpack...',
     genericPackImported: '{{count}} file(s) imported from the pack',
+    modCount: '{{count}} mod(s)',
+    packContents: 'Pack contents',
     cannotLoadMods: 'Could not load mods',
     skippedAlreadyPresent: '{{count}} mod(s) already present, skipped',
     preparing: 'Preparing...',

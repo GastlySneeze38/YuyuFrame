@@ -294,6 +294,7 @@ pub fn run() {
             commands::instance::import::import_apply,
             commands::instance::import::mods_import_paths,
             commands::instance::modpack::modpack_fetch_index,
+            commands::instance::modpack::modpack_fetch_curseforge_index,
             commands::instance::modpack::modpack_install,
             commands::instance::modpack::modpack_install_curseforge,
             commands::instance::modpack::modpack_install_from_path,

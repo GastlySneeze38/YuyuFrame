@@ -111,6 +111,16 @@ export type ModpackImportResult =
   | { kind: 'structured'; meta: ModpackMeta }
   | { kind: 'generic'; imported: number; failed: number }
 
+/// Aperçu d'un pack avant install (ModpackDetailModal) — version MC, loader,
+/// et noms des mods référencés. Résolu depuis le fichier du pack lui-même
+/// (`modpack_fetch_index`/`modpack_fetch_curseforge_index`), pas depuis les
+/// métadonnées de recherche (qui ne contiennent ni l'un ni l'autre).
+export interface ModpackIndexInfo {
+  mc_version: string | null
+  loader: string
+  mods: string[]
+}
+
 export interface Account {
   username: string
   uuid: string

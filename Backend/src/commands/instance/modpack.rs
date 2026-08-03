@@ -111,6 +111,9 @@ struct ModrinthIndex {
 pub struct ModpackIndexInfo {
     pub mc_version: Option<String>,
     pub loader: String,
+    /// Noms de fichiers `mods/` référencés par le pack — sert uniquement à
+    /// l'aperçu (ModpackDetailModal côté frontend), pas à l'installation.
+    pub mods: Vec<String>,
 }
 
 fn loader_from_dependencies(deps: &std::collections::HashMap<String, String>) -> String {
@@ -164,9 +167,16 @@ pub async fn modpack_fetch_index(file_url: String) -> Result<ModpackIndexInfo, S
     let index = tokio::task::spawn_blocking(move || read_index(&bytes))
         .await
         .map_err(|e| e.to_string())??;
+    let mods = index
+        .files
+        .iter()
+        .filter(|f| f.path.starts_with("mods/"))
+        .filter_map(|f| f.path.rsplit('/').next().map(|s| s.to_string()))
+        .collect();
     Ok(ModpackIndexInfo {
         mc_version: index.dependencies.get("minecraft").cloned(),
         loader: loader_from_dependencies(&index.dependencies),
+        mods,
     })
 }
 
@@ -198,18 +208,30 @@ struct CfManifestFile {
     file_id: u64,
 }
 
-// `version`/`mod_loaders` jamais lus pour l'instant : contrairement à Modrinth
-// (`modpack_fetch_index`), on n'auto-configure pas encore la version/loader de
-// l'instance depuis un pack CurseForge — l'install se fait dans l'instance
-// déjà ouverte, comme le reste du flux modpack actuel. Gardés pour fidélité au
-// schéma du manifest et un futur câblage.
 #[derive(Deserialize, Default)]
-#[allow(dead_code)]
+struct CfModLoaderEntry {
+    id: String,
+    #[serde(default)]
+    primary: bool,
+}
+
+#[derive(Deserialize, Default)]
 struct CfManifestMinecraft {
     #[serde(default)]
     version: String,
     #[serde(default, rename = "modLoaders")]
-    mod_loaders: Vec<serde_json::Value>,
+    mod_loaders: Vec<CfModLoaderEntry>,
+}
+
+/// Dérive un nom de loader générique ("forge"/"fabric"/"neoforge"/"quilt") à
+/// partir des ids CurseForge (ex: "forge-47.2.0", "fabric-0.16.9") — prend
+/// l'entrée `primary` s'il y en a une, sinon la première. Même sortie que
+/// `loader_from_dependencies` côté Modrinth, pour un rendu identique dans
+/// ModpackDetailModal quelle que soit la source.
+fn loader_from_cf_manifest(minecraft: &CfManifestMinecraft) -> String {
+    let entry = minecraft.mod_loaders.iter().find(|m| m.primary).or_else(|| minecraft.mod_loaders.first());
+    let Some(entry) = entry else { return "vanilla".to_string() };
+    entry.id.split('-').next().unwrap_or("vanilla").to_lowercase()
 }
 
 fn default_cf_overrides() -> String {
@@ -219,7 +241,6 @@ fn default_cf_overrides() -> String {
 #[derive(Deserialize)]
 struct CfManifest {
     #[serde(default)]
-    #[allow(dead_code)]
     minecraft: CfManifestMinecraft,
     #[serde(default)]
     name: String,
@@ -458,6 +479,41 @@ async fn install_curseforge_pack(
         .map_err(|e| e.to_string())?;
 
     Ok(meta)
+}
+
+/// Aperçu d'un pack CurseForge avant install (ModpackDetailModal côté
+/// frontend) — version MC, loader, et noms des mods référencés. Résout les
+/// noms de fichiers via le même batch que l'installation réelle plutôt que de
+/// n'afficher que des ids CurseForge illisibles.
+#[tauri::command]
+pub async fn modpack_fetch_curseforge_index(
+    state: tauri::State<'_, SharedState>,
+    file_url: String,
+) -> Result<ModpackIndexInfo, String> {
+    check_cf_cdn_url(&file_url)?;
+    let client = reqwest::Client::builder()
+        .user_agent("YuyuFrame/1.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&file_url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Téléchargement échoué: {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
+
+    let manifest = tokio::task::spawn_blocking(move || read_cf_manifest(&bytes))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    let file_ids: Vec<u64> = manifest.files.iter().map(|f| f.file_id).collect();
+    let resolved = resolve_cf_files(&state, &file_ids).await?;
+    let mods = resolved.into_iter().map(|f| f.file_name).collect();
+
+    Ok(ModpackIndexInfo {
+        mc_version: if manifest.minecraft.version.is_empty() { None } else { Some(manifest.minecraft.version.clone()) },
+        loader: loader_from_cf_manifest(&manifest.minecraft),
+        mods,
+    })
 }
 
 #[derive(Deserialize)]

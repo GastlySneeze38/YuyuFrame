@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackImportResult, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -258,7 +258,9 @@ export const api = {
 
   modpacks: {
     fetchIndex: (fileUrl: string) =>
-      invoke<{ mc_version: string | null; loader: string }>('modpack_fetch_index', { fileUrl }),
+      invoke<ModpackIndexInfo>('modpack_fetch_index', { fileUrl }),
+    fetchCurseforgeIndex: (fileUrl: string) =>
+      invoke<ModpackIndexInfo>('modpack_fetch_curseforge_index', { fileUrl }),
     install: (input: {
       instanceId: string
       fileUrl: string

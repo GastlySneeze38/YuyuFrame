@@ -31,7 +31,7 @@ function isFiltersActive(f: ModrinthSearchFilters): boolean {
 
 export function ModpackBrowseTab({
   query, results, searching, installing, installProgress, cfInstalling, cfInstallProgress,
-  filters, onQueryChange, onInstall, onInstallCurseforge, onFiltersChange,
+  filters, onQueryChange, onInstall, onInstallCurseforge, onFiltersChange, onOpenDetail,
 }: {
   query: string
   results: MergedModpackHit[]
@@ -45,6 +45,7 @@ export function ModpackBrowseTab({
   onInstall: (hit: ModpackHit) => void
   onInstallCurseforge: (hit: CurseforgeModpackHit) => void
   onFiltersChange: (f: ModrinthSearchFilters) => void
+  onOpenDetail: (hit: MergedModpackHit) => void
 }) {
   const t = useT()
   const [showFilters, setShowFilters] = useState(false)
@@ -200,7 +201,11 @@ export function ModpackBrowseTab({
           const handleInstall = () => isModrinth ? onInstall(r.hit) : onInstallCurseforge(r.hit)
 
           return (
-            <div key={key} className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)]">
+            <div
+              key={key}
+              onClick={() => onOpenDetail(r)}
+              className="flex flex-col gap-2.5 rounded-2xl px-4 py-3 cursor-pointer transition-colors bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-[rgba(75,63,207,0.35)]"
+            >
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden bg-[rgba(255,255,255,0.06)] flex items-center justify-center">
                   {iconUrl ? <img src={iconUrl} alt={title} className="w-full h-full object-cover" /> : <PlugIcon size={20} color="rgba(255,255,255,0.2)" />}
@@ -218,7 +223,7 @@ export function ModpackBrowseTab({
                   <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{t('mods.byAuthor', { author })} · {formatDownloadCount(downloads)} {t('mods.downloads')}</p>
                 </div>
                 <button
-                  onClick={handleInstall}
+                  onClick={(e) => { e.stopPropagation(); handleInstall() }}
                   disabled={isInstallingThis}
                   className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border border-[rgba(75,63,207,0.5)] text-[rgba(255,255,255,0.85)] ${
                     isInstallingThis ? 'bg-[rgba(40,38,65,0.7)] cursor-not-allowed' : 'bg-[rgba(75,63,207,0.3)] cursor-pointer'

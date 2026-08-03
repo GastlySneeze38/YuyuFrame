@@ -30,6 +30,8 @@ export const fr = {
     downloadingModpack: 'Téléchargement du modpack...',
     installingModpack: 'Installation du modpack...',
     genericPackImported: '{{count}} fichier(s) importé(s) depuis le pack',
+    modCount: '{{count}} mod(s)',
+    packContents: 'Contenu du pack',
     cannotLoadMods: 'Impossible de charger les mods',
     skippedAlreadyPresent: '{{count}} mod(s) déjà présent(s) ignoré(s)',
     preparing: 'Préparation...',

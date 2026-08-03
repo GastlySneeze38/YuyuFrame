@@ -20,6 +20,7 @@ import {
 } from '@/components/mods/curseforgeUtils'
 import { ModDetailModal } from '@/components/mods/ModDetailModal'
 import { CurseforgeDetailModal } from '@/components/mods/CurseforgeDetailModal'
+import { ModpackDetailModal } from '@/components/mods/ModpackDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { showError, showApiError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
@@ -157,6 +158,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [logoCache, setLogoCache] = useState<Record<string, string | null>>({})
   const [detailHit, setDetailHit] = useState<ModrinthHit | null>(null)
   const [cfDetailHit, setCfDetailHit] = useState<CurseforgeHit | null>(null)
+  const [packDetailHit, setPackDetailHit] = useState<MergedModpackHit | null>(null)
   const [switchingModName, setSwitchingModName] = useState<string | null>(null)
 
   const installedByProject = useMemo(() => {
@@ -1023,6 +1025,27 @@ export function ModsContent({ instance }: { instance: Instance }) {
         )
       })()}
 
+      {packDetailHit && (
+        <ModpackDetailModal
+          hit={packDetailHit}
+          installing={
+            packDetailHit.source === 'modrinth'
+              ? packInstalling === packDetailHit.hit.project_id
+              : cfPackInstalling === packDetailHit.hit.id
+          }
+          installProgress={packDetailHit.source === 'modrinth' ? packInstallProgress : cfPackInstallProgress}
+          onClose={() => setPackDetailHit(null)}
+          onInstall={async () => {
+            if (packDetailHit.source === 'modrinth') {
+              await handleInstallModpack(packDetailHit.hit)
+            } else {
+              await handleInstallCfModpack(packDetailHit.hit)
+            }
+            setPackDetailHit(null)
+          }}
+        />
+      )}
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-3">
         {modpackMeta && (
@@ -1117,6 +1140,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
               onInstall={handleInstallModpack}
               onInstallCurseforge={handleInstallCfModpack}
               onFiltersChange={handlePackFiltersChange}
+              onOpenDetail={setPackDetailHit}
             />
           </div>
         )}
