@@ -69,9 +69,17 @@ interface CurseforgeApiCategory {
 /// pour l'instant (pas les resource packs/plugins Bukkit, gérés plus tard).
 const CLASS_ID_MODS = '6'
 
-/// Champs de tri CurseForge (voir `/v1/mods/search`) — 'relevance' n'envoie
-/// rien (comportement par défaut de l'API, équivalent à "Featured").
+/// Champs de tri CurseForge (voir `/v1/mods/search`). CurseForge n'a PAS de
+/// tri par pertinence textuelle : omettre `sortField` retombe sur "Featured"
+/// (1), la mise en avant éditoriale de CurseForge, sans rapport avec la
+/// requête tapée — les mods réellement pertinents pour une recherche pointue
+/// (typiquement Forge, où CurseForge concentre le plus de mods) finissaient
+/// noyés derrière des mods "Featured" génériques, parfois en toute fin de
+/// liste. "Popularity" descendant est le proxy le plus proche de la
+/// pertinence perçue, et c'est déjà le tri par défaut du site CurseForge
+/// lui-même pour une recherche texte.
 const SORT_FIELD: Record<string, string> = {
+  relevance: '2',
   downloads: '6',
   updated: '3',
   name: '4',
@@ -88,7 +96,8 @@ export async function fetchCurseforgeSearch(
     classId: CLASS_ID_MODS,
     pageSize: 20,
     categoryId: filters.categoryId ? String(filters.categoryId) : undefined,
-    sortField: filters.sort ? SORT_FIELD[filters.sort] : undefined,
+    sortField: SORT_FIELD[filters.sort ?? 'relevance'],
+    sortOrder: 'desc',
   })) as { data?: CurseforgeApiMod[] }
 
   return (data?.data ?? []).map(toCurseforgeHit)
