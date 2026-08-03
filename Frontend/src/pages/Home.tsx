@@ -75,7 +75,6 @@ export default function Home() {
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
 
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
-  const [launchMsg, setLaunchMsg] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
@@ -210,7 +209,7 @@ export default function Home() {
   }, [selectedInstanceId])
 
   useTauriEvent<string>('launch_error', (payload) => {
-    setLaunchMsg(payload)
+    showError(payload)
     if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
     clearPhase2()
     setProgress(null)
@@ -251,7 +250,6 @@ export default function Home() {
     if (!selectedInstanceId || gameRunning || !username) return
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
-    setLaunchMsg('')
     try {
       if (p2pEnabled && P2P_ENABLED) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
       else await api.launch.start(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
@@ -264,7 +262,7 @@ export default function Home() {
       // message d'erreur était masqué par un texte générique inutile pour
       // diagnostiquer le problème (cf. même bug corrigé sur Login.tsx).
       const message = e instanceof Error ? e.message : typeof e === 'string' ? e : t('home.launchError')
-      setLaunchMsg(message)
+      showError(message)
     }
   }
 
@@ -568,12 +566,6 @@ export default function Home() {
               </button>
             )}
           </div>
-
-          {launchMsg && (
-            <p className="w-full rounded-lg px-3 py-2 text-center text-xs text-red-300 bg-[rgba(200,50,50,0.12)]">
-              {launchMsg}
-            </p>
-          )}
 
           </div>
         </div>
