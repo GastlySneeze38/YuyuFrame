@@ -351,6 +351,49 @@ export function ModsContent({ instance }: { instance: Instance }) {
     })
   }, [mods])
 
+  /// Repli quand l'extraction locale (effet ci-dessus) ne trouve aucune icône
+  /// dans le jar lui-même — certains mods (ex: FTB Essentials) n'embarquent
+  /// tout simplement pas d'icône dans leur jar, ni `icon` dans fabric.mod.json/
+  /// `logoFile` dans mods.toml, ni pack.png : ce n'est pas un bug d'extraction,
+  /// il n'y a rien à extraire. Ces mods ont pourtant une icône en recherche
+  /// (hébergée par Modrinth/CurseForge, indépendante du jar) — on la réutilise
+  /// ici via l'identité déjà résolue ailleurs dans ce composant (sha1 →
+  /// Modrinth `versionMap`, nom → CurseForge `cfModIdByName`). `logoCache[key]
+  /// === null` cible précisément les mods dont l'extraction locale a échoué
+  /// (`undefined` = pas encore vérifié, à ignorer ici). `logoCache` volontairement
+  /// absent des dépendances : cet effet l'écrit lui-même, l'y ajouter boucle.
+  useEffect(() => {
+    if (mods.length === 0) return
+    const toResolve = mods.filter((mod) => {
+      const key = displayName(mod.name)
+      return logoCache[key] === null && (versionMap[mod.sha1]?.projectId || cfModIdByName[mod.name])
+    })
+    if (toResolve.length === 0) return
+
+    toResolve.forEach(async (mod) => {
+      const key = displayName(mod.name)
+      const cacheKey = `${instanceId}/${key}`
+      let iconUrl: string | null = null
+      const projectId = versionMap[mod.sha1]?.projectId
+      if (projectId) {
+        const detail = await fetchProjectDetail(projectId)
+        iconUrl = detail?.icon_url ?? null
+      }
+      if (!iconUrl) {
+        const cfModId = cfModIdByName[mod.name]
+        if (cfModId) {
+          const detail = await fetchCurseforgeModDetail(cfModId)
+          iconUrl = detail?.logoUrl ?? null
+        }
+      }
+      if (iconUrl) {
+        _iconCache[cacheKey] = iconUrl
+        setLogoCache((prev) => ({ ...prev, [key]: iconUrl }))
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mods, versionMap, cfModIdByName])
+
   const loadMods = async () => {
     if (!instanceId) return
     setLoadingMods(true)
