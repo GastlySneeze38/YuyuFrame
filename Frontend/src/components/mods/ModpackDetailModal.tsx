@@ -5,6 +5,7 @@ import { resolveModpackFile } from '@/lib/modrinthModpacks'
 import { resolveCurseforgeModpackFile } from '@/lib/curseforgeModpacks'
 import { formatDownloadCount } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
+import { displayName } from './modUtils'
 import { Spinner } from '@/components/ui/Spinner'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloseButton } from '@/components/ui/CloseButton'
@@ -134,10 +135,23 @@ export function ModpackDetailModal({
         <p className="flex-shrink-0 text-[11px] font-bold text-[rgba(255,255,255,0.4)] uppercase tracking-[0.06em]">
           {t('mods.packContents')}
         </p>
-        <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto rounded-xl p-2 bg-[rgba(0,0,0,0.25)] min-h-[120px]">
+        <div className="flex flex-1 min-w-0 flex-col overflow-y-auto rounded-xl p-2 bg-[rgba(0,0,0,0.25)] min-h-[120px]">
           {loadingInfo ? null : info && info.mods.length > 0 ? (
-            info.mods.map((m) => (
-              <div key={m} className="truncate rounded-lg px-2 py-1.5 text-[12px] text-[rgba(255,255,255,0.75)]">{m}</div>
+            // Triés + extension .jar retirée + alternance de fond : 68 noms de
+            // fichiers bruts collés les uns aux autres (souvent chargés de
+            // tirets/points de version) formaient un bloc illisible, surtout
+            // en petite taille — le tri et l'espacement les rendent scannables.
+            // `min-w-0` indispensable : un enfant flex refuse de rétrécir sous
+            // la largeur de son contenu tant qu'on ne le force pas, donc
+            // `break-words` seul ne suffisait pas — le texte débordait et se
+            // faisait rogner net par le conteneur au lieu de passer à la ligne.
+            [...info.mods].sort((a, b) => a.localeCompare(b)).map((m, i) => (
+              <div
+                key={m}
+                className={`min-w-0 break-words rounded-lg px-2.5 py-[7px] text-[12.5px] text-[rgba(255,255,255,0.85)] ${i % 2 === 0 ? 'bg-[rgba(255,255,255,0.02)]' : ''}`}
+              >
+                {displayName(m)}
+              </div>
             ))
           ) : !loadingInfo && !infoError ? (
             <p className="text-[12px] text-[rgba(255,255,255,0.3)] text-center py-4">{t('mods.noResults')}</p>
