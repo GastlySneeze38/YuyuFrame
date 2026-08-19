@@ -38,6 +38,23 @@ fn hash_key(parts: &[&str]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// `true` si ce runtime Java a une archive CDS de base — le CDS dynamique
+/// (`-XX:ArchiveClassesAtExit`) s'appuie dessus et échoue avec juste un
+/// warning JVM sinon (jamais fatal, mais AppCDS ne fait alors strictement
+/// rien) : "-XX:ArchiveClassesAtExit is unsupported when base CDS archive is
+/// not loaded" — trouvé en test réel avec le runtime Mojang
+/// `java-runtime-epsilon` (Java 25), visiblement livré sans `classes.jsa`.
+/// Emplacement standard depuis JDK 12 (VM serveur, la seule que ship
+/// OpenJDK 9+ sur desktop 64 bits) : `<JAVA_HOME>/lib/server/classes.jsa` —
+/// `<JAVA_HOME>/lib/classes.jsa` en repli pour d'éventuels autres layouts.
+fn has_base_cds_archive(java: &str) -> bool {
+    let Some(java_home) = Path::new(java).parent().and_then(Path::parent) else {
+        return false;
+    };
+    java_home.join("lib").join("server").join("classes.jsa").exists()
+        || java_home.join("lib").join("classes.jsa").exists()
+}
+
 /// P1-7 (audit launcher) : génère l'archive AppCDS au premier lancement d'un
 /// profil et la réutilise aux lancements suivants — le gain de temps de
 /// démarrage le plus rentable et le moins risqué disponible d'après l'audit,
@@ -54,13 +71,14 @@ fn hash_key(parts: &[&str]) -> String {
 /// par erreur contre un classpath différent. Les archives d'une combinaison
 /// précédente pour CETTE instance sont supprimées au passage (best-effort).
 pub(super) async fn appcds_jvm_args(
+    java: &str,
     java_major: u32,
     game_dir: &Path,
     version_id: &str,
     loader: Option<&str>,
     classpath_str: &str,
 ) -> Vec<String> {
-    if java_major < 17 {
+    if java_major < 17 || !has_base_cds_archive(java) {
         return Vec::new();
     }
 
@@ -84,6 +102,17 @@ pub(super) async fn appcds_jvm_args(
     if archive_path.exists() {
         vec![format!("-XX:SharedArchiveFile={}", archive_path.display())]
     } else {
-        vec![format!("-XX:ArchiveClassesAtExit={}", archive_path.display())]
+        // Le launcher attache TOUJOURS au moins un javaagent (LauncherAgent,
+        // et p2p-agent si activé) — sans ce déverrouillage explicite, le dump
+        // CDS échoue systématiquement avec "Must enable
+        // AllowArchivingWithJavaAgent in order to run Java agent during CDS
+        // dumping" (trouvé en test réel). Seulement nécessaire pour la phase
+        // de DUMP (ArchiveClassesAtExit) — jamais pour le simple chargement
+        // (SharedArchiveFile, branche ci-dessus).
+        vec![
+            "-XX:+UnlockDiagnosticVMOptions".to_string(),
+            "-XX:+AllowArchivingWithJavaAgent".to_string(),
+            format!("-XX:ArchiveClassesAtExit={}", archive_path.display()),
+        ]
     }
 }

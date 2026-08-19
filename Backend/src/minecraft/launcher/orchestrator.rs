@@ -466,7 +466,7 @@ pub async fn download_and_launch(
     // de cette combinaison (version/loader/classpath/mods), la réutilise
     // ensuite. Calculé ici, avant que `classpath_str` ne soit déplacé dans
     // `args` plus bas (-cp).
-    let appcds_args = appcds_jvm_args(java_major, &mc_game_dir, version_id, loader, &classpath_str).await;
+    let appcds_args = appcds_jvm_args(&java, java_major, &mc_game_dir, version_id, loader, &classpath_str).await;
 
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major);
     // Même condition que build_jvm_args (P1-4, audit launcher) : ZGC
