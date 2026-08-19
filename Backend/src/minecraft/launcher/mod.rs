@@ -1,5 +1,6 @@
 mod agent_deploy;
 mod agents;
+mod appcds;
 mod classpath;
 mod java;
 mod jvm_args;

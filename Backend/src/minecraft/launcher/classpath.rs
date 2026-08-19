@@ -135,12 +135,23 @@ enum DownloadFailure {
     Retryable(anyhow::Error),
 }
 
+/// O-2 (audit pipeline) : streamé vers le disque au fil de l'eau
+/// (`bytes_stream`) au lieu de bufferiser le fichier entier en RAM
+/// (`resp.bytes()`) avant d'écrire — le client jar (~25 Mo) et les grosses
+/// libs transitaient entièrement par la heap, et avec 16-32 téléchargements
+/// concurrents ça représentait plusieurs centaines de Mo d'allocations
+/// transitoires pendant la phase la plus chargée du lancement. Le SHA1 est
+/// calculé sur les mêmes chunks au passage — pas de seconde lecture disque
+/// après coup.
 async fn try_download_once(
     client: &reqwest::Client,
     url: &str,
     tmp: &Path,
     expected_sha1: Option<&str>,
 ) -> Result<(), DownloadFailure> {
+    use futures::StreamExt;
+    use sha1::{Digest, Sha1};
+
     let resp = client.get(url).send().await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
     let status = resp.status();
     if status.is_client_error() {
@@ -149,25 +160,30 @@ async fn try_download_once(
     if !status.is_success() {
         return Err(DownloadFailure::Retryable(anyhow!("HTTP {}", status)));
     }
-    let bytes = resp.bytes().await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+
+    if let Some(parent) = tmp.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+    }
+    let mut file = tokio::fs::File::create(tmp).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+    let mut hasher = expected_sha1.map(|_| Sha1::new());
+
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+        if let Some(h) = hasher.as_mut() {
+            h.update(&chunk);
+        }
+        file.write_all(&chunk).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+    }
 
     if let Some(expected) = expected_sha1 {
-        use sha1::{Digest, Sha1};
-        let mut hasher = Sha1::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
+        let actual = format!("{:x}", hasher.expect("hasher initialisé quand expected_sha1 est Some").finalize());
         if !actual.eq_ignore_ascii_case(expected) {
             return Err(DownloadFailure::Retryable(anyhow!(
                 "hash SHA1 invalide pour {} (attendu {}, obtenu {})", url, expected, actual
             )));
         }
     }
-
-    if let Some(parent) = tmp.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
-    }
-    let mut file = tokio::fs::File::create(tmp).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
-    file.write_all(&bytes).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
     Ok(())
 }
 

@@ -109,35 +109,49 @@ pub(super) async fn tail_log_file(log_path: PathBuf, stop_flag: Arc<AtomicBool>,
     let current_end = tokio::fs::metadata(&log_path).await.map(|m| m.len()).unwrap_or(0);
     let mut pos: u64 = current_end;
     let mut last_len: u64 = current_end;
+    // O-5 (audit pipeline) : le handle reste ouvert ENTRE deux ticks au lieu
+    // d'être rouvert + reseeké à CHAQUE tick pendant toute la session de jeu
+    // (~36 000 réouvertures/heure avant ce correctif, pour un fichier dont on
+    // ne lit que la fin) — ne le rouvre que sur détection de troncature
+    // (ci-dessous) ou au tout premier tick où il y a quelque chose à lire.
+    let mut reader: Option<BufReader<tokio::fs::File>> = None;
 
     loop {
         if let Ok(metadata) = tokio::fs::metadata(&log_path).await {
             let len = metadata.len();
             if len < last_len {
-                // Fichier recréé au démarrage — recommencer depuis le début
+                // Fichier recréé au démarrage — recommencer depuis le début,
+                // et forcer une réouverture puisque l'ancien handle pointe
+                // vers l'ancien fichier (déjà remplacé sur disque).
                 pos = 0;
+                reader = None;
             }
             last_len = len;
 
             if len > pos {
-                if let Ok(mut file) = tokio::fs::File::open(&log_path).await {
-                    if file.seek(std::io::SeekFrom::Start(pos)).await.is_ok() {
-                        let mut reader = BufReader::new(file);
-                        let mut line = String::new();
-                        loop {
-                            line.clear();
-                            match reader.read_line(&mut line).await {
-                                Ok(n) if n > 0 => {
-                                    pos += n as u64;
-                                    let trimmed = line.trim_end().to_string();
-                                    if !trimmed.is_empty() {
-                                        log_to_console(&app, &console_label, &trimmed, "out");
-                                    }
+                if reader.is_none() {
+                    if let Ok(mut file) = tokio::fs::File::open(&log_path).await {
+                        if file.seek(std::io::SeekFrom::Start(pos)).await.is_ok() {
+                            reader = Some(BufReader::new(file));
+                        }
+                    }
+                }
+                if let Some(r) = reader.as_mut() {
+                    let mut line = String::new();
+                    loop {
+                        line.clear();
+                        match r.read_line(&mut line).await {
+                            Ok(n) if n > 0 => {
+                                pos += n as u64;
+                                let trimmed = line.trim_end().to_string();
+                                if !trimmed.is_empty() {
+                                    log_to_console(&app, &console_label, &trimmed, "out");
                                 }
-                                // Ok(0) = EOF, Err(_) = erreur de lecture — dans les deux cas
-                                // on arrête cette passe et on retente au prochain tick.
-                                _ => break,
                             }
+                            // Ok(0) = EOF, Err(_) = erreur de lecture — dans les deux cas
+                            // on arrête cette passe et on retente au prochain tick, SANS
+                            // fermer le handle (voir commentaire plus haut).
+                            _ => break,
                         }
                     }
                 }

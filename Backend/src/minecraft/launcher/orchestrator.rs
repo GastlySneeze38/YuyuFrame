@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use futures::StreamExt;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use crate::state::{MinecraftSession, SharedState};
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
 use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
+use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
 use super::java::ensure_java;
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args};
@@ -177,26 +179,56 @@ pub async fn download_and_launch(
             let objects_dir = assets_dir.join("objects");
             let total_assets = index_file.objects.len() as u64;
 
-            let sem = Arc::new(Semaphore::new(32));
-            let mut tasks: JoinSet<Result<()>> = JoinSet::new();
+            // O-3 (audit pipeline) : un seul `read_dir` par bucket de préfixe
+            // (256 au maximum — 2 caractères hexa) au lieu d'un appel par
+            // asset (~4000 sur une version moderne, un par `exists()`/
+            // `metadata()`). Le résultat (nom de fichier → taille) est mis en
+            // mémoire une fois pour toutes puis consulté localement par
+            // chaque tâche ci-dessous, plus aucun syscall pour la détection
+            // "déjà présent" pendant la boucle de téléchargement.
+            let mut existing: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+            if let Ok(mut buckets) = tokio::fs::read_dir(&objects_dir).await {
+                while let Ok(Some(bucket)) = buckets.next_entry().await {
+                    if !bucket.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    if let Ok(mut files) = tokio::fs::read_dir(bucket.path()).await {
+                        while let Ok(Some(f)) = files.next_entry().await {
+                            if let (Ok(meta), Some(name)) = (f.metadata().await, f.file_name().to_str().map(str::to_string)) {
+                                existing.insert(name, meta.len());
+                            }
+                        }
+                    }
+                }
+            }
+            let existing = Arc::new(existing);
 
-            for (obj_id, obj) in index_file.objects.into_iter() {
-                let sem = sem.clone();
-                let client = client.clone();
-                let objects_dir = objects_dir.clone();
-                tasks.spawn(async move {
-                    // L-6 (audit pipeline) : un index d'assets corrompu (tronqué
-                    // par une coupure réseau, voir L-1) peut contenir un hash de
-                    // moins de 2 caractères — `&obj.hash[..2]` paniquerait alors
-                    // la tâche entière au lieu de sauter juste cette entrée.
-                    let Some(prefix) = obj.hash.get(..2) else {
-                        tracing::warn!("Asset «{}» ignoré : hash invalide ({:?})", obj_id, obj.hash);
-                        return Ok(());
-                    };
-                    let obj_dir = objects_dir.join(prefix);
-                    let obj_path = obj_dir.join(&obj.hash);
-                    if !file_matches(&obj_path, Some(obj.size)).await {
-                        let _permit = sem.acquire().await.unwrap();
+            // O-4 (audit pipeline) : `buffer_unordered` au lieu de spawner les
+            // ~4000 tâches d'un coup avec un sémaphore à 32 pour les brider
+            // après coup — celui-ci matérialisait 4000 futures en mémoire
+            // pour n'en exécuter que 32 à la fois. `buffer_unordered` ne
+            // matérialise que les futures réellement en vol, sans sémaphore
+            // séparé à gérer.
+            let mut results = futures::stream::iter(index_file.objects.into_iter())
+                .map(|(obj_id, obj)| {
+                    let client = client.clone();
+                    let objects_dir = objects_dir.clone();
+                    let existing = existing.clone();
+                    async move {
+                        // L-6 (audit pipeline) : un index d'assets corrompu
+                        // (tronqué par une coupure réseau, voir L-1) peut
+                        // contenir un hash de moins de 2 caractères —
+                        // `&obj.hash[..2]` paniquerait alors la tâche entière
+                        // au lieu de sauter juste cette entrée.
+                        let Some(prefix) = obj.hash.get(..2) else {
+                            tracing::warn!("Asset «{}» ignoré : hash invalide ({:?})", obj_id, obj.hash);
+                            return;
+                        };
+                        let up_to_date = existing.get(&obj.hash).map(|&len| len == obj.size).unwrap_or(false);
+                        if up_to_date {
+                            return;
+                        }
+                        let obj_path = objects_dir.join(prefix).join(&obj.hash);
                         let url = format!(
                             "https://resources.download.minecraft.net/{}/{}",
                             prefix, obj.hash
@@ -209,13 +241,11 @@ pub async fn download_and_launch(
                             tracing::warn!("Téléchargement asset «{}» échoué : {}", obj_id, e);
                         }
                     }
-                    Ok::<(), anyhow::Error>(())
-                });
-            }
+                })
+                .buffer_unordered(32);
 
             let mut done = 0u64;
-            while let Some(r) = tasks.join_next().await {
-                r??;
+            while results.next().await.is_some() {
                 if cancelled(&cancel) {
                     return Err(anyhow!(LAUNCH_CANCELLED_MSG));
                 }
@@ -432,6 +462,12 @@ pub async fn download_and_launch(
     full_classpath.push(client_jar.to_string_lossy().to_string());
     let classpath_str = dedup_classpath(full_classpath).join(classpath_sep);
 
+    // P1-7 (audit launcher) : AppCDS — génère l'archive au premier lancement
+    // de cette combinaison (version/loader/classpath/mods), la réutilise
+    // ensuite. Calculé ici, avant que `classpath_str` ne soit déplacé dans
+    // `args` plus bas (-cp).
+    let appcds_args = appcds_jvm_args(java_major, &mc_game_dir, version_id, loader, &classpath_str).await;
+
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major);
     // Même condition que build_jvm_args (P1-4, audit launcher) : ZGC
     // seulement à partir de 6 Go, sinon ce message annoncerait ZGC alors que
@@ -449,6 +485,7 @@ pub async fn download_and_launch(
     args.extend(extra_jvm_args);
     args.extend(p2p_jvm_args);
     args.extend(launcher_agent_jvm_args);
+    args.extend(appcds_args);
     args.extend(["-cp".to_string(), classpath_str, main_class]);
     args.extend(build_game_args(&details, session, &mc_game_dir, &assets_dir, version_id));
     args.extend(extra_game_args);
