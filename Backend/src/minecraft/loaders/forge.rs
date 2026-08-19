@@ -83,6 +83,28 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
 /// (1.7.x à ~1.12) utilisent des ids irréguliers selon la version (casse,
 /// suffixe dupliqué...), donc on recherche plutôt un dossier existant dont le
 /// nom contient à la fois la version MC et le build Forge.
+/// N'importe quelle version Forge déjà installée pour ce MC, sans connaître
+/// le build — repli HORS LIGNE quand `fetch_latest_version` ne peut pas
+/// joindre les serveurs Forge (voir `setup_forge`). Même heuristique de nom
+/// de dossier que [`find_installed`], sans la contrainte sur le build ;
+/// `neoforge-*` est exclu explicitement (dossiers distincts, voir
+/// `neoforge::find_any_installed`).
+pub fn find_any_installed(mc_version: &str, mc_dir: &Path) -> Option<String> {
+    let versions_dir = mc_dir.join("versions");
+    let entries = std::fs::read_dir(&versions_dir).ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let lower = name.to_ascii_lowercase();
+        if lower.starts_with("neoforge") || !lower.contains("forge") {
+            continue;
+        }
+        if name.contains(mc_version) && entry.path().join(format!("{}.json", name)).exists() {
+            return Some(name);
+        }
+    }
+    None
+}
+
 pub fn find_installed(mc_version: &str, forge_ver: &str, mc_dir: &Path) -> Option<String> {
     let versions_dir = mc_dir.join("versions");
     let entries = std::fs::read_dir(&versions_dir).ok()?;

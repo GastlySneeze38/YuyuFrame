@@ -20,7 +20,13 @@ struct LoaderInfo {
 /// Réutilise directement `fabric::FabricProfile` (même forme JSON exacte,
 /// vérifiée sur un profil réel : `mainClass`, `libraries: [{name, url}]`,
 /// `arguments.{jvm,game}`) — pas besoin d'un type dupliqué.
+/// Repli hors ligne sur le dernier profil connu — voir
+/// `fabric::profile_with_cache` (même mécanique, clé de cache "quilt").
 pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
+    super::fabric::profile_with_cache_for("quilt", mc_version, || fetch_profile_online(mc_version)).await
+}
+
+async fn fetch_profile_online(mc_version: &str) -> Result<String> {
     let client = crate::minecraft::http::short_lived_client();
 
     let url = format!("{}/versions/loader/{}", QUILT_META, mc_version);
@@ -58,11 +64,5 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
         QUILT_META, mc_version, loader_ver
     );
 
-    client
-        .get(&profile_url)
-        .send()
-        .await?
-        .json()
-        .await
-        .map_err(|e| anyhow!("Profil Quilt invalide: {}", e))
+    Ok(client.get(&profile_url).send().await?.text().await?)
 }

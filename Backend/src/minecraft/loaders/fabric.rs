@@ -40,8 +40,80 @@ pub struct FabricArguments {
     pub game: Option<Vec<serde_json::Value>>,
 }
 
+// ── Cache disque des profils de loader (mode hors ligne) ─────────────────────
+
+/// Emplacement du profil résolu mis en cache — voir [`profile_with_cache`].
+fn profile_cache_path(loader: &str, mc_version: &str) -> PathBuf {
+    crate::minecraft::launcher::minecraft_dir()
+        .join("loaders")
+        .join(format!("{}-{}.json", loader, mc_version))
+}
+
+/// Résout un profil de loader (Fabric/Quilt) RÉSEAU D'ABORD, avec repli sur
+/// le dernier profil connu mis en cache sur disque.
+///
+/// Sans ce repli, une instance déjà installée et parfaitement jouable
+/// refusait de se lancer hors ligne : contrairement au JSON de version
+/// vanilla (mis en cache de longue date, voir `orchestrator`), le profil
+/// Fabric/Quilt était re-téléchargé à CHAQUE lancement et son échec était
+/// fatal — d'où « error sending request for url (meta.fabricmc.net/...) »
+/// sans aucune connexion, alors que toutes les libs étaient déjà là.
+///
+/// Volontairement réseau-d'abord et non cache-d'abord : le profil, lui,
+/// n'est PAS immuable (une nouvelle version de loader sort régulièrement),
+/// donc servir le cache en priorité épinglerait l'utilisateur sur un loader
+/// périmé pour toujours. Le cache n'est qu'un filet de sécurité.
+async fn profile_with_cache<F, Fut>(loader: &str, mc_version: &str, fetch: F) -> Result<FabricProfile>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<String>>,
+{
+    let online = match fetch().await {
+        Ok(raw) => serde_json::from_str::<FabricProfile>(&raw)
+            .map(|p| (p, raw))
+            .map_err(|e| anyhow!("Profil {} invalide: {}", loader, e)),
+        Err(e) => Err(e),
+    };
+
+    match online {
+        Ok((profile, raw)) => {
+            let path = profile_cache_path(loader, mc_version);
+            if let Some(parent) = path.parent() {
+                let _ = tokio::fs::create_dir_all(parent).await;
+            }
+            if let Err(e) = tokio::fs::write(&path, &raw).await {
+                tracing::warn!("Mise en cache du profil {} échouée ({}) — le lancement hors ligne ne sera pas possible", loader, e);
+            }
+            Ok(profile)
+        }
+        Err(e) => {
+            let path = profile_cache_path(loader, mc_version);
+            match tokio::fs::read_to_string(&path).await {
+                Ok(raw) => match serde_json::from_str::<FabricProfile>(&raw) {
+                    Ok(profile) => {
+                        tracing::warn!("{} injoignable ({}) — repli sur le profil en cache ({})", loader, e, path.display());
+                        Ok(profile)
+                    }
+                    Err(parse_err) => Err(anyhow!(
+                        "{} injoignable ({}) et profil en cache illisible ({})", loader, e, parse_err
+                    )),
+                },
+                Err(_) => Err(anyhow!(
+                    "{} injoignable ({}) et aucun profil en cache pour MC {} — une première installation en ligne est nécessaire",
+                    loader, e, mc_version
+                )),
+            }
+        }
+    }
+}
+
 /// Fetch the Fabric profile for the latest stable loader compatible with `mc_version`.
+/// Repli hors ligne sur le dernier profil connu — voir [`profile_with_cache`].
 pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
+    profile_with_cache("fabric", mc_version, || fetch_profile_online(mc_version)).await
+}
+
+async fn fetch_profile_online(mc_version: &str) -> Result<String> {
     let client = crate::minecraft::http::short_lived_client();
 
     let url = format!("{}/versions/loader/{}", FABRIC_META, mc_version);
@@ -69,13 +141,17 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
         FABRIC_META, mc_version, loader_ver
     );
 
-    client
-        .get(&profile_url)
-        .send()
-        .await?
-        .json()
-        .await
-        .map_err(|e| anyhow!("Profil Fabric invalide: {}", e))
+    Ok(client.get(&profile_url).send().await?.text().await?)
+}
+
+/// Variante de [`profile_with_cache`] exposée à `quilt.rs` — même mécanique,
+/// clé de cache différente.
+pub(super) async fn profile_with_cache_for<F, Fut>(loader: &str, mc_version: &str, fetch: F) -> Result<FabricProfile>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<String>>,
+{
+    profile_with_cache(loader, mc_version, fetch).await
 }
 
 /// Download a Fabric library and return its local path (None if unavailable

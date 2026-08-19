@@ -134,7 +134,11 @@ pub fn capture(event: &str, properties: serde_json::Value) {
             "distinct_id": distinct_id,
             "properties": properties,
         });
-        match reqwest::Client::new()
+        // Timeouts obligatoires même sur une tâche détachée : sans eux, un
+        // portail captif ou un réseau qui pend laisse la requête (et sa tâche
+        // tokio) en vie indéfiniment — invisible, mais ça s'accumule à chaque
+        // événement capturé pendant toute la session.
+        match crate::minecraft::http::short_lived_client()
             .post(format!("{}/capture/", host))
             .json(&body)
             .send()

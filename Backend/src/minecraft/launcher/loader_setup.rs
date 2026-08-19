@@ -226,20 +226,41 @@ pub(super) async fn setup_forge(
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version Forge...");
 
-    let forge_ver = forge::fetch_latest_version(mc_version).await?;
-    tracing::info!("Forge {} pour MC {}", forge_ver, mc_version);
+    let mut warnings = Vec::new();
 
-    let version_id = match forge::find_installed(mc_version, &forge_ver, mc_dir) {
-        Some(id) => id,
-        None => {
-            set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur Forge...");
-            forge::install(mc_version, &forge_ver, mc_dir, libraries_dir, java, client).await?
+    // Repli HORS LIGNE : la résolution de la dernière version Forge passe par
+    // le réseau, mais une instance déjà installée n'en a pas besoin pour se
+    // lancer. Avant, cet échec était fatal AVANT même de regarder ce qui est
+    // sur le disque — une instance parfaitement jouable refusait de démarrer
+    // sans connexion.
+    let version_id = match forge::fetch_latest_version(mc_version).await {
+        Ok(forge_ver) => {
+            tracing::info!("Forge {} pour MC {}", forge_ver, mc_version);
+            match forge::find_installed(mc_version, &forge_ver, mc_dir) {
+                Some(id) => id,
+                None => {
+                    set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur Forge...");
+                    forge::install(mc_version, &forge_ver, mc_dir, libraries_dir, java, client).await?
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Serveur Forge injoignable ({}) — recherche d'une installation locale", e);
+            match forge::find_any_installed(mc_version, mc_dir) {
+                Some(id) => {
+                    warnings.push("Serveur Forge injoignable — lancement avec la version déjà installée".to_string());
+                    id
+                }
+                None => return Err(anyhow!(
+                    "Serveur Forge injoignable et aucune installation Forge locale pour MC {} — une première installation en ligne est nécessaire ({})",
+                    mc_version, e
+                )),
+            }
         }
     };
 
     let mut forge_json = forge::read_version_json(&version_id, mc_dir)?;
     let mut forge_cp = Vec::new();
-    let mut warnings = Vec::new();
 
     // 16 téléchargements simultanés — même limite que les libs vanilla et
     // Fabric plus haut. Forge a couramment 50-150+ libs : les télécharger une
@@ -331,20 +352,37 @@ pub(super) async fn setup_neoforge(
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version NeoForge...");
 
-    let neoforge_ver = neoforge::fetch_latest_version(mc_version).await?;
-    tracing::info!("NeoForge {} pour MC {}", neoforge_ver, mc_version);
+    let mut warnings = Vec::new();
 
-    let version_id = match neoforge::find_installed(&neoforge_ver, mc_dir) {
-        Some(id) => id,
-        None => {
-            set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur NeoForge...");
-            neoforge::install(&neoforge_ver, mc_dir, java, client).await?
+    // Repli HORS LIGNE — même raisonnement que `setup_forge` ci-dessus.
+    let version_id = match neoforge::fetch_latest_version(mc_version).await {
+        Ok(neoforge_ver) => {
+            tracing::info!("NeoForge {} pour MC {}", neoforge_ver, mc_version);
+            match neoforge::find_installed(&neoforge_ver, mc_dir) {
+                Some(id) => id,
+                None => {
+                    set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur NeoForge...");
+                    neoforge::install(&neoforge_ver, mc_dir, java, client).await?
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Serveur NeoForge injoignable ({}) — recherche d'une installation locale", e);
+            match neoforge::find_any_installed(mc_version, mc_dir) {
+                Some(id) => {
+                    warnings.push("Serveur NeoForge injoignable — lancement avec la version déjà installée".to_string());
+                    id
+                }
+                None => return Err(anyhow!(
+                    "Serveur NeoForge injoignable et aucune installation NeoForge locale pour MC {} — une première installation en ligne est nécessaire ({})",
+                    mc_version, e
+                )),
+            }
         }
     };
 
     let mut neoforge_json = forge::read_version_json(&version_id, mc_dir)?;
     let mut neoforge_cp = Vec::new();
-    let mut warnings = Vec::new();
 
     if let Some(libs) = neoforge_json.libraries.take() {
         let total = libs.len() as u64;

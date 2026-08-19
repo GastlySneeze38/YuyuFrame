@@ -60,6 +60,37 @@ pub fn find_installed(neoforge_ver: &str, mc_dir: &Path) -> Option<String> {
     path.exists().then_some(id)
 }
 
+/// N'importe quelle version NeoForge déjà installée pour ce MC, sans
+/// connaître le build — repli HORS LIGNE quand `fetch_latest_version` ne peut
+/// pas joindre `maven.neoforged.net` (voir `setup_neoforge`). Le dossier ne
+/// contient jamais la version MC telle quelle (`1.21.1` → `neoforge-21.1.x`),
+/// d'où le même calcul de préfixe que `fetch_latest_version`.
+pub fn find_any_installed(mc_version: &str, mc_dir: &Path) -> Option<String> {
+    let prefix = format!("{}.", mc_version.strip_prefix("1.").unwrap_or(mc_version));
+    let entries = std::fs::read_dir(mc_dir.join("versions")).ok()?;
+    let mut best: Option<String> = None;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(ver) = name.strip_prefix("neoforge-") else { continue };
+        if !ver.starts_with(&prefix) || !entry.path().join(format!("{}.json", name)).exists() {
+            continue;
+        }
+        // Plusieurs builds peuvent cohabiter — on garde le plus récent, même
+        // tri numérique que `fetch_latest_version`.
+        let keep = match &best {
+            Some(current) => {
+                let current_ver = current.strip_prefix("neoforge-").unwrap_or(current);
+                cmp_core(&version_core(ver), &version_core(current_ver)).is_gt()
+            }
+            None => true,
+        };
+        if keep {
+            best = Some(name);
+        }
+    }
+    best
+}
+
 /// Télécharge l'installeur NeoForge et le lance en mode client headless.
 /// Contrairement à Forge, NeoForge n'a jamais eu de format d'installeur
 /// legacy (pas de version pré-1.13) : toujours `--installClient` en ligne de
