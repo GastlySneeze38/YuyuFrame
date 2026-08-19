@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod http;
 pub mod launcher;
 pub mod loaders;
 pub mod maven;

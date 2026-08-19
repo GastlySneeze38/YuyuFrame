@@ -58,6 +58,7 @@ pub(super) async fn setup_fabric(
     app: &tauri::AppHandle,
     avoid_beta: bool,
     progress_floor: &AtomicU64,
+    client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Fabric Loader...");
 
@@ -90,10 +91,11 @@ pub(super) async fn setup_fabric(
     for lib in profile.libraries {
         let sem = fabric_sem.clone();
         let libraries_dir = libraries_dir.to_path_buf();
+        let client = client.clone();
         fabric_tasks.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
             let name = lib.name.clone();
-            let path = fabric::download_library(&lib, &libraries_dir).await;
+            let path = fabric::download_library(&lib, &libraries_dir, &client).await;
             (name, path)
         });
     }
@@ -148,6 +150,7 @@ pub(super) async fn setup_quilt(
     app: &tauri::AppHandle,
     avoid_beta: bool,
     progress_floor: &AtomicU64,
+    client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Quilt Loader...");
 
@@ -171,12 +174,13 @@ pub(super) async fn setup_quilt(
     for lib in profile.libraries {
         let sem = quilt_sem.clone();
         let libraries_dir = libraries_dir.to_path_buf();
+        let client = client.clone();
         quilt_tasks.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
             let name = lib.name.clone();
             // Réutilise fabric::download_library : même format de lib
             // ({name, url}), aucune logique spécifique à "Fabric" dedans.
-            let path = fabric::download_library(&lib, &libraries_dir).await;
+            let path = fabric::download_library(&lib, &libraries_dir, &client).await;
             (name, path)
         });
     }
@@ -224,6 +228,7 @@ pub(super) async fn setup_forge(
     java: &str,
     app: &tauri::AppHandle,
     progress_floor: &AtomicU64,
+    client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version Forge...");
 
@@ -234,7 +239,7 @@ pub(super) async fn setup_forge(
         Some(id) => id,
         None => {
             set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur Forge...");
-            forge::install(mc_version, &forge_ver, mc_dir, libraries_dir, java).await?
+            forge::install(mc_version, &forge_ver, mc_dir, libraries_dir, java, client).await?
         }
     };
 
@@ -252,10 +257,11 @@ pub(super) async fn setup_forge(
         for lib in libs {
             let sem = forge_sem.clone();
             let libraries_dir = libraries_dir.to_path_buf();
+            let client = client.clone();
             forge_tasks.spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
                 let name = lib.name.clone();
-                let path = forge::download_library(&lib, &libraries_dir).await;
+                let path = forge::download_library(&lib, &libraries_dir, &client).await;
                 (name, path)
             });
         }
@@ -327,6 +333,7 @@ pub(super) async fn setup_neoforge(
     java: &str,
     app: &tauri::AppHandle,
     progress_floor: &AtomicU64,
+    client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version NeoForge...");
 
@@ -337,7 +344,7 @@ pub(super) async fn setup_neoforge(
         Some(id) => id,
         None => {
             set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement de l'installeur NeoForge...");
-            neoforge::install(&neoforge_ver, mc_dir, java).await?
+            neoforge::install(&neoforge_ver, mc_dir, java, client).await?
         }
     };
 
@@ -352,10 +359,11 @@ pub(super) async fn setup_neoforge(
         for lib in libs {
             let sem = neoforge_sem.clone();
             let libraries_dir = libraries_dir.to_path_buf();
+            let client = client.clone();
             neoforge_tasks.spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
                 let name = lib.name.clone();
-                let path = forge::download_library(&lib, &libraries_dir).await;
+                let path = forge::download_library(&lib, &libraries_dir, &client).await;
                 (name, path)
             });
         }

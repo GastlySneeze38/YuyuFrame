@@ -21,7 +21,7 @@ pub struct VersionInfo {
 }
 
 pub async fn fetch_version_list() -> Result<Vec<VersionInfo>> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
     let manifest: VersionManifest = client
         .get(VERSION_MANIFEST)
         .send()

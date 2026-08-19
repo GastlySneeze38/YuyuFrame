@@ -58,7 +58,7 @@ pub struct ForgeArguments {
 
 /// Returns the Forge version string (e.g. "54.0.1") for a given MC version.
 pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
     let promos: ForgePromos = client
         .get(FORGE_PROMOTIONS)
         .send()
@@ -144,7 +144,7 @@ fn inspect_installer(installer_path: &Path) -> Result<InstallerProfile> {
 /// Écrit le version json et télécharge les libs (incluant le universal jar
 /// Forge) décrits par le profil legacy — équivalent du travail que ferait le
 /// `SimpleInstaller` GUI pour un client.
-async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &Path, libraries_dir: &Path) -> Result<()> {
+async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &Path, libraries_dir: &Path, client: &reqwest::Client) -> Result<()> {
     let version_info = profile
         .get("versionInfo")
         .ok_or_else(|| anyhow!("Profil Forge legacy invalide"))?;
@@ -191,7 +191,7 @@ async fn install_legacy(version_id: &str, profile: &serde_json::Value, mc_dir: &
         };
         let url = format!("{}{}/{}/{}/{}", base, group, art, ver, remote_file);
 
-        if let Ok(resp) = reqwest::Client::new().get(&url).send().await {
+        if let Ok(resp) = client.get(&url).send().await {
             if resp.status().is_success() {
                 if let Ok(bytes) = resp.bytes().await {
                     let _ = tokio::fs::write(&local_path, &bytes).await;
@@ -211,6 +211,7 @@ pub async fn install(
     mc_dir: &Path,
     libraries_dir: &Path,
     java: &str,
+    client: &reqwest::Client,
 ) -> Result<String> {
     let installer_name = format!("forge-{}-{}-installer.jar", mc_version, forge_ver);
     // Forge moderne (>= ~1.13) range ses installeurs sous "{mc}-{forge}/".
@@ -226,7 +227,6 @@ pub async fn install(
     let installer_path = temp.join(&installer_name);
 
     if !installer_path.exists() {
-        let client = reqwest::Client::new();
         tracing::info!("Téléchargement installeur Forge depuis {}", modern_url);
         let mut resp = client.get(&modern_url).send().await?;
         if !resp.status().is_success() {
@@ -260,15 +260,19 @@ pub async fn install(
                 .await?;
 
             if !output.status.success() {
+                // L'installeur Forge écrit l'essentiel de son diagnostic sur
+                // stdout, pas stderr — sans les deux, le message remonté à
+                // l'utilisateur est souvent vide ou inutile.
+                let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(anyhow!("Installeur Forge échoué:\n{}", stderr))
+                Err(anyhow!("Installeur Forge échoué:\n{}\n{}", stdout, stderr))
             } else {
                 Ok(id)
             }
         }
         InstallerProfile::Legacy { id, profile } => {
             tracing::info!("Installation manuelle du profil Forge legacy {}...", id);
-            install_legacy(&id, &profile, mc_dir, libraries_dir).await.map(|_| id)
+            install_legacy(&id, &profile, mc_dir, libraries_dir, client).await.map(|_| id)
         }
     };
 
@@ -295,7 +299,7 @@ pub fn read_version_json(version_id: &str, mc_dir: &Path) -> Result<ForgeVersion
 /// where a library only has `name` + an optional base maven `url`.
 /// None si indisponible — voir les `tracing::warn!` pour la raison précise,
 /// remontée par l'appelant comme avertissement de lancement.
-pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path) -> Option<PathBuf> {
+pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path, client: &reqwest::Client) -> Option<PathBuf> {
     let Some(coord) = MavenCoord::parse(&lib.name) else {
         tracing::warn!("[Forge] coordonnée maven invalide, lib ignorée : {}", lib.name);
         return None;
@@ -328,7 +332,7 @@ pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path) -> Optio
     }
 
     if !local_path.exists() && !url.is_empty() {
-        match reqwest::Client::new().get(&url).send().await {
+        match client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => match resp.bytes().await {
                 Ok(bytes) => {
                     if let Err(e) = tokio::fs::write(&local_path, &bytes).await {

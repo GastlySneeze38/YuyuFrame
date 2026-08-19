@@ -352,6 +352,8 @@ pub async fn resolve_and_install_deps(
 
     let client = reqwest::Client::builder()
         .user_agent("YuyuFrame/1.0")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
     let mut recent_failures = load_recent_failures(mods_dir).await;

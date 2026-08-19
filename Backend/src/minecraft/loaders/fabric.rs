@@ -42,7 +42,7 @@ pub struct FabricArguments {
 
 /// Fetch the Fabric profile for the latest stable loader compatible with `mc_version`.
 pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
 
     let url = format!("{}/versions/loader/{}", FABRIC_META, mc_version);
     let entries: Vec<LoaderEntry> = client
@@ -81,7 +81,7 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
 /// Download a Fabric library and return its local path (None if unavailable
 /// — voir les `tracing::warn!` pour la raison précise, remontée par
 /// l'appelant comme avertissement de lancement, pas comme détail technique).
-pub async fn download_library(lib: &FabricLibrary, libraries_dir: &Path) -> Option<PathBuf> {
+pub async fn download_library(lib: &FabricLibrary, libraries_dir: &Path, client: &reqwest::Client) -> Option<PathBuf> {
     let base_url = lib.url.as_deref().unwrap_or("https://libraries.minecraft.net/");
 
     // Fabric ne fournit jamais de classifier sur ses libs de loader — on ignore
@@ -112,7 +112,7 @@ pub async fn download_library(lib: &FabricLibrary, libraries_dir: &Path) -> Opti
     }
 
     if !local_path.exists() {
-        match reqwest::Client::new().get(&url).send().await {
+        match client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => match resp.bytes().await {
                 Ok(bytes) => {
                     if let Err(e) = tokio::fs::write(&local_path, &bytes).await {
@@ -164,6 +164,8 @@ pub async fn ensure_fabric_api(mc_version: &str, mods_dir: &Path) -> Result<()> 
 
     let client = reqwest::Client::builder()
         .user_agent("YuyuFrame/1.0")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
     let url = format!(

@@ -21,7 +21,7 @@ struct NeoForgeVersionList {
 /// MC dans le préfixe puisque NeoForge ne cible jamais deux versions patch de
 /// MC avec le même majeur.mineur différemment.
 pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
     let resp: NeoForgeVersionList = client
         .get(NEOFORGE_VERSIONS_API)
         .send()
@@ -64,7 +64,7 @@ pub fn find_installed(neoforge_ver: &str, mc_dir: &Path) -> Option<String> {
 /// Contrairement à Forge, NeoForge n'a jamais eu de format d'installeur
 /// legacy (pas de version pré-1.13) : toujours `--installClient` en ligne de
 /// commande, jamais besoin de reproduire un profil d'installation à la main.
-pub async fn install(neoforge_ver: &str, mc_dir: &Path, java: &str) -> Result<String> {
+pub async fn install(neoforge_ver: &str, mc_dir: &Path, java: &str, client: &reqwest::Client) -> Result<String> {
     let id = format!("neoforge-{}", neoforge_ver);
     let installer_name = format!("neoforge-{}-installer.jar", neoforge_ver);
     let url = format!("{}{}/{}", NEOFORGE_MAVEN, neoforge_ver, installer_name);
@@ -74,7 +74,6 @@ pub async fn install(neoforge_ver: &str, mc_dir: &Path, java: &str) -> Result<St
     let installer_path: PathBuf = temp.join(&installer_name);
 
     if !installer_path.exists() {
-        let client = reqwest::Client::new();
         tracing::info!("Téléchargement installeur NeoForge depuis {}", url);
         let resp = client.get(&url).send().await?;
         if !resp.status().is_success() {
@@ -99,8 +98,11 @@ pub async fn install(neoforge_ver: &str, mc_dir: &Path, java: &str) -> Result<St
     let _ = tokio::fs::remove_dir_all(&temp).await;
 
     if !output.status.success() {
+        // Même remarque que Forge (R-1) : le diagnostic utile atterrit
+        // souvent sur stdout, pas seulement stderr.
+        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow!("Installeur NeoForge échoué:\n{}", stderr));
+        return Err(anyhow!("Installeur NeoForge échoué:\n{}\n{}", stdout, stderr));
     }
 
     Ok(id)

@@ -90,6 +90,18 @@ pub async fn download_and_launch(
     // évite complètement le manifest + la requête détails par réseau, qui
     // se refaisaient sans condition à CHAQUE lancement même quand rien n'avait
     // changé depuis la fois précédente.
+    // Client HTTP partagé — pool de connexions réutilisées pour tous les
+    // téléchargements (assets, libs, installeurs Forge/NeoForge...). Bornes
+    // temporelles obligatoires : sans elles, une connexion qui s'ouvre puis
+    // ne répond plus (Wi-Fi qui bascule, CDN qui pend, portail captif)
+    // bloque le lancement indéfiniment, barre de progression figée sans
+    // message et seul recours l'annulation manuelle.
+    let client = Arc::new(reqwest::Client::builder()
+        .pool_max_idle_per_host(32)
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60)) // large : le client jar fait ~25 Mo
+        .build()?);
+
     let version_json_cache = versions_dir.join(version_id).join(format!("{}.json", version_id));
     let details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
         set_progress(&app, 5, 100, "Détails de version (cache local)...");
@@ -103,18 +115,13 @@ pub async fn download_and_launch(
             .ok_or_else(|| anyhow!("Version {} introuvable", version_id))?;
 
         set_progress(&app, 5, 100, "Récupération des détails...");
-        let raw = reqwest::Client::new().get(&version_info.url).send().await?.text().await?;
+        let raw = client.get(&version_info.url).send().await?.text().await?;
         if let Some(parent) = version_json_cache.parent() {
             let _ = tokio::fs::create_dir_all(parent).await;
         }
         let _ = tokio::fs::write(&version_json_cache, &raw).await;
         serde_json::from_str(&raw)?
     };
-
-    // Client HTTP partagé — pool de connexions réutilisées pour tous les téléchargements
-    let client = Arc::new(reqwest::Client::builder()
-        .pool_max_idle_per_host(32)
-        .build()?);
 
     // Plafond partagé entre les deux émetteurs concurrents (libs + assets, voir
     // set_progress_monotonic) — un seul par lancement, jamais partagé entre
@@ -319,10 +326,10 @@ pub async fn download_and_launch(
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
 
     let loader_setup = match loader.unwrap_or("vanilla") {
-        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor).await?,
-        "quilt" => setup_quilt(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor).await?,
-        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor).await?,
-        "neoforge" => setup_neoforge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor).await?,
+        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor, &client).await?,
+        "quilt" => setup_quilt(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor, &client).await?,
+        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor, &client).await?,
+        "neoforge" => setup_neoforge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor, &client).await?,
         _ => LoaderSetup { main_class: details.main_class.clone(), ..Default::default() },
     };
     let (main_class, extra_classpath, extra_game_args, extra_jvm_args) = (

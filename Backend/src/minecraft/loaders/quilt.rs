@@ -21,7 +21,7 @@ struct LoaderInfo {
 /// vérifiée sur un profil réel : `mainClass`, `libraries: [{name, url}]`,
 /// `arguments.{jvm,game}`) — pas besoin d'un type dupliqué.
 pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
 
     let url = format!("{}/versions/loader/{}", QUILT_META, mc_version);
     let entries: Vec<LoaderEntry> = client
