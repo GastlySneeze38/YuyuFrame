@@ -12,7 +12,7 @@ use crate::state::{MinecraftSession, SharedState};
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
 use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
-use super::classpath::{artifact_path, dedup_classpath, download_file, extract_natives, should_download_library};
+use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
 use super::java::ensure_java;
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args};
 #[cfg(target_os = "windows")]
@@ -114,7 +114,18 @@ pub async fn download_and_launch(
         .timeout(std::time::Duration::from_secs(60)) // large : le client jar fait ~25 Mo
         .build()?);
 
-    let version_json_cache = versions_dir.join(version_id).join(format!("{}.json", version_id));
+    // L-3 (audit pipeline) : layout standard Minecraft versions/<id>/<id>.json
+    // (même dossier que le client_jar plus bas), pas versions/<id>/<id>/<id>.json
+    // — l'ancien chemin descendait un niveau de trop, invisible à tout outil
+    // externe (MultiMC, inspection manuelle) et source de deux conventions de
+    // chemin cohabitant dans le même dossier "versions/". Migration best-effort
+    // d'un cache existant à l'ancien chemin, pour éviter un retéléchargement
+    // inutile chez les utilisateurs qui l'avaient déjà en cache.
+    let version_json_cache = versions_dir.join(format!("{}.json", version_id));
+    let legacy_version_json_cache = versions_dir.join(version_id).join(format!("{}.json", version_id));
+    if !version_json_cache.exists() && legacy_version_json_cache.exists() {
+        let _ = tokio::fs::rename(&legacy_version_json_cache, &version_json_cache).await;
+    }
     let details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
         set_progress(&app, 5, 100, "Détails de version (cache local)...");
         serde_json::from_str(&text)?
@@ -169,22 +180,34 @@ pub async fn download_and_launch(
             let sem = Arc::new(Semaphore::new(32));
             let mut tasks: JoinSet<Result<()>> = JoinSet::new();
 
-            for obj in index_file.objects.into_values() {
+            for (obj_id, obj) in index_file.objects.into_iter() {
                 let sem = sem.clone();
                 let client = client.clone();
                 let objects_dir = objects_dir.clone();
                 tasks.spawn(async move {
-                    let prefix = &obj.hash[..2];
+                    // L-6 (audit pipeline) : un index d'assets corrompu (tronqué
+                    // par une coupure réseau, voir L-1) peut contenir un hash de
+                    // moins de 2 caractères — `&obj.hash[..2]` paniquerait alors
+                    // la tâche entière au lieu de sauter juste cette entrée.
+                    let Some(prefix) = obj.hash.get(..2) else {
+                        tracing::warn!("Asset «{}» ignoré : hash invalide ({:?})", obj_id, obj.hash);
+                        return Ok(());
+                    };
                     let obj_dir = objects_dir.join(prefix);
                     let obj_path = obj_dir.join(&obj.hash);
-                    if !obj_path.exists() {
+                    if !file_matches(&obj_path, Some(obj.size)).await {
                         let _permit = sem.acquire().await.unwrap();
-                        tokio::fs::create_dir_all(&obj_dir).await?;
                         let url = format!(
                             "https://resources.download.minecraft.net/{}/{}",
                             prefix, obj.hash
                         );
-                        download_file(&client, &url, &obj_path).await.ok();
+                        // Erreur best-effort mais désormais LOGGÉE : avant, elle
+                        // était intégralement avalée (`.ok()`), sans warning de
+                        // lancement ni trace — un asset manquant restait
+                        // totalement invisible jusqu'au crash Java en jeu.
+                        if let Err(e) = download_verified(&client, &url, &obj_path, Some(&obj.hash)).await {
+                            tracing::warn!("Téléchargement asset «{}» échoué : {}", obj_id, e);
+                        }
                     }
                     Ok::<(), anyhow::Error>(())
                 });
@@ -212,9 +235,9 @@ pub async fn download_and_launch(
     };
 
     let client_jar = versions_dir.join(format!("{}.jar", version_id));
-    if !client_jar.exists() {
+    if !file_matches(&client_jar, Some(details.downloads.client.size)).await {
         set_progress_monotonic(&app, &progress_floor, 10, 100, "Téléchargement du client Minecraft...");
-        download_file(&client, &details.downloads.client.url, &client_jar).await?;
+        download_verified(&client, &details.downloads.client.url, &client_jar, Some(&details.downloads.client.sha1)).await?;
     }
 
     set_progress_monotonic(&app, &progress_floor, 20, 100, "Téléchargement des bibliothèques...");
@@ -245,11 +268,8 @@ pub async fn download_and_launch(
 
             if let Some(art) = artifact {
                 let lib_path = artifact_path(&libraries_dir, &art, &lib_name);
-                if let Some(parent) = lib_path.parent() {
-                    tokio::fs::create_dir_all(parent).await?;
-                }
-                if !lib_path.exists() {
-                    download_file(&client, &art.url, &lib_path).await?;
+                if !file_matches(&lib_path, Some(art.size)).await {
+                    download_verified(&client, &art.url, &lib_path, Some(&art.sha1)).await?;
                 }
                 // Les JARs natifs (":natives-xxx") sont extraits vers natives_dir
                 // ET ajoutés au classpath : LWJGL 3.x utilise le classpath comme fallback
@@ -275,11 +295,8 @@ pub async fn download_and_launch(
                             native_art,
                             &format!("{}:{}", lib_name, key),
                         );
-                        if let Some(parent) = native_path.parent() {
-                            tokio::fs::create_dir_all(parent).await?;
-                        }
-                        if !native_path.exists() {
-                            download_file(&client, &native_art.url, &native_path).await?;
+                        if !file_matches(&native_path, Some(native_art.size)).await {
+                            download_verified(&client, &native_art.url, &native_path, Some(&native_art.sha1)).await?;
                         }
                         native_paths.push(native_path);
                     }

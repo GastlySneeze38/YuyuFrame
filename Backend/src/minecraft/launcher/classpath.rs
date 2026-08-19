@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
 use crate::minecraft::maven::MavenCoord;
@@ -77,7 +78,14 @@ pub(super) async fn extract_natives(jar_path: &Path, natives_dir: &Path) -> Resu
             if !is_native { continue; }
             let file_name = std::path::Path::new(&name).file_name().unwrap_or_default().to_string_lossy().to_string();
             let out_path = natives_dir.join(&file_name);
-            if !out_path.exists() {
+            // L-5 (audit launcher) : comparer la taille décompressée attendue
+            // avant de sauter l'extraction — sans ça, une DLL tronquée (coupure
+            // réseau pendant le téléchargement du jar, voir L-1) ou héritée
+            // d'une autre version de LWJGL reste en place indéfiniment
+            // (UnsatisfiedLinkError insoluble sans suppression manuelle).
+            let up_to_date = out_path.exists()
+                && std::fs::metadata(&out_path).map(|m| m.len()).unwrap_or(0) == entry.size();
+            if !up_to_date {
                 let mut out = std::fs::File::create(&out_path)?;
                 std::io::copy(&mut entry, &mut out)?;
             }
@@ -88,13 +96,112 @@ pub(super) async fn extract_natives(jar_path: &Path, natives_dir: &Path) -> Resu
     .map_err(|e| anyhow!("Tâche extraction natives : {}", e))?
 }
 
-pub(super) async fn download_file(client: &reqwest::Client, url: &str, path: &Path) -> Result<()> {
-    let resp = client.get(url).send().await?;
-    if !resp.status().is_success() {
-        return Err(anyhow!("Download failed {}: {}", url, resp.status()));
+/// `true` si `path` existe déjà avec le contenu attendu : présence pure sans
+/// `expected_size` (aucune taille connue à ce point d'appel), ou présence +
+/// taille exacte sinon — un fichier tronqué par une coupure réseau existe
+/// mais fait la mauvaise taille. Moins cher qu'un SHA1 complet à chaque
+/// lancement, et suffisant pour attraper une troncature (L-1, audit launcher).
+pub(super) async fn file_matches(path: &Path, expected_size: Option<u64>) -> bool {
+    match expected_size {
+        Some(size) => tokio::fs::metadata(path).await.map(|m| m.len() == size).unwrap_or(false),
+        None => tokio::fs::try_exists(path).await.unwrap_or(false),
     }
-    let bytes = resp.bytes().await?;
-    let mut file = tokio::fs::File::create(path).await?;
-    file.write_all(&bytes).await?;
+}
+
+/// Téléchargement simple, sans vérification d'intégrité — pour les cas où
+/// aucun SHA1 n'est disponible côté appelant (ex : index d'assets, runtime
+/// Java Mojang). Bénéficie quand même de l'écriture atomique et du retry de
+/// [`download_verified`].
+pub(super) async fn download_file(client: &reqwest::Client, url: &str, path: &Path) -> Result<()> {
+    download_verified(client, url, path, None).await
+}
+
+enum DownloadFailure {
+    /// 4xx : la ressource n'existe pas ou l'accès est refusé — retenter ne
+    /// changera rien, on abandonne immédiatement (R-2, audit pipeline).
+    ClientError(reqwest::StatusCode),
+    /// Erreur réseau ou 5xx — transitoire, vaut la peine d'être retenté.
+    Retryable(anyhow::Error),
+}
+
+async fn try_download_once(
+    client: &reqwest::Client,
+    url: &str,
+    tmp: &Path,
+    expected_sha1: Option<&str>,
+) -> Result<(), DownloadFailure> {
+    let resp = client.get(url).send().await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+    let status = resp.status();
+    if status.is_client_error() {
+        return Err(DownloadFailure::ClientError(status));
+    }
+    if !status.is_success() {
+        return Err(DownloadFailure::Retryable(anyhow!("HTTP {}", status)));
+    }
+    let bytes = resp.bytes().await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+
+    if let Some(expected) = expected_sha1 {
+        use sha1::{Digest, Sha1};
+        let mut hasher = Sha1::new();
+        hasher.update(&bytes);
+        let actual = format!("{:x}", hasher.finalize());
+        if !actual.eq_ignore_ascii_case(expected) {
+            return Err(DownloadFailure::Retryable(anyhow!(
+                "hash SHA1 invalide pour {} (attendu {}, obtenu {})", url, expected, actual
+            )));
+        }
+    }
+
+    if let Some(parent) = tmp.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+    }
+    let mut file = tokio::fs::File::create(tmp).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
+    file.write_all(&bytes).await.map_err(|e| DownloadFailure::Retryable(e.into()))?;
     Ok(())
+}
+
+/// Téléchargement atomique et (optionnellement) vérifié — L-1 et R-2 de
+/// l'audit pipeline, corrigés ensemble puisqu'ils touchent le même chemin de
+/// code.
+///
+/// - Écrit d'abord dans `<path>.part` puis `rename` vers `path` (atomique sur
+///   le même volume) : une coupure réseau, l'app tuée ou un disque plein
+///   pendant l'écriture ne laisse jamais de fichier tronqué au chemin final —
+///   avant ce correctif, un tel fichier PASSAIT les tests `exists()` du reste
+///   du pipeline et n'était donc plus jamais retéléchargé.
+/// - Vérifie le SHA1 contre `expected_sha1` quand fourni (déjà disponible
+///   dans le manifeste Mojang pour le client jar, les libs et les assets,
+///   mais jusqu'ici jamais lu).
+/// - 3 tentatives avec backoff exponentiel sur erreur réseau/5xx — pas sur
+///   4xx (la ressource n'existe pas ou l'accès est refusé, insister ne sert
+///   à rien).
+pub(super) async fn download_verified(
+    client: &reqwest::Client,
+    url: &str,
+    path: &Path,
+    expected_sha1: Option<&str>,
+) -> Result<()> {
+    let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
+    tmp_name.push(".part");
+    let tmp = path.with_file_name(tmp_name);
+
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 0..3u32 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(500 * (1u64 << (attempt - 1)))).await;
+        }
+        match try_download_once(client, url, &tmp, expected_sha1).await {
+            Ok(()) => {
+                tokio::fs::rename(&tmp, path).await?;
+                return Ok(());
+            }
+            Err(DownloadFailure::ClientError(status)) => {
+                let _ = tokio::fs::remove_file(&tmp).await;
+                return Err(anyhow!("Téléchargement échoué {} : {}", url, status));
+            }
+            Err(DownloadFailure::Retryable(e)) => last_err = Some(e),
+        }
+    }
+    let _ = tokio::fs::remove_file(&tmp).await;
+    Err(last_err.unwrap_or_else(|| anyhow!("Téléchargement échoué : {}", url)))
 }
