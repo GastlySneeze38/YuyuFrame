@@ -15,18 +15,26 @@ fn appcds_dir(game_dir: &Path) -> PathBuf {
 /// contient jamais les jars de mods, chargés dynamiquement par le loader à
 /// l'exécution) ne change pas. Best-effort : un dossier `mods/` absent ou
 /// illisible donne juste une empreinte vide, jamais une erreur.
+/// Scan synchrone dans UN SEUL `spawn_blocking`, pour la même raison que le
+/// scan des assets (voir `orchestrator`) : `tokio::fs::DirEntry::metadata()`
+/// repasse par `spawn_blocking` à chaque entrée, soit un aller-retour vers le
+/// pool de threads par mod (~90 sur un gros modpack) à chaque lancement.
 async fn mods_fingerprint(game_dir: &Path) -> String {
     let mods_dir = game_dir.join("mods");
-    let mut entries: Vec<(String, u64)> = Vec::new();
-    if let Ok(mut dir) = tokio::fs::read_dir(&mods_dir).await {
-        while let Ok(Some(entry)) = dir.next_entry().await {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let size = entry.metadata().await.map(|m| m.len()).unwrap_or(0);
-            entries.push((name, size));
+    tokio::task::spawn_blocking(move || {
+        let mut entries: Vec<(String, u64)> = Vec::new();
+        if let Ok(dir) = std::fs::read_dir(&mods_dir) {
+            for entry in dir.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                entries.push((name, size));
+            }
         }
-    }
-    entries.sort();
-    entries.iter().map(|(n, s)| format!("{n}:{s}")).collect::<Vec<_>>().join(",")
+        entries.sort();
+        entries.iter().map(|(n, s)| format!("{n}:{s}")).collect::<Vec<_>>().join(",")
+    })
+    .await
+    .unwrap_or_default()
 }
 
 fn hash_key(parts: &[&str]) -> String {

@@ -208,8 +208,17 @@ pub(super) async fn download_verified(
     path: &Path,
     expected_sha1: Option<&str>,
 ) -> Result<()> {
+    // Suffixe unique, PAS juste "<nom>.part" : deux téléchargements
+    // concurrents visant le MÊME chemin final (possible dès que deux sources
+    // de libs se recoupent — vanilla et loader peuvent référencer le même
+    // artefact dans la même version) écriraient sinon dans le même fichier
+    // temporaire, produisant un contenu entrelacé. Ici chacun a le sien, et
+    // le `rename` final est atomique : le dernier gagne, avec un contenu
+    // complet et vérifié dans les deux cas.
+    static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
-    tmp_name.push(".part");
+    tmp_name.push(format!(".{seq}.part"));
     let tmp = path.with_file_name(tmp_name);
 
     let mut last_err: Option<anyhow::Error> = None;
