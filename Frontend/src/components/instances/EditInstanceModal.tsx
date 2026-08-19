@@ -74,6 +74,7 @@ export function EditInstanceModal({
           vendor={jvmVendor} onVendorChange={setJvmVendor}
           customPath={jvmCustomPath} onCustomPathChange={setJvmCustomPath}
           gcPolicy={gcPolicy} onGcPolicyChange={setGcPolicy}
+          ramMb={ram}
           preview={{ instanceId: instance.id, mcVersion, ramMb: ram }}
         />
 

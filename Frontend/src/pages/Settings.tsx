@@ -6,6 +6,7 @@ import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
+import { JvmAdvancedSection } from '@/components/instances/JvmAdvancedSection'
 import { useT, LANGUAGES } from '@/i18n'
 
 /** Valeurs courantes proposées en puces pour la RAM personnalisée (>8 Go) —
@@ -16,7 +17,9 @@ const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
 export default function Settings() {
   const t = useT()
   const {
-    brightness, setBrightness, defaultRam, setDefaultRam, customRamMb, setCustomRamMb, closeOnLaunch, setCloseOnLaunch,
+    brightness, setBrightness, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
+    defaultJvmVendor, setDefaultJvmVendor, defaultJvmCustomPath, setDefaultJvmCustomPath, defaultGcPolicy, setDefaultGcPolicy,
+    closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
@@ -263,6 +266,21 @@ export default function Settings() {
                     {t('settings.lancement.ramInfoText')}
                   </div>
                 )}
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* JVM par défaut — valeur de départ pour les nouvelles
+                  instances (voir CreateInstanceModal), pas de bouton de
+                  prévisualisation ici : aucune instance concrète à résoudre. */}
+              <div>
+                <p className="text-sm font-medium text-white mb-2">{t('settings.lancement.jvmLabel')}</p>
+                <JvmAdvancedSection
+                  vendor={defaultJvmVendor} onVendorChange={setDefaultJvmVendor}
+                  customPath={defaultJvmCustomPath} onCustomPathChange={setDefaultJvmCustomPath}
+                  gcPolicy={defaultGcPolicy} onGcPolicyChange={setDefaultGcPolicy}
+                  ramMb={defaultRam}
+                />
               </div>
 
               <div className="h-px bg-white/6" />

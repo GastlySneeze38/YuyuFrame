@@ -58,11 +58,17 @@ async function installPresetMods(
 export function CreateInstanceModal({
   versions,
   defaultRam,
+  defaultJvmVendor,
+  defaultJvmCustomPath,
+  defaultGcPolicy,
   onClose,
   onCreate,
 }: {
   versions: string[]
   defaultRam: number
+  defaultJvmVendor: JvmVendor
+  defaultJvmCustomPath: string
+  defaultGcPolicy: string
   onClose: () => void
   onCreate: (instance: Instance) => void
 }) {
@@ -76,9 +82,9 @@ export function CreateInstanceModal({
   const [mcVersion, setMcVersion] = useState(versions[0] ?? '')
   const [loader, setLoader] = useState<Loader>('vanilla')
   const [ram, setRam] = useState(defaultRam)
-  const [jvmVendor, setJvmVendor] = useState<JvmVendor>('temurin')
-  const [jvmCustomPath, setJvmCustomPath] = useState('')
-  const [gcPolicy, setGcPolicy] = useState('auto')
+  const [jvmVendor, setJvmVendor] = useState<JvmVendor>(defaultJvmVendor)
+  const [jvmCustomPath, setJvmCustomPath] = useState(defaultJvmCustomPath)
+  const [gcPolicy, setGcPolicy] = useState(defaultGcPolicy)
   // Optimiste par défaut (true/true) pour ne pas griser le bouton "Créer"
   // pendant le premier rendu, avant que RamPicker n'ait pu calculer son
   // premier statut réel (retour utilisateur : bloquer la création tant
@@ -118,6 +124,9 @@ export function CreateInstanceModal({
       setMcVersion(versions[0] ?? '')
       setLoader('vanilla')
       setRam(defaultRam)
+      setJvmVendor(defaultJvmVendor)
+      setJvmCustomPath(defaultJvmCustomPath)
+      setGcPolicy(defaultGcPolicy)
       api.analytics.track('instance_create_from_scratch_selected', { flow_id: flowId.current })
     }
   }
@@ -229,6 +238,7 @@ export function CreateInstanceModal({
               vendor={jvmVendor} onVendorChange={setJvmVendor}
               customPath={jvmCustomPath} onCustomPathChange={setJvmCustomPath}
               gcPolicy={gcPolicy} onGcPolicyChange={setGcPolicy}
+              ramMb={ram}
             />
 
             {!ramStatus.isKnownTier ? (

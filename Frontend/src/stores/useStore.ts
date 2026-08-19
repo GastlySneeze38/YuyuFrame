@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Instance, Version, Account } from '@/types'
+import type { Instance, JvmVendor, Version, Account } from '@/types'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 
 export type YuyuPlan = 'free' | 'premium' | 'ultimate'
@@ -65,6 +65,18 @@ interface Store {
    * quand définie. `null` = pas de custom, on garde le palier standard. */
   customRamMb: number | null
   setCustomRamMb: (mb: number | null) => void
+
+  // ── JVM par défaut (P1-6, Phase 6) — mêmes réglages que ceux exposés par
+  // JvmAdvancedSection sur chaque instance, mais comme valeur de départ pour
+  // les nouvelles instances (voir CreateInstanceModal), pas une valeur
+  // appliquée directement au lancement (chaque instance garde son propre
+  // choix, modifiable indépendamment après création). ──
+  defaultJvmVendor: JvmVendor
+  setDefaultJvmVendor: (v: JvmVendor) => void
+  defaultJvmCustomPath: string
+  setDefaultJvmCustomPath: (p: string) => void
+  defaultGcPolicy: string
+  setDefaultGcPolicy: (p: string) => void
 
   closeOnLaunch: boolean
   setCloseOnLaunch: (v: boolean) => void
@@ -249,6 +261,13 @@ export const useStore = create<Store>()(
       customRamMb: null,
       setCustomRamMb: (customRamMb) => set({ customRamMb }),
 
+      defaultJvmVendor: 'auto',
+      setDefaultJvmVendor: (defaultJvmVendor) => set({ defaultJvmVendor }),
+      defaultJvmCustomPath: '',
+      setDefaultJvmCustomPath: (defaultJvmCustomPath) => set({ defaultJvmCustomPath }),
+      defaultGcPolicy: 'auto',
+      setDefaultGcPolicy: (defaultGcPolicy) => set({ defaultGcPolicy }),
+
       closeOnLaunch: false,
       setCloseOnLaunch: (closeOnLaunch) => set({ closeOnLaunch }),
 
@@ -382,6 +401,9 @@ export const useStore = create<Store>()(
         selectedInstanceId: s.selectedInstanceId,
         defaultRam: s.defaultRam,
         customRamMb: s.customRamMb,
+        defaultJvmVendor: s.defaultJvmVendor,
+        defaultJvmCustomPath: s.defaultJvmCustomPath,
+        defaultGcPolicy: s.defaultGcPolicy,
         closeOnLaunch: s.closeOnLaunch,
         p2pEnabled: s.p2pEnabled,
         brightness: s.brightness,

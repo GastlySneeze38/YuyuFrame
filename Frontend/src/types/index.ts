@@ -80,7 +80,7 @@ export interface ImportProgressEvent {
   label?: string
 }
 
-export type JvmVendor = 'temurin' | 'openj9' | 'graal' | 'custom'
+export type JvmVendor = 'auto' | 'temurin' | 'openj9' | 'graal' | 'custom'
 
 export interface Instance {
   id: string

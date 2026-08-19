@@ -16,7 +16,7 @@ use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
 use super::java::ensure_java;
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, JvmVendor};
+use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, resolve_auto_vendor, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
@@ -70,6 +70,13 @@ pub async fn download_and_launch(
     jvm_custom_path: Option<&str>,
     gc_policy: &str,
 ) -> Result<Vec<String>> {
+    // P1-6 : "auto" couvre toute la config (vendeur ET GC), résolu une seule
+    // fois ici avant toute utilisation — voir doc de `resolve_auto_vendor`.
+    let (jvm_vendor, gc_policy) = if jvm_vendor == "auto" {
+        (resolve_auto_vendor(ram_mb), "auto")
+    } else {
+        (jvm_vendor, gc_policy)
+    };
     let jvm_vendor = JvmVendor::parse(jvm_vendor);
     let launch_start = std::time::Instant::now();
     crate::integrations::analytics::capture("download_started", serde_json::json!({
@@ -678,6 +685,11 @@ pub async fn preview_jvm_config(
     gc_policy: &str,
 ) -> Result<(String, u32, Vec<String>)> {
     tracing::info!("[JVM preview] instance={} version={}", instance_id, version_id);
+    let (jvm_vendor, gc_policy) = if jvm_vendor == "auto" {
+        (resolve_auto_vendor(ram_mb), "auto")
+    } else {
+        (jvm_vendor, gc_policy)
+    };
     let jvm_vendor = JvmVendor::parse(jvm_vendor);
     let mc_dir = minecraft_dir();
     let versions_dir = mc_dir.join("versions").join(version_id);

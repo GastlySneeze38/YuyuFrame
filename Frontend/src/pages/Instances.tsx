@@ -19,7 +19,7 @@ export default function Instances() {
     versions, setVersions,
     instances, setInstances, addInstance, updateInstance, removeInstance,
     selectedInstanceId, setSelectedInstanceId,
-    defaultRam, syncGameSettings,
+    defaultRam, defaultJvmVendor, defaultJvmCustomPath, defaultGcPolicy, syncGameSettings,
   } = useStore()
 
   const [loading, setLoading] = useState(true)
@@ -197,6 +197,9 @@ export default function Instances() {
         <CreateInstanceModal
           versions={releaseVersions}
           defaultRam={defaultRam}
+          defaultJvmVendor={defaultJvmVendor}
+          defaultJvmCustomPath={defaultJvmCustomPath}
+          defaultGcPolicy={defaultGcPolicy}
           onClose={() => setShowCreate(false)}
           onCreate={(inst) => {
             addInstance(inst)

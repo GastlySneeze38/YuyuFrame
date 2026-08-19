@@ -38,7 +38,7 @@ struct InstanceMeta {
     gc_policy: String,
 }
 
-fn default_jvm_vendor() -> String { "temurin".to_string() }
+fn default_jvm_vendor() -> String { "auto".to_string() }
 fn default_gc_policy() -> String { "auto".to_string() }
 
 #[allow(clippy::too_many_arguments)]

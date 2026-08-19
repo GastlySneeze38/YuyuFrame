@@ -19,10 +19,13 @@ pub(super) enum JvmVendor {
     /// l'Enterprise. Nécessite un `custom_path` fourni par l'utilisateur : le
     /// launcher ne télécharge jamais GraalVM lui-même.
     Graal,
-    /// Chemin JVM fourni intégralement par l'utilisateur (`custom_path`) —
-    /// aucune résolution/téléchargement, aucune hypothèse sur le vendeur
-    /// réel : traité comme HotSpot pour le choix des flags GC (le cas très
-    /// majoritaire des JVM "custom" en pratique).
+    /// Aucune résolution/téléchargement automatique — un `custom_path` est
+    /// obligatoire (voir `ensure_java`). Traité comme HotSpot pour le choix
+    /// des flags GC (le cas très majoritaire des JVM "custom" en pratique).
+    /// Note : `custom_path` n'est plus réservé à ce vendeur — n'importe quel
+    /// vendeur peut aussi en fournir un pour épingler une install précise
+    /// (voir `ensure_java`) ; `Custom` reste utile pour dire explicitement
+    /// "je fournis tout, ne devine rien" sans se rattacher à Temurin/OpenJ9/Graal.
     Custom,
 }
 
@@ -60,7 +63,6 @@ impl JvmVendor {
 /// déjà décidé par `build_hotspot_jvm_args` sur `ram_mb`/`java_major`).
 pub(super) fn resolve_auto_vendor(ram_mb: u32) -> &'static str {
     if ram_mb < 3072 { "openj9" } else { "temurin" }
-    }
 }
 
 /// Extrait juste la paire `--tweakClass <classe>` d'une `minecraftArguments`

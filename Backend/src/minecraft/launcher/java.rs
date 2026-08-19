@@ -46,14 +46,21 @@ const MOJANG_JAVA_MANIFEST: &str =
 /// par version majeure par construction), ce qui évite à l'appelant de
 /// relancer `java -version` juste après pour la redécouvrir.
 ///
-/// `vendor`/`custom_path` (P1-6, audit launcher, Phase 6) : `Custom` court-
-/// circuite toute résolution (chemin fourni tel quel, erreur explicite s'il
-/// est cassé) ; `OpenJ9` délègue à [`ensure_openj9`] avant de retomber sur
-/// la résolution standard ci-dessous en cas d'échec ; `Graal` fait de même
-/// avec un `custom_path` s'il est fourni (le launcher ne télécharge jamais
-/// GraalVM lui-même — voir doc de `JvmVendor::Graal`). `Temurin` (le
-/// défaut) et les replis best-effort partagent tous la même résolution :
-/// JAVA_HOME → install système → runtime Mojang en cache → téléchargement Mojang.
+/// `vendor`/`custom_path` (P1-6, audit launcher, Phase 6) : `custom_path`,
+/// quand fourni et non-vide, est TOUJOURS prioritaire — quel que soit le
+/// vendeur (retour utilisateur : la structure initiale ne permettait de
+/// fournir un chemin custom que pour "Graal"/"Custom", impossible d'épingler
+/// une install Temurin ou OpenJ9 précise sans changer de famille de flags).
+/// `vendor` ne pilote donc plus QUE la famille de flags générée par
+/// `build_jvm_args` et, en l'absence de chemin custom, la stratégie de
+/// résolution/téléchargement automatique : `Custom` sans chemin est une
+/// erreur explicite (un chemin custom manquant n'a pas de sens) ; `OpenJ9`
+/// délègue à [`ensure_openj9`] avant de retomber sur la résolution standard
+/// en cas d'échec ; `Graal` retombe directement dessus avec un avertissement
+/// (le launcher ne télécharge jamais GraalVM lui-même — voir doc de
+/// `JvmVendor::Graal`) ; `Temurin` (le défaut) et tous les replis best-effort
+/// partagent la même résolution : JAVA_HOME → install système → runtime
+/// Mojang en cache → téléchargement Mojang.
 pub(super) async fn ensure_java(
     component: &str,
     required_major: u32,
@@ -64,27 +71,21 @@ pub(super) async fn ensure_java(
     vendor: JvmVendor,
     custom_path: Option<&str>,
 ) -> Result<(String, u32)> {
-    if vendor == JvmVendor::Custom {
-        let path = custom_path.ok_or_else(|| anyhow!("Vendeur JVM \"custom\" sélectionné sans chemin fourni"))?;
+    if let Some(path) = custom_path.filter(|p| !p.is_empty()) {
         if !Path::new(path).exists() {
-            return Err(anyhow!("JVM personnalisée introuvable : {}", path));
+            return Err(anyhow!("Chemin JVM personnalisé introuvable : {}", path));
         }
         let major = detect_java_major_version(path).await
             .ok_or_else(|| anyhow!("Impossible de déterminer la version de la JVM personnalisée : {}", path))?;
         return Ok((path.to_string(), major));
     }
 
+    if vendor == JvmVendor::Custom {
+        return Err(anyhow!("Vendeur JVM \"custom\" sélectionné sans chemin fourni"));
+    }
+
     if vendor == JvmVendor::Graal {
-        if let Some(path) = custom_path {
-            if Path::new(path).exists() {
-                if let Some(major) = detect_java_major_version(path).await {
-                    return Ok((path.to_string(), major));
-                }
-            }
-            tracing::warn!("GraalVM configuré à {} mais inutilisable — repli sur la résolution standard", path);
-        } else {
-            tracing::warn!("Vendeur \"GraalVM\" sélectionné sans chemin — repli sur la résolution standard (Temurin/Mojang)");
-        }
+        tracing::warn!("Vendeur \"GraalVM\" sélectionné sans chemin — repli sur la résolution standard (Temurin/Mojang)");
     }
 
     if vendor == JvmVendor::OpenJ9 {

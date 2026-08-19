@@ -46,7 +46,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              ram_mb          INTEGER NOT NULL DEFAULT 4096,
              favorite        INTEGER NOT NULL DEFAULT 0,
              created_at      INTEGER NOT NULL,
-             jvm_vendor      TEXT    NOT NULL DEFAULT 'temurin',
+             jvm_vendor      TEXT    NOT NULL DEFAULT 'auto',
              jvm_custom_path TEXT,
              gc_policy       TEXT    NOT NULL DEFAULT 'auto'
          );
@@ -71,7 +71,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN description TEXT NOT NULL DEFAULT ''", []);
     // P1-6 (audit launcher, Phase 6) : vendeur JVM + policy GC par instance.
-    let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_vendor TEXT NOT NULL DEFAULT 'temurin'", []);
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_vendor TEXT NOT NULL DEFAULT 'auto'", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_custom_path TEXT", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN gc_policy TEXT NOT NULL DEFAULT 'auto'", []);
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN is_offline INTEGER NOT NULL DEFAULT 0", []);
