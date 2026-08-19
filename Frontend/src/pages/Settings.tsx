@@ -10,12 +10,14 @@ import { useT, LANGUAGES } from '@/i18n'
 export default function Settings() {
   const t = useT()
   const {
-    brightness, setBrightness, defaultRam, setDefaultRam, closeOnLaunch, setCloseOnLaunch,
+    brightness, setBrightness, defaultRam, setDefaultRam, customRamMb, setCustomRamMb, closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
     language, setLanguage,
   } = useStore()
+
+  const [showRamInfo, setShowRamInfo] = useState(false)
 
   const CATEGORIES = [
     { id: 'lancement', label: t('settings.categories.lancement') },
@@ -168,6 +170,52 @@ export default function Settings() {
                 <div className="flex justify-between text-[10px] text-white/25">
                   <span>1 Go</span><span>4 Go</span><span>8 Go</span><span>12 Go</span><span>16 Go</span>
                 </div>
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* RAM personnalisée (>8 Go) — remplace le palier "8 Go" des
+                  fenêtres de création/édition d'instance (voir RamPicker) */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-white">{t('settings.lancement.customRamLabel')}</p>
+                  <button
+                    onClick={() => setShowRamInfo((v) => !v)}
+                    title={t('settings.lancement.ramInfoTooltip')}
+                    className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white/35 border border-white/20 transition-colors hover:text-white/70 hover:border-white/40"
+                  >
+                    i
+                  </button>
+                </div>
+                <p className="text-[11px] text-white/35">{t('settings.lancement.customRamDesc')}</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1024}
+                    step={512}
+                    placeholder={t('settings.lancement.customRamPlaceholder')}
+                    value={customRamMb ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      setCustomRamMb(raw === '' ? null : Math.max(1024, Number(raw)))
+                    }}
+                    className="w-32 rounded-xl px-3 text-sm text-white outline-none h-[36px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] focus:border-[rgba(75,63,207,0.6)]"
+                  />
+                  <span className="text-[11px] text-white/35">Mo</span>
+                  {customRamMb !== null && (
+                    <button
+                      onClick={() => setCustomRamMb(null)}
+                      className="text-[11px] text-white/35 underline transition-colors hover:text-white/70"
+                    >
+                      {t('settings.lancement.customRamClear')}
+                    </button>
+                  )}
+                </div>
+                {showRamInfo && (
+                  <div className="rounded-xl p-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-[11px] text-white/50 leading-relaxed">
+                    {t('settings.lancement.ramInfoText')}
+                  </div>
+                )}
               </div>
 
               <div className="h-px bg-white/6" />

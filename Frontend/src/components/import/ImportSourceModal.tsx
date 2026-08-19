@@ -6,7 +6,7 @@ import { useStore } from '@/stores/useStore'
 import { clampLoader, loaderColor } from '@/lib/loader'
 import { formatBytes } from '@/lib/format'
 import { ModalShell } from '@/components/ui/ModalShell'
-import { RamPicker } from '@/components/ui/RamPicker'
+import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { NameInput, VersionSelect, LoaderPicker } from '@/components/instances/InstanceFormFields'
 import { showError } from '@/stores/useErrorToast'
@@ -60,6 +60,10 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
   const [mcVersion, setMcVersion] = useState('')
   const [loader, setLoader] = useState<Loader>('vanilla')
   const [ram, setRam] = useState(defaultRam)
+  // Purement informatif ici (pas de blocage, contrairement à la création
+  // "vierge") : l'import garde un objectif de simplicité, une valeur par
+  // défaut suffit à continuer même non-optimale.
+  const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
 
   const [applying, setApplying] = useState(false)
   const [progress, setProgress] = useState<ImportProgressEvent | null>(null)
@@ -329,7 +333,10 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                   onChange={setMcVersion}
                 />
                 <LoaderPicker value={loader} onChange={setLoader} />
-                <RamPicker value={ram} onChange={setRam} />
+                <RamPicker value={ram} onChange={setRam} loader={loader} modCount={scan.mods.length} onStatusChange={setRamStatus} />
+                {ramStatus.isKnownTier && !ramStatus.isRecommended && (
+                  <p className="text-[11px] text-[rgba(240,180,90,0.6)] -mt-2">⚠ {t('instancesPage.ramNotOptimal')}</p>
+                )}
               </div>
             ) : (
               <select

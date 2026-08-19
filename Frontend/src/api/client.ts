@@ -185,7 +185,7 @@ export const api = {
   },
 
   system: {
-    memoryInfo: () => invoke<SystemMemoryInfo>('system_memory_info'),
+    memoryInfo: (loader?: string, modCount?: number) => invoke<SystemMemoryInfo>('system_memory_info', { loader, modCount }),
     getDataRoot: () => invoke<string>('data_root_get'),
     setDataRoot: (newParent: string) => invoke<string>('data_root_set', { newParent }),
     openFolder: (path: string) => invoke<void>('open_folder', { path }),

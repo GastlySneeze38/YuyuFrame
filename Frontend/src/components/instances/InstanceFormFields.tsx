@@ -36,14 +36,15 @@ export function DescriptionInput({ value, onChange }: { value: string; onChange:
   )
 }
 
-export function SubmitButton({ loading, label, loadingLabel, onClick }: { loading: boolean; label: string; loadingLabel: string; onClick: () => void }) {
+export function SubmitButton({ loading, disabled, label, loadingLabel, onClick }: { loading: boolean; disabled?: boolean; label: string; loadingLabel: string; onClick: () => void }) {
+  const isDisabled = loading || !!disabled
   return (
     <button
       onClick={onClick}
-      disabled={loading}
+      disabled={isDisabled}
       className={`w-full font-bold text-white transition-all duration-200 active:scale-95 h-[42px] rounded-xl text-[13px] ${
-        loading
-          ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed'
+        isDisabled
+          ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed opacity-60'
           : 'bg-[#4B3FCF] shadow-[0_4px_20px_rgba(75,63,207,0.35)] cursor-pointer hover:bg-[#6155e8]'
       }`}
     >

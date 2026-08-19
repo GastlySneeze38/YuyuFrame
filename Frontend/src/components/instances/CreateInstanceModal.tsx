@@ -4,7 +4,7 @@ import type { Instance, Loader } from '@/types'
 import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
-import { RamPicker } from '@/components/ui/RamPicker'
+import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
@@ -75,6 +75,11 @@ export function CreateInstanceModal({
   const [mcVersion, setMcVersion] = useState(versions[0] ?? '')
   const [loader, setLoader] = useState<Loader>('vanilla')
   const [ram, setRam] = useState(defaultRam)
+  // Optimiste par défaut (true/true) pour ne pas griser le bouton "Créer"
+  // pendant le premier rendu, avant que RamPicker n'ait pu calculer son
+  // premier statut réel (retour utilisateur : bloquer la création tant
+  // qu'aucun palier RAM n'a été explicitement choisi).
+  const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState(t('instancesPage.creating'))
 
@@ -210,11 +215,27 @@ export function CreateInstanceModal({
               </div>
             )}
 
-            <RamPicker value={ram} onChange={setRam} />
+            <RamPicker value={ram} onChange={setRam} loader={loader} modCount={selectedPreset?.mods.length ?? 0} onStatusChange={setRamStatus} />
 
             <DescriptionInput value={description} onChange={setDescription} />
 
-            <SubmitButton loading={loading} label={t('instancesPage.createInstanceButton')} loadingLabel={loadingLabel} onClick={handleCreate} />
+            {!ramStatus.isKnownTier ? (
+              <p className="text-[11px] text-[rgba(240,180,90,0.75)] -mt-2">
+                ⚠ {t('instancesPage.ramNotSelected')}
+              </p>
+            ) : !ramStatus.isRecommended ? (
+              <p className="text-[11px] text-[rgba(240,180,90,0.6)] -mt-2">
+                ⚠ {t('instancesPage.ramNotOptimal')}
+              </p>
+            ) : null}
+
+            <SubmitButton
+              loading={loading}
+              disabled={!ramStatus.isKnownTier}
+              label={t('instancesPage.createInstanceButton')}
+              loadingLabel={loadingLabel}
+              onClick={handleCreate}
+            />
           </>
         )}
       </div>

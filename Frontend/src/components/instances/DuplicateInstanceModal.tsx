@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
 import type { Instance } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
-import { RamPicker } from '@/components/ui/RamPicker'
+import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, SubmitButton, VersionSelect } from './InstanceFormFields'
 import { useT } from '@/i18n'
@@ -26,6 +26,15 @@ export function DuplicateInstanceModal({
   const [ram, setRam] = useState(source.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState(t('instancesPage.duplicating'))
+  // Nombre de mods de l'instance source — la copie les emporte tous, la
+  // recommandation RAM doit donc en tenir compte dès l'ouverture de la modal.
+  const [modCount, setModCount] = useState(0)
+  useEffect(() => {
+    api.mods.list(source.id).then((mods) => setModCount(mods.length)).catch(() => {})
+  }, [source.id])
+  // Purement informatif ici (pas de blocage) : contrairement à la création,
+  // cette RAM existait déjà sur l'instance source — un avertissement suffit.
+  const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
 
   const handleDuplicate = async () => {
     if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
@@ -52,7 +61,7 @@ export function DuplicateInstanceModal({
 
         <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} />
 
-        <RamPicker value={ram} onChange={setRam} />
+        <RamPicker value={ram} onChange={setRam} loader={source.loader} modCount={modCount} onStatusChange={setRamStatus} />
 
         <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
           <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="text-[rgba(255,255,255,0.3)] flex-shrink-0">
@@ -65,6 +74,10 @@ export function DuplicateInstanceModal({
               : t('instancesPage.modsWillCopy')}
           </p>
         </div>
+
+        {ramStatus.isKnownTier && !ramStatus.isRecommended && (
+          <p className="text-[11px] text-[rgba(240,180,90,0.6)] -mt-2">⚠ {t('instancesPage.ramNotOptimal')}</p>
+        )}
 
         <SubmitButton loading={loading} label={t('instancesPage.duplicateButton')} loadingLabel={loadingLabel} onClick={handleDuplicate} />
       </div>

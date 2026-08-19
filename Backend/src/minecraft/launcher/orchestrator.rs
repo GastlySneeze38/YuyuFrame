@@ -433,10 +433,13 @@ pub async fn download_and_launch(
     let classpath_str = dedup_classpath(full_classpath).join(classpath_sep);
 
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major);
-    let gc_msg = if java_major >= 21 {
-        format!("Java {} détecté — ZGC Generational activé", java_major)
+    // Même condition que build_jvm_args (P1-4, audit launcher) : ZGC
+    // seulement à partir de 6 Go, sinon ce message annoncerait ZGC alors que
+    // le G1 de repli est celui réellement appliqué.
+    let gc_msg = if java_major >= 21 && ram_mb >= 6144 {
+        format!("Java {} détecté, {} Mo alloués — ZGC Generational activé", java_major, ram_mb)
     } else {
-        format!("Java {} détecté — G1GC client activé", java_major)
+        format!("Java {} détecté, {} Mo alloués — G1GC client activé", java_major, ram_mb)
     };
     log_to_console(&app, &console_label, &gc_msg, "out");
     // Correctifs OS spécifiques suggérés par Mojang (ex: -XstartOnFirstThread

@@ -15,9 +15,6 @@ export function formatRam(mb: number): string {
   return mb >= 1024 ? `${mb / 1024} Go` : `${mb} Mo`
 }
 
-/** Paliers de RAM proposés à la création/import d'une instance. */
-export const RAM_OPTIONS = [1024, 2048, 4096, 6144, 8192]
-
 /** Nombre de téléchargements Modrinth compact ("1.2k", "3.4M"). */
 export function formatDownloadCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`

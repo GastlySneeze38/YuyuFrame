@@ -24,9 +24,17 @@ pub(super) fn extract_tweak_class_args(mc_args: &str) -> Vec<String> {
 }
 
 pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -> Vec<String> {
+    // P1-5 (audit launcher) : marge sous le plafond mémoire demandé — réserve
+    // ~10% (plancher 200 Mo) pour le natif (rendu, GLFW/LWJGL, DLL, code
+    // cache JIT, métaspace), jamais compté dans `ram_mb`. Sans cette marge,
+    // -Xmx posé à la valeur brute demandée est la cause directe du risque OOM
+    // sur les petites configs (ex: profil 2 Go → -Xmx2048m, zéro marge).
+    let reserve_mb = (ram_mb / 10).max(200).min(ram_mb.saturating_sub(256));
+    let heap_mb = ram_mb - reserve_mb;
+
     let mut base = vec![
-        format!("-Xmx{}m", ram_mb),
-        format!("-Xms{}m", ram_mb),  // Xms = Xmx : pas de redimensionnement du heap
+        format!("-Xmx{}m", heap_mb),
+        format!("-Xms{}m", heap_mb),  // Xms = Xmx : pas de redimensionnement du heap
         format!("-Djava.library.path={}", natives_dir.display()),
         format!("-Dorg.lwjgl.librarypath={}", natives_dir.display()),
         "-XX:+DisableExplicitGC".into(),       // Ignore System.gc() appelés par les mods
@@ -45,20 +53,32 @@ pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -
         base.push("-XX:+AlwaysPreTouch".into());
     }
 
-    if java_major >= 21 {
-        // ── ZGC Generational (Java 21+) ───────────────────────────────────────
+    // P1-4 (audit launcher) : ZGC croisé sur `ram_mb` ET `java_major`, pas
+    // seulement sur la version Java — son overhead structurel (colored
+    // pointers, ~1.5x le jeu de données vivant contre ~1.15x pour G1) mange
+    // une part disproportionnée d'un petit tas et rapproche du crash OOM.
+    // Repli sur G1 en dessous de 6 Go quel que soit `java_major` : c'est le
+    // palier "6 Go → max" de la grille jvm-config, à ne jamais franchir vers
+    // ZGC (le palier "~2 Go" cible OpenJ9/gencon — pas encore implémenté,
+    // voir P1-6 — G1 reste le meilleur repli HotSpot disponible en attendant).
+    if java_major >= 21 && ram_mb >= 6144 {
+        // ── ZGC Generational (Java 21+, ≥6 Go) ────────────────────────────────
         // GC concurrent : collecte en parallèle du jeu → pauses < 1ms
         // Élimine les freezes récurrents de 200ms causés par G1 mixed collections
         let mut args = base;
+        // P2-2 (audit launcher) : UnlockExperimentalVMOptions en TÊTE de la
+        // branche, comme les deux autres branches ci-dessous — jusqu'ici posé
+        // en dernier, inoffensif tant que ZAllocationSpikeTolerance (un flag
+        // *product*, pas *experimental*) reste seul après lui, mais un futur
+        // flag réellement experimental ajouté à cette liste ferait sinon
+        // refuser le démarrage de la JVM avec un message peu parlant.
+        args.push("-XX:+UnlockExperimentalVMOptions".into());
         args.push("-XX:+UseZGC".into());
         // ZGenerational est le défaut depuis Java 24 — ne pas l'ajouter pour éviter le warning
         if java_major < 24 {
             args.push("-XX:+ZGenerational".into());
         }
-        args.extend([
-            "-XX:ZAllocationSpikeTolerance=5.0".into(),
-            "-XX:+UnlockExperimentalVMOptions".into(),
-        ]);
+        args.push("-XX:ZAllocationSpikeTolerance=5.0".into());
         args
     } else if java_major <= 8 {
         // ── G1GC tuning Java 8 (versions legacy : 1.8.9 et antérieures) ───────
@@ -103,8 +123,10 @@ pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -
         ]);
         args
     } else {
-        // ── G1GC (Java 9 à 20) ────────────────────────────────────────────────
-        // ZGC Generational non disponible, fallback G1GC avec tuning client
+        // ── G1GC (Java 9-20, ou Java 21+ en dessous de 6 Go) ──────────────────
+        // ZGC non disponible (Java < 21) ou écarté par la grille RAM (P1-4,
+        // heap trop petit pour amortir son overhead structurel) — fallback
+        // G1GC avec tuning client dans les deux cas, les flags sont identiques.
         let region_size = if ram_mb >= 12288 { "16M" }
             else if ram_mb >= 6144 { "8M" }
             else if ram_mb >= 3072 { "4M" }

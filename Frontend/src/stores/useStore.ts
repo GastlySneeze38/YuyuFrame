@@ -61,6 +61,11 @@ interface Store {
   defaultRam: number
   setDefaultRam: (r: number) => void
 
+  /** RAM personnalisée (>8 Go) — remplace le palier "8 Go" dans RamPicker
+   * quand définie. `null` = pas de custom, on garde le palier standard. */
+  customRamMb: number | null
+  setCustomRamMb: (mb: number | null) => void
+
   closeOnLaunch: boolean
   setCloseOnLaunch: (v: boolean) => void
 
@@ -241,6 +246,9 @@ export const useStore = create<Store>()(
       defaultRam: 4096,
       setDefaultRam: (defaultRam) => set({ defaultRam }),
 
+      customRamMb: null,
+      setCustomRamMb: (customRamMb) => set({ customRamMb }),
+
       closeOnLaunch: false,
       setCloseOnLaunch: (closeOnLaunch) => set({ closeOnLaunch }),
 
@@ -373,6 +381,7 @@ export const useStore = create<Store>()(
         yuyuPlanExpiresAt: s.yuyuPlanExpiresAt,
         selectedInstanceId: s.selectedInstanceId,
         defaultRam: s.defaultRam,
+        customRamMb: s.customRamMb,
         closeOnLaunch: s.closeOnLaunch,
         p2pEnabled: s.p2pEnabled,
         brightness: s.brightness,

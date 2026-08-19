@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
 import type { Instance, Loader } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
-import { RamPicker } from '@/components/ui/RamPicker'
+import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { useT } from '@/i18n'
@@ -27,6 +27,15 @@ export function EditInstanceModal({
   const [ram, setRam] = useState(instance.ram_mb)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState(t('instancesPage.saving'))
+  // Mods déjà installés sur cette instance — la recommandation RAM doit en
+  // tenir compte dès l'ouverture de la modal.
+  const [modCount, setModCount] = useState(0)
+  useEffect(() => {
+    api.mods.list(instance.id).then((mods) => setModCount(mods.length)).catch(() => {})
+  }, [instance.id])
+  // Purement informatif ici (pas de blocage) : contrairement à la création,
+  // cette RAM existait déjà sur l'instance — un avertissement suffit.
+  const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
 
   const handleSave = async () => {
     if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
@@ -53,7 +62,7 @@ export function EditInstanceModal({
         <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} />
         <LoaderPicker value={loader} onChange={setLoader} />
 
-        <RamPicker value={ram} onChange={setRam} />
+        <RamPicker value={ram} onChange={setRam} loader={loader} modCount={modCount} onStatusChange={setRamStatus} />
 
         <DescriptionInput value={description} onChange={setDescription} />
 
@@ -66,6 +75,10 @@ export function EditInstanceModal({
               {t('instancesPage.modsWillUpdatePrefix')} <span className="text-[rgba(120,110,230,0.9)] font-semibold">{mcVersion}</span>.
             </p>
           </div>
+        )}
+
+        {ramStatus.isKnownTier && !ramStatus.isRecommended && (
+          <p className="text-[11px] text-[rgba(240,180,90,0.6)] -mt-2">⚠ {t('instancesPage.ramNotOptimal')}</p>
         )}
 
         <SubmitButton loading={loading} label={t('common.save')} loadingLabel={loadingLabel} onClick={handleSave} />
