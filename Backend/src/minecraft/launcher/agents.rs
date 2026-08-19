@@ -223,18 +223,24 @@ pub(super) async fn setup_launcher_agent(
     // contre un jeu 1.8.9 (mismatch fatal). Rust connaît déjà version_id
     // avec certitude, pas besoin de deviner côté agent.
     //
+    // loader=... (P0-5, voir audit launcher) : le Rust connaît le loader
+    // avec certitude (choisi par l'utilisateur), l'agent n'a plus besoin de
+    // le redeviner par Class.forName côté Java — évite l'incohérence
+    // Rust/Java sur la classification de Quilt (voir `is_fabric` ci-dessus).
+    //
     // yarn=... OMIS quand yarn_path_opt est None (26.1+) — AgentConfig
     // (Java) laisse alors yarnPath=null, MappingsRegistry reste en
     // scheme OFFICIAL sans jamais tenter de charger de jar Yarn.
     let mixin_arg = format!("-javaagent:{}", mixin_jar.display());
+    let loader_name = loader.unwrap_or("vanilla");
     let mut agent_arg = match &yarn_path_opt {
         Some(yarn_path) => format!(
-            "-javaagent:{}=yarn={},version={}",
-            agent_jar.display(), yarn_path.display(), version_id,
+            "-javaagent:{}=yarn={},version={},loader={}",
+            agent_jar.display(), yarn_path.display(), version_id, loader_name,
         ),
         None => format!(
-            "-javaagent:{}=version={}",
-            agent_jar.display(), version_id,
+            "-javaagent:{}=version={},loader={}",
+            agent_jar.display(), version_id, loader_name,
         ),
     };
     // readyEvent=... — Named Event Win32 (voir ready_event.rs) signalé par le

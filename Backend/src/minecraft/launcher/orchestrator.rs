@@ -83,6 +83,18 @@ pub async fn download_and_launch(
         tokio::fs::create_dir_all(dir).await?;
     }
 
+    // Le mode `--installClient` des installeurs Forge/NeoForge (action
+    // ClientInstall) exige que ce fichier existe déjà dans mc_dir : il le lit
+    // puis le réécrit pour y ajouter un profil de launcher. Sans lui,
+    // l'installeur sort en échec — c'est la cause de la panne Forge/NeoForge
+    // la plus classique chez les launchers tiers. Posé une seule fois ici,
+    // en amont de tout appel d'installeur, plutôt que dupliqué dans chaque
+    // loader.
+    let launcher_profiles = mc_dir.join("launcher_profiles.json");
+    if !launcher_profiles.exists() {
+        tokio::fs::write(&launcher_profiles, r#"{"profiles":{},"version":3}"#).await?;
+    }
+
     // ── Vanilla download ──────────────────────────────────────────────────────
 
     // Le JSON de détails d'une version donnée ne change jamais une fois publié

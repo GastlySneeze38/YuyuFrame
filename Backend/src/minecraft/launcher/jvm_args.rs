@@ -91,7 +91,10 @@ pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -
             "-XX:G1ReservePercent=20".into(),
             "-XX:InitiatingHeapOccupancyPercent=15".into(),
             "-XX:+AlwaysActAsServerClassMachine".into(), // force les heuristiques JIT "serveur" (compilation plus agressive) même sur petite machine
-            "-XX:+UseFastAccessorMethods".into(),
+            // -XX:+UseFastAccessorMethods retiré (P1-3, audit launcher) :
+            // déprécié depuis 8u20, supprimé en JDK 9 — "Unrecognized VM
+            // option" et refus de démarrer si jamais atteint avec un
+            // java_major incohérent (n'apporte rien même sur du vrai Java 8).
             "-XX:MaxInlineLevel=15".into(),
             "-XX:+UseCompressedOops".into(),
             "-XX:ThreadPriorityPolicy=1".into(),

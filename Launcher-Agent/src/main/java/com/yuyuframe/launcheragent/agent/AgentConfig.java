@@ -10,6 +10,8 @@ import java.util.UUID;
  *                     Pour 1.8.9 : fournir un JAR Legacy Fabric Yarn 1.8.9.
  *   version=<ver>     Force la version MC (ex: "1.8.9"). Par défaut auto-détectée
  *                     via -Dminecraft.version ou sonde de classes.
+ *   loader=<nom>      "vanilla", "fabric", "quilt", "forge" ou "neoforge" —
+ *                     connu avec certitude côté Rust (voir launcher/agents.rs).
  */
 public class AgentConfig {
 
@@ -37,6 +39,15 @@ public class AgentConfig {
      */
     public String readyEvent;
 
+    /**
+     * Loader choisi par l'utilisateur (arg "loader=...") — "vanilla",
+     * "fabric", "quilt", "forge" ou "neoforge". Le Rust le connaît avec
+     * certitude (voir launcher/agents.rs, setup_launcher_agent) ; pas encore
+     * consommé ici pour la décision d'isolation Mixin (voir docs/launcher/
+     * audit/README-bugs-a-fix.md, P0-2/P0-3 — chantier séparé).
+     */
+    public String loader;
+
     private static AgentConfig current;
 
     public static AgentConfig parse(String args) {
@@ -50,6 +61,7 @@ public class AgentConfig {
                     case "yarn":       cfg.yarnPath      = kv[1].trim(); break;
                     case "version":    cfg.forcedVersion = kv[1].trim(); break;
                     case "readyEvent": cfg.readyEvent    = kv[1].trim(); break;
+                    case "loader":     cfg.loader        = kv[1].trim(); break;
                 }
             }
         }

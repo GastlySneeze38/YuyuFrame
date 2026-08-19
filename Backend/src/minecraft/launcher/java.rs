@@ -53,12 +53,16 @@ pub(super) async fn ensure_java(
     app: &tauri::AppHandle,
     progress_floor: &AtomicU64,
 ) -> Result<(String, u32)> {
-    // 1. JAVA_HOME
+    // 1. JAVA_HOME — version EXACTE requise, même contrainte que
+    // find_system_java (Java 8 : LaunchWrapper incompatible Java 9+ ; Java 9+ :
+    // une version plus récente que celle requise par MC fait planter LWJGL en
+    // présence d'un agent JVM, voir find_system_java). Un JAVA_HOME moderne
+    // pointant sur un JDK 21 utilisé pour lancer du 1.8.9 plantait sinon.
     if let Ok(home) = std::env::var("JAVA_HOME") {
         let exe = PathBuf::from(&home).join("bin").join(java_exe_name());
         if exe.exists() {
             if let Some(v) = detect_java_major_version(&exe.to_string_lossy()).await {
-                if v >= required_major {
+                if v == required_major {
                     return Ok((exe.to_string_lossy().to_string(), v));
                 }
             }
@@ -316,6 +320,10 @@ fn java_exe_name() -> &'static str {
 
 /// Extrait la version majeure depuis un nom de répertoire JDK.
 /// Reconnaît : "jdk-21", "jre-21", "jdk-21.0.3+9", "java-21-openjdk-amd64", "temurin-21", etc.
+/// Et la forme legacy "1.X" des paquets Debian/Ubuntu/RHEL — "java-1.8.0-openjdk-amd64"
+/// donnerait "1" avec un simple premier segment, jamais la vraie version majeure (8) :
+/// sans ce cas, ces JDK système ne matchaient jamais `required_major` et étaient
+/// silencieusement ignorés (retéléchargement inutile du runtime Mojang).
 fn java_major_from_dir_name(name: &str) -> Option<u32> {
     let stripped = name
         .strip_prefix("jdk-")
@@ -324,5 +332,11 @@ fn java_major_from_dir_name(name: &str) -> Option<u32> {
         .or_else(|| name.strip_prefix("temurin-"))
         .or_else(|| name.strip_prefix("corretto-"))
         .or_else(|| name.strip_prefix("semeru-"))?;
-    stripped.split(['.', '+', '-', '_']).next()?.parse().ok()
+    let mut segments = stripped.split(['.', '+', '-', '_']);
+    let first: u32 = segments.next()?.parse().ok()?;
+    if first == 1 {
+        segments.next()?.parse().ok()
+    } else {
+        Some(first)
+    }
 }
