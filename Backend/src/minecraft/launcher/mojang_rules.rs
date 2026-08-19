@@ -18,6 +18,19 @@ pub(super) fn rules_allow(rules: &[serde_json::Value]) -> bool {
     let mut allowed = true;
     for rule in rules {
         let action = rule.get("action").and_then(|a| a.as_str()).unwrap_or("allow");
+        // L-4 (audit pipeline) : Mojang utilise aussi des règles à base de
+        // `features` (ex: {"action":"allow","features":{"is_demo_user":true}}),
+        // sans clé "os". Sans ce garde-fou, une telle règle tombait dans la
+        // branche ci-dessous et était acceptée INCONDITIONNELLEMENT — piège de
+        // régression : le jour où P2-1 honore réellement `arguments.jvm`/
+        // `arguments.game` via cet évaluateur (au lieu de les jeter en silence),
+        // ça injecterait "--demo" dans les arguments de jeu et le launcher
+        // lancerait Minecraft en mode démo. Refusée explicitement tant que le
+        // launcher n'expose pas ces options (résolution d'écran custom, demo...).
+        if rule.get("features").is_some() {
+            if action == "allow" { allowed = false; }
+            continue;
+        }
         let Some(os) = rule.get("os") else {
             allowed = action == "allow";
             continue;
@@ -31,4 +44,35 @@ pub(super) fn rules_allow(rules: &[serde_json::Value]) -> bool {
         }
     }
     allowed
+}
+
+/// Extrait les chaînes d'un tableau JSON brut d'`arguments.jvm`/`arguments.game`
+/// (format Mojang, partagé par le vanilla ET tous les profils de loader —
+/// Fabric, Quilt, Forge, NeoForge), en honorant les règles `rules` des entrées
+/// conditionnelles (`{"rules": [...], "value": "..."|[...]}`) au lieu de les
+/// jeter en silence (P2-1, audit launcher) — `extract_mojang_jvm_args` gérait
+/// déjà correctement ce cas pour le vanilla, `loader_setup::json_str_array`
+/// avait sa propre implémentation divergente qui sautait purement et
+/// simplement toute entrée objet. Un seul évaluateur pour les deux, comme déjà
+/// le cas pour `rules_allow`/`should_download_library`.
+pub(super) fn extract_conditional_args(values: &[serde_json::Value]) -> Vec<String> {
+    values.iter()
+        .flat_map(|entry| match entry {
+            serde_json::Value::String(s) => vec![s.clone()],
+            serde_json::Value::Object(_) => {
+                let applies = entry.get("rules")
+                    .and_then(|r| r.as_array())
+                    .is_none_or(|r| rules_allow(r));
+                if !applies { return vec![]; }
+                match entry.get("value") {
+                    Some(serde_json::Value::String(s)) => vec![s.clone()],
+                    Some(serde_json::Value::Array(arr)) => {
+                        arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                    }
+                    _ => vec![],
+                }
+            }
+            _ => vec![],
+        })
+        .collect()
 }

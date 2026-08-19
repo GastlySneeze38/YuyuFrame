@@ -7,14 +7,8 @@ use tokio::task::JoinSet;
 
 use crate::minecraft::loaders::{deps, fabric, forge, neoforge, quilt};
 use super::jvm_args::extract_tweak_class_args;
+use super::mojang_rules::extract_conditional_args;
 use super::progress::set_progress_monotonic;
-
-/// Extrait les chaînes d'un tableau JSON brut (`arguments.jvm`/`arguments.game`
-/// des profils Fabric/Forge), en ignorant silencieusement les entrées non-string
-/// (objets conditionnels de règles OS, non gérés ici).
-fn json_str_array(values: &[serde_json::Value]) -> Vec<String> {
-    values.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
-}
 
 /// Substitue les placeholders propres au version json de Forge moderne
 /// (>= ~1.17, vérifié empiriquement sur le JSON réel de 1.20.1-47.2.20) et
@@ -118,7 +112,7 @@ pub(super) async fn setup_fabric(
         .arguments
         .as_ref()
         .and_then(|a| a.jvm.as_ref())
-        .map(|jvm| json_str_array(jvm))
+        .map(|jvm| extract_conditional_args(jvm))
         .unwrap_or_default();
     // Rarement fourni par les profils Fabric en pratique, mais on l'applique
     // par cohérence avec le vanilla (build_game_args) et Forge (extra_game) —
@@ -127,7 +121,7 @@ pub(super) async fn setup_fabric(
         .arguments
         .as_ref()
         .and_then(|a| a.game.as_ref())
-        .map(|game| json_str_array(game))
+        .map(|game| extract_conditional_args(game))
         .unwrap_or_default();
 
     Ok(LoaderSetup {
@@ -203,13 +197,13 @@ pub(super) async fn setup_quilt(
         .arguments
         .as_ref()
         .and_then(|a| a.jvm.as_ref())
-        .map(|jvm| json_str_array(jvm))
+        .map(|jvm| extract_conditional_args(jvm))
         .unwrap_or_default();
     let extra_game: Vec<String> = profile
         .arguments
         .as_ref()
         .and_then(|a| a.game.as_ref())
-        .map(|game| json_str_array(game))
+        .map(|game| extract_conditional_args(game))
         .unwrap_or_default();
 
     Ok(LoaderSetup {
@@ -282,7 +276,7 @@ pub(super) async fn setup_forge(
 
     let extra_game: Vec<String> = forge_json
         .arguments.as_ref().and_then(|a| a.game.as_ref())
-        .map(|g| substitute_forge_placeholders(json_str_array(g), &version_id, libraries_dir))
+        .map(|g| substitute_forge_placeholders(extract_conditional_args(g), &version_id, libraries_dir))
         .unwrap_or_else(|| {
             // Legacy Forge (pré-1.13) : pas de bloc "arguments", seulement une
             // "minecraftArguments" à plat dont on extrait juste --tweakClass
@@ -292,7 +286,7 @@ pub(super) async fn setup_forge(
 
     let mut extra_jvm: Vec<String> = forge_json
         .arguments.as_ref().and_then(|a| a.jvm.as_ref())
-        .map(|j| substitute_forge_placeholders(json_str_array(j), &version_id, libraries_dir))
+        .map(|j| substitute_forge_placeholders(extract_conditional_args(j), &version_id, libraries_dir))
         .unwrap_or_default();
 
     // Forge legacy (pré-1.13, pas de bloc "arguments") : FML revérifie par défaut
@@ -384,12 +378,12 @@ pub(super) async fn setup_neoforge(
 
     let extra_game: Vec<String> = neoforge_json
         .arguments.as_ref().and_then(|a| a.game.as_ref())
-        .map(|g| substitute_forge_placeholders(json_str_array(g), &version_id, libraries_dir))
+        .map(|g| substitute_forge_placeholders(extract_conditional_args(g), &version_id, libraries_dir))
         .unwrap_or_default();
 
     let extra_jvm: Vec<String> = neoforge_json
         .arguments.as_ref().and_then(|a| a.jvm.as_ref())
-        .map(|j| substitute_forge_placeholders(json_str_array(j), &version_id, libraries_dir))
+        .map(|j| substitute_forge_placeholders(extract_conditional_args(j), &version_id, libraries_dir))
         .unwrap_or_default();
 
     Ok(LoaderSetup {

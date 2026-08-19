@@ -7,6 +7,17 @@ use crate::minecraft::maven::MavenCoord;
 use crate::minecraft::versions::{Artifact, Library};
 use super::mojang_rules::rules_allow;
 
+/// Déduplique par `group/artifact` (voir `artifact_key`), en conservant la
+/// PREMIÈRE occurrence de chaque clé — PREMIER GAGNANT, l'ordre d'appel est
+/// CONTRACTUEL (R-3, audit pipeline). L'appelant (orchestrator.rs) place les
+/// libs du loader (Fabric/Forge/...) avant les libs vanilla précisément pour
+/// que cet ordre garantisse que les premières masquent les secondes — c'est
+/// ce qui permet à Forge/Fabric d'imposer leurs propres versions de libs
+/// (Guava, Gson...) plutôt que celles, potentiellement incompatibles avec
+/// leurs mods, du manifeste Mojang. Changer cette fonction pour garder la
+/// DERNIÈRE occurrence casserait ça silencieusement — voir le test
+/// `dedup_classpath_keeps_first_occurrence` ci-dessous, qui verrouille ce
+/// comportement.
 pub(super) fn dedup_classpath(entries: Vec<String>) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut result = Vec::with_capacity(entries.len());
@@ -204,4 +215,35 @@ pub(super) async fn download_verified(
     }
     let _ = tokio::fs::remove_file(&tmp).await;
     Err(last_err.unwrap_or_else(|| anyhow!("Téléchargement échoué : {}", url)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dedup_classpath;
+
+    /// Verrouille le comportement documenté sur `dedup_classpath` (R-3, audit
+    /// pipeline) : premier gagnant. Une lib loader (Forge) placée avant la
+    /// même lib en version vanilla doit masquer cette dernière.
+    #[test]
+    fn dedup_classpath_keeps_first_occurrence() {
+        let forge_guava = r"C:\mc\libraries\com\google\guava\guava\32.1.2-forge\guava-32.1.2-forge.jar".to_string();
+        let vanilla_guava = r"C:\mc\libraries\com\google\guava\guava\32.1.2-jre\guava-32.1.2-jre.jar".to_string();
+
+        let result = dedup_classpath(vec![forge_guava.clone(), vanilla_guava]);
+
+        assert_eq!(result, vec![forge_guava], "la lib loader (première occurrence) doit être conservée, pas la vanilla");
+    }
+
+    /// Les JARs natifs ne doivent jamais être dédupliqués entre eux (x86_64 ≠
+    /// arm64), ni effacer le JAR principal du même artifact.
+    #[test]
+    fn dedup_classpath_keeps_all_native_variants() {
+        let main_jar = r"C:\mc\libraries\org\lwjgl\lwjgl\3.3.3\lwjgl-3.3.3.jar".to_string();
+        let native_win = r"C:\mc\libraries\org\lwjgl\lwjgl\3.3.3\lwjgl-3.3.3-natives-windows.jar".to_string();
+        let native_linux = r"C:\mc\libraries\org\lwjgl\lwjgl\3.3.3\lwjgl-3.3.3-natives-linux.jar".to_string();
+
+        let result = dedup_classpath(vec![main_jar.clone(), native_win.clone(), native_linux.clone()]);
+
+        assert_eq!(result, vec![main_jar, native_win, native_linux]);
+    }
 }

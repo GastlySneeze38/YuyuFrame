@@ -417,10 +417,18 @@ pub async fn download_and_launch(
 
     let classpath_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
 
+    // R-3 (audit pipeline) : cet ORDRE est contractuel — `dedup_classpath`
+    // déduplique par `group/artifact` en conservant la PREMIÈRE occurrence
+    // (voir sa doc), donc les libs du loader (Fabric/Forge/...) DOIVENT
+    // précéder les libs vanilla pour que les premières masquent les secondes
+    // (comportement voulu : le loader connaît la version de lib compatible
+    // avec ses mods, pas juste celle du manifeste Mojang). Une réorganisation
+    // innocente de ces `extend` casserait Forge/Fabric silencieusement — le
+    // launcher démarrerait, mais avec les mauvaises versions de libs.
     let mut full_classpath: Vec<String> = extra_classpath;
     full_classpath.extend(p2p_extra_cp); // asm-9.5.jar + asm-tree-9.5.jar avant tout le reste
     full_classpath.extend(launcher_agent_extra_cp); // idem pour le LauncherAgent
-    full_classpath.extend(classpath);
+    full_classpath.extend(classpath); // libs vanilla — APRÈS les libs loader ci-dessus
     full_classpath.push(client_jar.to_string_lossy().to_string());
     let classpath_str = dedup_classpath(full_classpath).join(classpath_sep);
 

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::minecraft::versions::VersionDetails;
 use crate::state::MinecraftSession;
-use super::mojang_rules::rules_allow;
+use super::mojang_rules::extract_conditional_args;
 
 /// Extrait juste la paire `--tweakClass <classe>` d'une `minecraftArguments`
 /// legacy (le reste de la chaîne ne fait que dupliquer les placeholders déjà
@@ -231,32 +231,22 @@ pub(super) fn build_game_args(
 /// Ajoutés en plus de `build_jvm_args` (notre propre tuning GC), jamais à sa
 /// place. Le classpath (`-cp`, `${classpath}`) est volontairement filtré :
 /// on construit et pose le nôtre séparément, l'inclure ici le doublonnerait
-/// sans bénéfice. Tout placeholder qu'on ne sait pas substituer (autre que
-/// natives_directory/launcher_name/launcher_version) fait sauter l'argument
-/// plutôt que de passer un token brisé du style `${inconnu}` à Java.
+/// sans bénéfice. Même chose pour `-Djava.library.path` (P2-3, audit
+/// launcher) : `build_jvm_args` le pose déjà, ce bloc réinjecterait la même
+/// valeur (`${natives_directory}` substitué) une seconde fois — sans effet
+/// fonctionnel (la dernière valeur l'emporte), mais du bruit dans la ligne de
+/// commande et les logs de diagnostic. Tout placeholder qu'on ne sait pas
+/// substituer (autre que natives_directory/launcher_name/launcher_version)
+/// fait sauter l'argument plutôt que de passer un token brisé du style
+/// `${inconnu}` à Java.
 pub(super) fn extract_mojang_jvm_args(details: &VersionDetails, natives_dir: &Path) -> Vec<String> {
     let Some(arguments) = details.arguments.as_ref() else { return Vec::new() };
     let natives = natives_dir.to_string_lossy().into_owned();
 
-    arguments.jvm.iter()
-        .flat_map(|entry| match entry {
-            serde_json::Value::String(s) => vec![s.clone()],
-            serde_json::Value::Object(_) => {
-                let applies = entry.get("rules")
-                    .and_then(|r| r.as_array())
-                    .is_none_or(|r| rules_allow(r));
-                if !applies { return vec![]; }
-                match entry.get("value") {
-                    Some(serde_json::Value::String(s)) => vec![s.clone()],
-                    Some(serde_json::Value::Array(arr)) => {
-                        arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
-                    }
-                    _ => vec![],
-                }
-            }
-            _ => vec![],
-        })
-        .filter(|s| s != "-cp" && s != "-classpath" && !s.contains("${classpath}"))
+    extract_conditional_args(&arguments.jvm)
+        .into_iter()
+        .filter(|s| s != "-cp" && s != "-classpath" && !s.contains("${classpath}")
+            && s != "-Djava.library.path" && !s.starts_with("-Djava.library.path="))
         .map(|s| s
             .replace("${natives_directory}", &natives)
             .replace("${launcher_name}", "YuyuFrame")
