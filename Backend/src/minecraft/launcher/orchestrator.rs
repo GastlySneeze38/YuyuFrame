@@ -164,6 +164,33 @@ pub async fn download_and_launch(
     // deux lancements différents.
     let progress_floor = Arc::new(AtomicU64::new(0));
 
+    // ── Java en tâche de fond — démarre immédiatement, indépendant des libs ──
+    // `ensure_java` ne dépend QUE du manifeste de version (déjà résolu
+    // ci-dessus), jamais des libs/natives — mais il était jusqu'ici appelé
+    // APRÈS elles, donc un lancement à froid sur une version MC qui exige un
+    // runtime Java encore absent sérialisait le téléchargement d'un JRE
+    // complet (~45 Mo) derrière celui de toutes les bibliothèques. Lancé ici
+    // en parallèle, awaité plus bas juste avant le setup du loader (premier
+    // point qui a réellement besoin du chemin java : installeur Forge/NeoForge).
+    // `set_progress_monotonic` est fait pour ces émetteurs concurrents (voir
+    // sa doc) — le plancher partagé empêche la barre de reculer.
+    let required_java = details.java_version.as_ref().map(|j| j.major_version).unwrap_or(8);
+    // Pas de javaVersion dans le manifest = ancienne version MC → Java 8 requis (LaunchWrapper)
+    let java_component = details.java_version.as_ref()
+        .map(|j| j.component.as_str())
+        .unwrap_or("jre-legacy") // composant Mojang pour Java 8
+        .to_string();
+    let java_task = {
+        let client = client.clone();
+        let app = app.clone();
+        let mc_dir = mc_dir.clone();
+        let progress_floor = progress_floor.clone();
+        let custom_path = jvm_custom_path.map(str::to_string);
+        tokio::spawn(async move {
+            ensure_java(&java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, custom_path.as_deref()).await
+        })
+    };
+
     // ── Assets en tâche de fond — démarre immédiatement, indépendant des libs ──
     // Les assets et les libs sont totalement indépendants : on les télécharge en parallèle.
     let assets_task = {
@@ -192,26 +219,40 @@ pub async fn download_and_launch(
 
             // O-3 (audit pipeline) : un seul `read_dir` par bucket de préfixe
             // (256 au maximum — 2 caractères hexa) au lieu d'un appel par
-            // asset (~4000 sur une version moderne, un par `exists()`/
-            // `metadata()`). Le résultat (nom de fichier → taille) est mis en
-            // mémoire une fois pour toutes puis consulté localement par
-            // chaque tâche ci-dessous, plus aucun syscall pour la détection
-            // "déjà présent" pendant la boucle de téléchargement.
-            let mut existing: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
-            if let Ok(mut buckets) = tokio::fs::read_dir(&objects_dir).await {
-                while let Ok(Some(bucket)) = buckets.next_entry().await {
-                    if !bucket.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                        continue;
-                    }
-                    if let Ok(mut files) = tokio::fs::read_dir(bucket.path()).await {
-                        while let Ok(Some(f)) = files.next_entry().await {
-                            if let (Ok(meta), Some(name)) = (f.metadata().await, f.file_name().to_str().map(str::to_string)) {
-                                existing.insert(name, meta.len());
+            // asset (~4000 sur une version moderne, un par `exists()`).
+            // Le résultat (nom de fichier → taille) est mis en mémoire une
+            // fois pour toutes puis consulté localement par chaque tâche
+            // ci-dessous, plus aucun syscall pour la détection "déjà présent"
+            // pendant la boucle de téléchargement.
+            //
+            // TOUT le scan tient dans UN SEUL `spawn_blocking`, en `std::fs`
+            // synchrone : les équivalents tokio (`read_dir().next_entry()`,
+            // `DirEntry::metadata()`) repassent par `spawn_blocking` à CHAQUE
+            // entrée, ce qui aurait rendu ~4000 allers-retours vers le pool de
+            // threads — soit exactement le coût que ce correctif est censé
+            // supprimer. La taille vient en plus gratuitement du scan de
+            // répertoire lui-même sur Windows (déjà dans WIN32_FIND_DATA).
+            let existing = {
+                let objects_dir = objects_dir.clone();
+                tokio::task::spawn_blocking(move || {
+                    let mut map: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+                    let Ok(buckets) = std::fs::read_dir(&objects_dir) else { return map };
+                    for bucket in buckets.flatten() {
+                        if !bucket.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                            continue;
+                        }
+                        let Ok(files) = std::fs::read_dir(bucket.path()) else { continue };
+                        for f in files.flatten() {
+                            if let (Ok(meta), Some(name)) = (f.metadata(), f.file_name().to_str().map(str::to_string)) {
+                                map.insert(name, meta.len());
                             }
                         }
                     }
-                }
-            }
+                    map
+                })
+                .await
+                .unwrap_or_default()
+            };
             let existing = Arc::new(existing);
 
             // O-4 (audit pipeline) : `buffer_unordered` au lieu de spawner les
@@ -355,6 +396,7 @@ pub async fn download_and_launch(
         let (cp_entry, native_paths) = result??;
         if cancelled(&cancel) {
             assets_task.abort();
+            java_task.abort();
             return Err(anyhow!(LAUNCH_CANCELLED_MSG));
         }
         if let Some(cp) = cp_entry { classpath.push(cp); }
@@ -385,12 +427,11 @@ pub async fn download_and_launch(
     // ── Loader-specific setup ────────────────────────────────────────────────
     // Les assets continuent de se télécharger en arrière-plan pendant ce temps.
 
-    // Pas de javaVersion dans le manifest = ancienne version MC → Java 8 requis (LaunchWrapper)
-    let required_java = details.java_version.as_ref().map(|j| j.major_version).unwrap_or(8);
-    let java_component = details.java_version.as_ref()
-        .map(|j| j.component.as_str())
-        .unwrap_or("jre-legacy"); // composant Mojang pour Java 8
-    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, jvm_custom_path).await?;
+    // Rejoint la tâche Java lancée en parallèle tout en haut — a très
+    // probablement déjà fini pendant le téléchargement des libs, sauf sur un
+    // lancement à froid où un runtime complet a dû être téléchargé.
+    let (java, java_major) = java_task.await
+        .map_err(|e| anyhow!("Tâche Java : {}", e))??;
     ensure_gpu_preference(&java).await;
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
@@ -477,7 +518,7 @@ pub async fn download_and_launch(
     // de cette combinaison (version/loader/classpath/mods), la réutilise
     // ensuite. Calculé ici, avant que `classpath_str` ne soit déplacé dans
     // `args` plus bas (-cp).
-    let appcds_args = appcds_jvm_args(&java, java_major, &mc_game_dir, version_id, loader, &classpath_str).await;
+    let appcds_args = appcds_jvm_args(&java, java_major, &mc_game_dir, version_id, loader, &classpath_str, true).await;
 
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
     // P1-6 (Phase 6) : message de diagnostic conscient du vendeur — même
@@ -723,7 +764,10 @@ pub async fn preview_jvm_config(
     // aperçu) — AppCDS calculé sur un classpath vide plutôt que d'en
     // reconstruire un faux : la clé de cache serait de toute façon différente
     // de celle d'un vrai lancement, donc jamais réutilisée par erreur.
-    args.extend(appcds_jvm_args(&java, java_major, game_dir, version_id, None, "").await);
+    // `prune_stale: false` OBLIGATOIRE ici — voir la doc de `appcds_jvm_args` :
+    // élaguer sur cette clé volontairement différente détruirait l'archive du
+    // vrai lancement.
+    args.extend(appcds_jvm_args(&java, java_major, game_dir, version_id, None, "", false).await);
 
     Ok((java, java_major, args))
 }

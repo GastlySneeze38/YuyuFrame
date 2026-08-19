@@ -70,6 +70,12 @@ fn has_base_cds_archive(java: &str) -> bool {
 /// si elle change, c'est un tout nouveau fichier `.jsa`, jamais réutilisé
 /// par erreur contre un classpath différent. Les archives d'une combinaison
 /// précédente pour CETTE instance sont supprimées au passage (best-effort).
+/// `prune_stale` — supprimer les archives des combinaisons précédentes.
+/// TOUJOURS `false` hors d'un vrai lancement : l'aperçu des paramètres
+/// (`preview_jvm_config`) calcule volontairement une clé différente
+/// (classpath encore inconnu à ce stade), donc élaguer depuis là
+/// supprimerait l'archive du VRAI lancement et forcerait sa régénération
+/// complète au prochain démarrage — l'inverse exact du but d'AppCDS.
 pub(super) async fn appcds_jvm_args(
     java: &str,
     java_major: u32,
@@ -77,6 +83,7 @@ pub(super) async fn appcds_jvm_args(
     version_id: &str,
     loader: Option<&str>,
     classpath_str: &str,
+    prune_stale: bool,
 ) -> Vec<String> {
     if java_major < 17 || !has_base_cds_archive(java) {
         return Vec::new();
@@ -91,10 +98,12 @@ pub(super) async fn appcds_jvm_args(
     let key = hash_key(&[version_id, loader.unwrap_or("vanilla"), classpath_str, &mods_fp]);
     let archive_path = dir.join(format!("{key}.jsa"));
 
-    if let Ok(mut entries) = tokio::fs::read_dir(&dir).await {
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            if entry.path() != archive_path {
-                let _ = tokio::fs::remove_file(entry.path()).await;
+    if prune_stale {
+        if let Ok(mut entries) = tokio::fs::read_dir(&dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if entry.path() != archive_path {
+                    let _ = tokio::fs::remove_file(entry.path()).await;
+                }
             }
         }
     }

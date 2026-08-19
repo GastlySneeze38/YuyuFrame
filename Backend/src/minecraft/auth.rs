@@ -152,7 +152,7 @@ async fn xbox_auth_chain(
 // ── Device code flow ──────────────────────────────────────────────────────────
 
 pub async fn start_device_auth() -> Result<DeviceCodeResponse> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
     let params = [
         ("client_id", MS_CLIENT_ID),
         ("scope", "XboxLive.signin offline_access"),
@@ -179,7 +179,7 @@ pub async fn start_device_auth() -> Result<DeviceCodeResponse> {
 
 /// Polls Microsoft. Returns None if still pending, Some(session) on success.
 pub async fn poll_device_auth(device_code: &str) -> Result<Option<MinecraftSession>> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
     // Pas de redirect_uri ici : la requête de polling du device code grant
     // n'en a jamais besoin (l'auth se fait sur un autre appareil/onglet) —
     // confirmé contre ce même endpoint login.live.com par gophertunnel
@@ -234,7 +234,7 @@ pub async fn poll_device_auth(device_code: &str) -> Result<Option<MinecraftSessi
 pub async fn refresh_session(
     ms_refresh_token: &str,
 ) -> Result<(String, String, String, String, i64)> {
-    let client = reqwest::Client::new();
+    let client = crate::minecraft::http::short_lived_client();
 
     // Exchange refresh token for new MS access token
     let params = [
