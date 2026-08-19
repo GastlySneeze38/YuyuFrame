@@ -9,45 +9,49 @@ pub struct InstanceRow {
     pub ram_mb: u32,
     pub favorite: bool,
     pub description: String,
+    /// P1-6 (audit launcher, Phase 6) — "temurin" (défaut) | "openj9" | "graal" | "custom".
+    pub jvm_vendor: String,
+    /// Chemin JVM fourni par l'utilisateur — requis si `jvm_vendor` vaut
+    /// "custom", optionnel pour "graal" (repli best-effort sinon, voir `ensure_java`).
+    pub jvm_custom_path: Option<String>,
+    /// "auto" (défaut, grille RAM/loader) ou une policy explicite — le jeu
+    /// de valeurs valides dépend de `jvm_vendor` (voir `build_jvm_args`).
+    pub gc_policy: String,
+}
+
+const INSTANCE_COLUMNS: &str =
+    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy";
+
+fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
+    Ok(InstanceRow {
+        id: r.get(0)?,
+        name: r.get(1)?,
+        mc_version: r.get(2)?,
+        loader: r.get(3)?,
+        ram_mb: r.get::<_, u32>(4)?,
+        favorite: r.get::<_, i64>(5)? != 0,
+        description: r.get(6)?,
+        jvm_vendor: r.get(7)?,
+        jvm_custom_path: r.get(8)?,
+        gc_policy: r.get(9)?,
+    })
 }
 
 pub fn instance_list(conn: &Connection, user_id: i64) -> Result<Vec<InstanceRow>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, mc_version, loader, ram_mb, favorite, description FROM instances
-         WHERE yuyu_user_id = ?1 ORDER BY created_at ASC",
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {INSTANCE_COLUMNS} FROM instances WHERE yuyu_user_id = ?1 ORDER BY created_at ASC",
+    ))?;
     let rows = stmt
-        .query_map(params![user_id], |r| {
-            Ok(InstanceRow {
-                id: r.get(0)?,
-                name: r.get(1)?,
-                mc_version: r.get(2)?,
-                loader: r.get(3)?,
-                ram_mb: r.get::<_, u32>(4)?,
-                favorite: r.get::<_, i64>(5)? != 0,
-                description: r.get(6)?,
-            })
-        })?
+        .query_map(params![user_id], row_to_instance)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
 pub fn instance_get(conn: &Connection, id: &str, user_id: i64) -> Result<Option<InstanceRow>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, mc_version, loader, ram_mb, favorite, description FROM instances
-         WHERE id = ?1 AND yuyu_user_id = ?2",
-    )?;
-    match stmt.query_row(params![id, user_id], |r| {
-        Ok(InstanceRow {
-            id: r.get(0)?,
-            name: r.get(1)?,
-            mc_version: r.get(2)?,
-            loader: r.get(3)?,
-            ram_mb: r.get::<_, u32>(4)?,
-            favorite: r.get::<_, i64>(5)? != 0,
-            description: r.get(6)?,
-        })
-    }) {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {INSTANCE_COLUMNS} FROM instances WHERE id = ?1 AND yuyu_user_id = ?2",
+    ))?;
+    match stmt.query_row(params![id, user_id], row_to_instance) {
         Ok(row) => Ok(Some(row)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e.into()),
@@ -72,12 +76,15 @@ pub fn instance_insert(
     loader: &str,
     ram_mb: u32,
     description: &str,
+    jvm_vendor: &str,
+    jvm_custom_path: Option<&str>,
+    gc_policy: &str,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(
-        "INSERT INTO instances (id, yuyu_user_id, name, mc_version, loader, ram_mb, created_at, description)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![id, user_id, name, mc_version, loader, ram_mb, now, description],
+        "INSERT INTO instances (id, yuyu_user_id, name, mc_version, loader, ram_mb, created_at, description, jvm_vendor, jvm_custom_path, gc_policy)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![id, user_id, name, mc_version, loader, ram_mb, now, description, jvm_vendor, jvm_custom_path, gc_policy],
     )?;
     Ok(())
 }
@@ -92,11 +99,14 @@ pub fn instance_update(
     loader: &str,
     ram_mb: u32,
     description: &str,
+    jvm_vendor: &str,
+    jvm_custom_path: Option<&str>,
+    gc_policy: &str,
 ) -> Result<()> {
     let n = conn.execute(
-        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5
-         WHERE id=?6 AND yuyu_user_id=?7",
-        params![name, mc_version, loader, ram_mb, description, id, user_id],
+        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5, jvm_vendor=?6, jvm_custom_path=?7, gc_policy=?8
+         WHERE id=?9 AND yuyu_user_id=?10",
+        params![name, mc_version, loader, ram_mb, description, jvm_vendor, jvm_custom_path, gc_policy, id, user_id],
     )?;
     if n == 0 {
         return Err(anyhow::anyhow!("Instance introuvable"));

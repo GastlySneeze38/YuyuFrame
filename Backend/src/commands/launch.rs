@@ -47,6 +47,9 @@ pub async fn launch_game(
         ram_mb: instance.ram_mb,
         favorite: instance.favorite,
         description: instance.description,
+        jvm_vendor: instance.jvm_vendor,
+        jvm_custom_path: instance.jvm_custom_path,
+        gc_policy: instance.gc_policy,
     };
 
     let game_dir = instance_dir(&instance_id);
@@ -182,6 +185,9 @@ pub async fn launch_game(
             &instance_id,
             connect_server.as_deref(),
             cancel_rx,
+            &instance.jvm_vendor,
+            instance.jvm_custom_path.as_deref(),
+            &instance.gc_policy,
         )
         .await
         {
@@ -258,6 +264,35 @@ pub async fn list_saved_servers(instance_id: String) -> Result<Vec<launcher::Sav
 #[tauri::command]
 pub async fn ping_server(address: String) -> Result<server_ping::ServerPingInfo, String> {
     server_ping::ping_server(&address).await
+}
+
+#[derive(serde::Serialize)]
+pub struct JvmConfigPreview {
+    pub java_path: String,
+    pub java_major: u32,
+    pub jvm_args: Vec<String>,
+}
+
+/// P1-6 (audit launcher, Phase 6) — bouton "Voir la configuration appliquée"
+/// des paramètres avancés d'instance : résout la JVM et génère les flags
+/// exactement comme un vrai lancement (voir `preview_jvm_config`), sans
+/// spawner Minecraft.
+#[tauri::command]
+pub async fn preview_jvm_config(
+    app: tauri::AppHandle,
+    instance_id: String,
+    mc_version: String,
+    ram_mb: u32,
+    jvm_vendor: String,
+    jvm_custom_path: Option<String>,
+    gc_policy: String,
+) -> Result<JvmConfigPreview, String> {
+    let game_dir = instance_dir(&instance_id);
+    let (java_path, java_major, jvm_args) = launcher::preview_jvm_config(
+        &instance_id, &mc_version, ram_mb, &game_dir, app,
+        &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy,
+    ).await.map_err(|e| e.to_string())?;
+    Ok(JvmConfigPreview { java_path, java_major, jvm_args })
 }
 
 /// Demande l'annulation d'un lancement en cours — best-effort : coupe le

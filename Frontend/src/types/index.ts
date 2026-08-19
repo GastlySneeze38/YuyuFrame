@@ -80,6 +80,8 @@ export interface ImportProgressEvent {
   label?: string
 }
 
+export type JvmVendor = 'temurin' | 'openj9' | 'graal' | 'custom'
+
 export interface Instance {
   id: string
   name: string
@@ -88,6 +90,16 @@ export interface Instance {
   ram_mb: number
   favorite: boolean
   description: string
+  jvm_vendor: JvmVendor
+  jvm_custom_path: string | null
+  /** "auto" (défaut) ou une policy explicite — le jeu de valeurs valides dépend de `jvm_vendor`. */
+  gc_policy: string
+}
+
+export interface JvmConfigPreview {
+  java_path: string
+  java_major: number
+  jvm_args: string[]
 }
 
 export interface ModpackMeta {

@@ -6,6 +6,7 @@ use tokio::task::JoinSet;
 
 use std::sync::atomic::AtomicU64;
 use super::classpath::download_file;
+use super::jvm_args::JvmVendor;
 use super::progress::set_progress_monotonic;
 
 pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
@@ -44,7 +45,15 @@ const MOJANG_JAVA_MANIFEST: &str =
 /// chemins de résolution sauf JAVA_HOME (composants Mojang et Temurin ciblés
 /// par version majeure par construction), ce qui évite à l'appelant de
 /// relancer `java -version` juste après pour la redécouvrir.
-/// Ordre de priorité : JAVA_HOME → install système → runtime Mojang en cache → téléchargement Mojang.
+///
+/// `vendor`/`custom_path` (P1-6, audit launcher, Phase 6) : `Custom` court-
+/// circuite toute résolution (chemin fourni tel quel, erreur explicite s'il
+/// est cassé) ; `OpenJ9` délègue à [`ensure_openj9`] avant de retomber sur
+/// la résolution standard ci-dessous en cas d'échec ; `Graal` fait de même
+/// avec un `custom_path` s'il est fourni (le launcher ne télécharge jamais
+/// GraalVM lui-même — voir doc de `JvmVendor::Graal`). `Temurin` (le
+/// défaut) et les replis best-effort partagent tous la même résolution :
+/// JAVA_HOME → install système → runtime Mojang en cache → téléchargement Mojang.
 pub(super) async fn ensure_java(
     component: &str,
     required_major: u32,
@@ -52,7 +61,39 @@ pub(super) async fn ensure_java(
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     progress_floor: &AtomicU64,
+    vendor: JvmVendor,
+    custom_path: Option<&str>,
 ) -> Result<(String, u32)> {
+    if vendor == JvmVendor::Custom {
+        let path = custom_path.ok_or_else(|| anyhow!("Vendeur JVM \"custom\" sélectionné sans chemin fourni"))?;
+        if !Path::new(path).exists() {
+            return Err(anyhow!("JVM personnalisée introuvable : {}", path));
+        }
+        let major = detect_java_major_version(path).await
+            .ok_or_else(|| anyhow!("Impossible de déterminer la version de la JVM personnalisée : {}", path))?;
+        return Ok((path.to_string(), major));
+    }
+
+    if vendor == JvmVendor::Graal {
+        if let Some(path) = custom_path {
+            if Path::new(path).exists() {
+                if let Some(major) = detect_java_major_version(path).await {
+                    return Ok((path.to_string(), major));
+                }
+            }
+            tracing::warn!("GraalVM configuré à {} mais inutilisable — repli sur la résolution standard", path);
+        } else {
+            tracing::warn!("Vendeur \"GraalVM\" sélectionné sans chemin — repli sur la résolution standard (Temurin/Mojang)");
+        }
+    }
+
+    if vendor == JvmVendor::OpenJ9 {
+        match ensure_openj9(required_major, mc_dir, client, app, progress_floor).await {
+            Ok(result) => return Ok(result),
+            Err(e) => tracing::warn!("Résolution OpenJ9 échouée ({}), repli sur la résolution standard (Temurin/Mojang)", e),
+        }
+    }
+
     // 1. JAVA_HOME — version EXACTE requise, même contrainte que
     // find_system_java (Java 8 : LaunchWrapper incompatible Java 9+ ; Java 9+ :
     // une version plus récente que celle requise par MC fait planter LWJGL en
@@ -115,6 +156,40 @@ pub(super) async fn ensure_java(
         Ok((java_exe.to_string_lossy().to_string(), required_major))
     } else {
         Err(anyhow!("Runtime Java installé mais introuvable à {}", java_exe.display()))
+    }
+}
+
+/// P1-6 (audit launcher, Phase 6) : résout un runtime OpenJ9 pour
+/// `required_major` — depuis le cache local si déjà téléchargé, sinon via
+/// Adoptium (même limitation Windows-only que `download_adoptium_jre8`, voir
+/// sa doc). Rangé sous `runtime/openj9-<major>/`, à part des runtimes Mojang
+/// (`runtime/<component>/`) et du Temurin 8 dédié
+/// (`runtime/jre-legacy-temurin/`) — trois familles de runtimes distinctes,
+/// jamais mélangées.
+async fn ensure_openj9(
+    required_major: u32,
+    mc_dir: &Path,
+    client: &reqwest::Client,
+    app: &tauri::AppHandle,
+    progress_floor: &AtomicU64,
+) -> Result<(String, u32)> {
+    let dir = mc_dir.join("runtime").join(format!("openj9-{required_major}"));
+    let exe = dir.join("bin").join(java_exe_name());
+    if exe.exists() {
+        return Ok((exe.to_string_lossy().to_string(), required_major));
+    }
+    if !cfg!(target_os = "windows") {
+        return Err(anyhow!("Téléchargement OpenJ9 non supporté sur cette plateforme pour l'instant"));
+    }
+
+    tracing::info!("OpenJ9 {} introuvable — téléchargement depuis Adoptium", required_major);
+    set_progress_monotonic(app, progress_floor, 10, 100, &format!("Téléchargement Java {required_major} (Eclipse OpenJ9)..."));
+    download_adoptium(required_major, "openj9", &dir, client).await?;
+
+    if exe.exists() {
+        Ok((exe.to_string_lossy().to_string(), required_major))
+    } else {
+        Err(anyhow!("Runtime OpenJ9 installé mais introuvable à {}", exe.display()))
     }
 }
 
@@ -203,15 +278,23 @@ async fn download_mojang_runtime(
 }
 
 /// Télécharge un JRE 8 récent (Eclipse Temurin, build "latest" — 8u4xx+ au
-/// lieu du 8u51 figé par Mojang) via l'API publique Adoptium et l'extrait
-/// dans `dest` (structure finale : `dest/bin/java.exe`, comme Mojang).
-/// Windows uniquement pour l'instant — Adoptium sert un .zip sur Windows
-/// mais un .tar.gz sur macOS/Linux, et seul le crate `zip` est disponible ici.
+/// lieu du 8u51 figé par Mojang) via l'API publique Adoptium — repli sur
+/// [`download_adoptium`] (généralisée à n'importe quelle version majeure et
+/// n'importe quel vendeur, voir P1-6/Phase 6, `ensure_openj9`).
 async fn download_adoptium_jre8(dest: &Path, client: &reqwest::Client) -> Result<()> {
+    download_adoptium(8, "hotspot", dest, client).await
+}
+
+/// Télécharge un JRE via l'API publique Adoptium et l'extrait dans `dest`
+/// (structure finale : `dest/bin/java.exe`, comme Mojang). `jvm_impl` :
+/// "hotspot" (Temurin) ou "openj9" (Eclipse OpenJ9) — même URL Adoptium pour
+/// les deux, seul ce segment change. Windows uniquement pour l'instant —
+/// Adoptium sert un .zip sur Windows mais un .tar.gz sur macOS/Linux, et
+/// seul le crate `zip` est disponible ici.
+async fn download_adoptium(major: u32, jvm_impl: &str, dest: &Path, client: &reqwest::Client) -> Result<()> {
     let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x64" };
     let url = format!(
-        "https://api.adoptium.net/v3/binary/latest/8/ga/windows/{}/jre/hotspot/normal/eclipse?project=jdk",
-        arch
+        "https://api.adoptium.net/v3/binary/latest/{major}/ga/windows/{arch}/jre/{jvm_impl}/normal/eclipse?project=jdk",
     );
 
     let resp = client.get(&url).send().await?;

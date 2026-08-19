@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,11 +87,11 @@ export const api = {
       const pairs = await invoke<[string, string][]>('instance_id_migrations')
       return pairs.map(([oldId, newId]) => ({ oldId, newId }))
     },
-    create: (name: string, mc_version: string, loader: string, ram_mb: number, description?: string) =>
-      invoke<Instance>('instance_create', { name, mcVersion: mc_version, loader, ramMb: ram_mb, description }),
+    create: (name: string, mc_version: string, loader: string, ram_mb: number, description?: string, jvm_vendor?: string, jvm_custom_path?: string, gc_policy?: string) =>
+      invoke<Instance>('instance_create', { name, mcVersion: mc_version, loader, ramMb: ram_mb, description, jvmVendor: jvm_vendor, jvmCustomPath: jvm_custom_path, gcPolicy: gc_policy }),
     delete: (id: string) => invoke<void>('instance_delete', { id }),
-    update: (id: string, name: string, mc_version: string, loader: string, ram_mb: number, description?: string) =>
-      invoke<Instance>('instance_update', { id, name, mcVersion: mc_version, loader, ramMb: ram_mb, description }),
+    update: (id: string, name: string, mc_version: string, loader: string, ram_mb: number, description?: string, jvm_vendor?: string, jvm_custom_path?: string, gc_policy?: string) =>
+      invoke<Instance>('instance_update', { id, name, mcVersion: mc_version, loader, ramMb: ram_mb, description, jvmVendor: jvm_vendor, jvmCustomPath: jvm_custom_path, gcPolicy: gc_policy }),
     duplicate: (sourceId: string, name: string, mc_version: string, ram_mb: number) =>
       invoke<Instance>('instance_duplicate', { sourceId, name, mcVersion: mc_version, ramMb: ram_mb }),
     toggleFavorite: (id: string) => invoke<Instance>('instance_toggle_favorite', { id }),
@@ -99,6 +99,9 @@ export const api = {
     exportSettings: (instanceId: string) => invoke<void>('instance_export_settings', { instanceId }),
     applySettings: (instanceId: string) => invoke<boolean>('instance_apply_settings', { instanceId }),
     openFolder: (instanceId: string) => invoke<void>('instance_open_folder', { instanceId }),
+    // P1-6 (audit launcher, Phase 6) — bouton "Voir la configuration appliquée".
+    previewJvmConfig: (instanceId: string, mcVersion: string, ramMb: number, jvmVendor: string, jvmCustomPath: string | undefined, gcPolicy: string) =>
+      invoke<JvmConfigPreview>('preview_jvm_config', { instanceId, mcVersion, ramMb, jvmVendor, jvmCustomPath, gcPolicy }),
   },
 
   yuyu: {

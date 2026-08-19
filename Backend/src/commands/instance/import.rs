@@ -570,6 +570,9 @@ pub async fn import_apply(
                 params.loader,
                 params.ram_mb,
                 None,
+                None,
+                None,
+                None,
             )
             .await?;
             instance.id

@@ -273,6 +273,7 @@ pub fn run() {
             commands::deep_link::take_pending_deep_link,
             commands::launch::list_saved_servers,
             commands::launch::ping_server,
+            commands::launch::preview_jvm_config,
             commands::instance::mods::mods_list,
             commands::instance::mods::mods_toggle,
             commands::instance::mods::mods_delete,

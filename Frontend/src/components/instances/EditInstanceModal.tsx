@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
-import type { Instance, Loader } from '@/types'
+import type { Instance, JvmVendor, Loader } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
+import { JvmAdvancedSection } from './JvmAdvancedSection'
 import { useT } from '@/i18n'
 
 export function EditInstanceModal({
@@ -25,6 +26,9 @@ export function EditInstanceModal({
   const [mcVersion, setMcVersion] = useState(instance.mc_version)
   const [loader, setLoader] = useState<Loader>(instance.loader)
   const [ram, setRam] = useState(instance.ram_mb)
+  const [jvmVendor, setJvmVendor] = useState<JvmVendor>(instance.jvm_vendor)
+  const [jvmCustomPath, setJvmCustomPath] = useState(instance.jvm_custom_path ?? '')
+  const [gcPolicy, setGcPolicy] = useState(instance.gc_policy)
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState(t('instancesPage.saving'))
   // Mods déjà installés sur cette instance — la recommandation RAM doit en
@@ -41,7 +45,7 @@ export function EditInstanceModal({
     if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
     setLoading(true); setLoadingLabel(t('instancesPage.saving'))
     try {
-      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim())
+      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim(), jvmVendor, jvmCustomPath.trim() || undefined, gcPolicy)
       if (mcVersion !== instance.mc_version) {
         setLoadingLabel(t('instancesPage.updatingMods'))
         await updateModsForNewVersion(instance.id, mcVersion, loader)
@@ -65,6 +69,13 @@ export function EditInstanceModal({
         <RamPicker value={ram} onChange={setRam} loader={loader} modCount={modCount} onStatusChange={setRamStatus} />
 
         <DescriptionInput value={description} onChange={setDescription} />
+
+        <JvmAdvancedSection
+          vendor={jvmVendor} onVendorChange={setJvmVendor}
+          customPath={jvmCustomPath} onCustomPathChange={setJvmCustomPath}
+          gcPolicy={gcPolicy} onGcPolicyChange={setGcPolicy}
+          preview={{ instanceId: instance.id, mcVersion, ramMb: ram }}
+        />
 
         {mcVersion !== instance.mc_version && (
           <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-[rgba(75,63,207,0.08)] border border-[rgba(75,63,207,0.25)]">

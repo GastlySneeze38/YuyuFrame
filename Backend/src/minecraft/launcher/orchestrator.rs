@@ -16,7 +16,7 @@ use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
 use super::java::ensure_java;
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args};
+use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
@@ -66,7 +66,11 @@ pub async fn download_and_launch(
     instance_id: &str,
     connect_server: Option<&str>,
     cancel: watch::Receiver<bool>,
+    jvm_vendor: &str,
+    jvm_custom_path: Option<&str>,
+    gc_policy: &str,
 ) -> Result<Vec<String>> {
+    let jvm_vendor = JvmVendor::parse(jvm_vendor);
     let launch_start = std::time::Instant::now();
     crate::integrations::analytics::capture("download_started", serde_json::json!({
         "instance_id": instance_id,
@@ -379,7 +383,7 @@ pub async fn download_and_launch(
     let java_component = details.java_version.as_ref()
         .map(|j| j.component.as_str())
         .unwrap_or("jre-legacy"); // composant Mojang pour Java 8
-    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor).await?;
+    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, jvm_custom_path).await?;
     ensure_gpu_preference(&java).await;
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
@@ -468,14 +472,19 @@ pub async fn download_and_launch(
     // `args` plus bas (-cp).
     let appcds_args = appcds_jvm_args(&java, java_major, &mc_game_dir, version_id, loader, &classpath_str).await;
 
-    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major);
-    // Même condition que build_jvm_args (P1-4, audit launcher) : ZGC
-    // seulement à partir de 6 Go, sinon ce message annoncerait ZGC alors que
-    // le G1 de repli est celui réellement appliqué.
-    let gc_msg = if java_major >= 21 && ram_mb >= 6144 {
-        format!("Java {} détecté, {} Mo alloués — ZGC Generational activé", java_major, ram_mb)
-    } else {
-        format!("Java {} détecté, {} Mo alloués — G1GC client activé", java_major, ram_mb)
+    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
+    // P1-6 (Phase 6) : message de diagnostic conscient du vendeur — même
+    // condition que la branche ZGC de build_hotspot_jvm_args pour ne jamais
+    // annoncer un GC qui n'est pas réellement celui appliqué.
+    let gc_msg = match jvm_vendor {
+        JvmVendor::OpenJ9 => {
+            let policy = match gc_policy { "optthruput" | "optavgpause" | "balanced" | "metronome" => gc_policy, _ => "gencon" };
+            format!("Java {} (Eclipse OpenJ9) détecté, {} Mo alloués — -Xgcpolicy:{} activé", java_major, ram_mb, policy)
+        }
+        _ if gc_policy != "g1" && java_major >= 21 && ram_mb >= 6144 => {
+            format!("Java {} ({}) détecté, {} Mo alloués — ZGC Generational activé", java_major, jvm_vendor.as_str(), ram_mb)
+        }
+        _ => format!("Java {} ({}) détecté, {} Mo alloués — G1GC client activé", java_major, jvm_vendor.as_str(), ram_mb),
     };
     log_to_console(&app, &console_label, &gc_msg, "out");
     // Correctifs OS spécifiques suggérés par Mojang (ex: -XstartOnFirstThread
@@ -647,4 +656,62 @@ pub async fn download_and_launch(
     }
 
     Ok(launch_warnings)
+}
+
+/// P1-6 (audit launcher, Phase 6, item "voir la configuration appliquée") :
+/// résout la JVM et génère les flags exactement comme le ferait un vrai
+/// lancement (mêmes fonctions, `ensure_java`/`build_jvm_args`/
+/// `appcds_jvm_args`), sans spawner Minecraft — pour que le bouton "Voir la
+/// configuration appliquée" des paramètres avancés montre la RÉALITÉ, pas
+/// une simulation séparée qui pourrait diverger avec le temps. Peut déclencher
+/// un téléchargement de runtime JVM si absent du cache (même comportement
+/// qu'un lancement réel) : c'est le prix d'un aperçu fidèle plutôt qu'un
+/// mensonge instantané.
+pub async fn preview_jvm_config(
+    instance_id: &str,
+    version_id: &str,
+    ram_mb: u32,
+    game_dir: &std::path::Path,
+    app: tauri::AppHandle,
+    jvm_vendor: &str,
+    jvm_custom_path: Option<&str>,
+    gc_policy: &str,
+) -> Result<(String, u32, Vec<String>)> {
+    tracing::info!("[JVM preview] instance={} version={}", instance_id, version_id);
+    let jvm_vendor = JvmVendor::parse(jvm_vendor);
+    let mc_dir = minecraft_dir();
+    let versions_dir = mc_dir.join("versions").join(version_id);
+    let natives_dir = versions_dir.join("natives");
+    let progress_floor = Arc::new(AtomicU64::new(0));
+
+    let client = Arc::new(reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()?);
+
+    let version_json_cache = versions_dir.join(format!("{}.json", version_id));
+    let details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
+        serde_json::from_str(&text)?
+    } else {
+        let versions = fetch_version_list().await?;
+        let version_info = versions.iter().find(|v| v.id == version_id)
+            .ok_or_else(|| anyhow!("Version {} introuvable", version_id))?;
+        let raw = client.get(&version_info.url).send().await?.text().await?;
+        serde_json::from_str(&raw)?
+    };
+
+    let required_java = details.java_version.as_ref().map(|j| j.major_version).unwrap_or(8);
+    let java_component = details.java_version.as_ref().map(|j| j.component.as_str()).unwrap_or("jre-legacy");
+    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, jvm_custom_path).await?;
+
+    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
+    args.extend(extract_mojang_jvm_args(&details, &natives_dir));
+    // Classpath encore inconnu à ce stade (dépend des libs/loader/mods
+    // résolus au lancement réel, pas nécessaire pour ce qu'affiche cet
+    // aperçu) — AppCDS calculé sur un classpath vide plutôt que d'en
+    // reconstruire un faux : la clé de cache serait de toute façon différente
+    // de celle d'un vrai lancement, donc jamais réutilisée par erreur.
+    args.extend(appcds_jvm_args(&java, java_major, game_dir, version_id, None, "").await);
+
+    Ok((java, java_major, args))
 }

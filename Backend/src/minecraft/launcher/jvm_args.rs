@@ -4,6 +4,65 @@ use crate::minecraft::versions::VersionDetails;
 use crate::state::MinecraftSession;
 use super::mojang_rules::extract_conditional_args;
 
+/// P1-6 (audit launcher, Phase 6) : le vendeur de JVM choisi pour un profil.
+/// `Temurin` reste le défaut et le seul chemin testé en profondeur — les
+/// trois autres activent un comportement différent dans `ensure_java`
+/// (résolution/téléchargement) et `build_jvm_args` (syntaxe des flags GC,
+/// radicalement différente sur OpenJ9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum JvmVendor {
+    Temurin,
+    OpenJ9,
+    /// Volontairement une option manuelle neutre, jamais un défaut — voir
+    /// doc jvm-config : gains JIT inconsistants sur Minecraft, warmup souvent
+    /// plus long qu'avec C2, meilleures optimisations réservées à
+    /// l'Enterprise. Nécessite un `custom_path` fourni par l'utilisateur : le
+    /// launcher ne télécharge jamais GraalVM lui-même.
+    Graal,
+    /// Chemin JVM fourni intégralement par l'utilisateur (`custom_path`) —
+    /// aucune résolution/téléchargement, aucune hypothèse sur le vendeur
+    /// réel : traité comme HotSpot pour le choix des flags GC (le cas très
+    /// majoritaire des JVM "custom" en pratique).
+    Custom,
+}
+
+impl JvmVendor {
+    pub(super) fn parse(s: &str) -> Self {
+        match s {
+            "openj9" => JvmVendor::OpenJ9,
+            "graal" => JvmVendor::Graal,
+            "custom" => JvmVendor::Custom,
+            _ => JvmVendor::Temurin,
+        }
+    }
+
+    pub(super) fn as_str(&self) -> &'static str {
+        match self {
+            JvmVendor::Temurin => "temurin",
+            JvmVendor::OpenJ9 => "openj9",
+            JvmVendor::Graal => "graal",
+            JvmVendor::Custom => "custom",
+        }
+    }
+}
+
+/// Retour utilisateur : "Auto" doit couvrir toute la config (vendeur ET GC),
+/// pas seulement le GC — c'est la lecture correcte de la grille jvm-config
+/// ("Sélecteur de GC... Option Auto qui applique LA GRILLE ci-dessous selon
+/// la RAM"), que l'implémentation initiale avait restreinte à tort au seul
+/// GC. `"auto"` n'est PAS une variante de `JvmVendor` (le reste du code n'a
+/// jamais besoin de savoir "auto" a existé, seulement le résultat concret) —
+/// résolu une fois ici, tôt, par l'appelant (`download_and_launch`,
+/// `preview_jvm_config`), avant tout usage de `JvmVendor::parse`.
+///
+/// ~2 Go → OpenJ9 (empreinte de base plus faible, la marge nécessaire sur un
+/// budget serré) ; au-delà → Temurin (le choix de GC exact — G1 ou ZGC — est
+/// déjà décidé par `build_hotspot_jvm_args` sur `ram_mb`/`java_major`).
+pub(super) fn resolve_auto_vendor(ram_mb: u32) -> &'static str {
+    if ram_mb < 3072 { "openj9" } else { "temurin" }
+    }
+}
+
 /// Extrait juste la paire `--tweakClass <classe>` d'une `minecraftArguments`
 /// legacy (le reste de la chaîne ne fait que dupliquer les placeholders déjà
 /// substitués par les args vanilla de base).
@@ -23,7 +82,52 @@ pub(super) fn extract_tweak_class_args(mc_args: &str) -> Vec<String> {
     out
 }
 
-pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -> Vec<String> {
+/// Point d'entrée public — dispatch selon le vendeur (P1-6, Phase 6). La
+/// syntaxe des flags GC d'OpenJ9 (`-Xgcpolicy:*`) n'a rien à voir avec celle
+/// de la famille HotSpot (`-XX:+Use*GC`) : deux générateurs séparés plutôt
+/// qu'une seule fonction avec des branches qui se marcheraient dessus.
+/// Temurin/Graal/Custom partagent le même générateur HotSpot — Graal CE et
+/// la plupart des JVM "custom" en pratique sont HotSpot-compatibles côté
+/// flags GC (voir doc de `JvmVendor::Graal`/`JvmVendor::Custom`).
+pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32, vendor: JvmVendor, gc_policy: &str) -> Vec<String> {
+    match vendor {
+        JvmVendor::OpenJ9 => build_openj9_jvm_args(ram_mb, natives_dir, gc_policy),
+        JvmVendor::Temurin | JvmVendor::Graal | JvmVendor::Custom => build_hotspot_jvm_args(ram_mb, natives_dir, java_major, gc_policy),
+    }
+}
+
+/// P1-6 (audit launcher, Phase 6) : grille RAM/GC OpenJ9, alternative à
+/// `build_hotspot_jvm_args` pour le palier "~2 Go" de la grille jvm-config —
+/// OpenJ9 a une empreinte mémoire de base nettement plus faible que HotSpot,
+/// la marge nécessaire sur un budget aussi serré. `gencon` (par défaut,
+/// "auto") est adapté aux objets à durée de vie courte typiques de Minecraft
+/// (entités, particules, paquets réseau) ; les autres policies restent
+/// sélectionnables explicitement (voir sélecteur GC des paramètres avancés).
+/// Volontairement minimal : contrairement à HotSpot, aucun flag `-XX:*`
+/// documenté ici n'a été vérifié en conditions réelles (voir P1-3 — un flag
+/// inconnu empêche la JVM de démarrer), on se limite donc au strict
+/// nécessaire plutôt que de porter tout le tuning HotSpot en devinant.
+fn build_openj9_jvm_args(ram_mb: u32, natives_dir: &Path, gc_policy: &str) -> Vec<String> {
+    let reserve_mb = (ram_mb / 10).max(200).min(ram_mb.saturating_sub(256));
+    let heap_mb = ram_mb - reserve_mb;
+
+    let policy = match gc_policy {
+        "optthruput" | "optavgpause" | "balanced" | "metronome" => gc_policy,
+        _ => "gencon",
+    };
+
+    vec![
+        format!("-Xmx{}m", heap_mb),
+        format!("-Xms{}m", heap_mb),
+        format!("-Djava.library.path={}", natives_dir.display()),
+        format!("-Dorg.lwjgl.librarypath={}", natives_dir.display()),
+        format!("-Xgcpolicy:{}", policy),
+        "-XX:+UseCompressedOops".into(),
+        "-Xdisableexplicitgc".into(), // équivalent OpenJ9 de -XX:+DisableExplicitGC (System.gc() ignoré)
+    ]
+}
+
+fn build_hotspot_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32, gc_policy: &str) -> Vec<String> {
     // P1-5 (audit launcher) : marge sous le plafond mémoire demandé — réserve
     // ~10% (plancher 200 Mo) pour le natif (rendu, GLFW/LWJGL, DLL, code
     // cache JIT, métaspace), jamais compté dans `ram_mb`. Sans cette marge,
@@ -59,9 +163,18 @@ pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32) -
     // une part disproportionnée d'un petit tas et rapproche du crash OOM.
     // Repli sur G1 en dessous de 6 Go quel que soit `java_major` : c'est le
     // palier "6 Go → max" de la grille jvm-config, à ne jamais franchir vers
-    // ZGC (le palier "~2 Go" cible OpenJ9/gencon — pas encore implémenté,
-    // voir P1-6 — G1 reste le meilleur repli HotSpot disponible en attendant).
-    if java_major >= 21 && ram_mb >= 6144 {
+    // ZGC (le palier "~2 Go" cible OpenJ9/gencon, voir `build_openj9_jvm_args`).
+    //
+    // P1-6 (Phase 6) : `gc_policy` permet un choix explicite ("g1"/"zgc")
+    // depuis les paramètres avancés, mais le plancher de sécurité "jamais
+    // ZGC en dessous de 6 Go" (doc jvm-config, "à ne jamais faire" — le
+    // mismatch le plus dommageable de toute la grille) reste appliqué même
+    // en override manuel, pas seulement en "auto".
+    let use_zgc = match gc_policy {
+        "g1" => false,
+        _ => java_major >= 21 && ram_mb >= 6144, // "auto", "zgc" (sous réserve du plancher), ou toute valeur inconnue
+    };
+    if use_zgc {
         // ── ZGC Generational (Java 21+, ≥6 Go) ────────────────────────────────
         // GC concurrent : collecte en parallèle du jeu → pauses < 1ms
         // Élimine les freezes récurrents de 200ms causés par G1 mixed collections

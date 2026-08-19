@@ -12,6 +12,6 @@ mod ready_event;
 mod servers;
 
 pub use agent_deploy::deploy_bundled_agent;
-pub use orchestrator::{download_and_launch, minecraft_dir, LAUNCH_CANCELLED_MSG};
+pub use orchestrator::{download_and_launch, minecraft_dir, preview_jvm_config, LAUNCH_CANCELLED_MSG};
 pub use progress::{register_console_waiter, signal_console_ready};
 pub use servers::{read_saved_servers, SavedServer};

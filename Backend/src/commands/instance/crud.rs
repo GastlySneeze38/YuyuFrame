@@ -14,6 +14,11 @@ pub struct Instance {
     pub ram_mb: u32,
     pub favorite: bool,
     pub description: String,
+    /// P1-6 (audit launcher, Phase 6) — "temurin" (défaut) | "openj9" | "graal" | "custom".
+    pub jvm_vendor: String,
+    pub jvm_custom_path: Option<String>,
+    /// "auto" (défaut) ou une policy explicite — voir `build_jvm_args`.
+    pub gc_policy: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -25,9 +30,19 @@ struct InstanceMeta {
     ram_mb: u32,
     #[serde(default)]
     description: String,
+    #[serde(default = "default_jvm_vendor")]
+    jvm_vendor: String,
+    #[serde(default)]
+    jvm_custom_path: Option<String>,
+    #[serde(default = "default_gc_policy")]
+    gc_policy: String,
 }
 
-fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32, description: &str) {
+fn default_jvm_vendor() -> String { "temurin".to_string() }
+fn default_gc_policy() -> String { "auto".to_string() }
+
+#[allow(clippy::too_many_arguments)]
+fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32, description: &str, jvm_vendor: &str, jvm_custom_path: Option<&str>, gc_policy: &str) {
     let meta = InstanceMeta {
         id: id.to_string(),
         name: name.to_string(),
@@ -35,6 +50,9 @@ fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32,
         loader: loader.to_string(),
         ram_mb,
         description: description.to_string(),
+        jvm_vendor: jvm_vendor.to_string(),
+        jvm_custom_path: jvm_custom_path.map(str::to_string),
+        gc_policy: gc_policy.to_string(),
     };
     match serde_json::to_string_pretty(&meta) {
         Ok(json) => {
@@ -102,7 +120,11 @@ pub(crate) fn gen_id(name: &str) -> String {
 }
 
 fn row_to_instance(r: db::InstanceRow) -> Instance {
-    Instance { id: r.id, name: r.name, mc_version: r.mc_version, loader: r.loader, ram_mb: r.ram_mb, favorite: r.favorite, description: r.description }
+    Instance {
+        id: r.id, name: r.name, mc_version: r.mc_version, loader: r.loader, ram_mb: r.ram_mb,
+        favorite: r.favorite, description: r.description,
+        jvm_vendor: r.jvm_vendor, jvm_custom_path: r.jvm_custom_path, gc_policy: r.gc_policy,
+    }
 }
 
 fn user_id(s: &crate::state::AppState) -> i64 {
@@ -130,6 +152,7 @@ pub async fn instance_list(state: tauri::State<'_, SharedState>) -> Result<Vec<I
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn instance_create(
     state: tauri::State<'_, SharedState>,
     name: String,
@@ -137,27 +160,32 @@ pub async fn instance_create(
     loader: String,
     ram_mb: u32,
     description: Option<String>,
+    jvm_vendor: Option<String>,
+    jvm_custom_path: Option<String>,
+    gc_policy: Option<String>,
 ) -> Result<Instance, String> {
     if name.trim().is_empty() {
         return Err("Le nom de l'instance est requis".into());
     }
     let description = description.unwrap_or_default().trim().to_string();
     let name = name.trim().to_string();
+    let jvm_vendor = jvm_vendor.unwrap_or_else(default_jvm_vendor);
+    let gc_policy = gc_policy.unwrap_or_else(default_gc_policy);
     let id = gen_id(&name);
     tokio::fs::create_dir_all(instance_dir(&id))
         .await
         .map_err(|e| e.to_string())?;
-    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description);
+    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy);
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description)
+    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy)
         .map_err(|e| e.to_string())?;
     crate::integrations::analytics::capture("instance_created", serde_json::json!({
         "mc_version": &mc_version,
         "loader": &loader,
     }));
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy })
 }
 
 #[tauri::command]
@@ -197,6 +225,7 @@ pub async fn instance_toggle_favorite(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn instance_update(
     state: tauri::State<'_, SharedState>,
     id: String,
@@ -205,15 +234,20 @@ pub async fn instance_update(
     loader: String,
     ram_mb: u32,
     description: Option<String>,
+    jvm_vendor: Option<String>,
+    jvm_custom_path: Option<String>,
+    gc_policy: Option<String>,
 ) -> Result<Instance, String> {
     let name = name.trim().to_string();
     let description = description.unwrap_or_default().trim().to_string();
+    let jvm_vendor = jvm_vendor.unwrap_or_else(default_jvm_vendor);
+    let gc_policy = gc_policy.unwrap_or_else(default_gc_policy);
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description)
+    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy)
         .map_err(|e| e.to_string())?;
-    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description);
+    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy);
     let row = db::instance_get(&db, &id, uid)
         .map_err(|e| e.to_string())?
         .ok_or("Instance introuvable")?;
@@ -233,14 +267,14 @@ pub async fn instance_duplicate(
     }
     let name = name.trim().to_string();
 
-    let loader = {
+    let (loader, jvm_vendor, jvm_custom_path, gc_policy) = {
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
         let src = db::instance_get(&db, &source_id, uid)
             .map_err(|e| e.to_string())?
             .ok_or("Instance source introuvable")?;
-        src.loader
+        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy)
     };
 
     let new_id = gen_id(&name);
@@ -261,15 +295,15 @@ pub async fn instance_duplicate(
         }
     }
 
-    write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "");
+    write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy);
 
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "")
+    db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy)
         .map_err(|e| e.to_string())?;
 
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new() })
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy })
 }
 
 /// Copie `options.txt` de l'instance vers un template global dans le dossier
@@ -356,7 +390,7 @@ pub async fn instance_startup_sync(
                 let meta_path = instances_root.join(&id).join("meta.json");
                 if let Ok(json) = std::fs::read_to_string(&meta_path) {
                     if let Ok(meta) = serde_json::from_str::<InstanceMeta>(&json) {
-                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description).ok();
+                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description, &meta.jvm_vendor, meta.jvm_custom_path.as_deref(), &meta.gc_policy).ok();
                     }
                 }
                 // Pas de meta.json → on laisse le dossier, impossible d'importer

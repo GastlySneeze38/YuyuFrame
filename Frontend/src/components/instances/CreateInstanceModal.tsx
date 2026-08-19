@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api/client'
-import type { Instance, Loader } from '@/types'
+import type { Instance, JvmVendor, Loader } from '@/types'
 import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
@@ -8,6 +8,7 @@ import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showError } from '@/stores/useErrorToast'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
+import { JvmAdvancedSection } from './JvmAdvancedSection'
 import { PresetCard } from './PresetCard'
 import { useT } from '@/i18n'
 
@@ -75,6 +76,9 @@ export function CreateInstanceModal({
   const [mcVersion, setMcVersion] = useState(versions[0] ?? '')
   const [loader, setLoader] = useState<Loader>('vanilla')
   const [ram, setRam] = useState(defaultRam)
+  const [jvmVendor, setJvmVendor] = useState<JvmVendor>('temurin')
+  const [jvmCustomPath, setJvmCustomPath] = useState('')
+  const [gcPolicy, setGcPolicy] = useState('auto')
   // Optimiste par défaut (true/true) pour ne pas griser le bouton "Créer"
   // pendant le premier rendu, avant que RamPicker n'ait pu calculer son
   // premier statut réel (retour utilisateur : bloquer la création tant
@@ -135,7 +139,7 @@ export function CreateInstanceModal({
     setLoading(true); setLoadingLabel(t('instancesPage.creating'))
     api.analytics.track('instance_create_submitted', { flow_id: flowId.current, mc_version: mcVersion, loader })
     try {
-      const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim())
+      const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim(), jvmVendor, jvmCustomPath.trim() || undefined, gcPolicy)
       if (selectedPreset) {
         await installPresetMods(instance.id, selectedPreset, mcVersion, (done, total) => {
           setLoadingLabel(t('instancesPage.installingModsProgress', { done, total }))
@@ -218,6 +222,14 @@ export function CreateInstanceModal({
             <RamPicker value={ram} onChange={setRam} loader={loader} modCount={selectedPreset?.mods.length ?? 0} onStatusChange={setRamStatus} />
 
             <DescriptionInput value={description} onChange={setDescription} />
+
+            {/* Pas de prévisualisation ici (`preview` omis) : l'instance
+                n'existe pas encore, rien à résoudre tant qu'elle n'est pas créée. */}
+            <JvmAdvancedSection
+              vendor={jvmVendor} onVendorChange={setJvmVendor}
+              customPath={jvmCustomPath} onCustomPathChange={setJvmCustomPath}
+              gcPolicy={gcPolicy} onGcPolicyChange={setGcPolicy}
+            />
 
             {!ramStatus.isKnownTier ? (
               <p className="text-[11px] text-[rgba(240,180,90,0.75)] -mt-2">
