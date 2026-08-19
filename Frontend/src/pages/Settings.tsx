@@ -3,9 +3,15 @@ import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
+import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
 import { useT, LANGUAGES } from '@/i18n'
+
+/** Valeurs courantes proposées en puces pour la RAM personnalisée (>8 Go) —
+ * choix rapide sans taper, le champ Mo juste en dessous reste ouvert pour
+ * une valeur exacte (ex: 9500 Mo). */
+const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
 
 export default function Settings() {
   const t = useT()
@@ -157,18 +163,26 @@ export default function Settings() {
                     </p>
                   </div>
                   <span className="text-sm font-bold text-[#7b72e9]">
-                    {defaultRam >= 1024 ? `${(defaultRam / 1024).toFixed(defaultRam % 1024 === 0 ? 0 : 1)} Go` : `${defaultRam} Mo`}
+                    {formatRam(defaultRam)}
                   </span>
                 </div>
                 <input
                   type="range"
-                  min={1024} max={16384} step={512}
+                  // Bornes et pas alignés sur les paliers réellement
+                  // sélectionnables dans RamPicker (2 à 8 Go, tous espacés
+                  // d'1 Go) — avant, le slider allait de 1 à 16 Go par pas de
+                  // 512 Mo : des valeurs comme "4.5 Go" ou "1 Go" ne
+                  // correspondaient à AUCUN bouton proposé ailleurs dans le
+                  // launcher (retour utilisateur). Au-delà de 8 Go, c'est le
+                  // champ "RAM personnalisée" juste en dessous qui prend le
+                  // relais, pas ce slider.
+                  min={2048} max={8192} step={1024}
                   value={defaultRam}
                   onChange={(e) => setDefaultRam(Number(e.target.value))}
                   className="w-full accent-[#4B3FCF]"
                 />
                 <div className="flex justify-between text-[10px] text-white/25">
-                  <span>1 Go</span><span>4 Go</span><span>8 Go</span><span>12 Go</span><span>16 Go</span>
+                  <span>2 Go</span><span>3 Go</span><span>4 Go</span><span>5 Go</span><span>6 Go</span><span>7 Go</span><span>8 Go</span>
                 </div>
               </div>
 
@@ -188,20 +202,53 @@ export default function Settings() {
                   </button>
                 </div>
                 <p className="text-[11px] text-white/35">{t('settings.lancement.customRamDesc')}</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={1024}
-                    step={512}
-                    placeholder={t('settings.lancement.customRamPlaceholder')}
-                    value={customRamMb ?? ''}
-                    onChange={(e) => {
-                      const raw = e.target.value
-                      setCustomRamMb(raw === '' ? null : Math.max(1024, Number(raw)))
-                    }}
-                    className="w-32 rounded-xl px-3 text-sm text-white outline-none h-[36px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] focus:border-[rgba(75,63,207,0.6)]"
-                  />
-                  <span className="text-[11px] text-white/35">Mo</span>
+
+                {/* Puces de valeurs courantes (>8 Go) — choix direct sans
+                    taper, la précision reste possible via le champ Mo
+                    juste en dessous pour qui veut une valeur exacte. */}
+                <div className="flex flex-wrap gap-1.5">
+                  {CUSTOM_RAM_PRESETS_GO.map((go) => {
+                    const mb = go * 1024
+                    const active = customRamMb === mb
+                    return (
+                      <button
+                        key={go}
+                        onClick={() => setCustomRamMb(mb)}
+                        className={`rounded-lg text-[11px] font-semibold transition-all duration-150 h-[26px] px-2.5 border ${
+                          active
+                            ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(75,63,207,0.7)] text-white'
+                            : 'bg-[rgba(0,0,0,0.35)] border-[rgba(255,255,255,0.08)] text-white/45 hover:border-white/25 hover:text-white/70'
+                        }`}
+                      >
+                        {go} Go
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 rounded-xl pl-3 pr-2.5 h-[40px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] transition-colors focus-within:border-[rgba(75,63,207,0.6)]">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1024}
+                      step={512}
+                      placeholder={t('settings.lancement.customRamPlaceholder')}
+                      value={customRamMb ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setCustomRamMb(raw === '' ? null : Math.max(1024, Number(raw)))
+                      }}
+                      // Masque les flèches natives du input[type=number] —
+                      // très inégales/moches d'un thème système à l'autre,
+                      // et déjà accessible au clavier (↑/↓) sans elles.
+                      className="w-24 bg-transparent text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                    <span className="text-[11px] text-white/35 flex-shrink-0">Mo</span>
+                  </div>
+                  {customRamMb !== null && customRamMb >= 1024 && (
+                    <span className="text-[11px] font-semibold text-[#7b72e9]">≈ {formatRam(customRamMb)}</span>
+                  )}
                   {customRamMb !== null && (
                     <button
                       onClick={() => setCustomRamMb(null)}
