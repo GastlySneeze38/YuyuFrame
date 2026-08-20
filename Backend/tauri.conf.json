@@ -38,7 +38,8 @@
       "../Launcher-Agent/lib/asm-analysis-9.5.jar": "agent/libs/asm-analysis-9.5.jar",
       "../Launcher-Agent/lib/asm-commons-9.5.jar": "agent/libs/asm-commons-9.5.jar",
       "../Launcher-Agent/lib/jna.jar": "agent/libs/jna.jar",
-      "../Launcher-Agent/lib/jna-platform.jar": "agent/libs/jna-platform.jar"
+      "../Launcher-Agent/lib/jna-platform.jar": "agent/libs/jna-platform.jar",
+      "../Launcher-Agent/lib/mixinextras.jar": "agent/libs/mixinextras.jar"
     }
   },
   "plugins": {

@@ -42,7 +42,7 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         return;
     }
 
-    let files: [(&str, PathBuf); 10] = [
+    let files: [(&str, PathBuf); 11] = [
         ("launcher-agent.jar", dest_dir.join("launcher-agent.jar")),
         ("content_core.dll", dest_dir.join("content_core.dll")),
         ("libs/mixin.jar", dest_libs.join("mixin.jar")),
@@ -55,6 +55,12 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         // direct de l'API Win32 depuis du Java pur, pas de nouvelle DLL Rust.
         ("libs/jna.jar", dest_libs.join("jna.jar")),
         ("libs/jna-platform.jar", dest_libs.join("jna-platform.jar")),
+        // MixinExtras (ROADMAP-agent.md Phase 3) — dépendance ajoutée cote
+        // compilation (build.bat) mais pas encore cablee au runtime (voir sa
+        // javadoc dans build.bat) : deployee ici des maintenant pour que le
+        // fichier soit deja en place chez l'utilisateur le jour ou ce cablage
+        // sera fait, plutot que de devoir attendre une mise a jour separee.
+        ("libs/mixinextras.jar", dest_libs.join("mixinextras.jar")),
     ];
 
     let mut deployed = 0;

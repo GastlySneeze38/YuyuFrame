@@ -118,6 +118,33 @@ if not exist "%LIB%\asm-commons-9.5.jar" (
     if errorlevel 1 ( echo [ERREUR] Telechargement ASM-Commons echoue & goto :error )
 )
 
+:: MixinExtras (ROADMAP-agent.md Phase 3) : compagnon de Sponge Mixin
+:: (injecteurs @WrapOperation/@ModifyReturnValue/@WrapMethod/@ModifyReceiver/
+:: @Local/@Share/@Cancellable), utilise massivement par Fabric API elle-meme.
+:: mixinextras-common (PAS -fabric/-forge, qui sont des variantes deja
+:: pre-shadees pour ces loaders precis) : le bon choix ici, cet agent a son
+:: propre IMixinService standalone (LauncherMixinService), ni Fabric Loader
+:: ni ModLauncher/Forge.
+::
+:: DEPENDANCE AJOUTEE ICI SEULEMENT (compilation) — le cablage runtime
+:: (classloader isole sous Fabric, classpath de lancement vanilla cote Rust,
+:: appel MixinExtrasBootstrap.init()) reste a faire separement, voir
+:: ROADMAP-agent.md Phase 3.2 : sans lui, ce jar compile mais n'est
+:: chargeable par aucun des deux modes de lancement en l'etat.
+::
+:: -proc:none (voir plus bas) desactive aussi l'annotation processor de
+:: mixinextras-common — INTENTIONNEL, meme raisonnement que pour celui de
+:: Mixin lui-meme (crash CI documente plus haut) : cet AP ne sert QUE la
+:: feature "Expressions" (@ModifyExpressionValue, matching semantique par
+:: @Definition) — tous les autres injecteurs (@WrapOperation etc., ceux
+:: vises par la Phase 3) sont de simples annotations lues a la transformation
+:: de classe par MixinExtras, aucun codegen de compilation requis.
+if not exist "%LIB%\mixinextras.jar" (
+    echo [Deps] Telechargement MixinExtras 0.5.4...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/io/github/llamalad7/mixinextras-common/0.5.4/mixinextras-common-0.5.4.jar' -OutFile '%LIB%\mixinextras.jar' -UseBasicParsing"
+    if errorlevel 1 ( echo [ERREUR] Telechargement MixinExtras echoue & goto :error )
+)
+
 :: JNA (BorderlessWindowNative, module "Fenetre sans bordure") : appel direct
 :: de l'API Win32 (User32/Kernel32) depuis du Java pur, sans ecrire/compiler
 :: le moindre code natif nous-memes — contrairement a content_core.dll/
@@ -204,7 +231,7 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
 :: gardes-fous ci-dessus. -proc:none l'empeche de tourner du tout, plutot
 :: que de corriger un mecanisme qu'on ne veut pas.
 "%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
-  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%OUT_STUBS%" ^
+  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
 del "%SRCLIST%" 2>nul
@@ -273,6 +300,7 @@ copy /Y "%LIB%\asm-analysis-9.5.jar"  "%LIBS_DEPLOY_DIR%\asm-analysis-9.5.jar"  
 copy /Y "%LIB%\asm-commons-9.5.jar"   "%LIBS_DEPLOY_DIR%\asm-commons-9.5.jar"    >nul
 copy /Y "%LIB%\jna.jar"               "%LIBS_DEPLOY_DIR%\jna.jar"                >nul
 copy /Y "%LIB%\jna-platform.jar"      "%LIBS_DEPLOY_DIR%\jna-platform.jar"       >nul
+copy /Y "%LIB%\mixinextras.jar"       "%LIBS_DEPLOY_DIR%\mixinextras.jar"        >nul
 if exist "%~dp0content-core\target\release\content_core.dll" (
     copy /Y "%~dp0content-core\target\release\content_core.dll" "%AGENT_DEPLOY_DIR%\content_core.dll" >nul
     echo [Deploy] content_core.dll deploye
