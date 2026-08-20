@@ -9,7 +9,6 @@
   "mixins": [],
   "client": [
     "client.TitleScreenMixin",
-    "client.KeybindsScreenMixin",
     "client.GlobalUiRenderMixin",
     "client.GlobalUiPresentMixin",
     "client.CrosshairMixin",

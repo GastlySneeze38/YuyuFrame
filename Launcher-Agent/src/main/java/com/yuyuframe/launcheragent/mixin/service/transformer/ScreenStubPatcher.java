@@ -31,46 +31,6 @@ public final class ScreenStubPatcher {
     private static String orElse(String v, String fallback) { return v != null ? v : fallback; }
 
     /**
-     * Méthodes déclarées dans nos écrans custom dont le nom "official" doit
-     * être traduit vers le nom runtime AVANT que le JVM ne les lie comme
-     * override — voir le commentaire sur visitMethod() ci-dessous. Chaque
-     * entrée : (nom+descripteur écrits dans le code source) → (classe
-     * officielle propriétaire, nom officiel, descripteur officiel) tel
-     * qu'attendu par MappingsRegistry.runtimeMethod().
-     */
-    private static final class OverrideMethods {
-        private static final class Key {
-            final String name, desc;
-            Key(String name, String desc) { this.name = name; this.desc = desc; }
-            @Override public boolean equals(Object o) {
-                if (!(o instanceof Key)) return false;
-                Key k = (Key) o;
-                return name.equals(k.name) && desc.equals(k.desc);
-            }
-            @Override public int hashCode() { return name.hashCode() * 31 + desc.hashCode(); }
-        }
-        private static final class Owner {
-            final String officialClass, officialName, officialDesc;
-            Owner(String officialClass, String officialName, String officialDesc) {
-                this.officialClass = officialClass;
-                this.officialName = officialName;
-                this.officialDesc = officialDesc;
-            }
-        }
-        private final java.util.Map<Key, Owner> table = new java.util.HashMap<>();
-
-        void register(String declaredName, String declaredDesc, String officialClass, String officialName, String officialDesc) {
-            table.put(new Key(declaredName, declaredDesc), new Owner(officialClass, officialName, officialDesc));
-        }
-
-        String translate(String declaredName, String declaredDesc) {
-            Owner o = table.get(new Key(declaredName, declaredDesc));
-            if (o == null) return declaredName;
-            return MappingsRegistry.runtimeMethod(o.officialClass, o.officialName, o.officialDesc);
-        }
-    }
-
-    /**
      * {@code Screen()} (no-arg) N'EXISTE PAS PARTOUT — trouvé en test réel
      * (voir historique du projet) : 1.8.9 (official {@code axu}) n'a QUE le
      * no-arg (vérifié par désassemblage : {@code public axu();}, aucune autre
@@ -199,22 +159,6 @@ public final class ScreenStubPatcher {
         }
         if (result != null) LITERAL_METHOD_CACHE.put(realCompSlash, result);
         return result;
-    }
-
-    private static final OverrideMethods OVERRIDE_METHODS = new OverrideMethods();
-    static {
-        // Screen.init() — voir docs/LauncherAgent/index.md, refmap TitleScreen/PackScreen.
-        OVERRIDE_METHODS.register("bg_", "()V", "gsb", "bg_", "()V");
-        // Element.mouseScrolled(double,double,double,double) — voir mappings.tiny classe "gmm".
-        OVERRIDE_METHODS.register("a", "(DDDD)Z", "gmm", "a", "(DDDD)Z");
-        // Screen.tick() — utilisé par CustomKeybindsScreen pour scruter l'état GLFW
-        // des touches (mode "écoute" de rebind) sans toucher à keyPressed (qui prend
-        // désormais un type record "KeyInput" sans stub compilable, comme "Click"
-        // pour la souris — voir docs/LauncherAgent/index.md).
-        OVERRIDE_METHODS.register("tick", "()V", "gsb", "e", "()V");
-        // Screen.shouldCloseOnEsc() — renvoyé à `false` pendant l'écoute d'une
-        // touche pour qu'Échap annule l'écoute SANS fermer tout l'écran.
-        OVERRIDE_METHODS.register("shouldCloseOnEsc", "()Z", "gsb", "aY_", "()Z");
     }
 
     public static byte[] patch(byte[] classBytes, ClassLoader loader) {
@@ -469,7 +413,12 @@ public final class ScreenStubPatcher {
                     } else if ("keyTyped".equals(name) && "(CI)V".equals(descriptor)) {
                         runtimeName = realKeyTypedVoidName;
                     } else {
-                        runtimeName = OVERRIDE_METHODS.translate(name, descriptor);
+                        // Plus aucune méthode déclarée par nos écrans custom restants
+                        // (UiScreenBase) n'a besoin de renommage hors des cas explicites
+                        // ci-dessus — inchangé (ex-table OVERRIDE_METHODS, propre à
+                        // CustomKeybindsScreen désormais supprimé, voir ROADMAP-agent
+                        // Phase 1).
+                        runtimeName = name;
                     }
                     MethodVisitor mv = super.visitMethod(access, runtimeName, remapAll(descriptor), signature, exceptions);
                     return new MethodVisitor(Opcodes.ASM9, mv) {

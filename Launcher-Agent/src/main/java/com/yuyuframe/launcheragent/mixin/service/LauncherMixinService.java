@@ -150,14 +150,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/TitleScreenMixin",
             "net/minecraft/client/gui/screen/TitleScreen",
             "init", "()V", "net/minecraft/client/gui/screen/Screen"),
-        // "<init>" n'a jamais de nom à traduire, mais le descripteur contient des
-        // types Yarn named (Screen, GameOptions) → traduits en official+intermediary
-        // par runtimeDesc() via la lookup Yarn.
-        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/KeybindsScreenMixin",
-            "net/minecraft/client/gui/screen/option/KeybindsScreen",
-            "<init>",
-            "(Lnet/minecraft/client/gui/screen/Screen;Lnet/minecraft/client/option/GameOptions;)V",
-            null),
         // render() déclaré directement sur GameRenderer — pas de repli. Point
         // d'accroche de la LOGIQUE du moteur UI custom (input/tick/ouverture
         // du menu), voir GlobalUiRenderMixin. Le DESSIN, lui, est sur

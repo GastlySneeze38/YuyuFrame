@@ -19,7 +19,6 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
     /** Classes compilées contre les stubs Screen/Text — à patcher au chargement. */
     private static final java.util.Set<String> STUB_PATCHED_SCREENS = java.util.Collections.unmodifiableSet(
         new java.util.HashSet<String>(java.util.Arrays.asList(
-            "com/yuyuframe/launcheragent/screen/CustomKeybindsScreen",
             "com/yuyuframe/launcheragent/runtime/ui/ingameui/UiScreenBase"
         )));
 
