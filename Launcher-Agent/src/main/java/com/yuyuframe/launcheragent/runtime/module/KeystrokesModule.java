@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.KeyMappingAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -7,6 +9,9 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -96,23 +101,37 @@ public final class KeystrokesModule extends SingleHudModule {
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
             try {
-                Object mc = McReflect.minecraftClient();
-                if (mc == null) return;
-                Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
-                if (options == null) return;
+                Object forward, left, back, right, jump;
 
-                // BUG TROUVÉ (audit modules, voir historique de session) :
-                // noms de champ "forwardKey"/"leftKey"/etc. (1.8.9) inversés
-                // en 1.16.5 — "keyForward"/"keyLeft"/etc. Essaie les deux.
-                // 26.1+ : "keyForward"/"keyBack" (Yarn 1.16.5+) sont eux-mêmes
-                // RENOMMÉS "keyUp"/"keyDown" côté Mojang réel (vérifié par javap
-                // sur Options.class du jar client 26.1.2) — "keyLeft"/"keyRight"/
-                // "keyJump" coïncident déjà, aucun repli nécessaire pour ceux-là.
-                Object forward = optionsFieldEither(options, "forwardKey", "keyForward", "keyUp");
-                Object left    = optionsFieldEither(options, "leftKey", "keyLeft", null);
-                Object back    = optionsFieldEither(options, "backKey", "keyBack", "keyDown");
-                Object right   = optionsFieldEither(options, "rightKey", "keyRight", null);
-                Object jump    = optionsFieldEither(options, "jumpKey", "keyJump", null);
+                // 26.1.2 sans réflexion — Options.keyUp/keyDown/keyLeft/keyRight/
+                // keyJump (champs publics, voir stub Options) obtenus via
+                // MinecraftAccessor261#la$options() (champ privé Minecraft.options).
+                Options directOptions = directOptions();
+                if (directOptions != null) {
+                    forward = directOptions.keyUp;
+                    left    = directOptions.keyLeft;
+                    back    = directOptions.keyDown;
+                    right   = directOptions.keyRight;
+                    jump    = directOptions.keyJump;
+                } else {
+                    Object mc = McReflect.minecraftClient();
+                    if (mc == null) return;
+                    Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+                    if (options == null) return;
+
+                    // BUG TROUVÉ (audit modules, voir historique de session) :
+                    // noms de champ "forwardKey"/"leftKey"/etc. (1.8.9) inversés
+                    // en 1.16.5 — "keyForward"/"keyLeft"/etc. Essaie les deux.
+                    // 26.1+ : "keyForward"/"keyBack" (Yarn 1.16.5+) sont eux-mêmes
+                    // RENOMMÉS "keyUp"/"keyDown" côté Mojang réel (vérifié par javap
+                    // sur Options.class du vrai jar 26.1.2) — "keyLeft"/"keyRight"/
+                    // "keyJump" coïncident déjà, aucun repli nécessaire pour ceux-là.
+                    forward = optionsFieldEither(options, "forwardKey", "keyForward", "keyUp");
+                    left    = optionsFieldEither(options, "leftKey", "keyLeft", null);
+                    back    = optionsFieldEither(options, "backKey", "keyBack", "keyDown");
+                    right   = optionsFieldEither(options, "rightKey", "keyRight", null);
+                    jump    = optionsFieldEither(options, "jumpKey", "keyJump", null);
+                }
 
                 trackClicks();
 
@@ -165,6 +184,21 @@ public final class KeystrokesModule extends SingleHudModule {
             } catch (Throwable ignored) {}
         }
 
+        /**
+         * 26.1.2 sans réflexion — {@code Minecraft.getInstance()} +
+         * {@code MinecraftAccessor261#la$options()}. Try/catch dédié :
+         * {@code Minecraft.getInstance()} référence le nom RÉEL, inexistant
+         * tel quel sur les autres brackets (obfusqués) — {@code null}
+         * déclenche le repli réflexion multi-bracket côté appelant.
+         */
+        private Options directOptions() {
+            try {
+                Object mc = Minecraft.getInstance();
+                if (mc instanceof MinecraftAccessor261) return ((MinecraftAccessor261) mc).la$options();
+            } catch (Throwable ignored) {}
+            return null;
+        }
+
         private Object optionsField(Object options, String yarnField, String realFieldFallback) {
             try {
                 Field f = realFieldFallback != null
@@ -194,6 +228,12 @@ public final class KeystrokesModule extends SingleHudModule {
 
         private boolean isDown(Object keyBinding) {
             if (keyBinding == null) return false;
+            // 26.1.2 sans réflexion — KeyMappingAccessor261#la$isDown() (champ privé).
+            if (keyBinding instanceof KeyMappingAccessor261) {
+                try {
+                    return ((KeyMappingAccessor261) keyBinding).la$isDown();
+                } catch (Throwable ignored) {}
+            }
             try {
                 // 26.1+ : KeyBinding→KeyMapping, champ "pressed"→"isDown" (vérifié javap).
                 return McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed", "isDown").getBoolean(keyBinding);
@@ -216,6 +256,18 @@ public final class KeystrokesModule extends SingleHudModule {
          */
         private String keyLabel(Object keyBinding) {
             if (keyBinding == null) return "?";
+            // 26.1.2 sans réflexion — KeyMappingAccessor261#la$key() (champ
+            // privé) + InputConstants.Key.getValue() (méthode publique).
+            if (keyBinding instanceof KeyMappingAccessor261) {
+                try {
+                    InputConstants.Key key = ((KeyMappingAccessor261) keyBinding).la$key();
+                    if (key != null) {
+                        int code = key.getValue();
+                        String name = com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
+                        return name == null || name.isEmpty() ? "?" : name;
+                    }
+                } catch (Throwable ignored) {}
+            }
             try {
                 Integer directCode = tryGetInt(keyBinding, "code");
                 if (directCode != null) {

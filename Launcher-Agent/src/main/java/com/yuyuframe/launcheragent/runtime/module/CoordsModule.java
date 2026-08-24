@@ -6,10 +6,20 @@ import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeManager;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Optional;
 
 /**
  * Port de PvP-Mod CoordsConfig/CoordsHud — sa propre carte, comme dans la
@@ -51,9 +61,18 @@ public final class CoordsModule extends SingleHudModule {
 
             String xLine = "X: --", yLine = "Y: --", zLine = "Z: --", facing = null, biome = null;
             try {
-                Object mc = McReflect.minecraftClient();
+                // 26.1.2 sans réflexion — Minecraft.player (champ public).
+                // Try/catch dédié : Minecraft.getInstance() référence le nom
+                // RÉEL, inexistant tel quel sur les autres brackets (obfusqués).
+                Object mc = null, playerDirect = null;
+                try {
+                    Minecraft directMc = Minecraft.getInstance();
+                    if (directMc != null && directMc.player != null) { mc = directMc; playerDirect = directMc.player; }
+                } catch (Throwable ignored) {}
+                if (playerDirect == null) mc = McReflect.minecraftClient();
                 if (mc != null) {
-                    Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
+                    Object player = playerDirect != null ? playerDirect
+                        : McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
                     if (player != null) {
                         double[] pos = playerPos(player);
                         double px = pos[0], py = pos[1], pz = pos[2];
@@ -119,6 +138,15 @@ public final class CoordsModule extends SingleHudModule {
          * chemin (champs directs, 1.8.9) d'abord, sinon les méthodes.
          */
         private double[] playerPos(Object player) throws Exception {
+            // 26.1.2 sans réflexion — getX()/getY()/getZ() (méthodes publiques,
+            // voir stub LocalPlayer). Try/catch dédié : instanceof contre un nom
+            // de classe RÉEL, inexistant tel quel sur les autres brackets.
+            try {
+                if (player instanceof LocalPlayer) {
+                    LocalPlayer lp = (LocalPlayer) player;
+                    return new double[]{ lp.getX(), lp.getY(), lp.getZ() };
+                }
+            } catch (Throwable ignored) {}
             Field xf = tryField(player, "x"), yf = tryField(player, "y"), zf = tryField(player, "z");
             if (xf != null && yf != null && zf != null) {
                 return new double[]{ xf.getDouble(player), yf.getDouble(player), zf.getDouble(player) };
@@ -152,6 +180,10 @@ public final class CoordsModule extends SingleHudModule {
          * la classe runtime du joueur.
          */
         private float playerYaw(Object player) throws Exception {
+            // 26.1.2 sans réflexion — getYRot() (méthode publique).
+            try {
+                if (player instanceof LocalPlayer) return ((LocalPlayer) player).getYRot();
+            } catch (Throwable ignored) {}
             Field yf = McReflect.fieldOnClass("net/minecraft/entity/Entity", "yaw");
             if (yf != null) return yf.getFloat(player);
             if (!yawResolveAttempted) {
@@ -312,7 +344,41 @@ public final class CoordsModule extends SingleHudModule {
             return null;
         }
 
+        /**
+         * 26.1.2 sans réflexion — {@code Minecraft.level} (champ public) →
+         * {@code getBiomeManager()} → {@code getBiome(BlockPos)} → {@code
+         * Holder<Biome>} (méthodes publiques vérifiées par javap, voir
+         * javadoc de {@link #modernGetBiome}). {@code Holder.getKey()}/{@code
+         * ResourceKey.getValue()} reprennent EXACTEMENT les mêmes noms que
+         * l'ancien chemin réflexif ({@link #registryEntryKeyPath}, jamais
+         * revérifié pour 26.1.2 spécifiquement mais repris par cohérence
+         * plutôt que de deviner un autre nom — voir stub {@code Holder}/
+         * {@code ResourceKey}).
+         */
+        private String biomeDirect(int bx, int by, int bz) {
+            try {
+                ClientLevel level = Minecraft.getInstance().level;
+                if (level == null) return null;
+                BiomeManager biomeManager = level.getBiomeManager();
+                if (biomeManager == null) return null;
+                Holder<Biome> holder = biomeManager.getBiome(new BlockPos(bx, by, bz));
+                if (holder == null) return null;
+                Optional<ResourceKey<Biome>> keyOpt = holder.getKey();
+                if (keyOpt == null || !keyOpt.isPresent()) return null;
+                Identifier id = keyOpt.get().getValue();
+                return id != null ? prettifyBiomePath(id.getPath()) : null;
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+
         private String biomeName(Object player, int bx, int by, int bz) {
+            try {
+                if (player instanceof LocalPlayer) {
+                    String direct = biomeDirect(bx, by, bz);
+                    if (direct != null) return direct;
+                }
+            } catch (Throwable ignored) {}
             try {
                 // BUG TROUVÉ (1.20.4, même cause que playerYaw) : l'ancienne
                 // résolution (McReflect.field(player.getClass(), ...), qui

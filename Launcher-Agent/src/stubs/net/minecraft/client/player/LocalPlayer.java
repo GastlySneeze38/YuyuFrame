@@ -32,4 +32,8 @@ public abstract class LocalPlayer {
     public HumanoidArm getMainArm() { return null; }
     public float getAttackStrengthScale(float adjustTicks) { return 0f; }
     public UUID getUUID() { return null; }
+    public double getX() { return 0d; }
+    public double getY() { return 0d; }
+    public double getZ() { return 0d; }
+    public float getYRot() { return 0f; }
 }

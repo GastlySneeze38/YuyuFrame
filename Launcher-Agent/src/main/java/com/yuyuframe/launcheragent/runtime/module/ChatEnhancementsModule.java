@@ -2,10 +2,15 @@ package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.User;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -169,14 +174,26 @@ public final class ChatEnhancementsModule extends LauncherModule {
             la$lastProcessedMessage = headLine;
 
             if (pingOnMention) {
-                // 26.1+ : champ "session"→"user" (type Session→User), méthode
-                // "getUsername"→"getName" (vérifiés par javap).
-                Field sessionField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "session", "user");
-                Object session = sessionField != null ? sessionField.get(mc) : null;
-                Method getUsername = session != null
-                    ? McReflect.noArgMethod(session.getClass(), "net/minecraft/client/util/Session", "getUsername", "getName")
-                    : null;
-                String username = getUsername != null ? (String) getUsername.invoke(session) : null;
+                // 26.1.2 sans réflexion — MinecraftAccessor261#la$user() (champ
+                // privé) + User.getName() (méthode publique). Repli réflexion
+                // multi-bracket sinon.
+                String username = null;
+                if (mc instanceof MinecraftAccessor261) {
+                    try {
+                        User user = ((MinecraftAccessor261) mc).la$user();
+                        if (user != null) username = user.getName();
+                    } catch (Throwable ignored) {}
+                }
+                if (username == null) {
+                    // 26.1+ : champ "session"→"user" (type Session→User), méthode
+                    // "getUsername"→"getName" (vérifiés par javap).
+                    Field sessionField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "session", "user");
+                    Object session = sessionField != null ? sessionField.get(mc) : null;
+                    Method getUsername = session != null
+                        ? McReflect.noArgMethod(session.getClass(), "net/minecraft/client/util/Session", "getUsername", "getName")
+                        : null;
+                    username = getUsername != null ? (String) getUsername.invoke(session) : null;
+                }
                 // BUG SIGNALÉ PAR L'UTILISATEUR : chaque message ENVOYÉ PAR
                 // LUI-MÊME le pingait, car le tag d'expéditeur affiché en tête
                 // de ligne ("<GhastlySneeze38> t") contient déjà son propre
@@ -243,6 +260,20 @@ public final class ChatEnhancementsModule extends LauncherModule {
      * "random.orb" (1.8.9) visé à l'origine.
      */
     private void playPingSound(Object mc) {
+        // 26.1.2 sans réflexion — Minecraft.getSoundManager()/SoundManager.play()/
+        // SimpleSoundInstance.forUI()/SoundEvents.EXPERIENCE_ORB_PICKUP (méthodes
+        // et champ publics, voir stubs). Try/catch dédié : Minecraft.getInstance()
+        // référence le nom RÉEL, inexistant tel quel sur les autres brackets.
+        try {
+            Minecraft directMc = Minecraft.getInstance();
+            if (directMc != null) {
+                net.minecraft.client.sounds.SoundManager soundManager = directMc.getSoundManager();
+                if (soundManager != null) {
+                    soundManager.play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f));
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {}
         try {
             if (!pingSoundResolveAttempted) {
                 pingSoundResolveAttempted = true;

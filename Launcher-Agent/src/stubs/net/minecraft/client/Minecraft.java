@@ -2,8 +2,10 @@ package net.minecraft.client;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.sounds.SoundManager;
 
 /**
  * Stub compile-only (26.1+) — cible de mixin ({@code ScreenSetMixin261}, etc.)
@@ -25,6 +27,8 @@ public abstract class Minecraft {
     public abstract void setScreen(Screen screen);
     public abstract RenderTarget getMainRenderTarget();
     public abstract ClientPacketListener getConnection();
+    public abstract SoundManager getSoundManager();
 
     public LocalPlayer player;
+    public ClientLevel level;
 }

@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.Options;
+import net.minecraft.client.User;
 import net.minecraft.client.Window;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
@@ -49,4 +50,8 @@ public interface MinecraftAccessor261 {
     /** Ajouté pour {@code FpsModule} — champ STATIC (accesseur Sponge Mixin valide sur un champ statique, appelable depuis n'importe quelle instance). */
     @Accessor("fps")
     int la$fps();
+
+    /** Ajouté pour {@code ChatEnhancementsModule} (pseudo local, détection de mention). */
+    @Accessor("user")
+    User la$user();
 }

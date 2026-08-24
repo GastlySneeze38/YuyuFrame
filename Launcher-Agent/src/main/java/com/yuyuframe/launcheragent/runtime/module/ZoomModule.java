@@ -1,5 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -7,6 +10,8 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 
 import java.lang.reflect.Field;
 
@@ -144,16 +149,16 @@ public final class ZoomModule extends LauncherModule {
             int scroll = readScrollDelta();
 
             boolean down = isZoomKeyDown();
-            Field fovField = fovField();
+            Object fovHandle = fovHandle();
             Object options = optionsInstance();
-            if (fovField == null || options == null) return;
+            if (fovHandle == null || options == null) return;
 
             if (down && !zooming) {
                 zooming = true;
                 scrollOffsetFov = 0;
                 if (!active) {
                     active = true;
-                    savedFov = readOptionValue(fovField, options);
+                    savedFov = readOptionValue(fovHandle, options);
                     effectiveFov = savedFov;
                     transitionRange = Math.max(1.0, Math.abs(savedFov - zoomFov));
                     saveSensitivity(options);
@@ -187,7 +192,7 @@ public final class ZoomModule extends LauncherModule {
             double targetFov = zooming ? (zoomFov - scrollOffsetFov) : savedFov;
 
             effectiveFov = stepToward(effectiveFov, targetFov);
-            writeOptionValue(fovField, options, effectiveFov);
+            writeOptionValue(fovHandle, options, effectiveFov);
             applySensitivityScale(options);
 
             // Transition de sortie terminée (touche relâchée ET la valeur
@@ -195,7 +200,7 @@ public final class ZoomModule extends LauncherModule {
             // (élimine toute erreur d'arrondi accumulée par le lissage) et
             // libération de l'état, pour qu'un futur appui reparte propre.
             if (!zooming && Math.abs(effectiveFov - savedFov) < 0.05) {
-                writeOptionValue(fovField, options, savedFov);
+                writeOptionValue(fovHandle, options, savedFov);
                 restoreSensitivity(options);
                 active = false;
                 savedFov = -1;
@@ -228,10 +233,10 @@ public final class ZoomModule extends LauncherModule {
         if (enabled) return;
         if (active && savedFov >= 0) {
             try {
-                Field fovField = fovField();
+                Object fovHandle = fovHandle();
                 Object options = optionsInstance();
-                if (fovField != null && options != null) {
-                    writeOptionValue(fovField, options, savedFov);
+                if (fovHandle != null && options != null) {
+                    writeOptionValue(fovHandle, options, savedFov);
                     restoreSensitivity(options);
                 }
             } catch (Throwable ignored) {
@@ -282,14 +287,38 @@ public final class ZoomModule extends LauncherModule {
      * Généralisé (ex-readFov/writeFov) pour aussi servir à {@code
      * sensitivity} (même famille d'objet sur 26.1.2 : {@code OptionInstance<
      * Double>}, confirmé par javap) — voir applySensitivityScale().
+     *
+     * {@code handle} est soit un {@code Field} (repli réflexion multi-bracket,
+     * comportement inchangé), soit un {@code OptionInstanceAccessor261}
+     * (26.1.2 sans réflexion — voir {@link #fovHandle()}/{@link
+     * #sensitivityHandle}) : le champ {@code .value} de {@code OptionInstance}
+     * est écrit DIRECTEMENT via l'accessor, jamais via {@code setValue()} —
+     * même raison que {@link McReflect#simpleOptionSetValue} (validation
+     * vanilla qui clampe fov/sensibilité, voir sa javadoc) — et la MÊME
+     * détection de boxing Integer/Float/Double par le type de la valeur
+     * COURANTE, reprise ici à l'identique.
      */
-    private double readOptionValue(Field field, Object options) throws Exception {
+    private double readOptionValue(Object handle, Object options) throws Exception {
+        if (handle instanceof OptionInstanceAccessor261) {
+            return ((Number) ((OptionInstanceAccessor261) handle).la$value()).doubleValue();
+        }
+        Field field = (Field) handle;
         if (field.getType() == double.class) return field.getDouble(options);
         if (field.getType() == float.class) return field.getFloat(options);
         return McReflect.simpleOptionGetValue(field.get(options));
     }
 
-    private void writeOptionValue(Field field, Object options, double value) throws Exception {
+    private void writeOptionValue(Object handle, Object options, double value) throws Exception {
+        if (handle instanceof OptionInstanceAccessor261) {
+            OptionInstanceAccessor261 acc = (OptionInstanceAccessor261) handle;
+            Object current = acc.la$value();
+            Object boxed = current instanceof Integer ? (Object) Integer.valueOf((int) Math.round(value))
+                : current instanceof Float ? (Object) Float.valueOf((float) value)
+                : (Object) Double.valueOf(value);
+            acc.la$setValue(boxed);
+            return;
+        }
+        Field field = (Field) handle;
         if (field.getType() == double.class) { field.setDouble(options, value); return; }
         if (field.getType() == float.class) { field.setFloat(options, (float) value); return; }
         McReflect.simpleOptionSetValue(field.get(options), value);
@@ -309,11 +338,11 @@ public final class ZoomModule extends LauncherModule {
     private void applySensitivityScale(Object options) {
         if (savedSensitivity < 0 || sensitivityCompensation <= 0f || savedFov <= 0) return;
         try {
-            Field field = sensitivityField(options);
-            if (field == null) return;
+            Object handle = sensitivityHandle(options);
+            if (handle == null) return;
             double ratio = Math.min(1.0, effectiveFov / savedFov);
             double scale = 1.0 - (1.0 - ratio) * (sensitivityCompensation / 100.0);
-            writeOptionValue(field, options, savedSensitivity * scale);
+            writeOptionValue(handle, options, savedSensitivity * scale);
         } catch (Throwable t) {
             LauncherLog.err("[ZoomModule] applySensitivityScale: " + t);
         }
@@ -321,8 +350,8 @@ public final class ZoomModule extends LauncherModule {
 
     private void saveSensitivity(Object options) {
         try {
-            Field field = sensitivityField(options);
-            savedSensitivity = field != null ? readOptionValue(field, options) : -1;
+            Object handle = sensitivityHandle(options);
+            savedSensitivity = handle != null ? readOptionValue(handle, options) : -1;
         } catch (Throwable t) {
             savedSensitivity = -1;
         }
@@ -331,23 +360,27 @@ public final class ZoomModule extends LauncherModule {
     private void restoreSensitivity(Object options) {
         if (savedSensitivity < 0) return;
         try {
-            Field field = sensitivityField(options);
-            if (field != null) writeOptionValue(field, options, savedSensitivity);
+            Object handle = sensitivityHandle(options);
+            if (handle != null) writeOptionValue(handle, options, savedSensitivity);
         } catch (Throwable ignored) {
         }
         savedSensitivity = -1;
     }
 
     /**
-     * Yarn "mouseSensitivity" (nom historique 1.8.9) → réel "sensitivity"
-     * (vérifié par javap sur le jar client 26.1.2 : {@code OptionInstance<
-     * Double> sensitivity}) — si la résolution échoue sur un bracket non
-     * testé, {@link #applySensitivityScale} se dégrade silencieusement (le
-     * zoom lui-même continue de fonctionner, seule la compensation de
-     * sensibilité ne s'applique pas), même philosophie que le reste de ce
-     * module face à un champ introuvable.
+     * 26.1.2 sans réflexion — {@code OptionsAccessor261#la$sensitivity()}
+     * (champ privé). Repli : Yarn "mouseSensitivity" (nom historique 1.8.9)
+     * → réel "sensitivity" (vérifié par javap sur le vrai jar 26.1.2 :
+     * {@code OptionInstance<Double> sensitivity}) — si la résolution échoue
+     * sur un bracket non testé, {@link #applySensitivityScale} se dégrade
+     * silencieusement (le zoom lui-même continue de fonctionner, seule la
+     * compensation de sensibilité ne s'applique pas).
      */
-    private Field sensitivityField(Object options) {
+    private Object sensitivityHandle(Object options) {
+        if (options instanceof OptionsAccessor261) {
+            Object sensOption = ((OptionsAccessor261) options).la$sensitivity();
+            if (sensOption instanceof OptionInstanceAccessor261) return sensOption;
+        }
         return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "mouseSensitivity", "sensitivity");
     }
 
@@ -372,15 +405,38 @@ public final class ZoomModule extends LauncherModule {
         return (boolean) McReflect.rawMethod(keyboard, "isKeyDown", int.class).invoke(null, cachedKeyCode);
     }
 
+    /**
+     * 26.1.2 sans réflexion — {@code Minecraft.getInstance()} +
+     * {@code MinecraftAccessor261#la$options()} (champ privé). Try/catch
+     * dédié : {@code Minecraft.getInstance()} référence le nom RÉEL,
+     * inexistant tel quel sur les autres brackets (obfusqués) — repli
+     * réflexion multi-bracket sinon.
+     */
     private Object optionsInstance() throws Exception {
+        try {
+            Object mc = Minecraft.getInstance();
+            if (mc instanceof MinecraftAccessor261) {
+                Options options = ((MinecraftAccessor261) mc).la$options();
+                if (options != null) return options;
+            }
+        } catch (Throwable ignored) {}
         Object mc = McReflect.minecraftClient();
         if (mc == null) return null;
         return McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
     }
 
-    private Field fovField() throws Exception {
+    /**
+     * 26.1.2 sans réflexion — {@code OptionsAccessor261#la$fov()} (champ
+     * privé). Repli réflexion sinon — voir {@link #sensitivityHandle}, même
+     * principe.
+     */
+    private Object fovHandle() throws Exception {
         Object options = optionsInstance();
         if (options == null) return null;
+        if (options instanceof OptionsAccessor261) {
+            Object fovOption = ((OptionsAccessor261) options).la$fov();
+            if (fovOption instanceof OptionInstanceAccessor261) return fovOption;
+        }
         return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "fov");
     }
 }
