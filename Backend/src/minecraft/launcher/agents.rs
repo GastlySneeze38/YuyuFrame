@@ -135,6 +135,14 @@ pub(super) async fn setup_launcher_agent(
     let asm_util_jar     = libs_dir.join("asm-util-9.5.jar");
     let asm_analysis_jar = libs_dir.join("asm-analysis-9.5.jar");
     let asm_commons_jar  = libs_dir.join("asm-commons-9.5.jar");
+    // MixinExtras (ROADMAP-agent.md Phase 3) — même traitement que ASM :
+    // Fabric Loader 0.15.0+ embarque déjà sa propre copie (mixinextras-fabric),
+    // donc même risque "duplicate classes" que pour ASM si on ajoute la nôtre
+    // en plus sur le classpath du jeu sous Fabric. Contrairement à Mixin
+    // lui-même (jamais partageable, voir l'isolation par classloader côté
+    // Java), MixinExtras n'a pas ce problème de singleton partagé — le skip
+    // simple suffit ici.
+    let mixinextras_jar = libs_dir.join("mixinextras.jar");
     // JNA (module optimodule "Fenêtre sans bordure", BorderlessWindowNative) —
     // pas de conflit "duplicate classes" façon ASM/Fabric, donc ajoutée au
     // classpath dans tous les cas (vanilla ET Fabric), pas seulement !is_fabric.
@@ -196,7 +204,7 @@ pub(super) async fn setup_launcher_agent(
     let is_fabric = matches!(loader, Some("fabric") | Some("quilt"));
     let mut extra_cp: Vec<String> = Vec::new();
     if !is_fabric {
-        for jar in [&asm_jar, &asm_tree_jar, &asm_util_jar, &asm_analysis_jar, &asm_commons_jar] {
+        for jar in [&asm_jar, &asm_tree_jar, &asm_util_jar, &asm_analysis_jar, &asm_commons_jar, &mixinextras_jar] {
             if jar.exists() {
                 extra_cp.push(jar.to_string_lossy().to_string());
             } else {

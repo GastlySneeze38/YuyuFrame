@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-20-v670";
+    private static final String BUILD_VERSION = "2026-08-24-v671";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -184,6 +184,7 @@ public class LauncherAgent {
             String[] libJarNames = {
                 "mixin.jar", "asm-9.5.jar", "asm-tree-9.5.jar",
                 "asm-util-9.5.jar", "asm-analysis-9.5.jar", "asm-commons-9.5.jar",
+                "mixinextras.jar",
             };
             List<URL> urls = new ArrayList<>();
             urls.add(new java.io.File(agentDir, "launcher-agent.jar").toURI().toURL());

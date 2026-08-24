@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.mixin;
 
+import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
@@ -29,6 +30,16 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
 
     @Override
     public void onLoad(String mixinPackage) {
+        // MixinExtras (ROADMAP-agent.md Phase 3) — s'enregistre dans L'INSTANCE
+        // Mixin qui appelle onLoad() ici, jamais celle de Fabric : sous Fabric,
+        // ce plugin est chargé par le classloader isolé (voir LauncherAgent.
+        // startIsolated()/IsolatedBootstrap), donc cet appel rejoint notre
+        // propre instance Mixin isolée — pas de partage de singleton avec
+        // Fabric (même raisonnement que l'isolation de Mixin lui-même, voir
+        // docs/LauncherAgent/index.md). Appelé une seule fois par lancement
+        // (un seul bracket résolu, voir VersionBracketRegistry), pas besoin
+        // de garde d'idempotence.
+        MixinExtrasBootstrap.init();
         cfg = LauncherLog.loadPropertiesFromDefaultLocations(getClass().getClassLoader());
         applyMixinDebugProperties();
         LauncherLog.loadConfig(cfg);
