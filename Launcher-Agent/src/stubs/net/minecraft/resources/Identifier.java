@@ -11,4 +11,13 @@ package net.minecraft.resources;
 public final class Identifier {
     public String getPath() { return ""; }
     public String getNamespace() { return ""; }
+
+    /**
+     * Visibilité NON confirmée dans le code existant (contrairement au
+     * reste de ce stub) — tenté en méthode statique publique par analogie
+     * avec {@code Component.literal(String)}/{@code Identifier.of(...)}
+     * (motif habituel des factories vanilla). À vérifier en jeu avant de
+     * s'appuyer dessus (voir audit ROADMAP-agent.md §3.3, moteur graphique).
+     */
+    public static Identifier withDefaultNamespace(String path) { return null; }
 }

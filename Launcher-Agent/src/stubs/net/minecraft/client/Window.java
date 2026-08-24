@@ -8,4 +8,5 @@ package net.minecraft.client;
  */
 public abstract class Window {
     public long handle() { return 0L; }
+    public int getGuiScaledWidth() { return 0; }
 }

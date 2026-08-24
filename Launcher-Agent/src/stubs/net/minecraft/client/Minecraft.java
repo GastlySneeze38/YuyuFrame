@@ -28,6 +28,7 @@ public abstract class Minecraft {
     public abstract RenderTarget getMainRenderTarget();
     public abstract ClientPacketListener getConnection();
     public abstract SoundManager getSoundManager();
+    public abstract Window getWindow();
 
     public LocalPlayer player;
     public ClientLevel level;
