@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -8,6 +9,9 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern;
+import net.minecraft.client.CameraType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 
 import java.lang.reflect.Method;
 
@@ -222,6 +226,12 @@ public final class FreelookModule extends LauncherModule {
             if (engaged == wasEngaged) return;
             wasEngaged = engaged;
 
+            if (applyCameraTypeViaAccessor(engaged)) return;
+
+            // Repli réflexion — MinecraftAccessor261 (apimixin/v26_1/core/,
+            // voir audit ROADMAP-agent.md §3.3) pas encore tissé, en attente
+            // du basculement JSON : chemin IDENTIQUE à avant, plus jamais
+            // atteint le jour où applyCameraTypeViaAccessor() réussira.
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
             java.lang.reflect.Field fOptions = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options");
@@ -255,6 +265,31 @@ public final class FreelookModule extends LauncherModule {
         }
     }
 
+    /**
+     * Chemin SANS réflexion (voir {@code apimixin.v26_1.core.MinecraftAccessor261})
+     * — force/restaure la vue 3e personne via {@code Options.getCameraType()}/
+     * {@code setCameraType(CameraType)} (méthodes publiques, appel direct) +
+     * l'accessor pour le champ privé {@code Minecraft.options}. {@code true}
+     * si utilisé avec succès (Mixin tissé), auquel cas l'appelant NE DOIT PAS
+     * retomber sur la réflexion. {@code false} si {@code MinecraftAccessor261}
+     * n'est pas encore tissé ({@code mc} n'implémente pas l'interface) — repli
+     * ATTENDU tant que le basculement JSON n'est pas fait, pas une erreur.
+     */
+    private boolean applyCameraTypeViaAccessor(boolean engaged) {
+        Object mc = Minecraft.getInstance();
+        if (!(mc instanceof MinecraftAccessor261)) return false;
+        Options options = ((MinecraftAccessor261) mc).la$options();
+        if (options == null) return false;
+        if (engaged) {
+            savedCameraType = options.getCameraType();
+            options.setCameraType(CameraType.THIRD_PERSON_BACK);
+        } else if (savedCameraType != null) {
+            options.setCameraType((CameraType) savedCameraType);
+            savedCameraType = null;
+        }
+        return true;
+    }
+
     /** Accumule un delta caméra-only (degrés) au lieu de tourner le joueur — voir MouseHandlerFreelookMixin261. */
     public static void accumulate(double dYaw, double dPitch) {
         active = true;
@@ -286,7 +321,8 @@ public final class FreelookModule extends LauncherModule {
             // laisser bloquée en 3e personne, même chemin que onTick()
             // sinon suivi (le module ne tourne plus, wasEngaged ne
             // redeviendrait jamais faux tout seul).
-            if (wasEngaged && savedCameraType != null) {
+            if (wasEngaged && savedCameraType != null && !restoreCameraTypeViaAccessor()) {
+                // Repli réflexion — voir applyCameraTypeViaAccessor(), même principe.
                 try {
                     Object mc = McReflect.minecraftClient();
                     if (mc != null) {
@@ -304,6 +340,16 @@ public final class FreelookModule extends LauncherModule {
             wasEngaged = false;
             savedCameraType = null;
         }
+    }
+
+    /** Chemin SANS réflexion pour la restauration — voir {@link #applyCameraTypeViaAccessor}, même principe. */
+    private boolean restoreCameraTypeViaAccessor() {
+        Object mc = Minecraft.getInstance();
+        if (!(mc instanceof MinecraftAccessor261)) return false;
+        Options options = ((MinecraftAccessor261) mc).la$options();
+        if (options == null) return false;
+        options.setCameraType((CameraType) savedCameraType);
+        return true;
     }
 
     /** Changement de mode en cours de partie (ex: touche restée enfoncée en passant de "Basculer" à "Maintenir") — repart d'un état propre plutôt que de garder un état "basculé" fantôme. */

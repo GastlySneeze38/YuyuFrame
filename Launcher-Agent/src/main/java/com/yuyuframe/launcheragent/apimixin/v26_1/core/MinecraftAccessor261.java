@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import net.minecraft.client.MouseHandler;
+import net.minecraft.client.Options;
 import net.minecraft.client.Window;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
@@ -40,4 +41,8 @@ public interface MinecraftAccessor261 {
 
     @Accessor("mouseHandler")
     MouseHandler la$mouseHandler();
+
+    /** Ajouté pour {@code FreelookModule} (forçage/restauration de la vue 3e personne) — voir sa javadoc. */
+    @Accessor("options")
+    Options la$options();
 }
