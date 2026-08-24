@@ -105,6 +105,20 @@ public final class HudConfigStore {
         }
     }
 
+    /**
+     * Force une relecture depuis le disque au prochain {@link #applyTo}/accès
+     * — {@link #ensureLoaded()} ne charge normalement qu'UNE FOIS par
+     * process. Voir {@code YfCommands} ("/yf reload-config", Phase 4.5) :
+     * l'appelant doit ensuite rappeler {@link #applyTo(LauncherModule)} pour
+     * CHAQUE module de {@code ModuleRegistry.all()} pour que les nouvelles
+     * valeurs soient effectivement réappliquées.
+     */
+    public static synchronized void reload() {
+        DATA.clear();
+        loaded = false;
+        ensureLoaded();
+    }
+
     /** Écrase les valeurs par défaut du module (déjà fixées par son constructeur) avec ce qui a été persisté, s'il y a quelque chose. */
     public static void applyTo(LauncherModule module) {
         ensureLoaded();

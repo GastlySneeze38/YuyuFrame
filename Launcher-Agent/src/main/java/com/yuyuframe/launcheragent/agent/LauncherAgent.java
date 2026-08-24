@@ -29,7 +29,10 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-24-v692";
+    private static final String BUILD_VERSION = "2026-08-24-v693";
+
+    /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
+    public static String buildVersion() { return BUILD_VERSION; }
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -60,6 +63,17 @@ public class LauncherAgent {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save(); } catch (Throwable ignored) {}
         }, "YuyuFrame-ConfigSave"));
+
+        // Phase 4.5 (ROADMAP-agent.md) — système de commandes client. Pur
+        // Java, aucune dépendance au jeu : sûr à exécuter inconditionnellement
+        // ici, avant tout le reste. Le hook qu'il enregistre (HookPoint.CHAT_SEND)
+        // reste dormant tant que ChatSendMixin261 (apimixin/v26_1/chat/) n'est
+        // pas tissé — comme tout apimixin cette session, voir feedback mémoire.
+        try {
+            com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry.bootstrap();
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] ClientCommandRegistry.bootstrap() échoué (non bloquant) : " + t);
+        }
 
         // Réchauffe UiFont/AWT Toolkit ICI, MAINTENANT, PENDANT premain() — pas
         // un simple souci de perf. UiFont mesure le texte via un
