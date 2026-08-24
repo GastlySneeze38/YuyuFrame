@@ -20,7 +20,8 @@ abstract class HudExtractAirBubblesMixin261 {
     @WrapOperation(method = "extractPlayerHealth",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractAirBubbles(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/world/entity/player/Player;III)V"))
     private void la$dispatchAirBubbles(Gui instance, GuiGraphicsExtractor graphics, Player player, int heartCount, int top, int left, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_AIR_BUBBLES, graphics);
-        renderVanilla.call(instance, graphics, player, heartCount, top, left);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_AIR_BUBBLES, graphics)) {
+            renderVanilla.call(instance, graphics, player, heartCount, top, left);
+        }
     }
 }

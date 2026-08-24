@@ -22,7 +22,8 @@ abstract class HudExtractHeartsMixin261 {
     private void la$dispatchHearts(Gui instance, GuiGraphicsExtractor graphics, Player player, int x, int y, int lines,
                                     int regeneratingHeartIndex, float maxHealth, int lastHealth, int health,
                                     int absorption, boolean blinking, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_HEARTS, graphics);
-        renderVanilla.call(instance, graphics, player, x, y, lines, regeneratingHeartIndex, maxHealth, lastHealth, health, absorption, blinking);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_HEARTS, graphics)) {
+            renderVanilla.call(instance, graphics, player, x, y, lines, regeneratingHeartIndex, maxHealth, lastHealth, health, absorption, blinking);
+        }
     }
 }

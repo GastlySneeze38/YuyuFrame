@@ -22,7 +22,8 @@ abstract class HudExtractCrosshairMixin261 {
     @WrapOperation(method = "extractRenderState",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractCrosshair(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V"))
     private void la$dispatchCrosshair(Gui instance, GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_CROSSHAIR, graphics);
-        renderVanilla.call(instance, graphics, deltaTracker);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_CROSSHAIR, graphics)) {
+            renderVanilla.call(instance, graphics, deltaTracker);
+        }
     }
 }

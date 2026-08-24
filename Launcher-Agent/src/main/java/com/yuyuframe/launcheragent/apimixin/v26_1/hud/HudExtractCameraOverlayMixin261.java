@@ -19,11 +19,14 @@ import org.spongepowered.asm.mixin.injection.At;
  *
  * Simplification volontaire par rapport à l'original : Fabric route ce hook
  * à travers son propre système de couches ({@code HudElementRegistryImpl},
- * before/after/instead par élément) — non reproduit ici. {@link
- * VanillaHookRegistry#dispatch} tourne AVANT le dessin vanilla, qui a
- * ensuite TOUJOURS lieu (pas de remplacement/annulation possible côté module
- * pour l'instant — capacité à ajouter plus tard si un module en a réellement
- * besoin, voir ROADMAP-agent.md §3.2).
+ * before/after/instead par élément COMPOSABLES) — non reproduit à ce niveau
+ * de détail. {@link VanillaHookRegistry#dispatch} tourne AVANT le dessin
+ * vanilla ; si {@link VanillaHookRegistry.HookHandler#handle} d'AU MOINS UN
+ * module enregistré retourne {@code true} (voir sa javadoc), le dessin
+ * vanilla est SAUTÉ — un module peut donc remplacer entièrement cet élément
+ * HUD. Tous les handlers enregistrés sont appelés dans tous les cas (pas de
+ * court-circuit), donc un module purement observateur reçoit toujours sa
+ * notification même si un autre a pris la main sur le dessin.
  */
 @Mixin(targets = "net.minecraft.client.gui.Gui")
 abstract class HudExtractCameraOverlayMixin261 {
@@ -31,7 +34,8 @@ abstract class HudExtractCameraOverlayMixin261 {
     @WrapOperation(method = "extractRenderState",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractCameraOverlays(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V"))
     private void la$dispatchCameraOverlay(Gui instance, GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_CAMERA_OVERLAY, graphics);
-        renderVanilla.call(instance, graphics, deltaTracker);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_CAMERA_OVERLAY, graphics)) {
+            renderVanilla.call(instance, graphics, deltaTracker);
+        }
     }
 }

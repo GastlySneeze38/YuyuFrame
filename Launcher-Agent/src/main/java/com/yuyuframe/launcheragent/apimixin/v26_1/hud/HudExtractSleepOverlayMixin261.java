@@ -20,7 +20,8 @@ abstract class HudExtractSleepOverlayMixin261 {
     @WrapOperation(method = "extractRenderState",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractSleepOverlay(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V"))
     private void la$dispatchSleepOverlay(Gui instance, GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_SLEEP_OVERLAY, graphics);
-        renderVanilla.call(instance, graphics, deltaTracker);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_SLEEP_OVERLAY, graphics)) {
+            renderVanilla.call(instance, graphics, deltaTracker);
+        }
     }
 }

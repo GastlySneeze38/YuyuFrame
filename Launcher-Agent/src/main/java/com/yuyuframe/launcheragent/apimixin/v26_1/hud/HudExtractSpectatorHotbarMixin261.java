@@ -22,7 +22,8 @@ abstract class HudExtractSpectatorHotbarMixin261 {
     @WrapOperation(method = "extractHotbarAndDecorations",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/spectator/SpectatorGui;extractHotbar(Lnet/minecraft/client/gui/GuiGraphicsExtractor;)V"))
     private void la$dispatchSpectatorHotbar(SpectatorGui instance, GuiGraphicsExtractor graphics, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_HOTBAR, graphics);
-        renderVanilla.call(instance, graphics);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_HOTBAR, graphics)) {
+            renderVanilla.call(instance, graphics);
+        }
     }
 }

@@ -22,7 +22,8 @@ abstract class HudExtractArmorMixin261 {
     @WrapOperation(method = "extractPlayerHealth",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractArmor(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/world/entity/player/Player;IIII)V"))
     private void la$dispatchArmor(GuiGraphicsExtractor graphics, Player player, int i, int j, int k, int x, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_ARMOR, graphics);
-        renderVanilla.call(graphics, player, i, j, k, x);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_ARMOR, graphics)) {
+            renderVanilla.call(graphics, player, i, j, k, x);
+        }
     }
 }

@@ -90,8 +90,6 @@ public enum HookPoint {
     LEVEL_BLOCK_OUTLINE_EXTRACT,
     /** Voir {@code LevelRendererMixin#extractLevel} (Inject RETURN). */
     LEVEL_EXTRACT,
-    /** Voir {@code ClientLevelMixin} (fabric-rendering-v1) {@code #onChunkLoaded}/{@code #clearTintCaches}. */
-    CLIENT_LEVEL_TINT_CACHE_CLEAR,
     /** Voir {@code GuiRenderStateMixin#reset} (Inject TAIL) — même classe que UiVanillaItemRenderer exploite déjà par réflexion manuelle. */
     GUI_RENDER_STATE_RESET,
     /** Voir {@code GameRendererMixin#extract} (Inject HEAD) — passe d'extraction générale par frame. */
@@ -106,7 +104,14 @@ public enum HookPoint {
     KEYBOARD_KEY,
     /** Voir {@code MinecraftMixin#setScreen} (screen-api-v1) — transition d'écran. */
     SCREEN_SET,
-    /** Voir {@code AbstractContainerScreenMixin} — {@code extractRenderStateWithTooltipAndSubtitles}, point déjà identifié pour ShulkerPreviewModule. */
+    /**
+     * Voir {@code ScreenMixin#extractWithTooltip} (fabric-screen-api-v1) —
+     * CORRECTIF : cible en réalité {@code Screen} en général (juste après
+     * {@code extractBackground}), pas spécifiquement {@code
+     * AbstractContainerScreen} malgré le nom de cette entrée — c'est là que
+     * ShulkerPreviewModule devra s'accrocher, {@code AbstractContainerScreen}
+     * n'en étant qu'un cas particulier.
+     */
     CONTAINER_SCREEN_EXTRACT_TOOLTIP,
     /** Voir {@code client.MultiPlayerGameModeMixin} (events-interaction-v0) — clic gauche/attaque bloc. */
     ATTACK_BLOCK,

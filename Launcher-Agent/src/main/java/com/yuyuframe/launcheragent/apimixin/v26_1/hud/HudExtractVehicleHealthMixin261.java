@@ -22,7 +22,8 @@ abstract class HudExtractVehicleHealthMixin261 {
     @WrapOperation(method = "extractHotbarAndDecorations",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractVehicleHealth(Lnet/minecraft/client/gui/GuiGraphicsExtractor;)V"))
     private void la$dispatchVehicleHealth(Gui instance, GuiGraphicsExtractor graphics, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_VEHICLE_HEALTH, graphics);
-        renderVanilla.call(instance, graphics);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_VEHICLE_HEALTH, graphics)) {
+            renderVanilla.call(instance, graphics);
+        }
     }
 }

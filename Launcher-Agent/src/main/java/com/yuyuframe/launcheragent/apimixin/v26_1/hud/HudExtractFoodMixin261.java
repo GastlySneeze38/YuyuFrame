@@ -20,7 +20,8 @@ abstract class HudExtractFoodMixin261 {
     @WrapOperation(method = "extractPlayerHealth",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractFood(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/world/entity/player/Player;II)V"))
     private void la$dispatchFood(Gui instance, GuiGraphicsExtractor graphics, Player player, int top, int right, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_FOOD, graphics);
-        renderVanilla.call(instance, graphics, player, top, right);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_FOOD, graphics)) {
+            renderVanilla.call(instance, graphics, player, top, right);
+        }
     }
 }

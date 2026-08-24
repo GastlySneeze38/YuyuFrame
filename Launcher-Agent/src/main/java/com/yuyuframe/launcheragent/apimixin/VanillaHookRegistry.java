@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * Dispatcher générique par {@link HookPoint} — voir ROADMAP-agent.md §3.2.
@@ -31,15 +30,48 @@ import java.util.function.Consumer;
  * décision actée : simplicité de cette première version, chaque module
  * caste vers le type réel qu'il sait attendre pour CE HookPoint précis
  * (documenté dans le commentaire du mixin correspondant dans {@code apimixin/}).
+ *
+ * ENRICHISSEMENT (annulation/remplacement — voir la javadoc de {@link HookHandler}) :
+ * {@link #dispatch} retourne désormais {@code boolean} au lieu de {@code void}
+ * — {@code true} si AU MOINS UN handler a pris en charge le rendu lui-même,
+ * auquel cas le mixin appelant NE DOIT PAS dessiner vanilla ensuite. Pour
+ * l'instant, seuls les mixins de {@code apimixin/v26_1/hud/} consultent
+ * réellement cette valeur de retour (les autres catégories continuent à
+ * l'ignorer, donc à toujours dessiner vanilla en plus — comportement
+ * inchangé pour elles, migration au cas par cas plus tard si besoin).
  */
 public final class VanillaHookRegistry {
 
     private VanillaHookRegistry() {}
 
-    private static final Map<HookPoint, List<Consumer<Object>>> HANDLERS = new EnumMap<>(HookPoint.class);
+    /**
+     * Handler enregistré pour un {@link HookPoint}.
+     *
+     * @return {@code true} si CE handler a lui-même pris en charge le rendu
+     *         (dessiné quelque chose à la place de vanilla, ou décidé de ne
+     *         rien dessiner du tout) — le mixin appelant doit alors sauter
+     *         son propre appel vanilla. {@code false} pour un handler
+     *         purement notificatif (le cas de loin le plus courant — ex:
+     *         un module qui veut juste savoir qu'un élément va se dessiner,
+     *         sans le remplacer) : retourner {@code false} systématiquement
+     *         équivaut exactement à l'ancien {@code Consumer<Object>}.
+     *
+     *         Si PLUSIEURS handlers sont enregistrés sur le même HookPoint,
+     *         TOUS sont appelés (pas de court-circuit au premier qui prend
+     *         la main) — un module qui observe seulement ne doit pas être
+     *         privé de sa notification parce qu'un autre a remplacé le
+     *         dessin vanilla. Le résultat final de {@link #dispatch} est le
+     *         OU logique de tous les retours.
+     */
+    @FunctionalInterface
+    public interface HookHandler {
+        boolean handle(Object ctx);
+    }
+
+    private static final Map<HookPoint, List<HookHandler>> HANDLERS = new EnumMap<>(HookPoint.class);
 
     /** Enregistre {@code handler} pour {@code point} — appelé à chaque {@link #dispatch} de ce HookPoint, tant que le module reste construit (pas de désenregistrement : le tissage Mixin est figé au chargement de classe, voir la javadoc de {@link HookPoint}). */
-    public static void register(HookPoint point, Consumer<Object> handler) {
+    public static void register(HookPoint point, HookHandler handler) {
         HANDLERS.computeIfAbsent(point, p -> new ArrayList<>()).add(handler);
     }
 
@@ -49,18 +81,27 @@ public final class VanillaHookRegistry {
      * Chaque handler est isolé par son propre {@code try/catch} : un module
      * qui lève ne doit jamais empêcher les autres modules enregistrés sur ce
      * même {@code point} de recevoir l'appel, ni faire remonter l'exception
-     * dans le pipeline de rendu/tick vanilla qui a déclenché ce hook.
+     * dans le pipeline de rendu/tick vanilla qui a déclenché ce hook — une
+     * exception compte comme {@code false} (pas de prise en charge) pour ce
+     * handler précis.
+     *
+     * @return {@code true} si au moins un handler a retourné {@code true}
+     *         (voir {@link HookHandler}) — l'appelant doit alors sauter son
+     *         dessin vanilla. {@code false} si la liste est vide/absente ou
+     *         si tous les handlers ont retourné {@code false}.
      */
-    public static void dispatch(HookPoint point, Object ctx) {
-        List<Consumer<Object>> handlers = HANDLERS.get(point);
-        if (handlers == null || handlers.isEmpty()) return;
-        for (Consumer<Object> handler : handlers) {
+    public static boolean dispatch(HookPoint point, Object ctx) {
+        List<HookHandler> handlers = HANDLERS.get(point);
+        if (handlers == null || handlers.isEmpty()) return false;
+        boolean handled = false;
+        for (HookHandler handler : handlers) {
             try {
-                handler.accept(ctx);
+                if (handler.handle(ctx)) handled = true;
             } catch (Throwable t) {
                 LauncherLog.err("[VanillaHookRegistry] handler en erreur pour " + point + ": " + t);
             }
         }
+        return handled;
     }
 
     /**
@@ -72,7 +113,7 @@ public final class VanillaHookRegistry {
      * fichier qui en regrouperait plusieurs).
      */
     public static boolean isUsed(HookPoint point) {
-        List<Consumer<Object>> handlers = HANDLERS.get(point);
+        List<HookHandler> handlers = HANDLERS.get(point);
         return handlers != null && !handlers.isEmpty();
     }
 }

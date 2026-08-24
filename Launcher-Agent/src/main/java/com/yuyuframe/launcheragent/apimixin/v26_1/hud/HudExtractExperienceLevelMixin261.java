@@ -23,7 +23,8 @@ abstract class HudExtractExperienceLevelMixin261 {
     @WrapOperation(method = "extractHotbarAndDecorations",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/contextualbar/ContextualBarRenderer;extractExperienceLevel(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/gui/Font;I)V"))
     private void la$dispatchExperienceLevel(GuiGraphicsExtractor graphics, Font font, int level, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL, graphics);
-        renderVanilla.call(graphics, font, level);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL, graphics)) {
+            renderVanilla.call(graphics, font, level);
+        }
     }
 }

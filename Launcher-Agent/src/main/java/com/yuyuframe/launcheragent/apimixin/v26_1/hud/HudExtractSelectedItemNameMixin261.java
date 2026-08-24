@@ -19,7 +19,8 @@ abstract class HudExtractSelectedItemNameMixin261 {
     @WrapOperation(method = "extractHotbarAndDecorations",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractSelectedItemName(Lnet/minecraft/client/gui/GuiGraphicsExtractor;)V"))
     private void la$dispatchSelectedItemName(Gui instance, GuiGraphicsExtractor graphics, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_SELECTED_ITEM_NAME, graphics);
-        renderVanilla.call(instance, graphics);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_SELECTED_ITEM_NAME, graphics)) {
+            renderVanilla.call(instance, graphics);
+        }
     }
 }

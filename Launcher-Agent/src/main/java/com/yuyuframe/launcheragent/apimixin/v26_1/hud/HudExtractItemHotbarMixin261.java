@@ -20,7 +20,8 @@ abstract class HudExtractItemHotbarMixin261 {
     @WrapOperation(method = "extractHotbarAndDecorations",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractItemHotbar(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V"))
     private void la$dispatchItemHotbar(Gui instance, GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, Operation<Void> renderVanilla) {
-        VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_ITEM_HOTBAR, graphics);
-        renderVanilla.call(instance, graphics, deltaTracker);
+        if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_ITEM_HOTBAR, graphics)) {
+            renderVanilla.call(instance, graphics, deltaTracker);
+        }
     }
 }
