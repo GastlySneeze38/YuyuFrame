@@ -205,12 +205,21 @@ pub async fn launch_game(
             }
             Ok(_) => {}
             Err(e) if e.to_string() == launcher::LAUNCH_CANCELLED_MSG => {
+                // download_progress n'est remis à None qu'une fois la JVM
+                // lancée avec succès (voir orchestrator.rs, juste avant le
+                // spawn) — sur annulation/erreur AVANT ce point, il restait
+                // bloqué à sa dernière valeur (état partagé, pas d'effet
+                // visible tant que le frontend ne lit que l'événement
+                // download_progress, mais fragile pour tout futur code qui
+                // relirait cet état directement — voir audit pipeline lancement).
+                state_clone.write().await.download_progress = None;
                 crate::integrations::analytics::capture("launch_cancelled", serde_json::json!({
                     "instance_id": &instance_id,
                 }));
                 let _ = app.emit("launch_cancelled", &instance_id);
             }
             Err(e) => {
+                state_clone.write().await.download_progress = None;
                 tracing::error!("Erreur de lancement: {}", e);
                 crate::integrations::analytics::capture("launch_error", serde_json::json!({
                     "instance_id": &instance_id,

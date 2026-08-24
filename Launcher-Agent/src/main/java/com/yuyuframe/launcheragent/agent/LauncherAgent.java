@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-24-v691";
+    private static final String BUILD_VERSION = "2026-08-24-v692";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -160,7 +160,23 @@ public class LauncherAgent {
             LauncherLog.agent(1, "[LauncherAgent] loader=" + loaderName + " — bootstrap Mixin via classloader isolé");
             startIsolated(inst, config.yarnPath, mcVersion, intermediary);
         } else {
-            IsolatedBootstrap.start(inst, config.yarnPath, intermediary, false, mcVersion);
+            // Try/catch dédié (audit robustesse pipeline de lancement) : le
+            // chemin isolé (startIsolated) capture déjà toute exception dans
+            // son propre try/catch(Throwable) — CE chemin (vanilla, le PLUS
+            // emprunté) n'avait aucune protection locale. Une exception non
+            // capturée ici remonte jusqu'à premain(), qui la relance
+            // (throw t) — et java.lang.instrument fait avorter TOUTE LA JVM
+            // sur une exception non capturée dans premain. Un seul mixin mal
+            // résolu contre les mappings (ex: régression de bracket de
+            // version) plantait donc le lancement vanilla en entier, alors
+            // que ce n'est qu'une fonctionnalité annexe (resource packs
+            // Modrinth in-game) qui devrait se dégrader proprement.
+            try {
+                IsolatedBootstrap.start(inst, config.yarnPath, intermediary, false, mcVersion);
+            } catch (Throwable t) {
+                LauncherLog.err("[LauncherAgent] Bootstrap non isolé échoué (vanilla) : " + t);
+                t.printStackTrace(System.err);
+            }
         }
 
         LauncherLog.agent(3, "[LauncherAgent] Prêt — en attente du chargement Minecraft");

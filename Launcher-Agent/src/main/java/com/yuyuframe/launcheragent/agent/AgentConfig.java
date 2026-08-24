@@ -42,9 +42,11 @@ public class AgentConfig {
     /**
      * Loader choisi par l'utilisateur (arg "loader=...") — "vanilla",
      * "fabric", "quilt", "forge" ou "neoforge". Le Rust le connaît avec
-     * certitude (voir launcher/agents.rs, setup_launcher_agent) ; pas encore
-     * consommé ici pour la décision d'isolation Mixin (voir docs/launcher/
-     * audit/README-bugs-a-fix.md, P0-2/P0-3 — chantier séparé).
+     * certitude (voir launcher/agents.rs, setup_launcher_agent) — consommé
+     * par {@code LauncherAgent.resolveLoaderName()}/{@code needsIsolation()}/
+     * {@code usesIntermediaryMappings()} pour la décision d'isolation Mixin
+     * (P0-2/P0-3/P0-5, voir docs/launcher/audit/README-bugs-a-fix.md — fait,
+     * ce n'est plus le "devinage" que ce commentaire décrivait).
      */
     public String loader;
 
