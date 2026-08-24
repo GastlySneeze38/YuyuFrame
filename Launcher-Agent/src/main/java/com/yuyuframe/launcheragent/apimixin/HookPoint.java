@@ -1,0 +1,149 @@
+package com.yuyuframe.launcheragent.apimixin;
+
+/**
+ * Catalogue fixe des points d'accroche vanilla exposés à nos modules — voir
+ * ROADMAP-agent.md §3.2. Chaque entrée correspond à UN mixin dans
+ * {@code apimixin/} (jamais plusieurs {@code @Inject}/{@code @WrapOperation}
+ * regroupés dans un seul mixin — voir le raisonnement détaillé dans la
+ * roadmap : {@link VanillaHookRegistry#isUsed} doit pouvoir décider hook par
+ * hook si Mixin tisse ou non, ce que Mixin ne permet qu'au niveau d'une
+ * classe {@code @Mixin} entière, jamais d'une méthode injectée isolée).
+ *
+ * Ces entrées sont VOLONTAIREMENT indépendantes de toute version MC précise
+ * (pas de suffixe {@code 261}/{@code 1214} dans leur nom) — un seul
+ * {@code HookPoint} logique (ex: {@link #HUD_EXTRACT_CROSSHAIR}) peut être
+ * dispatché par un mixin différent selon le bracket (voir
+ * {@code VersionBracketRegistry}), une fois que d'autres brackets auront
+ * aussi leur propre pull Fabric API adapté (voir ROADMAP-agent.md §3.1/§5 —
+ * pour l'instant, seul le bracket 26.1.2 a des mixins réellement écrits
+ * derrière ces entrées).
+ *
+ * Chaque commentaire pointe vers le mixin Fabric API d'origine ayant servi de
+ * référence (voir {@code mixinapi/26.1.2/}) — utile pour retrouver le point
+ * d'injection exact (cible, {@code @At}, éventuel {@code @Slice}) au moment
+ * de porter le mixin réel.
+ */
+public enum HookPoint {
+
+    // ── HUD (fabric-rendering-v1 — GuiMixin, 26.1.2/1.21.11 "GuiRenderState" ─
+    // pipeline différé, voir UiRenderer/UiVanillaItemRenderer pour le contexte
+    // dual-pipeline déjà géré côté rendu custom de ce projet) ─────────────────
+    /** Voir {@code GuiMixin#extractCameraOverlays} (WrapOperation). */
+    HUD_EXTRACT_CAMERA_OVERLAY,
+    /** Voir {@code GuiMixin#extractCrosshair} (WrapOperation). */
+    HUD_EXTRACT_CROSSHAIR,
+    /** Voir {@code GuiMixin#extractHotbar} (WrapOperation, via SpectatorGui). */
+    HUD_EXTRACT_HOTBAR,
+    /** Voir {@code GuiMixin#extractItemHotbar} (WrapOperation). */
+    HUD_EXTRACT_ITEM_HOTBAR,
+    /** Voir {@code GuiMixin#extractArmor} (WrapOperation). */
+    HUD_EXTRACT_ARMOR,
+    /** Voir {@code GuiMixin#extractHearts} (WrapOperation). */
+    HUD_EXTRACT_HEARTS,
+    /** Voir {@code GuiMixin#extractFood} (WrapOperation). */
+    HUD_EXTRACT_FOOD,
+    /** Voir {@code GuiMixin#extractAirBubbles} (WrapOperation). */
+    HUD_EXTRACT_AIR_BUBBLES,
+    /** Voir {@code GuiMixin#extractVehicleHealth} (WrapOperation). */
+    HUD_EXTRACT_VEHICLE_HEALTH,
+    /** Voir {@code GuiMixin} → {@code ContextualBarRenderer.extractBackground} (WrapOperation). */
+    HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND,
+    /** Voir {@code GuiMixin} → {@code ContextualBarRenderer.extractExperienceLevel} (WrapOperation). */
+    HUD_EXTRACT_EXPERIENCE_LEVEL,
+    /** Voir {@code GuiMixin#extractSelectedItemName} (WrapOperation). */
+    HUD_EXTRACT_SELECTED_ITEM_NAME,
+    /** Voir {@code GuiMixin} → {@code SpectatorGui.extractAction} (WrapOperation). */
+    HUD_EXTRACT_SPECTATOR_ACTION,
+    /** Voir {@code GuiMixin#extractEffects} (WrapOperation). */
+    HUD_EXTRACT_EFFECTS,
+    /** Voir {@code GuiMixin#extractBossOverlay} (WrapOperation). */
+    HUD_EXTRACT_BOSS_OVERLAY,
+    /** Voir {@code GuiMixin#extractSleepOverlay} (WrapOperation). */
+    HUD_EXTRACT_SLEEP_OVERLAY,
+    /** Voir {@code GuiMixin#extractDemoOverlay} (WrapOperation). */
+    HUD_EXTRACT_DEMO_OVERLAY,
+    /** Voir {@code GuiMixin#extractScoreboardSidebar} (WrapOperation). */
+    HUD_EXTRACT_SCOREBOARD_SIDEBAR,
+    /** Voir {@code GuiMixin#extractOverlayMessage} (WrapOperation). */
+    HUD_EXTRACT_OVERLAY_MESSAGE,
+    /** Voir {@code GuiMixin#extractTitle} (WrapOperation). */
+    HUD_EXTRACT_TITLE,
+    /** Voir {@code GuiMixin#extractChat} (WrapOperation). */
+    HUD_EXTRACT_CHAT,
+    /** Voir {@code GuiMixin#extractTabList} (WrapOperation). */
+    HUD_EXTRACT_TAB_LIST,
+
+    // ── Rendu de texte/décorations d'item (fabric-rendering-v1) ──────────────
+    /** Voir {@code GuiGraphicsExtractorMixin#itemDecorations} (Inject RETURN) — texte de durabilité/quantité, vanilla inclus. */
+    ITEM_DECORATIONS_EXTRACT,
+    /** Voir {@code AdvancementToastMixin#extractRenderState} (WrapOperation sur fakeItem) — TOUS les toasts, vanilla compris. */
+    ADVANCEMENT_TOAST_EXTRACT,
+    /** Voir {@code SubtitleOverlayMixin#extractRenderState} (WrapMethod). */
+    SUBTITLE_OVERLAY_EXTRACT,
+    /** Voir {@code HumanoidArmorLayerMixin#submit}/{@code renderArmorPiece} — armure vanilla incluse. */
+    ARMOR_LAYER_RENDER,
+
+    // ── Monde/niveau (fabric-rendering-v1 — LevelRendererMixin) ──────────────
+    /** Voir {@code LevelRendererMixin#renderLevel} (Inject HEAD) — tout début du rendu du monde. */
+    LEVEL_RENDER_HEAD,
+    /** Voir {@code LevelRendererMixin#extractBlockOutline} (Inject RETURN) — recoupe le hook déjà utilisé côté modules existants. */
+    LEVEL_BLOCK_OUTLINE_EXTRACT,
+    /** Voir {@code LevelRendererMixin#extractLevel} (Inject RETURN). */
+    LEVEL_EXTRACT,
+    /** Voir {@code ClientLevelMixin} (fabric-rendering-v1) {@code #onChunkLoaded}/{@code #clearTintCaches}. */
+    CLIENT_LEVEL_TINT_CACHE_CLEAR,
+    /** Voir {@code GuiRenderStateMixin#reset} (Inject TAIL) — même classe que UiVanillaItemRenderer exploite déjà par réflexion manuelle. */
+    GUI_RENDER_STATE_RESET,
+    /** Voir {@code GameRendererMixin#extract} (Inject HEAD) — passe d'extraction générale par frame. */
+    GAME_RENDER_EXTRACT,
+
+    // ── Écran/Input (fabric-screen-api-v1 + fabric-events-interaction-v0) ────
+    /** Voir {@code ScreenMixin}/{@code ScreenAccessor} (fabric-screen-api-v1) — extension générique de tout écran. */
+    SCREEN_INIT,
+    /** Voir {@code MouseHandlerMixin} (screen-api-v1 ET events-interaction-v0) — comble la carence scroll (Phase 5.6). */
+    MOUSE_SCROLL,
+    /** Voir {@code KeyboardHandlerMixin} (screen-api-v1). */
+    KEYBOARD_KEY,
+    /** Voir {@code MinecraftMixin#setScreen} (screen-api-v1) — transition d'écran. */
+    SCREEN_SET,
+    /** Voir {@code AbstractContainerScreenMixin} — {@code extractRenderStateWithTooltipAndSubtitles}, point déjà identifié pour ShulkerPreviewModule. */
+    CONTAINER_SCREEN_EXTRACT_TOOLTIP,
+    /** Voir {@code client.MultiPlayerGameModeMixin} (events-interaction-v0) — clic gauche/attaque bloc. */
+    ATTACK_BLOCK,
+    /** Voir {@code client.MinecraftMixin} (events-interaction-v0) — pré-attaque. */
+    PRE_ATTACK,
+
+    // ── Raccourcis clavier (fabric-key-mapping-api-v1) ────────────────────────
+    /** Voir {@code OptionsMixin} — enregistrement de {@code KeyMapping} custom. */
+    KEYBIND_REGISTER,
+    /** Voir {@code KeyMappingCategoryMixin} — catégorie custom dans l'écran Contrôles vanilla. */
+    KEYBIND_CATEGORY_REGISTER,
+
+    // ── Chat (fabric-message-api-v1) ──────────────────────────────────────────
+    /** Voir {@code client.message.ChatListenerMixin} — réception. Existe déjà une variante maison (ChatListenerMixin261) à réconcilier. */
+    CHAT_RECEIVE,
+    /** Voir {@code client.message.ClientPacketListenerMixin} — envoi. */
+    CHAT_SEND,
+
+    // ── Item (fabric-item-api-v1) ──────────────────────────────────────────
+    /** Voir {@code client.ItemInHandRendererMixin} — recoupe SwingSpeedModule/OldItemRotationsModule. */
+    ITEM_IN_HAND_RENDER,
+    /** Voir {@code client.ItemStackMixin} — {@code getTooltipLines} RETURN ordinal=1. */
+    ITEM_TOOLTIP,
+    /** Voir {@code client.MultiPlayerGameModeMixin} (item-api-v1) — timing de bris de bloc. */
+    BLOCK_BREAK_TIMING,
+
+    // ── Cycle de vie tick/chunk/entité (fabric-lifecycle-events-v1) ──────────
+    /** Voir {@code client.MinecraftMixin} — base tick client. */
+    CLIENT_TICK,
+    /** Voir {@code client.LevelChunkMixin}/{@code client.ClientChunkCacheMixin}. */
+    CHUNK_LOAD,
+    /** Voir {@code client.ClientLevelEntityCallbacksMixin} ({@code ClientLevel$EntityCallbacks}). */
+    ENTITY_LOAD,
+    /** Voir {@code client.ClientLevelEntityCallbacksMixin}. */
+    ENTITY_UNLOAD,
+    /** Voir {@code client.ClientLevelMixin} (lifecycle-events-v1) — chargement du niveau client. */
+    CLIENT_LEVEL_LOAD,
+    /** Voir {@code client.ClientPacketListenerMixin}/{@code client.ClientConfigurationPacketListenerImplMixin} — (dé)connexion serveur. */
+    SERVER_CONNECT,
+}
