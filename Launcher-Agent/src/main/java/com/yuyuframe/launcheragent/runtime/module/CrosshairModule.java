@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -111,13 +113,23 @@ public final class CrosshairModule extends LauncherModule {
     private static boolean cooldownErrorLogged;
 
     public CrosshairModule() {
-        super("custom-crosshair", "Crosshair personnalisé", "Remplace la croix de visée vanilla", false);
+        super("custom-crosshair", "Crosshair personnalisé", "Remplace la croix de visée vanilla", false,
+            HookPoint.HUD_EXTRACT_CROSSHAIR);
         // Voir LauncherModule.ICON_LOCAL_CROSSHAIR — aucune icône "crosshair"/
         // "réticule"/"viseur" trouvée dans le style icons8 utilisé partout
         // ailleurs (vérifié individuellement), un vrai réticule dessiné à la
         // main est de toute façon plus fidèle que "target" (cible en cercles
         // concentriques, PAS un viseur).
         iconUrl = ICON_LOCAL_CROSSHAIR;
+
+        // Migration apimixin (ROADMAP-agent.md §3.2) — remplace l'ancien
+        // CrosshairMixin261 (mixin/, ModuleRegistry.get("custom-crosshair") +
+        // ci.cancel()) : dispatch()==true fait sauter le rendu vanilla dans
+        // HudExtractCrosshairMixin261 (apimixin/), exactement le même effet
+        // que l'ancien ci.cancel() — masquer la croix vanilla quand ce module
+        // est actif, notre propre croix étant dessinée séparément par
+        // onRenderOverlay ci-dessous.
+        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_CROSSHAIR, ctx -> isEnabled());
     }
 
     @Override

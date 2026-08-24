@@ -1,7 +1,8 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.freelook;
 
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
-import com.yuyuframe.launcheragent.runtime.module.FreelookModule;
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import net.minecraft.client.player.LocalPlayer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -37,6 +38,13 @@ import org.spongepowered.asm.mixin.injection.At;
  * (le joueur tourne, comportement vanilla inchangé quand le freelook n'est
  * pas engagé).
  *
+ * Passe par {@link HookPoint#FREELOOK_TURN_INTERCEPT} (audit ROADMAP-agent.md
+ * §4 — apimixin ne doit jamais importer un module concret de {@code
+ * runtime.*}, ce fichier importait directement {@code FreelookModule} avant
+ * cette correction) — {@link VanillaHookRegistry#dispatch} renvoie {@code
+ * true} quand {@code FreelookModule} a consommé le delta (accumulé côté
+ * caméra), auquel cas le tour réel du joueur doit être annulé.
+ *
  * NON TESTÉ EN JEU au moment de l'écriture.
  */
 @Mixin(targets = "net.minecraft.client.MouseHandler")
@@ -45,11 +53,6 @@ public abstract class MouseHandlerFreelookMixin261 {
     @WrapWithCondition(method = "turnPlayer(D)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;turn(DD)V"))
     private boolean la$interceptTurn(LocalPlayer instance, double yRot, double xRot) {
-        if (!FreelookModule.isFreelookEngaged()) {
-            FreelookModule.deactivate();
-            return true;
-        }
-        FreelookModule.accumulate(yRot, xRot);
-        return false;
+        return !VanillaHookRegistry.dispatch(HookPoint.FREELOOK_TURN_INTERCEPT, new double[]{yRot, xRot});
     }
 }

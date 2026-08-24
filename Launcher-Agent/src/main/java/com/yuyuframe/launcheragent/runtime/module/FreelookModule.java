@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -137,8 +139,40 @@ public final class FreelookModule extends LauncherModule {
     private Object savedCameraType;
 
     public FreelookModule() {
-        super("freelook", "Freelook", "Maintenir (ou basculer) une touche pour regarder autour de soi sans changer la direction du personnage (façon OptiFine).", false);
+        super("freelook", "Freelook", "Maintenir (ou basculer) une touche pour regarder autour de soi sans changer la direction du personnage (façon OptiFine).", false,
+            HookPoint.FREELOOK_TURN_INTERCEPT, HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET);
+        // 26.1.2 — migration apimixin (ROADMAP-agent.md §4) : MouseHandlerFreelookMixin261/
+        // CameraFreelookMixin261 n'importent plus FreelookModule directement,
+        // ils dispatchent via VanillaHookRegistry — c'est CE module qui
+        // s'enregistre dessus (bon sens de dépendance : runtime → apimixin).
+        VanillaHookRegistry.register(HookPoint.FREELOOK_TURN_INTERCEPT, this::interceptTurn);
+        VanillaHookRegistry.registerValue(HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET, this::cameraRotationOffset);
     }
+
+    /** Handler de {@link HookPoint#FREELOOK_TURN_INTERCEPT} — voir MouseHandlerFreelookMixin261. {@code ctx} = {@code double[]{yRot, xRot}}. */
+    private boolean interceptTurn(Object ctx) {
+        if (!(ctx instanceof double[])) return false;
+        double[] delta = (double[]) ctx;
+        if (!isFreelookEngaged()) {
+            deactivate();
+            return false;
+        }
+        accumulate(delta[0], delta[1]);
+        return true;
+    }
+
+    /** Handler de {@link HookPoint#FREELOOK_CAMERA_ROTATION_OFFSET} — voir CameraFreelookMixin261. {@code ctx} = {@code float[]{yRot, xRot}}, renvoie {@code float[]{newYRot, newXRot}} ou {@code null} (freelook inactif, aucun changement). */
+    private Object cameraRotationOffset(Object ctx) {
+        if (!isActive() || !(ctx instanceof float[])) return null;
+        float[] in = (float[]) ctx;
+        float yRot = in[0];
+        float xRot = in[1];
+        float newXRot = clampFloat(xRot + (float) pitchOffset(), -90f, 90f);
+        float newYRot = yRot + (float) yawOffset();
+        return new float[]{newYRot, newXRot};
+    }
+
+    private static float clampFloat(float v, float lo, float hi) { return v < lo ? lo : Math.min(v, hi); }
 
     /**
      * Appelé par MouseHandlerFreelookMixin261 (une fois par frame) — vrai si

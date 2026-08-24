@@ -18,11 +18,9 @@ import java.util.Map;
  *
  * Un mixin apimixin ABSENT d'ici (mixins "hub"/infrastructure comme {@code
  * TitleScreenMixin261}/{@code GlobalUiRenderMixin261}/{@code
- * GlobalUiPresentMixin261}/{@code GuiFlushMixin261}, interfaces {@code
- * @Accessor}/{@code @Invoker}, ou mixins hors du système HookPoint comme
- * {@code CameraFreelookMixin261}/{@code MouseHandlerFreelookMixin261}) weave
- * TOUJOURS — {@code shouldApplyMixin()} n'applique la gate déclarative qu'aux
- * mixins listés ici.
+ * GlobalUiPresentMixin261}/{@code GuiFlushMixin261}, ou interfaces {@code
+ * @Accessor}/{@code @Invoker}) weave TOUJOURS — {@code shouldApplyMixin()}
+ * n'applique la gate déclarative qu'aux mixins listés ici.
  *
  * Mise à jour manuelle à chaque nouveau mixin {@code apimixin/} backé par un
  * {@link HookPoint} — mécanique mais volontairement explicite (pas de
@@ -111,6 +109,10 @@ public final class MixinHookPointRegistry {
 
         // ── Horloge ────────────────────────────────────────────────────────
         put("ClockTotalTicksMixin261", HookPoint.CLOCK_TOTAL_TICKS);
+
+        // ── Freelook ───────────────────────────────────────────────────────
+        put("MouseHandlerFreelookMixin261", HookPoint.FREELOOK_TURN_INTERCEPT);
+        put("CameraFreelookMixin261", HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET);
     }
 
     /** @return le {@link HookPoint} associé à ce nom simple de classe mixin, ou {@code null} si absent (mixin hors système déclaratif — voir la javadoc de classe). */

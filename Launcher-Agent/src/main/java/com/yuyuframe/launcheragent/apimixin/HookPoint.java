@@ -187,4 +187,25 @@ public enum HookPoint {
      * {@code Holder}, valeur de remplacement = {@code Long} ou {@code null}.
      */
     CLOCK_TOTAL_TICKS,
+
+    // ── Freelook (pas de mixin Fabric API — bespoke, voir FreelookModule) ────
+    /**
+     * Voir {@code MouseHandlerFreelookMixin261} — dernier appel {@code
+     * LocalPlayer.turn(D,D)} dans {@code MouseHandler.turnPlayer(D)V}.
+     * Dispatché via {@link VanillaHookRegistry#dispatch} — {@code true} =
+     * delta consommé par le freelook (rotation réelle du joueur annulée),
+     * {@code false} = laisser vanilla tourner le joueur normalement.
+     * {@code ctx} = {@code double[]{yRot, xRot}} (deltas déjà post-courbe de
+     * sensibilité vanilla).
+     */
+    FREELOOK_TURN_INTERCEPT,
+    /**
+     * Voir {@code CameraFreelookMixin261} — args de {@code
+     * Camera.setRotation(F,F)} DANS {@code alignWithEntity(F)V}. Dispatché
+     * via {@link VanillaHookRegistry#dispatchValue} — {@code ctx} =
+     * {@code float[]{yRot, xRot}} (valeurs vanilla déjà calculées), valeur de
+     * remplacement = {@code float[]{newYRot, newXRot}} si le freelook est
+     * actif, {@code null} sinon (aucun changement).
+     */
+    FREELOOK_CAMERA_ROTATION_OFFSET,
 }

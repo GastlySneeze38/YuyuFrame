@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.freelook;
 
-import com.yuyuframe.launcheragent.runtime.module.FreelookModule;
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
@@ -43,6 +44,12 @@ import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
  * contrairement à l'ancienne version qui avait besoin de 2 hooks + garde
  * {@code !detached} faute d'en être sûr. NON TESTÉ EN JEU au moment de
  * l'écriture.
+ *
+ * Passe par {@link HookPoint#FREELOOK_CAMERA_ROTATION_OFFSET} (audit
+ * ROADMAP-agent.md §4 — apimixin ne doit jamais importer un module concret
+ * de {@code runtime.*}, ce fichier importait directement {@code
+ * FreelookModule} avant cette correction) — {@code FreelookModule} calcule
+ * l'offset et s'enregistre lui-même via {@code VanillaHookRegistry.registerValue}.
  */
 @Mixin(targets = "net.minecraft.client.Camera")
 public abstract class CameraFreelookMixin261 {
@@ -50,16 +57,12 @@ public abstract class CameraFreelookMixin261 {
     @ModifyArgs(method = "alignWithEntity(F)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;setRotation(FF)V"))
     private void la$applyFreelookOffset(Args args) {
-        if (!FreelookModule.isActive()) return;
-        float yRot = args.get(0);
-        float xRot = args.get(1);
-        float newXRot = clamp(xRot + (float) FreelookModule.pitchOffset(), -90f, 90f);
-        float newYRot = yRot + (float) FreelookModule.yawOffset();
-        args.set(0, newYRot);
-        args.set(1, newXRot);
-    }
-
-    private static float clamp(float v, float lo, float hi) {
-        return v < lo ? lo : Math.min(v, hi);
+        Object result = VanillaHookRegistry.dispatchValue(HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET,
+            new float[]{args.get(0), args.get(1)});
+        if (result instanceof float[]) {
+            float[] adjusted = (float[]) result;
+            args.set(0, adjusted[0]);
+            args.set(1, adjusted[1]);
+        }
     }
 }
