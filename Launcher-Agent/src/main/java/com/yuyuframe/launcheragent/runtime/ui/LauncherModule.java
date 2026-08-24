@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+
 /**
  * Base commune de tout module réel (YuyuPvP, HUD Vanilla+...) — équivalent
  * structurel d'un "Mod" OneConfig : un module N'ÉCRIT AUCUN code d'écran,
@@ -74,17 +76,41 @@ public abstract class LauncherModule {
      */
     public static final String ICON_LOCAL_CROSSHAIR = "local:crosshair";
 
+    /**
+     * Points d'accroche déclarés par ce module (ROADMAP-agent.md §3.2) — pure
+     * métadonnée légère, jamais consultée par ce module lui-même : sert
+     * uniquement d'audit/documentation (quel module dépend de quel {@link
+     * HookPoint}). Le tissage réel du mixin apimixin correspondant est
+     * gouverné par {@code VanillaHookRegistry.isUsed(point)}, alimenté par
+     * l'appel RÉEL à {@code VanillaHookRegistry.register(point, ...)} que ce
+     * module doit faire lui-même (typiquement dans son constructeur, juste
+     * après {@code super(...)}) — déclarer un HookPoint ici sans
+     * l'enregistrer ne suffit PAS à faire weaver son mixin.
+     */
+    public final HookPoint[] hookPoints;
+
     protected LauncherModule(String id, String name, String description, boolean enabledByDefault) {
         this(id, name, description, null, enabledByDefault);
     }
 
     protected LauncherModule(String id, String name, String description, String shortDescription, boolean enabledByDefault) {
+        this(id, name, description, shortDescription, enabledByDefault, EMPTY_HOOKPOINTS);
+    }
+
+    protected LauncherModule(String id, String name, String description, boolean enabledByDefault, HookPoint... hookPoints) {
+        this(id, name, description, null, enabledByDefault, hookPoints);
+    }
+
+    protected LauncherModule(String id, String name, String description, String shortDescription, boolean enabledByDefault, HookPoint... hookPoints) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.shortDescription = shortDescription;
         this.enabled = enabledByDefault;
+        this.hookPoints = hookPoints != null ? hookPoints : EMPTY_HOOKPOINTS;
     }
+
+    private static final HookPoint[] EMPTY_HOOKPOINTS = new HookPoint[0];
 
     public boolean isEnabled() { return enabled; }
 

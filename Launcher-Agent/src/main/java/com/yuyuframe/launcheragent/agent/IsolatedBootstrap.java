@@ -106,11 +106,20 @@ public final class IsolatedBootstrap {
         // fichier brut vs jar), jamais de "intermediary" — voir sa javadoc.
         writeRefmapFile(inst, isolated);
 
-        // Sélection du fichier de config Mixin selon la version MC.
+        // Sélection du/des fichier(s) de config Mixin selon la version MC —
+        // mixinConfig (legacy) est NULLABLE : un bracket entièrement basculé
+        // vers apimixin/ (voir VersionBracketRegistry, 26.1.2) n'en a plus.
         String mixinConfig = bracket.mixinConfigResource;
+        String apiMixinConfig = bracket.apiMixinConfigResource;
 
-        Set<String> mixinTargets = discoverMixinTargets(mixinConfig);
-        bootstrapMixin(inst, mixinTargets, mixinConfig);
+        Set<String> mixinTargets = new LinkedHashSet<>();
+        if (mixinConfig != null) {
+            mixinTargets.addAll(discoverMixinTargets(mixinConfig));
+        }
+        if (apiMixinConfig != null) {
+            mixinTargets.addAll(discoverMixinTargets(apiMixinConfig));
+        }
+        bootstrapMixin(inst, mixinTargets, mixinConfig, apiMixinConfig);
         scheduleDelayedRetransform(inst, mixinTargets);
     }
 
@@ -178,7 +187,7 @@ public final class IsolatedBootstrap {
     }
 
     /** @return true si le bootstrap a réussi. */
-    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig) {
+    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig, String apiMixinConfig) {
         try {
             MixinBootstrap.init();
 
@@ -197,8 +206,15 @@ public final class IsolatedBootstrap {
                 LauncherLog.warn("[LauncherAgent] gotoPhase(DEFAULT) erreur: " + ex);
             }
 
-            Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
-            LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + mixinConfig);
+            if (mixinConfig != null) {
+                Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
+                LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + mixinConfig);
+            }
+
+            if (apiMixinConfig != null) {
+                Mixins.addConfiguration(apiMixinConfig, (IMixinConfigSource) null);
+                LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + apiMixinConfig);
+            }
 
             LauncherMixinService.installWrapper();
 
@@ -214,7 +230,9 @@ public final class IsolatedBootstrap {
 
             retransformLoadedTargets(inst, mixinTargets);
             LauncherLog.agent(3, "[LauncherAgent] Composant Mixin initialisé avec succès ("
-                + mixinConfig + ", " + mixinTargets.size() + " cible(s) : " + mixinTargets + ")");
+                + (mixinConfig != null ? mixinConfig : "(aucune config legacy)")
+                + (apiMixinConfig != null ? " + " + apiMixinConfig : "")
+                + ", " + mixinTargets.size() + " cible(s) : " + mixinTargets + ")");
             return true;
         } catch (Throwable e) {
             // Throwable, pas Exception : certains échecs Mixin (ex: MixinInitialisationError)

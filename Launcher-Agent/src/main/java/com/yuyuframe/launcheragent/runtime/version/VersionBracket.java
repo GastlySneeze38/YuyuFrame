@@ -14,12 +14,30 @@ public final class VersionBracket {
 
     public final String key;
     public final String mixinConfigResource;
+    /**
+     * Config Mixin {@code apimixin/} additionnelle (ROADMAP-agent.md §3.2/§4) —
+     * {@code null} tant qu'un bracket n'a pas encore son propre pull apimixin/
+     * (aujourd'hui seul 26.1.2 en a une). Chargée EN PLUS de {@link
+     * #mixinConfigResource} (jamais à sa place — la config legacy correspondante
+     * reste tissée telle quelle, voir IsolatedBootstrap.start()) : le tissage
+     * RÉEL de chaque mixin listé ici reste gouverné mixin par mixin par {@code
+     * LauncherMixinConfigPlugin.shouldApplyMixin()} via {@code
+     * MixinHookPointRegistry}/{@code VanillaHookRegistry.isUsed()} — lister un
+     * mixin ici ne suffit pas à ce qu'il weave, voir la javadoc de {@code
+     * HookPoint}.
+     */
+    public final String apiMixinConfigResource;
     public final String yarnJarNameHint;
     public final Predicate<String> matcher;
 
     public VersionBracket(String key, String mixinConfigResource, String yarnJarNameHint, Predicate<String> matcher) {
+        this(key, mixinConfigResource, null, yarnJarNameHint, matcher);
+    }
+
+    public VersionBracket(String key, String mixinConfigResource, String apiMixinConfigResource, String yarnJarNameHint, Predicate<String> matcher) {
         this.key = key;
         this.mixinConfigResource = mixinConfigResource;
+        this.apiMixinConfigResource = apiMixinConfigResource;
         this.yarnJarNameHint = yarnJarNameHint;
         this.matcher = matcher;
     }

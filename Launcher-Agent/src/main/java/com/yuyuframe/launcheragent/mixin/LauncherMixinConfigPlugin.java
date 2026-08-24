@@ -1,6 +1,9 @@
 package com.yuyuframe.launcheragent.mixin;
 
 import com.llamalad7.mixinextras.MixinExtrasBootstrap;
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.MixinHookPointRegistry;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
@@ -66,6 +69,22 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
             LauncherLog.warn("[MixinPlugin] " + simpleName + " ignoré — Yarn 1.8.9 non chargé "
                 + "(fournissez yarn=<legacy-yarn-" + mcVer + "-mergedv2.jar>)");
             return false;
+        }
+
+        // Tissage déclaratif apimixin/ (ROADMAP-agent.md §3.2) — un mixin
+        // apimixin backé par un HookPoint (voir MixinHookPointRegistry) ne
+        // weave QUE si au moins un module s'est enregistré dessus via
+        // VanillaHookRegistry.register(...). Un mixin apimixin absent du
+        // registre (hub/infra, accessors/invokers, freelook — hors système
+        // HookPoint) continue de weave sans condition, comme avant.
+        if (mixinClassName.startsWith("com.yuyuframe.launcheragent.apimixin.")) {
+            HookPoint point = MixinHookPointRegistry.resolve(simpleName);
+            if (point != null) {
+                boolean used = VanillaHookRegistry.isUsed(point);
+                LauncherLog.asm(2, "[MixinPlugin] " + simpleName + " → " + point
+                    + " : " + (used ? "tissé (module(s) enregistré(s))" : "IGNORÉ (aucun module enregistré)"));
+                return used;
+            }
         }
         return true;
     }

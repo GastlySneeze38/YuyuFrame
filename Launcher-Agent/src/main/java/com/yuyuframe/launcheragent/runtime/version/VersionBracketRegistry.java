@@ -117,7 +117,24 @@ public final class VersionBracketRegistry {
         // écrit) — à valider en jeu avant tout usage en production.
         BRACKETS.add(new VersionBracket(
             "26_1_2",
-            "mixins.launcheragent-26.1.json",
+            // Bascule COMPLÈTE décidée explicitement pour 26.1.2 (débrief user,
+            // voir feedback_apimixin_migration_scope en mémoire) : plus AUCUNE
+            // config legacy chargée pour ce bracket — mixinConfigResource=null,
+            // seule mixins.launcheragent-apimixin-26.1.json reste active. Le
+            // fichier mixins.launcheragent-26.1.json et tout mixin/client/v26_1/
+            // restent intacts sur disque (règle permanente : mixin/ = code mort
+            // de référence, jamais supprimé), simplement plus RÉFÉRENCÉS ici.
+            // Régression ATTENDUE et acceptée le temps de la migration module
+            // par module : tout mixin apimixin backé par un HookPoint sans
+            // module encore réenregistré dessus (crosshair, cœurs/faim/armure,
+            // brouillard, tab list, etc. — voir MixinHookPointRegistry) est
+            // bloqué par shouldApplyMixin() → fonctionnalité invisible en jeu
+            // jusqu'à sa migration. Seuls restent actifs : les mixins hors
+            // système HookPoint (hub/infra, accessors/invokers, freelook) et
+            // CHAT_SEND (seul HookPoint avec un module réellement enregistré,
+            // via ClientCommandRegistry).
+            null,
+            "mixins.launcheragent-apimixin-26.1.json",
             "26.1.2",
             version -> "26.1.2".equals(version)));
     }
