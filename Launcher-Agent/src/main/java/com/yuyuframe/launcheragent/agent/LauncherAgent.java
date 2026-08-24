@@ -19,15 +19,17 @@ import java.util.List;
  *
  * Toute la logique Mixin/ASM vit dans IsolatedBootstrap (voir ce fichier pour
  * le détail) — ce point d'entrée ne fait que décider COMMENT la charger :
- * directement (vanilla/Forge) ou via un classloader isolé dédié (Fabric, pour
- * ne jamais partager l'état statique de Mixin avec celui de Fabric Loader —
- * voir docs/LauncherAgent/index.md, historique des bugs Fabric).
+ * directement (vanilla, seul loader sans Mixin embarqué) ou via un
+ * classloader isolé dédié (Fabric/Quilt/Forge 1.13+/NeoForge — tous
+ * embarquent Mixin, voir needsIsolation() — pour ne jamais partager l'état
+ * statique de Mixin avec le leur, voir docs/LauncherAgent/index.md et
+ * docs/launcher/audit/README-bugs-a-fix.md P0-2/P0-3/P0-5 pour l'historique).
  *
  * Voir docs/LauncherAgent/index.md pour le cahier des charges complet.
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-24-v688";
+    private static final String BUILD_VERSION = "2026-08-24-v691";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -112,20 +114,35 @@ public class LauncherAgent {
         LauncherLog.agent(1, "[LauncherAgent] version MC détectée : " + mcVersion);
         System.setProperty("launcheragent.mcVersion", mcVersion);
 
-        boolean fabric = isFabricPresent();
+        // Phase 3.3 (ROADMAP-agent.md) / P0-2+P0-3+P0-5 (docs/launcher/audit/
+        // README-bugs-a-fix.md) : le loader vient du Rust (arg "loader=...",
+        // connu avec certitude, voir Backend/src/minecraft/launcher/agents.rs)
+        // plutôt que redeviné ici par Class.forName — fiabilise Quilt/Forge/
+        // NeoForge, qu'un test Fabric-only classait auparavant à tort comme
+        // "vanilla, pas d'isolation nécessaire". Repli par introspection de
+        // classe UNIQUEMENT si "loader=" est absent (lancement manuel hors
+        // Rust, ou ancien build du launcher qui ne le fournit pas encore).
+        String loaderName = resolveLoaderName(config.loader);
+        boolean needsIsolation = needsIsolation(loaderName);
+        boolean intermediary = usesIntermediaryMappings(loaderName);
 
-        // Sous Fabric, le code tissé par Mixin dans les classes du jeu (la$onInit
-        // de TitleScreenMixin) est résolu par KnotClassLoader,
-        // PAS par notre classloader isolé — donc MappingsRegistry/YarnMappings y
-        // existent comme une COPIE STATIQUE SÉPARÉE, jamais initialisée par
-        // IsolatedBootstrap (qui tourne sur le classloader isolé). Une System
-        // property est le seul canal de configuration qui traverse vraiment
-        // toutes les copies/classloaders — MappingsRegistry.ensureInitialized()
-        // (appelé paresseusement à la première utilisation, quelle que soit la
-        // copie de la classe) la relit pour se réinitialiser elle-même.
+        // Sous Fabric/Quilt/Forge/NeoForge, le code tissé par Mixin dans les
+        // classes du jeu (la$onInit de TitleScreenMixin) est résolu par LEUR
+        // classloader, PAS par notre classloader isolé — donc MappingsRegistry/
+        // YarnMappings y existent comme une COPIE STATIQUE SÉPARÉE, jamais
+        // initialisée par IsolatedBootstrap (qui tourne sur le classloader
+        // isolé). Une System property est le seul canal de configuration qui
+        // traverse vraiment toutes les copies/classloaders —
+        // MappingsRegistry.ensureInitialized() (appelé paresseusement à la
+        // première utilisation, quelle que soit la copie de la classe) la
+        // relit pour se réinitialiser elle-même.
         if (config.yarnPath != null) System.setProperty("launcheragent.yarnPath", config.yarnPath);
         if (config.readyEvent != null) System.setProperty("launcheragent.readyEvent", config.readyEvent);
-        System.setProperty("launcheragent.fabric", String.valueOf(fabric));
+        // Remplace l'ancienne clé "launcheragent.fabric" — DÉCOUPLÉE en deux
+        // notions distinctes (P0-3) : "faut-il isoler le classloader Mixin ?"
+        // (needsIsolation, ci-dessous) et "le jeu tourne-t-il en mappings
+        // intermediary ?" (intermediary, seule celle-ci lue par MappingsRegistry).
+        System.setProperty("launcheragent.intermediary", String.valueOf(intermediary));
 
         // Chemin du jar — lu par FabricKnotExposer pour enregistrer
         // launcher-agent.jar comme "code source" PROPRE à KnotClassLoader (pas
@@ -139,25 +156,69 @@ public class LauncherAgent {
                 new java.io.File(agentJarFile, "launcher-agent.jar").getAbsolutePath());
         }
 
-        if (fabric) {
-            LauncherLog.agent(1, "[LauncherAgent] Fabric détecté — bootstrap Mixin via classloader isolé");
-            startIsolated(inst, config.yarnPath, mcVersion);
+        if (needsIsolation) {
+            LauncherLog.agent(1, "[LauncherAgent] loader=" + loaderName + " — bootstrap Mixin via classloader isolé");
+            startIsolated(inst, config.yarnPath, mcVersion, intermediary);
         } else {
-            IsolatedBootstrap.start(inst, config.yarnPath, false, mcVersion);
+            IsolatedBootstrap.start(inst, config.yarnPath, intermediary, false, mcVersion);
         }
 
         LauncherLog.agent(3, "[LauncherAgent] Prêt — en attente du chargement Minecraft");
     }
 
-    /** Détecte si Fabric Loader est sur le classpath (présent ≠ encore initialisé). */
-    private static boolean isFabricPresent() {
+    /**
+     * Loader tel que fourni par le Rust (arg "loader=..." — voir AgentConfig,
+     * Backend/src/minecraft/launcher/agents.rs), ou repli par introspection de
+     * classe si absent (lancement manuel, ou build du launcher antérieur à ce
+     * plumbing). Retourne "vanilla"/"fabric"/"quilt"/"forge"/"neoforge" —
+     * "forge" par défaut si ModLauncher est détecté (NeoForge indiscernable de
+     * Forge par cette seule classe, mais {@link #needsIsolation}/{@link
+     * #usesIntermediaryMappings} traitent les deux identiquement de toute
+     * façon — voir docs/launcher/audit/README-bugs-a-fix.md P0-2/P0-3/P0-5).
+     */
+    private static String resolveLoaderName(String configLoader) {
+        if (configLoader != null && !configLoader.isEmpty()) return configLoader;
+        ClassLoader cl = LauncherAgent.class.getClassLoader();
+        if (classPresent("net.fabricmc.loader.impl.launch.knot.Knot", cl)) return "fabric";
+        if (classPresent("org.quiltmc.loader.impl.launch.knot.Knot", cl)) return "quilt";
+        if (classPresent("cpw.mods.modlauncher.Launcher", cl)) return "forge";
+        return "vanilla";
+    }
+
+    private static boolean classPresent(String className, ClassLoader cl) {
         try {
-            Class.forName("net.fabricmc.loader.impl.launch.knot.Knot", false,
-                LauncherAgent.class.getClassLoader());
+            Class.forName(className, false, cl);
             return true;
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    /**
+     * Isolation nécessaire dès qu'un AUTRE hôte Mixin vit déjà dans le
+     * classloader système — Fabric et Quilt (Knot), Forge 1.13+/NeoForge
+     * (ModLauncher, mixin embarqué depuis 1.13+) — pas seulement Fabric, voir
+     * P0-2 (README-bugs-a-fix.md) : le test Fabric-only précédent laissait
+     * Quilt/Forge moderne/NeoForge prendre le chemin non isolé à tort
+     * (collision des singletons statiques Mixin → crash ou "could not find
+     * any targets matching").
+     */
+    private static boolean needsIsolation(String loader) {
+        return "fabric".equals(loader) || "quilt".equals(loader)
+            || "forge".equals(loader) || "neoforge".equals(loader);
+    }
+
+    /**
+     * Le jeu tourne-t-il en mappings intermediary (Fabric/Quilt) ? DÉCOUPLÉ
+     * de {@link #needsIsolation} (P0-3) : Forge/NeoForge ont AUSSI besoin de
+     * l'isolation classloader mais tournent en mappings SRG, ni intermediary
+     * ni official — pas encore supportés par {@code MappingsRegistry.Scheme}
+     * (troisième cas à prévoir si le support Forge/NeoForge est visé un jour,
+     * voir README-bugs-a-fix.md) — repli sur OFFICIAL pour eux en attendant
+     * (comme vanilla), pas de régression, juste pas encore de vrai support.
+     */
+    private static boolean usesIntermediaryMappings(String loader) {
+        return "fabric".equals(loader) || "quilt".equals(loader);
     }
 
     /**
@@ -171,7 +232,7 @@ public class LauncherAgent {
      * chargées par Fabric (KnotClassLoader) — voir IsolatedBootstrap pour le
      * détail.
      */
-    private static void startIsolated(Instrumentation inst, String yarnPath, String mcVersion) {
+    private static void startIsolated(Instrumentation inst, String yarnPath, String mcVersion, boolean intermediary) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
@@ -242,7 +303,7 @@ public class LauncherAgent {
             Class<?> bootstrapClass = Class.forName(
                 "com.yuyuframe.launcheragent.agent.IsolatedBootstrap", true, isolatedCl);
             java.lang.reflect.Method startMethod =
-                bootstrapClass.getMethod("start", Instrumentation.class, String.class, boolean.class, String.class);
+                bootstrapClass.getMethod("start", Instrumentation.class, String.class, boolean.class, boolean.class, String.class);
 
             // Mixin résout son IMixinService via ServiceLoader, qui se base par
             // défaut sur le classloader de CONTEXTE du thread courant — pas
@@ -255,7 +316,13 @@ public class LauncherAgent {
             ClassLoader previousContext = current.getContextClassLoader();
             current.setContextClassLoader(isolatedCl);
             try {
-                startMethod.invoke(null, inst, yarnPath, true, mcVersion);
+                // "intermediary" propagé depuis premain0() (P0-3) — n'est
+                // PLUS toujours "true" ici : Forge/NeoForge passent aussi par
+                // ce chemin isolé (voir needsIsolation) mais avec intermediary
+                // = false (mappings SRG, pas intermediary Fabric/Quilt).
+                // "isolated" = true : CE chemin (startIsolated) est TOUJOURS
+                // le cas isolé par définition — pilote writeRefmapFile.
+                startMethod.invoke(null, inst, yarnPath, intermediary, true, mcVersion);
             } finally {
                 current.setContextClassLoader(previousContext);
             }

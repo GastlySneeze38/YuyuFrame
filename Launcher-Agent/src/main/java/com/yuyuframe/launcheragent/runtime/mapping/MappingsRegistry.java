@@ -55,8 +55,12 @@ public final class MappingsRegistry implements IRemapper {
         if (YarnMappings.isLoaded() || autoInitAttempted) return;
         autoInitAttempted = true;
         try {
-            boolean fabric = "true".equals(System.getProperty("launcheragent.fabric"));
-            scheme = fabric ? Scheme.INTERMEDIARY : Scheme.OFFICIAL;
+            // "launcheragent.intermediary" (ex "launcheragent.fabric", renommé
+            // P0-3 — voir docs/launcher/audit/README-bugs-a-fix.md) : découplé
+            // de la décision d'isolation classloader, Quilt inclus désormais
+            // (Fabric ET Quilt tournent en mappings intermediary).
+            boolean intermediary = "true".equals(System.getProperty("launcheragent.intermediary"));
+            scheme = intermediary ? Scheme.INTERMEDIARY : Scheme.OFFICIAL;
             String yarnPath = System.getProperty("launcheragent.yarnPath");
             if (yarnPath == null || yarnPath.isEmpty()) return;
             if (yarnPath.endsWith(".jar") || yarnPath.endsWith(".zip")) {

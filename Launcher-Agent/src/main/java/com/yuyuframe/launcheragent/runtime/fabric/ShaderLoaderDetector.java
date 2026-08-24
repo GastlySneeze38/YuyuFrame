@@ -6,7 +6,8 @@ package com.yuyuframe.launcheragent.runtime.fabric;
  * menu pause (un shaderpack installé sans loader compatible ne fait rien).
  *
  * Aucune dépendance de compilation sur Iris : juste une vérification
- * Class.forName par réflexion, comme isFabricPresent() dans LauncherAgent.
+ * Class.forName par réflexion, comme LauncherAgent#resolveLoaderName() en
+ * repli (ex-isFabricPresent(), voir Phase 3.3 ROADMAP-agent.md).
  */
 public final class ShaderLoaderDetector {
 

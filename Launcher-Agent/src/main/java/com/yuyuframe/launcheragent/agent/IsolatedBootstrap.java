@@ -45,13 +45,26 @@ public final class IsolatedBootstrap {
     private IsolatedBootstrap() {}
 
     /**
-     * @param fabric    vrai si Fabric Loader est présent — déterminé par LauncherAgent
-     *                  (pas redétectable ici sous isolation classloader).
-     * @param mcVersion version Minecraft détectée par MinecraftVersionDetector.
+     * @param intermediary vrai si le jeu tourne en mappings intermediary
+     *                     (Fabric/Quilt) — déterminé par LauncherAgent à partir
+     *                     du loader (arg "loader=...", voir P0-3/P0-5 dans
+     *                     docs/launcher/audit/README-bugs-a-fix.md). DÉCOUPLÉ
+     *                     de {@code isolated} (Forge/NeoForge passent aussi par
+     *                     le chemin isolé mais avec {@code intermediary=false}
+     *                     — mappings SRG, pas encore supportés par {@code
+     *                     MappingsRegistry.Scheme}).
+     * @param isolated     vrai si CE bootstrap tourne sur le classloader isolé
+     *                     dédié (LauncherAgent.startIsolated(), TOUS les
+     *                     loaders qui embarquent Mixin — voir needsIsolation())
+     *                     plutôt que sur le classloader système (vanilla) —
+     *                     pilote UNIQUEMENT la stratégie d'écriture du refmap
+     *                     (writeRefmapFile), sans rapport avec le schéma de
+     *                     mappings.
+     * @param mcVersion    version Minecraft détectée par MinecraftVersionDetector.
      */
-    public static void start(Instrumentation inst, String yarnPath, boolean fabric, String mcVersion) {
+    public static void start(Instrumentation inst, String yarnPath, boolean intermediary, boolean isolated, String mcVersion) {
         LauncherLog.agent(1, "[LauncherAgent] IsolatedBootstrap.start (classloader=" + IsolatedBootstrap.class.getClassLoader()
-            + ", fabric=" + fabric + ", version=" + mcVersion + ")");
+            + ", intermediary=" + intermediary + ", isolated=" + isolated + ", version=" + mcVersion + ")");
 
         VersionBracket bracket = VersionBracketRegistry.resolve(mcVersion);
         if (bracket == null) {
@@ -63,7 +76,7 @@ public final class IsolatedBootstrap {
         }
         LauncherLog.agent(1, "[LauncherAgent] Bracket de version résolu : " + bracket.key);
 
-        MappingsRegistry.setScheme(fabric
+        MappingsRegistry.setScheme(intermediary
             ? MappingsRegistry.Scheme.INTERMEDIARY
             : MappingsRegistry.Scheme.OFFICIAL);
 
@@ -82,14 +95,16 @@ public final class IsolatedBootstrap {
                 + (obfClass.equals(probe) ? "  ← NON MAPPÉ" : "  ← OK"));
         }
 
-        // Refmap requis dans TOUS les cas (vanilla ET Fabric) : nos @Inject
+        // Refmap requis dans TOUS les cas (isolé ET non isolé) : nos @Inject
         // utilisent des noms Yarn NAMED ("init", pas "bg_"/"b" en dur) — sans
         // refmap écrit, Mixin valide les cibles contre la chaîne named
         // littérale, qui ne correspond à rien dans le jar obfusqué chargé →
         // "could not find any targets matching". refmapMethodReplacement() est
         // scheme-aware (voir LauncherMixinService) : nom officiel brut en
-        // vanilla, intermediary sous Fabric — un seul mécanisme couvre les deux cas.
-        writeRefmapFile(inst, fabric);
+        // vanilla, intermediary sous Fabric/Quilt — un seul mécanisme couvre
+        // les deux cas. writeRefmapFile ne dépend QUE de "isolated" (stratégie
+        // fichier brut vs jar), jamais de "intermediary" — voir sa javadoc.
+        writeRefmapFile(inst, isolated);
 
         // Sélection du fichier de config Mixin selon la version MC.
         String mixinConfig = bracket.mixinConfigResource;
@@ -104,20 +119,21 @@ public final class IsolatedBootstrap {
      * pour le contenu.
      *
      * Deux mécanismes de résolution selon le mode de chargement :
-     *   - Fabric (isolé) : <agentDir>/generated/ est déjà sur le classpath du
-     *     classloader isolé dédié (ajouté par LauncherAgent.startIsolated()
-     *     AVANT sa construction) — écrire le fichier brut dans ce dossier
-     *     suffit, il devient résolvable immédiatement.
-     *   - Vanilla/Forge (non isolé) : IsolatedBootstrap tourne sur le
-     *     classloader SYSTÈME, que launcher.rs n'a jamais configuré pour
-     *     inclure <agentDir>/generated/ dans son -cp — écrire le fichier là
-     *     ne suffit pas, il resterait introuvable. java.lang.instrument
-     *     n'offre PAS d'équivalent "ajoute ce dossier au classpath système" à
-     *     chaud (seulement Instrumentation.appendToSystemClassLoaderSearch(),
-     *     qui n'accepte qu'un JarFile) — le refmap est donc empaqueté dans un
+     *   - Isolé (Fabric/Quilt/Forge/NeoForge, voir needsIsolation()) :
+     *     <agentDir>/generated/ est déjà sur le classpath du classloader isolé
+     *     dédié (ajouté par LauncherAgent.startIsolated() AVANT sa
+     *     construction) — écrire le fichier brut dans ce dossier suffit, il
+     *     devient résolvable immédiatement.
+     *   - Non isolé (vanilla) : IsolatedBootstrap tourne sur le classloader
+     *     SYSTÈME, que launcher.rs n'a jamais configuré pour inclure
+     *     <agentDir>/generated/ dans son -cp — écrire le fichier là ne suffit
+     *     pas, il resterait introuvable. java.lang.instrument n'offre PAS
+     *     d'équivalent "ajoute ce dossier au classpath système" à chaud
+     *     (seulement Instrumentation.appendToSystemClassLoaderSearch(), qui
+     *     n'accepte qu'un JarFile) — le refmap est donc empaqueté dans un
      *     petit jar dédié, ajouté au classloader système via cette API.
      */
-    private static void writeRefmapFile(Instrumentation inst, boolean fabric) {
+    private static void writeRefmapFile(Instrumentation inst, boolean isolated) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
@@ -128,7 +144,7 @@ public final class IsolatedBootstrap {
             dir.mkdirs();
             String json = LauncherMixinService.buildRefmapJson();
 
-            if (fabric) {
+            if (isolated) {
                 java.io.File file = new java.io.File(dir, "mixins.launcheragent.refmap.json");
                 java.nio.file.Files.write(file.toPath(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 LauncherLog.agent(1, "[LauncherAgent] refmap écrit (fichier brut, classloader isolé) : " + file);
