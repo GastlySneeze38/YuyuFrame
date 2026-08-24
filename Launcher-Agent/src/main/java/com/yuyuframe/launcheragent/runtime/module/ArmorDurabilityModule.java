@@ -7,6 +7,12 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemStack;
 
 import java.lang.reflect.Method;
 
@@ -240,6 +246,22 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * javadoc pour le pourquoi.
          */
         private Object[] computeStacks() {
+            // 26.1.2 sans réflexion — Minecraft.player + getItemInHand/
+            // getItemBySlot (méthodes publiques, voir stub LocalPlayer). Try/
+            // catch dédié : nom de classe RÉEL, inexistant tel quel sur les
+            // autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
+            try {
+                LocalPlayer directPlayer = Minecraft.getInstance().player;
+                if (directPlayer != null) {
+                    Object held = directPlayer.getItemInHand(mainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
+                    Object helmet = directPlayer.getItemBySlot(EquipmentSlot.HEAD);
+                    Object chest = directPlayer.getItemBySlot(EquipmentSlot.CHEST);
+                    Object legs = directPlayer.getItemBySlot(EquipmentSlot.LEGS);
+                    Object boots = directPlayer.getItemBySlot(EquipmentSlot.FEET);
+                    return new Object[]{ helmet, chest, legs, boots, held };
+                }
+            } catch (Throwable ignored) {}
+
             Object helmet = null, chest = null, legs = null, boots = null, held = null;
             try {
                 Object mc = McReflect.minecraftClient();
@@ -393,6 +415,15 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * réellement affichée, pas systématiquement.
          */
         private boolean vanillaOffhandVisibleOnLeft() {
+            // 26.1.2 sans réflexion — voir computeStacks() pour le principe.
+            try {
+                LocalPlayer directPlayer = Minecraft.getInstance().player;
+                if (directPlayer != null) {
+                    Object offHandStackObj = directPlayer.getItemInHand(InteractionHand.OFF_HAND);
+                    if (!(offHandStackObj instanceof ItemStack) || ((ItemStack) offHandStackObj).isEmpty()) return false;
+                    return directPlayer.getMainArm() == HumanoidArm.RIGHT;
+                }
+            } catch (Throwable ignored) {}
             try {
                 Object mc = McReflect.minecraftClient();
                 if (mc == null) return false;
@@ -436,6 +467,16 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
         private String durabilityText(Object stack) {
             if (stack == null) return null;
+            // 26.1.2 sans réflexion — voir computeStacks() pour le principe.
+            try {
+                if (stack instanceof ItemStack) {
+                    ItemStack is = (ItemStack) stack;
+                    if (!is.isDamageableItem()) return null;
+                    int max = is.getMaxDamage();
+                    int dmg = is.getDamageValue();
+                    return (max - dmg) + "/" + max;
+                }
+            } catch (Throwable ignored) {}
             try {
                 // 26.1+ : isDamageable→isDamageableItem, getDamage→getDamageValue
                 // (vérifiés par javap sur le jar client 26.1.2 réel) ; getMaxDamage inchangé.

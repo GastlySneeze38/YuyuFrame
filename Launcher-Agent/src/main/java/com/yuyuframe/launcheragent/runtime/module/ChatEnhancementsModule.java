@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -74,9 +76,12 @@ public final class ChatEnhancementsModule extends LauncherModule {
     public ChatEnhancementsModule() {
         super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false);
         iconUrl = icons8("chat");
+        // 26.1.2 — voir apimixin/v26_1/chat/ChatReceiveMixin261 (réconciliation
+        // de l'ancien mixin.client.v26_1.ChatListenerMixin261, même déclencheur).
+        VanillaHookRegistry.register(HookPoint.CHAT_RECEIVE, ctx -> { onChatMessageObserved(); return false; });
     }
 
-    /** Appelé par {@code ChatListenerMixin261} — voir javadoc de tête pour le pourquoi (fiabilité face au polling par tick). */
+    /** Appelé par {@code ChatListenerMixin261} (mixin/) ou {@code ChatReceiveMixin261} (apimixin/) — voir javadoc de tête pour le pourquoi (fiabilité face au polling par tick). */
     public static void onChatMessageObserved() {
         try {
             com.yuyuframe.launcheragent.runtime.ui.LauncherModule module =

@@ -45,4 +45,8 @@ public interface MinecraftAccessor261 {
     /** Ajouté pour {@code FreelookModule} (forçage/restauration de la vue 3e personne) — voir sa javadoc. */
     @Accessor("options")
     Options la$options();
+
+    /** Ajouté pour {@code FpsModule} — champ STATIC (accesseur Sponge Mixin valide sur un champ statique, appelable depuis n'importe quelle instance). */
+    @Accessor("fps")
+    int la$fps();
 }

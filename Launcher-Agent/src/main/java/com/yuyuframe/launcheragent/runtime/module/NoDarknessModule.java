@@ -3,6 +3,9 @@ package com.yuyuframe.launcheragent.runtime.module;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.effect.MobEffects;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -35,6 +38,17 @@ public final class NoDarknessModule extends LauncherModule {
 
     @Override
     public void onTick() {
+        // 26.1.2 sans réflexion — Minecraft.player (champ public) +
+        // hasEffect/removeEffect (méthodes publiques, voir stub LocalPlayer).
+        // Try/catch dédié : nom de classe RÉEL, inexistant tel quel sur les
+        // autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
+        try {
+            LocalPlayer directPlayer = Minecraft.getInstance().player;
+            if (directPlayer != null) {
+                if (directPlayer.hasEffect(MobEffects.DARKNESS)) directPlayer.removeEffect(MobEffects.DARKNESS);
+                return;
+            }
+        } catch (Throwable ignored) {}
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;

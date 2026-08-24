@@ -116,4 +116,48 @@ public final class VanillaHookRegistry {
         List<HookHandler> handlers = HANDLERS.get(point);
         return handlers != null && !handlers.isEmpty();
     }
+
+    /**
+     * Variante "remplacement de valeur de retour" — pour les hooks type
+     * {@code ClientClockManagerWorldTimeMixin261} où {@link HookHandler}
+     * (booléen "annulé ou pas") ne suffit pas : le mixin appelant a besoin
+     * d'une VALEUR à renvoyer, pas juste d'un signal cancel/pas-cancel. Reste
+     * séparé de {@link HookHandler}/{@link #dispatch} plutôt que de forcer
+     * {@code Object} en résultat partout — la plupart des HookPoint restent
+     * de simples notifications booléennes, pas besoin d'alourdir ce cas
+     * courant pour ce cas rare.
+     */
+    @FunctionalInterface
+    public interface ValueHandler {
+        /** Retourne une valeur de remplacement, ou {@code null} pour laisser vanilla faire son calcul normal. */
+        Object resolve(Object ctx);
+    }
+
+    private static final Map<HookPoint, List<ValueHandler>> VALUE_HANDLERS = new EnumMap<>(HookPoint.class);
+
+    public static void registerValue(HookPoint point, ValueHandler handler) {
+        VALUE_HANDLERS.computeIfAbsent(point, p -> new ArrayList<>()).add(handler);
+    }
+
+    /**
+     * @return la première valeur de remplacement non-nulle fournie par un
+     *         handler enregistré sur {@code point}, ou {@code null} si aucun
+     *         n'en fournit (l'appelant doit alors laisser vanilla s'exécuter
+     *         normalement) — PAS de OU logique ici (contrairement à {@link
+     *         #dispatch}) : une seule valeur peut être renvoyée à l'appelant,
+     *         le premier handler qui en fournit une gagne.
+     */
+    public static Object dispatchValue(HookPoint point, Object ctx) {
+        List<ValueHandler> handlers = VALUE_HANDLERS.get(point);
+        if (handlers == null) return null;
+        for (ValueHandler handler : handlers) {
+            try {
+                Object result = handler.resolve(ctx);
+                if (result != null) return result;
+            } catch (Throwable t) {
+                LauncherLog.err("[VanillaHookRegistry] value handler en erreur pour " + point + ": " + t);
+            }
+        }
+        return null;
+    }
 }

@@ -274,20 +274,30 @@ public final class FreelookModule extends LauncherModule {
      * retomber sur la réflexion. {@code false} si {@code MinecraftAccessor261}
      * n'est pas encore tissé ({@code mc} n'implémente pas l'interface) — repli
      * ATTENDU tant que le basculement JSON n'est pas fait, pas une erreur.
+     *
+     * Enveloppé dans son propre try/catch (pas seulement celui de l'appelant) :
+     * {@code Minecraft.getInstance()} référence directement {@code
+     * net.minecraft.client.Minecraft} — nom RÉEL, inexistant tel quel sur les
+     * autres brackets (1.8.9-1.21.11, obfusqués) — {@code NoClassDefFoundError}
+     * y est attendu et doit rester silencieux, jamais logué comme une erreur.
      */
     private boolean applyCameraTypeViaAccessor(boolean engaged) {
-        Object mc = Minecraft.getInstance();
-        if (!(mc instanceof MinecraftAccessor261)) return false;
-        Options options = ((MinecraftAccessor261) mc).la$options();
-        if (options == null) return false;
-        if (engaged) {
-            savedCameraType = options.getCameraType();
-            options.setCameraType(CameraType.THIRD_PERSON_BACK);
-        } else if (savedCameraType != null) {
-            options.setCameraType((CameraType) savedCameraType);
-            savedCameraType = null;
+        try {
+            Object mc = Minecraft.getInstance();
+            if (!(mc instanceof MinecraftAccessor261)) return false;
+            Options options = ((MinecraftAccessor261) mc).la$options();
+            if (options == null) return false;
+            if (engaged) {
+                savedCameraType = options.getCameraType();
+                options.setCameraType(CameraType.THIRD_PERSON_BACK);
+            } else if (savedCameraType != null) {
+                options.setCameraType((CameraType) savedCameraType);
+                savedCameraType = null;
+            }
+            return true;
+        } catch (Throwable t) {
+            return false;
         }
-        return true;
     }
 
     /** Accumule un delta caméra-only (degrés) au lieu de tourner le joueur — voir MouseHandlerFreelookMixin261. */
@@ -342,14 +352,18 @@ public final class FreelookModule extends LauncherModule {
         }
     }
 
-    /** Chemin SANS réflexion pour la restauration — voir {@link #applyCameraTypeViaAccessor}, même principe. */
+    /** Chemin SANS réflexion pour la restauration — voir {@link #applyCameraTypeViaAccessor}, même principe (y compris le try/catch dédié). */
     private boolean restoreCameraTypeViaAccessor() {
-        Object mc = Minecraft.getInstance();
-        if (!(mc instanceof MinecraftAccessor261)) return false;
-        Options options = ((MinecraftAccessor261) mc).la$options();
-        if (options == null) return false;
-        options.setCameraType((CameraType) savedCameraType);
-        return true;
+        try {
+            Object mc = Minecraft.getInstance();
+            if (!(mc instanceof MinecraftAccessor261)) return false;
+            Options options = ((MinecraftAccessor261) mc).la$options();
+            if (options == null) return false;
+            options.setCameraType((CameraType) savedCameraType);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** Changement de mode en cours de partie (ex: touche restée enfoncée en passant de "Basculer" à "Maintenir") — repart d'un état propre plutôt que de garder un état "basculé" fantôme. */

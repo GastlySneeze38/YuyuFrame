@@ -7,6 +7,11 @@ import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.Holder;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -67,6 +72,39 @@ public final class PotionEffectsModule extends SingleHudModule {
 
         private List<EffectRow> currentRows() {
             List<EffectRow> rows = new ArrayList<>();
+            // 26.1.2 sans réflexion — Minecraft.player + getActiveEffects()/
+            // getAmplifier()/getDuration()/getEffect()/value() (méthodes
+            // publiques, voir stubs LocalPlayer/MobEffectInstance/Holder). Try/
+            // catch dédié : nom de classe RÉEL, inexistant tel quel sur les
+            // autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
+            try {
+                LocalPlayer directPlayer = Minecraft.getInstance().player;
+                if (directPlayer != null) {
+                    Collection<MobEffectInstance> effects = directPlayer.getActiveEffects();
+                    if (effects != null) {
+                        for (MobEffectInstance instance : effects) {
+                            int amplifier = instance.getAmplifier();
+                            int duration = instance.getDuration();
+                            Holder<MobEffect> holder = instance.getEffect();
+                            MobEffect effect = holder != null ? holder.value() : null;
+
+                            String name = effect != null ? prettify(effect.getDescriptionId()) : "?";
+                            if (amplifier > 0 && amplifier <= ROMAN.length) name += " " + ROMAN[amplifier - 1];
+                            int seconds = duration / 20;
+                            String time = (seconds >= 60 ? (seconds / 60) + "m " : "") + (seconds % 60) + "s";
+                            UiColor color = UiTheme.ACCENT;
+                            if (effect != null) {
+                                int rgb = effect.getColor();
+                                color = new UiColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 255);
+                            }
+                            rows.add(new EffectRow(name, time, color));
+                        }
+                        return rows;
+                    }
+                }
+            } catch (Throwable ignored) {
+                rows.clear();
+            }
             try {
                 Object mc = McReflect.minecraftClient();
                 if (mc == null) return rows;

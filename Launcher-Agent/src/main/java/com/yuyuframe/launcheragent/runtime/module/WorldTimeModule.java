@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 
@@ -37,5 +39,7 @@ public final class WorldTimeModule extends LauncherModule {
         super("world-time", "Temps du monde", "Force l'heure affichée (soleil/lune/ciel), sans changer le vrai temps serveur",
             "Force l'heure affichée", false);
         iconUrl = icons8("clock");
+        // 26.1.2 — voir apimixin/v26_1/clock/ClockTotalTicksMixin261.
+        VanillaHookRegistry.registerValue(HookPoint.CLOCK_TOTAL_TICKS, ctx -> isEnabled() ? (Long) (long) time : null);
     }
 }

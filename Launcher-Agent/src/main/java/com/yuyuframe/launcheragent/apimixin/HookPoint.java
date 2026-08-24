@@ -175,4 +175,16 @@ public enum HookPoint {
     CLIENT_LEVEL_LOAD,
     /** Voir {@code client.ClientPacketListenerMixin}/{@code client.ClientConfigurationPacketListenerImplMixin} — (dé)connexion serveur. */
     SERVER_CONNECT,
+
+    // ── Horloge (pas de mixin Fabric API — bespoke, voir audit ROADMAP-agent.md
+    // §3.3) ─────────────────────────────────────────────────────────────────
+    /**
+     * Voir {@code ClientClockManager.getTotalTicks(Holder)} (Inject HEAD,
+     * cancellable) — LA source unique dont dérive tout le rendu temporel
+     * (soleil/lune/couleur du ciel/éclairage ambiant), voir WorldTimeModule.
+     * Dispatché via {@link VanillaHookRegistry#dispatchValue} (remplacement
+     * de valeur de retour), PAS {@link VanillaHookRegistry#dispatch} — ctx =
+     * {@code Holder}, valeur de remplacement = {@code Long} ou {@code null}.
+     */
+    CLOCK_TOTAL_TICKS,
 }

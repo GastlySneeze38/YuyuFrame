@@ -1,5 +1,12 @@
 package net.minecraft.core;
 
-/** Stub compile-only (26.1+) — marqueur vide, juste assez pour typer un paramètre capturé (jamais lu). Voir {@code Camera.java}/{@code Identifier.java} pour le pourquoi. */
-public interface Holder {
+/**
+ * Stub compile-only (26.1+) — {@code value()} ajouté (méthode publique,
+ * appel direct) pour déballer les Holder&lt;MobEffect&gt; de {@code
+ * MobEffects}/{@code MobEffectInstance} (voir {@code NoDarknessModule}/
+ * {@code PotionEffectsModule}). Générique — usage brut ({@code Holder} sans
+ * paramètre, comme dans {@code ClockTotalTicksMixin261}) reste valide.
+ */
+public interface Holder<T> {
+    T value();
 }

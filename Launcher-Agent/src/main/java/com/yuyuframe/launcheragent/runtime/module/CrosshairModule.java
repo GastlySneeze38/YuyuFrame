@@ -9,6 +9,9 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -240,6 +243,13 @@ public final class CrosshairModule extends LauncherModule {
      * du tout, pas juste replier sur "toujours prêt" (voir javadoc de tête).
      */
     private float attackCooldownProgress() {
+        // 26.1.2 sans réflexion — Minecraft.player + getAttackStrengthScale
+        // (méthode publique, voir stub LocalPlayer). Try/catch dédié : nom de
+        // classe RÉEL, inexistant tel quel sur les autres brackets (obfusqués).
+        try {
+            LocalPlayer directPlayer = Minecraft.getInstance().player;
+            if (directPlayer != null) return directPlayer.getAttackStrengthScale(0f);
+        } catch (Throwable ignored) {}
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return -1f;

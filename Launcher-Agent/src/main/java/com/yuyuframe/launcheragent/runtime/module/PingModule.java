@@ -4,6 +4,10 @@ import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.player.LocalPlayer;
 
 import java.lang.reflect.Method;
 import java.util.UUID;
@@ -22,6 +26,20 @@ public final class PingModule extends SingleHudModule {
     private static final class ContentSource implements HudElement.ContentSource {
         @Override
         public String[] lines() {
+            // 26.1.2 sans réflexion — Minecraft.player (champ public) +
+            // getConnection()/getPlayerInfo()/getLatency() (méthodes publiques,
+            // voir stubs). Try/catch dédié : nom de classe RÉEL, inexistant tel
+            // quel sur les autres brackets (obfusqués) — repli réflexion sinon.
+            try {
+                LocalPlayer directPlayer = Minecraft.getInstance().player;
+                if (directPlayer != null) {
+                    ClientPacketListener connection = Minecraft.getInstance().getConnection();
+                    if (connection != null) {
+                        PlayerInfo info = connection.getPlayerInfo(directPlayer.getUUID());
+                        if (info != null) return new String[]{ info.getLatency() + " ms" };
+                    }
+                }
+            } catch (Throwable ignored) {}
             try {
                 Object mc = McReflect.minecraftClient();
                 if (mc == null) return new String[]{ "-- ms" };

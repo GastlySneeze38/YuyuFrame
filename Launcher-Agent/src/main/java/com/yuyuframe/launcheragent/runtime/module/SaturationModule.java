@@ -1,10 +1,14 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.FoodDataAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.food.FoodData;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -39,6 +43,24 @@ public final class SaturationModule extends SingleHudModule {
 
         @Override
         public String[] lines() {
+            // 26.1.2 sans réflexion — Minecraft.player + getFoodData()/
+            // getSaturationLevel() (méthodes publiques) + FoodDataAccessor261
+            // (exhaustionLevel, champ privé). Try/catch dédié : nom de classe
+            // RÉEL, inexistant tel quel sur les autres brackets (obfusqués).
+            try {
+                LocalPlayer directPlayer = Minecraft.getInstance().player;
+                if (directPlayer != null) {
+                    FoodData foodData = directPlayer.getFoodData();
+                    if (foodData != null) {
+                        float saturation = foodData.getSaturationLevel();
+                        float exhaustion = (foodData instanceof FoodDataAccessor261)
+                            ? ((FoodDataAccessor261) foodData).la$exhaustionLevel() : Float.NaN;
+                        String satText = Float.isNaN(saturation) ? "--" : String.format(Locale.ROOT, "%.1f", saturation);
+                        String exhText = Float.isNaN(exhaustion) ? "--" : String.format(Locale.ROOT, "%.2f", exhaustion);
+                        return new String[]{ "Saturation : " + satText, "Exhaustion : " + exhText };
+                    }
+                }
+            } catch (Throwable ignored) {}
             try {
                 Object mc = McReflect.minecraftClient();
                 if (mc == null) return fallback();

@@ -1,9 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
+import net.minecraft.client.Minecraft;
 
 import java.lang.reflect.Field;
 
@@ -27,6 +29,17 @@ public final class FpsModule extends SingleHudModule {
     private static final class ContentSource implements HudElement.ContentSource {
         @Override
         public String[] lines() {
+            // 26.1.2 sans réflexion (voir apimixin/v26_1/core/MinecraftAccessor261#la$fps) —
+            // repli réflexion multi-bracket sinon (1.8.9-1.21.11). Try/catch
+            // dédié : Minecraft.getInstance() référence le nom RÉEL, inexistant
+            // tel quel sur les autres brackets (obfusqués) — NoClassDefFoundError
+            // attendu là, doit rester silencieux.
+            try {
+                Object mcAcc = Minecraft.getInstance();
+                if (mcAcc instanceof MinecraftAccessor261) {
+                    return new String[]{ ((MinecraftAccessor261) mcAcc).la$fps() + " FPS" };
+                }
+            } catch (Throwable ignored) {}
             try {
                 Object mc = McReflect.minecraftClient();
                 if (mc == null) return new String[]{ "-- FPS" };
