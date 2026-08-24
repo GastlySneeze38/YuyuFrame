@@ -1,7 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import net.minecraft.client.renderer.fog.FogData;
+import net.minecraft.resources.Identifier;
 
 /**
  * Équivalent "Clear Water/Lava/Powder Snow" — supprime le brouillard
@@ -25,6 +29,9 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
  * 26.1.2 UNIQUEMENT pour l'instant (voir mémoire du portage).
  */
 public final class ClearVisionModule extends LauncherModule {
+
+    private static final float FAR = 1_000_000f;
+
     // Réglages ajoutés explicitement à la demande — activer/désactiver
     // CHAQUE liquide indépendamment (avant : tout ou rien via le seul
     // toggle du module). Vrai par défaut pour les 3 : comportement
@@ -45,5 +52,26 @@ public final class ClearVisionModule extends LauncherModule {
         // utilisateur : débordait de la sous-sidebar du groupe "Confort
         // visuel" ; le détail reste dans la description.
         super("clear-vision", "Vision claire", "Retire le brouillard teinté et le givre de l'eau, la lave et la neige poudreuse", false);
+        // 26.1.2 — voir apimixin/v26_1/fog/ (brouillard) et
+        // apimixin/v26_1/hud/HudExtractTextureOverlayMixin261 (givre écran).
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_WATER, ctx -> pushFogFarIf(clearWater, ctx));
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_LAVA, ctx -> pushFogFarIf(clearLava, ctx));
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_POWDERED_SNOW, ctx -> pushFogFarIf(clearPowderSnow, ctx));
+        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY, this::cancelPowderSnowOverlay);
+    }
+
+    private boolean pushFogFarIf(boolean flag, Object ctx) {
+        if (!isEnabled() || !flag || !(ctx instanceof FogData)) return false;
+        FogData fogData = (FogData) ctx;
+        fogData.environmentalStart = FAR;
+        fogData.environmentalEnd = FAR * 2f;
+        fogData.renderDistanceStart = FAR;
+        fogData.renderDistanceEnd = FAR * 2f;
+        return true;
+    }
+
+    private boolean cancelPowderSnowOverlay(Object ctx) {
+        if (!isEnabled() || !clearPowderSnow || !(ctx instanceof Identifier)) return false;
+        return ((Identifier) ctx).getPath().contains("powder_snow");
     }
 }

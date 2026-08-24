@@ -72,6 +72,30 @@ public enum HookPoint {
     HUD_EXTRACT_CHAT,
     /** Voir {@code GuiMixin#extractTabList} (WrapOperation). */
     HUD_EXTRACT_TAB_LIST,
+    /**
+     * Voir {@code Gui.extractTextureOverlay(GuiGraphicsExtractor, Identifier, float)}
+     * — PAS de mixin Fabric API d'origine (bespoke, voir audit ROADMAP-agent.md §3.3) :
+     * point de passage COMMUN à deux overlays plein-écran distincts, discriminés par
+     * {@code ctx} (l'{@code Identifier} de la texture demandée) — "pumpkin" pour
+     * NoPumpkinOverlayModule, "powder_snow" pour ClearVisionModule#clearPowderSnow.
+     */
+    HUD_EXTRACT_TEXTURE_OVERLAY,
+
+    // ── Brouillard par environnement (pas de mixin Fabric API — bespoke, voir audit
+    // ROADMAP-agent.md §3.3 : Fabric API ne couvre aucune des 6 classes FogEnvironment,
+    // voir NoFogModule/ClearVisionModule pour les modules qui s'enregistrent ici) ──────
+    /** Voir {@code AtmosphericFogEnvironment.setupFog} (Inject TAIL) — brouillard de distance normal. */
+    FOG_SETUP_ATMOSPHERIC,
+    /** Voir {@code WaterFogEnvironment.setupFog} (Inject TAIL). */
+    FOG_SETUP_WATER,
+    /** Voir {@code LavaFogEnvironment.setupFog} (Inject TAIL). */
+    FOG_SETUP_LAVA,
+    /** Voir {@code PowderedSnowFogEnvironment.setupFog} (Inject TAIL). */
+    FOG_SETUP_POWDERED_SNOW,
+    /** Voir {@code BlindnessFogEnvironment.setupFog} (Inject TAIL). */
+    FOG_SETUP_BLINDNESS,
+    /** Voir {@code DarknessFogEnvironment.setupFog} (Inject TAIL). */
+    FOG_SETUP_DARKNESS,
 
     // ── Rendu de texte/décorations d'item (fabric-rendering-v1) ──────────────
     /** Voir {@code GuiGraphicsExtractorMixin#itemDecorations} (Inject RETURN) — texte de durabilité/quantité, vanilla inclus. */

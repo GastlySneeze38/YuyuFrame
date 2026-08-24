@@ -1,8 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import net.minecraft.client.renderer.fog.FogData;
 
 import java.lang.reflect.Field;
 
@@ -54,10 +57,31 @@ import java.lang.reflect.Field;
  */
 public final class NoFogModule extends LauncherModule {
 
+    private static final float FAR = 1_000_000f;
+
     private static boolean errorLogged;
 
     public NoFogModule() {
         super("no-fog", "Sans brouillard", "Désactive tout le brouillard (distance, eau, lave, ténèbres, cécité...)", false);
+        // 26.1.2 — voir apimixin/v26_1/fog/ : les 6 environnements dispatchent
+        // ici tel quel, plus aucune vérification "no-fog OU clear-vision"
+        // dupliquée dans chaque fichier Mixin (voir FogSetupWaterMixin261).
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_ATMOSPHERIC, this::pushFogFar);
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_WATER, this::pushFogFar);
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_LAVA, this::pushFogFar);
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_POWDERED_SNOW, this::pushFogFar);
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_BLINDNESS, this::pushFogFar);
+        VanillaHookRegistry.register(HookPoint.FOG_SETUP_DARKNESS, this::pushFogFar);
+    }
+
+    private boolean pushFogFar(Object ctx) {
+        if (!isEnabled() || !(ctx instanceof FogData)) return false;
+        FogData fogData = (FogData) ctx;
+        fogData.environmentalStart = FAR;
+        fogData.environmentalEnd = FAR * 2f;
+        fogData.renderDistanceStart = FAR;
+        fogData.renderDistanceEnd = FAR * 2f;
+        return true;
     }
 
     @Override
