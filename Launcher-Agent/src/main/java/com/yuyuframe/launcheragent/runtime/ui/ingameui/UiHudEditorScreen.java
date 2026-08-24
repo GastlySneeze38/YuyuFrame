@@ -3,10 +3,10 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudRegistry;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiHudBox;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 

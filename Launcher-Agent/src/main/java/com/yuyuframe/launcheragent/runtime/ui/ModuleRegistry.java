@@ -41,7 +41,7 @@ import com.yuyuframe.launcheragent.runtime.module.optimodule.ParticleRenderDista
 import com.yuyuframe.launcheragent.runtime.module.optimodule.PlayerBackfaceCullingModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.TileEntityRenderDistanceModule;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.UnstackedItemsModule;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
 import java.util.ArrayList;
 import java.util.Arrays;

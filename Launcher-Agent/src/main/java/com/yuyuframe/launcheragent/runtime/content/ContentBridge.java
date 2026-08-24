@@ -81,7 +81,7 @@ public final class ContentBridge {
      * Charge une image depuis N'IMPORTE QUELLE URL HTTPS et la décode en
      * pixels RGBA bruts côté Rust (crate {@code image} — PNG/JPEG/GIF/WebP/
      * BMP/ICO/TIFF, AUCUNE écriture disque) — voir
-     * {@link com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage},
+     * {@link com.yuyuframe.launcheragent.apigraphic.UiRemoteImage},
      * seul appelant prévu (ne PAS appeler directement depuis un écran, cette
      * méthode est SYNCHRONE et bloquante sur le réseau — toujours depuis un
      * thread daemon dédié, jamais le thread de rendu).

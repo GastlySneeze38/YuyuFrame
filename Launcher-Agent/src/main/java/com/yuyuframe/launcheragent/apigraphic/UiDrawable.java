@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
+package com.yuyuframe.launcheragent.apigraphic;
 
 /**
  * Marqueur implémenté par nos écrans custom (UiScreenBase, runtime.ui.ingameui)

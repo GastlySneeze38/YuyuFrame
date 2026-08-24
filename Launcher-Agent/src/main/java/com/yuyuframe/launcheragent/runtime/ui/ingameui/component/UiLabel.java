@@ -1,9 +1,9 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiWidget;
 
 /** Texte statique non-interactif — x,y = position de la ligne de base (voir UiRenderer.drawText). */
 public class UiLabel extends UiWidget {

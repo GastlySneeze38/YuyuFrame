@@ -4,8 +4,8 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPoller;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
+package com.yuyuframe.launcheragent.apigraphic;
 
 /**
  * Progression d'entrée/sortie (0=caché, 1=visible) pilotée par une DURÉE FIXE

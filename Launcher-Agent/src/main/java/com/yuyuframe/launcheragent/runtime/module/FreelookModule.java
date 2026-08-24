@@ -8,7 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern;
+import com.yuyuframe.launcheragent.apigraphic.UiInputPollerModern;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;

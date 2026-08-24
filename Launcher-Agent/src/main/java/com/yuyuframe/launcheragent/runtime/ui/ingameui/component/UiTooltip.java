@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
 /**
  * Bulle d'aide flottante près du curseur — dessinée en dernier par

@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
+package com.yuyuframe.launcheragent.apigraphic;
 
 /**
  * Valeur flottante qui converge en douceur vers une cible (hover, toggle,

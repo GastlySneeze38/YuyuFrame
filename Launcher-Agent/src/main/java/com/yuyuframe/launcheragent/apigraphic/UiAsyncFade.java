@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.graphicapi;
+package com.yuyuframe.launcheragent.apigraphic;
 
 /**
  * Fondu d'entrée pour du contenu qui arrive de façon ASYNCHRONE (icône

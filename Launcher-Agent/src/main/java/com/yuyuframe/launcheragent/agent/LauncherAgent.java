@@ -27,7 +27,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-24-v687";
+    private static final String BUILD_VERSION = "2026-08-24-v688";
 
     public static void premain(String agentArgs, Instrumentation inst) {
         try {
@@ -83,7 +83,7 @@ public class LauncherAgent {
         // contact AWT. Retiré. Voir UiFont.java pour le diagnostic PNG ajouté
         // à la place (dump direct de l'atlas, preuve plutôt qu'hypothèse).
         try {
-            com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiFont.REGULAR.textWidth("YuyuFrame", 1f);
+            com.yuyuframe.launcheragent.apigraphic.UiFont.REGULAR.textWidth("YuyuFrame", 1f);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] Réchauffage UiFont/AWT échoué (non bloquant) : " + t);
         }

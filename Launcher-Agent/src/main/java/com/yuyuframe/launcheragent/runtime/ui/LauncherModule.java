@@ -39,7 +39,7 @@ public abstract class LauncherModule {
      * URL HTTPS d'icône distante pour la carte de ce module (demandé
      * explicitement : "ajoute des icônes pour tous les modules", même
      * système de fetch HTTPS-en-mémoire que la galerie Modrinth — voir
-     * {@link com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRemoteImage}).
+     * {@link com.yuyuframe.launcheragent.apigraphic.UiRemoteImage}).
      * {@code null} (défaut) = pas d'icône dédiée, {@code ModCard} retombe
      * sur la pastille-lettre existante. Mutable et assigné APRÈS le
      * {@code super(...)} (dans le corps du constructeur de chaque module,
@@ -114,5 +114,5 @@ public abstract class LauncherModule {
      * vanilla) et UNIQUEMENT si {@link #isEnabled()} — pour un rendu
      * d'overlay plein écran (ex: teinte vie basse). Ne fait rien par défaut.
      */
-    public void onRenderOverlay(com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer renderer, int vpWidth, int vpHeight) {}
+    public void onRenderOverlay(com.yuyuframe.launcheragent.apigraphic.UiRenderer renderer, int vpWidth, int vpHeight) {}
 }

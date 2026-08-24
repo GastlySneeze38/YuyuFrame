@@ -1,9 +1,9 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiWidget;
 
 /** Bouton texte — rect arrondi, s'éclaircit en douceur au survol (voir UiAnimatedFloat), libellé centré. */
 public class UiButton extends UiWidget {

@@ -6,8 +6,8 @@ import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiColor;
-import com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
@@ -263,7 +263,7 @@ public final class KeystrokesModule extends SingleHudModule {
                     InputConstants.Key key = ((KeyMappingAccessor261) keyBinding).la$key();
                     if (key != null) {
                         int code = key.getValue();
-                        String name = com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
+                        String name = com.yuyuframe.launcheragent.apigraphic.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
                         return name == null || name.isEmpty() ? "?" : name;
                     }
                 } catch (Throwable ignored) {}
@@ -289,7 +289,7 @@ public final class KeystrokesModule extends SingleHudModule {
                 Method getCode = McReflect.noArgMethod(boundKey.getClass(), "net/minecraft/client/util/InputUtil$Key", "getCode", "getValue");
                 if (getCode == null) return "?";
                 int code = (int) getCode.invoke(boundKey);
-                String name = com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
+                String name = com.yuyuframe.launcheragent.apigraphic.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
                 return name == null || name.isEmpty() ? "?" : name;
             } catch (Throwable t) {
                 return "?";
@@ -329,8 +329,8 @@ public final class KeystrokesModule extends SingleHudModule {
          */
         private void trackClicks() {
             try {
-                com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern modern =
-                    com.yuyuframe.launcheragent.runtime.ui.graphicapi.UiInputPollerModern.ACTIVE;
+                com.yuyuframe.launcheragent.apigraphic.UiInputPollerModern modern =
+                    com.yuyuframe.launcheragent.apigraphic.UiInputPollerModern.ACTIVE;
                 boolean leftDown, rightDown;
                 if (modern != null) {
                     leftDown = modern.leftDown;
