@@ -148,7 +148,28 @@ public final class FreelookModule extends LauncherModule {
         VanillaHookRegistry.registerValue(HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET, this::cameraRotationOffset);
     }
 
-    /** Handler de {@link HookPoint#FREELOOK_TURN_INTERCEPT} — voir MouseHandlerFreelookMixin261. {@code ctx} = {@code double[]{yRot, xRot}}. */
+    /**
+     * Facteur appliqué par {@code Entity.turn(double yo, double xo)} À SES
+     * DEUX ARGUMENTS avant de les ajouter à xRot/yRot — vérifié au bytecode
+     * (javap du vrai jar 26.1.2) :
+     * <pre>
+     *   0: dload_3 / d2f / ldc 0.15f / fmul   → pitch
+     *   8: dload_1 / d2f / ldc 0.15f / fmul   → yaw
+     * </pre>
+     * {@code MouseHandlerFreelookMixin261} intercepte l'appel à {@code turn()}
+     * AVANT son exécution : les deltas reçus sont donc déjà passés par la
+     * courbe de sensibilité vanilla (calculée dans {@code turnPlayer}) mais
+     * PAS encore par ce facteur. Les accumuler bruts donne 1/0.15 ≈ 6,67× trop
+     * de rotation — exactement le symptôme « sensibilité trop rapide » remonté
+     * en jeu, et la même racine que le bug historique de l'ancienne
+     * implémentation (voir {@link #resolveSensitivity}), qui reconstruisait la
+     * courbe à la main et oubliait aussi ce facteur final.
+     *
+     * Omnilook fait le même calcul ({@code addRotation(yRot * 0.15, xRot * 0.15)}).
+     */
+    private static final double VANILLA_TURN_FACTOR = 0.15;
+
+    /** Handler de {@link HookPoint#FREELOOK_TURN_INTERCEPT} — voir MouseHandlerFreelookMixin261. {@code ctx} = {@code double[]{yRot, xRot}}, valeurs BRUTES telles que passées à {@code turn()} (pré-{@link #VANILLA_TURN_FACTOR}). */
     private boolean interceptTurn(Object ctx) {
         if (!(ctx instanceof double[])) return false;
         double[] delta = (double[]) ctx;
@@ -157,7 +178,7 @@ public final class FreelookModule extends LauncherModule {
             deactivate();
             return false;
         }
-        accumulate(delta[0], delta[1]);
+        accumulate(delta[0] * VANILLA_TURN_FACTOR, delta[1] * VANILLA_TURN_FACTOR);
         return true;
     }
 

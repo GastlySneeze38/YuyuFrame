@@ -21,7 +21,50 @@ package com.yuyuframe.launcheragent.apimixin;
  * Chaque commentaire pointe vers le mixin Fabric API d'origine ayant servi de
  * référence (voir {@code mixinapi/26.1.2/}) — utile pour retrouver le point
  * d'injection exact (cible, {@code @At}, éventuel {@code @Slice}) au moment
- * de porter le mixin réel.
+ * de porter le mixin réel. ⚠️ Ces commentaires disent « WrapOperation » parce
+ * qu'ils décrivent le mixin FABRIC API d'origine : ne PAS les recopier tels
+ * quels, voir la règle ci-dessous.
+ *
+ * <h2>RÈGLE : viser la méthode appelée, jamais le site d'appel</h2>
+ * Pour une porte « cet élément vanilla doit-il s'afficher ? », écrire
+ * <b>{@code @Inject}(method = "&lt;méthode appelée&gt;", at = @At("HEAD"),
+ * cancellable = true)</b> puis {@code ci.cancel()} — PAS un injecteur de site
+ * d'appel ({@code @WrapOperation}/{@code @Redirect} avec
+ * {@code @At(value = "INVOKE")}) sur l'appel depuis la méthode englobante.
+ *
+ * Fabric API peut se permettre le site d'appel : c'est un mod, il tisse tôt et
+ * en même temps que les autres. Nous sommes un {@code -javaagent} à côté de
+ * ~89 mods, et un site d'appel DISPARAÎT dès qu'un mod enveloppe la méthode
+ * englobante. Cas réel et coûteux (2026-08-25, §14) : Iris applique
+ * {@code @WrapMethod} sur {@code Gui.extractRenderState}, ce qui déplace tout
+ * le corps d'origine dans une méthode synthétique — {@code extractRenderState}
+ * ne contient plus qu'un appel à
+ * {@code wrapMethod$bne000$iris$handleHudHidingScreens}, et TOUS nos
+ * {@code @At(INVOKE)} portant dessus voyaient « Scanned 0 target(s) ».
+ * 17 mixins {@code HudExtract*} ont été convertis d'un coup pour cette raison ;
+ * l'échec était SILENCIEUX (voir {@code LauncherMixinTransformerWrapper} :
+ * la JVM ignore toute exception d'un {@code ClassFileTransformer}).
+ *
+ * Injecter dans la méthode appelée y est insensible : peu importe d'où part
+ * l'appel, il aboutit toujours là.
+ *
+ * Exceptions légitimes, qui DOIVENT rester sur le site d'appel :
+ * <ul>
+ *   <li>la méthode appelée appartient à une autre classe qu'on ne veut pas
+ *       tisser (hiérarchie trop large, interface) — ex.
+ *       {@code ContextualBarRenderer}, {@code SpectatorGui}, {@code Screen} ;</li>
+ *   <li>le site d'appel lui-même porte l'information — ex.
+ *       {@code MouseHandlerFreelookMixin261}, où intercepter
+ *       {@code LocalPlayer.turn} à CET endroit précis est ce qui donne des
+ *       deltas déjà passés par la courbe de sensibilité vanilla ;</li>
+ *   <li>il faut modifier une valeur/un argument plutôt que tout annuler — ex.
+ *       {@code CameraFreelookMixin261}.</li>
+ * </ul>
+ * Dans ces cas, préférer {@code @WrapOperation}/{@code @WrapWithCondition}
+ * (MixinExtras) à {@code @Redirect} : plusieurs wraps COMPOSENT sur un même
+ * site, deux {@code @Redirect} s'excluent. MixinExtras est opérationnel chez
+ * nous depuis {@code IsolatedBootstrap.initMixinExtras()} — avant ça, toute
+ * annotation MixinExtras d'{@code apimixin/} était silencieusement inerte.
  */
 public enum HookPoint {
 
