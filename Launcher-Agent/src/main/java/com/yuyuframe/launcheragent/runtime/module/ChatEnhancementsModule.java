@@ -78,7 +78,8 @@ public final class ChatEnhancementsModule extends LauncherModule {
     private int la$repeatCount = 1;
 
     public ChatEnhancementsModule() {
-        super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false);
+        super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false,
+            HookPoint.CHAT_RECEIVE);
         iconUrl = icons8("chat");
         // 26.1.2 — voir apimixin/v26_1/chat/ChatReceiveMixin261 (réconciliation
         // de l'ancien mixin.client.v26_1.ChatListenerMixin261, même déclencheur).

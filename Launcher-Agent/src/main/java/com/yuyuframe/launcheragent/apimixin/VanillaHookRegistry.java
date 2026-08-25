@@ -147,6 +147,69 @@ public final class VanillaHookRegistry {
      *         #dispatch}) : une seule valeur peut être renvoyée à l'appelant,
      *         le premier handler qui en fournit une gagne.
      */
+    /**
+     * Ensemble des {@link HookPoint} sur lesquels au moins un handler s'est
+     * réellement enregistré (les deux familles confondues : {@link HookHandler}
+     * et {@link ValueHandler}).
+     *
+     * Sert à l'audit de cohérence avec les déclarations statiques
+     * {@code LauncherModule.hookPoints} — voir {@link #auditDeclarations}.
+     * NE PAS utiliser pour décider d'un tissage : à l'instant du tissage ce
+     * jeu est TOUJOURS vide, les enregistrements n'ayant lieu qu'à la première
+     * frame (c'est précisément ce qui rendait la gate déclarative inopérante,
+     * voir {@code LauncherMixinConfigPlugin.GATE_ENABLED}).
+     */
+    public static java.util.Set<HookPoint> usedPoints() {
+        java.util.EnumSet<HookPoint> used = java.util.EnumSet.noneOf(HookPoint.class);
+        for (Map.Entry<HookPoint, List<HookHandler>> e : HANDLERS.entrySet()) {
+            if (e.getValue() != null && !e.getValue().isEmpty()) used.add(e.getKey());
+        }
+        for (Map.Entry<HookPoint, List<ValueHandler>> e : VALUE_HANDLERS.entrySet()) {
+            if (e.getValue() != null && !e.getValue().isEmpty()) used.add(e.getKey());
+        }
+        return used;
+    }
+
+    /**
+     * Compare ce qui est RÉELLEMENT enregistré à ce qui est DÉCLARÉ
+     * statiquement, et journalise tout écart (2026-08-25, §12).
+     *
+     * Le catalogue statique ({@code LauncherModule.hookPoints} + les
+     * registrants d'infrastructure passés en {@code extraDeclared}) est la
+     * seule source d'information exploitable AVANT le tissage. Il n'a de
+     * valeur que s'il reste exact : cet audit existe pour qu'une dérive se
+     * voie immédiatement dans launcher-agent.log au lieu de se traduire, plus
+     * tard, par un mixin écarté à tort si la gate est un jour activée.
+     *
+     * @param declared union des HookPoint déclarés statiquement
+     */
+    public static void auditDeclarations(java.util.Set<HookPoint> declared) {
+        java.util.Set<HookPoint> used = usedPoints();
+
+        java.util.EnumSet<HookPoint> undeclared = java.util.EnumSet.noneOf(HookPoint.class);
+        undeclared.addAll(used);
+        undeclared.removeAll(declared);
+
+        java.util.EnumSet<HookPoint> unused = java.util.EnumSet.noneOf(HookPoint.class);
+        unused.addAll(declared);
+        unused.removeAll(used);
+
+        if (!undeclared.isEmpty()) {
+            // Cas GRAVE pour une future gate : ces hooks sont utilisés sans
+            // être annoncés, donc leur mixin serait écarté à tort.
+            LauncherLog.err("[HookPointAudit] UTILISÉS MAIS NON DÉCLARÉS (" + undeclared.size()
+                + ") — à ajouter au super(...) du module concerné : " + undeclared);
+        }
+        if (!unused.isEmpty()) {
+            // Bénin : déclaration trop large (module désactivé, ou hook prévu
+            // mais pas encore branché).
+            LauncherLog.warn("[HookPointAudit] déclarés mais non enregistrés (" + unused.size()
+                + ") — bénin (module inactif ou hook prévu) : " + unused);
+        }
+        LauncherLog.ui(3, "[HookPointAudit] " + used.size() + " HookPoint utilisés, "
+            + declared.size() + " déclarés, " + undeclared.size() + " écart(s) bloquant(s)");
+    }
+
     public static Object dispatchValue(HookPoint point, Object ctx) {
         List<ValueHandler> handlers = VALUE_HANDLERS.get(point);
         if (handlers == null) return null;

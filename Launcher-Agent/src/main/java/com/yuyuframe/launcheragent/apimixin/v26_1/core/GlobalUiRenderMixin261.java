@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry;
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
@@ -49,6 +50,18 @@ public abstract class GlobalUiRenderMixin261 {
                     ClientCommandRegistry.bootstrap();
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): ClientCommandRegistry.bootstrap() a levé: " + t);
+                }
+                // Audit du catalogue statique — placé ICI parce que c'est le
+                // premier instant où TOUS les enregistrements ont eu lieu
+                // (modules ci-dessus + ClientCommandRegistry juste avant).
+                // Voir VanillaHookRegistry.auditDeclarations : sans lui, les
+                // déclarations LauncherModule.hookPoints dérivent en silence,
+                // et une gate qui s'appuierait dessus écarterait des mixins
+                // pourtant nécessaires.
+                try {
+                    VanillaHookRegistry.auditDeclarations(ModuleRegistry.declaredHookPoints());
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): audit HookPoint a levé: " + t);
                 }
             }
             GlobalUiRenderBridge261.inputPoller.poll();

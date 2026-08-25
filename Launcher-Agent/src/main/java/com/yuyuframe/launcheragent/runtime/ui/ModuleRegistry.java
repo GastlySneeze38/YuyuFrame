@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.runtime.module.ArmorDurabilityModule;
 import com.yuyuframe.launcheragent.runtime.module.ChatEnhancementsModule;
 import com.yuyuframe.launcheragent.runtime.module.ClearVisionModule;
@@ -393,6 +394,44 @@ public final class ModuleRegistry {
     public static List<LauncherModule> all() { return Collections.unmodifiableList(MODULES); }
 
     public static List<ModuleGroup> groups() { return Collections.unmodifiableList(GROUPS); }
+
+    /**
+     * HookPoint consommés par des registrants qui NE SONT PAS des modules
+     * (2026-08-25, §12).
+     *
+     * {@code LauncherModule.hookPoints} couvre les modules, mais pas
+     * l'infrastructure : {@code ClientCommandRegistry.bootstrap()} enregistre
+     * {@link HookPoint#CHAT_SEND} pour intercepter les commandes client, sans
+     * être un module. Toute future décision prise avant le tissage (gate
+     * déclarative) doit donc réunir CE jeu et celui des modules, sinon le
+     * mixin correspondant serait écarté à tort.
+     *
+     * À compléter si un autre composant hors-module se met à appeler
+     * {@code VanillaHookRegistry.register(...)} — l'audit de
+     * {@link VanillaHookRegistry#auditDeclarations} le signalera aussitôt en
+     * « UTILISÉS MAIS NON DÉCLARÉS ».
+     */
+    private static final HookPoint[] INFRA_HOOK_POINTS = { HookPoint.CHAT_SEND };
+
+    /**
+     * Union de TOUS les HookPoint déclarés statiquement : modules + infra.
+     *
+     * C'est la seule vue exploitable AVANT le tissage — {@code
+     * VanillaHookRegistry.usedPoints()} est vide à cet instant, les
+     * enregistrements n'ayant lieu qu'à la première frame.
+     *
+     * ⚠️ Appelle {@link #all()}, donc CONSTRUIT tous les modules. Ne pas
+     * invoquer depuis un contexte de tissage sans avoir vérifié qu'aucun
+     * constructeur de module ne touche une classe du jeu.
+     */
+    public static java.util.Set<HookPoint> declaredHookPoints() {
+        java.util.EnumSet<HookPoint> declared = java.util.EnumSet.noneOf(HookPoint.class);
+        Collections.addAll(declared, INFRA_HOOK_POINTS);
+        for (LauncherModule m : all()) {
+            if (m.hookPoints != null) Collections.addAll(declared, m.hookPoints);
+        }
+        return declared;
+    }
 
     /** Modules qui n'appartiennent à AUCUN {@link ModuleGroup} — ce sont ceux qui gardent leur propre carte sur l'écran d'accueil. */
     public static List<LauncherModule> ungrouped() {

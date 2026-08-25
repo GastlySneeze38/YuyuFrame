@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.extensibility.IMixinConfigSource;
 import org.objectweb.asm.*;
 
 import java.lang.instrument.Instrumentation;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -111,6 +113,13 @@ public final class IsolatedBootstrap {
         // vers apimixin/ (voir VersionBracketRegistry, 26.1.2) n'en a plus.
         String mixinConfig = bracket.mixinConfigResource;
         String apiMixinConfig = bracket.apiMixinConfigResource;
+
+        // Filtrage déclaratif HookPoint — remplace l'ancienne gate du plugin de
+        // config Mixin (voir filterConfigByHookPoints). Fait ICI, avant tout
+        // enregistrement, pour que Mixin n'ouvre même pas les mixins écartés.
+        if (apiMixinConfig != null) {
+            apiMixinConfig = filterConfigByHookPoints(apiMixinConfig);
+        }
 
         Set<String> mixinTargets = new LinkedHashSet<>();
         if (mixinConfig != null) {
@@ -327,6 +336,186 @@ public final class IsolatedBootstrap {
         int n;
         while ((n = is.read(chunk)) != -1) buf.write(chunk, 0, n);
         return buf.toByteArray();
+    }
+
+    // ── Filtrage déclaratif HookPoint (2026-08-25, §12) ────────────────────
+    //
+    // Remplace la gate qui vivait dans LauncherMixinConfigPlugin.
+    // shouldApplyMixin() — voir LauncherMixinService.findClass pour l'histoire
+    // complète. Deux raisons de l'avoir déplacée ici :
+    //
+    //  1. CORRECTION. Le plugin de config est INERTE sur ce bracket
+    //     (ClassCastException app/isolatedCl, launcher-agent.jar étant en
+    //     -javaagent donc présent sur les deux classloaders). Quatre tentatives
+    //     pour le réveiller ont cassé le démarrage du jeu. IsolatedBootstrap,
+    //     lui, tourne déjà dans le bon classloader : le problème disparaît par
+    //     construction.
+    //
+    //  2. PERFORMANCE. Le plugin arrive trop tard : quand Mixin appelle
+    //     shouldApplyMixin(), il a DÉJÀ chargé le bytecode de chaque mixin,
+    //     parsé ses annotations, construit son MixinInfo et résolu son refmap.
+    //     Il n'évite que le merge final. En retirant les entrées du JSON avant
+    //     addConfiguration(), Mixin ne sait même pas que ces mixins existent.
+    //     Mesuré sur ce poste : ~5,5 ms de préparation par mixin (66 en 365 ms),
+    //     pour ~40 mixins écartés sur 51 gatés → ~220 ms de démarrage, sur un
+    //     bootstrap agent de ~1 545 ms.
+    //
+    // ⚠️ TOUT passe par de la lecture de bytecode (ASM), JAMAIS par un
+    // Class.forName : charger HookPoint / MixinHookPointRegistry / ModuleRegistry
+    // depuis premain reviendrait à toucher apimixin depuis le classloader
+    // système — exactement le LinkageError du §10 (bug A).
+    //
+    // En cas d'échec quelconque, on renvoie la config d'origine : le filtrage
+    // est une optimisation, jamais un point de rupture.
+
+    private static final String HOOKPOINT_OWNER = "com/yuyuframe/launcheragent/apimixin/HookPoint";
+    private static final boolean FILTER_ENABLED =
+        !"false".equalsIgnoreCase(System.getProperty("launcheragent.hookpointFilter", "true"));
+
+    /**
+     * Réécrit {@code configName} en ne gardant que les mixins dont le HookPoint
+     * est réellement réclamé, et renvoie le nom de ressource à enregistrer.
+     *
+     * @return le nom du fichier filtré, ou {@code configName} inchangé si le
+     *         filtrage est désactivé, inapplicable ou en échec
+     */
+    private static String filterConfigByHookPoints(String configName) {
+        if (!FILTER_ENABLED) {
+            LauncherLog.agent(3, "[HookPointFilter] désactivé (-Dlauncheragent.hookpointFilter=false)");
+            return configName;
+        }
+        try {
+            ClassLoader agentCL = IsolatedBootstrap.class.getClassLoader();
+            String json;
+            try (java.io.InputStream is = agentCL.getResourceAsStream(configName)) {
+                if (is == null) return configName;
+                json = new String(readAllBytes(is), java.nio.charset.StandardCharsets.UTF_8);
+            }
+
+            Map<String, String> mixinToPoint = scanMixinHookPointMap();
+            Set<String> claimed = scanClaimedHookPoints();
+            if (mixinToPoint.isEmpty() || claimed.isEmpty()) {
+                LauncherLog.warn("[HookPointFilter] catalogue vide (map=" + mixinToPoint.size()
+                    + ", réclamés=" + claimed.size() + ") — config inchangée");
+                return configName;
+            }
+
+            List<String> dropped = new ArrayList<>();
+            String filtered = json;
+            for (Map.Entry<String, String> e : mixinToPoint.entrySet()) {
+                if (claimed.contains(e.getValue())) continue;
+                // L'entrée JSON se termine par le nom simple du mixin ; on la
+                // retire avec sa virgule pour garder un tableau valide.
+                Matcher m = Pattern.compile("\\s*\"[A-Za-z0-9$._]*" + Pattern.quote(e.getKey()) + "\",?")
+                        .matcher(filtered);
+                if (m.find()) {
+                    filtered = m.replaceFirst("");
+                    dropped.add(e.getKey() + " (" + e.getValue() + ")");
+                }
+            }
+            if (dropped.isEmpty()) {
+                LauncherLog.agent(3, "[HookPointFilter] aucun mixin à écarter — config inchangée");
+                return configName;
+            }
+            // Une entrée retirée en fin de tableau peut laisser une virgule
+            // orpheline avant le ']'.
+            filtered = filtered.replaceAll(",(\\s*])", "$1");
+
+            java.io.File agentDir = agentDir();
+            if (agentDir == null) return configName;
+            java.io.File dir = new java.io.File(agentDir, "generated");
+            dir.mkdirs();
+            String outName = configName.replace(".json", "-filtered.json");
+            java.nio.file.Files.write(new java.io.File(dir, outName).toPath(),
+                filtered.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            LauncherLog.agent(3, "[HookPointFilter] " + dropped.size() + " mixin(s) écarté(s) sur "
+                + mixinToPoint.size() + " gaté(s) — " + claimed.size() + " HookPoint réclamé(s) → " + outName);
+            LauncherLog.agent(1, "[HookPointFilter] écartés : " + dropped);
+            return outName;
+        } catch (Throwable t) {
+            LauncherLog.err("[HookPointFilter] échec, config d'origine conservée : " + t);
+            return configName;
+        }
+    }
+
+    /**
+     * Lit le {@code <clinit>} de {@code MixinHookPointRegistry} et en extrait
+     * les paires {@code put("NomDuMixin", HookPoint.X)} — sans charger la
+     * classe (voir l'avertissement du bloc ci-dessus).
+     */
+    private static Map<String, String> scanMixinHookPointMap() {
+        Map<String, String> map = new LinkedHashMap<>();
+        try (java.io.InputStream is = IsolatedBootstrap.class.getClassLoader()
+                .getResourceAsStream("com/yuyuframe/launcheragent/apimixin/MixinHookPointRegistry.class")) {
+            if (is == null) return map;
+            new ClassReader(readAllBytes(is)).accept(new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public org.objectweb.asm.MethodVisitor visitMethod(int a, String name, String d, String s, String[] ex) {
+                    return new org.objectweb.asm.MethodVisitor(Opcodes.ASM9) {
+                        private String lastString;
+                        @Override public void visitLdcInsn(Object value) {
+                            if (value instanceof String) lastString = (String) value;
+                        }
+                        @Override public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
+                            if (op == Opcodes.GETSTATIC && HOOKPOINT_OWNER.equals(owner) && lastString != null) {
+                                map.put(lastString, fname);
+                                lastString = null;
+                            }
+                        }
+                    };
+                }
+            }, ClassReader.SKIP_FRAMES);
+        } catch (Throwable t) {
+            LauncherLog.warn("[HookPointFilter] scanMixinHookPointMap: " + t);
+        }
+        return map;
+    }
+
+    /**
+     * Ensemble des HookPoint référencés par le code de {@code runtime/} —
+     * modules ({@code super(..., HookPoint.X)} comme
+     * {@code VanillaHookRegistry.register(HookPoint.X, ...)}) et
+     * infrastructure ({@code ClientCommandRegistry}, {@code ModuleRegistry.
+     * INFRA_HOOK_POINTS}).
+     *
+     * Le catalogue se dérive ainsi du code lui-même, sans table à maintenir en
+     * double. On ne scanne QUE {@code runtime/} : les mixins d'{@code apimixin/}
+     * référencent évidemment tous les HookPoint (ce sont eux qui les
+     * dispatchent), les inclure réclamerait tout et annulerait le filtre.
+     *
+     * Sur-approximation assumée : une référence à un HookPoint suffit à le
+     * réclamer, même si l'enregistrement est conditionnel. Un mixin gardé pour
+     * rien ne coûte que du temps de tissage ; un mixin écarté à tort casserait
+     * une fonctionnalité.
+     */
+    private static Set<String> scanClaimedHookPoints() {
+        Set<String> claimed = new LinkedHashSet<>();
+        String jarPath = System.getProperty("launcheragent.jarPath");
+        if (jarPath == null || jarPath.isEmpty()) return claimed;
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jarPath)) {
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                String n = entry.getName();
+                if (!n.startsWith("com/yuyuframe/launcheragent/runtime/") || !n.endsWith(".class")) continue;
+                try (java.io.InputStream is = zip.getInputStream(entry)) {
+                    new ClassReader(readAllBytes(is)).accept(new ClassVisitor(Opcodes.ASM9) {
+                        @Override
+                        public org.objectweb.asm.MethodVisitor visitMethod(int a, String mn, String d, String s, String[] ex) {
+                            return new org.objectweb.asm.MethodVisitor(Opcodes.ASM9) {
+                                @Override public void visitFieldInsn(int op, String owner, String fn, String fd) {
+                                    if (op == Opcodes.GETSTATIC && HOOKPOINT_OWNER.equals(owner)) claimed.add(fn);
+                                }
+                            };
+                        }
+                    }, ClassReader.SKIP_FRAMES);
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LauncherLog.warn("[HookPointFilter] scanClaimedHookPoints: " + t);
+        }
+        return claimed;
     }
 
     private static Set<String> discoverMixinTargets(String configName) {

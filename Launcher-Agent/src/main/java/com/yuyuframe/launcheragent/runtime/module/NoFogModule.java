@@ -62,7 +62,9 @@ public final class NoFogModule extends LauncherModule {
     private static boolean errorLogged;
 
     public NoFogModule() {
-        super("no-fog", "Sans brouillard", "Désactive tout le brouillard (distance, eau, lave, ténèbres, cécité...)", false);
+        super("no-fog", "Sans brouillard", "Désactive tout le brouillard (distance, eau, lave, ténèbres, cécité...)", false,
+            HookPoint.FOG_SETUP_ATMOSPHERIC, HookPoint.FOG_SETUP_WATER, HookPoint.FOG_SETUP_LAVA,
+            HookPoint.FOG_SETUP_POWDERED_SNOW, HookPoint.FOG_SETUP_BLINDNESS, HookPoint.FOG_SETUP_DARKNESS);
         // 26.1.2 — voir apimixin/v26_1/fog/ : les 6 environnements dispatchent
         // ici tel quel, plus aucune vérification "no-fog OU clear-vision"
         // dupliquée dans chaque fichier Mixin (voir FogSetupWaterMixin261).

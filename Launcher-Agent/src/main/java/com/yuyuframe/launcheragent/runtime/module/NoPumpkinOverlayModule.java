@@ -26,7 +26,8 @@ public final class NoPumpkinOverlayModule extends LauncherModule {
         // Nom raccourci (était "Sans citrouille (vision)") — retour
         // utilisateur : débordait de la sous-sidebar du groupe "Confort
         // visuel" ; le détail reste dans la description.
-        super("no-pumpkin-overlay", "Sans citrouille", "Retire l'overlay de vision de la citrouille sculptée portée sur la tête", false);
+        super("no-pumpkin-overlay", "Sans citrouille", "Retire l'overlay de vision de la citrouille sculptée portée sur la tête", false,
+            HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
         VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY, this::cancelPumpkinOverlay);
     }
 

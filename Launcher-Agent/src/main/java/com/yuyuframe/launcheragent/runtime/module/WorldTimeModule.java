@@ -37,7 +37,8 @@ public final class WorldTimeModule extends LauncherModule {
 
     public WorldTimeModule() {
         super("world-time", "Temps du monde", "Force l'heure affichée (soleil/lune/ciel), sans changer le vrai temps serveur",
-            "Force l'heure affichée", false);
+            "Force l'heure affichée", false,
+            HookPoint.CLOCK_TOTAL_TICKS);
         iconUrl = icons8("clock");
         // 26.1.2 — voir apimixin/v26_1/clock/ClockTotalTicksMixin261.
         VanillaHookRegistry.registerValue(HookPoint.CLOCK_TOTAL_TICKS, ctx -> isEnabled() ? (Long) (long) time : null);
