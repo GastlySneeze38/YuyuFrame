@@ -544,29 +544,31 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         String nameSlash = name.replace('.', '/');
         String resource = nameSlash + ".class";
 
-        ClassLoader cl = getContextClassLoader();
-        InputStream is = cl.getResourceAsStream(resource);
-        if (is == null) {
-            cl = LauncherMixinService.class.getClassLoader();
-            is = cl.getResourceAsStream(resource);
-        }
+        InputStream is = openResource(resource);
 
         String obfSlash = nameSlash;
         if (is == null && MappingsRegistry.isLoaded()) {
-            // Toujours "official" ici, jamais le schéma actif (intermediary
-            // sous Fabric) — cette lecture cherche un VRAI fichier .class sur
-            // le classpath, et seul le nom official correspond à une entrée
-            // réelle dans le jar Minecraft (toujours présent même sous Fabric,
-            // qui en a besoin comme source de remapping) — voir
-            // MappingsRegistry.getOfficialClassAlways().
-            obfSlash = MappingsRegistry.getOfficialClassAlways(nameSlash);
-            if (!obfSlash.equals(nameSlash)) {
-                String obfResource = obfSlash + ".class";
-                cl = getContextClassLoader();
-                is = cl.getResourceAsStream(obfResource);
-                if (is == null) {
-                    cl = LauncherMixinService.class.getClassLoader();
-                    is = cl.getResourceAsStream(obfResource);
+            // 1) Nom "official" (obfusqué brut Mojang) — c'est ce que contient
+            //    le jar client en VANILLA sans Fabric.
+            String officialSlash = MappingsRegistry.getOfficialClassAlways(nameSlash);
+            if (!officialSlash.equals(nameSlash)) {
+                is = openResource(officialSlash + ".class");
+                if (is != null) obfSlash = officialSlash;
+            }
+
+            // 2) Nom "intermediary" — utile UNIQUEMENT sur les brackets
+            //    réellement obfusqués (1.8.9, 1.21.x...), où Fabric place sur
+            //    le classpath .fabric/remappedJars/<mc>-<loader>/
+            //    client-intermediary.jar, dont les entrées sont nommées
+            //    net/minecraft/class_1297.class. SANS OBJET en 26.1.2 : cette
+            //    version est livrée DÉOBFUSQUÉE (0 entrée "class_" dans
+            //    26.1.2.jar, aucun remappedJars généré) — les noms named sont
+            //    déjà les noms réels, l'essai (1) comme (2) sont des no-op.
+            if (is == null) {
+                String runtimeSlash = MappingsRegistry.getObfClassDot(nameSlash).replace('.', '/');
+                if (!runtimeSlash.equals(nameSlash)) {
+                    is = openResource(runtimeSlash + ".class");
+                    if (is != null) obfSlash = runtimeSlash;
                 }
             }
         }
@@ -584,6 +586,55 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         } finally {
             is.close();
         }
+    }
+
+    /**
+     * Classloader capable de voir le JAR DU JEU — capturé par {@link
+     * LauncherMixinTransformerWrapper#transform} à la première classe
+     * {@code net/minecraft/**} transformée (Knot sous Fabric/Quilt, le
+     * classloader système en vanilla, TransformingClassLoader sous Forge).
+     *
+     * ⚠️ Indispensable, voir [[project_mc_261_port]] §12 : NI le classloader
+     * de contexte NI celui de ce service ne voient le jar du jeu. Les deux
+     * valent {@code isolatedCl} (URLClassLoader agent + libs Mixin, parent =
+     * platform CL, monté dans {@code LauncherAgent.startIsolated()}) —
+     * et le thread {@code LauncherAgent-Retransform}, créé par un
+     * {@code new Thread()} sans {@code setContextClassLoader} pendant que le
+     * contexte valait {@code isolatedCl}, en hérite À VIE.
+     *
+     * Sans ce troisième essai, {@link #getClassNode} échoue sur TOUTE classe
+     * du jeu, y compris quand elle existe dans le jar sous exactement le nom
+     * demandé. Cet échec est SILENCIEUX côté Mixin (simple
+     * "[Mixin/WARN] Error loading class") : {@code ClassInfo.forName()}
+     * renvoie null, donc {@code getCommonSuperClass()} retombe sur
+     * {@code java/lang/Object} pendant le calcul ASM COMPUTE_FRAMES → stack
+     * map frame déclarant Object là où le vérificateur attend un type précis
+     * → {@code VerifyError "Bad type on operand stack"} sur une méthode
+     * ARBITRAIRE de la classe tissée (la réécriture Mixin est class-wide, pas
+     * limitée à la méthode hookée). C'est l'origine réelle du crash attribué
+     * à tort à une "incompatibilité avec fabric-screen-api-v1" sur
+     * {@code Minecraft.setScreen} (voir §10) : les grosses classes comme
+     * {@code Minecraft} contiennent forcément des fusions de frames entre
+     * deux types du jeu, les petites ({@code Camera}, {@code FoodData}) non —
+     * d'où "n'importe lequel des 4 mixins seul = crash", que l'hypothèse
+     * "conflit entre mods" n'expliquait pas.
+     */
+    private static volatile ClassLoader gameClassLoader;
+
+    static void setGameClassLoader(ClassLoader cl) {
+        if (gameClassLoader == null && cl != null) gameClassLoader = cl;
+    }
+
+    /** Ouvre une ressource .class : contexte, puis ce service, puis le loader du jeu, puis le système. */
+    private static InputStream openResource(String resource) {
+        InputStream is = getContextClassLoader().getResourceAsStream(resource);
+        if (is == null) is = LauncherMixinService.class.getClassLoader().getResourceAsStream(resource);
+        if (is == null) {
+            ClassLoader game = gameClassLoader;
+            if (game != null) is = game.getResourceAsStream(resource);
+        }
+        if (is == null) is = ClassLoader.getSystemClassLoader().getResourceAsStream(resource);
+        return is;
     }
 
     private static ClassLoader getContextClassLoader() {

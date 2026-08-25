@@ -14,15 +14,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@code updateLevelInEngines}, seulement dispatché si {@code level != null}
  * (déconnexion = level null, pas un vrai "chargement").
  *
- * ⚠️ RETIRÉ PAR PRÉCAUTION de {@code mixins.launcheragent-apimixin-26.1.json}
- * (2026-08-24, voir [[project_mc_261_port]] §10) — même classe cible
- * ({@code Minecraft}) et même famille (@Inject sans module enregistré sur
- * son HookPoint) que {@code ClientTickMixin261}, confirmé lui provoquer un
- * VerifyError sur {@code setScreen} par simple présence dans le JSON. Pas
- * testé isolément (pas eu besoin, aucun module ne consomme
- * {@code CLIENT_LEVEL_LOAD} pour l'instant) — À REVALIDER ISOLÉMENT EN JEU
- * avant toute réintroduction, ne pas supposer sain juste parce que différent
- * de {@code ClientTickMixin261}.
+ * ⚠️ HISTORIQUE (2026-08-24, [[project_mc_261_port]] §10) — retiré du JSON
+ * PAR PRÉCAUTION, jamais testé isolément : même classe cible
+ * ({@code Minecraft}) et même famille que {@code ClientTickMixin261}, dont le
+ * {@code VerifyError} sur {@code setScreen} était alors avéré.
+ *
+ * ✅ RÉTABLI le 2026-08-25 (§12), la cause commune ayant été corrigée — voir
+ * la javadoc de {@code ClientTickMixin261} pour le détail, et celle de
+ * {@code LauncherMixinService.gameClassLoader} pour le mécanisme (résolution
+ * des classes du jeu impossible pendant COMPUTE_FRAMES → supertype commun
+ * {@code Object} → frames invalides sur une méthode arbitraire de la classe).
+ *
+ * Reste gaté sur {@link HookPoint#CLIENT_LEVEL_LOAD}, non consommé
+ * aujourd'hui : il n'est donc pas tissé en pratique.
  */
 @Mixin(targets = "net.minecraft.client.Minecraft")
 abstract class ClientLevelLoadMixin261 {

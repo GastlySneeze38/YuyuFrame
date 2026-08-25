@@ -38,6 +38,16 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
 
         triggerEarlyKnotExpose(loader);
 
+        // Le classloader qui définit une classe du jeu est, par construction,
+        // capable de lire le jar du jeu — contrairement à isolatedCl, seul
+        // loader connu de LauncherMixinService. Capture volontairement
+        // agnostique du loader (Knot sous Fabric, système en vanilla,
+        // TransformingClassLoader sous Forge) — voir la javadoc de
+        // LauncherMixinService.gameClassLoader pour le pourquoi.
+        if (loader != null && className.startsWith("net/minecraft/")) {
+            LauncherMixinService.setGameClassLoader(loader);
+        }
+
         // ── Nos propres écrans : remap stubs Screen / Text ───────────────────
         if (STUB_PATCHED_SCREENS.contains(className)) {
             byte[] patched = ScreenStubPatcher.patch(classfileBuffer, loader);

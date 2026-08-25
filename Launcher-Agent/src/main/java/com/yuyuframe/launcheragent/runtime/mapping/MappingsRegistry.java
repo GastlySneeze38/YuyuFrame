@@ -163,16 +163,24 @@ public final class MappingsRegistry implements IRemapper {
     // ── Named (Yarn) ↔ runtime — utilisé par discoverMixinTargets/ScreenStubPatcher ──
 
     /**
-     * Toujours "official", jamais "intermediary" — pour la lecture de
-     * bytecode DEPUIS LE DISQUE (getClassNode) : le jar Minecraft réel sur le
-     * classpath (toujours présent, même sous Fabric — Fabric en a besoin comme
-     * source pour son propre remapping) contient les classes sous leur nom
-     * "official" brut. Les noms "intermediary" n'existent eux QU'EN MÉMOIRE,
-     * générés par Fabric au chargement — aucune entrée de fichier ne porte ce
-     * nom dans aucun jar, donc une lecture-disque avec un nom intermediary
-     * échoue TOUJOURS, quelle que soit l'isolation de classloader. Utiliser
-     * {@link #map} (scheme-aware) pour la correspondance runtime, et CETTE
-     * méthode pour toute lecture statique de fichier .class.
+     * named (Yarn/Mojmap) → "official" (obfusqué brut Mojang), jamais le
+     * schéma actif.
+     *
+     * ⚠️ CORRECTION 2026-08-25 (voir [[project_mc_261_port]] §12) — la
+     * version précédente de ce commentaire affirmait que le jar Minecraft
+     * sur le classpath contient TOUJOURS les classes sous leur nom
+     * "official", même sous Fabric, et que les noms "intermediary"
+     * n'existeraient qu'en mémoire. **C'EST FAUX.** Sous Fabric/Quilt, le jar
+     * réellement sur le classpath de Knot est
+     * {@code .fabric/remappedJars/<mc>-<loader>/client-intermediary.jar}, et
+     * ses entrées sont bel et bien nommées {@code net/minecraft/class_1297.class}
+     * — vérifié par listing du zip. Le nom official n'y existe pas.
+     *
+     * Conséquence : une lecture-disque qui n'essaie QUE le nom official
+     * échoue systématiquement sous Fabric. {@code
+     * LauncherMixinService.getClassNode()} essaie donc les deux (official
+     * PUIS intermediary via {@link #getObfClassDot}) — ne pas retirer le
+     * second essai, il est la seule voie fonctionnelle sous Fabric.
      */
     public static String getOfficialClassAlways(String yarnClass) {
         String obf = YarnMappings.getOfficialClass(yarnClass);

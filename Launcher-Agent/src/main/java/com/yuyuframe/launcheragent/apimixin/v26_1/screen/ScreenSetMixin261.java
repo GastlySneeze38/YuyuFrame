@@ -14,22 +14,34 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * d'écran, HEAD de {@code setScreen} (avant que le nouvel écran ne soit
  * effectivement posé).
  *
- * ⚠️ RETIRÉ de {@code mixins.launcheragent-apimixin-26.1.json} (bissection
- * en jeu, 2026-08-24, voir [[project_mc_261_port]] §10) : testé ISOLÉMENT
- * (aucun autre mixin apimixin sur {@code Minecraft} présent), provoque quand
- * même un {@code VerifyError} "Bad type on operand stack" sur {@code
- * Minecraft.setScreen} lui-même. Bissection complète sur les 4 mixins
- * {@code apimixin} qui ciblaient {@code Minecraft} (celui-ci, {@code
- * MinecraftAccessor261}, {@code ClientTickMixin261}, {@code
- * ClientLevelLoadMixin261}) : 0 présent = sain, N'IMPORTE LEQUEL des 4 seul
- * = crash — pas un défaut de CE mixin précis, mais une incompatibilité entre
- * "au moins un mixin apimixin sur Minecraft" et un ou plusieurs autres mods
- * du modpack qui modifient déjà cette classe (au moins {@code
- * fabric-screen-api-v1}, qui a lui-même un mixin sur {@code setScreen} — et
- * {@code fabric-data-generation-api-v1}, dont le mixin sur {@code Minecraft}
- * échoue DÉJÀ avant toute modification de notre part, voir log de session).
- * NE PAS remettre sans revalider en jeu — et NE PAS ajouter le moindre
- * nouveau mixin {@code apimixin} sur {@code Minecraft} sans le même risque.
+ * ⚠️ HISTORIQUE (2026-08-24, [[project_mc_261_port]] §10) — retiré du JSON
+ * après bissection en jeu : il provoquait alors un {@code VerifyError}
+ * "Bad type on operand stack" sur {@code Minecraft.setScreen}. Conclusion
+ * retenue à l'époque : « incompatibilité entre au moins un mixin apimixin sur
+ * {@code Minecraft} et un autre mod modifiant cette classe » (soupçon sur
+ * {@code fabric-screen-api-v1}).
+ *
+ * ✅ RÉTABLI le 2026-08-25 (§12) — ce crash ne se reproduit plus. Remis dans
+ * le JSON, il se tisse proprement ({@code Mixing v26_1.screen.ScreenSetMixin261
+ * … into net.minecraft.client.Minecraft}, handler
+ * {@code handler$zba000$la$dispatchScreenSet}) et le jeu tourne sans
+ * {@code VerifyError} — constaté sur 5 lancements consécutifs (v723→v727),
+ * modpack identique, {@code fabric-screen-api-v1} toujours présent.
+ *
+ * Deux correctifs sont intervenus entre-temps, sans qu'on puisse attribuer le
+ * mérite à l'un plutôt qu'à l'autre : {@code
+ * LauncherMixinService.getClassNode()} n'interrogeait que {@code isolatedCl},
+ * qui ne voit pas le jar du jeu — toute classe du jeu échouait donc à se
+ * résoudre pendant le calcul ASM COMPUTE_FRAMES, faisant retomber le supertype
+ * commun sur {@code Object} et produisant des frames invalides (voir la
+ * javadoc de {@code LauncherMixinService.gameClassLoader}, qui décrit
+ * exactement cette signature d'erreur) ; et {@code
+ * LauncherMixinTransformerWrapper.triggerEarlyKnotExpose()} pour la résolution
+ * APP/Knot.
+ *
+ * Reste gaté sur {@link HookPoint#SCREEN_SET} : aucun module ne le consomme
+ * aujourd'hui, donc il n'est pas tissé en pratique — c'est voulu, la gate est
+ * une optimisation du temps de tissage.
  */
 @Mixin(targets = "net.minecraft.client.Minecraft")
 abstract class ScreenSetMixin261 {

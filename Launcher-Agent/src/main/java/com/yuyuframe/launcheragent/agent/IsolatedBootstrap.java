@@ -462,22 +462,29 @@ public final class IsolatedBootstrap {
         int count = 0;
         for (Class<?> cls : inst.getAllLoadedClasses()) {
             if (!targets.contains(cls.getName())) continue;
-            // Défensif : si la classe est déjà mixée (voir countHooks), pas besoin
-            // de retransform, même ici — même raisonnement que scheduleDelayedRetransform.
-            if (countHooks(cls) > 0) {
-                LauncherLog.agent(1, "[LauncherAgent] Cible déjà mixée (retransform immédiat): "
-                        + cls.getName() + " — skip");
-                continue;
-            }
-            boolean modifiable = inst.isModifiableClass(cls);
-            LauncherLog.agent(1, "[LauncherAgent] Retransform immédiat: " + cls.getName()
-                    + " | modifiable=" + modifiable);
-            if (!modifiable) continue;
+            // Tout le corps est protégé, countHooks() COMPRIS : il appelle
+            // getDeclaredMethods(), qui force la résolution de TOUTES les
+            // signatures de la classe et peut donc lever une LinkageError sur
+            // une classe massive (Minecraft). Hors try, cette erreur remontait
+            // et tuait la boucle — voir la même correction dans
+            // scheduleDelayedRetransform, où elle tuait carrément le thread.
             try {
+                // Défensif : si la classe est déjà mixée (voir countHooks), pas besoin
+                // de retransform, même ici — même raisonnement que scheduleDelayedRetransform.
+                if (countHooks(cls) > 0) {
+                    LauncherLog.agent(1, "[LauncherAgent] Cible déjà mixée (retransform immédiat): "
+                            + cls.getName() + " — skip");
+                    continue;
+                }
+                boolean modifiable = inst.isModifiableClass(cls);
+                LauncherLog.agent(1, "[LauncherAgent] Retransform immédiat: " + cls.getName()
+                        + " | modifiable=" + modifiable);
+                if (!modifiable) continue;
                 inst.retransformClasses(cls);
                 count++;
             } catch (Throwable ex) {
-                LauncherLog.err("[LauncherAgent] Retransform " + cls.getName() + " erreur: " + ex);
+                LauncherLog.err("[LauncherAgent] Retransform immédiat " + cls.getName() + " erreur: " + ex);
+                ex.printStackTrace(System.err);
             }
         }
         LauncherLog.agent(3, "[LauncherAgent] Retransformations immédiates: " + count + "/" + targets.size());
@@ -485,6 +492,12 @@ public final class IsolatedBootstrap {
 
     private static void scheduleDelayedRetransform(Instrumentation inst, Set<String> targets) {
         if (targets.isEmpty()) return;
+        // DIAG §12 : niveau 3 (visible) — sert à répondre à « Minecraft est-il
+        // seulement dans la liste des cibles ? ». Les décisions par classe
+        // ci-dessous étaient en niveau 1, donc filtrées : on ne voyait ni les
+        // skips ni les retransforms, seulement leurs effets.
+        LauncherLog.agent(3, "[LauncherAgent] Cibles retransform (" + targets.size() + ") — Minecraft présent="
+                + targets.contains("net.minecraft.client.Minecraft"));
         Thread t = new Thread(() -> {
             Set<String> remaining = new LinkedHashSet<>(targets);
             long deadline = System.currentTimeMillis() + 30_000;
@@ -492,28 +505,54 @@ public final class IsolatedBootstrap {
                 try { Thread.sleep(200); } catch (InterruptedException e) { return; }
                 for (Class<?> cls : inst.getAllLoadedClasses()) {
                     if (!remaining.remove(cls.getName())) continue;
-                    int alreadyHooks = countHooks(cls);
-                    if (alreadyHooks > 0) {
-                        LauncherLog.agent(1, "[LauncherAgent] Cible déjà mixée (initial load): "
-                                + cls.getName() + " — skip retransform");
-                        continue;
-                    }
-                    boolean mod = inst.isModifiableClass(cls);
-                    LauncherLog.agent(1, "[LauncherAgent] Retransform différé: " + cls.getName()
-                            + " | modifiable=" + mod);
-                    if (!mod) continue;
+                    // ⚠️ countHooks() DOIT être dans le try (2026-08-25, §12) : il
+                    // appelle getDeclaredMethods(), qui résout toutes les signatures
+                    // de la classe et peut lever une LinkageError/Error sur une
+                    // classe massive comme Minecraft. Placé hors du try comme
+                    // auparavant, cette erreur remontait hors du for ET du while et
+                    // TUAIT CE THREAD — donc tous les rattrapages restants, en
+                    // silence. Symptôme observé : dès qu'un mixin ciblant Minecraft
+                    // entrait dans la liste des cibles, une douzaine de mixins sans
+                    // rapport (Options, Camera, ClientClockManager, LevelRenderer,
+                    // TitleScreen…) cessaient d'être tissés, sans le moindre message.
                     try {
+                        int alreadyHooks = countHooks(cls);
+                        if (alreadyHooks > 0) {
+                            // Les noms sont journalisés : un skip injustifié (faux
+                            // positif comme celui de Minecraft en §12) se repère
+                            // alors d'un coup d'œil dans launcher-agent.log.
+                            LauncherLog.agent(3, "[LauncherAgent] Cible déjà mixée (initial load): "
+                                    + cls.getName() + " — skip retransform (" + alreadyHooks
+                                    + " hooks: " + hookNames(cls) + ")");
+                            continue;
+                        }
+                        boolean mod = inst.isModifiableClass(cls);
+                        LauncherLog.agent(3, "[LauncherAgent] Retransform différé: " + cls.getName()
+                                + " | modifiable=" + mod);
+                        if (!mod) continue;
                         inst.retransformClasses(cls);
                     } catch (Throwable ex) {
-                        LauncherLog.err("[LauncherAgent] Retransform " + cls.getName() + " erreur: " + ex);
+                        LauncherLog.err("[LauncherAgent] Retransform différé " + cls.getName() + " erreur: " + ex);
+                        ex.printStackTrace(System.err);
                     }
                 }
             }
             if (!remaining.isEmpty()) {
-                LauncherLog.warn("[LauncherAgent] cibles jamais chargées: " + remaining);
+                LauncherLog.agent(3, "[LauncherAgent] cibles JAMAIS CHARGÉES (" + remaining.size() + "): " + remaining);
             }
-            LauncherLog.agent(1, "[LauncherAgent] Thread retransform terminé");
-        }, "LauncherAgent-Retransform");
+            LauncherLog.agent(3, "[LauncherAgent] Thread retransform terminé");
+        }, "LauncherAgent-Retransform") {
+            @Override public void run() {
+                // Filet global : une Error non rattrapée ici faisait disparaître
+                // tout le rattrapage sans laisser la moindre trace dans le log.
+                try {
+                    super.run();
+                } catch (Throwable fatal) {
+                    LauncherLog.err("[LauncherAgent] Thread retransform MORT : " + fatal);
+                    fatal.printStackTrace(System.err);
+                }
+            }
+        };
         t.setDaemon(true);
         t.start();
     }
@@ -533,10 +572,46 @@ public final class IsolatedBootstrap {
      * en réalité aucun besoin. Chercher "la$" n'importe où dans le nom
      * (au lieu d'exiger qu'il soit en tête) détecte correctement ce cas.
      */
+    /**
+     * Compte les méthodes que NOUS avons tissées dans {@code cls}.
+     *
+     * Resserré 2026-08-25 (§12) : le test était
+     * {@code m.getName().contains("la$")} — un {@code contains} sur 3
+     * caractères, qui matche la séquence « la$ » n'importe où, y compris au
+     * milieu d'un nom de méthode injecté par un AUTRE mod. Aucun faux positif
+     * constaté à ce jour (le skip observé sur {@code Minecraft} portait bien
+     * sur notre propre {@code handler$zba000$la$dispatchScreenSet}, donc à
+     * juste titre) — c'est un durcissement préventif, pas la correction d'un
+     * bug avéré. Ne pas relâcher ce test sans raison.
+     *
+     * Formes réellement produites pour nos handlers, toutes couvertes ici :
+     * <ul>
+     *   <li>{@code la$applyFreelookOffset} — tissage direct, préfixe intact</li>
+     *   <li>{@code handler$zza000$la$onInit} — renommage @Inject de Mixin</li>
+     *   <li>{@code la$guiTextured_$md$f4a86e$0} — renommage @Accessor</li>
+     * </ul>
+     * Un nom qui contient « la$ » sans être à l'une de ces deux positions
+     * n'est pas à nous et ne doit plus compter.
+     */
     private static int countHooks(Class<?> cls) {
         int n = 0;
-        for (java.lang.reflect.Method m : cls.getDeclaredMethods())
-            if (m.getName().contains("la$")) n++;
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            String name = m.getName();
+            if (name.startsWith("la$") || name.contains("$la$")) n++;
+        }
         return n;
+    }
+
+    /** Noms des méthodes comptées par {@link #countHooks} — pour rendre un faux positif lisible dans le log. */
+    private static String hookNames(Class<?> cls) {
+        StringBuilder sb = new StringBuilder();
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            String name = m.getName();
+            if (name.startsWith("la$") || name.contains("$la$")) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(name);
+            }
+        }
+        return sb.toString();
     }
 }
