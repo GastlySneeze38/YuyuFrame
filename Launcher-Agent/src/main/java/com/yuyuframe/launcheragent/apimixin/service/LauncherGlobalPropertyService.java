@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.mixin.service;
+package com.yuyuframe.launcheragent.apimixin.service;
 
 import org.spongepowered.asm.service.IGlobalPropertyService;
 import org.spongepowered.asm.service.IPropertyKey;

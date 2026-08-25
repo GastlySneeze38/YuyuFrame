@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "com.yuyuframe.launcheragent.apimixin",
   "compatibilityLevel": "JAVA_17",
-  "plugin": "com.yuyuframe.launcheragent.mixin.LauncherMixinConfigPlugin",
+  "plugin": "com.yuyuframe.launcheragent.apimixin.LauncherMixinConfigPlugin",
   "refmap": "mixins.launcheragent.refmap.json",
   "verbose": false,
   "mixins": [],

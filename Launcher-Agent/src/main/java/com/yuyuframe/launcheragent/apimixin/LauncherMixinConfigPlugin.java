@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.mixin;
+package com.yuyuframe.launcheragent.apimixin;
 
 import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;

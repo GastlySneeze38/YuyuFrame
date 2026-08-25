@@ -1,6 +1,6 @@
-package com.yuyuframe.launcheragent.mixin.service;
+package com.yuyuframe.launcheragent.apimixin.service;
 
-import com.yuyuframe.launcheragent.mixin.service.transformer.ScreenStubPatcher;
+import com.yuyuframe.launcheragent.apimixin.service.transformer.ScreenStubPatcher;
 import org.spongepowered.asm.mixin.transformer.IMixinTransformer;
 
 import java.lang.instrument.ClassFileTransformer;

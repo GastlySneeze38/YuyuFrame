@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.mixin.service;
+package com.yuyuframe.launcheragent.apimixin.service;
 
 import org.spongepowered.asm.service.IMixinServiceBootstrap;
 
@@ -10,7 +10,7 @@ public class LauncherMixinServiceBootstrap implements IMixinServiceBootstrap {
 
     @Override
     public String getServiceClassName() {
-        return "com.yuyuframe.launcheragent.mixin.service.LauncherMixinService";
+        return "com.yuyuframe.launcheragent.apimixin.service.LauncherMixinService";
     }
 
     @Override

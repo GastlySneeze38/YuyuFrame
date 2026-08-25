@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.mixin.service.transformer;
+package com.yuyuframe.launcheragent.apimixin.service.transformer;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
