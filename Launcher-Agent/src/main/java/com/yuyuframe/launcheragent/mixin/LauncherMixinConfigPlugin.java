@@ -31,8 +31,25 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
 
     private Properties cfg = new Properties();
 
+    // DIAG TEMPORAIRE §12 — via LauncherLog.err, qui écrit dans
+    // launcher-agent.log (System.err brut partait dans la console du launcher :
+    // onLoad() tourne pendant premain, avant que le logger de Minecraft
+    // n'existe, donc invisible dans latest.log).
+    static {
+        LauncherLog.err("[MixinPlugin-DIAG] <clinit> — classe chargée");
+    }
+
+    public LauncherMixinConfigPlugin() {
+        LauncherLog.err("[MixinPlugin-DIAG] <init> — instance créée par Mixin");
+    }
+
     @Override
     public void onLoad(String mixinPackage) {
+        // DIAG TEMPORAIRE §12 — volontairement AVANT toute
+        // autre instruction : MixinExtrasBootstrap.init() est la première
+        // ligne réelle, donc une erreur là rendait onLoad() totalement
+        // silencieux. LauncherLog.err écrit toujours dans le fichier.
+        LauncherLog.err("[MixinPlugin-DIAG] ENTER onLoad pkg=" + mixinPackage);
         // MixinExtras (ROADMAP-agent.md Phase 3) — s'enregistre dans L'INSTANCE
         // Mixin qui appelle onLoad() ici, jamais celle de Fabric : sous Fabric,
         // ce plugin est chargé par le classloader isolé (voir LauncherAgent.
@@ -43,6 +60,7 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         // (un seul bracket résolu, voir VersionBracketRegistry), pas besoin
         // de garde d'idempotence.
         MixinExtrasBootstrap.init();
+        LauncherLog.err("[MixinPlugin-DIAG] MixinExtrasBootstrap.init() OK");
         cfg = LauncherLog.loadPropertiesFromDefaultLocations(getClass().getClassLoader());
         applyMixinDebugProperties();
         LauncherLog.loadConfig(cfg);
@@ -57,6 +75,9 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String simpleName = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
+        // DIAG TEMPORAIRE §12 — la gate est-elle seulement consultée ?
+        LauncherLog.err("[MixinPlugin-DIAG] shouldApplyMixin " + simpleName
+            + " → point=" + MixinHookPointRegistry.resolve(simpleName));
         if ("true".equalsIgnoreCase(cfg.getProperty("disable_mixin." + simpleName))) {
             LauncherLog.asm(3, "[MixinPlugin] désactivé par config : " + simpleName);
             return false;

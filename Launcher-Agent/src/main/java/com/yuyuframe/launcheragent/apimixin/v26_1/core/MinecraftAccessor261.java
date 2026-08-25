@@ -47,9 +47,23 @@ public interface MinecraftAccessor261 {
     @Accessor("options")
     Options la$options();
 
-    /** Ajouté pour {@code FpsModule} — champ STATIC (accesseur Sponge Mixin valide sur un champ statique, appelable depuis n'importe quelle instance). */
+    /**
+     * Ajouté pour {@code FpsModule}. {@code static} REQUIS : le champ l'est
+     * ({@code private static int fps}, vérifié au javap sur le jar 26.1.2), et
+     * Sponge Mixin exige que l'accesseur ait la même staticité que sa cible.
+     * Tant que cette méthode était déclarée comme les autres (méthode
+     * d'instance), Mixin avertissait à chaque lancement :
+     * <pre>@Accessor[FIELD_GETTER]::la$fps()I should be static as its target is</pre>
+     *
+     * Le corps n'est jamais exécuté — Mixin le remplace au tissage ; il rend
+     * juste bruyant le cas où ce mixin ne serait pas appliqué, plutôt que de
+     * renvoyer un 0 silencieux et faux. Même idiome que
+     * {@code RenderPipelinesAccessor261#la$guiTextured()}.
+     *
+     * Appel : {@code MinecraftAccessor261.la$fps()}, sans instance.
+     */
     @Accessor("fps")
-    int la$fps();
+    static int la$fps() { throw new AssertionError("MinecraftAccessor261 non tissé"); }
 
     /** Ajouté pour {@code ChatEnhancementsModule} (pseudo local, détection de mention). */
     @Accessor("user")
