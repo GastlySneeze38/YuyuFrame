@@ -547,10 +547,18 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
      *       tôt), et finalement un échec silencieux non diagnostiqué.</li>
      * </ul>
      * Le seul bénéfice attendu était d'activer la gate {@code HookPoint} — or
-     * elle s'est révélée structurellement inopérante (voir
-     * {@code LauncherMixinConfigPlugin.GATE_ENABLED} : 51 mixins écartés, 0
-     * tissé, parce que les modules s'enregistrent APRÈS le tissage). Il n'y a
-     * donc actuellement rien à gagner à réveiller ce plugin.
+     * elle repose sur {@code VanillaHookRegistry}, dont l'état n'est connu
+     * qu'à l'EXÉCUTION (modules enregistrés à la première frame), alors que
+     * {@code shouldApplyMixin()} décide au TISSAGE : à cet instant le
+     * registre est TOUJOURS vide (51 mixins écartés, 0 tissé, constaté en
+     * v739). La gate a depuis été DÉPLACÉE vers {@code
+     * IsolatedBootstrap.filterConfigByHookPoints()} (2026-08-25, §12), qui
+     * filtre le JSON par lecture de bytecode AVANT tout enregistrement Mixin
+     * — donc avant même que ce classloading foireux n'entre en jeu. Ce
+     * plugin reste sans intérêt à réveiller pour CETTE raison-là ; ses
+     * autres responsabilités ({@code disable_mixin.*}, {@code mixin.debug.*},
+     * journal de succès par mixin) restent fonctionnelles sur les brackets
+     * non isolés (vanilla), seule voie où il se charge correctement.
      */
     public Class<?> findClass(String name, boolean initialize) throws ClassNotFoundException {
         return Class.forName(name, initialize, getContextClassLoader());

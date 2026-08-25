@@ -105,19 +105,6 @@ public final class VanillaHookRegistry {
     }
 
     /**
-     * {@code true} si au moins un module a déclaré ce {@code point} —
-     * consulté par {@code shouldApplyMixin()} (voir {@code LauncherMixinConfigPlugin})
-     * pour décider si le mixin correspondant doit être tissé du tout (un
-     * mixin par HookPoint, voir la javadoc de {@link HookPoint} — donc cette
-     * décision reste possible hook par hook, jamais tout ou rien pour un
-     * fichier qui en regrouperait plusieurs).
-     */
-    public static boolean isUsed(HookPoint point) {
-        List<HookHandler> handlers = HANDLERS.get(point);
-        return handlers != null && !handlers.isEmpty();
-    }
-
-    /**
      * Variante "remplacement de valeur de retour" — pour les hooks type
      * {@code ClientClockManagerWorldTimeMixin261} où {@link HookHandler}
      * (booléen "annulé ou pas") ne suffit pas : le mixin appelant a besoin
@@ -140,14 +127,6 @@ public final class VanillaHookRegistry {
     }
 
     /**
-     * @return la première valeur de remplacement non-nulle fournie par un
-     *         handler enregistré sur {@code point}, ou {@code null} si aucun
-     *         n'en fournit (l'appelant doit alors laisser vanilla s'exécuter
-     *         normalement) — PAS de OU logique ici (contrairement à {@link
-     *         #dispatch}) : une seule valeur peut être renvoyée à l'appelant,
-     *         le premier handler qui en fournit une gagne.
-     */
-    /**
      * Ensemble des {@link HookPoint} sur lesquels au moins un handler s'est
      * réellement enregistré (les deux familles confondues : {@link HookHandler}
      * et {@link ValueHandler}).
@@ -156,8 +135,9 @@ public final class VanillaHookRegistry {
      * {@code LauncherModule.hookPoints} — voir {@link #auditDeclarations}.
      * NE PAS utiliser pour décider d'un tissage : à l'instant du tissage ce
      * jeu est TOUJOURS vide, les enregistrements n'ayant lieu qu'à la première
-     * frame (c'est précisément ce qui rendait la gate déclarative inopérante,
-     * voir {@code LauncherMixinConfigPlugin.GATE_ENABLED}).
+     * frame — c'est pour ça que le filtrage réel se fait par lecture de
+     * bytecode AVANT le tissage, voir {@code
+     * IsolatedBootstrap.filterConfigByHookPoints()}.
      */
     public static java.util.Set<HookPoint> usedPoints() {
         java.util.EnumSet<HookPoint> used = java.util.EnumSet.noneOf(HookPoint.class);
@@ -210,6 +190,14 @@ public final class VanillaHookRegistry {
             + declared.size() + " déclarés, " + undeclared.size() + " écart(s) bloquant(s)");
     }
 
+    /**
+     * @return la première valeur de remplacement non-nulle fournie par un
+     *         handler enregistré sur {@code point}, ou {@code null} si aucun
+     *         n'en fournit (l'appelant doit alors laisser vanilla s'exécuter
+     *         normalement) — PAS de OU logique ici (contrairement à {@link
+     *         #dispatch}) : une seule valeur peut être renvoyée à l'appelant,
+     *         le premier handler qui en fournit une gagne.
+     */
     public static Object dispatchValue(HookPoint point, Object ctx) {
         List<ValueHandler> handlers = VALUE_HANDLERS.get(point);
         if (handlers == null) return null;

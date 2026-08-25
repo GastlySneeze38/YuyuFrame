@@ -20,9 +20,9 @@ public final class VersionBracket {
      * (aujourd'hui seul 26.1.2 en a une). Chargée EN PLUS de {@link
      * #mixinConfigResource} (jamais à sa place — la config legacy correspondante
      * reste tissée telle quelle, voir IsolatedBootstrap.start()) : le tissage
-     * RÉEL de chaque mixin listé ici reste gouverné mixin par mixin par {@code
-     * LauncherMixinConfigPlugin.shouldApplyMixin()} via {@code
-     * MixinHookPointRegistry}/{@code VanillaHookRegistry.isUsed()} — lister un
+     * RÉEL de chaque mixin backé par un {@link com.yuyuframe.launcheragent.apimixin.HookPoint}
+     * reste filtré mixin par mixin, AVANT même que Mixin ne charge le JSON —
+     * voir {@code IsolatedBootstrap.filterConfigByHookPoints()} — lister un
      * mixin ici ne suffit pas à ce qu'il weave, voir la javadoc de {@code
      * HookPoint}.
      */

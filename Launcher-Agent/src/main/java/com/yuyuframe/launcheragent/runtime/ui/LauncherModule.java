@@ -78,14 +78,25 @@ public abstract class LauncherModule {
 
     /**
      * Points d'accroche déclarés par ce module (ROADMAP-agent.md §3.2) — pure
-     * métadonnée légère, jamais consultée par ce module lui-même : sert
-     * uniquement d'audit/documentation (quel module dépend de quel {@link
-     * HookPoint}). Le tissage réel du mixin apimixin correspondant est
-     * gouverné par {@code VanillaHookRegistry.isUsed(point)}, alimenté par
-     * l'appel RÉEL à {@code VanillaHookRegistry.register(point, ...)} que ce
-     * module doit faire lui-même (typiquement dans son constructeur, juste
-     * après {@code super(...)}) — déclarer un HookPoint ici sans
-     * l'enregistrer ne suffit PAS à faire weaver son mixin.
+     * métadonnée légère, jamais consultée par ce module lui-même. Deux
+     * consommateurs (2026-08-25, §12) :
+     * <ul>
+     *   <li>{@code IsolatedBootstrap.filterConfigByHookPoints()} — lit CE
+     *       tableau, via {@code ModuleRegistry.declaredHookPoints()}, pour
+     *       décider AVANT le tissage quels mixins {@code apimixin/} garder
+     *       dans le JSON envoyé à Mixin. C'est la déclaration qui compte
+     *       réellement : un mixin dont le HookPoint n'apparaît dans le
+     *       {@code hookPoints} d'AUCUN module (ni dans {@code
+     *       ModuleRegistry.INFRA_HOOK_POINTS}) est retiré du JSON avant même
+     *       que Mixin ne le charge.</li>
+     *   <li>{@code VanillaHookRegistry.auditDeclarations()} — compare ce
+     *       tableau à ce qui est RÉELLEMENT enregistré à l'exécution ({@code
+     *       VanillaHookRegistry.register(point, ...)}, typiquement dans le
+     *       constructeur juste après {@code super(...)}) et journalise tout
+     *       écart. Un HookPoint utilisé sans être déclaré ici casserait le
+     *       filtrage ci-dessus (mixin retiré à tort) — l'audit le signale en
+     *       {@code [ERR]} dès le lancement suivant.</li>
+     * </ul>
      */
     public final HookPoint[] hookPoints;
 

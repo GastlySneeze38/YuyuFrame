@@ -8,19 +8,30 @@ import java.util.Map;
  * HookPoint} qu'il dispatche — voir ROADMAP-agent.md §3.2 ("un mixin par
  * HookPoint", déjà imposé par la javadoc de {@link HookPoint}).
  *
- * Consulté par {@code LauncherMixinConfigPlugin.shouldApplyMixin()} : un
- * mixin apimixin PRÉSENT ici ne weave que si {@link
- * VanillaHookRegistry#isUsed} renvoie {@code true} pour son HookPoint (au
- * moins un module a appelé {@code VanillaHookRegistry.register(...)} pour ce
- * point avant le premier chargement de la classe cible — l'ordre est
- * garanti : l'enregistrement des modules se fait au démarrage de l'agent,
- * bien avant que Minecraft charge la moindre classe cible de rendu/tick).
+ * ⚠️ Consulté par LECTURE DE BYTECODE, pas par appel Java (2026-08-25, §12) :
+ * {@code IsolatedBootstrap.scanMixinHookPointMap()} lit le {@code <clinit>}
+ * de CETTE classe (ce fichier {@code .class}, tel quel dans le JAR) et en
+ * extrait les paires {@code put("NomDuMixin", HookPoint.X)} sans jamais
+ * charger la classe via {@code Class.forName} — le faire depuis
+ * {@code premain} reviendrait à toucher {@code apimixin/} depuis le
+ * classloader système, garantissant un {@code LinkageError}. Ce mécanisme a
+ * remplacé l'ancien : un plugin de config Mixin ({@code
+ * LauncherMixinConfigPlugin.shouldApplyMixin()}) qui appelait {@link
+ * #resolve} au tissage — inopérant sur tout bracket isolé (Fabric/Quilt/
+ * Forge/NeoForge), voir {@code LauncherMixinService.findClass} pour
+ * l'historique.
+ *
+ * Un mixin apimixin listé ici, dont le HookPoint n'est réclamé par AUCUN
+ * module (voir {@code LauncherModule.hookPoints}) ni par l'infrastructure
+ * ({@code ModuleRegistry.INFRA_HOOK_POINTS}), est retiré du JSON de config
+ * AVANT que Mixin ne le charge — voir {@code
+ * IsolatedBootstrap.filterConfigByHookPoints()}.
  *
  * Un mixin apimixin ABSENT d'ici (mixins "hub"/infrastructure comme {@code
  * TitleScreenMixin261}/{@code GlobalUiRenderMixin261}/{@code
  * GlobalUiPresentMixin261}/{@code GuiFlushMixin261}, ou interfaces {@code
- * @Accessor}/{@code @Invoker}) weave TOUJOURS — {@code shouldApplyMixin()}
- * n'applique la gate déclarative qu'aux mixins listés ici.
+ * @Accessor}/{@code @Invoker}) weave TOUJOURS — le filtrage ne s'applique
+ * qu'aux mixins listés ici.
  *
  * Mise à jour manuelle à chaque nouveau mixin {@code apimixin/} backé par un
  * {@link HookPoint} — mécanique mais volontairement explicite (pas de

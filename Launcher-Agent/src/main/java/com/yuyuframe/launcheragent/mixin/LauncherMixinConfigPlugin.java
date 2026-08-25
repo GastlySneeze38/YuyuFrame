@@ -1,9 +1,6 @@
 package com.yuyuframe.launcheragent.mixin;
 
 import com.llamalad7.mixinextras.MixinExtrasBootstrap;
-import com.yuyuframe.launcheragent.apimixin.HookPoint;
-import com.yuyuframe.launcheragent.apimixin.MixinHookPointRegistry;
-import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
@@ -30,36 +27,6 @@ import java.util.Set;
 public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
 
     private Properties cfg = new Properties();
-
-    /**
-     * Gate déclarative {@link HookPoint} — DÉSACTIVÉE par défaut (2026-08-25, §12).
-     *
-     * Elle n'avait jamais tourné : le plugin échouait à se charger
-     * ({@code ClassCastException} app/isolatedCl). Une fois ce blocage corrigé,
-     * elle s'est révélée structurellement inopérante — au premier lancement où
-     * elle a réellement décidé : <b>51 mixins IGNORÉ, 0 tissé</b>.
-     *
-     * Cause : {@code shouldApplyMixin()} est appelé au TISSAGE (préparation des
-     * configs, au boot), alors que les modules ne s'enregistrent qu'à
-     * l'EXÉCUTION — {@code VanillaHookRegistry.register(...)} est appelé depuis
-     * l'init de {@code GlobalUiRenderMixin261}, à la première frame rendue.
-     * Au moment de la décision, le registre est donc TOUJOURS vide et
-     * {@code isUsed()} renvoie systématiquement {@code false} : HUD, fog, chat,
-     * keybind, level, clock, screen — tout est écarté.
-     *
-     * Pour la rendre viable il faut une déclaration STATIQUE, connue avant le
-     * tissage : le câblage {@code super("mon-module", HookPoint.X)} au
-     * constructeur de {@code LauncherModule} évoqué dans la javadoc de
-     * {@link VanillaHookRegistry} (jamais implémenté). La gate lirait alors ce
-     * catalogue statique au lieu du registre runtime.
-     *
-     * En attendant, on journalise la décision qu'elle AURAIT prise sans
-     * l'appliquer — utile pour mesurer le gain potentiel. Réactivable par
-     * {@code -Dlauncheragent.hookpointGate=true} une fois la déclaration
-     * statique en place.
-     */
-    private static final boolean GATE_ENABLED =
-        "true".equalsIgnoreCase(System.getProperty("launcheragent.hookpointGate", "false"));
 
     @Override
     public void onLoad(String mixinPackage) {
@@ -101,22 +68,22 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
             return false;
         }
 
-        // Tissage déclaratif apimixin/ (ROADMAP-agent.md §3.2) — un mixin
-        // apimixin backé par un HookPoint (voir MixinHookPointRegistry) ne
-        // weave QUE si au moins un module s'est enregistré dessus via
-        // VanillaHookRegistry.register(...). Un mixin apimixin absent du
-        // registre (hub/infra, accessors/invokers, freelook — hors système
-        // HookPoint) continue de weave sans condition, comme avant.
-        if (mixinClassName.startsWith("com.yuyuframe.launcheragent.apimixin.")) {
-            HookPoint point = MixinHookPointRegistry.resolve(simpleName);
-            if (point != null) {
-                boolean used = VanillaHookRegistry.isUsed(point);
-                LauncherLog.asm(2, "[MixinPlugin] " + simpleName + " → " + point
-                    + " : " + (used ? "module(s) enregistré(s)" : "aucun module enregistré")
-                    + (GATE_ENABLED ? (used ? " → tissé" : " → IGNORÉ") : " → tissé (gate désactivée)"));
-                if (GATE_ENABLED) return used;
-            }
-        }
+        // Le filtrage déclaratif apimixin/HookPoint (ROADMAP-agent.md §3.2)
+        // ne vit PLUS ici (2026-08-25, §12) — voir
+        // IsolatedBootstrap.filterConfigByHookPoints(), appelé avant même
+        // Mixins.addConfiguration(). Un mixin écarté n'apparaît plus du tout
+        // dans le JSON que ce plugin reçoit : shouldApplyMixin() n'est donc
+        // jamais sollicité pour lui, il n'y a rien à décider ici.
+        //
+        // Historique du pourquoi ce n'est PAS ici : ce plugin est chargé par
+        // Mixin via le classloader de CONTEXTE au moment de la sélection des
+        // configs, qui vaut 'app' à cet instant (launcher-agent.jar étant en
+        // -javaagent, il y est AUSSI présent) — alors que Mixin tourne depuis
+        // isolatedCl. Le cast échoue systématiquement sur tout bracket isolé
+        // (Fabric/Quilt/Forge/NeoForge) : voir LauncherMixinService.findClass
+        // pour l'historique complet (quatre tentatives de réveil du plugin,
+        // toutes annulées) et VanillaHookRegistry.usedPoints()/auditDeclarations
+        // pour le mécanisme qui a remplacé la gate.
         return true;
     }
 
