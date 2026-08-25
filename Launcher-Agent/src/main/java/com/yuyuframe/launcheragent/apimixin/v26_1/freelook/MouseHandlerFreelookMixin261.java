@@ -32,12 +32,6 @@ import org.spongepowered.asm.mixin.injection.At;
  * fidélité bit-à-bit à F5 par construction, plus aucun risque de facteur
  * ×4/×6.7 mal calculé à la main.
  *
- * {@code @WrapWithCondition} : si le handler retourne {@code false}, l'appel
- * réel à {@code player.turn(...)} est ANNULÉ (remplace {@code ci.cancel()}
- * de l'ancienne version) ; {@code true} le laisse s'exécuter normalement
- * (le joueur tourne, comportement vanilla inchangé quand le freelook n'est
- * pas engagé).
- *
  * Passe par {@link HookPoint#FREELOOK_TURN_INTERCEPT} (audit ROADMAP-agent.md
  * §4 — apimixin ne doit jamais importer un module concret de {@code
  * runtime.*}, ce fichier importait directement {@code FreelookModule} avant
@@ -45,7 +39,33 @@ import org.spongepowered.asm.mixin.injection.At;
  * true} quand {@code FreelookModule} a consommé le delta (accumulé côté
  * caméra), auquel cas le tour réel du joueur doit être annulé.
  *
- * NON TESTÉ EN JEU au moment de l'écriture.
+ * ⚠️ Aller-retour {@code @WrapWithCondition} → {@code @Redirect} →
+ * {@code @WrapWithCondition} (2026-08-25, §14) — ne pas « corriger » sans
+ * lire ceci. Le handler n'était jamais invoqué, SANS la moindre erreur, et on
+ * a d'abord cru à un problème de retransform ; la vraie cause est que
+ * MixinExtras n'était pas initialisé dans NOTRE environnement Mixin, donc le
+ * cœur de Sponge recopiait {@code la$interceptTurn} dans la classe cible sans
+ * jamais l'appeler. Corrigé dans {@code IsolatedBootstrap.initMixinExtras()}
+ * (voir sa javadoc). Le passage temporaire en {@code @Redirect} avait servi
+ * de contournement et prouvé le diagnostic.
+ *
+ * Retour à {@code @WrapWithCondition} (l'approche d'Omnilook) une fois
+ * MixinExtras opérationnel, pour la COMPOSABILITÉ : deux {@code @Redirect}
+ * concurrents sur un même site d'appel s'excluent mutuellement, alors que
+ * plusieurs conditions MixinExtras cohabitent. On tourne à côté de ~89 mods,
+ * dont {@code freecam}, qui a toutes les raisons de toucher
+ * {@code MouseHandler} — un {@code @Redirect} y serait une bombe à retardement.
+ *
+ * ⚠️ Pourquoi on ne peut PAS appliquer ici le remède de
+ * {@code HudExtractCrosshairMixin261} (viser la méthode appelée plutôt que le
+ * site d'appel, immunisé contre les enveloppements) : intercepter
+ * {@code LocalPlayer.turn} PRÉCISÉMENT à ce site d'appel est porteur de sens —
+ * c'est ce qui donne des deltas déjà passés par la courbe de sensibilité
+ * vanilla, donc une fidélité au bit près à F5. Injecter dans
+ * {@code turnPlayer} lui-même ferait resurgir le bug historique du facteur
+ * ×6.7 (courbe reconstruite à la main). Et un mixin sur {@code LocalPlayer}/
+ * {@code Entity} reste exclu (hiérarchie commune à toutes les entités, voir
+ * la javadoc de {@code FreelookModule}).
  */
 @Mixin(targets = "net.minecraft.client.MouseHandler")
 public abstract class MouseHandlerFreelookMixin261 {

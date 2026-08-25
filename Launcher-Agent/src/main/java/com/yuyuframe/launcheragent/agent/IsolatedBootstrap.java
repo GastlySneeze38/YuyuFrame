@@ -195,6 +195,68 @@ public final class IsolatedBootstrap {
         }
     }
 
+    /**
+     * Installe l'extension MixinExtras dans NOTRE environnement Mixin — sans
+     * quoi TOUTE annotation MixinExtras d'{@code apimixin/} ({@code
+     * @WrapOperation}, {@code @WrapWithCondition}, {@code @ModifyExpressionValue},
+     * {@code @WrapMethod} — une trentaine d'injecteurs) est SILENCIEUSEMENT
+     * INERTE : le cœur de Sponge Mixin ne connaît pas ces annotations, il se
+     * contente de recopier la méthode handler telle quelle dans la classe
+     * cible, sans jamais l'appeler ni signaler quoi que ce soit.
+     *
+     * Symptôme historique exact (2026-08-25, §14) : {@code la$dispatchCrosshair}
+     * était bien présente dans {@code Gui}, mais NUE — sans le préfixe {@code
+     * wrapOperation$…} qu'aurait produit un vrai traitement MixinExtras
+     * (comparer avec {@code modifyExpressionValue$zfn000$fabric-content-registries-v0$…},
+     * bien traité, lui, parce que Fabric a initialisé MixinExtras pour SES
+     * configs). Même cause pour {@code @WrapWithCondition} du freelook, jamais
+     * déclenché.
+     *
+     * ⚠️ Pourquoi l'appel vit ICI et pas dans {@code LauncherMixinConfigPlugin}
+     * (où il se trouvait) : sur tout bracket isolé — Fabric compris — le plugin
+     * de config N'EST JAMAIS INSTANCIÉ (ClassCastException app/isolatedCl sur
+     * {@code IMixinConfigPlugin}, avalée par le {@code PluginHandle} de Mixin,
+     * voir {@code LauncherMixinService.findClass}). Son {@code onLoad()} — donc
+     * son {@code initMixinExtrasIfHostDidNot()} — ne s'exécutait tout
+     * simplement jamais là où on en avait besoin. {@code bootstrapMixin} tourne,
+     * lui, dans {@code isolatedCl}, qui contient déjà {@code mixinextras.jar}
+     * (voir la liste de jars dans {@code LauncherAgent}) : la classe résolue
+     * ici est NOTRE copie, donc l'extension s'enregistre dans NOTRE transformer,
+     * pas dans celui de Fabric.
+     *
+     * Les classloaders sont journalisés volontairement : si {@code
+     * MixinExtrasBootstrap} venait à être résolu depuis Knot au lieu
+     * d'{@code isolatedCl}, on réinitialiserait le MixinExtras de Fabric — ce
+     * qui reproduirait la cascade « cannot overwrite method … @Overwrite is
+     * required » sur les mods Fabric déjà tissés. Repli immédiat sans rebuild :
+     * {@code -Dlauncheragent.mixinextras=false}.
+     */
+    private static void initMixinExtras() {
+        if ("false".equalsIgnoreCase(System.getProperty("launcheragent.mixinextras"))) {
+            LauncherLog.agent(3, "[LauncherAgent] MixinExtras désactivé (-Dlauncheragent.mixinextras=false)");
+            return;
+        }
+        try {
+            Class<?> boot = Class.forName("com.llamalad7.mixinextras.MixinExtrasBootstrap",
+                true, IsolatedBootstrap.class.getClassLoader());
+            LauncherLog.agent(3, "[LauncherAgent] MixinExtras: classe résolue depuis "
+                + describeLoader(boot.getClassLoader())
+                + " | Mixin depuis " + describeLoader(MixinEnvironment.class.getClassLoader()));
+            boot.getMethod("init").invoke(null);
+            LauncherLog.agent(3, "[LauncherAgent] MixinExtras initialisé dans NOTRE environnement Mixin"
+                + " — injecteurs @WrapOperation/@WrapWithCondition/@ModifyExpressionValue actifs");
+        } catch (Throwable t) {
+            // Jamais silencieux : sans ça, une trentaine d'injecteurs redeviennent
+            // inertes sans le moindre signe (voir javadoc).
+            LauncherLog.err("[LauncherAgent] MixinExtras NON initialisé — tous les injecteurs"
+                + " MixinExtras d'apimixin/ resteront inertes : " + t);
+        }
+    }
+
+    private static String describeLoader(ClassLoader cl) {
+        return cl == null ? "bootstrap" : cl.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(cl));
+    }
+
     /** @return true si le bootstrap a réussi. */
     private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig, String apiMixinConfig) {
         try {
@@ -214,6 +276,8 @@ public final class IsolatedBootstrap {
             } catch (Exception ex) {
                 LauncherLog.warn("[LauncherAgent] gotoPhase(DEFAULT) erreur: " + ex);
             }
+
+            initMixinExtras();
 
             if (mixinConfig != null) {
                 Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
@@ -705,6 +769,17 @@ public final class IsolatedBootstrap {
                     // rapport (Options, Camera, ClientClockManager, LevelRenderer,
                     // TitleScreen…) cessaient d'être tissés, sans le moindre message.
                     try {
+                        // Source AUTORITAIRE d'abord (2026-08-25, §14) : le
+                        // transformer note lui-même les classes qu'il a
+                        // réellement tissées au chargement — countHooks() en
+                        // dessous reste comme filet, mais il est race-y (voir
+                        // LauncherMixinTransformerWrapper.MIXED_AT_LOAD).
+                        if (com.yuyuframe.launcheragent.apimixin.service.LauncherMixinTransformerWrapper
+                                .wasMixedAtLoad(cls.getName())) {
+                            LauncherLog.agent(3, "[LauncherAgent] Cible déjà tissée au chargement (transformer): "
+                                    + cls.getName() + " — skip retransform");
+                            continue;
+                        }
                         int alreadyHooks = countHooks(cls);
                         if (alreadyHooks > 0) {
                             // Les noms sont journalisés : un skip injustifié (faux

@@ -57,7 +57,83 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         String obfDot = className.replace('/', '.');
         String yarnNamed = com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.INSTANCE.unmap(className);
 
-        return transformer.transformClassBytes(obfDot, yarnNamed.replace('/', '.'), classfileBuffer);
+        byte[] result;
+        try {
+            result = transformer.transformClassBytes(obfDot, yarnNamed.replace('/', '.'), classfileBuffer);
+        } catch (Throwable t) {
+            // ⚠️ NE JAMAIS avaler ça en silence (2026-08-25, §14) : une exception
+            // qui sort d'un ClassFileTransformer est SILENCIEUSEMENT ignorée par
+            // la JVM, qui charge alors la classe NON transformée — aucune trace
+            // nulle part, ni dans latest.log ni ici. C'est exactement ce qui
+            // masquait l'échec de tissage de net.minecraft.client.gui.Gui :
+            // Mixin journalisait bien « Mixing HudExtractCrosshairMixin261 …
+            // into …gui.Gui » (l'application COMMENÇAIT), puis levait ; la classe
+            // partait sans notre @Redirect (crosshair vanilla jamais supprimé),
+            // et le rattrapage par retransform déclenchait ensuite le conflit
+            // fatal avec fabric-content-registries-v0. On relance après avoir
+            // journalisé : comportement JVM inchangé, mais plus jamais muet.
+            // IllegalClassLoadError = « cette classe est dans le package mixin
+            // déclaré mais n'est pas un mixin » — c'est le cas ATTENDU de nos
+            // classes d'API (HookPoint, VanillaHookRegistry…) qui vivent sous
+            // com.yuyuframe.launcheragent.apimixin, le package déclaré par le
+            // JSON. Sans intérêt à hurler dessus à chaque chargement : warn.
+            boolean expected = t.getClass().getName().endsWith("IllegalClassLoadError");
+            if (expected) {
+                com.yuyuframe.launcheragent.runtime.log.LauncherLog.warn(
+                    "[LauncherAgent] " + obfDot + " est dans le package mixin déclaré sans être un mixin"
+                    + " — non transformée (attendu pour les classes d'API d'apimixin/)");
+            } else {
+                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[LauncherAgent] Tissage Mixin ÉCHOUÉ pour " + obfDot
+                    + " — classe chargée NON transformée (la JVM ignore silencieusement"
+                    + " toute exception d'un ClassFileTransformer) : " + t);
+                t.printStackTrace(System.err);
+            }
+            throw t;
+        }
+
+        // Trace autoritaire du tissage au CHARGEMENT INITIAL (2026-08-25, §14) —
+        // voir IsolatedBootstrap.scheduleDelayedRetransform, qui la consulte
+        // avant de décider un retransform. Enregistrée ICI parce que c'est le
+        // seul point qui SAIT si Mixin a réellement modifié la classe : le
+        // test qui servait avant (countHooks(), réflexion getDeclaredMethods()
+        // sur la classe une fois chargée) est intrinsèquement RACE-Y — le
+        // thread de retransform sonde getAllLoadedClasses() toutes les 200 ms
+        // et peut tomber sur la classe à un instant où ses méthodes tissées ne
+        // sont pas encore visibles, concluant à tort « 0 hook, il faut
+        // retransformer ». Symptôme réel et reproductible : net.minecraft.client.gui.Gui
+        // (tissée avec succès au chargement) partait quand même en retransform,
+        // ce qui réveille l'agent hot-swap interne de Sponge Mixin — lequel
+        // retente d'appliquer les mixins de TOUS les mods sur Gui, dont
+        // fabric-content-registries-v0 déjà appliqué → InvalidMixinException
+        // « cannot overwrite method » puis ClassFormatError, à chaque lancement.
+        // classBeingRedefined == null distingue le chargement initial d'un
+        // retransform (où le résultat ne prouve plus rien sur l'état de départ).
+        if (classBeingRedefined == null && result != null && result != classfileBuffer) {
+            MIXED_AT_LOAD.add(obfDot);
+        }
+        // DIAG TEMPORAIRE (§14) — Gui est la SEULE cible sur 23 à ne pas
+        // apparaître dans MIXED_AT_LOAD alors que Mixin journalise pourtant
+        // « Mixing HudExtractCrosshairMixin261 … into net.minecraft.client.gui.Gui ».
+        // On veut savoir laquelle des trois conditions ci-dessus échoue.
+        return result;
+    }
+
+    /**
+     * Classes que Mixin a RÉELLEMENT modifiées lors de leur chargement initial
+     * (nom pointé). Alimenté par {@link #transform}, lu par {@code
+     * IsolatedBootstrap.scheduleDelayedRetransform} — voir le commentaire de
+     * l'enregistrement pour le bug de course que ça corrige.
+     *
+     * Sans course par construction : une classe n'apparaît dans {@code
+     * Instrumentation.getAllLoadedClasses()} qu'une fois {@code defineClass}
+     * terminé, donc APRÈS que ce transformer ait rendu la main et rempli ce set.
+     */
+    private static final java.util.Set<String> MIXED_AT_LOAD =
+        java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+
+    /** @return {@code true} si {@code dotClassName} a été tissée par Mixin à son chargement initial — un retransform serait alors inutile ET dangereux. */
+    public static boolean wasMixedAtLoad(String dotClassName) {
+        return MIXED_AT_LOAD.contains(dotClassName);
     }
 
     /**

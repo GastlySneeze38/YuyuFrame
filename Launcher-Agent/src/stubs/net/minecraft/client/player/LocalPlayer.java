@@ -36,4 +36,5 @@ public abstract class LocalPlayer {
     public double getY() { return 0d; }
     public double getZ() { return 0d; }
     public float getYRot() { return 0f; }
+    public void turn(double yRot, double xRot) {}
 }

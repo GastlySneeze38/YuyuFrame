@@ -152,7 +152,8 @@ public final class FreelookModule extends LauncherModule {
     private boolean interceptTurn(Object ctx) {
         if (!(ctx instanceof double[])) return false;
         double[] delta = (double[]) ctx;
-        if (!isFreelookEngaged()) {
+        boolean engaged = isFreelookEngaged();
+        if (!engaged) {
             deactivate();
             return false;
         }
@@ -162,7 +163,8 @@ public final class FreelookModule extends LauncherModule {
 
     /** Handler de {@link HookPoint#FREELOOK_CAMERA_ROTATION_OFFSET} — voir CameraFreelookMixin261. {@code ctx} = {@code float[]{yRot, xRot}}, renvoie {@code float[]{newYRot, newXRot}} ou {@code null} (freelook inactif, aucun changement). */
     private Object cameraRotationOffset(Object ctx) {
-        if (!isActive() || !(ctx instanceof float[])) return null;
+        boolean active = isActive();
+        if (!active || !(ctx instanceof float[])) return null;
         float[] in = (float[]) ctx;
         float yRot = in[0];
         float xRot = in[1];
