@@ -18,6 +18,13 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  */
 @Mixin(targets = "net.minecraft.client.renderer.RenderPipelines")
 public interface RenderPipelinesAccessor261 {
+    /**
+     * {@code static} requis pour un champ statique (idiome Sponge Mixin). Non
+     * utilisé pour l'instant — {@code @Accessor} sur {@code Minecraft} a
+     * causé un VerifyError au tissage (voir la javadoc du stub {@code
+     * Minecraft.java}) : à vérifier en jeu avant toute utilisation réelle
+     * plutôt que de supposer cette classe sans risque.
+     */
     @Accessor("GUI_TEXTURED")
-    RenderPipeline la$guiTextured();
+    static RenderPipeline la$guiTextured() { throw new AssertionError(); }
 }

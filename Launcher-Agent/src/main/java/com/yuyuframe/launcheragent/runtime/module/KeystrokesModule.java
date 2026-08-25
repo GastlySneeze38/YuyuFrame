@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.KeyMappingAccessor261;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -185,16 +184,16 @@ public final class KeystrokesModule extends SingleHudModule {
         }
 
         /**
-         * 26.1.2 sans réflexion — {@code Minecraft.getInstance()} +
-         * {@code MinecraftAccessor261#la$options()}. Try/catch dédié :
-         * {@code Minecraft.getInstance()} référence le nom RÉEL, inexistant
-         * tel quel sur les autres brackets (obfusqués) — {@code null}
-         * déclenche le repli réflexion multi-bracket côté appelant.
+         * 26.1.2 sans réflexion — {@code Minecraft.getInstance().options}
+         * (champ PUBLIC, vérifié javap). Try/catch dédié : {@code
+         * Minecraft.getInstance()} référence le nom RÉEL, inexistant tel quel
+         * sur les autres brackets (obfusqués) — {@code null} déclenche le
+         * repli réflexion multi-bracket côté appelant.
          */
         private Options directOptions() {
             try {
                 Object mc = Minecraft.getInstance();
-                if (mc instanceof MinecraftAccessor261) return ((MinecraftAccessor261) mc).la$options();
+                if (mc instanceof Minecraft) return ((Minecraft) mc).options;
             } catch (Throwable ignored) {}
             return null;
         }

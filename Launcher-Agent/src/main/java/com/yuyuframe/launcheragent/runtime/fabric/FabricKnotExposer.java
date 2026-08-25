@@ -23,9 +23,25 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
  * addCodeSource() vit sur KnotClassDelegate, pas sur KnotClassLoader lui-même
  * (pattern délégué : KnotClassLoader expose getDelegate() pour y accéder).
  * Appelé par réflexion (aucune dépendance de compilation sur les classes
- * internes de Fabric Loader) dès le premier hook Mixin qui s'exécute
- * (TitleScreen), donc largement avant que l'utilisateur ne puisse cliquer sur
- * le bouton.
+ * internes de Fabric Loader).
+ *
+ * Point d'appel principal : {@code LauncherMixinTransformerWrapper.
+ * triggerEarlyKnotExpose()} (2026-08-25, voir [[project_mc_261_port]] §11) —
+ * déclenché dès la TOUTE PREMIÈRE classe transformée dont le classloader est
+ * Knot/Quilt, sur un thread dédié pour rester hors de la pile d'appel
+ * réentrante de {@code ClassFileTransformer.transform()}. Les autres
+ * appelants (mixins "hub" comme {@code GlobalUiRenderMixin261}) restent en
+ * place par sécurité (idempotent via {@code done}), mais n'ont plus besoin
+ * d'être les premiers : n'importe quel mixin apimixin qui appelle
+ * {@code VanillaHookRegistry} directement (ex: {@code
+ * GameRenderExtractMixin261}, {@code ClockTotalTicksMixin261}) sans passer
+ * par {@code ensureExposed()} lui-même a longtemps été le vrai point de
+ * fuite — Knot résolvait alors {@code VanillaHookRegistry} en silence via
+ * APP (délégation permise par {@code fabric.debug.disableClassPathIsolation},
+ * posé dans {@code LauncherAgent.premain0()}) avant que le jar ne soit
+ * possédé, figeant cette résolution → {@code LinkageError} (loader
+ * constraint violation) au premier module tissé côté Knot qui touchait le
+ * même point d'entrée.
  */
 public final class FabricKnotExposer {
 

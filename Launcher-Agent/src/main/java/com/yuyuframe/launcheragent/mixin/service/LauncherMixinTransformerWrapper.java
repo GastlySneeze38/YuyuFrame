@@ -36,6 +36,8 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         if (classfileBuffer == null || className == null) return null;
         if (isBootstrapPackage(className)) return null;
 
+        triggerEarlyKnotExpose(loader);
+
         // ── Nos propres écrans : remap stubs Screen / Text ───────────────────
         if (STUB_PATCHED_SCREENS.contains(className)) {
             byte[] patched = ScreenStubPatcher.patch(classfileBuffer, loader);
@@ -68,5 +70,61 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             || className.startsWith("jdk/")
             || className.startsWith("sun/")
             || className.startsWith("com/sun/");
+    }
+
+    private static volatile boolean knotExposeTriggered = false;
+
+    /**
+     * Déclenche {@code FabricKnotExposer.ensureExposed()} dès la PREMIÈRE
+     * classe transformée dont le classloader est Knot/Quilt (2026-08-24, voir
+     * [[project_mc_261_port]] §11, bug C — LinkageError app/knot sur
+     * VanillaHookRegistry).
+     *
+     * Root cause identifiée par lecture de code (pas par log — les diagnostics
+     * précédents dans FabricKnotExposer/VanillaHookRegistry n'ont jamais
+     * réussi à capturer le moment exact) : {@code GameRenderExtractMixin261}/
+     * {@code ClockTotalTicksMixin261} appellent {@code VanillaHookRegistry}
+     * DIRECTEMENT depuis {@code GameRenderer.extract}/{@code
+     * ClientClockManager.getTotalTicks} — deux points d'entrée qui s'exécutent
+     * à CHAQUE frame, dès la toute première, SANS jamais appeler
+     * {@code ensureExposed()} avant (contrairement aux 2 mixins "hub" qui,
+     * eux, l'appellent en tête de {@code GameRenderer.render}). Comme
+     * {@code extract} précède {@code render} dans le pipeline de rendu
+     * moderne, ce chemin gagne systématiquement la course à la PREMIÈRE
+     * résolution de VanillaHookRegistry par Knot — qui, code source pas
+     * encore possédé, délègue silencieusement à APP (grâce à
+     * {@code fabric.debug.disableClassPathIsolation}, posé dans
+     * LauncherAgent.premain0() — sans lui Knot lèverait une exception
+     * bruyante au lieu de déléguer en silence). Cette résolution se fige
+     * pour ce site d'appel précis, quoi qu'il arrive ensuite.
+     *
+     * Fix : n'importe QUEL point d'entrée qui touche VanillaHookRegistry en
+     * premier casse le même piège — plutôt que garder chaque mixin
+     * individuellement responsable d'appeler ensureExposed() (fragile, un
+     * seul oubli suffit), on le garantit ICI, structurellement, dès que Knot
+     * transforme sa toute première classe — largement avant que le moindre
+     * mixin apimixin ne s'exécute.
+     *
+     * ⚠️ Volontairement PAS de réflexion inline ici : {@code transform()} est
+     * appelé par la JVM PENDANT la définition d'une classe (JVMTI class-file-
+     * load hook), pour TOUTE classe du process (voir {@link
+     * #isBootstrapPackage}) — un contexte non-réentrant. La réflexion
+     * profonde de {@code FabricKnotExposer} ({@code getDeclaredMethods()}/
+     * {@code getDeclaredFields()} récursifs) peut elle-même déclencher du
+     * chargement de classes ; si l'une d'elles boucle sur la classe en cours
+     * de définition sur CE thread → {@code ClassCircularityError}. On se
+     * contente donc de CAPTURER la référence du classloader ici (gratuit,
+     * aucune réflexion) et de déléguer le vrai travail à un thread dédié,
+     * hors de la pile d'appel réentrante de {@code transform()}.
+     */
+    private static void triggerEarlyKnotExpose(ClassLoader loader) {
+        if (knotExposeTriggered || loader == null) return;
+        // "net.fabricmc.loader.impl.launch.knot." (Fabric) ou
+        // "org.quiltmc.loader.impl.launch.knot." (Quilt) — jamais Forge/
+        // NeoForge (ModLauncher, pas de notion de "Knot" à exposer ainsi).
+        if (!loader.getClass().getName().contains(".launch.knot.")) return;
+        knotExposeTriggered = true;
+        new Thread(() -> com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer.ensureExposed(loader),
+            "LauncherAgent-EarlyKnotExpose").start();
     }
 }

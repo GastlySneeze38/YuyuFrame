@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-24-v697";
+    private static final String BUILD_VERSION = "2026-08-25-v720";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -64,16 +64,20 @@ public class LauncherAgent {
             try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save(); } catch (Throwable ignored) {}
         }, "YuyuFrame-ConfigSave"));
 
-        // Phase 4.5 (ROADMAP-agent.md) — système de commandes client. Pur
-        // Java, aucune dépendance au jeu : sûr à exécuter inconditionnellement
-        // ici, avant tout le reste. Le hook qu'il enregistre (HookPoint.CHAT_SEND)
-        // reste dormant tant que ChatSendMixin261 (apimixin/v26_1/chat/) n'est
-        // pas tissé — comme tout apimixin cette session, voir feedback mémoire.
-        try {
-            com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry.bootstrap();
-        } catch (Throwable t) {
-            LauncherLog.err("[LauncherAgent] ClientCommandRegistry.bootstrap() échoué (non bloquant) : " + t);
-        }
+        // Phase 4.5 (ROADMAP-agent.md) — système de commandes client. RETIRÉ
+        // D'ICI (2026-08-24, voir [[project_mc_261_port]] §10/bug classloader) :
+        // appeler ClientCommandRegistry.bootstrap() ICI touchait VanillaHookRegistry
+        // EN PREMIER via le classloader SYSTÈME (celui qui charge l'agent
+        // lui-même, premain() tourne dessus) — alors que ModuleRegistry/les
+        // modules (NoFogModule, etc.) ne sont touchés QUE depuis le code tissé
+        // dans le jeu, via KnotClassLoader (Fabric), après que FabricKnotExposer
+        // ait fait adopter tout notre jar par Knot. Deux classloaders différents
+        // définissant chacun leur propre copie de VanillaHookRegistry$HookHandler
+        // → LinkageError (loader constraint violation) dès qu'un module tissé
+        // dans le jeu appelle VanillaHookRegistry.register(...). Bootstrap
+        // déplacé dans GlobalUiRenderMixin261 (même bloc d'init one-shot que
+        // ModuleRegistry.all()) pour que TOUT ce qui touche apimixin/ soit
+        // systématiquement chargé depuis le MÊME classloader que le jeu.
 
         // Réchauffe UiFont/AWT Toolkit ICI, MAINTENANT, PENDANT premain() — pas
         // un simple souci de perf. UiFont mesure le texte via un

@@ -110,9 +110,21 @@ public final class MixinHookPointRegistry {
         // ── Horloge ────────────────────────────────────────────────────────
         put("ClockTotalTicksMixin261", HookPoint.CLOCK_TOTAL_TICKS);
 
-        // ── Freelook ───────────────────────────────────────────────────────
-        put("MouseHandlerFreelookMixin261", HookPoint.FREELOOK_TURN_INTERCEPT);
-        put("CameraFreelookMixin261", HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET);
+        // ── Freelook : PAS ici (2026-08-24, voir [[project_mc_261_port]] §11) ──
+        // MouseHandlerFreelookMixin261/CameraFreelookMixin261 dispatchent bien
+        // via HookPoint/VanillaHookRegistry (dispatch()/dispatchValue() sont
+        // sûrs sans handler enregistré — retournent false/null), MAIS ne
+        // doivent PAS être gatés ici : Camera est chargée dans Minecraft.<init>,
+        // avant que FreelookModule (enregistré au premier GameRenderer.render(),
+        // voir GlobalUiRenderMixin261/ModuleRegistry.all()) n'ait eu la chance
+        // de s'enregistrer — violant la garantie d'ordre documentée ci-dessus.
+        // Résultat : CameraFreelookMixin261 partait sur le chemin de retransform
+        // tardif (IsolatedBootstrap.scheduleDelayedRetransform), où la classe
+        // synthétique Args$1ArgsClassGenerator (@ModifyArgs, Sponge Mixin) ne
+        // se liait pas correctement au runtime → NoSuchMethodError sur
+        // Args$1.of(float,float) dans Camera.alignWithEntity. Laisser ces 2
+        // mixins tisser INCONDITIONNELLEMENT (comme les mixins hub) évite le
+        // retransform et le bug.
     }
 
     /** @return le {@link HookPoint} associé à ce nom simple de classe mixin, ou {@code null} si absent (mixin hors système déclaratif — voir la javadoc de classe). */

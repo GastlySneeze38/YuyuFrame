@@ -2,7 +2,6 @@ package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -262,10 +261,9 @@ public final class FreelookModule extends LauncherModule {
 
             if (applyCameraTypeViaAccessor(engaged)) return;
 
-            // Repli réflexion — MinecraftAccessor261 (apimixin/v26_1/core/,
-            // voir audit ROADMAP-agent.md §3.3) pas encore tissé, en attente
-            // du basculement JSON : chemin IDENTIQUE à avant, plus jamais
-            // atteint le jour où applyCameraTypeViaAccessor() réussira.
+            // Repli réflexion — uniquement atteint si Minecraft.getInstance()
+            // a levé (autre bracket que 26.1.2, nom réel inexistant) : chemin
+            // IDENTIQUE à avant.
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
             java.lang.reflect.Field fOptions = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options");
@@ -300,14 +298,13 @@ public final class FreelookModule extends LauncherModule {
     }
 
     /**
-     * Chemin SANS réflexion (voir {@code apimixin.v26_1.core.MinecraftAccessor261})
-     * — force/restaure la vue 3e personne via {@code Options.getCameraType()}/
-     * {@code setCameraType(CameraType)} (méthodes publiques, appel direct) +
-     * l'accessor pour le champ privé {@code Minecraft.options}. {@code true}
-     * si utilisé avec succès (Mixin tissé), auquel cas l'appelant NE DOIT PAS
-     * retomber sur la réflexion. {@code false} si {@code MinecraftAccessor261}
-     * n'est pas encore tissé ({@code mc} n'implémente pas l'interface) — repli
-     * ATTENDU tant que le basculement JSON n'est pas fait, pas une erreur.
+     * Chemin SANS réflexion — force/restaure la vue 3e personne via {@code
+     * Options.getCameraType()}/{@code setCameraType(CameraType)} et le champ
+     * PUBLIC {@code Minecraft.options} (vérifiés publics par javap — jamais
+     * besoin d'un Accessor Mixin, voir la javadoc du stub {@code
+     * Minecraft.java} pour l'historique du bug que ça a causé). {@code true}
+     * si utilisé avec succès, auquel cas l'appelant NE DOIT PAS retomber sur
+     * la réflexion.
      *
      * Enveloppé dans son propre try/catch (pas seulement celui de l'appelant) :
      * {@code Minecraft.getInstance()} référence directement {@code
@@ -317,9 +314,7 @@ public final class FreelookModule extends LauncherModule {
      */
     private boolean applyCameraTypeViaAccessor(boolean engaged) {
         try {
-            Object mc = Minecraft.getInstance();
-            if (!(mc instanceof MinecraftAccessor261)) return false;
-            Options options = ((MinecraftAccessor261) mc).la$options();
+            Options options = ((Minecraft) Minecraft.getInstance()).options;
             if (options == null) return false;
             if (engaged) {
                 savedCameraType = options.getCameraType();
@@ -389,9 +384,7 @@ public final class FreelookModule extends LauncherModule {
     /** Chemin SANS réflexion pour la restauration — voir {@link #applyCameraTypeViaAccessor}, même principe (y compris le try/catch dédié). */
     private boolean restoreCameraTypeViaAccessor() {
         try {
-            Object mc = Minecraft.getInstance();
-            if (!(mc instanceof MinecraftAccessor261)) return false;
-            Options options = ((MinecraftAccessor261) mc).la$options();
+            Options options = ((Minecraft) Minecraft.getInstance()).options;
             if (options == null) return false;
             options.setCameraType((CameraType) savedCameraType);
             return true;

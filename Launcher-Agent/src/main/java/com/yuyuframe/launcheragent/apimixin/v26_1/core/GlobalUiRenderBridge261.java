@@ -4,7 +4,7 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.UiInputPoller;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
-import net.minecraft.client.Window;
+import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.gui.screens.Screen;
 
 /**
@@ -27,12 +27,14 @@ import net.minecraft.client.gui.screens.Screen;
  * JAR final — au runtime c'est toujours la VRAIE classe du jeu qui répond,
  * voir build.bat).
  * <pre>
- *   Minecraft.window / Minecraft.screen / Minecraft.mouseHandler
+ *   Minecraft.getWindow() / Minecraft.screen / Minecraft.mouseHandler
  * </pre>
- * — champs PRIVÉS, inaccessibles par appel direct : exposés via {@link
- * MinecraftAccessor261} (Sponge {@code @Accessor}, même dossier), généré
- * par Mixin au tissage — zéro réflexion, contrairement à {@code
- * getDeclaredField}+{@code setAccessible}.
+ * — tous PUBLICS (vérifié javap, voir javadoc du stub {@code Minecraft.java})
+ * : accès direct, AUCUN {@code @Accessor} Sponge Mixin — un {@code
+ * MinecraftAccessor261} avait existé ici mais corrompait le bytecode de
+ * {@code Minecraft.setScreen} au tissage (VerifyError, voir historique de
+ * session) ; supprimé définitivement, ces champs n'en avaient de toute façon
+ * jamais eu besoin.
  *
  * API PUBLIQUE identique à l'ancien pont (mêmes signatures) — le jour du
  * basculement, {@code GlobalUiRenderMixin261}/{@code GlobalUiPresentMixin261}
@@ -61,12 +63,13 @@ public final class GlobalUiRenderBridge261 {
     }
 
     public static long getWindowHandle(Object mc) {
-        Window window = ((MinecraftAccessor261) mc).la$window();
+        Window window = ((Minecraft) mc).getWindow();
         return window != null ? window.handle() : 0L;
     }
 
+    /** {@code screen} est un champ PUBLIC de {@code Minecraft} (vérifié javap) — accès direct, pas d'Accessor. */
     public static Object getCurrentScreen(Object mc) {
-        return ((MinecraftAccessor261) mc).la$screen();
+        return ((Minecraft) mc).screen;
     }
 
     /**
@@ -78,7 +81,7 @@ public final class GlobalUiRenderBridge261 {
      */
     public static boolean isMouseGrabbed(Object mc) {
         try {
-            MouseHandler handler = ((MinecraftAccessor261) mc).la$mouseHandler();
+            MouseHandler handler = ((Minecraft) mc).mouseHandler;
             return handler == null || handler.isMouseGrabbed();
         } catch (Throwable t) {
             return true; // repli permissif — voir ci-dessus

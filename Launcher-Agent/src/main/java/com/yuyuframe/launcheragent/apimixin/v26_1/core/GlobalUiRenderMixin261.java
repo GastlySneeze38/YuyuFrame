@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
+import com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry;
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
@@ -39,6 +40,16 @@ public abstract class GlobalUiRenderMixin261 {
                 GlobalUiRenderBridge261.inputPoller = new UiInputPollerModern(handle, this.getClass().getClassLoader());
                 ModuleRegistry.all();
                 GlobalUiSettings.INSTANCE.onConfigChanged();
+                // Phase 4.5 — déplacé depuis LauncherAgent.premain0() (voir sa
+                // javadoc et [[project_mc_261_port]] §10) : DOIT être touché
+                // depuis ICI (classloader du jeu, comme ModuleRegistry juste
+                // au-dessus), jamais depuis premain0() (classloader système),
+                // sous peine de LinkageError sur VanillaHookRegistry.
+                try {
+                    ClientCommandRegistry.bootstrap();
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): ClientCommandRegistry.bootstrap() a levé: " + t);
+                }
             }
             GlobalUiRenderBridge261.inputPoller.poll();
 
