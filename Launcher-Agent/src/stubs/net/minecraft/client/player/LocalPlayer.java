@@ -36,5 +36,14 @@ public abstract class LocalPlayer {
     public double getY() { return 0d; }
     public double getZ() { return 0d; }
     public float getYRot() { return 0f; }
+    public float getXRot() { return 0f; }
     public void turn(double yRot, double xRot) {}
+    public float getHealth() { return 0f; }
+    public float getMaxHealth() { return 0f; }
+    public float getEyeHeight() { return 0f; }
+    // Object, pas GameProfile : com.mojang.authlib n'est PAS sur le classpath
+    // de la passe de compilation des stubs (isolée, voir build.bat) — cast
+    // vers com.mojang.authlib.GameProfile côté appelant (classpath complet
+    // là-bas), voir MumbleLinkModule.
+    public Object getGameProfile() { return null; }
 }

@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.mumble.MumbleLinkBridge;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 
 import java.lang.reflect.Method;
 
@@ -28,6 +30,32 @@ public final class MumbleLinkModule extends LauncherModule {
     public void onTick() {
         try {
             if (!MumbleLinkBridge.ensureInit()) return;
+
+            // 26.1.2 sans réflexion (2026-08-26, §22 — audit modules) —
+            // Minecraft.player + Entity.getX/Y/Z/getYRot/getXRot/getEyeHeight()
+            // + Player.getGameProfile() (méthodes publiques, vérifiées javap).
+            // Repli réflexion multi-bracket sinon, inchangé.
+            try {
+                LocalPlayer directPlayer = Minecraft.getInstance().player;
+                if (directPlayer != null) {
+                    double px = directPlayer.getX();
+                    double py = directPlayer.getY();
+                    double pz = directPlayer.getZ();
+                    float yaw = directPlayer.getYRot();
+                    float pitch = directPlayer.getXRot();
+                    float eyeHeight = directPlayer.getEyeHeight();
+                    // GameProfile (com.mojang.authlib) — bibliothèque externe,
+                    // PAS sur le classpath de compilation de ce module (ni stub
+                    // ni jar, contrairement à net.minecraft.*) : getName() par
+                    // réflexion directe reste nécessaire ici, voir profileName().
+                    String username = profileName(directPlayer.getGameProfile());
+
+                    float yawRad = (float) Math.toRadians(yaw);
+                    float pitchRad = (float) Math.toRadians(pitch);
+                    MumbleLinkBridge.update((float) px, (float) (py + eyeHeight), (float) pz, yawRad, pitchRad, username);
+                    return;
+                }
+            } catch (Throwable ignored) {}
 
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
@@ -117,7 +145,15 @@ public final class MumbleLinkModule extends LauncherModule {
         try {
             Method getGameProfile = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/player/PlayerEntity", "getGameProfile");
             if (getGameProfile == null) return null;
-            Object profile = getGameProfile.invoke(player);
+            return profileName(getGameProfile.invoke(player));
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** {@code GameProfile.getName()} par réflexion directe — voir javadoc de classe (bibliothèque externe, hors classpath de compilation). */
+    private String profileName(Object profile) {
+        try {
             if (profile == null) return null;
             Object name = profile.getClass().getMethod("getName").invoke(profile);
             return name != null ? name.toString() : null;

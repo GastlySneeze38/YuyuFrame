@@ -4,4 +4,6 @@ package net.minecraft.network.chat;
 public interface Component {
     static Component literal(String text) { return null; }
     static Component translatable(String key) { return null; }
+    /** {@code getString()} — méthode par défaut PUBLIQUE (vérifiée javap), voir {@code ChatEnhancementsModule}. */
+    default String getString() { return null; }
 }

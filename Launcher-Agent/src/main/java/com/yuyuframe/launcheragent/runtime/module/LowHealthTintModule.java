@@ -7,6 +7,8 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.apigraphic.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 
 import java.lang.reflect.Method;
 
@@ -78,18 +80,11 @@ public final class LowHealthTintModule extends LauncherModule {
     @Override
     public void onRenderOverlay(UiRenderer renderer, int vpWidth, int vpHeight) {
         try {
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-            Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
-            if (player == null) return;
-
-            Method getHealth = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getHealth");
-            Method getMaxHealth = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getMaxHealth");
-            if (getHealth == null || getMaxHealth == null) return;
-
-            float maxHealth = (float) getMaxHealth.invoke(player);
+            float[] hp = healthAndMax();
+            if (hp == null) return;
+            float maxHealth = hp[1];
             if (maxHealth <= 0f) return;
-            float healthPercent = (float) getHealth.invoke(player) / maxHealth * 100f;
+            float healthPercent = hp[0] / maxHealth * 100f;
             if (healthPercent >= threshold) return;
 
             float ratio = Math.max(0f, Math.min(1f, 1f - healthPercent / threshold));
@@ -119,6 +114,33 @@ public final class LowHealthTintModule extends LauncherModule {
                 drawVignetteBands(renderer, vpWidth, vpHeight, vSize, alpha);
             }
         } catch (Throwable ignored) {}
+    }
+
+    /**
+     * 26.1.2 sans réflexion (2026-08-26, §22 — audit modules) —
+     * {@code Minecraft.player} + {@code LivingEntity.getHealth()/getMaxHealth()}
+     * (méthodes publiques, vérifiées javap — pas de champ privé en jeu ici,
+     * aucun Accessor Mixin pertinent). Repli réflexion multi-bracket sinon.
+     * @return {@code float[]{health, maxHealth}} ou {@code null} si indisponible.
+     */
+    private float[] healthAndMax() {
+        try {
+            LocalPlayer directPlayer = Minecraft.getInstance().player;
+            if (directPlayer != null) return new float[]{ directPlayer.getHealth(), directPlayer.getMaxHealth() };
+        } catch (Throwable ignored) {}
+        try {
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return null;
+            Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
+            if (player == null) return null;
+
+            Method getHealth = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getHealth");
+            Method getMaxHealth = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getMaxHealth");
+            if (getHealth == null || getMaxHealth == null) return null;
+            return new float[]{ (float) getHealth.invoke(player), (float) getMaxHealth.invoke(player) };
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     /**

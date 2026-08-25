@@ -4,6 +4,7 @@ import net.minecraft.client.MouseHandler;
 import net.minecraft.client.Options;
 import net.minecraft.client.User;
 import com.mojang.blaze3d.platform.Window;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -68,4 +69,8 @@ public interface MinecraftAccessor261 {
     /** Ajouté pour {@code ChatEnhancementsModule} (pseudo local, détection de mention). */
     @Accessor("user")
     User la$user();
+
+    /** Ajouté pour {@code ChatEnhancementsModule} (2026-08-26, §22) — {@code Gui} est public (vérifié javap), routé ici pour rester sur UNE seule surface d'accès à l'état interne de {@code Minecraft}, voir la javadoc de classe. */
+    @Accessor("gui")
+    Gui la$gui();
 }

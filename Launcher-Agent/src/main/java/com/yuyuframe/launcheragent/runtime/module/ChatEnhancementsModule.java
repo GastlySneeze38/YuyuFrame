@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.ChatComponentAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -9,7 +10,13 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.User;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
+import net.minecraft.client.multiplayer.chat.GuiMessageSource;
+import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 
 import java.lang.reflect.Field;
@@ -105,7 +112,91 @@ public final class ChatEnhancementsModule extends LauncherModule {
         checkChatState();
     }
 
+    /**
+     * 26.1.2 sans réflexion (2026-08-26, §22 — audit modules) — {@code
+     * Minecraft.gui}/{@code Gui.getChat()} (publics, via {@link
+     * MinecraftAccessor261#la$gui()} pour rester sur une seule surface
+     * d'accès à {@code Minecraft}) puis {@link ChatComponentAccessor261}
+     * pour {@code allMessages}/{@code addMessage(...)} (privés, voir sa
+     * javadoc). Logique IDENTIQUE au chemin réflexion ci-dessous (dédup par
+     * IDENTITÉ d'objet, retrait du tag d'expéditeur avant la recherche du
+     * pseudo, fusion des répétitions) — voir les commentaires de {@link
+     * #checkChatState} pour l'historique de chaque bug déjà corrigé.
+     *
+     * @return {@code true} si traité ICI (pas de repli réflexion à faire —
+     * y compris quand il n'y avait rien de neuf à traiter), {@code false}
+     * si indisponible sur ce bracket (repli réflexion complet côté appelant).
+     */
+    private boolean checkChatStateDirect() {
+        Object mc = Minecraft.getInstance();
+        if (!(mc instanceof MinecraftAccessor261)) return false;
+        Gui gui = ((MinecraftAccessor261) mc).la$gui();
+        if (gui == null) return false;
+        ChatComponent chat = gui.getChat();
+        if (!(chat instanceof ChatComponentAccessor261)) return false;
+        ChatComponentAccessor261 chatAcc = (ChatComponentAccessor261) chat;
+        List<GuiMessage> messages = chatAcc.la$allMessages();
+        if (messages == null || messages.isEmpty()) return false;
+
+        GuiMessage headLine = messages.get(0);
+        Component content = headLine.content();
+        if (content == null) return false;
+        String plain = content.getString();
+        if (plain == null) return false;
+
+        if (headLine == la$lastProcessedMessage) return true;
+        la$lastProcessedMessage = headLine;
+
+        if (pingOnMention) {
+            String username = null;
+            try {
+                User user = ((MinecraftAccessor261) mc).la$user();
+                if (user != null) username = user.getName();
+            } catch (Throwable ignored) {}
+            String body = SENDER_TAG_PREFIX.matcher(plain).replaceFirst("");
+            boolean matched = username != null && !username.isEmpty() && body.toLowerCase().contains(username.toLowerCase());
+            if (matched) playPingSound(mc);
+        }
+
+        if (stackRepeats) {
+            String base = COUNTER_SUFFIX.matcher(plain).replaceAll("");
+            if (base.equals(la$lastDistinctBase)) {
+                la$repeatCount++;
+                String combinedText = base + " (x" + la$repeatCount + ")";
+                if (mergeRepeatedMessageDirect(chatAcc, chat, messages, headLine, combinedText)) {
+                    if (!messages.isEmpty()) la$lastProcessedMessage = messages.get(0);
+                }
+            } else {
+                la$repeatCount = 1;
+                la$lastDistinctBase = base;
+            }
+        }
+        return true;
+    }
+
+    /** Version directe (accessor) de {@link #mergeRepeatedMessage} — voir sa javadoc pour le détail de chaque champ repris tel quel (source/tag) et pourquoi {@code rescaleChat()} est nécessaire après. */
+    private boolean mergeRepeatedMessageDirect(ChatComponentAccessor261 chatAcc, ChatComponent chat, List<GuiMessage> messages, GuiMessage headLine, String combinedText) {
+        try {
+            GuiMessageSource sourceValue = headLine.source();
+            GuiMessageTag tagValue = headLine.tag();
+            if (messages.size() >= 2) { messages.remove(0); messages.remove(0); }
+            Component combined = Component.literal(combinedText);
+            chatAcc.la$addMessage(combined, null, sourceValue, tagValue);
+            chat.rescaleChat();
+            return true;
+        } catch (Throwable t) {
+            if (!mergeErrorLogged) {
+                mergeErrorLogged = true;
+                LauncherLog.err("[ChatEnhancementsModule] mergeRepeatedMessageDirect: " + t);
+            }
+            return false;
+        }
+    }
+
     private void checkChatState() {
+        try {
+            if (checkChatStateDirect()) return;
+        } catch (Throwable ignored) {}
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
