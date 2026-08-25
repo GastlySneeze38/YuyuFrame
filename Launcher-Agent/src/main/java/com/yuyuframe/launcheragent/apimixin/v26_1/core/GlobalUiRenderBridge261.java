@@ -16,25 +16,17 @@ import net.minecraft.client.gui.screens.Screen;
  * mixin/) se décide plus tard, en bloc.
  *
  * Remplace CHAQUE {@code Class.forName}/{@code getDeclaredMethod}/{@code
- * getDeclaredField}/{@code setAccessible}/{@code invoke} de l'ancien pont
- * par deux techniques, toutes deux SANS réflexion au runtime :
- * <pre>
- *   Minecraft.getInstance()/setScreen(Screen)/getMainRenderTarget()
- *   Window.handle()/MouseHandler.isMouseGrabbed()
- * </pre>
- * — méthodes PUBLIQUES vérifiées via javap sur le jar client 26.1.2 réel :
- * appel DIRECT possible via les stubs typés (compile-only, jamais dans le
- * JAR final — au runtime c'est toujours la VRAIE classe du jeu qui répond,
- * voir build.bat).
- * <pre>
- *   Minecraft.getWindow() / Minecraft.screen / Minecraft.mouseHandler
- * </pre>
- * — tous PUBLICS (vérifié javap, voir javadoc du stub {@code Minecraft.java})
- * : accès direct, AUCUN {@code @Accessor} Sponge Mixin — un {@code
- * MinecraftAccessor261} avait existé ici mais corrompait le bytecode de
- * {@code Minecraft.setScreen} au tissage (VerifyError, voir historique de
- * session) ; supprimé définitivement, ces champs n'en avaient de toute façon
- * jamais eu besoin.
+ * getDeclaredField}/{@code setAccessible}/{@code invoke} de l'ancien pont —
+ * {@code setScreen(Screen)}/{@code getMainRenderTarget()}/{@code
+ * getInstance()} restent des appels PUBLICS directs (pas de champ en jeu,
+ * rien à gagner d'un Accessor) ; {@code window}/{@code screen}/{@code
+ * mouseHandler} passent par {@link MinecraftAccessor261} (2026-08-26, §22 —
+ * voir sa javadoc et celle du stub {@code Minecraft.java} pour l'historique
+ * du VerifyError qui avait fait éviter tout Accessor ici : RÉSOLU, revenu à
+ * l'architecture apimixin par choix explicite — un accessor écrit en noms
+ * Yarn "named" reste, EN PLUS, le seul chemin qui pourra un jour couvrir
+ * d'autres brackets via {@code MappingsRegistry} (remapper Mixin déjà
+ * branché), ce qu'un cast/champ public direct ne permettra jamais).
  *
  * API PUBLIQUE identique à l'ancien pont (mêmes signatures) — le jour du
  * basculement, {@code GlobalUiRenderMixin261}/{@code GlobalUiPresentMixin261}
@@ -63,13 +55,14 @@ public final class GlobalUiRenderBridge261 {
     }
 
     public static long getWindowHandle(Object mc) {
-        Window window = ((Minecraft) mc).getWindow();
+        if (!(mc instanceof MinecraftAccessor261)) return 0L;
+        Window window = ((MinecraftAccessor261) mc).la$window();
         return window != null ? window.handle() : 0L;
     }
 
-    /** {@code screen} est un champ PUBLIC de {@code Minecraft} (vérifié javap) — accès direct, pas d'Accessor. */
+    /** {@code screen} — via {@link MinecraftAccessor261#la$screen()} (2026-08-26, §22). */
     public static Object getCurrentScreen(Object mc) {
-        return ((Minecraft) mc).screen;
+        return mc instanceof MinecraftAccessor261 ? ((MinecraftAccessor261) mc).la$screen() : null;
     }
 
     /**
@@ -81,7 +74,8 @@ public final class GlobalUiRenderBridge261 {
      */
     public static boolean isMouseGrabbed(Object mc) {
         try {
-            MouseHandler handler = ((Minecraft) mc).mouseHandler;
+            if (!(mc instanceof MinecraftAccessor261)) return true;
+            MouseHandler handler = ((MinecraftAccessor261) mc).la$mouseHandler();
             return handler == null || handler.isMouseGrabbed();
         } catch (Throwable t) {
             return true; // repli permissif — voir ci-dessus
