@@ -90,6 +90,16 @@ public final class FreelookModule extends LauncherModule {
         category = "Réglages", options = { "Maintenir", "Basculer" })
     public int mode = 0;
 
+    // Défaut sur "Avant" (2026-08-25, §15) — retour utilisateur : en vue
+    // Arrière, regarder tout en haut plaque la caméra contre le joueur
+    // (comportement natif de getMaxZoom()/move() en vue arrière, voir la
+    // javadoc de CameraFreelookMixin261 pour le détail vérifié par javap) ;
+    // la vue Avant n'a PAS ce problème (son propre retournement de pitch
+    // vanilla inverse le sens du rayon de recul).
+    @ConfigDropdown(name = "Vue 3e personne", description = "Vue forcée à l'engagement du freelook (voir onTick). \"Avant\" (défaut, face au joueur — pas de blocage en regardant vers le haut) ou \"Arrière\" (dos au joueur, la caméra se plaque contre le joueur en regardant tout en haut — limitation vanilla).",
+        category = "Réglages", options = { "Arrière", "Avant" })
+    public int thirdPersonView = 1;
+
     // Demandé explicitement ("utilise la sensibilité du jeu normal, et
     // ajoute le choix entre sensi du jeu ou personnalisée") — le freelook
     // lisait DÉJÀ Options.sensitivity() par défaut (voir readSensitivity()
@@ -169,26 +179,77 @@ public final class FreelookModule extends LauncherModule {
      */
     private static final double VANILLA_TURN_FACTOR = 0.15;
 
+    // Front montant de l'engagement — INDÉPENDANT de LauncherModule#wasEngaged
+    // (utilisé par onTick() pour la bascule de CameraType, cadence différente
+    // : tick de jeu vs callback souris) pour ne pas coupler deux chemins
+    // d'exécution distincts. Consulté par cameraRotationOffset (PAS par
+    // interceptTurn) : voir sa javadoc pour pourquoi le calcul de mise à
+    // niveau vue Avant a besoin du xRot y étant disponible.
+    private static volatile boolean turnEngagedPrev;
+    private static volatile boolean pendingLevelOnEngage;
+
     /** Handler de {@link HookPoint#FREELOOK_TURN_INTERCEPT} — voir MouseHandlerFreelookMixin261. {@code ctx} = {@code double[]{yRot, xRot}}, valeurs BRUTES telles que passées à {@code turn()} (pré-{@link #VANILLA_TURN_FACTOR}). */
     private boolean interceptTurn(Object ctx) {
         if (!(ctx instanceof double[])) return false;
         double[] delta = (double[]) ctx;
         boolean engaged = isFreelookEngaged();
         if (!engaged) {
+            turnEngagedPrev = false;
             deactivate();
             return false;
+        }
+        if (!turnEngagedPrev) {
+            turnEngagedPrev = true;
+            pendingLevelOnEngage = true;
         }
         accumulate(delta[0] * VANILLA_TURN_FACTOR, delta[1] * VANILLA_TURN_FACTOR);
         return true;
     }
 
-    /** Handler de {@link HookPoint#FREELOOK_CAMERA_ROTATION_OFFSET} — voir CameraFreelookMixin261. {@code ctx} = {@code float[]{yRot, xRot}}, renvoie {@code float[]{newYRot, newXRot}} ou {@code null} (freelook inactif, aucun changement). */
+    /**
+     * Handler de {@link HookPoint#FREELOOK_CAMERA_ROTATION_OFFSET} — voir
+     * CameraFreelookMixin261. {@code ctx} = {@code float[]{yRot, xRot}} —
+     * {@code xRot} est {@code entity.getViewXRot(partialTick)}, GELÉ pour
+     * toute la durée de l'engagement (le vrai {@code turn()} du joueur est
+     * annulé pendant ce temps par {@code MouseHandlerFreelookMixin261}) —
+     * renvoie {@code float[]{newYRot, newXRot}} ou {@code null} (freelook
+     * inactif, aucun changement).
+     *
+     * Cadrage fixe en vue Avant SEULEMENT, au premier appel de chaque
+     * engagement (2026-08-25, §15-§18 — retours utilisateur successifs :
+     * "regarde le ciel" → mis à l'horizontale → "pas assez, remonte" (erreur
+     * de sens de ma part, corrigée) → "il faut regarder vers le BAS [le sol],
+     * descends plutôt à 40°"). Cause vérifiée au bytecode (voir javadoc de
+     * {@code CameraFreelookMixin261}) : notre point d'injection (ordinal 1)
+     * tourne AVANT le retournement propre à {@code isMirrored()}, qui calcule
+     * {@code xRot final = -(xRot + pitchOffset)}. Pour atteindre un cadrage
+     * FIXE {@code xRot final = FRONT_VIEW_TARGET_PITCH} (positif = vers le
+     * bas, convention vanilla déjà établie ailleurs dans ce fichier) quel que
+     * soit le {@code xRot} de départ :
+     * <pre>
+     *   xRot final = -(xRot + pitchOffset) = FRONT_VIEW_TARGET_PITCH
+     *   ⟹ pitchOffset = -FRONT_VIEW_TARGET_PITCH - xRot
+     * </pre>
+     * Valeur choisie par estimation (pas mesurable sans jeu) — ajuster
+     * {@link #FRONT_VIEW_TARGET_PITCH} sur retour utilisateur plutôt que de
+     * la retoucher à l'aveugle. Le joueur ajuste ensuite librement par-dessus,
+     * comme avant. AUCUNE négation des DELTAS de souris eux-mêmes : contrôles
+     * confirmés NON inversés par l'utilisateur, voir historique.
+     */
+    private static final double FRONT_VIEW_TARGET_PITCH = 30.0;
+
     private Object cameraRotationOffset(Object ctx) {
         boolean active = isActive();
         if (!active || !(ctx instanceof float[])) return null;
         float[] in = (float[]) ctx;
         float yRot = in[0];
         float xRot = in[1];
+        if (pendingLevelOnEngage) {
+            pendingLevelOnEngage = false;
+            if (thirdPersonView == 1) {
+                pitchOffset = -FRONT_VIEW_TARGET_PITCH - xRot;
+            }
+        }
         float newXRot = clampFloat(xRot + (float) pitchOffset(), -90f, 90f);
         float newYRot = yRot + (float) yawOffset();
         return new float[]{newYRot, newXRot};
@@ -262,18 +323,27 @@ public final class FreelookModule extends LauncherModule {
         return module.sensitivityMode == 1 ? module.customSensitivity / 100.0 : gameSensitivity;
     }
 
+    /** @return {@code CameraType.THIRD_PERSON_FRONT} ou {@code THIRD_PERSON_BACK} selon {@link #thirdPersonView} — les deux sont des constantes statiques publiques (vérifiées par javap du vrai jar 26.1.2). */
+    private CameraType targetCameraType() {
+        return thirdPersonView == 1 ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK;
+    }
+
+    /** @return le nom du champ de {@code CameraType}/{@code Perspective} (Yarn) correspondant à {@link #thirdPersonView} — pour le repli réflexion cross-bracket, voir {@link #onTick}. */
+    private String targetCameraTypeFieldName() {
+        return thirdPersonView == 1 ? "THIRD_PERSON_FRONT" : "THIRD_PERSON_BACK";
+    }
+
     /**
-     * Force la vue à la 3e personne (dos) dès que le freelook s'engage, peu
-     * importe la vue de départ — demandé explicitement par l'utilisateur
-     * ("péu importe dans quelle vue on est ça nous mette a la 3e personne").
-     * Restaure la vue EXACTE d'avant (même si l'utilisateur a lui-même
-     * changé de vue PENDANT le freelook via F5 — {@link #savedCameraType}
-     * garde la valeur d'AVANT l'engagement, jamais réécrasée entre-temps) au
-     * désengagement. Réflexion directe (noms RÉELS, bracket 26.1.2
-     * uniquement comme le reste de ce module) : {@code Options.getCameraType()}/
-     * {@code setCameraType(CameraType)}, {@code CameraType.THIRD_PERSON_BACK}
-     * (constante statique publique) — vérifiés par désassemblage bytecode du
-     * vrai jar 26.1.2.
+     * Force la vue 3e personne choisie ({@link #thirdPersonView}) dès que le
+     * freelook s'engage, peu importe la vue de départ — demandé explicitement
+     * par l'utilisateur ("péu importe dans quelle vue on est ça nous mette a
+     * la 3e personne"). Restaure la vue EXACTE d'avant (même si l'utilisateur
+     * a lui-même changé de vue PENDANT le freelook via F5 — {@link
+     * #savedCameraType} garde la valeur d'AVANT l'engagement, jamais
+     * réécrasée entre-temps) au désengagement. Réflexion directe (noms RÉELS,
+     * bracket 26.1.2 uniquement comme le reste de ce module) : {@code
+     * Options.getCameraType()}/{@code setCameraType(CameraType)} — vérifiés
+     * par désassemblage bytecode du vrai jar 26.1.2.
      */
     @Override
     public void onTick() {
@@ -307,10 +377,10 @@ public final class FreelookModule extends LauncherModule {
                 Class<?> cameraTypeClass = McReflect.yarnClass(
                     "net/minecraft/client/option/Perspective", "net.minecraft.client.CameraType");
                 if (cameraTypeClass == null) return;
-                java.lang.reflect.Field fThirdPersonBack = McReflect.field(cameraTypeClass,
-                    "net/minecraft/client/option/Perspective", "THIRD_PERSON_BACK");
-                if (fThirdPersonBack == null) return;
-                setCameraType.invoke(options, fThirdPersonBack.get(null));
+                java.lang.reflect.Field fTarget = McReflect.field(cameraTypeClass,
+                    "net/minecraft/client/option/Perspective", targetCameraTypeFieldName());
+                if (fTarget == null) return;
+                setCameraType.invoke(options, fTarget.get(null));
             } else if (savedCameraType != null) {
                 setCameraType.invoke(options, savedCameraType);
                 savedCameraType = null;
@@ -341,7 +411,7 @@ public final class FreelookModule extends LauncherModule {
             if (options == null) return false;
             if (engaged) {
                 savedCameraType = options.getCameraType();
-                options.setCameraType(CameraType.THIRD_PERSON_BACK);
+                options.setCameraType(targetCameraType());
             } else if (savedCameraType != null) {
                 options.setCameraType((CameraType) savedCameraType);
                 savedCameraType = null;

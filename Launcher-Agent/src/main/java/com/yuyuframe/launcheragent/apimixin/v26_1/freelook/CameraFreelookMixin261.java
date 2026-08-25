@@ -82,6 +82,39 @@ import org.spongepowered.asm.mixin.injection.At;
  * notre méthode) — insensible à ce bug, fonctionne identiquement sous
  * tissage initial ET sous retransform.
  *
+ * ⚠️ {@code ordinal = 1} OBLIGATOIRE (2026-08-25, §15 — retour utilisateur :
+ * "en vue arrière on ne peut pas aller vers le haut"). {@code alignWithEntity}
+ * contient QUATRE appels à {@code setRotation(FF)}, vérifiés par javap du vrai
+ * jar 26.1.2, dans cet ordre bytecode :
+ * <pre>
+ *   #0 (véhicule/minecart, lerp)     — hors sujet ici
+ *   #1 (branche normale) : setRotation(entity.getViewYRot, entity.getViewXRot)
+ *   #2 (SEULEMENT si isMirrored(), donc SEULEMENT en THIRD_PERSON_FRONT) :
+ *      setRotation(this.yRot + 180, -this.xRot) — retourne yaw/pitch pour
+ *      que le joueur se voie à l'endroit depuis une caméra qui lui fait face
+ *   #3 (sommeil) — hors sujet ici
+ * </pre>
+ * Sans {@code ordinal}, {@code @At(INVOKE)} matche les QUATRE — en vue Arrière
+ * (jamais mirrored) seul #1 s'exécute réellement, sans conséquence. En vue
+ * AVANT, #1 ET #2 s'exécutent tous les deux DANS LA MÊME frame : notre offset
+ * s'appliquait donc deux fois — une fois sur #1, une seconde fois sur #2, qui
+ * relit un xRot/yRot DÉJÀ modifié par nous. {@code ordinal = 1} nous limite à
+ * #1 et laisse le retournement vanilla de #2 tourner INTACT sur le résultat.
+ *
+ * C'est ce qui règle le blocage vertical en vue Arrière (racine vanilla, pas
+ * un bug introduit ici) : {@code getMaxZoom()}/{@code move()}, juste après,
+ * font un rayon "derrière" la rotation ACTUELLE de la caméra pour savoir
+ * jusqu'où reculer sans traverser un mur. En Arrière, ce rayon part
+ * directement du pitch qu'on vient de fixer — près de -90° (regarder tout en
+ * haut), "derrière la vue" pointe vers le SOL, le rayon touche presque
+ * aussitôt, {@code maxZoom} s'effondre vers 0 et la caméra se plaque contre
+ * le joueur (comportement vanilla natif du F5 arrière, retrouvable sans
+ * freelook). En Avant, l'appel #2 (désormais intact) NÉGATIVE le pitch avant
+ * ce même calcul — le rayon part dans la direction opposée et ne s'effondre
+ * pas de la même façon, exactement comme le F5 avant vanilla s'en sort déjà.
+ * {@link FreelookModule#thirdPersonView} par défaut sur "Avant" pour cette
+ * raison.
+ *
  * ⚠️ {@link FabricKnotExposer#ensureExposed} appelé ici aussi (2026-08-24,
  * même chantier §11) — filet de sécurité SANS EFFET dans la pratique : ce
  * problème (résolution de {@code VanillaHookRegistry} par APP au lieu de
@@ -99,7 +132,7 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class CameraFreelookMixin261 {
 
     @WrapOperation(method = "alignWithEntity(F)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;setRotation(FF)V"))
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Camera;setRotation(FF)V", ordinal = 1))
     private void la$applyFreelookOffset(Camera instance, float yRot, float xRot, Operation<Void> setRotation) {
         FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
         Object result = VanillaHookRegistry.dispatchValue(HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET,
