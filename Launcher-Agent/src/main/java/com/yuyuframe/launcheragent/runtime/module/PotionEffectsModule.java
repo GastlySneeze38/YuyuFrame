@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -23,8 +25,16 @@ public final class PotionEffectsModule extends SingleHudModule {
     public PotionEffectsModule() {
         super("potion-effects", "Effets de potion", "Liste des effets de potion actifs", false,
             new HudElement("potion-effects", "Effets de potion", HudAnchor.TOP_RIGHT, 8f, 40f,
-                (HudElement.CustomRenderer) new Renderer()));
+                (HudElement.CustomRenderer) new Renderer()),
+            HookPoint.HUD_EXTRACT_EFFECTS);
         iconUrl = icons8("test-tube");
+
+        // BUG TROUVÉ (audit modules 2026-08-25, §19 — même trou que
+        // ArmorDurabilityModule, voir sa javadoc) : dessinait sa propre liste
+        // d'effets SANS supprimer les icônes vanilla natives — mixin
+        // HudExtractEffectsMixin261/HookPoint HUD_EXTRACT_EFFECTS déjà
+        // existants, jamais câblés faute de relais dans SingleHudModule.
+        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_EFFECTS, ctx -> isEnabled());
     }
 
     /**

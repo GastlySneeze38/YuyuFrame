@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
@@ -405,16 +406,16 @@ public final class ZoomModule extends LauncherModule {
     }
 
     /**
-     * 26.1.2 sans réflexion — {@code Minecraft.getInstance().options} (champ
-     * PUBLIC, vérifié javap). Try/catch dédié : {@code Minecraft.getInstance()}
-     * référence le nom RÉEL, inexistant tel quel sur les autres brackets
-     * (obfusqués) — repli réflexion multi-bracket sinon.
+     * 26.1.2 sans réflexion — {@code MinecraftAccessor261#la$options()}
+     * (architecture apimixin, 2026-08-25 §19/§20). Try/catch dédié : {@code
+     * Minecraft.getInstance()} référence le nom RÉEL, inexistant tel quel sur
+     * les autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
      */
     private Object optionsInstance() throws Exception {
         try {
             Object mc = Minecraft.getInstance();
-            if (mc instanceof Minecraft) {
-                Options options = ((Minecraft) mc).options;
+            if (mc instanceof MinecraftAccessor261) {
+                Options options = ((MinecraftAccessor261) mc).la$options();
                 if (options != null) return options;
             }
         } catch (Throwable ignored) {}

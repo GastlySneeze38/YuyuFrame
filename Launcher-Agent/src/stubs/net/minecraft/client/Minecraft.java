@@ -18,24 +18,26 @@ import net.minecraft.client.sounds.SoundManager;
  * la VRAIE classe au runtime (voir javadoc de {@code GlobalUiRenderBridge261}).
  *
  * {@code player}/{@code screen}/{@code mouseHandler}/{@code options} : TOUS
- * champs PUBLICS (vérifiés par javap) — accès direct, aucun {@code @Accessor}
- * nécessaire. {@code getUser()}/{@code getFps()} : {@code user}/{@code fps}
- * SONT privés, mais chacun a une méthode getter PUBLIQUE — même chose,
- * inutile de générer un Accessor Mixin dessus.
+ * champs PUBLICS (vérifiés par javap) — un accès direct reste toujours
+ * possible sans {@code @Accessor}. {@code getUser()}/{@code getFps()} :
+ * {@code user}/{@code fps} SONT privés, mais chacun a une méthode getter
+ * PUBLIQUE — accès direct possible là aussi, sans Accessor Mixin.
  *
- * BUG TROUVÉ (VerifyError "Bad type on operand stack" sur {@code
- * Minecraft.setScreen}, plusieurs heures de bissection) : une classe {@code
- * MinecraftAccessor261} existait ici avec 5 {@code @Accessor} Sponge Mixin
- * pour exposer window/screen/mouseHandler/options/user/fps — TOUS ces champs
- * s'avèrent en réalité publics ou dotés d'un getter public (vérifié par
- * javap), donc l'Accessor n'a jamais été nécessaire. Sa seule présence sur la
- * classe {@code Minecraft} (peu importe QUELS champs elle exposait — testé
- * avec seulement 4 champs restants, crash identique) corrompait le bytecode
- * généré pour {@code setScreen} au tissage (StackMapTable/local invalide,
- * incompatibilité probable Sponge Mixin 0.8.7 + class file version 69/Java
- * 25). Supprimée définitivement — accès direct partout à la place. Ne JAMAIS
- * recréer d'{@code @Accessor} sur {@code Minecraft} sans d'abord vérifier via
- * javap qu'aucun accès public n'existe déjà.
+ * ⚠️ HISTORIQUE (2026-08 — RÉSOLU, voir {@code MinecraftAccessor261}) : un
+ * VerifyError ("Bad type on operand stack" sur {@code Minecraft.setScreen})
+ * avait été bissecté jusqu'à la SEULE PRÉSENCE d'un {@code @Accessor} Sponge
+ * Mixin sur {@code Minecraft} (peu importe quels champs il exposait — testé
+ * avec seulement 4 champs restants, crash identique). {@code
+ * MinecraftAccessor261} a depuis été confirmé fonctionnel (tissage sans
+ * erreur, exercé en jeu) — la cause racine du VerifyError d'alors n'était PAS
+ * "un Accessor sur Minecraft est intrinsèquement impossible", elle est
+ * ailleurs et corrigée. L'architecture du projet PRÉFÈRE désormais passer
+ * par {@code MinecraftAccessor261} pour ces champs plutôt que par un cast
+ * direct {@code (Minecraft) mc}, même quand le champ est public — une seule
+ * surface documentée pour tout accès à l'état interne de {@code Minecraft}
+ * (2026-08-25, §19/§20). Avant de toucher à nouveau ce mixin, vérifier que le
+ * problème historique reste bien absent (démarrage + ouverture d'un écran,
+ * ex: menu pause) plutôt que de supposer l'un ou l'autre sans preuve.
  */
 public abstract class Minecraft {
     public static Minecraft getInstance() { return null; }

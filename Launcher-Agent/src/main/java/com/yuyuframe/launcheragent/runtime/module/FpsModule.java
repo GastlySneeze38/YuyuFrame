@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -28,15 +29,16 @@ public final class FpsModule extends SingleHudModule {
     private static final class ContentSource implements HudElement.ContentSource {
         @Override
         public String[] lines() {
-            // 26.1.2 sans réflexion — Minecraft.getFps() (méthode publique,
-            // vérifiée javap) — repli réflexion multi-bracket sinon
-            // (1.8.9-1.21.11). Try/catch dédié : Minecraft.getInstance()
-            // référence le nom RÉEL, inexistant tel quel sur les autres
-            // brackets (obfusqués) — NoClassDefFoundError attendu là, doit
-            // rester silencieux.
+            // 26.1.2 sans réflexion — MinecraftAccessor261#la$fps()
+            // (architecture apimixin, 2026-08-25 §19/§20 — Minecraft.getFps()
+            // est aussi public mais on passe uniformément par l'Accessor pour
+            // rester sur UNE seule surface documentée, voir sa javadoc) —
+            // repli réflexion multi-bracket sinon (1.8.9-1.21.11). Try/catch
+            // dédié : Minecraft.getInstance() référence le nom RÉEL, inexistant
+            // tel quel sur les autres brackets (obfusqués) — NoClassDefFoundError
+            // attendu là, doit rester silencieux.
             try {
-                Minecraft mc = Minecraft.getInstance();
-                if (mc != null) return new String[]{ mc.getFps() + " FPS" };
+                if (Minecraft.getInstance() != null) return new String[]{ MinecraftAccessor261.la$fps() + " FPS" };
             } catch (Throwable ignored) {}
             try {
                 Object mc = McReflect.minecraftClient();

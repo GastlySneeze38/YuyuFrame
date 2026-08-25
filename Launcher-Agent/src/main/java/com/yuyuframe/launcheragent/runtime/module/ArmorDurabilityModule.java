@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -73,8 +75,22 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     public ArmorDurabilityModule() {
         super("armor-durability", "Armure/Durabilité", "Durabilité de l'armure et de l'objet en main", false,
             new HudElement("armor-durability", "Armure/Durabilité", HudAnchor.BOTTOM_RIGHT, 8f, 8f,
-                (HudElement.CustomRenderer) RENDERER));
+                (HudElement.CustomRenderer) RENDERER),
+            HookPoint.HUD_EXTRACT_ARMOR);
         iconUrl = icons8("shield");
+
+        // BUG TROUVÉ (audit modules 2026-08-25, §19, retour utilisateur :
+        // "l'armure/durabilité [...] chevauche le HUD vanilla") — ce module
+        // dessinait sa propre rangée d'armure SANS jamais supprimer la
+        // rangée vanilla native (mixin HudExtractArmorMixin261/HookPoint
+        // HUD_EXTRACT_ARMOR déjà existants, simplement jamais consultés ici,
+        // faute d'un constructeur SingleHudModule capable de relayer un
+        // HookPoint — voir sa javadoc). Même câblage que CrosshairModule :
+        // dispatch()==true fait sauter le rendu vanilla dans
+        // HudExtractArmorMixin261 tant que CE module est actif — style
+        // "Vanilla" INCLUS (il double lui aussi l'armure, jamais la main,
+        // voir javadoc de VANILLA_SLOT_OFFSETS_GUI).
+        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_ARMOR, ctx -> isEnabled());
     }
 
     @Override

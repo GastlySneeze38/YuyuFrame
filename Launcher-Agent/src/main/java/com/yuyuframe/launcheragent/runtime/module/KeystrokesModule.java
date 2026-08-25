@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.KeyMappingAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -103,8 +104,10 @@ public final class KeystrokesModule extends SingleHudModule {
                 Object forward, left, back, right, jump;
 
                 // 26.1.2 sans réflexion — Options.keyUp/keyDown/keyLeft/keyRight/
-                // keyJump (champs publics, voir stub Options) obtenus via
-                // MinecraftAccessor261#la$options() (champ privé Minecraft.options).
+                // keyJump (champs publics, voir stub Options) via
+                // MinecraftAccessor261#la$options() (voir directOptions() plus
+                // bas) — architecture apimixin, pas de cast/champ vanilla brut
+                // dans les modules (2026-08-25, §19/§20).
                 Options directOptions = directOptions();
                 if (directOptions != null) {
                     forward = directOptions.keyUp;
@@ -184,8 +187,8 @@ public final class KeystrokesModule extends SingleHudModule {
         }
 
         /**
-         * 26.1.2 sans réflexion — {@code Minecraft.getInstance().options}
-         * (champ PUBLIC, vérifié javap). Try/catch dédié : {@code
+         * 26.1.2 sans réflexion — {@code MinecraftAccessor261#la$options()}
+         * (architecture apimixin, voir sa javadoc). Try/catch dédié : {@code
          * Minecraft.getInstance()} référence le nom RÉEL, inexistant tel quel
          * sur les autres brackets (obfusqués) — {@code null} déclenche le
          * repli réflexion multi-bracket côté appelant.
@@ -193,7 +196,7 @@ public final class KeystrokesModule extends SingleHudModule {
         private Options directOptions() {
             try {
                 Object mc = Minecraft.getInstance();
-                if (mc instanceof Minecraft) return ((Minecraft) mc).options;
+                if (mc instanceof MinecraftAccessor261) return ((MinecraftAccessor261) mc).la$options();
             } catch (Throwable ignored) {}
             return null;
         }

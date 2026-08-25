@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -174,13 +175,13 @@ public final class ChatEnhancementsModule extends LauncherModule {
             la$lastProcessedMessage = headLine;
 
             if (pingOnMention) {
-                // 26.1.2 sans réflexion — Minecraft.getUser() (méthode
-                // publique, vérifiée javap) + User.getName(). Repli réflexion
-                // multi-bracket sinon.
+                // 26.1.2 sans réflexion — MinecraftAccessor261#la$user()
+                // (architecture apimixin, 2026-08-25 §19/§20) + User.getName().
+                // Repli réflexion multi-bracket sinon.
                 String username = null;
-                if (mc instanceof Minecraft) {
+                if (mc instanceof MinecraftAccessor261) {
                     try {
-                        User user = ((Minecraft) mc).getUser();
+                        User user = ((MinecraftAccessor261) mc).la$user();
                         if (user != null) username = user.getName();
                     } catch (Throwable ignored) {}
                 }
