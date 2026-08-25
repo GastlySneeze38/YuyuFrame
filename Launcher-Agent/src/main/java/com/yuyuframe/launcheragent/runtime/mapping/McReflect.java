@@ -34,6 +34,28 @@ public final class McReflect {
 
     public static Object minecraftClient() {
         if (mcInstance != null) return mcInstance;
+
+        // ⚠️ NE JAMAIS forcer <clinit> de Minecraft hors du Render thread
+        // (2026-08-25, §12). Plus bas, getInstance.invoke(null) est un appel de
+        // méthode STATIQUE : il déclenche l'initialisation de la classe. Appelé
+        // trop tôt — typiquement depuis notre thread "YuyuFrame-ConfigSave",
+        // 2,5 s après le lancement — Minecraft.<clinit> s'exécute avant que le
+        // jeu ne soit prêt, échoue en ExceptionInInitializerError, et la classe
+        // devient DÉFINITIVEMENT inutilisable pour toute la JVM : plus aucun
+        // démarrage possible, sans message côté Fabric.
+        //
+        // Preuve par les logs : dans les runs sains l'erreur apparaissait à
+        // +94 s / +222 s (à la fermeture, donc sans conséquence) ; dans le run
+        // cassé, à +2,5 s, et le jeu ne démarrait plus.
+        //
+        // Le Render thread est le seul où Minecraft est garanti déjà
+        // initialisé quand notre code s'exécute. Ailleurs on renvoie null — ce
+        // que les appelants savent déjà gérer (c'était déjà le résultat en
+        // pratique, l'échec étant simplement journalisé) — et le cache
+        // mcInstance, une fois peuplé par le Render thread, reste lisible par
+        // tous les threads.
+        if (!"Render thread".equals(Thread.currentThread().getName())) return null;
+
         try {
             // BUG TROUVÉ (26.1+) : MappingsRegistry.loadClass() ne retombe
             // JAMAIS sur le vrai nom Mojang quand Yarn n'est pas chargé — il

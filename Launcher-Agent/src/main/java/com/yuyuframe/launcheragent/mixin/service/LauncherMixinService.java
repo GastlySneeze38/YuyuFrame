@@ -509,10 +509,49 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
 
     @Override
     public Class<?> findClass(String name) throws ClassNotFoundException {
-        return Class.forName(name, false, getContextClassLoader());
+        return findClass(name, false);
     }
 
     @Override
+    /**
+     * Résolution via le classloader de CONTEXTE — surtout ne pas préférer le
+     * classloader isolé ici.
+     *
+     * Diagnostic établi le 2026-08-25 (§12), conservé parce qu'il ne faut pas
+     * refaire cette tentative sans un plan complet : comme
+     * {@code launcher-agent.jar} est passé en {@code -javaagent}, il est AUSSI
+     * sur le classloader 'app'. La sélection des configs Mixin n'ayant pas lieu
+     * pendant {@code LauncherAgent.startIsolated()} (qui ne pose isolatedCl
+     * comme contexte que temporairement) mais bien plus tard, cette méthode
+     * résout {@code LauncherMixinConfigPlugin} depuis 'app' — où il implémente
+     * la copie APP de {@code IMixinConfigPlugin}, incompatible avec celle de
+     * notre Mixin isolé :
+     * <pre>ClassCastException: ...LauncherMixinConfigPlugin cannot be cast to
+     * ...IMixinConfigPlugin (loader 'app' vs java.net.URLClassLoader@…)</pre>
+     * Mixin l'attrape, laisse {@code plugin} à null, et n'appelle donc jamais
+     * {@code onLoad()} ni {@code shouldApplyMixin()}. Le plugin de config est
+     * ainsi INERTE sur ce bracket depuis toujours (l'erreur était en plus
+     * invisible : bug de niveaux de {@code LauncherLogger}, corrigé depuis).
+     *
+     * ⚠️ Deux tentatives de correction ont été faites et TOUTES DEUX ANNULÉES,
+     * parce que rendre le plugin fonctionnel casse le démarrage du jeu :
+     * <ul>
+     *   <li>isolatedCl pour TOUTES les classes (v737) → active
+     *       {@code org.spongepowered.tools.agent.MixinAgent}, dont le
+     *       transformer réapplique les mixins de Fabric pendant notre
+     *       retransform : cascade de {@code cannot overwrite method …
+     *       @Overwrite is required} puis {@code ClassFormatError}.</li>
+     *   <li>isolatedCl limité à {@code com.yuyuframe.*} (v738-v741) → même
+     *       crash, puis d'autres en chaîne une fois celui-là écarté
+     *       (double init MixinExtras, {@code Minecraft.<clinit>} forcé trop
+     *       tôt), et finalement un échec silencieux non diagnostiqué.</li>
+     * </ul>
+     * Le seul bénéfice attendu était d'activer la gate {@code HookPoint} — or
+     * elle s'est révélée structurellement inopérante (voir
+     * {@code LauncherMixinConfigPlugin.GATE_ENABLED} : 51 mixins écartés, 0
+     * tissé, parce que les modules s'enregistrent APRÈS le tissage). Il n'y a
+     * donc actuellement rien à gagner à réveiller ce plugin.
+     */
     public Class<?> findClass(String name, boolean initialize) throws ClassNotFoundException {
         return Class.forName(name, initialize, getContextClassLoader());
     }

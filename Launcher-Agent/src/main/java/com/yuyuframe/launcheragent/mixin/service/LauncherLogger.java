@@ -39,15 +39,26 @@ public class LauncherLogger implements ILogger {
     @Override
     public void log(Level lvl, String msg, Object... args) {
         String formatted = args.length == 0 ? msg : String.format(msg.replace("{}", "%s"), (Object[]) args);
-        java.io.PrintStream out = (lvl.ordinal() >= Level.WARN.ordinal()) ? System.err : System.out;
+        // ⚠️ COMPARAISON INVERSÉE CORRIGÉE (2026-08-25, §12) — dans
+        // org.spongepowered.asm.logging.Level, le plus GRAVE a l'ordinal le
+        // plus BAS : FATAL=0, ERROR=1, WARN=2, INFO=3, DEBUG=4, TRACE=5
+        // (vérifié au bytecode sur le mixin.jar embarqué). Le test précédent,
+        // "ordinal() >= WARN.ordinal()", sélectionnait donc WARN/INFO/DEBUG/
+        // TRACE et EXCLUAIT ERROR et FATAL — exactement l'inverse de
+        // l'intention. Conséquence : depuis la création de cette classe, aucun
+        // ERROR ni FATAL de Sponge Mixin n'a jamais atteint launcher-agent.log
+        // (0 occurrence de "[Mixin/ERROR]" sur ~29 jours de logs, contre 607
+        // WARN et 3576 INFO), et ces messages partaient sur System.out au lieu
+        // de System.err. C'est ce qui a masqué le "Error loading companion
+        // plugin class [...]" expliquant pourquoi LauncherMixinConfigPlugin
+        // était instancié puis jamais appelé.
+        java.io.PrintStream out = (lvl.ordinal() <= Level.WARN.ordinal()) ? System.err : System.out;
         out.println("[Mixin/" + lvl + "] [" + id + "] " + formatted);
-        // Miroir temporaire vers notre fichier de log persistant — le flux
-        // System.out/err de ce logger n'atteint PAS launcher-agent.log (voir
-        // toFile() de LauncherLog, indépendant de la capture stdout du
-        // launcher Rust, jugée peu fiable) : impossible jusqu'ici de voir les
-        // WARN/ERROR internes de Sponge Mixin (ex: injecteur qui ne trouve
-        // pas sa cible) pendant le débogage de MixinToggleSprint189/Sneak189.
-        if (lvl.ordinal() >= Level.WARN.ordinal()) {
+        // Miroir vers notre fichier de log persistant — le flux System.out/err
+        // de ce logger n'atteint PAS launcher-agent.log (voir toFile() de
+        // LauncherLog, indépendant de la capture stdout du launcher Rust,
+        // jugée peu fiable).
+        if (lvl.ordinal() <= Level.WARN.ordinal()) {
             com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[Mixin/" + lvl + "] [" + id + "] " + formatted);
         }
     }
@@ -56,6 +67,13 @@ public class LauncherLogger implements ILogger {
     public void log(Level lvl, String msg, Throwable t) {
         log(lvl, msg);
         t.printStackTrace(System.err);
+        // La stack trace ne partait que sur System.err, donc absente du
+        // fichier : c'est justement la cause d'un échec qu'on veut lire.
+        com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+            "[Mixin/" + lvl + "] [" + id + "] cause : " + t);
+        for (StackTraceElement el : t.getStackTrace()) {
+            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("    at " + el);
+        }
     }
 
     @Override

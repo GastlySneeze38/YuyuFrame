@@ -31,25 +31,38 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
 
     private Properties cfg = new Properties();
 
-    // DIAG TEMPORAIRE §12 — via LauncherLog.err, qui écrit dans
-    // launcher-agent.log (System.err brut partait dans la console du launcher :
-    // onLoad() tourne pendant premain, avant que le logger de Minecraft
-    // n'existe, donc invisible dans latest.log).
-    static {
-        LauncherLog.err("[MixinPlugin-DIAG] <clinit> — classe chargée");
-    }
-
-    public LauncherMixinConfigPlugin() {
-        LauncherLog.err("[MixinPlugin-DIAG] <init> — instance créée par Mixin");
-    }
+    /**
+     * Gate déclarative {@link HookPoint} — DÉSACTIVÉE par défaut (2026-08-25, §12).
+     *
+     * Elle n'avait jamais tourné : le plugin échouait à se charger
+     * ({@code ClassCastException} app/isolatedCl). Une fois ce blocage corrigé,
+     * elle s'est révélée structurellement inopérante — au premier lancement où
+     * elle a réellement décidé : <b>51 mixins IGNORÉ, 0 tissé</b>.
+     *
+     * Cause : {@code shouldApplyMixin()} est appelé au TISSAGE (préparation des
+     * configs, au boot), alors que les modules ne s'enregistrent qu'à
+     * l'EXÉCUTION — {@code VanillaHookRegistry.register(...)} est appelé depuis
+     * l'init de {@code GlobalUiRenderMixin261}, à la première frame rendue.
+     * Au moment de la décision, le registre est donc TOUJOURS vide et
+     * {@code isUsed()} renvoie systématiquement {@code false} : HUD, fog, chat,
+     * keybind, level, clock, screen — tout est écarté.
+     *
+     * Pour la rendre viable il faut une déclaration STATIQUE, connue avant le
+     * tissage : le câblage {@code super("mon-module", HookPoint.X)} au
+     * constructeur de {@code LauncherModule} évoqué dans la javadoc de
+     * {@link VanillaHookRegistry} (jamais implémenté). La gate lirait alors ce
+     * catalogue statique au lieu du registre runtime.
+     *
+     * En attendant, on journalise la décision qu'elle AURAIT prise sans
+     * l'appliquer — utile pour mesurer le gain potentiel. Réactivable par
+     * {@code -Dlauncheragent.hookpointGate=true} une fois la déclaration
+     * statique en place.
+     */
+    private static final boolean GATE_ENABLED =
+        "true".equalsIgnoreCase(System.getProperty("launcheragent.hookpointGate", "false"));
 
     @Override
     public void onLoad(String mixinPackage) {
-        // DIAG TEMPORAIRE §12 — volontairement AVANT toute
-        // autre instruction : MixinExtrasBootstrap.init() est la première
-        // ligne réelle, donc une erreur là rendait onLoad() totalement
-        // silencieux. LauncherLog.err écrit toujours dans le fichier.
-        LauncherLog.err("[MixinPlugin-DIAG] ENTER onLoad pkg=" + mixinPackage);
         // MixinExtras (ROADMAP-agent.md Phase 3) — s'enregistre dans L'INSTANCE
         // Mixin qui appelle onLoad() ici, jamais celle de Fabric : sous Fabric,
         // ce plugin est chargé par le classloader isolé (voir LauncherAgent.
@@ -59,8 +72,7 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         // docs/LauncherAgent/index.md). Appelé une seule fois par lancement
         // (un seul bracket résolu, voir VersionBracketRegistry), pas besoin
         // de garde d'idempotence.
-        MixinExtrasBootstrap.init();
-        LauncherLog.err("[MixinPlugin-DIAG] MixinExtrasBootstrap.init() OK");
+        initMixinExtrasIfHostDidNot();
         cfg = LauncherLog.loadPropertiesFromDefaultLocations(getClass().getClassLoader());
         applyMixinDebugProperties();
         LauncherLog.loadConfig(cfg);
@@ -75,9 +87,6 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String simpleName = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
-        // DIAG TEMPORAIRE §12 — la gate est-elle seulement consultée ?
-        LauncherLog.err("[MixinPlugin-DIAG] shouldApplyMixin " + simpleName
-            + " → point=" + MixinHookPointRegistry.resolve(simpleName));
         if ("true".equalsIgnoreCase(cfg.getProperty("disable_mixin." + simpleName))) {
             LauncherLog.asm(3, "[MixinPlugin] désactivé par config : " + simpleName);
             return false;
@@ -103,8 +112,9 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
             if (point != null) {
                 boolean used = VanillaHookRegistry.isUsed(point);
                 LauncherLog.asm(2, "[MixinPlugin] " + simpleName + " → " + point
-                    + " : " + (used ? "tissé (module(s) enregistré(s))" : "IGNORÉ (aucun module enregistré)"));
-                return used;
+                    + " : " + (used ? "module(s) enregistré(s)" : "aucun module enregistré")
+                    + (GATE_ENABLED ? (used ? " → tissé" : " → IGNORÉ") : " → tissé (gate désactivée)"));
+                if (GATE_ENABLED) return used;
             }
         }
         return true;
@@ -129,6 +139,51 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         // confirmation explicite que CE Mixin s'est bien tissé dans sa cible
         // réelle, pas juste "bootstrap réussi" au sens large.
         LauncherLog.asm(3, "[MixinPlugin] Mixin initialisé avec succès : " + mixinClassName + " → " + targetClassName);
+    }
+
+    /**
+     * N'initialise MixinExtras que si l'hôte ne l'a pas déjà fait (2026-08-25, §12).
+     *
+     * Historique : {@code MixinExtrasBootstrap.init()} était la première
+     * instruction d'{@link #onLoad}, mais {@code onLoad} n'a JAMAIS été appelé
+     * sur le bracket 26.1 — le plugin échouait à se charger
+     * ({@code ClassCastException} app/isolatedCl, corrigé via
+     * {@code LauncherMixinService.findClass}). C'était donc du code mort, et
+     * nos ~33 injecteurs MixinExtras ({@code @WrapOperation}, {@code @WrapMethod},
+     * {@code @Local}, {@code @WrapWithCondition}) fonctionnaient malgré tout,
+     * parce que Fabric initialise MixinExtras pour toute la JVM
+     * ({@code Initializing MixinExtras via MixinExtrasServiceImpl}).
+     *
+     * Dès que le plugin s'est mis à fonctionner (v737/v738), cet appel a produit
+     * un SECOND enregistrement de MixinExtras dans un pipeline partagé, et le
+     * jeu ne démarrait plus : pendant notre retransform, les injecteurs
+     * MixinExtras des mods Fabric ({@code wrapOperation$…},
+     * {@code modifyExpressionValue$…}, {@code wrapMethod$…}) échouaient en
+     * cascade sur « cannot overwrite method … @Overwrite is required », suivis
+     * de {@code ClassFormatError}.
+     *
+     * Détection : {@code KnotClient} est chargé par le classloader SYSTÈME sous
+     * Fabric/Quilt (c'est lui qui contient le {@code main}), donc visible d'ici.
+     * Hors Fabric (vanilla), personne n'a initialisé MixinExtras et l'appel
+     * reste nécessaire.
+     */
+    private void initMixinExtrasIfHostDidNot() {
+        boolean hostAlreadyInit = false;
+        for (String knot : new String[]{
+                "net.fabricmc.loader.impl.launch.knot.KnotClient",
+                "org.quiltmc.loader.impl.launch.knot.KnotClient"}) {
+            try {
+                Class.forName(knot, false, ClassLoader.getSystemClassLoader());
+                hostAlreadyInit = true;
+                break;
+            } catch (Throwable ignored) {}
+        }
+        if (hostAlreadyInit) {
+            LauncherLog.asm(3, "[MixinPlugin] MixinExtras déjà initialisé par le loader hôte — init() ignoré");
+            return;
+        }
+        MixinExtrasBootstrap.init();
+        LauncherLog.asm(3, "[MixinPlugin] MixinExtras initialisé par nous (hôte sans MixinExtras)");
     }
 
     private void applyMixinDebugProperties() {
