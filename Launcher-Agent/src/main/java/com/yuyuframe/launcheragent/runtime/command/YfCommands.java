@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.command;
 import com.yuyuframe.launcheragent.agent.LauncherAgent;
 import com.yuyuframe.launcheragent.apigraphic.debug.DebugOverlayState;
 import com.yuyuframe.launcheragent.apigraphic.debug.DevShaderLoader;
+import com.yuyuframe.launcheragent.apigraphic.shader.UiSolidPipelinePoc;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.GlobalUiRenderBridge261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
@@ -48,6 +49,7 @@ final class YfCommands {
         ClientCommandRegistry.register(modules());
         ClientCommandRegistry.register(perf());
         ClientCommandRegistry.register(debug());
+        ClientCommandRegistry.register(shaderPoc());
         ClientCommandRegistry.register(reloadConfig());
         ClientCommandRegistry.register(shaderReload());
     }
@@ -200,6 +202,18 @@ final class YfCommands {
                 DebugOverlayState.wireframeEnabled = !DebugOverlayState.wireframeEnabled;
                 LauncherLog.info("[YfCommands] Overlay debug rendu : " + (DebugOverlayState.wireframeEnabled ? "activé" : "désactivé")
                     + " (état seulement pour l'instant — voir DebugOverlayState, rendu réel prévu Phase 5)");
+            }
+        };
+    }
+
+    private static ClientCommand shaderPoc() {
+        return new ClientCommand() {
+            public String name() { return "yf shaderpoc"; }
+            public String description() { return "Toggle un quad de test dessiné via un RenderPipeline/GLSL 100% maison (roadmap Phase 5, preuve de mécanisme — voir ShaderPipelineFactory)"; }
+            public void execute(String[] args) {
+                UiSolidPipelinePoc.testEnabled = !UiSolidPipelinePoc.testEnabled;
+                LauncherLog.info("[YfCommands] Test pipeline shader maison : " + (UiSolidPipelinePoc.testEnabled ? "activé" : "désactivé")
+                    + " (quad rose plein écran si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
     }

@@ -3,7 +3,6 @@ package com.yuyuframe.launcheragent.apigraphic.render;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
-import com.yuyuframe.launcheragent.apigraphic.shader.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -19,6 +18,18 @@ import java.util.Map;
 import java.util.OptionalInt;
 
 /**
+ * ⚠️ CODE MORT — copie verbatim de {@code UiTextBlaze3D} conservée au moment
+ * du remplacement de {@code RenderPipelines.GUI_TEXT} par un pipeline
+ * shader maison (voir {@code ShaderPipelineFactory}, roadmap Phase 5).
+ * AUCUNE référence ailleurs dans le projet — pas compilée dans le chemin
+ * d'exécution réel, juste gardée pour un rollback rapide si le pipeline
+ * maison pose problème en jeu (fichier historiquement fragile, bugs
+ * silencieux sans exception — saga v445-v459, voir project_mc_261_port).
+ * Pour revenir en arrière : remplacer le contenu de {@code UiTextBlaze3D.java}
+ * par celui-ci (en renommant la classe/le constructeur), ou `git revert`.
+ *
+ * Javadoc d'origine ci-dessous, inchangée :
+ *
  * Rendu de texte era E (Blaze3D, 1.21.6+) via le VRAI pipeline du moteur
  * (GpuDevice/GpuTexture/RenderPipeline/RenderPass), au lieu de contourner
  * Blaze3D avec des appels GL bruts (glTexImage2D/glBindTexture/glActiveTexture)
@@ -51,9 +62,9 @@ import java.util.OptionalInt;
  * partout ailleurs dans ce fichier/ce projet pour toute interaction avec le
  * jeu, jamais de compilation directe contre du code non garanti présent.
  */
-public final class UiTextBlaze3D {
+public final class UiTextBlaze3DLegacy {
 
-    private UiTextBlaze3D() {}
+    private UiTextBlaze3DLegacy() {}
 
     private static Boolean available;
 
@@ -87,81 +98,13 @@ public final class UiTextBlaze3D {
     private static Constructor<?> ctorNativeImage, ctorVector4f, ctorVector3f;
 
     private static Object fieldFilterModeLinear, fieldTextureFormatRgba8,
-        fieldNativeImageFormatRgba;
+        fieldNativeImageFormatRgba, fieldRenderPipelineGuiText;
 
     private static int usageTextureBinding, usageTextureCopyDst, usageBufferVertex, usageBufferCopyDst, usageBufferUniform;
 
     private static Method mMatrixSetOrtho, mMatrixGetFloatArray;
 
     private static boolean resolveAttempted, resolveOk;
-
-    // ── Pipeline shader maison (roadmap Phase 5, remplace RenderPipelines.GUI_TEXT — voir ShaderPipelineFactory) ──
-
-    /**
-     * Copie quasi-verbatim de {@code assets/minecraft/shaders/core/
-     * rendertype_text.vsh} (extrait du vrai jar client 26.1.2, jamais
-     * deviné) — le shader que {@code RenderPipelines.GUI_TEXT} utilise
-     * réellement, MOINS le fog ({@code fog.glsl}/{@code
-     * FogEnvironmentalStart}/etc., jamais visible sur de l'UI 2D
-     * orthographique, absent même du {@code gui.fsh} plus simple de
-     * vanilla — simplification sûre). {@code sample_lightmap(Sampler2, UV2)}
-     * inliné en {@code texelFetch(Sampler2, UV2 / 16, 0)} — implémentation
-     * réelle déjà identifiée lors du bug historique UV2/lightmap (voir plus
-     * bas, ensureWhiteTexture) : {@code Sampler2} reste bindé à une texture
-     * blanche 1×1 + {@code UV2=(0,0)}, donc ce facteur vaut toujours 1 — le
-     * neutraliser en dur ici serait un raccourci correct AUJOURD'HUI, mais
-     * le garder réel préserve la possibilité future d'un vrai lightmap.
-     * Attributs ({@code Position}/{@code Color}/{@code UV0}/{@code UV2}) :
-     * NOMS EXACTS attendus par le {@code VertexFormat} copié depuis {@code
-     * GUI_TEXT} (voir {@link ShaderPipelineFactory#buildPipeline}) — Blaze3D
-     * lie les attributs de sommet par NOM, jamais par position fixe.
-     */
-    private static final String HOME_VERTEX_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "layout(std140) uniform Projection {\n" +
-        "    mat4 ProjMat;\n" +
-        "};\n" +
-        "in vec3 Position;\n" +
-        "in vec4 Color;\n" +
-        "in vec2 UV0;\n" +
-        "in ivec2 UV2;\n" +
-        "uniform sampler2D Sampler2;\n" +
-        "out vec4 vertexColor;\n" +
-        "out vec2 texCoord0;\n" +
-        "void main() {\n" +
-        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
-        "    vertexColor = Color * texelFetch(Sampler2, UV2 / 16, 0);\n" +
-        "    texCoord0 = UV0;\n" +
-        "}\n";
-
-    /** Copie quasi-verbatim de {@code core/rendertype_text.fsh} (même source réelle, même simplification sans fog) — voir {@link #HOME_VERTEX_SRC}. */
-    private static final String HOME_FRAGMENT_SRC =
-        "#version 330\n" +
-        "uniform sampler2D Sampler0;\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "in vec4 vertexColor;\n" +
-        "in vec2 texCoord0;\n" +
-        "out vec4 fragColor;\n" +
-        "void main() {\n" +
-        "    vec4 color = texture(Sampler0, texCoord0) * vertexColor * ColorModulator;\n" +
-        "    if (color.a < 0.1) {\n" +
-        "        discard;\n" +
-        "    }\n" +
-        "    fragColor = color;\n" +
-        "}\n";
-
-    private static Object homePipeline, homeShaderSource;
 
     /**
      * Résout une classe via Yarn si chargé (obfuscation classique,
@@ -418,28 +361,13 @@ public final class UiTextBlaze3D {
 
             fieldFilterModeLinear = clsFilterMode.getField("LINEAR").get(null);
             fieldTextureFormatRgba8 = clsTextureFormat.getField("RGBA8").get(null);
-
-            // Pipeline shader maison (roadmap Phase 5) — REMPLACE
-            // RenderPipelines.GUI_TEXT pour le rendu réel, voir
-            // ShaderPipelineFactory pour le mécanisme (précompilePipeline +
-            // ShaderSource) et HOME_VERTEX_SRC/HOME_FRAGMENT_SRC pour le
-            // GLSL. Format de sommets/état couleur/profondeur/cull restent
-            // copiés depuis GUI_TEXT par ShaderPipelineFactory lui-même —
-            // seul le GLSL change ici. Samplers/uniforms déclarés
-            // explicitement (Sampler0/Sampler2/DynamicTransforms/Projection)
-            // : exactement les 4 bindings que ce fichier alimente déjà plus
-            // bas (mBindTexture/mSetUniformSlice, code inchangé).
-            Object vertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d.vsh");
-            Object fragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d.fsh");
-            homePipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d", vertexId, fragmentId,
-                new String[]{ "Sampler0", "Sampler2" }, new String[]{ "DynamicTransforms", "Projection" });
-            homeShaderSource = ShaderPipelineFactory.shaderSource(vertexId, HOME_VERTEX_SRC, fragmentId, HOME_FRAGMENT_SRC);
-
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null
+            fieldRenderPipelineGuiText = clsRenderPipelines.getField(
+                MappingsRegistry.getObfFieldName("net/minecraft/client/gl/RenderPipelines", "GUI_TEXT")).get(null);
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || fieldRenderPipelineGuiText == null
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {
-                throw new NoSuchMethodException("setColor/RGBA/homePipeline/sharedSequentialQuad/writeToTextureMip introuvable (voir logs)");
+                throw new NoSuchMethodException("setColor/RGBA/GUI_TEXT/sharedSequentialQuad/writeToTextureMip introuvable (voir logs)");
             }
 
             // BUG TROUVÉ (premier test v373/v374, IllegalStateException) : notre
@@ -1172,12 +1100,7 @@ public final class UiTextBlaze3D {
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
             try {
                 currentStage = "setPipeline";
-                // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
-                // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
-                // nécessaire après un rechargement de ressources (F3+T, resource
-                // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -1354,12 +1277,7 @@ public final class UiTextBlaze3D {
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
             try {
                 currentStage = "setPipeline(rect)";
-                // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
-                // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
-                // nécessaire après un rechargement de ressources (F3+T, resource
-                // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor(rect)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(rect)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -1468,12 +1386,7 @@ public final class UiTextBlaze3D {
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
             try {
                 currentStage = "setPipeline(icon)";
-                // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
-                // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
-                // nécessaire après un rechargement de ressources (F3+T, resource
-                // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor(icon)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(icon)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -1588,12 +1501,7 @@ public final class UiTextBlaze3D {
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
             try {
                 currentStage = "setPipeline(gradrect)";
-                // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
-                // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
-                // nécessaire après un rechargement de ressources (F3+T, resource
-                // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor(gradrect)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(gradrect)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -1704,12 +1612,7 @@ public final class UiTextBlaze3D {
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
             try {
                 currentStage = "setPipeline(gradrect2d)";
-                // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
-                // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
-                // nécessaire après un rechargement de ressources (F3+T, resource
-                // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor(gradrect2d)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(gradrect2d)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -1830,12 +1733,7 @@ public final class UiTextBlaze3D {
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
             try {
                 currentStage = "setPipeline(msgrad)";
-                // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
-                // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
-                // nécessaire après un rechargement de ressources (F3+T, resource
-                // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
                 if (mDisableScissor != null) { currentStage = "disableScissor(msgrad)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(msgrad)";
                 mBindDefaultUniforms.invoke(null, pass);

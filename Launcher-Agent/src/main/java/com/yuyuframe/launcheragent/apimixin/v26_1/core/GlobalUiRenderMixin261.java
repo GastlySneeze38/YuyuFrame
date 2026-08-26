@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
+import com.yuyuframe.launcheragent.apigraphic.shader.UiSolidPipelinePoc;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry;
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
@@ -79,6 +80,18 @@ public abstract class GlobalUiRenderMixin261 {
                     GlobalUiRenderBridge261.setScreen(mc, new UiMainMenuScreen(null));
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): setScreen(UiMainMenuScreen) a levé: " + t);
+                }
+            }
+
+            // Preuve de mécanisme "pipeline shader maison" (roadmap Phase 5,
+            // voir ShaderPipelineFactory) — inerte par défaut, /yf shaderpoc
+            // pour activer. Try/catch dédié : un échec ici ne doit jamais
+            // affecter le reste du hub de rendu.
+            if (UiSolidPipelinePoc.testEnabled) {
+                try {
+                    UiSolidPipelinePoc.drawTestQuad();
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): UiSolidPipelinePoc.drawTestQuad() a levé: " + t);
                 }
             }
         } catch (Throwable t) {
