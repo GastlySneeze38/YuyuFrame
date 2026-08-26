@@ -163,6 +163,128 @@ public final class UiTextBlaze3D {
 
     private static Object homePipeline, homeShaderSource;
 
+    // ── Pipeline dégradé multi-stop (roadmap Phase 5.1, remplace la grille CPU — voir project_home_shader_pipeline) ──
+
+    /**
+     * Position uniquement (Color/UV2 du format hérité de GUI_TEXT restent
+     * bindés dans le buffer mais volontairement PAS déclarés ici, inutiles —
+     * même principe que {@code UiSolidPipelinePoc}) + UV0 (pour le masque de
+     * coin arrondi, {@code Sampler0}). {@code fragPos} = position brute en
+     * pixels framebuffer, réutilisée telle quelle côté fragment pour calculer
+     * {@code t} PAR PIXEL (linéaire/radial/conique) — élimine le besoin
+     * d'une grille CPU, contrairement à l'ancienne approche.
+     */
+    private static final String GRADIENT_VERTEX_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform Projection {\n" +
+        "    mat4 ProjMat;\n" +
+        "};\n" +
+        "in vec3 Position;\n" +
+        "in vec2 UV0;\n" +
+        "out vec2 fragPos;\n" +
+        "out vec2 texCoord0;\n" +
+        "void main() {\n" +
+        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
+        "    fragPos = Position.xy;\n" +
+        "    texCoord0 = UV0;\n" +
+        "}\n";
+
+    /**
+     * {@code GradientParams} — tout en blocs de 4 floats (vec4), DÉLIBÉRÉMENT
+     * pas de {@code float[8]} (piège std140 classique : un array de scalaires
+     * a un stride de 16 octets par élément, pas 4 — emballer 4 positions par
+     * vec4 évite le problème par construction, voir le pack Java côté
+     * {@code writeGradientParams}). Boucle réelle sur {@code u_StopColors[i]}
+     * (indexation dynamique — GLSL 330 la garantit, contrairement à GLSL 1.10
+     * legacy qui a motivé la cascade if/else déroulée là-bas) — même algèbre
+     * t que {@code multiStopColorAt}/{@code
+     * UiPrimitiveRenderer.MULTISTOP_GRADIENT_FRAGMENT_SRC}, écrite ici une
+     * seule fois au lieu d'être dupliquée à la main dans 3 endroits.
+     */
+    private static final String GRADIENT_FRAGMENT_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform GradientParams {\n" +
+        "    vec4 u_StartEnd;\n" +
+        "    vec4 u_TypeRadius;\n" +
+        "    vec4 u_StopPos0123;\n" +
+        "    vec4 u_StopPos4567;\n" +
+        "    vec4 u_StopColors[8];\n" +
+        "};\n" +
+        "uniform sampler2D Sampler0;\n" +
+        "in vec2 fragPos;\n" +
+        "in vec2 texCoord0;\n" +
+        "out vec4 fragColor;\n" +
+        "float stopPos(int i) {\n" +
+        "    if (i < 4) {\n" +
+        "        if (i == 0) return u_StopPos0123.x;\n" +
+        "        if (i == 1) return u_StopPos0123.y;\n" +
+        "        if (i == 2) return u_StopPos0123.z;\n" +
+        "        return u_StopPos0123.w;\n" +
+        "    }\n" +
+        "    if (i == 4) return u_StopPos4567.x;\n" +
+        "    if (i == 5) return u_StopPos4567.y;\n" +
+        "    if (i == 6) return u_StopPos4567.z;\n" +
+        "    return u_StopPos4567.w;\n" +
+        "}\n" +
+        "void main() {\n" +
+        "    vec2 start = u_StartEnd.xy;\n" +
+        "    vec2 end = u_StartEnd.zw;\n" +
+        "    vec2 d = end - start;\n" +
+        "    int gradType = int(u_TypeRadius.x);\n" +
+        "    float t;\n" +
+        "    if (gradType == 1) {\n" +
+        "        float radius = length(d);\n" +
+        "        vec2 dp = fragPos - start;\n" +
+        "        t = radius < 1e-6 ? 0.0 : length(dp) / radius;\n" +
+        "    } else if (gradType == 2) {\n" +
+        "        float baseAngle = atan(d.y, d.x);\n" +
+        "        float ang = (atan(fragPos.y - start.y, fragPos.x - start.x) - baseAngle) / (2.0 * 3.14159265);\n" +
+        "        t = fract(ang);\n" +
+        "    } else {\n" +
+        "        float len2 = dot(d, d);\n" +
+        "        t = len2 < 1e-6 ? 0.0 : dot(fragPos - start, d) / len2;\n" +
+        "    }\n" +
+        "    t = clamp(t, 0.0, 1.0);\n" +
+        "    vec4 col = u_StopColors[0];\n" +
+        "    if (t <= stopPos(0)) {\n" +
+        "        col = u_StopColors[0];\n" +
+        "    } else {\n" +
+        "        for (int i = 0; i < 7; i++) {\n" +
+        "            float p0 = stopPos(i);\n" +
+        "            float p1 = stopPos(i + 1);\n" +
+        "            if (t <= p1) {\n" +
+        "                float span = p1 - p0;\n" +
+        "                float localT = span < 1e-6 ? 0.0 : clamp((t - p0) / span, 0.0, 1.0);\n" +
+        "                col = mix(u_StopColors[i], u_StopColors[i + 1], localT);\n" +
+        "                break;\n" +
+        "            }\n" +
+        "            col = u_StopColors[7];\n" +
+        "        }\n" +
+        "    }\n" +
+        "    float maskAlpha = texture(Sampler0, texCoord0).a;\n" +
+        "    vec4 color = col * ColorModulator;\n" +
+        "    color.a *= maskAlpha;\n" +
+        "    if (color.a < 0.1) {\n" +
+        "        discard;\n" +
+        "    }\n" +
+        "    fragColor = color;\n" +
+        "}\n";
+
+    private static Object gradientPipeline, gradientShaderSource;
+    private static Object gradientParamsBuffer;
+
     /**
      * Résout une classe via Yarn si chargé (obfuscation classique,
      * comportement INCHANGÉ), SINON (bracket 26.1+, jeu non obfusqué, Yarn
@@ -435,7 +557,16 @@ public final class UiTextBlaze3D {
                 new String[]{ "Sampler0", "Sampler2" }, new String[]{ "DynamicTransforms", "Projection" });
             homeShaderSource = ShaderPipelineFactory.shaderSource(vertexId, HOME_VERTEX_SRC, fragmentId, HOME_FRAGMENT_SRC);
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null
+            // Pipeline dégradé multi-stop (voir GRADIENT_VERTEX_SRC/GRADIENT_FRAGMENT_SRC)
+            // — GradientParams en plus de Sampler0/DynamicTransforms/Projection,
+            // pas de Sampler2 (pas de lightmap/texte ici).
+            Object gradVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_gradient.vsh");
+            Object gradFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_gradient.fsh");
+            gradientPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_gradient", gradVertexId, gradFragmentId,
+                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "GradientParams" });
+            gradientShaderSource = ShaderPipelineFactory.shaderSource(gradVertexId, GRADIENT_VERTEX_SRC, gradFragmentId, GRADIENT_FRAGMENT_SRC);
+
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || gradientPipeline == null
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {
@@ -863,6 +994,42 @@ public final class UiTextBlaze3D {
         return projectionBuffer;
     }
 
+    // ── Buffer GradientParams (192 octets, valeurs réécrites à CHAQUE draw — contrairement à la projection, le dégradé change à chaque appel) ──
+
+    private static Object ensureGradientParamsBuffer(Object device) throws Exception {
+        if (gradientParamsBuffer == null) {
+            java.util.function.Supplier<String> label = () -> "yuyuframe_gradient_params";
+            gradientParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 192L);
+        }
+        return gradientParamsBuffer;
+    }
+
+    /**
+     * Pack {@code GradientParams} en std140 — voir la disposition dans
+     * {@link #GRADIENT_FRAGMENT_SRC}. {@code colors}/{@code positions} DOIVENT
+     * déjà être complétés à 8 entrées (même convention que l'ancien {@code
+     * multiStopColorAt}, stops au-delà du nombre réel = copie du dernier
+     * stop réel) — voir {@code UiPrimitiveRenderer.drawMultiStopGradientRect},
+     * seul appelant en amont.
+     */
+    private static Object writeGradientParams(Object device, Object encoder, UiGradientType type,
+            float startX, float startY, float endX, float endY, UiColor[] colors, float[] positions) throws Exception {
+        Object buffer = ensureGradientParamsBuffer(device);
+        ByteBuffer data = ByteBuffer.allocateDirect(192).order(java.nio.ByteOrder.nativeOrder());
+        data.putFloat(startX).putFloat(startY).putFloat(endX).putFloat(endY);
+        float gradTypeCode = type == UiGradientType.RADIAL ? 1f : type == UiGradientType.CONIC ? 2f : 0f;
+        data.putFloat(gradTypeCode).putFloat(0f).putFloat(0f).putFloat(0f);
+        for (int i = 0; i < 8; i++) data.putFloat(positions[i]);
+        for (int i = 0; i < 8; i++) {
+            UiColor c = colors[i];
+            data.putFloat(c.r).putFloat(c.g).putFloat(c.b).putFloat(c.a);
+        }
+        data.flip();
+        Object slice = mBufferSlice.invoke(buffer, 0L, 192L);
+        mWriteToBuffer.invoke(encoder, slice, data);
+        return slice;
+    }
+
     // ── Dessin ───────────────────────────────────────────────────────────────
 
     /**
@@ -1015,21 +1182,14 @@ public final class UiTextBlaze3D {
     /**
      * Dégradé multi-stop (2 à 8 couleurs) linéaire/radial/conique — voir
      * {@code UiRenderer.drawMultiStopGradientRect}/{@link UiGradientType}.
-     * Contrairement à {@link #queueGradientRect}/{@link #queueGradientRect2D}
-     * (dégradés LINÉAIRES par construction, donc exactement représentables
-     * par 4 couleurs de sommet), ce pipeline n'a AUCUN hook shader custom —
-     * un dégradé radial/conique ne peut PAS être exact avec seulement 4
-     * sommets par quad. Approximation par GRILLE fine (voir {@link
-     * #putGridQuadsGradient}) : le rectangle "plein" (hors les 4 coins
-     * arrondis, qui restent 1 quad chacun — assez petits pour qu'une simple
-     * interpolation 4-sommets y soit visuellement suffisante) est subdivisé
-     * en cellules de ~28px, chaque sommet de grille reçoit sa couleur EXACTE
-     * (voir {@link #multiStopColorAt}), le GPU interpole ensuite SEULEMENT à
-     * l'intérieur de chaque petite cellule — assez fin pour qu'aucune facette
-     * ne soit perceptible à l'œil. {@code colors}/{@code positions} DOIVENT
-     * déjà être complétés à 8 entrées (stops au-delà du nombre réel dupliqués
-     * depuis le dernier stop réel) — voir {@code
-     * UiPrimitiveRenderer.drawMultiStopGradientRect}, seul appelant.
+     * Calculé PAR PIXEL dans {@link #GRADIENT_FRAGMENT_SRC} (pipeline shader
+     * maison, voir {@code ShaderPipelineFactory}) — plus d'approximation par
+     * grille CPU (ancienne limite : ce pipeline n'avait aucun hook shader
+     * custom à l'origine, remplacée depuis, voir project_home_shader_pipeline
+     * en mémoire projet). {@code colors}/{@code positions} DOIVENT déjà être
+     * complétés à 8 entrées (stops au-delà du nombre réel dupliqués depuis le
+     * dernier stop réel — même convention que le GLSL legacy/modern) — voir
+     * {@code UiPrimitiveRenderer.drawMultiStopGradientRect}, seul appelant.
      */
     public static void queueMultiStopGradientRect(float x0, float y0, float x1, float y1, float radius,
                                                     UiGradientType type, float startX, float startY, float endX, float endY,
@@ -1756,6 +1916,16 @@ public final class UiTextBlaze3D {
         }
     }
 
+    /**
+     * Dégradé multi-stop VRAIMENT calculé par pixel dans {@link
+     * #GRADIENT_FRAGMENT_SRC} (roadmap Phase 5.1, remplace l'ancienne
+     * approximation par grille CPU — voir project_home_shader_pipeline) —
+     * même squelette 9-slice que {@link #drawRect} (géométrie identique,
+     * {@code putRectQuad}/{@code putSolidQuad} réutilisés tels quels, couleur
+     * de sommet blanche opaque ignorée par ce shader) au lieu d'une
+     * subdivision en grille : la couleur ne dépend plus du sommet, juste de
+     * {@code fragPos} interpolé par le GPU et lu par le fragment shader.
+     */
     private static boolean drawMultiStopGradientRect(float x0, float y0, float x1, float y1, float radius,
                                                        UiGradientType type, float startX, float startY, float endX, float endY,
                                                        UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
@@ -1776,41 +1946,31 @@ public final class UiTextBlaze3D {
             currentStage = "ensureCornerMaskTexture(msgrad)";
             Object[] mask = ensureCornerMaskTexture(r);
             Object maskView = mask[1], maskSampler = mask[2];
-            currentStage = "ensureWhiteTexture(msgrad)";
-            Object[] white = ensureWhiteTexture();
 
             currentStage = "getDevice(msgrad)";
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(msgrad)";
             Object encoder = mCreateCommandEncoder.invoke(device);
+
+            int rgba = 0xFFFFFFFF; // couleur réelle calculée par pixel dans le fragment shader
             short light0 = 0, light1 = 0;
 
+            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
             int vertexCount;
-            ByteBuffer verts;
             if (r < 0.5f) {
-                int cells = gridCellCount(x0, x1, y0, y1);
-                verts = ensureStagingBuffer(cells * 4 * 28);
-                putGridQuadsGradient(verts, x0, x1, y0, y1, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                vertexCount = cells * 4;
+                putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
+                vertexCount = 4;
             } else {
-                int cellsTop = gridCellCount(x0 + r, x1 - r, y1 - r, y1);
-                int cellsBottom = gridCellCount(x0 + r, x1 - r, y0, y0 + r);
-                int cellsLeft = gridCellCount(x0, x0 + r, y0 + r, y1 - r);
-                int cellsRight = gridCellCount(x1 - r, x1, y0 + r, y1 - r);
-                int cellsCenter = gridCellCount(x0 + r, x1 - r, y0 + r, y1 - r);
-                int totalCells = 4 + cellsTop + cellsBottom + cellsLeft + cellsRight + cellsCenter;
-                verts = ensureStagingBuffer(totalCells * 4 * 28);
-
-                putRectQuadGradientMultiStop(verts, x0, x0 + r, y0, y0 + r, false, false, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putRectQuadGradientMultiStop(verts, x1 - r, x1, y0, y0 + r, true, false, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putRectQuadGradientMultiStop(verts, x0, x0 + r, y1 - r, y1, false, true, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putRectQuadGradientMultiStop(verts, x1 - r, x1, y1 - r, y1, true, true, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putGridQuadsGradient(verts, x0 + r, x1 - r, y0, y0 + r, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putGridQuadsGradient(verts, x0 + r, x1 - r, y1 - r, y1, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putGridQuadsGradient(verts, x0, x0 + r, y0 + r, y1 - r, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putGridQuadsGradient(verts, x1 - r, x1, y0 + r, y1 - r, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                putGridQuadsGradient(verts, x0 + r, x1 - r, y0 + r, y1 - r, type, startX, startY, endX, endY, colors, positions, light0, light1);
-                vertexCount = totalCells * 4;
+                putRectQuad(verts, x0, x0 + r, y0, y0 + r, false, false, rgba, light0, light1);
+                putRectQuad(verts, x1 - r, x1, y0, y0 + r, true, false, rgba, light0, light1);
+                putRectQuad(verts, x0, x0 + r, y1 - r, y1, false, true, rgba, light0, light1);
+                putRectQuad(verts, x1 - r, x1, y1 - r, y1, true, true, rgba, light0, light1);
+                putSolidQuad(verts, x0 + r, x1 - r, y0, y0 + r, rgba, light0, light1);
+                putSolidQuad(verts, x0 + r, x1 - r, y1 - r, y1, rgba, light0, light1);
+                putSolidQuad(verts, x0, x0 + r, y0 + r, y1 - r, rgba, light0, light1);
+                putSolidQuad(verts, x1 - r, x1, y0 + r, y1 - r, rgba, light0, light1);
+                putSolidQuad(verts, x0 + r, x1 - r, y0 + r, y1 - r, rgba, light0, light1);
+                vertexCount = 9 * 4;
             }
             verts.flip();
 
@@ -1823,7 +1983,7 @@ public final class UiTextBlaze3D {
 
             currentStage = "dynamicUniformsWrite(msgrad)";
             Object identity4 = clsMatrix4f.getConstructor().newInstance();
-            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
+            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur réelle vient de GradientParams, pas de ColorModulator
             Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
@@ -1831,6 +1991,9 @@ public final class UiTextBlaze3D {
             currentStage = "ensureProjectionBuffer(msgrad)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "writeGradientParams(msgrad)";
+            Object gradientSlice = writeGradientParams(device, encoder, type, startX, startY, endX, endY, colors, positions);
 
             currentStage = "createRenderPass(msgrad)";
             java.util.function.Supplier<String> passLabel = () -> "yuyuframe_msgradrect";
@@ -1841,8 +2004,8 @@ public final class UiTextBlaze3D {
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                ShaderPipelineFactory.precompile(device, gradientPipeline, gradientShaderSource);
+                mSetPipeline.invoke(pass, gradientPipeline);
                 if (mDisableScissor != null) { currentStage = "disableScissor(msgrad)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(msgrad)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -1850,10 +2013,10 @@ public final class UiTextBlaze3D {
                 mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(msgrad)";
                 mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                currentStage = "setUniform(GradientParams)(msgrad)";
+                mSetUniformSlice.invoke(pass, "GradientParams", gradientSlice);
                 currentStage = "bindTexture(Sampler0)(msgrad)";
                 mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
-                currentStage = "bindTexture(Sampler2)(msgrad)";
-                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
                 currentStage = "setVertexBuffer(msgrad)";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
 
@@ -2000,120 +2163,6 @@ public final class UiTextBlaze3D {
         putVertexPCTL(buf, xLeft, yBottom, cBL, u, v, light0, light1);
         putVertexPCTL(buf, xRight, yBottom, cBR, u, v, light0, light1);
         putVertexPCTL(buf, xRight, yTop, cTR, u, v, light0, light1);
-    }
-
-    // ── Dégradé multi-stop (roadmap Phase 5.1) — voir queueMultiStopGradientRect
-    // pour le pourquoi de l'approximation par grille sur ce pipeline. ─────────
-
-    /** Cible ~28px/cellule, borné [1,8] — évite un nombre de sommets qui explose sur un grand rectangle tout en restant fin sur les petits. */
-    private static int gridCellsFor(float size) {
-        int cells = Math.round(size / 28f);
-        return Math.max(1, Math.min(cells, 8));
-    }
-
-    private static int gridCellCount(float xLeft, float xRight, float yBottom, float yTop) {
-        return gridCellsFor(xRight - xLeft) * gridCellsFor(yTop - yBottom);
-    }
-
-    /**
-     * Couleur multi-stop à {@code (x,y)} — MÊME algèbre que le shader GLSL
-     * (voir {@code UiPrimitiveRenderer.MULTISTOP_GRADIENT_FRAGMENT_SRC}) :
-     * {@code colors}/{@code positions} déjà complétés à 8 entrées (stops
-     * au-delà du nombre réel = copie du dernier stop réel), même chaîne de
-     * comparaisons séquentielle (pas de tableau dynamiquement indexé côté
-     * GLSL — ici c'est du Java pur, l'indexation dynamique ne pose aucun
-     * problème, mais la MÊME logique est reprise pour un résultat identique
-     * entre les 3 pipelines).
-     */
-    private static int multiStopColorAt(UiGradientType type, float x, float y,
-                                         float startX, float startY, float endX, float endY,
-                                         UiColor[] colors, float[] positions) {
-        float dx = endX - startX, dy = endY - startY;
-        float t;
-        if (type == UiGradientType.RADIAL) {
-            float radius = (float) Math.sqrt(dx * dx + dy * dy);
-            float dpx = x - startX, dpy = y - startY;
-            t = radius < 1e-6f ? 0f : (float) Math.sqrt(dpx * dpx + dpy * dpy) / radius;
-        } else if (type == UiGradientType.CONIC) {
-            float baseAngle = (float) Math.atan2(dy, dx);
-            float ang = (float) (Math.atan2(y - startY, x - startX) - baseAngle) / (2f * (float) Math.PI);
-            t = ang - (float) Math.floor(ang);
-        } else {
-            float len2 = dx * dx + dy * dy;
-            t = len2 < 1e-6f ? 0f : ((x - startX) * dx + (y - startY) * dy) / len2;
-        }
-        t = Math.max(0f, Math.min(1f, t));
-
-        if (t <= positions[0]) return lerpRgba2Colors(colors[0], colors[0], 0f);
-        for (int i = 0; i < 7; i++) {
-            float p0 = positions[i], p1 = positions[i + 1];
-            if (t <= p1) {
-                float span = p1 - p0;
-                float localT = span < 1e-6f ? 0f : Math.max(0f, Math.min(1f, (t - p0) / span));
-                return lerpRgba2Colors(colors[i], colors[i + 1], localT);
-            }
-        }
-        return lerpRgba2Colors(colors[7], colors[7], 0f);
-    }
-
-    /** Couleur RGBA packée, interpolée entre {@code a} et {@code b} à {@code t} — même packing (AABBGGRR little-endian dans l'int) que {@link #lerpRgba}/{@link #lerpRgba2D}. */
-    private static int lerpRgba2Colors(UiColor a, UiColor b, float t) {
-        float r = a.r + (b.r - a.r) * t;
-        float g = a.g + (b.g - a.g) * t;
-        float bl = a.b + (b.b - a.b) * t;
-        float al = a.a + (b.a - a.a) * t;
-        int ri = Math.round(r * 255f), gi = Math.round(g * 255f), bi = Math.round(bl * 255f), ai = Math.round(al * 255f);
-        return (ai << 24) | (bi << 16) | (gi << 8) | ri;
-    }
-
-    /** Comme {@link #putRectQuad}, mais couleur multi-stop par sommet (voir {@link #multiStopColorAt}) — utilisé pour les 4 pièces de coin arrondi (assez petites pour qu'un seul quad y soit visuellement suffisant, pas de sous-grille ici). */
-    private static void putRectQuadGradientMultiStop(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
-                                                       boolean flipU, boolean flipV,
-                                                       UiGradientType type, float startX, float startY, float endX, float endY,
-                                                       UiColor[] colors, float[] positions, short light0, short light1) {
-        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
-        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
-        int cTL = multiStopColorAt(type, xLeft, yTop, startX, startY, endX, endY, colors, positions);
-        int cBL = multiStopColorAt(type, xLeft, yBottom, startX, startY, endX, endY, colors, positions);
-        int cBR = multiStopColorAt(type, xRight, yBottom, startX, startY, endX, endY, colors, positions);
-        int cTR = multiStopColorAt(type, xRight, yTop, startX, startY, endX, endY, colors, positions);
-        putVertexPCTL(buf, xLeft, yTop, cTL, uLeft, vTop, light0, light1);
-        putVertexPCTL(buf, xLeft, yBottom, cBL, uLeft, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yBottom, cBR, uRight, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yTop, cTR, uRight, vTop, light0, light1);
-    }
-
-    /**
-     * Subdivise {@code [xLeft,xRight]×[yBottom,yTop]} en grille (voir {@link
-     * #gridCellsFor}), une couleur EXACTE par nœud via {@link
-     * #multiStopColorAt} — le GPU n'interpole plus qu'à l'intérieur de
-     * chaque petite cellule. {@code u=v=0.95} : même échantillon "toujours
-     * opaque" du masque de coin que {@link #putSolidQuad} (ces cellules
-     * n'ont jamais de coin arrondi à gérer, voir l'appelant).
-     */
-    private static void putGridQuadsGradient(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
-                                              UiGradientType type, float startX, float startY, float endX, float endY,
-                                              UiColor[] colors, float[] positions, short light0, short light1) {
-        int cellsX = gridCellsFor(xRight - xLeft);
-        int cellsY = gridCellsFor(yTop - yBottom);
-        float u = 0.95f, v = 0.95f;
-        float w = xRight - xLeft, h = yTop - yBottom;
-        for (int cy = 0; cy < cellsY; cy++) {
-            float y0 = yBottom + h * cy / cellsY;
-            float y1 = yBottom + h * (cy + 1) / cellsY;
-            for (int cx = 0; cx < cellsX; cx++) {
-                float x0 = xLeft + w * cx / cellsX;
-                float x1 = xLeft + w * (cx + 1) / cellsX;
-                int cTL = multiStopColorAt(type, x0, y1, startX, startY, endX, endY, colors, positions);
-                int cBL = multiStopColorAt(type, x0, y0, startX, startY, endX, endY, colors, positions);
-                int cBR = multiStopColorAt(type, x1, y0, startX, startY, endX, endY, colors, positions);
-                int cTR = multiStopColorAt(type, x1, y1, startX, startY, endX, endY, colors, positions);
-                putVertexPCTL(buf, x0, y1, cTL, u, v, light0, light1);
-                putVertexPCTL(buf, x0, y0, cBL, u, v, light0, light1);
-                putVertexPCTL(buf, x1, y0, cBR, u, v, light0, light1);
-                putVertexPCTL(buf, x1, y1, cTR, u, v, light0, light1);
-            }
-        }
     }
 
     /** POSITION(float×3) + COLOR(ubyte×4) + UV0(float×2) + UV2/light(short×2) — 28 octets, ordre EXACT vérifié par désassemblage de VertexFormats.POSITION_COLOR_TEXTURE_LIGHT. */
