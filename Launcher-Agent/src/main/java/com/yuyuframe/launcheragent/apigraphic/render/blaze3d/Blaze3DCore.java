@@ -412,12 +412,14 @@ public final class Blaze3DCore {
                 new String[]{ "Sampler0", "Sampler2" }, new String[]{ "DynamicTransforms", "Projection" });
             homeShaderSource = ShaderPipelineFactory.shaderSource(vertexId, HOME_VERTEX_SRC, fragmentId, HOME_FRAGMENT_SRC);
 
-            // Pipeline dégradé multi-stop — construit par Blaze3DGradient
-            // lui-même (le fichier qui possède le GLSL possède aussi le code
-            // qui le compile), on vérifie juste ici que ça a réussi.
+            // Pipeline dégradé multi-stop / texte SDF — construits par
+            // Blaze3DGradient/Blaze3DText eux-mêmes (le fichier qui possède
+            // le GLSL possède aussi le code qui le compile), on vérifie
+            // juste ici que ça a réussi.
             boolean gradientPipelineOk = Blaze3DGradient.resolveGradientPipeline();
+            boolean textPipelineOk = Blaze3DText.resolveTextPipeline();
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || !gradientPipelineOk
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || !gradientPipelineOk || !textPipelineOk
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {

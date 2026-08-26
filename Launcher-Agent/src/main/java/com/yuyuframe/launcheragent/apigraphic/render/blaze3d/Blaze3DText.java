@@ -17,14 +17,85 @@ import java.util.Map;
 import java.util.OptionalInt;
 
 /**
- * Texte era E (Blaze3D) — atlas de couverture classique (PAS de seuillage
- * SDF sur ce pipeline, voir {@code Blaze3DCore.HOME_FRAGMENT_SRC}) pour
- * {@link com.yuyuframe.launcheragent.apigraphic.core.UiFont}. Scindé depuis
- * l'ancien {@code UiTextBlaze3D.java} — voir {@link Blaze3DCore} pour
- * l'infra partagée (réflexion, pipeline, file de dessin).
+ * Texte era E (Blaze3D) — VRAI rendu SDF (champ de distance signée, bord
+ * anticrénelé) pour {@link com.yuyuframe.launcheragent.apigraphic.core.UiFont},
+ * comme legacy/modern GL ({@code UiTextRenderer.TEXT_FRAGMENT_SRC}), au lieu
+ * du seuillage dur copié de vanilla ({@code Blaze3DCore.HOME_FRAGMENT_SRC},
+ * toujours utilisé par {@link Blaze3DRect} pour rect/icône). Pipeline dédié
+ * ({@link #TEXT_VERTEX_SRC}/{@link #TEXT_FRAGMENT_SRC}) construit via {@link
+ * #resolveTextPipeline()}, appelé depuis {@code Blaze3DCore.resolve()} —
+ * voir project_home_shader_pipeline en mémoire projet. Scindé depuis l'ancien
+ * {@code UiTextBlaze3D.java} — voir {@link Blaze3DCore} pour l'infra
+ * partagée (réflexion, buffers, file de dessin).
  */
 public final class Blaze3DText {
     private Blaze3DText() {}
+
+    /**
+     * Sans {@code Color}/{@code UV2} (attributs du format hérité de GUI_TEXT
+     * qui restent bindés dans le buffer mais volontairement pas déclarés ici,
+     * inutiles — même principe que {@link Blaze3DGradient}) : le texte envoie
+     * toujours un sommet blanc neutre, la vraie couleur vient de {@code
+     * ColorModulator} (voir {@link #TEXT_FRAGMENT_SRC}), pas besoin non plus
+     * du lightmap (Sampler2) qu'un pipeline texte dédié n'a plus à neutraliser.
+     */
+    private static final String TEXT_VERTEX_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform Projection {\n" +
+        "    mat4 ProjMat;\n" +
+        "};\n" +
+        "in vec3 Position;\n" +
+        "in vec2 UV0;\n" +
+        "out vec2 texCoord0;\n" +
+        "void main() {\n" +
+        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
+        "    texCoord0 = UV0;\n" +
+        "}\n";
+
+    /**
+     * Même algèbre EXACTE que {@code UiTextRenderer.TEXT_FRAGMENT_SRC}
+     * (legacy)/{@code TEXT_FRAGMENT_SRC_MODERN} — {@code BIAS=0.06} pour
+     * garder les traits fins (barres de "i"/"l"/"j") visibles en petit texte,
+     * {@code fwidth}+{@code smoothstep} pour le bord anticrénelé — juste
+     * portée en GLSL 330 core profile ({@code texture()} pas {@code
+     * texture2D()}, {@code ColorModulator} pas {@code gl_Color}).
+     */
+    private static final String TEXT_FRAGMENT_SRC =
+        "#version 330\n" +
+        "uniform sampler2D Sampler0;\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "in vec2 texCoord0;\n" +
+        "out vec4 fragColor;\n" +
+        "const float BIAS = 0.06;\n" +
+        "void main() {\n" +
+        "    float dist = texture(Sampler0, texCoord0).a + BIAS;\n" +
+        "    float w = fwidth(dist);\n" +
+        "    float alpha = smoothstep(0.5 - w, 0.5 + w, dist);\n" +
+        "    fragColor = vec4(ColorModulator.rgb, ColorModulator.a * alpha);\n" +
+        "}\n";
+
+    private static Object textPipeline, textShaderSource;
+
+    /** Construit le pipeline texte — voir {@link Blaze3DGradient#resolveGradientPipeline()} pour le même principe (ce fichier possède son GLSL, donc son code de compilation). */
+    static boolean resolveTextPipeline() throws Exception {
+        Object vertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_text.vsh");
+        Object fragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_text.fsh");
+        textPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_text", vertexId, fragmentId,
+            new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection" });
+        textShaderSource = ShaderPipelineFactory.shaderSource(vertexId, TEXT_VERTEX_SRC, fragmentId, TEXT_FRAGMENT_SRC);
+        return textPipeline != null;
+    }
 
     // ── Textures (une par UiFont, mises en cache — jamais recréées) ─────────
 
@@ -34,19 +105,17 @@ public final class Blaze3DText {
         Object[] cached = TEXTURES.get(font);
         if (cached != null) return cached;
 
-        // BUG TROUVÉ (draw() réussissait sans exception, projection valide
-        // (DIAG-PROJ), mais AUCUN texte visible) : font.atlasImage() est
-        // l'atlas APRÈS transformation en champ de distance signée (SDF, voir
-        // UiFont.buildSignedDistanceField) — alpha ~128 sur toute la zone de
-        // transition, saturé (0/255) seulement loin du bord. Le shader vanilla
-        // de RenderPipelines.GUI_TEXT (core/rendertype_text) ne fait AUCUN
-        // seuillage SDF, juste texture.rgba × couleur : lui donner cette
-        // texture produit un rendu quasi invisible. Fix : atlasImagePlain()
-        // (copie antialiasée classique, capturée AVANT la transformation SDF)
-        // — exactement le format que le shader vanilla attend (confirmé par
-        // désassemblage : GlyphAtlasTexture vanilla est lui-même un bitmap de
-        // couverture classique, jamais une SDF).
-        BufferedImage img = font.atlasImagePlain();
+        // Depuis le pipeline texte dédié (voir TEXT_FRAGMENT_SRC, SDF réel
+        // avec BIAS+fwidth+smoothstep — même algèbre que legacy/modern GL) :
+        // font.atlasImage() (APRÈS transformation en champ de distance
+        // signée, voir UiFont.buildSignedDistanceField) est maintenant le
+        // BON atlas — c'est exactement ce que ce shader attend. Historique :
+        // tant que ce fichier réutilisait le shader vanilla à seuillage dur
+        // (Blaze3DCore.HOME_FRAGMENT_SRC, texture.rgba × couleur, aucun
+        // seuillage SDF), il fallait atlasImagePlain() (couverture classique,
+        // capturée AVANT la transformation SDF) — sinon rendu quasi invisible
+        // (alpha ~128 partout sauf loin du bord). Ce n'est plus le cas ici.
+        BufferedImage img = font.atlasImage();
         int w = img.getWidth(), h = img.getHeight();
 
         // NativeImage(Format, w, h, useStbImage=false) puis remplissage pixel par pixel
@@ -153,10 +222,6 @@ public final class Blaze3DText {
             Object[] tex = ensureTexture(font);
             Object textureView = tex[1], sampler = tex[2];
 
-            currentStage = "ensureWhiteTexture";
-            Object[] white = ensureWhiteTexture();
-            Object whiteTextureView = white[1], whiteSampler = white[2];
-
             currentStage = "getDevice";
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder";
@@ -176,11 +241,7 @@ public final class Blaze3DText {
             // seul confirmé visible) en résulte — aucun autre changement requis.
             float yTop = Math.round(y + font.ascent * cs);
             float yBottom = Math.round(y - font.descent * cs);
-            int rgba = 0xFFFFFFFF; // couleur déjà appliquée via DynamicTransforms — sommets en blanc neutre
-            // UV2=(0,0) : voir ensureWhiteTexture() — texelFetch(Sampler2, (0,0)/16, 0)
-            // = (0,0), toujours valide, sur notre texture 1×1 blanche dédiée
-            // (JAMAIS 0xF000, qui vaut -4096 en short signé et provoquait un
-            // texelFetch hors-limites → vertexColor totalement transparent).
+            int rgba = 0xFFFFFFFF; // couleur déjà appliquée via ColorModulator — sommets en blanc neutre (Color/UV2 pas même lus par TEXT_FRAGMENT_SRC, voir sa javadoc)
             short light0 = 0, light1 = 0;
 
             ByteBuffer verts = ensureStagingBuffer(text.length() * 4 * 28);
@@ -271,8 +332,8 @@ public final class Blaze3DText {
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                ShaderPipelineFactory.precompile(device, textPipeline, textShaderSource);
+                mSetPipeline.invoke(pass, textPipeline);
                 if (mDisableScissor != null) { currentStage = "disableScissor"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -280,8 +341,7 @@ public final class Blaze3DText {
                 // Écrase le "Projection" ambiant repris par bindDefaultUniforms
                 // avec le nôtre (voir resolve() + ensureProjectionBuffer) — un
                 // setUniform() APRÈS un autre sur le même nom remplace le
-                // binding précédent (juste une liaison, pas une accumulation),
-                // même pattern que Sampler0/Sampler2 déjà liés séparément plus bas.
+                // binding précédent (juste une liaison, pas une accumulation).
                 currentStage = "setUniform(Projection)";
                 mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
 
@@ -290,12 +350,9 @@ public final class Blaze3DText {
 
                 currentStage = "bindTexture(Sampler0)";
                 mBindTexture.invoke(pass, "Sampler0", textureView, sampler);
-                // Sampler2 : texture 1×1 blanche DÉDIÉE (voir ensureWhiteTexture) —
-                // PAS l'atlas de police (celui-ci n'a AUCUNE garantie d'opacité au
-                // texel entier (0,0), à l'intérieur du padding). UV2=(0,0) (voir
-                // plus haut) garantit un texelFetch valide et opaque.
-                currentStage = "bindTexture(Sampler2)";
-                mBindTexture.invoke(pass, "Sampler2", whiteTextureView, whiteSampler);
+                // Plus de Sampler2/lightmap sur ce pipeline dédié (voir
+                // TEXT_FRAGMENT_SRC, ne le déclare même pas) — inutile
+                // maintenant que texte/rect ne partagent plus le même shader.
 
                 currentStage = "setVertexBuffer";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
