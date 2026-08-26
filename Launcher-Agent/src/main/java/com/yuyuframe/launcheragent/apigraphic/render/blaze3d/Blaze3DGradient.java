@@ -48,13 +48,10 @@ public final class Blaze3DGradient {
         "    mat4 ProjMat;\n" +
         "};\n" +
         "in vec3 Position;\n" +
-        "in vec2 UV0;\n" +
         "out vec2 fragPos;\n" +
-        "out vec2 texCoord0;\n" +
         "void main() {\n" +
         "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
         "    fragPos = Position.xy;\n" +
-        "    texCoord0 = UV0;\n" +
         "}\n";
 
     /**
@@ -68,6 +65,12 @@ public final class Blaze3DGradient {
      * t que {@code multiStopColorAt}/{@code
      * UiPrimitiveRenderer.MULTISTOP_GRADIENT_FRAGMENT_SRC}, écrite ici une
      * seule fois au lieu d'être dupliquée à la main dans 3 endroits.
+     *
+     * Coins arrondis ANALYTIQUES (voir {@code Blaze3DCore.RECT_FRAGMENT_SRC},
+     * même formule 1.8.9, portée ici plutôt que dupliquée dans un shader à
+     * part — remplace le masque-texture {@code Sampler0} qui existait avant,
+     * voir project_home_shader_pipeline) : {@code u_RectBounds} + {@code
+     * u_TypeRadius.y} (slot inutilisé jusqu'ici, réutilisé pour le rayon).
      */
     private static final String GRADIENT_FRAGMENT_SRC =
         "#version 330\n" +
@@ -83,10 +86,9 @@ public final class Blaze3DGradient {
         "    vec4 u_StopPos0123;\n" +
         "    vec4 u_StopPos4567;\n" +
         "    vec4 u_StopColors[8];\n" +
+        "    vec4 u_RectBounds;\n" +
         "};\n" +
-        "uniform sampler2D Sampler0;\n" +
         "in vec2 fragPos;\n" +
-        "in vec2 texCoord0;\n" +
         "out vec4 fragColor;\n" +
         "float stopPos(int i) {\n" +
         "    if (i < 4) {\n" +
@@ -135,10 +137,15 @@ public final class Blaze3DGradient {
         "            col = u_StopColors[7];\n" +
         "        }\n" +
         "    }\n" +
-        "    float maskAlpha = texture(Sampler0, texCoord0).a;\n" +
+        "    float radius = u_TypeRadius.y;\n" +
+        "    vec2 innerMin = u_RectBounds.xy + vec2(radius);\n" +
+        "    vec2 innerMax = u_RectBounds.zw - vec2(radius);\n" +
+        "    vec2 clamped = clamp(fragPos, innerMin, innerMax);\n" +
+        "    float rectDist = length(fragPos - clamped);\n" +
+        "    float rectAlpha = 1.0 - smoothstep(radius - 1.0, radius, rectDist);\n" +
         "    vec4 color = col * ColorModulator;\n" +
-        "    color.a *= maskAlpha;\n" +
-        "    if (color.a < 0.1) {\n" +
+        "    color.a *= rectAlpha;\n" +
+        "    if (color.a < 0.01) {\n" +
         "        discard;\n" +
         "    }\n" +
         "    fragColor = color;\n" +
@@ -160,17 +167,17 @@ public final class Blaze3DGradient {
         Object gradVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_gradient.vsh");
         Object gradFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_gradient.fsh");
         gradientPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_gradient", gradVertexId, gradFragmentId,
-            new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "GradientParams" });
+            new String[0], new String[]{ "DynamicTransforms", "Projection", "GradientParams" });
         gradientShaderSource = ShaderPipelineFactory.shaderSource(gradVertexId, GRADIENT_VERTEX_SRC, gradFragmentId, GRADIENT_FRAGMENT_SRC);
         return gradientPipeline != null;
     }
 
-    // ── Buffer GradientParams (192 octets, valeurs réécrites à CHAQUE draw — contrairement à la projection, le dégradé change à chaque appel) ──
+    // ── Buffer GradientParams (208 octets, valeurs réécrites à CHAQUE draw — contrairement à la projection, le dégradé change à chaque appel) ──
 
     private static Object ensureGradientParamsBuffer(Object device) throws Exception {
         if (gradientParamsBuffer == null) {
             java.util.function.Supplier<String> label = () -> "yuyuframe_gradient_params";
-            gradientParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 192L);
+            gradientParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 208L);
         }
         return gradientParamsBuffer;
     }
@@ -181,22 +188,26 @@ public final class Blaze3DGradient {
      * déjà être complétés à 8 entrées (même convention que l'ancien {@code
      * multiStopColorAt}, stops au-delà du nombre réel = copie du dernier
      * stop réel) — voir {@code UiPrimitiveRenderer.drawMultiStopGradientRect},
-     * seul appelant en amont.
+     * seul appelant en amont. {@code radius} = coins arrondis analytiques
+     * (voir javadoc de classe), {@code rectX0/Y0/X1/Y1} = bornes du rect pour
+     * la même formule.
      */
     private static Object writeGradientParams(Object device, Object encoder, UiGradientType type,
-            float startX, float startY, float endX, float endY, UiColor[] colors, float[] positions) throws Exception {
+            float startX, float startY, float endX, float endY, UiColor[] colors, float[] positions,
+            float radius, float rectX0, float rectY0, float rectX1, float rectY1) throws Exception {
         Object buffer = ensureGradientParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(192).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = ByteBuffer.allocateDirect(208).order(java.nio.ByteOrder.nativeOrder());
         data.putFloat(startX).putFloat(startY).putFloat(endX).putFloat(endY);
         float gradTypeCode = type == UiGradientType.RADIAL ? 1f : type == UiGradientType.CONIC ? 2f : 0f;
-        data.putFloat(gradTypeCode).putFloat(0f).putFloat(0f).putFloat(0f);
+        data.putFloat(gradTypeCode).putFloat(radius).putFloat(0f).putFloat(0f);
         for (int i = 0; i < 8; i++) data.putFloat(positions[i]);
         for (int i = 0; i < 8; i++) {
             UiColor c = colors[i];
             data.putFloat(c.r).putFloat(c.g).putFloat(c.b).putFloat(c.a);
         }
+        data.putFloat(rectX0).putFloat(rectY0).putFloat(rectX1).putFloat(rectY1);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 192L);
+        Object slice = mBufferSlice.invoke(buffer, 0L, 208L);
         mWriteToBuffer.invoke(encoder, slice, data);
         return slice;
     }
@@ -272,35 +283,15 @@ public final class Blaze3DGradient {
 
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
 
-            currentStage = "ensureCornerMaskTexture(gradrect)";
-            Object[] mask = ensureCornerMaskTexture(r);
-            Object maskView = mask[1], maskSampler = mask[2];
-            currentStage = "ensureWhiteTexture(gradrect)";
-            Object[] white = ensureWhiteTexture();
-
             currentStage = "getDevice(gradrect)";
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(gradrect)";
             Object encoder = mCreateCommandEncoder.invoke(device);
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
-            int vertexCount;
-            if (r < 0.5f) {
-                putSolidQuadGradient(verts, x0, x1, y0, y1, colorBottom, colorTop, y0, y1, light0, light1);
-                vertexCount = 4;
-            } else {
-                putRectQuadGradient(verts, x0, x0 + r, y0, y0 + r, false, false, colorBottom, colorTop, y0, y1, light0, light1);
-                putRectQuadGradient(verts, x1 - r, x1, y0, y0 + r, true, false, colorBottom, colorTop, y0, y1, light0, light1);
-                putRectQuadGradient(verts, x0, x0 + r, y1 - r, y1, false, true, colorBottom, colorTop, y0, y1, light0, light1);
-                putRectQuadGradient(verts, x1 - r, x1, y1 - r, y1, true, true, colorBottom, colorTop, y0, y1, light0, light1);
-                putSolidQuadGradient(verts, x0 + r, x1 - r, y0, y0 + r, colorBottom, colorTop, y0, y1, light0, light1);
-                putSolidQuadGradient(verts, x0 + r, x1 - r, y1 - r, y1, colorBottom, colorTop, y0, y1, light0, light1);
-                putSolidQuadGradient(verts, x0, x0 + r, y0 + r, y1 - r, colorBottom, colorTop, y0, y1, light0, light1);
-                putSolidQuadGradient(verts, x1 - r, x1, y0 + r, y1 - r, colorBottom, colorTop, y0, y1, light0, light1);
-                putSolidQuadGradient(verts, x0 + r, x1 - r, y0 + r, y1 - r, colorBottom, colorTop, y0, y1, light0, light1);
-                vertexCount = 9 * 4;
-            }
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
+            putSolidQuadGradient(verts, x0, x1, y0, y1, colorBottom, colorTop, y0, y1, light0, light1);
+            int vertexCount = 4;
             verts.flip();
 
             currentStage = "ensureVertexBuffer(gradrect)";
@@ -321,6 +312,9 @@ public final class Blaze3DGradient {
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
 
+            currentStage = "writeRectParams(gradrect)";
+            Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
+
             currentStage = "createRenderPass(gradrect)";
             java.util.function.Supplier<String> passLabel = () -> "yuyuframe_gradrect";
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
@@ -330,8 +324,8 @@ public final class Blaze3DGradient {
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                ShaderPipelineFactory.precompile(device, rectPipeline, rectShaderSource);
+                mSetPipeline.invoke(pass, rectPipeline);
                 if (mDisableScissor != null) { currentStage = "disableScissor(gradrect)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(gradrect)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -339,10 +333,8 @@ public final class Blaze3DGradient {
                 mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(gradrect)";
                 mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
-                currentStage = "bindTexture(Sampler0)(gradrect)";
-                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
-                currentStage = "bindTexture(Sampler2)(gradrect)";
-                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setUniform(RectParams)(gradrect)";
+                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
                 currentStage = "setVertexBuffer(gradrect)";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
 
@@ -387,35 +379,15 @@ public final class Blaze3DGradient {
 
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
 
-            currentStage = "ensureCornerMaskTexture(gradrect2d)";
-            Object[] mask = ensureCornerMaskTexture(r);
-            Object maskView = mask[1], maskSampler = mask[2];
-            currentStage = "ensureWhiteTexture(gradrect2d)";
-            Object[] white = ensureWhiteTexture();
-
             currentStage = "getDevice(gradrect2d)";
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(gradrect2d)";
             Object encoder = mCreateCommandEncoder.invoke(device);
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
-            int vertexCount;
-            if (r < 0.5f) {
-                putSolidQuadGradient2D(verts, x0, x1, y0, y1, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                vertexCount = 4;
-            } else {
-                putRectQuadGradient2D(verts, x0, x0 + r, y0, y0 + r, false, false, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putRectQuadGradient2D(verts, x1 - r, x1, y0, y0 + r, true, false, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putRectQuadGradient2D(verts, x0, x0 + r, y1 - r, y1, false, true, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putRectQuadGradient2D(verts, x1 - r, x1, y1 - r, y1, true, true, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putSolidQuadGradient2D(verts, x0 + r, x1 - r, y0, y0 + r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putSolidQuadGradient2D(verts, x0 + r, x1 - r, y1 - r, y1, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putSolidQuadGradient2D(verts, x0, x0 + r, y0 + r, y1 - r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putSolidQuadGradient2D(verts, x1 - r, x1, y0 + r, y1 - r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                putSolidQuadGradient2D(verts, x0 + r, x1 - r, y0 + r, y1 - r, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
-                vertexCount = 9 * 4;
-            }
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
+            putSolidQuadGradient2D(verts, x0, x1, y0, y1, bl, br, tl, tr, x0, x1, y0, y1, light0, light1);
+            int vertexCount = 4;
             verts.flip();
 
             currentStage = "ensureVertexBuffer(gradrect2d)";
@@ -436,6 +408,9 @@ public final class Blaze3DGradient {
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
 
+            currentStage = "writeRectParams(gradrect2d)";
+            Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
+
             currentStage = "createRenderPass(gradrect2d)";
             java.util.function.Supplier<String> passLabel = () -> "yuyuframe_gradrect2d";
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
@@ -445,8 +420,8 @@ public final class Blaze3DGradient {
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                ShaderPipelineFactory.precompile(device, rectPipeline, rectShaderSource);
+                mSetPipeline.invoke(pass, rectPipeline);
                 if (mDisableScissor != null) { currentStage = "disableScissor(gradrect2d)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(gradrect2d)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -454,10 +429,8 @@ public final class Blaze3DGradient {
                 mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(gradrect2d)";
                 mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
-                currentStage = "bindTexture(Sampler0)(gradrect2d)";
-                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
-                currentStage = "bindTexture(Sampler2)(gradrect2d)";
-                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setUniform(RectParams)(gradrect2d)";
+                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
                 currentStage = "setVertexBuffer(gradrect2d)";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
 
@@ -490,11 +463,11 @@ public final class Blaze3DGradient {
      * Dégradé multi-stop VRAIMENT calculé par pixel dans {@link
      * #GRADIENT_FRAGMENT_SRC} (roadmap Phase 5.1, remplace l'ancienne
      * approximation par grille CPU — voir project_home_shader_pipeline) —
-     * même squelette 9-slice que {@link #drawRect} (géométrie identique,
-     * {@code putRectQuad}/{@code putSolidQuad} réutilisés tels quels, couleur
-     * de sommet blanche opaque ignorée par ce shader) au lieu d'une
-     * subdivision en grille : la couleur ne dépend plus du sommet, juste de
-     * {@code fragPos} interpolé par le GPU et lu par le fragment shader.
+     * UN SEUL quad ({@code putSolidQuad} réutilisé tel quel, couleur de
+     * sommet blanche opaque ignorée par ce shader) — la couleur ET
+     * l'arrondi analytique (voir javadoc du shader) ne dépendent plus du
+     * sommet, juste de {@code fragPos} interpolé par le GPU et lu par le
+     * fragment shader.
      */
     private static boolean drawMultiStopGradientRect(float x0, float y0, float x1, float y1, float radius,
                                                        UiGradientType type, float startX, float startY, float endX, float endY,
@@ -513,10 +486,6 @@ public final class Blaze3DGradient {
 
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
 
-            currentStage = "ensureCornerMaskTexture(msgrad)";
-            Object[] mask = ensureCornerMaskTexture(r);
-            Object maskView = mask[1], maskSampler = mask[2];
-
             currentStage = "getDevice(msgrad)";
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(msgrad)";
@@ -525,23 +494,9 @@ public final class Blaze3DGradient {
             int rgba = 0xFFFFFFFF; // couleur réelle calculée par pixel dans le fragment shader
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
-            int vertexCount;
-            if (r < 0.5f) {
-                putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
-                vertexCount = 4;
-            } else {
-                putRectQuad(verts, x0, x0 + r, y0, y0 + r, false, false, rgba, light0, light1);
-                putRectQuad(verts, x1 - r, x1, y0, y0 + r, true, false, rgba, light0, light1);
-                putRectQuad(verts, x0, x0 + r, y1 - r, y1, false, true, rgba, light0, light1);
-                putRectQuad(verts, x1 - r, x1, y1 - r, y1, true, true, rgba, light0, light1);
-                putSolidQuad(verts, x0 + r, x1 - r, y0, y0 + r, rgba, light0, light1);
-                putSolidQuad(verts, x0 + r, x1 - r, y1 - r, y1, rgba, light0, light1);
-                putSolidQuad(verts, x0, x0 + r, y0 + r, y1 - r, rgba, light0, light1);
-                putSolidQuad(verts, x1 - r, x1, y0 + r, y1 - r, rgba, light0, light1);
-                putSolidQuad(verts, x0 + r, x1 - r, y0 + r, y1 - r, rgba, light0, light1);
-                vertexCount = 9 * 4;
-            }
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
+            putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
+            int vertexCount = 4;
             verts.flip();
 
             currentStage = "ensureVertexBuffer(msgrad)";
@@ -563,7 +518,7 @@ public final class Blaze3DGradient {
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
 
             currentStage = "writeGradientParams(msgrad)";
-            Object gradientSlice = writeGradientParams(device, encoder, type, startX, startY, endX, endY, colors, positions);
+            Object gradientSlice = writeGradientParams(device, encoder, type, startX, startY, endX, endY, colors, positions, r, x0, y0, x1, y1);
 
             currentStage = "createRenderPass(msgrad)";
             java.util.function.Supplier<String> passLabel = () -> "yuyuframe_msgradrect";
@@ -585,8 +540,6 @@ public final class Blaze3DGradient {
                 mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(GradientParams)(msgrad)";
                 mSetUniformSlice.invoke(pass, "GradientParams", gradientSlice);
-                currentStage = "bindTexture(Sampler0)(msgrad)";
-                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
                 currentStage = "setVertexBuffer(msgrad)";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
 
@@ -626,21 +579,7 @@ public final class Blaze3DGradient {
         return (ai << 24) | (bi << 16) | (gi << 8) | ri;
     }
 
-    /** Comme {@link #putRectQuad}, mais couleur PAR SOMMET (interpolée entre colorBottom/colorTop selon la position Y de ce sommet dans le rectangle global {@code [rectY0,rectY1]}) au lieu d'un rgba fixe. */
-    private static void putRectQuadGradient(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
-                                             boolean flipU, boolean flipV, UiColor colorBottom, UiColor colorTop,
-                                             float rectY0, float rectY1, short light0, short light1) {
-        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
-        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
-        int rgbaTop = lerpRgba(colorBottom, colorTop, yTop, rectY0, rectY1);
-        int rgbaBottom = lerpRgba(colorBottom, colorTop, yBottom, rectY0, rectY1);
-        putVertexPCTL(buf, xLeft, yTop, rgbaTop, uLeft, vTop, light0, light1);
-        putVertexPCTL(buf, xLeft, yBottom, rgbaBottom, uLeft, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yBottom, rgbaBottom, uRight, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yTop, rgbaTop, uRight, vTop, light0, light1);
-    }
-
-    /** Comme {@link #putSolidQuad}, mais couleur PAR SOMMET (voir {@link #putRectQuadGradient}). */
+    /** Coins désormais arrondis analytiquement dans le shader (voir {@code RECT_FRAGMENT_SRC}) — un seul quad par sommet suffit, plus de variante à UV variable par coin. */
     private static void putSolidQuadGradient(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
                                               UiColor colorBottom, UiColor colorTop, float rectY0, float rectY1,
                                               short light0, short light1) {
@@ -670,23 +609,7 @@ public final class Blaze3DGradient {
         return (ai << 24) | (bi << 16) | (gi << 8) | ri;
     }
 
-    /** Comme {@link #putRectQuadGradient}, mais bilinéaire (voir {@link #lerpRgba2D}) — chaque sommet interpole sur SES DEUX coordonnées, pas seulement Y. */
-    private static void putRectQuadGradient2D(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
-                                               boolean flipU, boolean flipV, UiColor bl, UiColor br, UiColor tl, UiColor tr,
-                                               float rectX0, float rectX1, float rectY0, float rectY1, short light0, short light1) {
-        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
-        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
-        int cTL = lerpRgba2D(bl, br, tl, tr, xLeft, yTop, rectX0, rectX1, rectY0, rectY1);
-        int cBL = lerpRgba2D(bl, br, tl, tr, xLeft, yBottom, rectX0, rectX1, rectY0, rectY1);
-        int cBR = lerpRgba2D(bl, br, tl, tr, xRight, yBottom, rectX0, rectX1, rectY0, rectY1);
-        int cTR = lerpRgba2D(bl, br, tl, tr, xRight, yTop, rectX0, rectX1, rectY0, rectY1);
-        putVertexPCTL(buf, xLeft, yTop, cTL, uLeft, vTop, light0, light1);
-        putVertexPCTL(buf, xLeft, yBottom, cBL, uLeft, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yBottom, cBR, uRight, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yTop, cTR, uRight, vTop, light0, light1);
-    }
-
-    /** Comme {@link #putSolidQuad}, mais bilinéaire (voir {@link #putRectQuadGradient2D}). */
+    /** Coins désormais arrondis analytiquement dans le shader (voir {@code RECT_FRAGMENT_SRC}) — un seul quad par sommet suffit, plus de variante à UV variable par coin. */
     private static void putSolidQuadGradient2D(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
                                                 UiColor bl, UiColor br, UiColor tl, UiColor tr,
                                                 float rectX0, float rectX1, float rectY0, float rectY1, short light0, short light1) {

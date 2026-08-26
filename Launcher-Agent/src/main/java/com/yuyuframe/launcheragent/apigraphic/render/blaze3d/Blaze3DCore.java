@@ -141,6 +141,105 @@ public final class Blaze3DCore {
 
     static Object homePipeline, homeShaderSource;
 
+    // ── Pipeline rect/dégradé-simple à coins arrondis ANALYTIQUES (remplace le masque-texture, voir project_home_shader_pipeline) ──
+
+    /**
+     * BUG TROUVÉ (retour utilisateur, capture à l'appui : coins toujours
+     * "crénelés/flous" comparés au 1.8.9 MALGRÉ le fix mipmap de {@code
+     * ensureCornerMaskTexture}) : un masque BAKÉ EN TEXTURE, aussi bien
+     * suréchantillonné soit-il, reste à résolution FINIE — il finit toujours
+     * par montrer son grain de texel dès qu'on zoome assez (magnification),
+     * contrairement à une distance calculée ANALYTIQUEMENT PAR PIXEL (1.8.9,
+     * {@code UiPrimitiveRenderer.FRAGMENT_SRC}), exacte à N'IMPORTE QUEL
+     * zoom. Ce pipeline porte cette même formule ici — {@code Position}+
+     * {@code Color} suffisent (pas de sampler du tout, {@code Sampler0}/
+     * {@code Sampler2} disparaissent pour ce chemin).
+     */
+    static final String RECT_VERTEX_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform Projection {\n" +
+        "    mat4 ProjMat;\n" +
+        "};\n" +
+        "in vec3 Position;\n" +
+        "in vec4 Color;\n" +
+        "out vec4 vertexColor;\n" +
+        "out vec2 fragPos;\n" +
+        "void main() {\n" +
+        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
+        "    vertexColor = Color;\n" +
+        "    fragPos = Position.xy;\n" +
+        "}\n";
+
+    /**
+     * Même formule EXACTE que {@code UiPrimitiveRenderer.FRAGMENT_SRC}
+     * (legacy/modern GL, 1.8.9→1.21.5ish) — clamp du point courant dans le
+     * rect "intérieur" (rect global rétréci de {@code u_RadiusPad.x} de
+     * chaque côté), distance à ce point clampé, {@code smoothstep} sur 1px
+     * de large. Correcte sur les bords droits (dist=0 → alpha=1 toujours,
+     * jamais de faux négatif) ET les coins — exactement ce qu'un remplissage
+     * uni/dégradé arrondi (sans anneau/ombre) demande. {@code radius=0}
+     * fonctionne nativement (clamp devient no-op) — plus besoin de
+     * branchement petit/grand rayon côté Java.
+     */
+    static final String RECT_FRAGMENT_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform RectParams {\n" +
+        "    vec4 u_Rect;\n" +
+        "    vec4 u_RadiusPad;\n" +
+        "};\n" +
+        "in vec4 vertexColor;\n" +
+        "in vec2 fragPos;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    float radius = u_RadiusPad.x;\n" +
+        "    vec2 innerMin = u_Rect.xy + vec2(radius);\n" +
+        "    vec2 innerMax = u_Rect.zw - vec2(radius);\n" +
+        "    vec2 clamped = clamp(fragPos, innerMin, innerMax);\n" +
+        "    float dist = length(fragPos - clamped);\n" +
+        "    float alpha = 1.0 - smoothstep(radius - 1.0, radius, dist);\n" +
+        "    vec4 color = vertexColor * ColorModulator;\n" +
+        "    color.a *= alpha;\n" +
+        "    if (color.a < 0.01) {\n" +
+        "        discard;\n" +
+        "    }\n" +
+        "    fragColor = color;\n" +
+        "}\n";
+
+    static Object rectPipeline, rectShaderSource;
+    static Object rectParamsBuffer;
+
+    static Object ensureRectParamsBuffer(Object device) throws Exception {
+        if (rectParamsBuffer == null) {
+            java.util.function.Supplier<String> label = () -> "yuyuframe_rect_params";
+            rectParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 32L);
+        }
+        return rectParamsBuffer;
+    }
+
+    /** Pack {@code RectParams} en std140 (32 octets, tout en vec4 — même précaution que {@code GradientParams}) et réécrit à CHAQUE draw (valeurs changent à chaque appel, contrairement à la projection). */
+    static Object writeRectParams(Object device, Object encoder, float x0, float y0, float x1, float y1, float radius) throws Exception {
+        Object buffer = ensureRectParamsBuffer(device);
+        ByteBuffer data = ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+        data.putFloat(x0).putFloat(y0).putFloat(x1).putFloat(y1);
+        data.putFloat(radius).putFloat(0f).putFloat(0f).putFloat(0f);
+        data.flip();
+        Object slice = mBufferSlice.invoke(buffer, 0L, 32L);
+        mWriteToBuffer.invoke(encoder, slice, data);
+        return slice;
+    }
+
     /**
      * Résout une classe via Yarn si chargé (obfuscation classique,
      * comportement INCHANGÉ), SINON (bracket 26.1+, jeu non obfusqué, Yarn
@@ -412,6 +511,16 @@ public final class Blaze3DCore {
                 new String[]{ "Sampler0", "Sampler2" }, new String[]{ "DynamicTransforms", "Projection" });
             homeShaderSource = ShaderPipelineFactory.shaderSource(vertexId, HOME_VERTEX_SRC, fragmentId, HOME_FRAGMENT_SRC);
 
+            // Pipeline rect/dégradé-simple à coins arrondis analytiques (voir
+            // RECT_VERTEX_SRC/RECT_FRAGMENT_SRC) — remplace homePipeline pour
+            // drawRect/drawGradientRect/drawGradientRect2D. Aucun sampler
+            // (pas de masque-texture, tout est calculé par pixel).
+            Object rectVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect.vsh");
+            Object rectFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect.fsh");
+            rectPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_rect", rectVertexId, rectFragmentId,
+                new String[0], new String[]{ "DynamicTransforms", "Projection", "RectParams" });
+            rectShaderSource = ShaderPipelineFactory.shaderSource(rectVertexId, RECT_VERTEX_SRC, rectFragmentId, RECT_FRAGMENT_SRC);
+
             // Pipeline dégradé multi-stop / texte SDF — construits par
             // Blaze3DGradient/Blaze3DText eux-mêmes (le fichier qui possède
             // le GLSL possède aussi le code qui le compile), on vérifie
@@ -419,7 +528,7 @@ public final class Blaze3DCore {
             boolean gradientPipelineOk = Blaze3DGradient.resolveGradientPipeline();
             boolean textPipelineOk = Blaze3DText.resolveTextPipeline();
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || !gradientPipelineOk || !textPipelineOk
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || !gradientPipelineOk || !textPipelineOk
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {
@@ -537,84 +646,6 @@ public final class Blaze3DCore {
         return whiteTexture;
     }
 
-    // ── Texture "masque coin arrondi" (fonds de panneau HUD, voir drawRect) ──
-
-    // BUG TROUVÉ (retour utilisateur : "les arrondis des cards sont
-    // pixelisés" PUIS, sur les tout petits rayons (badge cœur), "la courbe
-    // en 180° est mal calculée") — cette texture représentait un coin de
-    // rayon FIXE (128 texels), mappée PAR UV COMPLET (0..1) sur le coin
-    // RÉELLEMENT dessiné (voir putRectQuad) dont le rayon écran va de ~2px
-    // (badge cœur) à ~16px (cartes) — un facteur de réduction allant jusqu'à
-    // ~35× à l'affichage. Un sampler LINEAR (pas de mipmap) ne peut pas
-    // réduire une texture 128px vers un quad de 2-3px proprement, quelle que
-    // soit sa résolution source : le problème n'est pas la texture, c'est
-    // l'écart entre sa taille et celle réellement utilisée au rendu.
-    //
-    // Fix : UN masque PAR RAYON ÉCRAN (arrondi au pixel, mis en cache),
-    // généré à une taille PROCHE du rayon réel (léger sur-échantillonnage
-    // ×3 pour l'antialiasing, jamais plus de {@link #CORNER_MASK_SIZE}) au
-    // lieu d'une texture fixe toujours réduite à l'extrême — le facteur de
-    // réduction au rendu reste alors proche de 1:1 à 3:1 quel que soit le
-    // rayon, au lieu de jusqu'à 35:1. La bande de lissage (voir smoothstep
-    // ci-dessous) est recalculée PROPORTIONNELLEMENT à CHAQUE taille de
-    // masque (plus une fraction fixe d'une texture 128px sans rapport avec
-    // le rayon réel) — c'est ce qui corrige le "180° mal calculé" sur les
-    // petits rayons (la bande ne peut plus finir par couvrir tout le coin).
-    static final int CORNER_MASK_SIZE = 128;
-    static final Map<Integer, Object[]> cornerMaskCache = new HashMap<>();
-
-    /**
-     * Alpha = 1 (opaque) là où texel(tx,ty) est à distance <= N du point
-     * "intérieur" (N,N) (coin bas-droite du carré NxN, voir drawRect pour la
-     * correspondance écran) ; alpha = 0 au-delà, avec un lissage
-     * (smoothstep) sur une bande proportionnelle à N — pré-calculée dans une
-     * texture au lieu d'un shader dédié (RenderPipelines.GUI_TEXT n'en a
-     * pas) : image = "un coin haut-gauche arrondi" — les 3 autres coins sont
-     * obtenus par retournement UV (voir putRectQuad), pas 4 textures séparées.
-     *
-     * @param screenRadiusPx rayon écran RÉEL (en pixels) du coin sur le
-     *                        point d'appeler — détermine la taille (et donc
-     *                        la clé de cache) du masque généré, voir
-     *                        commentaire de classe ci-dessus.
-     */
-    static Object[] ensureCornerMaskTexture(float screenRadiusPx) throws Exception {
-        int bucket = Math.max(1, Math.round(screenRadiusPx));
-        Object[] cached = cornerMaskCache.get(bucket);
-        if (cached != null) return cached;
-
-        // ×3 : reste net (pas de flou d'agrandissement) tout en gardant un
-        // facteur de réduction modéré au rendu — 8 = plancher (même un
-        // rayon de 1px garde une bande de lissage exploitable) ; jamais plus
-        // que CORNER_MASK_SIZE (128, valeur d'origine — largement assez pour
-        // les gros rayons, donc AUCUN changement de qualité par rapport à
-        // avant sur ce cas, qui n'a jamais posé problème).
-        int n = Math.max(8, Math.min(CORNER_MASK_SIZE, bucket * 3));
-        float falloffTexels = Math.max(1.5f, n / 10f);
-
-        Object nativeImage = ctorNativeImage.newInstance(fieldNativeImageFormatRgba, n, n, false);
-        for (int ty = 0; ty < n; ty++) {
-            for (int tx = 0; tx < n; tx++) {
-                float dx = tx - n, dy = ty - n;
-                float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                float t = Math.max(0f, Math.min(1f, (dist - (n - falloffTexels)) / falloffTexels));
-                float alpha = 1f - (t * t * (3f - 2f * t)); // smoothstep
-                int a = Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f);
-                int nativeColor = (a << 24) | 0x00FFFFFF; // petit-boutiste RGBA — blanc, alpha calculé
-                mNativeImageSetColor.invoke(nativeImage, tx, ty, nativeColor);
-            }
-        }
-        Object device = mGetDevice.invoke(null);
-        java.util.function.Supplier<String> label = () -> "yuyuframe_corner_mask_" + bucket;
-        Object texture = mCreateTexture.invoke(device, label, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, n, n, 1, 1);
-        Object encoder = mCreateCommandEncoder.invoke(device);
-        mWriteToTexture.invoke(encoder, texture, nativeImage);
-        Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
-        Object[] result = {texture, textureView, sampler};
-        cornerMaskCache.put(bucket, result);
-        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture masque coin arrondi créée (rayon=" + bucket + "px, taille=" + n + "x" + n + ")");
-        return result;
-    }
 
     static Object vertexBuffer;
     static long vertexBufferCapacity;
@@ -766,19 +797,7 @@ public final class Blaze3DCore {
         for (QueuedDraw q : batch) q.execute();
     }
 
-    static void putRectQuad(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
-                                     boolean flipU, boolean flipV, int rgba, short light0, short light1) {
-        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
-        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
-        // Même ordre/winding que le texte (CCW confirmé visible) :
-        // (xLeft,yTop)→(xLeft,yBottom)→(xRight,yBottom)→(xRight,yTop).
-        putVertexPCTL(buf, xLeft, yTop, rgba, uLeft, vTop, light0, light1);
-        putVertexPCTL(buf, xLeft, yBottom, rgba, uLeft, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yBottom, rgba, uRight, vBottom, light0, light1);
-        putVertexPCTL(buf, xRight, yTop, rgba, uRight, vTop, light0, light1);
-    }
-
-    /** Bord/centre — UV CONSTANTE loin du bord du masque (toujours opaque, voir ensureCornerMaskTexture), donc un simple remplissage plein. */
+    /** Coins désormais arrondis analytiquement (voir {@code RECT_FRAGMENT_SRC}/{@code GRADIENT_FRAGMENT_SRC}) — un seul type de quad suffit, plus besoin d'une variante à UV variable par coin. */
     static void putSolidQuad(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop, int rgba, short light0, short light1) {
         float u = 0.95f, v = 0.95f;
         putVertexPCTL(buf, xLeft, yTop, rgba, u, v, light0, light1);

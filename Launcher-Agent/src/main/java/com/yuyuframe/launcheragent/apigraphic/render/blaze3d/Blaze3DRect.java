@@ -87,11 +87,18 @@ public final class Blaze3DRect {
         Blaze3DCore.enqueue(() -> drawIcon(cacheKey, img, x0, y0, x1, y1, alpha, vpWidth, vpHeight));
     }
 
-    // ── Rectangle arrondi (fond de panneau HUD) — MÊME pipeline GUI_TEXT que
-    // le texte, réutilise TOUT (device/encoder/pass/projection/DynamicTransforms/
-    // buffer de sommets/index partagé) — seule la texture Sampler0 change
-    // (masque de coin, voir ensureCornerMaskTexture) et la géométrie (9 quads
-    // "9-slice" au lieu de 4 sommets par glyphe).
+    // ── Rectangle arrondi (fond de panneau HUD) — pipeline dédié rectPipeline
+    // (voir Blaze3DCore.RECT_FRAGMENT_SRC), coins calculés analytiquement par
+    // pixel, un seul quad (plus de 9-slice/masque-texture, voir ci-dessous).
+    /**
+     * Coins arrondis ANALYTIQUES (voir {@code Blaze3DCore.RECT_FRAGMENT_SRC},
+     * même formule que {@code UiPrimitiveRenderer.FRAGMENT_SRC} 1.8.9) —
+     * remplace l'ancien masque-texture (résolution finie, visible dès qu'on
+     * zoome assez — voir project_home_shader_pipeline en mémoire projet).
+     * UN SEUL quad (le shader gère le rayon sur toute la surface, plus besoin
+     * d'isoler les 4 coins) — {@code radius=0} fonctionne nativement, plus
+     * de branchement petit/grand rayon.
+     */
     private static boolean drawRect(float x0, float y0, float x1, float y1, float radius, UiColor color, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
@@ -105,48 +112,19 @@ public final class Blaze3DRect {
             Object colorView = mGetColorAttachmentView.invoke(fb);
             if (colorView == null) return false;
 
-            // Rayon jamais plus grand que la moitié du plus petit côté —
-            // sinon les 4 coins se chevaucheraient (quads dégénérés/inversés).
-            // Calculé AVANT ensureCornerMaskTexture (contrairement à avant) :
-            // le masque est désormais dimensionné selon le rayon RÉEL, voir
-            // son commentaire de classe.
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
-
-            currentStage = "ensureCornerMaskTexture";
-            Object[] mask = ensureCornerMaskTexture(r);
-            Object maskView = mask[1], maskSampler = mask[2];
-            currentStage = "ensureWhiteTexture(rect)";
-            Object[] white = ensureWhiteTexture();
 
             currentStage = "getDevice(rect)";
             Object device = mGetDevice.invoke(null);
             currentStage = "createCommandEncoder(rect)";
             Object encoder = mCreateCommandEncoder.invoke(device);
 
-            int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator, comme le texte
+            int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator
             short light0 = 0, light1 = 0;
 
-            ByteBuffer verts = ensureStagingBuffer(9 * 4 * 28);
-            int vertexCount;
-            if (r < 0.5f) {
-                putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
-                vertexCount = 4;
-            } else {
-                // 4 coins — texture du masque, UV variable (retournée par coin).
-                putRectQuad(verts, x0, x0 + r, y0, y0 + r, false, false, rgba, light0, light1); // bas-gauche
-                putRectQuad(verts, x1 - r, x1, y0, y0 + r, true, false, rgba, light0, light1);  // bas-droite
-                putRectQuad(verts, x0, x0 + r, y1 - r, y1, false, true, rgba, light0, light1);  // haut-gauche
-                putRectQuad(verts, x1 - r, x1, y1 - r, y1, true, true, rgba, light0, light1);   // haut-droite
-                // 4 bords + centre — MÊME texture (masque), UV constante loin
-                // du bord (toujours opaque) : pas besoin d'un second binding
-                // Sampler0/pass séparé pour une texture blanche unie.
-                putSolidQuad(verts, x0 + r, x1 - r, y0, y0 + r, rgba, light0, light1);   // bas
-                putSolidQuad(verts, x0 + r, x1 - r, y1 - r, y1, rgba, light0, light1);   // haut
-                putSolidQuad(verts, x0, x0 + r, y0 + r, y1 - r, rgba, light0, light1);   // gauche
-                putSolidQuad(verts, x1 - r, x1, y0 + r, y1 - r, rgba, light0, light1);   // droite
-                putSolidQuad(verts, x0 + r, x1 - r, y0 + r, y1 - r, rgba, light0, light1); // centre
-                vertexCount = 9 * 4;
-            }
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
+            putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
+            int vertexCount = 4;
             verts.flip();
 
             currentStage = "ensureVertexBuffer(rect)";
@@ -167,6 +145,9 @@ public final class Blaze3DRect {
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
 
+            currentStage = "writeRectParams(rect)";
+            Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
+
             currentStage = "createRenderPass(rect)";
             java.util.function.Supplier<String> passLabel = () -> "yuyuframe_rect";
             Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
@@ -176,8 +157,8 @@ public final class Blaze3DRect {
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
+                ShaderPipelineFactory.precompile(device, rectPipeline, rectShaderSource);
+                mSetPipeline.invoke(pass, rectPipeline);
                 if (mDisableScissor != null) { currentStage = "disableScissor(rect)"; mDisableScissor.invoke(pass); }
                 currentStage = "bindDefaultUniforms(rect)";
                 mBindDefaultUniforms.invoke(null, pass);
@@ -185,10 +166,8 @@ public final class Blaze3DRect {
                 mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(rect)";
                 mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
-                currentStage = "bindTexture(Sampler0)(rect)";
-                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
-                currentStage = "bindTexture(Sampler2)(rect)";
-                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setUniform(RectParams)(rect)";
+                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
                 currentStage = "setVertexBuffer(rect)";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
 
