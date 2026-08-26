@@ -365,6 +365,19 @@ public final class GlBridge {
     public void glScissor(int x, int y, int w, int h) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glScissor", int.class, int.class, int.class, int.class).invoke(null, x, y, w, h);
     }
+    // ── Stencil (roadmap Phase 5.1, clip doux aux coins arrondis — voir UiPrimitiveRenderer#beginRoundedClip) ──
+    public void glStencilFunc(int func, int ref, int mask) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glStencilFunc", int.class, int.class, int.class).invoke(null, func, ref, mask);
+    }
+    public void glStencilOp(int sfail, int dpfail, int dppass) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glStencilOp", int.class, int.class, int.class).invoke(null, sfail, dpfail, dppass);
+    }
+    public void glStencilMask(int mask) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glStencilMask", int.class).invoke(null, mask);
+    }
+    public void glColorMask(boolean r, boolean g, boolean b, boolean a) throws Exception {
+        gl("org.lwjgl.opengl.GL11", "glColorMask", boolean.class, boolean.class, boolean.class, boolean.class).invoke(null, r, g, b, a);
+    }
     void glGenerateMipmap(int target) throws Exception {
         // GL30 (promu depuis GL_ARB_framebuffer_object) — dispo aussi bien
         // sous LWJGL2 (1.8.9, contexte GL2.1) que LWJGL3 (1.21), l'extension

@@ -335,6 +335,21 @@ public final class UiRenderer {
     }
 
     /**
+     * Clip aux coins arrondis via stencil buffer (roadmap Phase 5.1) —
+     * remplace {@link #beginScissor} quand la zone de clip doit suivre un
+     * rect ARRONDI (scissor seul coupe en angle droit même sur un coin
+     * visuellement rond). Legacy/modern GL uniquement (no-op sur Blaze3D era
+     * E, voir {@link UiPrimitiveRenderer#beginRoundedClip}).
+     */
+    public void beginRoundedClip(float x1, float y1, float x2, float y2, float radius, int vpWidth, int vpHeight) {
+        primitives.beginRoundedClip(x1, y1, x2, y2, radius, vpWidth, vpHeight);
+    }
+
+    public void endRoundedClip() {
+        primitives.endRoundedClip();
+    }
+
+    /**
      * DIAGNOSTIC : lit directement le framebuffer actif à la coordonnée
      * (x,y) (origine bas-gauche, même convention que le reste du pipeline
      * moderne) juste après un dessin — permet de trancher définitivement
@@ -409,6 +424,25 @@ public final class UiRenderer {
     public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
                             UiColor color, int vpWidth, int vpHeight) {
         primitives.drawShadow(x1, y1, x2, y2, radius, blur, spread, color, vpWidth, vpHeight);
+    }
+
+    /**
+     * Panneau "verre dépoli" (flou dual-Kawase, roadmap Phase 5.1) — fond =
+     * backdrop courant flouté + teinté, coins arrondis par coin. Era E
+     * (Blaze3D) uniquement pour l'instant — pas d'implémentation legacy/
+     * modern GL (no-op silencieux ailleurs, voir {@link
+     * com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur}).
+     *
+     * @param passes       étages downsample/upsample, {@code [1,5]} — plus haut = flou plus fort et plus coûteux.
+     * @param tint         couleur mélangée par-dessus le flou.
+     * @param tintStrength {@code [0,1]} — 0 = flou pur, 1 = couleur plate.
+     */
+    public void drawBlurredPanel(float x1, float y1, float x2, float y2,
+                                  float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                  int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
+        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueBlurredPanel(
+            x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            passes, tint, tintStrength, vpWidth, vpHeight);
     }
 
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,

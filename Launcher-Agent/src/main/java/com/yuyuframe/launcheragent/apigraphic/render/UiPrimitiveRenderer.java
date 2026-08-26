@@ -48,6 +48,11 @@ public final class UiPrimitiveRenderer {
     private void glEnd() throws Exception { gl.glEnd(); }
     private void glEnable(int cap) throws Exception { gl.glEnable(cap); }
     private void glDisable(int cap) throws Exception { gl.glDisable(cap); }
+    private void glClear(int mask) throws Exception { gl.glClear(mask); }
+    private void glStencilFunc(int func, int ref, int mask) throws Exception { gl.glStencilFunc(func, ref, mask); }
+    private void glStencilOp(int sfail, int dpfail, int dppass) throws Exception { gl.glStencilOp(sfail, dpfail, dppass); }
+    private void glStencilMask(int mask) throws Exception { gl.glStencilMask(mask); }
+    private void glColorMask(boolean r, boolean g, boolean b, boolean a) throws Exception { gl.glColorMask(r, g, b, a); }
     private void glBlendFunc(int sfactor, int dfactor) throws Exception { gl.glBlendFunc(sfactor, dfactor); }
     private void glActiveTexture(int texture) throws Exception { gl.glActiveTexture(texture); }
     private void glBindTexture(int target, int texture) throws Exception { gl.glBindTexture(target, texture); }
@@ -1272,6 +1277,87 @@ public final class UiPrimitiveRenderer {
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
                                        UiColor color, int vpWidth, int vpHeight) {
         drawFx(x1, y1, x2, y2, radius, 0f, borderWidth, color, color, false, vpWidth, vpHeight);
+    }
+
+    // ── Clip aux coins arrondis via stencil buffer (roadmap Phase 5.1) ──────
+    //
+    // Remplace glScissor (rectangle axis-aligned strict) pour les cas où la
+    // zone de clip doit suivre un rect ARRONDI (modale/dropdown/scroll à
+    // coins arrondis) — avec glScissor seul, le contenu clippé se fait
+    // couper en angle droit pile sur un coin qui, lui, est visuellement
+    // arrondi : un défaut visible (coin "carré dans un coin rond").
+    //
+    // Legacy/modern GL UNIQUEMENT (comme drawShadow/drawGlow) — sur Blaze3D
+    // (era E), les dessins passent par une file DIFFÉRÉE (Blaze3DCore.queued,
+    // exécutée une frame plus tard, voir UiScrollContainer §javadoc) : un
+    // vrai stencil GPU nécessiterait de faire traverser une région de clip à
+    // travers CHAQUE lambda empilée jusqu'à un RenderPass Blaze3D — écarté
+    // pour la même raison déjà actée pour le scissor Blaze3D (trop risqué à
+    // l'aveugle, aucun moyen de tester en jeu depuis cet environnement sur un
+    // pipeline déjà fragile). No-op silencieux là-bas — clipFade
+    // (UiScrollContainer) reste le filet de sécurité existant sur ce bracket.
+    //
+    // "Anti-aliasé" au sens : la frontière du masque SUIT la courbe analytique
+    // du rect arrondi pixel par pixel (même shader FRAGMENT_SRC que
+    // drawRoundedRect, avec son propre smoothstep 1px — un fragment sous le
+    // seuil alpha est discard, donc jamais écrit dans le stencil), PAS un
+    // blend sub-pixel : le stencil buffer reste un masque entier 0/1, comme
+    // toute technique stencil — largement suffisant pour éliminer le vrai
+    // défaut visible actuel (coin carré qui mord sur un coin rond).
+    private static final int GL_STENCIL_TEST = 0x0B90;
+    private static final int GL_STENCIL_BUFFER_BIT = 0x00000400;
+    private static final int GL_ALWAYS = 0x0207;
+    private static final int GL_EQUAL = 0x0202;
+    private static final int GL_KEEP = 0x1E00;
+    private static final int GL_REPLACE = 0x1E01;
+
+    private boolean roundedClipActive;
+
+    /**
+     * Démarre un clip à coins arrondis — tout dessin ENTRE cet appel et
+     * {@link #endRoundedClip()} n'est visible que dans le rect arrondi donné.
+     * No-op sur Blaze3D (era E) — voir le commentaire de section ci-dessus.
+     */
+    public void beginRoundedClip(float x1, float y1, float x2, float y2, float radius, int vpWidth, int vpHeight) {
+        if (Blaze3DCore.isAvailable()) return;
+        try {
+            glEnable(GL_STENCIL_TEST);
+            // Passe 1 : écrit le masque, sans toucher au framebuffer couleur
+            // ni au test de profondeur (on ne dessine ici QUE pour peupler le
+            // stencil, pas pour afficher quoi que ce soit).
+            glClear(GL_STENCIL_BUFFER_BIT);
+            glColorMask(false, false, false, false);
+            glStencilFunc(GL_ALWAYS, 1, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+            glStencilMask(0xFF);
+            // Couleur/alpha réels sans importance (glColorMask bloque toute
+            // écriture couleur) SAUF l'alpha, qui doit rester >= le seuil de
+            // discard du shader (drawRoundedRect) pour que le stencil soit
+            // bien écrit PARTOUT à l'intérieur de la forme arrondie.
+            drawRoundedRect(x1, y1, x2, y2, radius, new UiColor(1f, 1f, 1f, 1f), vpWidth, vpHeight);
+            // Passe 2 : réactive l'écriture couleur, seul le stencil déjà
+            // posé (==1) laisse désormais passer les dessins suivants.
+            glColorMask(true, true, true, true);
+            glStencilFunc(GL_EQUAL, 1, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+            glStencilMask(0x00);
+            roundedClipActive = true;
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] beginRoundedClip: " + t);
+            roundedClipActive = false;
+        }
+    }
+
+    /** Referme le clip ouvert par {@link #beginRoundedClip}. No-op si aucun clip actif (sur Blaze3D, ou si {@code beginRoundedClip} a échoué). */
+    public void endRoundedClip() {
+        if (!roundedClipActive) return;
+        roundedClipActive = false;
+        try {
+            glStencilMask(0xFF);
+            glDisable(GL_STENCIL_TEST);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] endRoundedClip: " + t);
+        }
     }
 
     /**

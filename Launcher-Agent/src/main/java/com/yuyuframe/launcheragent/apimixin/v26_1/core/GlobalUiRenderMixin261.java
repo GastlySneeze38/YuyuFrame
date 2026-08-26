@@ -94,6 +94,20 @@ public abstract class GlobalUiRenderMixin261 {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): UiSolidPipelinePoc.drawTestQuad() a levé: " + t);
                 }
             }
+
+            // Preuve de mécanisme flou dual-Kawase (roadmap Phase 5.1) — voir
+            // Blaze3DBlur, /yf blurpoc pour activer. fbWidth/fbHeight déjà
+            // résolus par l'input poller (même source que ModuleRegistry
+            // .renderOverlayAll, voir GlobalUiPresentMixin261), pas besoin de
+            // re-résoudre GLFW ici.
+            if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled) {
+                try {
+                    com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.drawTestPanel(
+                        GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DBlur.drawTestPanel() a levé: " + t);
+                }
+            }
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): " + t);
         }

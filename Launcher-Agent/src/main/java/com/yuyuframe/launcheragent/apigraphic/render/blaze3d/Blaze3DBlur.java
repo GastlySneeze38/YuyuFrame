@@ -1,0 +1,506 @@
+package com.yuyuframe.launcheragent.apigraphic.render.blaze3d;
+
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.shader.ShaderPipelineFactory;
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+
+import static com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore.*;
+
+import java.nio.ByteBuffer;
+import java.util.OptionalInt;
+
+/**
+ * Flou dual-Kawase (roadmap Phase 5.1) — panneau "verre dépoli" : le fond
+ * derrière un rect arrondi est flouté par une chaîne de downsample/upsample
+ * en plusieurs passes (Marius Bjørge, ARM, SIGGRAPH 2015 — technique déjà
+ * largement éprouvée, utilisée par la plupart des mods de blur Minecraft,
+ * dont plusieurs déjà présents dans les profils Modrinth de cette machine).
+ * Nettement moins cher qu'un vrai flou gaussien en temps réel (chaque passe
+ * ne coûte qu'un sample 5-tap ou 8-tap sur une texture de plus en plus
+ * petite) tout en restant visuellement très proche.
+ *
+ * <p>Vérifié par {@code javap} sur {@code GpuTexture.class}/{@code
+ * MainTarget.class} du jar client 26.1.2 réel (jamais deviné) : le
+ * framebuffer principal du jeu ({@code mc.getFramebuffer().getColorAttachmentView()},
+ * déjà utilisé comme CIBLE de rendu par tout le reste de {@code Blaze3DCore})
+ * est créé par {@code MainTarget.allocateColorAttachment} avec usage=15
+ * (COPY_DST|COPY_SRC|TEXTURE_BINDING|RENDER_ATTACHMENT) — {@code
+ * USAGE_TEXTURE_BINDING} est bien présent, donc échantillonnable DIRECTEMENT
+ * comme {@code Sampler0} en entrée de la 1ère passe de downsample, sans
+ * copie préalable dans une texture intermédiaire.
+ */
+public final class Blaze3DBlur {
+    private Blaze3DBlur() {}
+
+    /** Toggle via {@code /yf blurpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
+    public static volatile boolean testEnabled = false;
+
+    /** Panneau de test fixe (centré, 420×260, coins 24/24/4/4 pour vérifier le rayon par coin en même temps, teinte violette 25%) — dessiné en direct (PAS via {@link Blaze3DCore#enqueue}, même style que {@code UiSolidPipelinePoc}, POC autonome). */
+    public static void drawTestPanel(int vpWidth, int vpHeight) {
+        float w = 420f, h = 260f;
+        float x0 = (vpWidth - w) / 2f, y0 = (vpHeight - h) / 2f;
+        drawBlurredPanel(x0, y0, x0 + w, y0 + h, 24f, 24f, 4f, 4f, 4,
+            new UiColor(0.55f, 0.35f, 0.95f, 1f), 0.25f, vpWidth, vpHeight);
+    }
+
+    /**
+     * Passthrough Position+UV0 — pas de {@code DynamicTransforms}/{@code
+     * ColorModulator} (le flou ne module aucune couleur, juste un
+     * échantillonnage texture), volontairement plus minimal que {@link
+     * Blaze3DCore#HOME_VERTEX_SRC}. Attributs {@code Color}/{@code UV2}
+     * présents dans le {@code VertexFormat} copié (format commun à tout le
+     * moteur, voir {@link ShaderPipelineFactory#buildPipeline}) mais non
+     * déclarés ici — GLSL ignore silencieusement un attribut de sommet non
+     * lu par le shader, même pattern déjà utilisé par {@code
+     * GRADIENT_VERTEX_SRC}.
+     */
+    private static final String BLUR_VERTEX_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform Projection {\n" +
+        "    mat4 ProjMat;\n" +
+        "};\n" +
+        "in vec3 Position;\n" +
+        "in vec2 UV0;\n" +
+        "out vec2 texCoord0;\n" +
+        "void main() {\n" +
+        "    gl_Position = ProjMat * vec4(Position, 1.0);\n" +
+        "    texCoord0 = UV0;\n" +
+        "}\n";
+
+    /**
+     * Filtre de downsample dual-Kawase, 5 échantillons (centre ×4 + 4 coins
+     * diagonaux) — {@code u_TexelSize} = taille d'un texel de la texture
+     * SOURCE (celle qu'on échantillonne, PAS la destination).
+     */
+    private static final String BLUR_DOWN_FRAGMENT_SRC =
+        "#version 330\n" +
+        "uniform sampler2D Sampler0;\n" +
+        "layout(std140) uniform BlurParams {\n" +
+        "    vec4 u_TexelSize;\n" +
+        "};\n" +
+        "in vec2 texCoord0;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 halfpixel = u_TexelSize.xy * 0.5;\n" +
+        "    vec2 uv = texCoord0;\n" +
+        "    vec4 sum = texture(Sampler0, uv) * 4.0;\n" +
+        "    sum += texture(Sampler0, uv - halfpixel);\n" +
+        "    sum += texture(Sampler0, uv + halfpixel);\n" +
+        "    sum += texture(Sampler0, uv + vec2(halfpixel.x, -halfpixel.y));\n" +
+        "    sum += texture(Sampler0, uv - vec2(halfpixel.x, -halfpixel.y));\n" +
+        "    fragColor = sum / 8.0;\n" +
+        "}\n";
+
+    /**
+     * Filtre d'upsample dual-Kawase, 8 échantillons pondérés (motif "tente")
+     * — {@code u_TexelSize} = taille d'un texel de la texture SOURCE (le
+     * niveau plus petit qu'on remonte).
+     */
+    private static final String BLUR_UP_FRAGMENT_SRC =
+        "#version 330\n" +
+        "uniform sampler2D Sampler0;\n" +
+        "layout(std140) uniform BlurParams {\n" +
+        "    vec4 u_TexelSize;\n" +
+        "};\n" +
+        "in vec2 texCoord0;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 halfpixel = u_TexelSize.xy * 0.5;\n" +
+        "    vec2 uv = texCoord0;\n" +
+        "    vec4 sum = texture(Sampler0, uv + vec2(-halfpixel.x * 2.0, 0.0));\n" +
+        "    sum += texture(Sampler0, uv + vec2(-halfpixel.x, halfpixel.y)) * 2.0;\n" +
+        "    sum += texture(Sampler0, uv + vec2(0.0, halfpixel.y * 2.0));\n" +
+        "    sum += texture(Sampler0, uv + vec2(halfpixel.x, halfpixel.y)) * 2.0;\n" +
+        "    sum += texture(Sampler0, uv + vec2(halfpixel.x * 2.0, 0.0));\n" +
+        "    sum += texture(Sampler0, uv + vec2(halfpixel.x, -halfpixel.y)) * 2.0;\n" +
+        "    sum += texture(Sampler0, uv + vec2(0.0, -halfpixel.y * 2.0));\n" +
+        "    sum += texture(Sampler0, uv + vec2(-halfpixel.x, -halfpixel.y)) * 2.0;\n" +
+        "    fragColor = sum / 12.0;\n" +
+        "}\n";
+
+    /**
+     * Composite final : même formule SDF boîte-arrondie à rayon par coin que
+     * {@link Blaze3DCore#RECT_FRAGMENT_SRC} (dupliquée volontairement — ce
+     * pipeline a des uniforms différents, {@code BlurCompositeParams} au lieu
+     * d'aucun sampler, pas de raison de complexifier {@code RECT_FRAGMENT_SRC}
+     * partagé pour ce seul cas), + échantillonnage du fond flouté (UV =
+     * position écran normalisée) teinté par {@code u_TintAndStrength}.
+     */
+    private static final String BLUR_COMPOSITE_FRAGMENT_SRC =
+        "#version 330\n" +
+        "uniform sampler2D Sampler0;\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform RectParams {\n" +
+        "    vec4 u_Rect;\n" +
+        "    vec4 u_CornerRadii;\n" +
+        "};\n" +
+        "layout(std140) uniform BlurCompositeParams {\n" +
+        "    vec4 u_ScreenSize;\n" +
+        "    vec4 u_TintAndStrength;\n" +
+        "};\n" +
+        "in vec4 vertexColor;\n" +
+        "in vec2 fragPos;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 p = fragPos - center;\n" +
+        "    float radius = (p.x > 0.0)\n" +
+        "        ? ((p.y < 0.0) ? u_CornerRadii.y : u_CornerRadii.w)\n" +
+        "        : ((p.y < 0.0) ? u_CornerRadii.x : u_CornerRadii.z);\n" +
+        "    vec2 q = abs(p) - halfSize + vec2(radius);\n" +
+        "    float dist = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    vec2 screenUV = fragPos / u_ScreenSize.xy;\n" +
+        "    vec4 backdrop = texture(Sampler0, screenUV);\n" +
+        "    vec3 tinted = mix(backdrop.rgb, u_TintAndStrength.rgb, u_TintAndStrength.a);\n" +
+        "    vec4 color = vec4(tinted, 1.0) * vertexColor * ColorModulator;\n" +
+        "    color.a *= alpha;\n" +
+        "    if (color.a < 0.01) {\n" +
+        "        discard;\n" +
+        "    }\n" +
+        "    fragColor = color;\n" +
+        "}\n";
+
+    static Object downPipeline, downShaderSource, upPipeline, upShaderSource, compositePipeline, compositeShaderSource;
+    static Object blurParamsBuffer, compositeParamsBuffer;
+
+    static boolean resolveBlurPipeline() {
+        try {
+            Object downVId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_down.vsh");
+            Object downFId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_down.fsh");
+            downPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blur_down", downVId, downFId,
+                new String[]{ "Sampler0" }, new String[]{ "Projection", "BlurParams" });
+            downShaderSource = ShaderPipelineFactory.shaderSource(downVId, BLUR_VERTEX_SRC, downFId, BLUR_DOWN_FRAGMENT_SRC);
+
+            Object upVId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_up.vsh");
+            Object upFId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_up.fsh");
+            upPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blur_up", upVId, upFId,
+                new String[]{ "Sampler0" }, new String[]{ "Projection", "BlurParams" });
+            upShaderSource = ShaderPipelineFactory.shaderSource(upVId, BLUR_VERTEX_SRC, upFId, BLUR_UP_FRAGMENT_SRC);
+
+            // Vertex identique à RECT_VERTEX_SRC (Position+Color -> fragPos+vertexColor) — même source réutilisée, nouvel identifiant dédié.
+            Object compositeVId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_composite.vsh");
+            Object compositeFId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_composite.fsh");
+            compositePipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blur_composite", compositeVId, compositeFId,
+                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "RectParams", "BlurCompositeParams" });
+            compositeShaderSource = ShaderPipelineFactory.shaderSource(compositeVId, RECT_VERTEX_SRC, compositeFId, BLUR_COMPOSITE_FRAGMENT_SRC);
+
+            return downPipeline != null && upPipeline != null && compositePipeline != null;
+        } catch (Throwable t) {
+            Throwable cause = t;
+            while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+            LauncherLog.err("[UiRenderer] Blaze3DBlur: résolution pipeline échouée : " + t + " | cause réelle : " + cause);
+            return false;
+        }
+    }
+
+    static Object ensureBlurParamsBuffer(Object device) throws Exception {
+        if (blurParamsBuffer == null) {
+            java.util.function.Supplier<String> label = () -> "yuyuframe_blur_params";
+            blurParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 16L);
+        }
+        return blurParamsBuffer;
+    }
+
+    static Object writeBlurParams(Object device, Object encoder, float texelW, float texelH) throws Exception {
+        Object buffer = ensureBlurParamsBuffer(device);
+        ByteBuffer data = ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder());
+        data.putFloat(texelW).putFloat(texelH).putFloat(0f).putFloat(0f);
+        data.flip();
+        Object slice = mBufferSlice.invoke(buffer, 0L, 16L);
+        mWriteToBuffer.invoke(encoder, slice, data);
+        return slice;
+    }
+
+    static Object ensureCompositeParamsBuffer(Object device) throws Exception {
+        if (compositeParamsBuffer == null) {
+            java.util.function.Supplier<String> label = () -> "yuyuframe_blur_composite_params";
+            compositeParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 32L);
+        }
+        return compositeParamsBuffer;
+    }
+
+    static Object writeCompositeParams(Object device, Object encoder, float screenW, float screenH,
+                                        float tintR, float tintG, float tintB, float tintStrength) throws Exception {
+        Object buffer = ensureCompositeParamsBuffer(device);
+        ByteBuffer data = ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+        data.putFloat(screenW).putFloat(screenH).putFloat(0f).putFloat(0f);
+        data.putFloat(tintR).putFloat(tintG).putFloat(tintB).putFloat(tintStrength);
+        data.flip();
+        Object slice = mBufferSlice.invoke(buffer, 0L, 32L);
+        mWriteToBuffer.invoke(encoder, slice, data);
+        return slice;
+    }
+
+    // ── Chaîne de cibles de rendu hors-écran (downsample) ──────────────────
+    //
+    // 5 niveaux (÷2 à chaque étage) — suffisant pour un flou "verre dépoli"
+    // typique d'UI (pas besoin d'aller plus loin, l'upsample en tente lisse
+    // déjà énormément après 3-4 étages). Recréée seulement si le viewport
+    // change de taille (resize fenêtre/gui scale), PAS à chaque frame.
+
+    private static final int LEVELS = 5;
+    private static Object[] levelTexture = new Object[LEVELS];
+    private static Object[] levelView = new Object[LEVELS];
+    private static int[] levelW = new int[LEVELS], levelH = new int[LEVELS];
+    private static int chainVpWidth = -1, chainVpHeight = -1;
+    private static Object linearSampler;
+
+    private static void ensureChain(Object device, int vpWidth, int vpHeight) throws Exception {
+        if (chainVpWidth == vpWidth && chainVpHeight == vpHeight && levelTexture[0] != null) return;
+        for (int i = 0; i < LEVELS; i++) {
+            if (levelTexture[i] != null) {
+                try { mCloseTexture.invoke(levelTexture[i]); } catch (Throwable ignored) {}
+                levelTexture[i] = null;
+                levelView[i] = null;
+            }
+        }
+        int w = vpWidth, h = vpHeight;
+        int usage = usageTextureBinding | usageTextureRenderAttachment;
+        for (int i = 0; i < LEVELS; i++) {
+            w = Math.max(1, w / 2);
+            h = Math.max(1, h / 2);
+            levelW[i] = w;
+            levelH[i] = h;
+            final int idx = i;
+            java.util.function.Supplier<String> label = () -> "yuyuframe_blur_level_" + idx;
+            levelTexture[i] = mCreateTexture.invoke(device, label, usage, fieldTextureFormatRgba8, w, h, 1, 1);
+            levelView[i] = mCreateTextureView.invoke(device, levelTexture[i]);
+        }
+        if (linearSampler == null) {
+            linearSampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+        }
+        chainVpWidth = vpWidth;
+        chainVpHeight = vpHeight;
+        LauncherLog.ui(1, "[UiRenderer] Blaze3DBlur: chaîne de flou (re)créée, " + vpWidth + "x" + vpHeight + " -> " + LEVELS + " niveaux");
+    }
+
+    /** Dessine un quad plein écran-destination échantillonnant {@code srcView} avec le pipeline {@code pipeline}, écrit dans {@code dstView}. */
+    private static void drawBlurPass(Object device, Object encoder, Object pipeline, Object shaderSource,
+                                      Object srcView, Object srcSampler, int srcW, int srcH,
+                                      Object dstView, int dstW, int dstH, String debugLabel) throws Exception {
+        currentStage = "drawBlurPass(" + debugLabel + ")/vertices";
+        ByteBuffer verts = ensureStagingBuffer(4 * 28);
+        int rgba = 0xFFFFFFFF;
+        short light0 = 0, light1 = 0;
+        putVertexPCTL(verts, 0f, (float) dstH, rgba, 0f, 1f, light0, light1);
+        putVertexPCTL(verts, 0f, 0f, rgba, 0f, 0f, light0, light1);
+        putVertexPCTL(verts, (float) dstW, 0f, rgba, 1f, 0f, light0, light1);
+        putVertexPCTL(verts, (float) dstW, (float) dstH, rgba, 1f, 1f, light0, light1);
+        verts.flip();
+
+        currentStage = "drawBlurPass(" + debugLabel + ")/vertexBuffer";
+        Object vbo = ensureVertexBuffer(device, verts.remaining());
+        Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+        mWriteToBuffer.invoke(encoder, slice, verts);
+
+        currentStage = "drawBlurPass(" + debugLabel + ")/projection";
+        Object projectionBuf = ensureProjectionBuffer(device, encoder, dstW, dstH);
+        Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+        currentStage = "drawBlurPass(" + debugLabel + ")/params";
+        Object blurParamsSlice = writeBlurParams(device, encoder, 1f / srcW, 1f / srcH);
+
+        currentStage = "drawBlurPass(" + debugLabel + ")/renderPass";
+        java.util.function.Supplier<String> passLabel = () -> "yuyuframe_blur_" + debugLabel;
+        Object pass = mCreateRenderPass.invoke(encoder, passLabel, dstView, OptionalInt.empty());
+        try {
+            ShaderPipelineFactory.precompile(device, pipeline, shaderSource);
+            mSetPipeline.invoke(pass, pipeline);
+            if (mDisableScissor != null) mDisableScissor.invoke(pass);
+            mBindDefaultUniforms.invoke(null, pass);
+            mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+            mSetUniformSlice.invoke(pass, "BlurParams", blurParamsSlice);
+            mBindTexture.invoke(pass, "Sampler0", srcView, srcSampler);
+            mSetVertexBuffer.invoke(pass, 0, vbo);
+
+            if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+            Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
+            Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+            mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+            mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+        } finally {
+            mClosePass.invoke(pass);
+        }
+    }
+
+    /**
+     * Calcule la chaîne dual-Kawase complète pour le frame courant — à
+     * appeler UNE FOIS avant de composer un ou plusieurs panneaux "verre
+     * dépoli" (le résultat, {@code levelView[0]}, reste valide tant qu'aucun
+     * autre appel à cette méthode n'a lieu dans le même frame). {@code
+     * passes} borné à {@code [1, LEVELS]}.
+     */
+    private static boolean renderBlurChain(int vpWidth, int vpHeight, int passes) {
+        try {
+            currentStage = "renderBlurChain/device";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "renderBlurChain/encoder";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "renderBlurChain/ensureChain";
+            ensureChain(device, vpWidth, vpHeight);
+
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            Object sourceView = mGetColorAttachmentView.invoke(fb);
+            if (sourceView == null) return false;
+
+            int p = Math.max(1, Math.min(passes, LEVELS));
+
+            Object curView = sourceView;
+            int curW = vpWidth, curH = vpHeight;
+            for (int i = 0; i < p; i++) {
+                drawBlurPass(device, encoder, downPipeline, downShaderSource,
+                    curView, linearSampler, curW, curH, levelView[i], levelW[i], levelH[i], "down" + i);
+                curView = levelView[i];
+                curW = levelW[i];
+                curH = levelH[i];
+            }
+            for (int i = p - 1; i >= 1; i--) {
+                drawBlurPass(device, encoder, upPipeline, upShaderSource,
+                    levelView[i], linearSampler, levelW[i], levelH[i], levelView[i - 1], levelW[i - 1], levelH[i - 1], "up" + i);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] Blaze3DBlur.renderBlurChain a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Empile un panneau "verre dépoli" — fond = backdrop courant flouté
+     * (dual-Kawase, {@code passes} étages) teinté par {@code tint}/{@code
+     * tintStrength}, coins arrondis PAR COIN (même convention que {@link
+     * Blaze3DRect#queueRect}). Recalcule la chaîne de flou À CHAQUE appel
+     * (le contenu derrière le panneau peut changer d'une frame à l'autre) —
+     * si plusieurs panneaux floutés se chevauchent dans le même frame,
+     * chacun voit le vrai backdrop courant au moment de son dessin (ordre de
+     * la file {@link Blaze3DCore#enqueue}, cohérent avec le reste du moteur).
+     *
+     * @param passes        nombre d'étages downsample/upsample, {@code [1,5]} — plus haut = flou plus fort ET plus coûteux (chaque étage = 1 passe de rendu supplémentaire).
+     * @param tint          couleur de teinte mélangée par-dessus le flou (look "verre coloré") ; alpha ignoré, voir {@code tintStrength}.
+     * @param tintStrength  {@code [0,1]} — 0 = flou pur (aucune teinte), 1 = couleur plate (flou invisible).
+     */
+    public static void queueBlurredPanel(float x0, float y0, float x1, float y1,
+                                          float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                          int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        Blaze3DCore.enqueue(() -> drawBlurredPanel(x0, y0, x1, y1, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            passes, tint, tintStrength, vpWidth, vpHeight));
+    }
+
+    private static boolean drawBlurredPanel(float x0, float y0, float x1, float y1,
+                                             float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                             int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            currentStage = "drawBlurredPanel/renderBlurChain";
+            if (!renderBlurChain(vpWidth, vpHeight, passes)) return false;
+
+            currentStage = "minecraftClient(blurpanel)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(blurpanel)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(blurpanel)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            float maxR = Math.min((x1 - x0) / 2f, (y1 - y0) / 2f);
+            float rTL = Math.max(0f, Math.min(radiusTopLeft, maxR));
+            float rTR = Math.max(0f, Math.min(radiusTopRight, maxR));
+            float rBL = Math.max(0f, Math.min(radiusBottomLeft, maxR));
+            float rBR = Math.max(0f, Math.min(radiusBottomRight, maxR));
+
+            currentStage = "getDevice(blurpanel)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(blurpanel)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+
+            int rgba = 0xFFFFFFFF;
+            short light0 = 0, light1 = 0;
+            ByteBuffer verts = ensureStagingBuffer(4 * 28);
+            putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(blurpanel)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(blurpanel)";
+            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object colorMod = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
+            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(blurpanel)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "writeRectParams(blurpanel)";
+            Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, rTL, rTR, rBL, rBR);
+
+            currentStage = "writeCompositeParams(blurpanel)";
+            Object compositeParamsSlice = writeCompositeParams(device, encoder, (float) vpWidth, (float) vpHeight,
+                tint.r, tint.g, tint.b, tintStrength);
+
+            currentStage = "createRenderPass(blurpanel)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_blurpanel";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                currentStage = "setPipeline(blurpanel)";
+                ShaderPipelineFactory.precompile(device, compositePipeline, compositeShaderSource);
+                mSetPipeline.invoke(pass, compositePipeline);
+                if (mDisableScissor != null) mDisableScissor.invoke(pass);
+                mBindDefaultUniforms.invoke(null, pass);
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
+                mSetUniformSlice.invoke(pass, "BlurCompositeParams", compositeParamsSlice);
+                // Résultat final de la chaîne = levelView[0] (demi-résolution du
+                // dernier niveau upsamplé) — pas de passe supplémentaire pour
+                // remonter à la résolution native : l'échantillonnage linéaire
+                // au composite lisse déjà cet écart, gain négligeable pour un
+                // coût de passe en plus (même compromis que la plupart des
+                // implémentations dual-Kawase de blur Minecraft référencées).
+                mBindTexture.invoke(pass, "Sampler0", levelView[0], linearSampler);
+                currentStage = "setVertexBuffer(blurpanel)";
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+            } finally {
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] Blaze3DBlur.drawBlurredPanel a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+}

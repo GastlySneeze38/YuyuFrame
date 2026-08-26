@@ -50,6 +50,7 @@ final class YfCommands {
         ClientCommandRegistry.register(perf());
         ClientCommandRegistry.register(debug());
         ClientCommandRegistry.register(shaderPoc());
+        ClientCommandRegistry.register(blurPoc());
         ClientCommandRegistry.register(reloadConfig());
         ClientCommandRegistry.register(shaderReload());
     }
@@ -214,6 +215,19 @@ final class YfCommands {
                 UiSolidPipelinePoc.testEnabled = !UiSolidPipelinePoc.testEnabled;
                 LauncherLog.info("[YfCommands] Test pipeline shader maison : " + (UiSolidPipelinePoc.testEnabled ? "activé" : "désactivé")
                     + " (quad rose plein écran si le mécanisme fonctionne — voir logs en cas d'échec)");
+            }
+        };
+    }
+
+    private static ClientCommand blurPoc() {
+        return new ClientCommand() {
+            public String name() { return "yf blurpoc"; }
+            public String description() { return "Toggle un panneau de test flouté (dual-Kawase, roadmap Phase 5.1) centré à l'écran — voir Blaze3DBlur"; }
+            public void execute(String[] args) {
+                com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled;
+                LauncherLog.info("[YfCommands] Test panneau flouté : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled ? "activé" : "désactivé")
+                    + " (panneau violet translucide centré si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
     }

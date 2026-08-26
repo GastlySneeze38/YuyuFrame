@@ -67,7 +67,10 @@ public final class Blaze3DCore {
     static Object fieldFilterModeLinear, fieldTextureFormatRgba8,
         fieldNativeImageFormatRgba;
 
-    static int usageTextureBinding, usageTextureCopyDst, usageBufferVertex, usageBufferCopyDst, usageBufferUniform;
+    static int usageTextureBinding, usageTextureCopyDst, usageTextureRenderAttachment, usageBufferVertex, usageBufferCopyDst, usageBufferUniform;
+
+    /** Fermeture d'une {@code GpuTexture} (AutoCloseable, vérifié par javap) — utilisée par {@code Blaze3DBlur} pour libérer sa chaîne de cibles de rendu hors-écran quand le viewport change de taille. */
+    static Method mCloseTexture;
 
     static Method mMatrixSetOrtho, mMatrixGetFloatArray;
 
@@ -551,8 +554,9 @@ public final class Blaze3DCore {
             // juste ici que ça a réussi.
             boolean gradientPipelineOk = Blaze3DGradient.resolveGradientPipeline();
             boolean textPipelineOk = Blaze3DText.resolveTextPipeline();
+            boolean blurPipelineOk = Blaze3DBlur.resolveBlurPipeline();
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || !gradientPipelineOk || !textPipelineOk
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {
@@ -568,6 +572,15 @@ public final class Blaze3DCore {
             // différentes, même nom de champ) — bien résoudre celle de GpuTexture ici.
             usageTextureBinding = clsGpuTexture.getField("USAGE_TEXTURE_BINDING").getInt(null);
             usageTextureCopyDst = clsGpuTexture.getField("USAGE_COPY_DST").getInt(null);
+            // Vérifié par javap sur GpuTexture.class (jar client 26.1.2 réel) :
+            // USAGE_RENDER_ATTACHMENT existe bien, et MainTarget.allocateColorAttachment
+            // crée SA PROPRE texture couleur avec usage=15 (COPY_DST|COPY_SRC|
+            // TEXTURE_BINDING|RENDER_ATTACHMENT combinés) — confirme que le
+            // framebuffer principal du jeu est directement échantillonnable
+            // comme Sampler0 (TEXTURE_BINDING inclus), pas besoin d'une copie
+            // préalable pour alimenter la 1ère passe de downsample du flou.
+            usageTextureRenderAttachment = clsGpuTexture.getField("USAGE_RENDER_ATTACHMENT").getInt(null);
+            mCloseTexture = clsGpuTexture.getMethod("close");
             usageBufferVertex = clsGpuBuffer.getField("USAGE_VERTEX").getInt(null);
             usageBufferCopyDst = clsGpuBuffer.getField("USAGE_COPY_DST").getInt(null);
             usageBufferUniform = clsGpuBuffer.getField("USAGE_UNIFORM").getInt(null);
