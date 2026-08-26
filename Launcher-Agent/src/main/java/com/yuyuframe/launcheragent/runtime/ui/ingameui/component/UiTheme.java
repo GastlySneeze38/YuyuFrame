@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
-import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 
 /**
  * Palette centralisée style OneConfig (fond sombre, accent violet) —

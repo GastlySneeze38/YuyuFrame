@@ -1,4 +1,6 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.core;
+
+import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 
 /**
  * Marqueur implémenté par nos écrans custom (UiScreenBase, runtime.ui.ingameui)

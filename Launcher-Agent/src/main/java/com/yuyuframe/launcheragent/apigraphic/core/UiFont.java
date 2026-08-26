@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.core;
 
 import java.awt.Color;
 import java.awt.Font;

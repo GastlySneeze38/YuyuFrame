@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.core;
 
 /** Couleur RGBA simple, indépendante de toute lib externe (pas de OneColor/NanoVG). */
 public final class UiColor {

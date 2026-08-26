@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.debug;
 
 /**
  * État partagé de l'overlay de debug rendu (ROADMAP-agent.md Phase 4.5,

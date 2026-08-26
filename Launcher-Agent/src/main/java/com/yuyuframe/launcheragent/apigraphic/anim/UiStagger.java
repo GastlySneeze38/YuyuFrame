@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.anim;
 
 /**
  * Calcule un délai croissant par index — pour faire apparaître une LISTE

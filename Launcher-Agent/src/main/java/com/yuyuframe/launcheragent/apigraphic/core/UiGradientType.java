@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.core;
 
 /**
  * Type de dégradé multi-stop (roadmap Phase 5.1) — voir {@link UiRenderer#drawMultiStopGradientRect}.

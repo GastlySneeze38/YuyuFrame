@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.hud;
 
-import com.yuyuframe.launcheragent.apigraphic.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 

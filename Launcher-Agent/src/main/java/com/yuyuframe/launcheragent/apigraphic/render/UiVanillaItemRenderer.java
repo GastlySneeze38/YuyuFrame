@@ -1,5 +1,6 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.render;
 
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -14,12 +15,12 @@ import java.lang.reflect.Method;
  * vers le pipeline vanilla dans le projet, voir ArmorDurabilityModule pour
  * le premier appelant.
  */
-final class UiVanillaItemRenderer {
+public final class UiVanillaItemRenderer {
 
     private final UiRenderer owner;
     private final GlBridge gl;
 
-    UiVanillaItemRenderer(UiRenderer owner, GlBridge gl) {
+    public UiVanillaItemRenderer(UiRenderer owner, GlBridge gl) {
         this.owner = owner;
         this.gl = gl;
     }
@@ -100,7 +101,7 @@ final class UiVanillaItemRenderer {
      * trouvée) — mieux qu'une exception pour un appelant qui ferait juste
      * {@code framebufferPx / guiScale(vpWidth)}.
      */
-    static float guiScale(int vpWidth) {
+    public static float guiScale(int vpWidth) {
         long now = System.nanoTime();
         if (vpWidth == cachedGuiScaleVpWidth && (now - cachedGuiScaleAtNanos) < GUI_SCALE_CACHE_NANOS) {
             return cachedGuiScale;
@@ -119,7 +120,7 @@ final class UiVanillaItemRenderer {
         }
     }
 
-    void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
+    public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
         drawVanillaItemIcon(itemStack, x, y, size, vpWidth, vpHeight, false);
     }
 
@@ -147,7 +148,7 @@ final class UiVanillaItemRenderer {
      * #drawVanillaContainerTextureModernImmediate} — dessin synchrone, pas de
      * file d'attente. 1.8.9 : no-op silencieux, aucun appelant actuel ne le cible.
      */
-    void drawVanillaContainerTexture(String texturePath, float x, float y, float w, float h,
+    public void drawVanillaContainerTexture(String texturePath, float x, float y, float w, float h,
                                              float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
         if (!owner.isModern()) return;
         if (modernUsesDeferredGuiRenderer()) {
@@ -237,7 +238,7 @@ final class UiVanillaItemRenderer {
      * instance reconstruite). Voir la javadoc de
      * {@link #drawVanillaContainerTextureModernImmediate} pour le pourquoi.
      */
-    void flushPendingImmediateGuiBlits(Object realDrawContext) {
+    public void flushPendingImmediateGuiBlits(Object realDrawContext) {
         java.util.List<PendingGuiBlit> batchBlits;
         synchronized (pendingModernGuiBlits) {
             if (pendingModernGuiBlits.isEmpty()) return;
@@ -308,7 +309,7 @@ final class UiVanillaItemRenderer {
      *     sur le bracket 1.20.4 (pas de drawItemBar dans ses mappings Yarn —
      *     résolution échoue proprement, aucune barre dessinée, pas d'erreur).
      */
-    void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
+    public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
         if (itemStack == null) return;
         if (owner.isModern()) {
             drawVanillaItemIconModern(itemStack, x, y, size, vpWidth, vpHeight, withDurabilityBar);
@@ -728,7 +729,7 @@ final class UiVanillaItemRenderer {
      * lui-même — on ne fait qu'y AJOUTER nos propres commandes de dessin,
      * flushées par vanilla via SON PROPRE mécanisme, pas le nôtre.
      */
-    void flushPendingImmediateItemIcons(Object realDrawContext) {
+    public void flushPendingImmediateItemIcons(Object realDrawContext) {
         java.util.List<PendingItemIcon> batch;
         synchronized (pendingModernItemIcons) {
             if (pendingModernItemIcons.isEmpty()) return;
@@ -831,7 +832,7 @@ final class UiVanillaItemRenderer {
      * GameRenderer.render() en HEAD ajoutait nos icônes AVANT que
      * GuiRenderState.clear() ne les efface).
      */
-    static void flushPendingModernItemIcons(Object gameRenderer) {
+    public static void flushPendingModernItemIcons(Object gameRenderer) {
         try {
             // BUG TROUVÉ (test utilisateur, 26.1.2) : résoudre GameRenderer
             // par NOM (McReflect.yarnClass/Class.forName + classloader du
@@ -926,7 +927,7 @@ final class UiVanillaItemRenderer {
      * environnement) — voir les logs "[UiRenderer] itemIconModern" en cas
      * d'icône toujours invisible malgré ce correctif.
      */
-    static void flushPendingModernItemIconsFromState(Object guiState) {
+    public static void flushPendingModernItemIconsFromState(Object guiState) {
         if (guiState == null) return;
         flushIntoGuiState(guiState, guiState.getClass().getClassLoader());
     }
@@ -964,7 +965,7 @@ final class UiVanillaItemRenderer {
      * {@link #flushPendingModernItemIconsFromState} directement) avant de
      * déléguer à {@link #flushIntoGuiState}.
      */
-    static void flushPendingModernItemIconsFromGuiRenderer(Object guiRenderer) {
+    public static void flushPendingModernItemIconsFromGuiRenderer(Object guiRenderer) {
         if (guiRenderer == null) return;
         try {
             if (guiStateFieldModern == null) {

@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.anim;
 
 /**
  * Fondu d'entrée pour du contenu qui arrive de façon ASYNCHRONE (icône

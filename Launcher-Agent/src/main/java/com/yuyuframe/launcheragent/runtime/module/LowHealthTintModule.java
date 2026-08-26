@@ -5,7 +5,7 @@ import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;

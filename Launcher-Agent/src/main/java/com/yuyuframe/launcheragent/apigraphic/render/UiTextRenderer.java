@@ -1,5 +1,8 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.render;
 
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -15,12 +18,12 @@ import java.util.Map;
  * Shader SDF dédié (voir TEXT_FRAGMENT_SRC) : l'atlas encode une distance
  * signée au bord du glyphe dans son canal alpha, pas une couverture directe.
  */
-final class UiTextRenderer {
+public final class UiTextRenderer {
 
     private final UiRenderer owner;
     private final GlBridge gl;
 
-    UiTextRenderer(UiRenderer owner, GlBridge gl) {
+    public UiTextRenderer(UiRenderer owner, GlBridge gl) {
         this.owner = owner;
         this.gl = gl;
     }
@@ -164,9 +167,9 @@ final class UiTextRenderer {
         }
     }
 
-    float textWidth(String text, float scale) { return UiFont.REGULAR.textWidth(text, scale); }
+    public float textWidth(String text, float scale) { return UiFont.REGULAR.textWidth(text, scale); }
 
-    float textWidth(UiFont font, String text, float scale) { return font.textWidth(text, scale); }
+    public float textWidth(UiFont font, String text, float scale) { return font.textWidth(text, scale); }
 
     /**
      * Tronque {@code text} (avec "...") pour tenir dans {@code maxWidth}
@@ -180,7 +183,7 @@ final class UiTextRenderer {
      * spécifique à cet écran) — devenue un besoin partagé, pas un utilitaire
      * propre à Modrinth.
      */
-    String truncate(String text, float scale, float maxWidth) {
+    public String truncate(String text, float scale, float maxWidth) {
         if (text == null) return "";
         if (maxWidth <= 0 || textWidth(text, scale) <= maxWidth) return text;
         String ellipsis = "...";
@@ -189,7 +192,7 @@ final class UiTextRenderer {
         return len <= 0 ? ellipsis : text.substring(0, len) + ellipsis;
     }
 
-    void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
+    public void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         drawText(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight);
     }
 
@@ -202,7 +205,7 @@ final class UiTextRenderer {
      * au lieu d'un bord net), d'où ce programme séparé de celui de
      * drawRoundedRect.
      */
-    void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
+    public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
                           int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) return;
         if (owner.isModern()) {
@@ -222,14 +225,14 @@ final class UiTextRenderer {
      * inclus (contrairement à drawGlow/drawSkeletonShimmer, qui eux
      * dépendent de {@link UiPrimitiveRenderer#drawFx}).
      */
-    void drawTextShadowed(UiFont font, String text, float x, float y, UiColor color, UiColor shadowColor,
+    public void drawTextShadowed(UiFont font, String text, float x, float y, UiColor color, UiColor shadowColor,
                                   float shadowOffsetX, float shadowOffsetY, float scale, int vpWidth, int vpHeight) {
         if (text == null || text.isEmpty()) return;
         drawText(font, text, x + shadowOffsetX, y + shadowOffsetY, shadowColor, scale, vpWidth, vpHeight);
         drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
     }
 
-    void drawTextShadowed(String text, float x, float y, UiColor color, UiColor shadowColor,
+    public void drawTextShadowed(String text, float x, float y, UiColor color, UiColor shadowColor,
                                   float scale, int vpWidth, int vpHeight) {
         // Décalage 1px/1px à l'échelle du texte — convention "drop shadow"
         // standard (Minecraft vanilla utilise le même décalage relatif pour

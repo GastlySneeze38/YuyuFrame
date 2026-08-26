@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.command;
 
 import com.yuyuframe.launcheragent.agent.LauncherAgent;
-import com.yuyuframe.launcheragent.apigraphic.DebugOverlayState;
-import com.yuyuframe.launcheragent.apigraphic.DevShaderLoader;
+import com.yuyuframe.launcheragent.apigraphic.debug.DebugOverlayState;
+import com.yuyuframe.launcheragent.apigraphic.debug.DevShaderLoader;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.GlobalUiRenderBridge261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;

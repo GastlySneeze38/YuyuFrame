@@ -7,10 +7,10 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
-import com.yuyuframe.launcheragent.apigraphic.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiColorPicker;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiDropdown;
@@ -218,7 +218,7 @@ public final class ConfigScreenBuilder {
         private final String label;
         private final String actionLabel;
         private final Runnable action;
-        private final com.yuyuframe.launcheragent.apigraphic.UiAnimatedFloat actionHoverAnim;
+        private final com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat actionHoverAnim;
         // Toggle intégré (voir sectionHeaderWithToggle) — MUTUELLEMENT
         // EXCLUSIF avec action/actionLabel (jamais les deux en même temps
         // dans l'usage actuel) : réutilise le VRAI widget UiToggle (pas une
@@ -234,7 +234,7 @@ public final class ConfigScreenBuilder {
             this.actionLabel = actionLabel;
             this.action = action;
             this.actionHoverAnim = action != null
-                ? new com.yuyuframe.launcheragent.apigraphic.UiAnimatedFloat(0f, 16f) : null;
+                ? new com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat(0f, 16f) : null;
             this.toggle = null;
         }
 

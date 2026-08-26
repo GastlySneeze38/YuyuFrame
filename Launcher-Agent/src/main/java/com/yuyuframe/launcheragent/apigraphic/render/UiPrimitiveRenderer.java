@@ -1,5 +1,8 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.render;
 
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
 import java.lang.reflect.Method;
@@ -13,12 +16,12 @@ import java.util.Map;
  * (voir sa javadoc de classe pour l'architecture générale à 2 pipelines et le
  * pourquoi de la technique, même approche qu'Elementa/UIRoundedRectangle.kt).
  */
-final class UiPrimitiveRenderer {
+public final class UiPrimitiveRenderer {
 
     private final UiRenderer owner;
     private final GlBridge gl;
 
-    UiPrimitiveRenderer(UiRenderer owner, GlBridge gl) {
+    public UiPrimitiveRenderer(UiRenderer owner, GlBridge gl) {
         this.owner = owner;
         this.gl = gl;
     }
@@ -822,7 +825,7 @@ final class UiPrimitiveRenderer {
     }
 
     /** {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se replier sur une approximation par bandes. */
-    boolean isVignetteAvailable() {
+    public boolean isVignetteAvailable() {
         if (owner.isModern()) {
             ensureVignetteShaderInitModern();
             return !vignetteInitFailedModern;
@@ -837,7 +840,7 @@ final class UiPrimitiveRenderer {
      * pixels de distance du bord le plus proche). Voir VIGNETTE_FRAGMENT_SRC :
      * un seul quad, alpha calculé par pixel côté GPU, aucun palier possible.
      */
-    void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+    public void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
         if (vSize <= 0f) return;
         if (owner.isModern()) {
             drawEdgeVignetteModern(edgeColor, vSize, vpWidth, vpHeight);
@@ -991,7 +994,7 @@ final class UiPrimitiveRenderer {
      *                 qui, lui, pilote un vrai widget d'écran vanilla — ici
      *                 on reste dans NOTRE pipeline, version-générique).
      */
-    void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
+    public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
         drawIcon(cacheKey, img, x, y, size, size, 1f, vpWidth, vpHeight);
     }
 
@@ -1005,7 +1008,7 @@ final class UiPrimitiveRenderer {
      * — seule cette méthode, et les deux branches GL brut ci-dessous,
      * forçaient artificiellement un carré via un unique paramètre {@code size}.
      */
-    void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h, int vpWidth, int vpHeight) {
+    public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h, int vpWidth, int vpHeight) {
         drawIcon(cacheKey, img, x, y, w, h, 1f, vpWidth, vpHeight);
     }
 
@@ -1019,7 +1022,7 @@ final class UiPrimitiveRenderer {
      * (voir ICON_FRAGMENT_SRC/_MODERN) et le 4ᵉ composant du ColorModulator
      * côté Blaze3D (voir {@code UiTextBlaze3D#queueIcon}).
      */
-    void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
+    public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                           float alpha, int vpWidth, int vpHeight) {
         if (img == null) return;
         if (UiTextBlaze3D.isAvailable()) {
@@ -1178,7 +1181,7 @@ final class UiPrimitiveRenderer {
      *                 de la taille du rect dessiné.
      * @param vpHeight idem, hauteur totale du viewport.
      */
-    void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
+    public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
         if (UiTextBlaze3D.isAvailable()) {
             UiTextBlaze3D.queueRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
@@ -1193,7 +1196,7 @@ final class UiPrimitiveRenderer {
 
     /** @deprecated identique à {@link #drawRoundedRect} depuis que celui-ci route par Blaze3D sur era E — gardé pour ne pas retoucher HudPanelRenderer/KeystrokesModule. */
     @Deprecated
-    void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
+    public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                     int vpWidth, int vpHeight) {
         drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
@@ -1211,7 +1214,7 @@ final class UiPrimitiveRenderer {
      *               rétractée à l'intérieur) — 0 = ombre calée exactement sur
      *               les bords de {@code (x1,y1)-(x2,y2)}.
      */
-    void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
+    public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
                             UiColor color, int vpWidth, int vpHeight) {
         // BUG TROUVÉ (carte de mod entièrement noire) : cette ombre est
         // dessinée AVANT le fond de la carte dans le code appelant (pour
@@ -1232,7 +1235,7 @@ final class UiPrimitiveRenderer {
     }
 
     /** Contour creux (anneau) d'épaisseur {@code borderWidth}, coins arrondis — le rect lui-même reste transparent (à dessiner par-dessus un fond déjà posé avec {@link #drawRoundedRect}, pas à sa place). */
-    void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
+    public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
                                        UiColor color, int vpWidth, int vpHeight) {
         drawFx(x1, y1, x2, y2, radius, 0f, borderWidth, color, color, false, vpWidth, vpHeight);
     }
@@ -1245,7 +1248,7 @@ final class UiPrimitiveRenderer {
      * invisible) : couleur portée PAR SOMMET (interpolée par le GPU),
      * ColorModulator neutre, voir UiTextBlaze3D#drawGradientRect.
      */
-    void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
+    public void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
                                   UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
         if (UiTextBlaze3D.isAvailable()) {
             UiTextBlaze3D.queueGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
@@ -1270,7 +1273,7 @@ final class UiPrimitiveRenderer {
      * GLSL — jamais routé sur ce pipeline, voir l'historique dans
      * UiColorPicker pour ce qui a été corrigé.
      */
-    void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
+    public void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
                                     UiColor colorBottomLeft, UiColor colorBottomRight,
                                     UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
         if (UiTextBlaze3D.isAvailable()) {
@@ -1371,7 +1374,7 @@ final class UiPrimitiveRenderer {
      * (voir {@link UiTextBlaze3D#queueMultiStopGradientRect}), puis moderne/
      * legacy selon {@link UiRenderer#isModern()}.
      */
-    void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
+    public void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
                                     UiGradientType type, float startX, float startY, float endX, float endY,
                                     UiColor[] stopColors, float[] stopPositions, int vpWidth, int vpHeight) {
         if (stopColors == null || stopPositions == null || stopColors.length == 0
@@ -1504,7 +1507,7 @@ final class UiPrimitiveRenderer {
      * donc silencieusement de la même absence de rendu sur ce bracket,
      * jusqu'à ce qu'une solution Blaze3D dédiée existe (hors scope ici).
      */
-    void drawGlow(float x1, float y1, float x2, float y2, float radius, float intensity, UiColor color,
+    public void drawGlow(float x1, float y1, float x2, float y2, float radius, float intensity, UiColor color,
                           int vpWidth, int vpHeight) {
         int layers = 3;
         for (int i = 0; i < layers; i++) {
@@ -1529,7 +1532,7 @@ final class UiPrimitiveRenderer {
      * les 3 pipelines, Blaze3D era E inclus, sans limitation contrairement à
      * {@link #drawGlow}.
      */
-    void drawRipple(float centerX, float centerY, float maxRadius, float progress01, float startAlpha,
+    public void drawRipple(float centerX, float centerY, float maxRadius, float progress01, float startAlpha,
                             UiColor color, int vpWidth, int vpHeight) {
         float p = Math.max(0f, Math.min(1f, progress01));
         float r = maxRadius * p;
@@ -1556,7 +1559,7 @@ final class UiPrimitiveRenderer {
      * visible sur ce bracket (fond plat correct), seul le balayage lumineux
      * n'apparaît pas tant qu'aucune solution de flou Blaze3D n'existe.
      */
-    void drawSkeletonShimmer(float x1, float y1, float x2, float y2, float radius, float phase01,
+    public void drawSkeletonShimmer(float x1, float y1, float x2, float y2, float radius, float phase01,
                                      UiColor baseColor, UiColor highlightColor, int vpWidth, int vpHeight) {
         drawRoundedRect(x1, y1, x2, y2, radius, baseColor, vpWidth, vpHeight);
         float width = x2 - x1;
@@ -1582,7 +1585,7 @@ final class UiPrimitiveRenderer {
      *                    l'appelant (ex. {@code (System.currentTimeMillis() %
      *                    periodMs) / (float) periodMs * 360f}).
      */
-    void drawSpinner(float centerX, float centerY, float radius, float dotRadius, float rotationDeg,
+    public void drawSpinner(float centerX, float centerY, float radius, float dotRadius, float rotationDeg,
                              UiColor color, int vpWidth, int vpHeight) {
         int dotCount = 8;
         for (int i = 0; i < dotCount; i++) {

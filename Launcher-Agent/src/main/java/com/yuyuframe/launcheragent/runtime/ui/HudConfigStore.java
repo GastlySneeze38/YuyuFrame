@@ -5,7 +5,7 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
-import com.yuyuframe.launcheragent.apigraphic.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudAnchor;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;

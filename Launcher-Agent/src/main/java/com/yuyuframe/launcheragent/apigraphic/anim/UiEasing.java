@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.anim;
 
 /**
  * Fonctions d'accélération standard — transforment une progression LINÉAIRE

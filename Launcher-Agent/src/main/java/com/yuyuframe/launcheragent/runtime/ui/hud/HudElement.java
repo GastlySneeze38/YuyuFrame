@@ -122,7 +122,7 @@ public class HudElement {
      * reste — ex: la valeur numérique — reste TEXT_PRIMARY) ; sinon la ligne
      * entière est peinte dans cette couleur.
      */
-    public com.yuyuframe.launcheragent.apigraphic.UiColor textColor;
+    public com.yuyuframe.launcheragent.apigraphic.core.UiColor textColor;
     /** Suffixe littéral à isoler pour la coloration (ex: " FPS", " ms") — voir {@link #textColor}. */
     public String accentSuffix;
 
@@ -270,7 +270,7 @@ public class HudElement {
         }
         float contentW = 0f;
         for (String line : lines) {
-            contentW = Math.max(contentW, com.yuyuframe.launcheragent.apigraphic.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
+            contentW = Math.max(contentW, com.yuyuframe.launcheragent.apigraphic.core.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
         }
         float naturalH = lines.length * HudPanelRenderer.LINE_H + 2 * padY;
         float naturalW = contentW + 2 * padX;

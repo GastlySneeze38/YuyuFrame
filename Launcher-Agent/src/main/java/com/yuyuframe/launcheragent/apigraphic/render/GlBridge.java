@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.render;
 
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 
@@ -14,10 +14,10 @@ import java.util.Map;
  * respective) + capture/restauration d'état legacy — extrait de UiRenderer
  * (voir sa javadoc de classe pour l'architecture générale à 2 pipelines).
  */
-final class GlBridge {
+public final class GlBridge {
 
     private final Map<String, Method> glMethods = new HashMap<>();
-    ClassLoader gameClassLoader;
+    public ClassLoader gameClassLoader;
 
     private Method gl(String cls, String method, Class<?>... params) throws Exception {
         String key = cls + "#" + method + java.util.Arrays.toString(params);
@@ -47,38 +47,38 @@ final class GlBridge {
         return first;
     }
 
-    int glCreateShader(int type) throws Exception {
+    public int glCreateShader(int type) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL20", "glCreateShader", int.class).invoke(null, type);
     }
-    void glShaderSource(int shader, String src) throws Exception {
+    public void glShaderSource(int shader, String src) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glShaderSource", int.class, CharSequence.class).invoke(null, shader, src);
     }
-    void glCompileShader(int shader) throws Exception {
+    public void glCompileShader(int shader) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glCompileShader", int.class).invoke(null, shader);
     }
-    int glCreateProgram() throws Exception {
+    public int glCreateProgram() throws Exception {
         return (int) gl("org.lwjgl.opengl.GL20", "glCreateProgram").invoke(null);
     }
-    void glAttachShader(int program, int shader) throws Exception {
+    public void glAttachShader(int program, int shader) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glAttachShader", int.class, int.class).invoke(null, program, shader);
     }
-    void glLinkProgram(int program) throws Exception {
+    public void glLinkProgram(int program) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glLinkProgram", int.class).invoke(null, program);
     }
     int glGetUniformLocation(int program, String name) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL20", "glGetUniformLocation", int.class, CharSequence.class)
             .invoke(null, program, name);
     }
-    int glGetShaderi(int shader, int pname) throws Exception {
+    public int glGetShaderi(int shader, int pname) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL20", "glGetShaderi", int.class, int.class).invoke(null, shader, pname);
     }
-    String glGetShaderInfoLog(int shader) throws Exception {
+    public String glGetShaderInfoLog(int shader) throws Exception {
         return (String) gl("org.lwjgl.opengl.GL20", "glGetShaderInfoLog", int.class).invoke(null, shader);
     }
-    int glGetProgrami(int program, int pname) throws Exception {
+    public int glGetProgrami(int program, int pname) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL20", "glGetProgrami", int.class, int.class).invoke(null, program, pname);
     }
-    String glGetProgramInfoLog(int program) throws Exception {
+    public String glGetProgramInfoLog(int program) throws Exception {
         return (String) gl("org.lwjgl.opengl.GL20", "glGetProgramInfoLog", int.class).invoke(null, program);
     }
     void glUseProgram(int program) throws Exception {
@@ -110,10 +110,10 @@ final class GlBridge {
     void glEnd() throws Exception {
         gl("org.lwjgl.opengl.GL11", "glEnd").invoke(null);
     }
-    void glEnable(int cap) throws Exception {
+    public void glEnable(int cap) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glEnable", int.class).invoke(null, cap);
     }
-    void glDisable(int cap) throws Exception {
+    public void glDisable(int cap) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glDisable", int.class).invoke(null, cap);
     }
     boolean glIsEnabled(int cap) throws Exception {
@@ -362,7 +362,7 @@ final class GlBridge {
             int.class, int.class, int.class, java.nio.ByteBuffer.class)
             .invoke(null, target, level, internalFormat, width, height, border, format, type, pixels);
     }
-    void glScissor(int x, int y, int w, int h) throws Exception {
+    public void glScissor(int x, int y, int w, int h) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glScissor", int.class, int.class, int.class, int.class).invoke(null, x, y, w, h);
     }
     void glGenerateMipmap(int target) throws Exception {
@@ -374,41 +374,41 @@ final class GlBridge {
 
     // ── GL réflexion — pipeline MODERNE uniquement (VAO/VBO, GL15/GL20/GL30) ──
 
-    void glDrawArrays(int mode, int first, int count) throws Exception {
+    public void glDrawArrays(int mode, int first, int count) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glDrawArrays", int.class, int.class, int.class).invoke(null, mode, first, count);
     }
-    int glGetInteger(int pname) throws Exception {
+    public int glGetInteger(int pname) throws Exception {
         return (int) gl("org.lwjgl.opengl.GL11", "glGetInteger", int.class).invoke(null, pname);
     }
-    int glGenVertexArrays() throws Exception {
+    public int glGenVertexArrays() throws Exception {
         return (int) gl("org.lwjgl.opengl.GL30", "glGenVertexArrays").invoke(null);
     }
-    void glBindVertexArray(int array) throws Exception {
+    public void glBindVertexArray(int array) throws Exception {
         gl("org.lwjgl.opengl.GL30", "glBindVertexArray", int.class).invoke(null, array);
     }
-    int glGenBuffers() throws Exception {
+    public int glGenBuffers() throws Exception {
         return (int) gl("org.lwjgl.opengl.GL15", "glGenBuffers").invoke(null);
     }
-    void glBindBuffer(int target, int buffer) throws Exception {
+    public void glBindBuffer(int target, int buffer) throws Exception {
         gl("org.lwjgl.opengl.GL15", "glBindBuffer", int.class, int.class).invoke(null, target, buffer);
     }
-    void glBufferData(int target, FloatBuffer data, int usage) throws Exception {
+    public void glBufferData(int target, FloatBuffer data, int usage) throws Exception {
         gl("org.lwjgl.opengl.GL15", "glBufferData", int.class, FloatBuffer.class, int.class).invoke(null, target, data, usage);
     }
-    void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, long pointer) throws Exception {
+    public void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, long pointer) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glVertexAttribPointer", int.class, int.class, int.class, boolean.class, int.class, long.class)
             .invoke(null, index, size, type, normalized, stride, pointer);
     }
-    void glEnableVertexAttribArray(int index) throws Exception {
+    public void glEnableVertexAttribArray(int index) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glEnableVertexAttribArray", int.class).invoke(null, index);
     }
-    void glBindAttribLocation(int program, int index, String name) throws Exception {
+    public void glBindAttribLocation(int program, int index, String name) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glBindAttribLocation", int.class, int.class, CharSequence.class).invoke(null, program, index, name);
     }
-    void glUniformMatrix4fv(int location, boolean transpose, FloatBuffer value) throws Exception {
+    public void glUniformMatrix4fv(int location, boolean transpose, FloatBuffer value) throws Exception {
         gl("org.lwjgl.opengl.GL20", "glUniformMatrix4fv", int.class, boolean.class, FloatBuffer.class).invoke(null, location, transpose, value);
     }
-    void glReadPixels(int x, int y, int width, int height, int format, int type, java.nio.ByteBuffer pixels) throws Exception {
+    public void glReadPixels(int x, int y, int width, int height, int format, int type, java.nio.ByteBuffer pixels) throws Exception {
         gl("org.lwjgl.opengl.GL11", "glReadPixels", int.class, int.class, int.class, int.class, int.class, int.class, java.nio.ByteBuffer.class)
             .invoke(null, x, y, width, height, format, type, pixels);
     }

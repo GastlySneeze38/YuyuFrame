@@ -1,5 +1,12 @@
 package com.yuyuframe.launcheragent.apigraphic;
 
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
+import com.yuyuframe.launcheragent.apigraphic.render.GlBridge;
+import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
+import com.yuyuframe.launcheragent.apigraphic.render.UiTextRenderer;
+import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
 
@@ -57,7 +64,7 @@ public final class UiRenderer {
     // 4 floats/sommet, texCoord ignoré par les shaders rect/vignette).
     // ══════════════════════════════════════════════════════════════════════
 
-    static final String VERTEX_SRC_MODERN =
+    public static final String VERTEX_SRC_MODERN =
         "#version 150\n" +
         "in vec2 aPos;\n" +
         "in vec2 aTexCoord;\n" +
@@ -138,7 +145,7 @@ public final class UiRenderer {
         }
     }
 
-    int compileModernProgram(String vertexSrc, String fragmentSrc) throws Exception {
+    public int compileModernProgram(String vertexSrc, String fragmentSrc) throws Exception {
         int vsh = glBridge.glCreateShader(0x8B31); // GL_VERTEX_SHADER
         glBridge.glShaderSource(vsh, vertexSrc);
         glBridge.glCompileShader(vsh);
@@ -160,10 +167,10 @@ public final class UiRenderer {
     }
 
     /** {@code true} si l'init a échoué (VAO/VBO indisponibles) — voir {@link #ensureModernBuffersInit()}. */
-    boolean modernBuffersInitFailed() { return modernBuffersInitFailed; }
+    public boolean modernBuffersInitFailed() { return modernBuffersInitFailed; }
 
     /** VAO + VBO partagés — layout fixe : vec2 position (loc 0) + vec2 texCoord (loc 1), 4 floats/sommet. */
-    void ensureModernBuffersInit() {
+    public void ensureModernBuffersInit() {
         if (modernVao != -1 || modernBuffersInitFailed) return;
         try {
             LauncherLog.info("[UiRenderer] DIAG3: avant glGenVertexArrays");
@@ -204,17 +211,17 @@ public final class UiRenderer {
     }
 
     /** Direct, comme exigé par tout buffer réellement uploadé en GL (glBufferData attend un buffer NIO natif). */
-    FloatBuffer floatBuffer(int capacityFloats) {
+    public FloatBuffer floatBuffer(int capacityFloats) {
         return java.nio.ByteBuffer.allocateDirect(capacityFloats * 4)
             .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
     }
 
-    void putVertex(FloatBuffer buf, float x, float y, float u, float v) {
+    public void putVertex(FloatBuffer buf, float x, float y, float u, float v) {
         buf.put(x).put(y).put(u).put(v);
     }
 
     /** Un seul quad plein écran/rect (rect arrondi, vignette) — 4 sommets, GL_TRIANGLE_FAN (même topologie que l'ancien GL_QUADS). */
-    void drawQuadModern(float x1, float y1, float x2, float y2) {
+    public void drawQuadModern(float x1, float y1, float x2, float y2) {
         ensureModernBuffersInit();
         if (modernBuffersInitFailed) return;
         try {
@@ -231,7 +238,7 @@ public final class UiRenderer {
     }
 
     /** Sommets déjà préparés en GL_TRIANGLES (ex: texte, un ou plusieurs quads disjoints, 6 sommets/quad). */
-    void drawTrianglesModern(FloatBuffer verts) {
+    public void drawTrianglesModern(FloatBuffer verts) {
         ensureModernBuffersInit();
         if (modernBuffersInitFailed) return;
         try {
@@ -243,7 +250,7 @@ public final class UiRenderer {
 
     private static boolean fboDiagLogged = false;
 
-    void uploadAndDraw(FloatBuffer verts, int glMode, int vertexCount) throws Exception {
+    public void uploadAndDraw(FloatBuffer verts, int glMode, int vertexCount) throws Exception {
         // DIAGNOSTIC : quel framebuffer est actif à ce point précis (TAIL de
         // GameRenderer.render()) ? 0x8CA6 = GL_FRAMEBUFFER_BINDING.
         //
@@ -291,7 +298,7 @@ public final class UiRenderer {
      */
     private static boolean loggedBadProjectionLoc = false;
 
-    void uploadProjectionModern(int uniformLoc, int vpWidth, int vpHeight) throws Exception {
+    public void uploadProjectionModern(int uniformLoc, int vpWidth, int vpHeight) throws Exception {
         // -1 = uniform introuvable/optimisé — glUniformMatrix4fv est alors un
         // NO-OP SILENCIEUX (spec GL) : le shader garderait sa valeur par
         // défaut (matrice ZÉRO), donc gl_Position = 0 pour CHAQUE sommet —

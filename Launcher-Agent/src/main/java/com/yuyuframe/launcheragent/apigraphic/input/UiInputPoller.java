@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.input;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 

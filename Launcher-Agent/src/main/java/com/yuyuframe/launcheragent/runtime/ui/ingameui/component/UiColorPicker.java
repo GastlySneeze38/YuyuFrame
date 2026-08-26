@@ -1,13 +1,13 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.apigraphic.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.UiEasing;
-import com.yuyuframe.launcheragent.apigraphic.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
+import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.UiTransition;
-import com.yuyuframe.launcheragent.apigraphic.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
+import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 
 import java.awt.Color;
 import java.awt.Toolkit;

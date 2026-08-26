@@ -1,4 +1,7 @@
-package com.yuyuframe.launcheragent.apigraphic;
+package com.yuyuframe.launcheragent.apigraphic.core;
+
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 
 /**
  * Widget dessiné/cliqué à la main — jamais un vrai ButtonWidget/ClickableWidget
