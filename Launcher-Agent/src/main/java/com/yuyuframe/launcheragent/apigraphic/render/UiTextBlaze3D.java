@@ -484,7 +484,14 @@ public final class UiTextBlaze3D {
             resolveOk = true;
         } catch (Throwable t) {
             resolveOk = false;
-            LauncherLog.err("[LauncherAgent] UiTextBlaze3D: résolution échouée, repli sur le pipeline SDF existant : " + t);
+            // Cause réelle DÉROULÉE (pas juste "InvocationTargetException"
+            // générique) — piège du silent-catch déjà rencontré ailleurs dans
+            // ce projet (voir McReflect.minecraftClient()/getFramebuffer) :
+            // un simple "+ t" sur une exception réflexive n'affiche QUE le
+            // wrapper, jamais la vraie exception levée par le code du jeu.
+            Throwable cause = t;
+            while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+            LauncherLog.err("[LauncherAgent] UiTextBlaze3D: résolution échouée, repli sur le pipeline SDF existant : " + t + " | cause réelle : " + cause);
         }
         return resolveOk;
     }

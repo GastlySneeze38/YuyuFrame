@@ -146,7 +146,9 @@ public final class ShaderPipelineFactory {
             resolveOk = true;
         } catch (Throwable t) {
             resolveOk = false;
-            LauncherLog.err("[LauncherAgent] ShaderPipelineFactory: résolution échouée à l'étape '" + currentStage + "' : " + t);
+            Throwable cause = t;
+            while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+            LauncherLog.err("[LauncherAgent] ShaderPipelineFactory: résolution échouée à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
         }
         return resolveOk;
     }
@@ -213,7 +215,22 @@ public final class ShaderPipelineFactory {
 
         builder = mWithVertexFormat.invoke(builder, refVertexFormat, refVertexFormatMode);
         builder = mWithColorTargetState.invoke(builder, refColorTargetState);
-        builder = mWithDepthStencilState.invoke(builder, refDepthStencilState);
+        // BUG TROUVÉ (premier test en jeu, "rien ne s'affiche") : GUI_TEXT_SNIPPET
+        // est construit par vanilla avec withDepthStencilState(Optional.empty())
+        // (confirmé par désassemblage bytecode du static{} de RenderPipelines,
+        // PAS deviné) — son depthStencilState RÉEL vaut donc null. La surcharge
+        // non-Optional withDepthStencilState(DepthStencilState) fait en interne
+        // Optional.of(value) (vu dans son propre bytecode) : lui passer ce null
+        // levait IllegalArgumentException→NullPointerException à chaque appel,
+        // capturée par UiTextBlaze3D.resolve() comme un simple
+        // InvocationTargetException générique, sans plus de détail dans les
+        // logs (piège du silent-catch déjà rencontré ailleurs dans ce projet).
+        // Ne PAS appeler withDepthStencilState du tout dans ce cas — même
+        // résultat final (le champ non-posé retombe aussi sur null via
+        // Optional.orElse(null) dans Builder.build(), vu dans son bytecode).
+        if (refDepthStencilState != null) {
+            builder = mWithDepthStencilState.invoke(builder, refDepthStencilState);
+        }
         builder = mWithCull.invoke(builder, refCull);
         return mBuild.invoke(builder);
     }
