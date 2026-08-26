@@ -3,6 +3,8 @@ package com.yuyuframe.launcheragent.apigraphic.render;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -244,20 +246,20 @@ public final class UiTextRenderer {
                                  int vpWidth, int vpHeight) {
         // Era E (Blaze3D 1.21.6+) : passe EXCLUSIVEMENT par le vrai pipeline du
         // moteur (RenderPipelines.GUI_TEXT via GpuDevice/RenderPass, voir
-        // UiTextBlaze3D) — jamais de repli sur le pipeline SDF ci-dessous sur
-        // ces brackets, même si UiTextBlaze3D échoue : le SDF y est corrompu
+        // Blaze3DText) — jamais de repli sur le pipeline SDF ci-dessous sur
+        // ces brackets, même si Blaze3DText échoue : le SDF y est corrompu
         // de façon non-déterministe (confirmé sur toute la session, voir
         // historique) — un texte absent (échec silencieux, loggé côté
-        // UiTextBlaze3D) vaut mieux qu'un texte parfois illisible. Sur les
-        // brackets antérieurs (1.8.9→1.21.4), UiTextBlaze3D.isAvailable() est
+        // Blaze3DText) vaut mieux qu'un texte parfois illisible. Sur les
+        // brackets antérieurs (1.8.9→1.21.4), Blaze3DCore.isAvailable() est
         // {@code false} (classes Blaze3D absentes) — le pipeline SDF
         // ci-dessous reste alors le SEUL chemin, INCHANGÉ, exactement comme
         // avant cette era E.
-        if (UiTextBlaze3D.isAvailable()) {
-            // queueDraw (pas drawText direct) : voir UiTextBlaze3D pour le
+        if (Blaze3DCore.isAvailable()) {
+            // queueDraw (pas drawText direct) : voir Blaze3DText pour le
             // pourquoi (rendu différé d'une frame, nécessaire pour que le
             // texte atterrisse dans la texture qui sera présentée).
-            UiTextBlaze3D.queueDraw(font, text, x, y, color, scale, vpWidth, vpHeight);
+            Blaze3DText.queueDraw(font, text, x, y, color, scale, vpWidth, vpHeight);
             return;
         }
 

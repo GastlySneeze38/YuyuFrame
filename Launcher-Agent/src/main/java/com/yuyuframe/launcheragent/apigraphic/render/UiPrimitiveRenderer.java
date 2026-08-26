@@ -3,6 +3,9 @@ package com.yuyuframe.launcheragent.apigraphic.render;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGradient;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
 import java.lang.reflect.Method;
@@ -538,7 +541,7 @@ public final class UiPrimitiveRenderer {
     // passthrough texture (PAS le shader SDF du texte : une icône a ses
     // propres couleurs réelles, rien à seuiller/teinter). Utilisé UNIQUEMENT
     // sur les brackets pré-era-E (le dispatcher drawIcon route era E vers
-    // UiTextBlaze3D, qui a son propre chemin Blaze3D complet).
+    // Blaze3DRect, qui a son propre chemin Blaze3D complet).
     // u_Alpha : multiplicateur d'opacité (1.0 = comportement d'origine,
     // inchangé) — ajouté pour permettre un fondu d'entrée sur du contenu
     // asynchrone (icônes Modrinth qui arrivent en HTTP, voir UiAsyncFade)
@@ -1004,7 +1007,7 @@ public final class UiPrimitiveRenderer {
      * ratio d'aspect d'origine, voir ModrinthProjectDetailScreen) : la
      * version carrée ci-dessus délègue simplement ici avec {@code w=h=size},
      * aucun appelant existant à modifier. Le chemin Blaze3D (era E) acceptait
-     * DÉJÀ un rectangle arbitraire ({@code UiTextBlaze3D.queueIcon(x0,y0,x1,y1)}
+     * DÉJÀ un rectangle arbitraire ({@code Blaze3DRect.queueIcon(x0,y0,x1,y1)}
      * — seule cette méthode, et les deux branches GL brut ci-dessous,
      * forçaient artificiellement un carré via un unique paramètre {@code size}.
      */
@@ -1020,13 +1023,13 @@ public final class UiPrimitiveRenderer {
      * l'appelant ait à dessiner un rect de transition séparé. Threadé sur les
      * 3 pipelines (GL legacy, GL moderne, Blaze3D era E) via {@code u_Alpha}
      * (voir ICON_FRAGMENT_SRC/_MODERN) et le 4ᵉ composant du ColorModulator
-     * côté Blaze3D (voir {@code UiTextBlaze3D#queueIcon}).
+     * côté Blaze3D (voir {@code Blaze3DRect#queueIcon}).
      */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                           float alpha, int vpWidth, int vpHeight) {
         if (img == null) return;
-        if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueIcon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
+        if (Blaze3DCore.isAvailable()) {
+            Blaze3DRect.queueIcon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
             return;
         }
         int texId = ensureIconTexture(cacheKey, img);
@@ -1058,7 +1061,7 @@ public final class UiPrimitiveRenderer {
 
                 // UV : (x,y+h)=visuel HAUT-gauche (Y-up) ↔ (0,0)=image
                 // haut-gauche (convention image standard) — même
-                // correspondance que UiTextBlaze3D.drawIcon (voir sa javadoc).
+                // correspondance que Blaze3DRect.drawIcon (voir sa javadoc).
                 ensureModernBuffersInit();
                 if (!owner.modernBuffersInitFailed()) {
                     FloatBuffer verts = floatBuffer(4 * 4);
@@ -1183,8 +1186,8 @@ public final class UiPrimitiveRenderer {
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
-        if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        if (Blaze3DCore.isAvailable()) {
+            Blaze3DRect.queueRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
             return;
         }
         if (owner.isModern()) {
@@ -1229,7 +1232,7 @@ public final class UiPrimitiveRenderer {
         // de coin pré-calculé) — plutôt qu'une ombre mal composée par-dessus
         // le contenu, on saute l'ombre entièrement sur era E (perte
         // cosmétique mineure, contenu jamais assombri par erreur).
-        if (UiTextBlaze3D.isAvailable()) return;
+        if (Blaze3DCore.isAvailable()) return;
         drawFx(x1 - spread, y1 - spread, x2 + spread, y2 + spread, radius + spread, blur, 0f,
             color, color, false, vpWidth, vpHeight);
     }
@@ -1246,12 +1249,12 @@ public final class UiPrimitiveRenderer {
      * {@link #drawRoundedRect}) — BUG TROUVÉ (fond de sidebar, en GL brut,
      * composait par-dessus le texte des items de la sidebar, Blaze3D : texte
      * invisible) : couleur portée PAR SOMMET (interpolée par le GPU),
-     * ColorModulator neutre, voir UiTextBlaze3D#drawGradientRect.
+     * ColorModulator neutre, voir Blaze3DGradient#drawGradientRect.
      */
     public void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
                                   UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
-        if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
+        if (Blaze3DCore.isAvailable()) {
+            Blaze3DGradient.queueGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
             return;
         }
         drawFx(x1, y1, x2, y2, radius, 0f, 0f, colorBottom, colorTop, true, vpWidth, vpHeight);
@@ -1264,7 +1267,7 @@ public final class UiPrimitiveRenderer {
      * optionnels (radius=0 = rect plein), bord anti-aliasé NET — pas de
      * flou, contrairement à drawShadow/drawGlow.
      *
-     * Routé sur Blaze3D era E via {@link UiTextBlaze3D#queueGradientRect2D}
+     * Routé sur Blaze3D era E via {@link Blaze3DGradient#queueGradientRect2D}
      * — CONTRAIREMENT à drawShadow/drawGlow (no-op sur ce pipeline), ce
      * dégradé ne nécessite AUCUN shader custom côté Blaze3D : 4 couleurs de
      * sommet suffisent (le pipeline vertex-color déjà utilisé par
@@ -1276,8 +1279,8 @@ public final class UiPrimitiveRenderer {
     public void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
                                     UiColor colorBottomLeft, UiColor colorBottomRight,
                                     UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
-        if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+        if (Blaze3DCore.isAvailable()) {
+            Blaze3DGradient.queueGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
             return;
         }
         if (owner.isModern()) {
@@ -1371,7 +1374,7 @@ public final class UiPrimitiveRenderer {
      * avoir la MÊME longueur (2..8, tronqué au-delà) — {@code stopPositions}
      * croissant dans [0,1] (comportement non garanti sinon, voir le shader).
      * Routage identique à {@link #drawGradientRect2D} : Blaze3D era E d'abord
-     * (voir {@link UiTextBlaze3D#queueMultiStopGradientRect}), puis moderne/
+     * (voir {@link Blaze3DGradient#queueMultiStopGradientRect}), puis moderne/
      * legacy selon {@link UiRenderer#isModern()}.
      */
     public void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
@@ -1388,8 +1391,8 @@ public final class UiPrimitiveRenderer {
         for (int i = 0; i < n; i++) { colors[i] = stopColors[i]; positions[i] = stopPositions[i]; }
         for (int i = n; i < 8; i++) { colors[i] = colors[n - 1]; positions[i] = positions[n - 1]; }
 
-        if (UiTextBlaze3D.isAvailable()) {
-            UiTextBlaze3D.queueMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
+        if (Blaze3DCore.isAvailable()) {
+            Blaze3DGradient.queueMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
             return;
         }
         if (owner.isModern()) {

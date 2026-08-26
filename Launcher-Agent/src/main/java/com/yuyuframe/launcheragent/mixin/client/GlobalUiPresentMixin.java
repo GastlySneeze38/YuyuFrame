@@ -8,7 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.render.UiTextBlaze3D;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -31,15 +31,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * GL brut DOIT donc rester APRÈS lui (TAIL), sinon il atterrit sur un FBO
  * différent, jamais affiché.
  *
- * MAIS le texte natif Blaze3D (UiTextBlaze3D) a l'exigence de timing
+ * MAIS le texte natif Blaze3D (Blaze3DCore) a l'exigence de timing
  * OPPOSÉE : il dessine dans {@code mc.getFramebuffer()}'s texture
  * intermédiaire — celle-là même que `presentTexture()` copie vers FBO 0.
  * Dessiné à la TAIL (comme le GL brut), il arrive TROP TARD : la copie vers
  * FBO 0 a déjà eu lieu, le texte écrit reste invisible jusqu'à être écrasé
  * par le rendu de la frame suivante, jamais présenté. D'où le SECOND hook
  * ci-dessous, en HEAD (avant `presentTexture()`), qui ne fait QUE flusher la
- * file d'attente d'UiTextBlaze3D (rendu différé d'une frame — voir
- * UiTextBlaze3D#flushQueued) — jamais de dessin GL brut à ce point, pour ne
+ * file d'attente de Blaze3DCore (rendu différé d'une frame — voir
+ * Blaze3DCore#flushQueued) — jamais de dessin GL brut à ce point, pour ne
  * pas reproduire la régression ci-dessus.
  *
  * Garde : blitToScreen() n'est vérifiée QUE sur le Framebuffer PRINCIPAL
@@ -64,7 +64,7 @@ public abstract class GlobalUiPresentMixin {
             if (mc == null) return;
             Object mainFramebuffer = GlobalUiRenderBridge.getMainFramebuffer(mc);
             if (mainFramebuffer != this) return; // même garde que la TAIL — voir javadoc de classe.
-            UiTextBlaze3D.flushQueued();
+            Blaze3DCore.flushQueued();
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin (flush texte HEAD): " + t);
         }
