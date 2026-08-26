@@ -177,15 +177,30 @@ public final class Blaze3DCore {
         "}\n";
 
     /**
-     * Même formule EXACTE que {@code UiPrimitiveRenderer.FRAGMENT_SRC}
-     * (legacy/modern GL, 1.8.9→1.21.5ish) — clamp du point courant dans le
-     * rect "intérieur" (rect global rétréci de {@code u_RadiusPad.x} de
-     * chaque côté), distance à ce point clampé, {@code smoothstep} sur 1px
-     * de large. Correcte sur les bords droits (dist=0 → alpha=1 toujours,
-     * jamais de faux négatif) ET les coins — exactement ce qu'un remplissage
-     * uni/dégradé arrondi (sans anneau/ombre) demande. {@code radius=0}
-     * fonctionne nativement (clamp devient no-op) — plus besoin de
-     * branchement petit/grand rayon côté Java.
+     * Rayon PAR COIN (retour utilisateur : le hack "2 rects superposés, un
+     * arrondi + un plat par-dessus" pour simuler un rayon par coin — voir
+     * {@code UiMainMenuScreen#drawIconGrid} — causait des artefacts de
+     * chevauchement). SDF boîte-arrondie multi-rayon d'Inigo Quilez
+     * (iquilezles.org/articles/distfunctions2d, {@code sdRoundedBox}) au lieu
+     * du clamp mono-rayon précédent — généralisation stricte : avec les 4
+     * rayons égaux, produit EXACTEMENT le même alpha que l'ancienne formule
+     * (vérifié par calcul : {@code dist_new = dist_old - radius}, bandes de
+     * transition équivalentes par décalage) donc AUCUN changement visuel sur
+     * tout ce qui était déjà validé "parfait"/"beaucoup mieux". Corrige aussi
+     * radius=0 nativement (contrairement au clamp mono-rayon) : au centre,
+     * {@code q} est très négatif des deux côtés → dist très négatif → alpha=1
+     * ; seul le pixel EXACTEMENT sur le coin mathématique (jamais le centre
+     * d'un pixel réel, toujours décalé de 0.5px) friserait alpha=0.5, un
+     * artefact d'antialiasing normal et mineur, pas le "invisible partout" du
+     * clamp mono-rayon à radius=0.
+     *
+     * {@code u_CornerRadii = (topLeft, topRight, bottomLeft, bottomRight)} —
+     * "top"/"bottom" au sens du COIN LE PLUS PROCHE DE y0/y1 tels que passés
+     * par l'appelant (y0 < y1 toujours dans tous les appelants de ce moteur),
+     * PAS une convention d'axe GL absolue — robuste quel que soit le sens de
+     * l'axe Y de la projection (voir le bug historique de flip Y sur
+     * ensureProjectionBuffer, non pertinent ici puisqu'on compare seulement
+     * fragPos au centre DU RECT LUI-MÊME).
      */
     static final String RECT_FRAGMENT_SRC =
         "#version 330\n" +
@@ -197,18 +212,21 @@ public final class Blaze3DCore {
         "};\n" +
         "layout(std140) uniform RectParams {\n" +
         "    vec4 u_Rect;\n" +
-        "    vec4 u_RadiusPad;\n" +
+        "    vec4 u_CornerRadii;\n" +
         "};\n" +
         "in vec4 vertexColor;\n" +
         "in vec2 fragPos;\n" +
         "out vec4 fragColor;\n" +
         "void main() {\n" +
-        "    float radius = u_RadiusPad.x;\n" +
-        "    vec2 innerMin = u_Rect.xy + vec2(radius);\n" +
-        "    vec2 innerMax = u_Rect.zw - vec2(radius);\n" +
-        "    vec2 clamped = clamp(fragPos, innerMin, innerMax);\n" +
-        "    float dist = length(fragPos - clamped);\n" +
-        "    float alpha = 1.0 - smoothstep(radius - 1.0, radius, dist);\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 p = fragPos - center;\n" +
+        "    float radius = (p.x > 0.0)\n" +
+        "        ? ((p.y < 0.0) ? u_CornerRadii.y : u_CornerRadii.w)\n" +
+        "        : ((p.y < 0.0) ? u_CornerRadii.x : u_CornerRadii.z);\n" +
+        "    vec2 q = abs(p) - halfSize + vec2(radius);\n" +
+        "    float dist = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
         "    vec4 color = vertexColor * ColorModulator;\n" +
         "    color.a *= alpha;\n" +
         "    if (color.a < 0.01) {\n" +
@@ -228,12 +246,18 @@ public final class Blaze3DCore {
         return rectParamsBuffer;
     }
 
-    /** Pack {@code RectParams} en std140 (32 octets, tout en vec4 — même précaution que {@code GradientParams}) et réécrit à CHAQUE draw (valeurs changent à chaque appel, contrairement à la projection). */
+    /** Rayon UNIFORME — délègue à la version 4-rayons (tous égaux). */
     static Object writeRectParams(Object device, Object encoder, float x0, float y0, float x1, float y1, float radius) throws Exception {
+        return writeRectParams(device, encoder, x0, y0, x1, y1, radius, radius, radius, radius);
+    }
+
+    /** Pack {@code RectParams} en std140 (32 octets, tout en vec4 — même précaution que {@code GradientParams}) et réécrit à CHAQUE draw (valeurs changent à chaque appel, contrairement à la projection). {@code radiusTopLeft/TopRight/BottomLeft/BottomRight} — voir {@link #RECT_FRAGMENT_SRC} pour la convention top/bottom (relative à y0/y1, pas à l'axe GL). */
+    static Object writeRectParams(Object device, Object encoder, float x0, float y0, float x1, float y1,
+                                   float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight) throws Exception {
         Object buffer = ensureRectParamsBuffer(device);
         ByteBuffer data = ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
         data.putFloat(x0).putFloat(y0).putFloat(x1).putFloat(y1);
-        data.putFloat(radius).putFloat(0f).putFloat(0f).putFloat(0f);
+        data.putFloat(radiusTopLeft).putFloat(radiusTopRight).putFloat(radiusBottomLeft).putFloat(radiusBottomRight);
         data.flip();
         Object slice = mBufferSlice.invoke(buffer, 0L, 32L);
         mWriteToBuffer.invoke(encoder, slice, data);

@@ -59,8 +59,22 @@ public final class Blaze3DRect {
      * présenté (HEAD), assombrissant le texte sous un fond semi-transparent.
      */
     public static void queueRect(float x0, float y0, float x1, float y1, float radius, UiColor color, int vpWidth, int vpHeight) {
+        queueRect(x0, y0, x1, y1, radius, radius, radius, radius, color, vpWidth, vpHeight);
+    }
+
+    /**
+     * Rayon PAR COIN — voir {@link Blaze3DCore#RECT_FRAGMENT_SRC} pour la
+     * convention {@code radiusTopLeft/TopRight/BottomLeft/BottomRight}
+     * (relative à y0/y1 tels que passés, pas à l'axe GL). Remplace le hack
+     * "2 rects superposés" (un arrondi + un plat par-dessus pour annuler
+     * l'arrondi d'un côté — voir {@code UiMainMenuScreen#drawIconGrid}) par
+     * un seul draw, plus d'artefact de chevauchement au raccord.
+     */
+    public static void queueRect(float x0, float y0, float x1, float y1,
+                                  float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                  UiColor color, int vpWidth, int vpHeight) {
         if (!isAvailable()) return;
-        Blaze3DCore.enqueue(() -> drawRect(x0, y0, x1, y1, radius, color, vpWidth, vpHeight));
+        Blaze3DCore.enqueue(() -> drawRect(x0, y0, x1, y1, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight, color, vpWidth, vpHeight));
     }
 
     /**
@@ -99,7 +113,9 @@ public final class Blaze3DRect {
      * d'isoler les 4 coins) — {@code radius=0} fonctionne nativement, plus
      * de branchement petit/grand rayon.
      */
-    private static boolean drawRect(float x0, float y0, float x1, float y1, float radius, UiColor color, int vpWidth, int vpHeight) {
+    private static boolean drawRect(float x0, float y0, float x1, float y1,
+                                     float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                     UiColor color, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
             currentStage = "minecraftClient(rect)";
@@ -112,7 +128,11 @@ public final class Blaze3DRect {
             Object colorView = mGetColorAttachmentView.invoke(fb);
             if (colorView == null) return false;
 
-            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+            float maxR = Math.min((x1 - x0) / 2f, (y1 - y0) / 2f);
+            float rTL = Math.max(0f, Math.min(radiusTopLeft, maxR));
+            float rTR = Math.max(0f, Math.min(radiusTopRight, maxR));
+            float rBL = Math.max(0f, Math.min(radiusBottomLeft, maxR));
+            float rBR = Math.max(0f, Math.min(radiusBottomRight, maxR));
 
             currentStage = "getDevice(rect)";
             Object device = mGetDevice.invoke(null);
@@ -146,7 +166,7 @@ public final class Blaze3DRect {
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
 
             currentStage = "writeRectParams(rect)";
-            Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
+            Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, rTL, rTR, rBL, rBR);
 
             currentStage = "createRenderPass(rect)";
             java.util.function.Supplier<String> passLabel = () -> "yuyuframe_rect";

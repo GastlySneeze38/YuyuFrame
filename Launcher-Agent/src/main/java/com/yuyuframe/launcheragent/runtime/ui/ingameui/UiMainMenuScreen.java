@@ -1048,13 +1048,13 @@ public class UiMainMenuScreen extends UiScreenBase {
 
             // Bande cliquable (voir pairedToggle, invisibleStyle — ce
             // dessin-ci est SA seule apparence) — couleur reflète l'état
-            // actif/inactif du mod, pas juste décorative. drawRoundedRect
-            // arrondit TOUJOURS les 4 coins identiquement (pas de contrôle
-            // par coin dans ce moteur), donc un second rect PLAT (radius 0)
-            // recouvre la moitié haute de la bande pour annuler l'arrondi du
-            // haut : seuls les 2 coins bas restent visuellement arrondis,
-            // alignés sur ceux de la carte (même radius, même bord bas — voir
-            // le fond générique de draw(), déjà dessiné avant l'appel ici).
+            // actif/inactif du mod, pas juste décorative. Rayon PAR COIN
+            // (voir UiRenderer#drawRoundedRect à 4 rayons) : seuls les 2
+            // coins bas sont arrondis, alignés sur ceux de la carte (même
+            // radius, même bord bas — voir le fond générique de draw(), déjà
+            // dessiné avant l'appel ici). REMPLACE l'ancien hack "rect arrondi
+            // + rect plat par-dessus" (2 draws superposés) qui causait des
+            // artefacts de chevauchement au raccord — retour utilisateur.
             //
             // Survol ajouté (retour utilisateur : "ajoute un hover à la bar
             // pour activer/désactiver le module") — hoverAnim (soulèvement
@@ -1070,10 +1070,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             UiColor barBase = enabled ? UiTheme.ACCENT : UiTheme.TRACK_OFF;
             UiColor barHovered = enabled ? UiTheme.accentLight() : UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.TEXT_MUTED, 0.35f);
             UiColor barColor = UiColor.lerp(barBase, barHovered, barHoverT).multiplyAlpha(alpha);
-            renderer.drawRoundedRect(x, drawY, x + w, drawY + barH, UiTheme.RADIUS_MD, barColor, vpWidth, vpHeight);
-            if (barH > UiTheme.RADIUS_MD) {
-                renderer.drawRoundedRect(x, drawY + UiTheme.RADIUS_MD, x + w, drawY + barH, 0f, barColor, vpWidth, vpHeight);
-            }
+            renderer.drawRoundedRect(x, drawY, x + w, drawY + barH,
+                UiTheme.RADIUS_MD, UiTheme.RADIUS_MD, 0f, 0f, barColor, vpWidth, vpHeight);
 
             // Icône centrée dans la zone au-dessus de la bande — réduite
             // (retour utilisateur : "met les icônes plus petites pour la

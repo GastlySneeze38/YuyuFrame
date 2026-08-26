@@ -1197,6 +1197,37 @@ public final class UiPrimitiveRenderer {
         drawRoundedRectLegacy(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
+    /**
+     * Rayon PAR COIN — {@code topLeft}/{@code topRight} près de {@code y1},
+     * {@code bottomLeft}/{@code bottomRight} près de {@code y2} (convention
+     * de l'appelant : {@code y1 < y2}, {@code y1}="haut" du widget tel qu'il
+     * l'écrit, {@code y2}="bas" — voir {@link Blaze3DCore#RECT_FRAGMENT_SRC}
+     * pour pourquoi c'est robuste indépendamment de l'axe GL). Vrai support
+     * shader SEULEMENT sur Blaze3D (era E) ; legacy/modern GL n'ont pas ce
+     * réglage par coin dans leur shader — repli sur l'ancien hack "rect
+     * arrondi + rect plat par-dessus" (comportement inchangé là-bas, pas la
+     * cible du bug signalé).
+     */
+    public void drawRoundedRect(float x1, float y1, float x2, float y2,
+                                 float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                 UiColor color, int vpWidth, int vpHeight) {
+        if (Blaze3DCore.isAvailable()) {
+            Blaze3DRect.queueRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight, color, vpWidth, vpHeight);
+            return;
+        }
+        float maxRadius = Math.max(Math.max(radiusTopLeft, radiusTopRight), Math.max(radiusBottomLeft, radiusBottomRight));
+        drawRoundedRect(x1, y1, x2, y2, maxRadius, color, vpWidth, vpHeight);
+        float splitY = y1 + maxRadius;
+        if (splitY < y2) {
+            if (radiusTopLeft < maxRadius || radiusTopRight < maxRadius) {
+                drawRoundedRect(x1, y1, x2, splitY, 0f, color, vpWidth, vpHeight);
+            }
+            if (radiusBottomLeft < maxRadius || radiusBottomRight < maxRadius) {
+                drawRoundedRect(x1, splitY, x2, y2, 0f, color, vpWidth, vpHeight);
+            }
+        }
+    }
+
     /** @deprecated identique à {@link #drawRoundedRect} depuis que celui-ci route par Blaze3D sur era E — gardé pour ne pas retoucher HudPanelRenderer/KeystrokesModule. */
     @Deprecated
     public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,

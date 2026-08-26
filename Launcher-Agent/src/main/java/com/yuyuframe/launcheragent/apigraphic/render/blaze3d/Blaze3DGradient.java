@@ -142,6 +142,7 @@ public final class Blaze3DGradient {
         "    vec2 innerMax = u_RectBounds.zw - vec2(radius);\n" +
         "    vec2 clamped = clamp(fragPos, innerMin, innerMax);\n" +
         "    float rectDist = length(fragPos - clamped);\n" +
+        // Formule v808 restaurée telle quelle — voir Blaze3DCore.RECT_FRAGMENT_SRC.
         "    float rectAlpha = 1.0 - smoothstep(radius - 1.0, radius, rectDist);\n" +
         "    vec4 color = col * ColorModulator;\n" +
         "    color.a *= rectAlpha;\n" +
@@ -312,6 +313,9 @@ public final class Blaze3DGradient {
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
             Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
 
+            // Formule à rayon par coin (voir Blaze3DCore.RECT_FRAGMENT_SRC) —
+            // radius=0 fonctionne nativement, plus besoin de contourner vers
+            // homePipeline.
             currentStage = "writeRectParams(gradrect)";
             Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
 

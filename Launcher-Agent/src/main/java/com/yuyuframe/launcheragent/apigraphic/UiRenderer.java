@@ -386,6 +386,19 @@ public final class UiRenderer {
         primitives.drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
+    /**
+     * Rayon PAR COIN (era E/Blaze3D uniquement — voir {@link
+     * UiPrimitiveRenderer#drawRoundedRect(float, float, float, float, float, float, float, float, UiColor, int, int)}
+     * pour la convention topLeft/topRight/bottomLeft/bottomRight et le repli
+     * legacy/modern). Remplace le hack "2 rects superposés" pour un rayon
+     * différent par côté.
+     */
+    public void drawRoundedRect(float x1, float y1, float x2, float y2,
+                                 float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                 UiColor color, int vpWidth, int vpHeight) {
+        primitives.drawRoundedRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight, color, vpWidth, vpHeight);
+    }
+
     /** @deprecated identique à {@link #drawRoundedRect} depuis que celui-ci route par Blaze3D sur era E — gardé pour ne pas retoucher HudPanelRenderer/KeystrokesModule. */
     @Deprecated
     public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
