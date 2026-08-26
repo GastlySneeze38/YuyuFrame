@@ -407,6 +407,18 @@ public final class UiRenderer {
         primitives.drawGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
     }
 
+    /**
+     * Dégradé multi-stop (2 à 8 couleurs) linéaire/radial/conique — voir
+     * {@link UiGradientType} pour {@code startX/Y}/{@code endX/Y} et
+     * {@link UiPrimitiveRenderer#drawMultiStopGradientRect} pour le détail
+     * complet (roadmap Phase 5.1).
+     */
+    public void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
+                                           UiGradientType type, float startX, float startY, float endX, float endY,
+                                           UiColor[] stopColors, float[] stopPositions, int vpWidth, int vpHeight) {
+        primitives.drawMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, stopColors, stopPositions, vpWidth, vpHeight);
+    }
+
     public void drawGlow(float x1, float y1, float x2, float y2, float radius, float intensity, UiColor color,
                           int vpWidth, int vpHeight) {
         primitives.drawGlow(x1, y1, x2, y2, radius, intensity, color, vpWidth, vpHeight);

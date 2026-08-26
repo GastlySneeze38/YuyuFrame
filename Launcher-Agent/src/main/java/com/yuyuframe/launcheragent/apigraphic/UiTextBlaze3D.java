@@ -918,6 +918,32 @@ public final class UiTextBlaze3D {
         queued.add(() -> drawGradientRect2D(x0, y0, x1, y1, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight));
     }
 
+    /**
+     * Dégradé multi-stop (2 à 8 couleurs) linéaire/radial/conique — voir
+     * {@code UiRenderer.drawMultiStopGradientRect}/{@link UiGradientType}.
+     * Contrairement à {@link #queueGradientRect}/{@link #queueGradientRect2D}
+     * (dégradés LINÉAIRES par construction, donc exactement représentables
+     * par 4 couleurs de sommet), ce pipeline n'a AUCUN hook shader custom —
+     * un dégradé radial/conique ne peut PAS être exact avec seulement 4
+     * sommets par quad. Approximation par GRILLE fine (voir {@link
+     * #putGridQuadsGradient}) : le rectangle "plein" (hors les 4 coins
+     * arrondis, qui restent 1 quad chacun — assez petits pour qu'une simple
+     * interpolation 4-sommets y soit visuellement suffisante) est subdivisé
+     * en cellules de ~28px, chaque sommet de grille reçoit sa couleur EXACTE
+     * (voir {@link #multiStopColorAt}), le GPU interpole ensuite SEULEMENT à
+     * l'intérieur de chaque petite cellule — assez fin pour qu'aucune facette
+     * ne soit perceptible à l'œil. {@code colors}/{@code positions} DOIVENT
+     * déjà être complétés à 8 entrées (stops au-delà du nombre réel dupliqués
+     * depuis le dernier stop réel) — voir {@code
+     * UiPrimitiveRenderer.drawMultiStopGradientRect}, seul appelant.
+     */
+    public static void queueMultiStopGradientRect(float x0, float y0, float x1, float y1, float radius,
+                                                    UiGradientType type, float startX, float startY, float endX, float endY,
+                                                    UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        queued.add(() -> drawMultiStopGradientRect(x0, y0, x1, y1, radius, type, startX, startY, endX, endY, colors, positions, vpWidth, vpHeight));
+    }
+
     /** Appelé depuis {@code GlobalUiPresentMixin} à la HEAD de blitToScreen (avant presentTexture) — dessine tout ce qui a été empilé la frame précédente. */
     public static void flushQueued() {
         if (queued.isEmpty()) return;
@@ -1611,6 +1637,127 @@ public final class UiTextBlaze3D {
         }
     }
 
+    private static boolean drawMultiStopGradientRect(float x0, float y0, float x1, float y1, float radius,
+                                                       UiGradientType type, float startX, float startY, float endX, float endY,
+                                                       UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        try {
+            currentStage = "minecraftClient(msgrad)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(msgrad)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(msgrad)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
+
+            currentStage = "ensureCornerMaskTexture(msgrad)";
+            Object[] mask = ensureCornerMaskTexture(r);
+            Object maskView = mask[1], maskSampler = mask[2];
+            currentStage = "ensureWhiteTexture(msgrad)";
+            Object[] white = ensureWhiteTexture();
+
+            currentStage = "getDevice(msgrad)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(msgrad)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+            short light0 = 0, light1 = 0;
+
+            int vertexCount;
+            ByteBuffer verts;
+            if (r < 0.5f) {
+                int cells = gridCellCount(x0, x1, y0, y1);
+                verts = ensureStagingBuffer(cells * 4 * 28);
+                putGridQuadsGradient(verts, x0, x1, y0, y1, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                vertexCount = cells * 4;
+            } else {
+                int cellsTop = gridCellCount(x0 + r, x1 - r, y1 - r, y1);
+                int cellsBottom = gridCellCount(x0 + r, x1 - r, y0, y0 + r);
+                int cellsLeft = gridCellCount(x0, x0 + r, y0 + r, y1 - r);
+                int cellsRight = gridCellCount(x1 - r, x1, y0 + r, y1 - r);
+                int cellsCenter = gridCellCount(x0 + r, x1 - r, y0 + r, y1 - r);
+                int totalCells = 4 + cellsTop + cellsBottom + cellsLeft + cellsRight + cellsCenter;
+                verts = ensureStagingBuffer(totalCells * 4 * 28);
+
+                putRectQuadGradientMultiStop(verts, x0, x0 + r, y0, y0 + r, false, false, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putRectQuadGradientMultiStop(verts, x1 - r, x1, y0, y0 + r, true, false, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putRectQuadGradientMultiStop(verts, x0, x0 + r, y1 - r, y1, false, true, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putRectQuadGradientMultiStop(verts, x1 - r, x1, y1 - r, y1, true, true, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putGridQuadsGradient(verts, x0 + r, x1 - r, y0, y0 + r, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putGridQuadsGradient(verts, x0 + r, x1 - r, y1 - r, y1, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putGridQuadsGradient(verts, x0, x0 + r, y0 + r, y1 - r, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putGridQuadsGradient(verts, x1 - r, x1, y0 + r, y1 - r, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                putGridQuadsGradient(verts, x0 + r, x1 - r, y0 + r, y1 - r, type, startX, startY, endX, endY, colors, positions, light0, light1);
+                vertexCount = totalCells * 4;
+            }
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(msgrad)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            currentStage = "bufferSlice(msgrad)";
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            currentStage = "writeToBuffer(msgrad)";
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(msgrad)";
+            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
+            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(msgrad)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "createRenderPass(msgrad)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_msgradrect";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                currentStage = "setPipeline(msgrad)";
+                mSetPipeline.invoke(pass, fieldRenderPipelineGuiText);
+                if (mDisableScissor != null) { currentStage = "disableScissor(msgrad)"; mDisableScissor.invoke(pass); }
+                currentStage = "bindDefaultUniforms(msgrad)";
+                mBindDefaultUniforms.invoke(null, pass);
+                currentStage = "setUniform(Projection)(msgrad)";
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                currentStage = "setUniform(DynamicTransforms)(msgrad)";
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                currentStage = "bindTexture(Sampler0)(msgrad)";
+                mBindTexture.invoke(pass, "Sampler0", maskView, maskSampler);
+                currentStage = "bindTexture(Sampler2)(msgrad)";
+                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                currentStage = "setVertexBuffer(msgrad)";
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                currentStage = "shapeIndexBuffer(msgrad)";
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                int indexCount = (vertexCount / 4) * 6;
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                currentStage = "setIndexBuffer(msgrad)";
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                currentStage = "drawIndexed(msgrad)";
+                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+            } finally {
+                currentStage = "closePass(msgrad)";
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D.drawMultiStopGradientRect a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
     /**
      * Un des 4 coins arrondis : échantillonne {@link #ensureCornerMaskTexture()}
      * avec l'UV retourné selon le coin (flipU pour les coins DROITE, flipV
@@ -1729,6 +1876,120 @@ public final class UiTextBlaze3D {
         putVertexPCTL(buf, xLeft, yBottom, cBL, u, v, light0, light1);
         putVertexPCTL(buf, xRight, yBottom, cBR, u, v, light0, light1);
         putVertexPCTL(buf, xRight, yTop, cTR, u, v, light0, light1);
+    }
+
+    // ── Dégradé multi-stop (roadmap Phase 5.1) — voir queueMultiStopGradientRect
+    // pour le pourquoi de l'approximation par grille sur ce pipeline. ─────────
+
+    /** Cible ~28px/cellule, borné [1,8] — évite un nombre de sommets qui explose sur un grand rectangle tout en restant fin sur les petits. */
+    private static int gridCellsFor(float size) {
+        int cells = Math.round(size / 28f);
+        return Math.max(1, Math.min(cells, 8));
+    }
+
+    private static int gridCellCount(float xLeft, float xRight, float yBottom, float yTop) {
+        return gridCellsFor(xRight - xLeft) * gridCellsFor(yTop - yBottom);
+    }
+
+    /**
+     * Couleur multi-stop à {@code (x,y)} — MÊME algèbre que le shader GLSL
+     * (voir {@code UiPrimitiveRenderer.MULTISTOP_GRADIENT_FRAGMENT_SRC}) :
+     * {@code colors}/{@code positions} déjà complétés à 8 entrées (stops
+     * au-delà du nombre réel = copie du dernier stop réel), même chaîne de
+     * comparaisons séquentielle (pas de tableau dynamiquement indexé côté
+     * GLSL — ici c'est du Java pur, l'indexation dynamique ne pose aucun
+     * problème, mais la MÊME logique est reprise pour un résultat identique
+     * entre les 3 pipelines).
+     */
+    private static int multiStopColorAt(UiGradientType type, float x, float y,
+                                         float startX, float startY, float endX, float endY,
+                                         UiColor[] colors, float[] positions) {
+        float dx = endX - startX, dy = endY - startY;
+        float t;
+        if (type == UiGradientType.RADIAL) {
+            float radius = (float) Math.sqrt(dx * dx + dy * dy);
+            float dpx = x - startX, dpy = y - startY;
+            t = radius < 1e-6f ? 0f : (float) Math.sqrt(dpx * dpx + dpy * dpy) / radius;
+        } else if (type == UiGradientType.CONIC) {
+            float baseAngle = (float) Math.atan2(dy, dx);
+            float ang = (float) (Math.atan2(y - startY, x - startX) - baseAngle) / (2f * (float) Math.PI);
+            t = ang - (float) Math.floor(ang);
+        } else {
+            float len2 = dx * dx + dy * dy;
+            t = len2 < 1e-6f ? 0f : ((x - startX) * dx + (y - startY) * dy) / len2;
+        }
+        t = Math.max(0f, Math.min(1f, t));
+
+        if (t <= positions[0]) return lerpRgba2Colors(colors[0], colors[0], 0f);
+        for (int i = 0; i < 7; i++) {
+            float p0 = positions[i], p1 = positions[i + 1];
+            if (t <= p1) {
+                float span = p1 - p0;
+                float localT = span < 1e-6f ? 0f : Math.max(0f, Math.min(1f, (t - p0) / span));
+                return lerpRgba2Colors(colors[i], colors[i + 1], localT);
+            }
+        }
+        return lerpRgba2Colors(colors[7], colors[7], 0f);
+    }
+
+    /** Couleur RGBA packée, interpolée entre {@code a} et {@code b} à {@code t} — même packing (AABBGGRR little-endian dans l'int) que {@link #lerpRgba}/{@link #lerpRgba2D}. */
+    private static int lerpRgba2Colors(UiColor a, UiColor b, float t) {
+        float r = a.r + (b.r - a.r) * t;
+        float g = a.g + (b.g - a.g) * t;
+        float bl = a.b + (b.b - a.b) * t;
+        float al = a.a + (b.a - a.a) * t;
+        int ri = Math.round(r * 255f), gi = Math.round(g * 255f), bi = Math.round(bl * 255f), ai = Math.round(al * 255f);
+        return (ai << 24) | (bi << 16) | (gi << 8) | ri;
+    }
+
+    /** Comme {@link #putRectQuad}, mais couleur multi-stop par sommet (voir {@link #multiStopColorAt}) — utilisé pour les 4 pièces de coin arrondi (assez petites pour qu'un seul quad y soit visuellement suffisant, pas de sous-grille ici). */
+    private static void putRectQuadGradientMultiStop(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                                       boolean flipU, boolean flipV,
+                                                       UiGradientType type, float startX, float startY, float endX, float endY,
+                                                       UiColor[] colors, float[] positions, short light0, short light1) {
+        float uLeft = flipU ? 1f : 0f, uRight = flipU ? 0f : 1f;
+        float vBottom = flipV ? 1f : 0f, vTop = flipV ? 0f : 1f;
+        int cTL = multiStopColorAt(type, xLeft, yTop, startX, startY, endX, endY, colors, positions);
+        int cBL = multiStopColorAt(type, xLeft, yBottom, startX, startY, endX, endY, colors, positions);
+        int cBR = multiStopColorAt(type, xRight, yBottom, startX, startY, endX, endY, colors, positions);
+        int cTR = multiStopColorAt(type, xRight, yTop, startX, startY, endX, endY, colors, positions);
+        putVertexPCTL(buf, xLeft, yTop, cTL, uLeft, vTop, light0, light1);
+        putVertexPCTL(buf, xLeft, yBottom, cBL, uLeft, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yBottom, cBR, uRight, vBottom, light0, light1);
+        putVertexPCTL(buf, xRight, yTop, cTR, uRight, vTop, light0, light1);
+    }
+
+    /**
+     * Subdivise {@code [xLeft,xRight]×[yBottom,yTop]} en grille (voir {@link
+     * #gridCellsFor}), une couleur EXACTE par nœud via {@link
+     * #multiStopColorAt} — le GPU n'interpole plus qu'à l'intérieur de
+     * chaque petite cellule. {@code u=v=0.95} : même échantillon "toujours
+     * opaque" du masque de coin que {@link #putSolidQuad} (ces cellules
+     * n'ont jamais de coin arrondi à gérer, voir l'appelant).
+     */
+    private static void putGridQuadsGradient(ByteBuffer buf, float xLeft, float xRight, float yBottom, float yTop,
+                                              UiGradientType type, float startX, float startY, float endX, float endY,
+                                              UiColor[] colors, float[] positions, short light0, short light1) {
+        int cellsX = gridCellsFor(xRight - xLeft);
+        int cellsY = gridCellsFor(yTop - yBottom);
+        float u = 0.95f, v = 0.95f;
+        float w = xRight - xLeft, h = yTop - yBottom;
+        for (int cy = 0; cy < cellsY; cy++) {
+            float y0 = yBottom + h * cy / cellsY;
+            float y1 = yBottom + h * (cy + 1) / cellsY;
+            for (int cx = 0; cx < cellsX; cx++) {
+                float x0 = xLeft + w * cx / cellsX;
+                float x1 = xLeft + w * (cx + 1) / cellsX;
+                int cTL = multiStopColorAt(type, x0, y1, startX, startY, endX, endY, colors, positions);
+                int cBL = multiStopColorAt(type, x0, y0, startX, startY, endX, endY, colors, positions);
+                int cBR = multiStopColorAt(type, x1, y0, startX, startY, endX, endY, colors, positions);
+                int cTR = multiStopColorAt(type, x1, y1, startX, startY, endX, endY, colors, positions);
+                putVertexPCTL(buf, x0, y1, cTL, u, v, light0, light1);
+                putVertexPCTL(buf, x0, y0, cBL, u, v, light0, light1);
+                putVertexPCTL(buf, x1, y0, cBR, u, v, light0, light1);
+                putVertexPCTL(buf, x1, y1, cTR, u, v, light0, light1);
+            }
+        }
     }
 
     /** POSITION(float×3) + COLOR(ubyte×4) + UV0(float×2) + UV2/light(short×2) — 28 octets, ordre EXACT vérifié par désassemblage de VertexFormats.POSITION_COLOR_TEXTURE_LIGHT. */

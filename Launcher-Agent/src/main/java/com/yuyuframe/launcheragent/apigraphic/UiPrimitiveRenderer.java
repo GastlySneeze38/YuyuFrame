@@ -236,6 +236,92 @@ final class UiPrimitiveRenderer {
     private int uG2dRect = -1, uG2dRadius = -1, uG2dColorBL = -1, uG2dColorBR = -1, uG2dColorTL = -1, uG2dColorTR = -1;
     private boolean gradient2DInitFailed = false;
 
+    // ── Shader "MultiStopGradient" — dégradé LINÉAIRE/RADIAL/CONIQUE à N
+    // stops (roadmap Phase 5.1, "extension du shader Gradient2D existant" —
+    // capacité ajoutée en famille, PAS une fusion dans le même programme
+    // GLSL : Gradient2D fait un blend BILINÉAIRE à 4 coins, un mécanisme
+    // fondamentalement différent d'un balayage à N stops le long d'un axe/
+    // rayon/angle — les deux restent des shaders séparés, comme FX/Gradient2D
+    // le sont déjà l'un de l'autre).
+    //
+    // Paramétrage commun aux 3 types (voir UiGradientType) :
+    //   u_Start/u_End définissent l'axe — LINEAR : t=0/t=1 ; RADIAL : centre/
+    //   point qui fixe le rayon (= |end-start|) ; CONIC : centre/direction de
+    //   l'angle "0".
+    //
+    // 8 stops maximum, en uniforms NOMMÉS INDIVIDUELLEMENT (u_Stop0Color..
+    // u_Stop7Color / u_Stop0Pos..u_Stop7Pos) plutôt qu'un tableau uniform —
+    // l'indexation DYNAMIQUE d'un tableau uniform dans un fragment shader
+    // n'est PAS garantie par GLSL 1.10 (le bracket "legacy" cible du matériel
+    // ancien, 1.8.9) ; beaucoup de compilateurs déroulent une boucle à borne
+    // constante et ça fonctionnerait probablement, mais invérifiable sans
+    // accès à du matériel d'époque — la chaîne if/else entièrement dépliée
+    // ci-dessous est portable par construction, aucune hypothèse à faire.
+    //
+    // Stops inutilisés (au-delà de stopCount) : le CÔTÉ JAVA les remplit avec
+    // la position/couleur du DERNIER stop réel (voir drawMultiStopGradient*)
+    // — la chaîne if/else résout alors TOUJOURS sur la bonne couleur via la
+    // clause finale "else", sans qu'aucune branche shader n'ait besoin de
+    // connaître le nombre réel de stops.
+    private static final String MULTISTOP_GRADIENT_FRAGMENT_SRC =
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform float u_GradType;\n" +
+        "uniform vec2 u_Start;\n" +
+        "uniform vec2 u_End;\n" +
+        "uniform vec4 u_Stop0Color;\n" + "uniform float u_Stop0Pos;\n" +
+        "uniform vec4 u_Stop1Color;\n" + "uniform float u_Stop1Pos;\n" +
+        "uniform vec4 u_Stop2Color;\n" + "uniform float u_Stop2Pos;\n" +
+        "uniform vec4 u_Stop3Color;\n" + "uniform float u_Stop3Pos;\n" +
+        "uniform vec4 u_Stop4Color;\n" + "uniform float u_Stop4Pos;\n" +
+        "uniform vec4 u_Stop5Color;\n" + "uniform float u_Stop5Pos;\n" +
+        "uniform vec4 u_Stop6Color;\n" + "uniform float u_Stop6Pos;\n" +
+        "uniform vec4 u_Stop7Color;\n" + "uniform float u_Stop7Pos;\n" +
+        "float segT(float t, float p0, float p1) {\n" +
+        "    float span = p1 - p0;\n" +
+        "    return span < 1e-6 ? 0.0 : clamp((t - p0) / span, 0.0, 1.0);\n" +
+        "}\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    float t;\n" +
+        "    if (u_GradType < 0.5) {\n" +
+        "        vec2 dir = u_End - u_Start;\n" +
+        "        float len2 = dot(dir, dir);\n" +
+        "        t = len2 < 1e-6 ? 0.0 : dot(gl_FragCoord.xy - u_Start, dir) / len2;\n" +
+        "    } else if (u_GradType < 1.5) {\n" +
+        "        float rad = length(u_End - u_Start);\n" +
+        "        t = rad < 1e-6 ? 0.0 : length(gl_FragCoord.xy - u_Start) / rad;\n" +
+        "    } else {\n" +
+        "        vec2 dir = u_End - u_Start;\n" +
+        "        float baseAngle = atan(dir.y, dir.x);\n" +
+        "        vec2 q = gl_FragCoord.xy - u_Start;\n" +
+        "        float ang = (atan(q.y, q.x) - baseAngle) / 6.28318530718;\n" +
+        "        t = ang - floor(ang);\n" +
+        "    }\n" +
+        "    t = clamp(t, 0.0, 1.0);\n" +
+        "    vec4 col;\n" +
+        "    if (t <= u_Stop0Pos) col = u_Stop0Color;\n" +
+        "    else if (t <= u_Stop1Pos) col = mix(u_Stop0Color, u_Stop1Color, segT(t, u_Stop0Pos, u_Stop1Pos));\n" +
+        "    else if (t <= u_Stop2Pos) col = mix(u_Stop1Color, u_Stop2Color, segT(t, u_Stop1Pos, u_Stop2Pos));\n" +
+        "    else if (t <= u_Stop3Pos) col = mix(u_Stop2Color, u_Stop3Color, segT(t, u_Stop2Pos, u_Stop3Pos));\n" +
+        "    else if (t <= u_Stop4Pos) col = mix(u_Stop3Color, u_Stop4Color, segT(t, u_Stop3Pos, u_Stop4Pos));\n" +
+        "    else if (t <= u_Stop5Pos) col = mix(u_Stop4Color, u_Stop5Color, segT(t, u_Stop4Pos, u_Stop5Pos));\n" +
+        "    else if (t <= u_Stop6Pos) col = mix(u_Stop5Color, u_Stop6Color, segT(t, u_Stop5Pos, u_Stop6Pos));\n" +
+        "    else if (t <= u_Stop7Pos) col = mix(u_Stop6Color, u_Stop7Color, segT(t, u_Stop6Pos, u_Stop7Pos));\n" +
+        "    else col = u_Stop7Color;\n" +
+        "    gl_FragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "}\n";
+
+    private int multiStopGradientProgram = -1;
+    private int uMsgRect = -1, uMsgRadius = -1, uMsgGradType = -1, uMsgStart = -1, uMsgEnd = -1;
+    private final int[] uMsgStopColor = new int[8], uMsgStopPos = new int[8];
+    private boolean multiStopGradientInitFailed = false;
+
     // ══════════════════════════════════════════════════════════════════════
     // ── Pipeline MODERNE (1.21.11+) — voir javadoc de UiRenderer.
     // ══════════════════════════════════════════════════════════════════════
@@ -379,6 +465,71 @@ final class UiPrimitiveRenderer {
     private int uG2dRectModern = -1, uG2dRadiusModern = -1, uG2dColorBLModern = -1, uG2dColorBRModern = -1,
         uG2dColorTLModern = -1, uG2dColorTRModern = -1, uProjectionGradient2DModern = -1;
     private boolean gradient2DInitFailedModern = false;
+
+    // ── Shader "MultiStopGradient" moderne — même logique que
+    // MULTISTOP_GRADIENT_FRAGMENT_SRC (legacy), voir son commentaire pour le
+    // détail/le pourquoi (uniforms nommés individuellement, pas de tableau).
+    private static final String MULTISTOP_GRADIENT_FRAGMENT_SRC_MODERN =
+        "#version 150\n" +
+        "uniform vec4 u_Rect;\n" +
+        "uniform float u_Radius;\n" +
+        "uniform float u_GradType;\n" +
+        "uniform vec2 u_Start;\n" +
+        "uniform vec2 u_End;\n" +
+        "uniform vec4 u_Stop0Color;\n" + "uniform float u_Stop0Pos;\n" +
+        "uniform vec4 u_Stop1Color;\n" + "uniform float u_Stop1Pos;\n" +
+        "uniform vec4 u_Stop2Color;\n" + "uniform float u_Stop2Pos;\n" +
+        "uniform vec4 u_Stop3Color;\n" + "uniform float u_Stop3Pos;\n" +
+        "uniform vec4 u_Stop4Color;\n" + "uniform float u_Stop4Pos;\n" +
+        "uniform vec4 u_Stop5Color;\n" + "uniform float u_Stop5Pos;\n" +
+        "uniform vec4 u_Stop6Color;\n" + "uniform float u_Stop6Pos;\n" +
+        "uniform vec4 u_Stop7Color;\n" + "uniform float u_Stop7Pos;\n" +
+        "out vec4 fragColor;\n" +
+        "float segT(float t, float p0, float p1) {\n" +
+        "    float span = p1 - p0;\n" +
+        "    return span < 1e-6 ? 0.0 : clamp((t - p0) / span, 0.0, 1.0);\n" +
+        "}\n" +
+        "void main() {\n" +
+        "    vec2 center = (u_Rect.xy + u_Rect.zw) * 0.5;\n" +
+        "    vec2 halfSize = (u_Rect.zw - u_Rect.xy) * 0.5;\n" +
+        "    vec2 p = gl_FragCoord.xy - center;\n" +
+        "    vec2 d = abs(p) - halfSize + u_Radius;\n" +
+        "    float dist = length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0) - u_Radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    float t;\n" +
+        "    if (u_GradType < 0.5) {\n" +
+        "        vec2 dir = u_End - u_Start;\n" +
+        "        float len2 = dot(dir, dir);\n" +
+        "        t = len2 < 1e-6 ? 0.0 : dot(gl_FragCoord.xy - u_Start, dir) / len2;\n" +
+        "    } else if (u_GradType < 1.5) {\n" +
+        "        float rad = length(u_End - u_Start);\n" +
+        "        t = rad < 1e-6 ? 0.0 : length(gl_FragCoord.xy - u_Start) / rad;\n" +
+        "    } else {\n" +
+        "        vec2 dir = u_End - u_Start;\n" +
+        "        float baseAngle = atan(dir.y, dir.x);\n" +
+        "        vec2 q = gl_FragCoord.xy - u_Start;\n" +
+        "        float ang = (atan(q.y, q.x) - baseAngle) / 6.28318530718;\n" +
+        "        t = ang - floor(ang);\n" +
+        "    }\n" +
+        "    t = clamp(t, 0.0, 1.0);\n" +
+        "    vec4 col;\n" +
+        "    if (t <= u_Stop0Pos) col = u_Stop0Color;\n" +
+        "    else if (t <= u_Stop1Pos) col = mix(u_Stop0Color, u_Stop1Color, segT(t, u_Stop0Pos, u_Stop1Pos));\n" +
+        "    else if (t <= u_Stop2Pos) col = mix(u_Stop1Color, u_Stop2Color, segT(t, u_Stop1Pos, u_Stop2Pos));\n" +
+        "    else if (t <= u_Stop3Pos) col = mix(u_Stop2Color, u_Stop3Color, segT(t, u_Stop2Pos, u_Stop3Pos));\n" +
+        "    else if (t <= u_Stop4Pos) col = mix(u_Stop3Color, u_Stop4Color, segT(t, u_Stop3Pos, u_Stop4Pos));\n" +
+        "    else if (t <= u_Stop5Pos) col = mix(u_Stop4Color, u_Stop5Color, segT(t, u_Stop4Pos, u_Stop5Pos));\n" +
+        "    else if (t <= u_Stop6Pos) col = mix(u_Stop5Color, u_Stop6Color, segT(t, u_Stop5Pos, u_Stop6Pos));\n" +
+        "    else if (t <= u_Stop7Pos) col = mix(u_Stop6Color, u_Stop7Color, segT(t, u_Stop6Pos, u_Stop7Pos));\n" +
+        "    else col = u_Stop7Color;\n" +
+        "    fragColor = vec4(col.rgb, col.a * alpha);\n" +
+        "}\n";
+
+    private int multiStopGradientProgramModern = -1;
+    private int uMsgRectModern = -1, uMsgRadiusModern = -1, uMsgGradTypeModern = -1, uMsgStartModern = -1,
+        uMsgEndModern = -1, uProjectionMultiStopGradientModern = -1;
+    private final int[] uMsgStopColorModern = new int[8], uMsgStopPosModern = new int[8];
+    private boolean multiStopGradientInitFailedModern = false;
 
     // ── Icône RGBA quelconque (pastille de mod/pack téléchargée) — simple
     // passthrough texture (PAS le shader SDF du texte : une icône a ses
@@ -613,6 +764,60 @@ final class UiPrimitiveRenderer {
         } catch (Throwable t) {
             gradient2DInitFailedModern = true;
             LauncherLog.err("[UiRenderer] échec compilation shader Gradient2D moderne : " + t);
+        }
+    }
+
+    private void ensureMultiStopGradientShaderInit() {
+        if (multiStopGradientProgram != -1 || multiStopGradientInitFailed) return;
+        try {
+            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            glShaderSource(vsh, VERTEX_SRC);
+            glCompileShader(vsh);
+
+            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            glShaderSource(fsh, MULTISTOP_GRADIENT_FRAGMENT_SRC);
+            glCompileShader(fsh);
+
+            multiStopGradientProgram = glCreateProgram();
+            glAttachShader(multiStopGradientProgram, vsh);
+            glAttachShader(multiStopGradientProgram, fsh);
+            glLinkProgram(multiStopGradientProgram);
+
+            uMsgRect = glGetUniformLocation(multiStopGradientProgram, "u_Rect");
+            uMsgRadius = glGetUniformLocation(multiStopGradientProgram, "u_Radius");
+            uMsgGradType = glGetUniformLocation(multiStopGradientProgram, "u_GradType");
+            uMsgStart = glGetUniformLocation(multiStopGradientProgram, "u_Start");
+            uMsgEnd = glGetUniformLocation(multiStopGradientProgram, "u_End");
+            for (int i = 0; i < 8; i++) {
+                uMsgStopColor[i] = glGetUniformLocation(multiStopGradientProgram, "u_Stop" + i + "Color");
+                uMsgStopPos[i] = glGetUniformLocation(multiStopGradientProgram, "u_Stop" + i + "Pos");
+            }
+
+            LauncherLog.ui(1, "[UiRenderer] shader MultiStopGradient compilé, program=" + multiStopGradientProgram);
+        } catch (Throwable t) {
+            multiStopGradientInitFailed = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader MultiStopGradient : " + t);
+        }
+    }
+
+    private void ensureMultiStopGradientShaderInitModern() {
+        if (multiStopGradientProgramModern != -1 || multiStopGradientInitFailedModern) return;
+        try {
+            multiStopGradientProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, MULTISTOP_GRADIENT_FRAGMENT_SRC_MODERN);
+            uMsgRectModern = glGetUniformLocation(multiStopGradientProgramModern, "u_Rect");
+            uMsgRadiusModern = glGetUniformLocation(multiStopGradientProgramModern, "u_Radius");
+            uMsgGradTypeModern = glGetUniformLocation(multiStopGradientProgramModern, "u_GradType");
+            uMsgStartModern = glGetUniformLocation(multiStopGradientProgramModern, "u_Start");
+            uMsgEndModern = glGetUniformLocation(multiStopGradientProgramModern, "u_End");
+            for (int i = 0; i < 8; i++) {
+                uMsgStopColorModern[i] = glGetUniformLocation(multiStopGradientProgramModern, "u_Stop" + i + "Color");
+                uMsgStopPosModern[i] = glGetUniformLocation(multiStopGradientProgramModern, "u_Stop" + i + "Pos");
+            }
+            uProjectionMultiStopGradientModern = glGetUniformLocation(multiStopGradientProgramModern, "uProjection");
+            LauncherLog.ui(1, "[UiRenderer] shader MultiStopGradient (moderne) compilé, program=" + multiStopGradientProgramModern);
+        } catch (Throwable t) {
+            multiStopGradientInitFailedModern = true;
+            LauncherLog.err("[UiRenderer] échec compilation shader MultiStopGradient moderne : " + t);
         }
     }
 
@@ -1144,6 +1349,134 @@ final class UiPrimitiveRenderer {
             drawQuad(x1, y1, x2, y2, bl);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawGradient2DLegacy: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try {
+                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+            } catch (Throwable ignored) {}
+            try {
+                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+            } catch (Throwable ignored) {}
+            restoreLegacyGlState(savedGlState);
+        }
+    }
+
+    /**
+     * Dégradé multi-stop (2 à 8 couleurs) linéaire/radial/conique — voir
+     * {@link UiGradientType} pour le paramétrage de {@code startX/Y}/{@code
+     * endX/Y} selon le type. {@code stopColors}/{@code stopPositions} doivent
+     * avoir la MÊME longueur (2..8, tronqué au-delà) — {@code stopPositions}
+     * croissant dans [0,1] (comportement non garanti sinon, voir le shader).
+     * Routage identique à {@link #drawGradientRect2D} : Blaze3D era E d'abord
+     * (voir {@link UiTextBlaze3D#queueMultiStopGradientRect}), puis moderne/
+     * legacy selon {@link UiRenderer#isModern()}.
+     */
+    void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
+                                    UiGradientType type, float startX, float startY, float endX, float endY,
+                                    UiColor[] stopColors, float[] stopPositions, int vpWidth, int vpHeight) {
+        if (stopColors == null || stopPositions == null || stopColors.length == 0
+                || stopColors.length != stopPositions.length) return;
+        int n = Math.min(stopColors.length, 8);
+        // Stops au-delà de n : dupliquent le DERNIER stop réel (couleur+position)
+        // — voir la javadoc de MULTISTOP_GRADIENT_FRAGMENT_SRC pour pourquoi la
+        // chaîne if/else du shader résout ça correctement sans connaître n.
+        UiColor[] colors = new UiColor[8];
+        float[] positions = new float[8];
+        for (int i = 0; i < n; i++) { colors[i] = stopColors[i]; positions[i] = stopPositions[i]; }
+        for (int i = n; i < 8; i++) { colors[i] = colors[n - 1]; positions[i] = positions[n - 1]; }
+
+        if (UiTextBlaze3D.isAvailable()) {
+            UiTextBlaze3D.queueMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
+            return;
+        }
+        if (owner.isModern()) {
+            drawMultiStopGradientModern(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
+            return;
+        }
+        drawMultiStopGradientLegacy(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
+    }
+
+    private float gradTypeCode(UiGradientType type) {
+        switch (type) {
+            case RADIAL: return 1f;
+            case CONIC: return 2f;
+            default: return 0f;
+        }
+    }
+
+    private void drawMultiStopGradientModern(float x1, float y1, float x2, float y2, float radius,
+                                              UiGradientType type, float startX, float startY, float endX, float endY,
+                                              UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
+        ensureMultiStopGradientShaderInitModern();
+        if (multiStopGradientInitFailedModern) return;
+        try {
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            glUseProgram(multiStopGradientProgramModern);
+            glUniform4f(uMsgRectModern, x1, y1, x2, y2);
+            glUniform1f(uMsgRadiusModern, radius);
+            glUniform1f(uMsgGradTypeModern, gradTypeCode(type));
+            glUniform2f(uMsgStartModern, startX, startY);
+            glUniform2f(uMsgEndModern, endX, endY);
+            for (int i = 0; i < 8; i++) {
+                UiColor c = colors[i];
+                glUniform4f(uMsgStopColorModern[i], c.r, c.g, c.b, c.a);
+                glUniform1f(uMsgStopPosModern[i], positions[i]);
+            }
+            uploadProjectionModern(uProjectionMultiStopGradientModern, vpWidth, vpHeight);
+            drawQuadModern(x1, y1, x2, y2);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawMultiStopGradientModern: " + t);
+        } finally {
+            try { glUseProgram(0); } catch (Throwable ignored) {}
+        }
+    }
+
+    private void drawMultiStopGradientLegacy(float x1, float y1, float x2, float y2, float radius,
+                                              UiGradientType type, float startX, float startY, float endX, float endY,
+                                              UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
+        ensureMultiStopGradientShaderInit();
+        if (multiStopGradientInitFailed) return;
+
+        GlBridge.LegacyGlState savedGlState = null;
+        boolean projPushed = false, modelPushed = false;
+        try {
+            savedGlState = captureLegacyGlState();
+            glDisable(0x0DE1); // GL_TEXTURE_2D
+            glDisable(0x0B71); // GL_DEPTH_TEST
+            glDisable(0x0B44); // GL_CULL_FACE
+            glDisable(0x0BC0); // GL_ALPHA_TEST
+            glEnable(0x0BE2);  // GL_BLEND
+            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+
+            matrixMode(0x1701); // GL_PROJECTION
+            pushMatrix();
+            projPushed = true;
+            loadIdentity();
+            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            matrixMode(0x1700); // GL_MODELVIEW
+            pushMatrix();
+            modelPushed = true;
+            loadIdentity();
+
+            glUseProgram(multiStopGradientProgram);
+            glUniform4f(uMsgRect, x1, y1, x2, y2);
+            glUniform1f(uMsgRadius, radius);
+            glUniform1f(uMsgGradType, gradTypeCode(type));
+            glUniform2f(uMsgStart, startX, startY);
+            glUniform2f(uMsgEnd, endX, endY);
+            for (int i = 0; i < 8; i++) {
+                UiColor c = colors[i];
+                glUniform4f(uMsgStopColor[i], c.r, c.g, c.b, c.a);
+                glUniform1f(uMsgStopPos[i], positions[i]);
+            }
+            // gl_Color ignorée par ce shader — appel conservé pour réutiliser drawQuad() tel quel.
+            drawQuad(x1, y1, x2, y2, colors[0]);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiRenderer] drawMultiStopGradientLegacy: " + t);
         } finally {
             try { glUseProgram(0); } catch (Throwable ignored) {}
             try {
