@@ -63,6 +63,24 @@ public final class UiTransition {
     }
 
     /**
+     * Place la transition DIRECTEMENT dans son état final "visible", sans
+     * l'animer — symétrique de {@link UiAnimatedFloat#snapTo}.
+     *
+     * <p>Sert à marquer une transition comme DÉJÀ JOUÉE pour un élément qui ne
+     * doit pas l'exécuter. Attention au piège que ce cas révèle : ne PAS
+     * appeler {@link #eased()} ne suspend pas la transition, ça la laisse à
+     * {@code progress = 0} — donc au premier appel ultérieur elle démarre
+     * intégralement, avec un retard arbitraire. Sauter une animation en
+     * ignorant sa valeur ne la neutralise pas ; il faut la terminer
+     * explicitement.
+     */
+    public void snapToEnd() {
+        this.target = true;
+        this.progress = 1f;
+        this.sinceTargetChanged = delaySeconds;
+    }
+
+    /**
      * À appeler une fois par frame (avance l'horloge interne). Renvoie la
      * progression BRUTE 0..1 (linéaire) — préférer {@link #eased()} pour tout
      * usage visuel (opacité, échelle, décalage).

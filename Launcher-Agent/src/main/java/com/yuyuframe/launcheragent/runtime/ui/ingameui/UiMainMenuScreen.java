@@ -816,6 +816,9 @@ public class UiMainMenuScreen extends UiScreenBase {
     private void applyReorder(ModCard card, String id, float newX, float newY) {
         float[] prev = prevCardLocalPos.get(id);
         if (prev != null) {
+            // Déjà à l'écran avant cette reconstruction : pas d'entrée, quelle
+            // que soit la suite — voir ModCard#markAlreadyPresent.
+            card.markAlreadyPresent();
             float dx = prev[0] - newX, dy = prev[1] - newY;
             if (Math.abs(dx) > 0.5f || Math.abs(dy) > 0.5f) card.startMove(dx, dy);
         }
@@ -1290,10 +1293,32 @@ public class UiMainMenuScreen extends UiScreenBase {
         private boolean moving;
 
         /**
+         * Marque cette carte comme DÉJÀ PRÉSENTE avant la reconstruction :
+         * elle ne doit pas jouer d'animation d'entrée, qu'elle ait bougé ou non.
+         *
+         * <p>BUG CORRIGÉ (retour utilisateur : "à la fin des animations de
+         * changement comme le favori, ou quand tu changes le type de rendu, ça
+         * rejoue l'animation d'entrée") — la première version se contentait de
+         * FORCER {@code t = 1} tant que la carte se déplaçait, sans jamais
+         * consulter {@code enterAnim}. Or ne pas lire une {@link UiTransition}
+         * ne la met pas en pause : elle reste à {@code progress = 0}. À la fin
+         * du déplacement, le code recommençait donc à la lire — et elle jouait
+         * son entrée COMPLÈTE à ce moment-là, d'où l'animation parasite juste
+         * après le glissement. Il faut la TERMINER explicitement.
+         *
+         * <p>Appelé pour toute carte qui existait déjà, PAS seulement pour
+         * celles qui bougent : une carte restée exactement à la même place lors
+         * d'un changement d'agencement n'"apparaît" pas davantage que ses
+         * voisines qui glissent — sinon elle serait la seule à clignoter.
+         */
+        void markAlreadyPresent() {
+            enterAnim.snapToEnd();
+        }
+
+        /**
          * @param dx/dy écart ANCIENNE position moins NOUVELLE, dans le repère
-         *        local de la grille. Coupe aussi l'animation d'entrée : cette
-         *        carte n'apparaît pas, elle se DÉPLACE — rejouer une entrée
-         *        par-dessus est précisément ce qui rendait le geste illisible.
+         *        local de la grille. Voir {@link #markAlreadyPresent} pour la
+         *        neutralisation de l'entrée, faite séparément.
          */
         void startMove(float dx, float dy) {
             this.moveDx = dx;
