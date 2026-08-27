@@ -94,11 +94,10 @@ public final class UiTheme {
     public static float GLASS_STRENGTH_CARD = 0.58f;
     /** Champs/pilules (recherche, barres) — les plus légers, ce sont de petites surfaces où le flou se voit le mieux. */
     public static float GLASS_STRENGTH_FIELD = 0.52f;
-    // (Pas de GLASS_STRENGTH_MODAL pour l'instant : les tiroirs/modales
-    // — ModrinthContentScreen — ne sont pas encore passés au verre. Ajouter le
-    // token AVEC l'écran qui le consomme, jamais avant : c'est exactement le
-    // motif "capacité construite pour la généralité, zéro appelant" relevé par
-    // l'audit du moteur du 2026-08-27, à ne pas réamorcer ici.)
+    /** Panneaux de section des écrans de config (voir {@link UiPanel}) — ils portent du texte dense sur de grandes surfaces, donc plus teintés qu'une carte. */
+    public static float GLASS_STRENGTH_PANEL = 0.68f;
+    /** Modales/tiroirs — les plus denses : ils doivent couper franchement avec l'écran derrière eux (tiroir de filtres de ModrinthContentScreen). */
+    public static float GLASS_STRENGTH_MODAL = 0.78f;
 
     /**
      * Liseré de lumière sur le bord HAUT d'une surface de verre — signature

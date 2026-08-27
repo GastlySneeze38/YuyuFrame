@@ -277,7 +277,11 @@ public final class ConfigScreenBuilder {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+            // En-tête de section — plus teinté que les lignes ordinaires
+            // (GLASS_STRENGTH_PANEL) pour rester le repère structurant de la
+            // liste, sinon il se noierait dans la succession de bandes.
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL,
                 UiTheme.PANEL_BG_ALT.multiplyAlpha(0.82f * clipFade), vpWidth, vpHeight);
             float barW = UiTheme.scaled(3f), barInset = UiTheme.scaled(3f);
             renderer.drawRoundedRect(x, y + barInset, x + barW, y + h - barInset, barW / 2f,
@@ -441,8 +445,19 @@ public final class ConfigScreenBuilder {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+            // Bandeau de verre par ligne de réglage (rework 2026-08-27) — c'est
+            // LA surface dominante des écrans de config. Teinte légère : ces
+            // bandes se succèdent verticalement, une teinte forte redonnerait
+            // un aplat plein écran et annulerait l'intérêt du flou.
+            // clipFade porté par la couleur de repli, qui pilote AUSSI
+            // l'opacité du verre (voir UiRenderer#drawGlassPanel).
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD,
                 new UiColor(0, 0, 0, 60).multiplyAlpha(clipFade), vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                    Math.max(1f, UiTheme.scaled(1f)), UiTheme.GLASS_BORDER.multiplyAlpha(clipFade), vpWidth, vpHeight);
+            }
         }
     }
 

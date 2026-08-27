@@ -50,6 +50,9 @@ public class UiModGroupConfigScreen extends UiScreenBase {
     // partagée n'apporterait rien.
     private static final UiColor CONFIG_OVERLAY = new UiColor(6, 6, 10, 70);
 
+    /** Étages de flou de l'arrière-plan de verre — même valeur que UiMainMenuScreen (voir UiRenderer#beginGlassFrame). */
+    private static final int GLASS_PASSES = 4;
+
     // Non static/final — recalculées à chaque buildLayout() depuis
     // UiTheme.UI_SCALE (voir GlobalUiSettings, réglage "Taille de
     // l'interface"), même motif que UiMainMenuScreen/ConfigScreenBuilder.
@@ -100,6 +103,9 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         // Voir UiModConfigScreen#uiDraw pour le bug de z-order déjà corrigé
         // ici dès le départ : SidebarPanel est un widget ajouté EN PREMIER
         // dans "widgets" (voir buildLayout), jamais dessiné séparément ici.
+        // Voir UiModConfigScreen/UiMainMenuScreen — chaîne de flou partagée,
+        // empilée avant tout dessin.
+        UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -352,7 +358,13 @@ public class UiModGroupConfigScreen extends UiScreenBase {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hover = hoverAnim.get();
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover);
+                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
+            }
             // "«" (chevron double, U+00AB) plutôt que "<" — voir UiModConfigScreen.BackButton pour le détail du choix.
             String arrow = "«";
             float scale = UiTheme.scaled(0.7f);

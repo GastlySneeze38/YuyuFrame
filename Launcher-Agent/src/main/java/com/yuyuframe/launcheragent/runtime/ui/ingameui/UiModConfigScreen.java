@@ -56,6 +56,9 @@ public class UiModConfigScreen extends UiScreenBase {
     // plus de voile aide la lisibilité sans redevenir un mur opaque.
     private static final UiColor CONFIG_OVERLAY = new UiColor(6, 6, 10, 70);
 
+    /** Étages de flou de l'arrière-plan de verre — même valeur que UiMainMenuScreen (voir UiRenderer#beginGlassFrame). */
+    private static final int GLASS_PASSES = 4;
+
     // Non static/final — recalculées à chaque buildLayout() depuis
     // UiTheme.UI_SCALE (voir GlobalUiSettings, réglage "Taille de
     // l'interface"), même motif que UiMainMenuScreen/UiModGroupConfigScreen.
@@ -105,6 +108,11 @@ public class UiModConfigScreen extends UiScreenBase {
         // buildLayout) — l'ordre d'insertion pilote le z-order de
         // super.uiDraw(), donc il se dessine AVANT (donc EN DESSOUS) les
         // onglets, plus besoin de l'appeler séparément ici.
+        // Arrière-plan flouté partagé par toutes les surfaces de verre de ce
+        // frame — DOIT précéder tout dessin (voir UiRenderer#beginGlassFrame :
+        // la file s'exécute dans l'ordre d'empilement, donc la chaîne capture
+        // le monde seul). Un seul calcul pour l'écran entier.
+        UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -311,7 +319,13 @@ public class UiModConfigScreen extends UiScreenBase {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hover = hoverAnim.get();
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover);
+                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
+            }
             // "«" (chevron double, U+00AB, présent dans l'atlas Latin-1 de
             // UiFont) plutôt que "<" — un simple signe "inférieur à" détourné
             // en flèche, jugé "moche" par l'utilisateur. Police BOLD (plus

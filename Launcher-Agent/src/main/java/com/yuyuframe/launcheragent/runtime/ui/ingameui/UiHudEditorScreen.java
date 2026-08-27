@@ -37,6 +37,15 @@ public class UiHudEditorScreen extends UiScreenBase {
 
     private static final UiColor EDITOR_OVERLAY = new UiColor(6, 6, 10, 60);
 
+    /**
+     * Moins d'étages que les autres écrans (4) — la seule surface de verre ici
+     * est le petit bouton "Retour" au centre, et CET écran est justement celui
+     * où le jeu doit rester le plus fluide et le plus lisible (on positionne
+     * des éléments HUD par rapport à ce qu'on voit en direct). Payer la chaîne
+     * complète pour un unique bouton n'aurait pas de contrepartie visible.
+     */
+    private static final int GLASS_PASSES = 3;
+
     private final Object lastScreen;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
     private List<UiHudBox> hudBoxes = new ArrayList<>();
@@ -60,6 +69,10 @@ public class UiHudEditorScreen extends UiScreenBase {
             lastLayoutWidth = screenWidth;
             lastLayoutHeight = screenHeight;
         }
+        // Le VOILE de fond reste volontairement quasi-transparent (voir
+        // EDITOR_OVERLAY/javadoc de classe) : c'est le seul écran où voir le
+        // jeu net EST la fonction. Seul le bouton "Retour" est en verre.
+        UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -106,12 +119,21 @@ public class UiHudEditorScreen extends UiScreenBase {
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
+            float hover = hoverAnim.get();
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover);
+                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD,
+                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
+            }
             // "«" (chevron double, U+00AB) plutôt que "<" — voir UiModConfigScreen.BackButton pour le détail du choix.
+            // Glisse vers la gauche au survol : affordance "on te ramène en arrière".
             String label = "« " + Lang.tr("Retour");
             float tw = renderer.textWidth(label, 0.44f);
-            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.44f, vpWidth, vpHeight);
+            float slide = hover * UiTheme.scaled(3f);
+            renderer.drawText(label, x + (w - tw) / 2f - slide, y + h / 2f - 5f, UiTheme.TEXT_PRIMARY, 0.44f, vpWidth, vpHeight);
         }
 
         @Override

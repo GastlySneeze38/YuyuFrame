@@ -44,8 +44,17 @@ public class UiButton extends UiWidget {
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-        UiColor color = UiColor.lerp(BASE, HOVER, hoverAnim.get());
-        renderer.drawRoundedRect(x, y, x + w, y + h, RADIUS, color, vpWidth, vpHeight);
+        float hover = hoverAnim.get();
+        UiColor color = UiColor.lerp(BASE, HOVER, hover);
+        // Bouton de verre (rework 2026-08-27) — composant PARTAGÉ, converti
+        // ici pour propager le style à tous ses appelants d'un coup.
+        renderer.drawGlassPanel(x, y, x + w, y + h, RADIUS,
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, color, vpWidth, vpHeight);
+        if (renderer.isGlassAvailable()) {
+            UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover);
+            renderer.drawRoundedRectBorder(x, y, x + w, y + h, RADIUS,
+                Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
+        }
         if (rippleStartMs >= 0) {
             float progress = (System.currentTimeMillis() - rippleStartMs) / (float) RIPPLE_DURATION_MS;
             if (progress >= 1f) {

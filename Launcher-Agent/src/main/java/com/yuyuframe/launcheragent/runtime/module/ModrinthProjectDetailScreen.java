@@ -53,6 +53,9 @@ import java.util.regex.Pattern;
 public final class ModrinthProjectDetailScreen extends UiScreenBase {
 
     private static final int MAX_GALLERY = 12;
+
+    /** Étages de flou — même valeur que les autres écrans (voir UiRenderer#beginGlassFrame). */
+    private static final int GLASS_PASSES = 4;
     private static final float MARGIN = 28f;
     private static final float BACK_W = 110f, BACK_H = 34f;
     private static final float INSTALL_BTN_W = 170f, INSTALL_BTN_H = 40f;
@@ -169,6 +172,8 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         if (wasInstalling && !nowInstalling) alreadyInstalled = parent.isNowInstalled(hit);
         wasInstalling = nowInstalling;
 
+        // Chaîne de flou partagée — voir UiRenderer#beginGlassFrame.
+        UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -732,8 +737,16 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             float fade = clipFade;
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.PANEL_BG_ALT.multiplyAlpha(fade), vpWidth, vpHeight);
-            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD, 1.4f, UiTheme.TRACK_OFF.multiplyAlpha(fade * 0.8f), vpWidth, vpHeight);
+            // Panneau de verre (rework 2026-08-27) — contour repris sur
+            // GLASS_BORDER quand le verre est actif : TRACK_OFF (un gris plein)
+            // se voyait bien sur un fond opaque, il se confond avec le décor
+            // flouté une fois le panneau translucide.
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG_ALT.multiplyAlpha(fade), vpWidth, vpHeight);
+            UiColor panelBorder = renderer.isGlassAvailable()
+                ? UiTheme.GLASS_BORDER.multiplyAlpha(fade)
+                : UiTheme.TRACK_OFF.multiplyAlpha(fade * 0.8f);
+            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD, 1.4f, panelBorder, vpWidth, vpHeight);
 
             String url = urls.get(index);
             BufferedImage img = UiRemoteImage.get(url);

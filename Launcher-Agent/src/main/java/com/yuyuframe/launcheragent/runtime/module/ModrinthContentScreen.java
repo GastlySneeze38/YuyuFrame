@@ -230,11 +230,16 @@ public final class ModrinthContentScreen extends UiScreenBase {
         }
 
         updateDrawerLayout();
+        // Chaîne de flou partagée par tout le frame — voir
+        // UiRenderer#beginGlassFrame (doit précéder tout dessin).
+        UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
-            renderer.drawText(UiFont.BOLD, kind.headerTitle, MARGIN, screenHeight - 48,
-                UiTheme.TEXT_PRIMARY, 0.8f, screenWidth, screenHeight);
+            // Titre posé directement sur le décor — ombre portée obligatoire
+            // (voir UiTheme.TEXT_SHADOW), il ne repose sur aucune surface de verre.
+            renderer.drawTextShadowed(UiFont.BOLD, kind.headerTitle, MARGIN, screenHeight - 48,
+                UiTheme.TEXT_PRIMARY, UiTheme.TEXT_SHADOW, 1f, -1f, 0.8f, screenWidth, screenHeight);
             String status = statusText;
             if (!status.isEmpty()) {
                 // 40px sous la barre de recherche, encore 40px au-dessus du
@@ -263,6 +268,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // Retour/recherche qui se chevauchaient, texte minuscule sur un écran
     // entier vide) : tout est maintenant nettement plus grand et espacé.
     private static final float MARGIN = 28f;
+
+    /** Étages de flou — même valeur que les autres écrans (voir UiRenderer#beginGlassFrame). */
+    private static final int GLASS_PASSES = 4;
     private static final float BACK_W = 110f, BACK_H = 34f;
     private static final float TAB_H = 34f, TAB_W = 160f;
     // Distances depuis le HAUT de l'écran (screenHeight - X) — décalées de
@@ -373,7 +381,21 @@ public final class ModrinthContentScreen extends UiScreenBase {
         if (t <= 0.001f) return;
         drawerBackdrop.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
         float drawerX = screenWidth - DRAWER_W * t;
-        renderer.drawRoundedRect(drawerX, 0, screenWidth, screenHeight, 0, UiTheme.PANEL_BG, screenWidth, screenHeight);
+        if (renderer.isGlassAvailable()) {
+            // drawBlurredPanel et NON drawGlassPanel : ce tiroir est une MODALE,
+            // il doit flouter TOUT ce qu'il recouvre — y compris l'interface
+            // déjà dessinée dessous. La chaîne PARTAGÉE du frame
+            // (beginGlassFrame) ne contient que le monde du jeu, capturé avant
+            // le moindre pixel d'UI (voir Blaze3DBlur#queueFrameChain) : s'en
+            // servir ici laisserait la liste de résultats parfaitement nette
+            // sous le tiroir. Celui-ci recalcule donc sa propre chaîne à son
+            // tour dans la file — 9 passes en plus, mais seulement tant que le
+            // tiroir est ouvert, et pour un seul panneau.
+            renderer.drawBlurredPanel(drawerX, 0, screenWidth, screenHeight, 0f, 0f, 0f, 0f,
+                GLASS_PASSES, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, screenWidth, screenHeight);
+        } else {
+            renderer.drawRoundedRect(drawerX, 0, screenWidth, screenHeight, 0, UiTheme.PANEL_BG, screenWidth, screenHeight);
+        }
         // Liseré ACCENT au bord gauche — sépare visuellement le tiroir du
         // reste (drawShadow existe mais compose TOUJOURS après Blaze3D sur
         // era E, voir sa javadoc — un vrai risque de retomber sur le même bug
@@ -882,7 +904,22 @@ public final class ModrinthContentScreen extends UiScreenBase {
             float shadowAlpha = (60 + liftT * 30) * fade / 255f;
             renderer.drawShadow(x, dy, x + w, dy + h, UiTheme.RADIUS_MD, shadowBlur, 0f,
                 new UiColor(0f, 0f, 0f, shadowAlpha), vpWidth, vpHeight);
-            renderer.drawRoundedRect(x, dy, x + w, dy + h, UiTheme.RADIUS_MD, UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
+            // Carte de verre (rework 2026-08-27) — le survol DÉTEND la teinte
+            // (plus de décor flouté visible à travers) au lieu d'éclaircir un
+            // aplat, comme sur l'écran principal. Le fondu de bord de scroll
+            // passe par la couleur de repli, qui pilote AUSSI l'opacité du
+            // verre (voir UiRenderer#drawGlassPanel).
+            float glassStrength = UiTheme.GLASS_STRENGTH_CARD - liftT * 0.1f;
+            renderer.drawGlassPanel(x, dy, x + w, dy + h, UiTheme.RADIUS_MD,
+                UiTheme.GLASS_TINT, glassStrength, UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, liftT);
+                renderer.drawRoundedRectBorder(x, dy, x + w, dy + h, UiTheme.RADIUS_MD,
+                    Math.max(1f, UiTheme.scaled(1f)), border.multiplyAlpha(fade), vpWidth, vpHeight);
+                float hairline = Math.max(1f, UiTheme.scaled(1f));
+                renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, dy + h - hairline, x + w - UiTheme.RADIUS_MD, dy + h, 0f,
+                    UiTheme.GLASS_HAIRLINE.multiplyAlpha(fade), vpWidth, vpHeight);
+            }
 
             // Icône plafonnée (pas juste h-24) — sinon elle grossit à l'infini
             // avec la hauteur de carte et écrase visuellement le texte.

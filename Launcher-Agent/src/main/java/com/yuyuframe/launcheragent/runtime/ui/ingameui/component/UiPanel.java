@@ -21,8 +21,22 @@ public final class UiPanel {
     private static final float SHADOW_BLUR = 8f;
 
     public static void draw(UiRenderer renderer, float x, float y, float w, float h, String title, int vpWidth, int vpHeight) {
+        // Ombre AVANT le fond (le verre étant opaque dans ses bornes, il la
+        // recouvre proprement là où elle tombe sur lui — une ombre posée
+        // par-dessus ternirait le flou).
         renderer.drawShadow(x, y, x + w, y + h, UiTheme.RADIUS_MD, SHADOW_BLUR, 0f, SHADOW_COLOR, vpWidth, vpHeight);
-        renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_MD, UiTheme.PANEL_BG, vpWidth, vpHeight);
+        // Surface de verre (rework 2026-08-27) — CE helper est le panneau le
+        // plus réutilisé du moteur (tous les écrans de config), le convertir
+        // ici propage le style d'un coup au lieu de retoucher chaque écran.
+        renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG, vpWidth, vpHeight);
+        if (renderer.isGlassAvailable()) {
+            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD,
+                Math.max(1f, UiTheme.scaled(1f)), UiTheme.GLASS_BORDER, vpWidth, vpHeight);
+            float hairline = Math.max(1f, UiTheme.scaled(1f));
+            renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, y + h - hairline, x + w - UiTheme.RADIUS_MD, y + h, 0f,
+                UiTheme.GLASS_HAIRLINE, vpWidth, vpHeight);
+        }
         if (title != null && !title.isEmpty()) {
             renderer.drawText(UiFont.BOLD, title, x + UiTheme.scaled(16f), y + h - UiTheme.scaled(28f), UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.5f), vpWidth, vpHeight);
         }
