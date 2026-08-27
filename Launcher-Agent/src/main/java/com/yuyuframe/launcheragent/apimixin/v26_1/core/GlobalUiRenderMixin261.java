@@ -108,6 +108,31 @@ public abstract class GlobalUiRenderMixin261 {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DBlur.drawTestPanel() a levé: " + t);
                 }
             }
+
+            // Preuve de mécanisme rects batchés (roadmap Phase 5.5) — voir
+            // Blaze3DRect, /yf batchpoc pour activer.
+            if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled) {
+                try {
+                    com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.drawTestBatch(
+                        GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DRect.drawTestBatch() a levé: " + t);
+                }
+            }
+
+            // Preuve de mécanisme rich text (roadmap Phase 5.3) — voir
+            // UiRichText, /yf richtextpoc pour activer.
+            if (com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled) {
+                try {
+                    com.yuyuframe.launcheragent.apigraphic.UiRenderer richRenderer =
+                        com.yuyuframe.launcheragent.apigraphic.UiRenderer.get(this.getClass().getClassLoader());
+                    com.yuyuframe.launcheragent.apigraphic.core.UiRichText.drawTestParagraph(richRenderer,
+                        GlobalUiRenderBridge261.inputPoller.mouseX, GlobalUiRenderBridge261.inputPoller.mouseY,
+                        GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): UiRichText.drawTestParagraph() a levé: " + t);
+                }
+            }
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): " + t);
         }

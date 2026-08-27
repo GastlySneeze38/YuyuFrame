@@ -52,6 +52,8 @@ final class YfCommands {
         ClientCommandRegistry.register(shaderPoc());
         ClientCommandRegistry.register(blurPoc());
         ClientCommandRegistry.register(taffyPoc());
+        ClientCommandRegistry.register(richTextPoc());
+        ClientCommandRegistry.register(batchPoc());
         ClientCommandRegistry.register(reloadConfig());
         ClientCommandRegistry.register(shaderReload());
     }
@@ -278,6 +280,32 @@ final class YfCommands {
                 // growA(120)/growB(240)) : root=(0,0,500,?), fixed=(20,20,80,40),
                 // growA=(110,20,120,40), growB=(240,20,240,40).
                 LauncherLog.info("[YfCommands] taffypoc OK — " + rects.size() + " rects : " + rects);
+            }
+        };
+    }
+
+    private static ClientCommand richTextPoc() {
+        return new ClientCommand() {
+            public String name() { return "yf richtextpoc"; }
+            public String description() { return "Toggle un paragraphe de test rich text (gras/couleur/lien mélangés, word-wrap automatique — roadmap Phase 5.3) — voir UiRichText"; }
+            public void execute(String[] args) {
+                com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled;
+                LauncherLog.info("[YfCommands] Test rich text : " + (com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled ? "activé" : "désactivé")
+                    + " (paragraphe en bas à gauche si le mécanisme fonctionne — voir logs en cas d'échec)");
+            }
+        };
+    }
+
+    private static ClientCommand batchPoc() {
+        return new ClientCommand() {
+            public String name() { return "yf batchpoc"; }
+            public String description() { return "Toggle une grille de test de 40 rects (couleurs/tailles variées, même rayon) dessinés en UN SEUL draw call — roadmap Phase 5.5, voir Blaze3DRect#drawRectBatch"; }
+            public void execute(String[] args) {
+                com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled;
+                LauncherLog.info("[YfCommands] Test rects batchés : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled ? "activé" : "désactivé")
+                    + " (grille 10x4 dégradée si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
     }

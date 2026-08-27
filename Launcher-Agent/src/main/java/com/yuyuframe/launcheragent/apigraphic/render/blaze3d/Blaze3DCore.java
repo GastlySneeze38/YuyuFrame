@@ -241,6 +241,91 @@ public final class Blaze3DCore {
     static Object rectPipeline, rectShaderSource;
     static Object rectParamsBuffer;
 
+    // ── Pipeline de rects BATCHÉS (roadmap Phase 5.5) ───────────────────────
+    //
+    // Regroupe N rects (bornes/couleur différentes, MÊME rayon partagé) en UN
+    // SEUL draw call — contrairement à RECT_FRAGMENT_SRC (u_Rect/u_CornerRadii
+    // en UNIFORM, donc un seul rect par draw), ce pipeline calcule le SDF en
+    // espace LOCAL au quad : UV0 = coordonnée normalisée 0..1 dans le quad,
+    // UV2 (déjà présent dans le format de sommet hérité de GUI_TEXT, jamais
+    // utilisé par rectPipeline) réutilisé pour porter la taille RÉELLE en
+    // pixels du rect (short×2 — largeur/hauteur), lue par sommet. Un rayon
+    // PARTAGÉ (pas par coin) reste en uniform : aucune place restante dans le
+    // format PCTL 28 octets (Position 12 + Color 4 + UV0 8 + UV2 4 = 28,
+    // déjà plein) pour un rayon par sommet — un batch ne peut donc mélanger
+    // que des rects de MÊME rayon (contrainte acceptée, cas le plus courant :
+    // toutes les cartes d'un écran partagent RADIUS_MD).
+    static final String RECT_BATCH_VERTEX_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform Projection {\n" +
+        "    mat4 ProjMat;\n" +
+        "};\n" +
+        "in vec3 Position;\n" +
+        "in vec4 Color;\n" +
+        "in vec2 UV0;\n" +
+        "in ivec2 UV2;\n" +
+        "out vec4 vertexColor;\n" +
+        "out vec2 localUV;\n" +
+        "out vec2 rectSize;\n" +
+        "void main() {\n" +
+        "    gl_Position = ProjMat * vec4(Position, 1.0);\n" +
+        "    vertexColor = Color;\n" +
+        "    localUV = UV0;\n" +
+        "    rectSize = vec2(UV2);\n" +
+        "}\n";
+
+    /** Même formule SDF que {@link #RECT_FRAGMENT_SRC} (rayon uniforme, pas par coin) mais en espace LOCAL au quad (voir {@link #RECT_BATCH_VERTEX_SRC}) — {@code BatchParams.x} = rayon PARTAGÉ par tout le batch. */
+    static final String RECT_BATCH_FRAGMENT_SRC =
+        "#version 330\n" +
+        "layout(std140) uniform DynamicTransforms {\n" +
+        "    mat4 ModelViewMat;\n" +
+        "    vec4 ColorModulator;\n" +
+        "    vec3 ModelOffset;\n" +
+        "    mat4 TextureMat;\n" +
+        "};\n" +
+        "layout(std140) uniform BatchParams {\n" +
+        "    vec4 u_Radius;\n" +
+        "};\n" +
+        "in vec4 vertexColor;\n" +
+        "in vec2 localUV;\n" +
+        "in vec2 rectSize;\n" +
+        "out vec4 fragColor;\n" +
+        "void main() {\n" +
+        "    float radius = u_Radius.x;\n" +
+        "    vec2 halfSize = rectSize * 0.5;\n" +
+        "    vec2 p = localUV * rectSize - halfSize;\n" +
+        "    vec2 q = abs(p) - halfSize + vec2(radius);\n" +
+        "    float dist = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - radius;\n" +
+        "    float alpha = 1.0 - smoothstep(-1.0, 0.0, dist);\n" +
+        "    vec4 color = vertexColor * ColorModulator;\n" +
+        "    color.a *= alpha;\n" +
+        "    if (color.a < 0.01) {\n" +
+        "        discard;\n" +
+        "    }\n" +
+        "    fragColor = color;\n" +
+        "}\n";
+
+    static Object batchPipeline, batchShaderSource;
+    static Object batchParamsBuffer;
+
+    static Object ensureBatchParamsBuffer(Object device) throws Exception {
+        if (batchParamsBuffer == null) {
+            java.util.function.Supplier<String> label = () -> "yuyuframe_rect_batch_params";
+            batchParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 16L);
+        }
+        return batchParamsBuffer;
+    }
+
+    static Object writeBatchParams(Object device, Object encoder, float radius) throws Exception {
+        Object buffer = ensureBatchParamsBuffer(device);
+        ByteBuffer data = ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder());
+        data.putFloat(radius).putFloat(0f).putFloat(0f).putFloat(0f);
+        data.flip();
+        Object slice = mBufferSlice.invoke(buffer, 0L, 16L);
+        mWriteToBuffer.invoke(encoder, slice, data);
+        return slice;
+    }
+
     static Object ensureRectParamsBuffer(Object device) throws Exception {
         if (rectParamsBuffer == null) {
             java.util.function.Supplier<String> label = () -> "yuyuframe_rect_params";
@@ -548,6 +633,13 @@ public final class Blaze3DCore {
                 new String[0], new String[]{ "DynamicTransforms", "Projection", "RectParams" });
             rectShaderSource = ShaderPipelineFactory.shaderSource(rectVertexId, RECT_VERTEX_SRC, rectFragmentId, RECT_FRAGMENT_SRC);
 
+            // Pipeline rects BATCHÉS (voir RECT_BATCH_VERTEX_SRC/RECT_BATCH_FRAGMENT_SRC) — roadmap Phase 5.5.
+            Object batchVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect_batch.vsh");
+            Object batchFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect_batch.fsh");
+            batchPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_rect_batch", batchVertexId, batchFragmentId,
+                new String[0], new String[]{ "DynamicTransforms", "Projection", "BatchParams" });
+            batchShaderSource = ShaderPipelineFactory.shaderSource(batchVertexId, RECT_BATCH_VERTEX_SRC, batchFragmentId, RECT_BATCH_FRAGMENT_SRC);
+
             // Pipeline dégradé multi-stop / texte SDF — construits par
             // Blaze3DGradient/Blaze3DText eux-mêmes (le fichier qui possède
             // le GLSL possède aussi le code qui le compile), on vérifie
@@ -556,7 +648,7 @@ public final class Blaze3DCore {
             boolean textPipelineOk = Blaze3DText.resolveTextPipeline();
             boolean blurPipelineOk = Blaze3DBlur.resolveBlurPipeline();
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || batchPipeline == null || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {

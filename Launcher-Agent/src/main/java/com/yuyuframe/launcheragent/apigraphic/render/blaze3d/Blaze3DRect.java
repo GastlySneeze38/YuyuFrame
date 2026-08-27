@@ -22,33 +22,77 @@ import java.util.OptionalInt;
 public final class Blaze3DRect {
     private Blaze3DRect() {}
 
-    // ── Textures d'icônes arbitraires (pastilles de mod/pack, une par cacheKey) ──
-    // Même mécanisme que ensureTexture (police) — image RGBA quelconque au lieu
-    // d'un atlas de glyphes, jamais de mip (icônes 32-96px, jamais minifiées
-    // aussi violemment que le texte le plus petit de l'UI qui a motivé les mips).
+    // ── Atlas partagé d'icônes arbitraires (pastilles de mod/pack) — roadmap
+    // Phase 5.5 (batching/atlas). REMPLACE l'ancienne texture GPU dédiée par
+    // icône (une allocation + un bind Sampler0 différent par icône, ~15-20
+    // icônes visibles sur un écran comme UiMainMenuScreen) : désormais UNE
+    // seule texture GPU 2048×2048 partagée, chaque icône occupe un sous-rect
+    // — même bénéfice mémoire/changements d'état que UiFont (police), jamais
+    // appliqué aux icônes jusqu'ici. Packing "shelf" (même principe que
+    // UiFont#UiFont, généralisé pour des hauteurs variables — les icônes,
+    // contrairement aux glyphes, n'ont pas une cellHeight commune) : avance
+    // en X sur l'étagère courante, saute à l'étagère suivante (hauteur = max
+    // des icônes déjà posées dessus) quand ça déborde en largeur.
+    //
+    // NE remplace PAS le batching des DRAW CALLS eux-mêmes (chaque drawIcon
+    // reste un createRenderPass/drawIndexed séparé) — voir la javadoc de
+    // #drawIcon : regrouper les appels interLEAVÉS avec d'autres types de
+    // dessin (rect/texte) casserait l'ordre Z durement acquis de ce moteur
+    // (voir l'historique de bugs de composition dans Blaze3DCore/
+    // UiScrollContainer), écarté pour cette raison — l'atlas seul réduit déjà
+    // les changements de texture bindés, la vraie fuite mémoire/état visée
+    // par cet item de roadmap.
 
-    private static final Map<String, Object[]> ICON_TEXTURES = new HashMap<>(); // cacheKey -> [GpuTexture, GpuTextureView, GpuSampler]
+    private static final int ATLAS_SIZE = 2048;
+    private static final int ATLAS_PADDING = 2; // évite le bleeding bilinéaire entre deux icônes adjacentes sur l'étagère
 
-    private static Object[] ensureIconTexture(String cacheKey, BufferedImage img) throws Exception {
-        Object[] cached = ICON_TEXTURES.get(cacheKey);
+    private static Object atlasTexture, atlasView, atlasSampler;
+    private static int shelfX = ATLAS_PADDING, shelfY = ATLAS_PADDING, shelfRowH = 0;
+    private static final Map<String, float[]> ICON_UV = new HashMap<>(); // cacheKey -> [u0,v0,u1,v1]
+
+    private static void ensureAtlasTexture(Object device) throws Exception {
+        if (atlasTexture != null) return;
+        java.util.function.Supplier<String> label = () -> "yuyuframe_icon_atlas";
+        atlasTexture = mCreateTexture.invoke(device, label, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, ATLAS_SIZE, ATLAS_SIZE, 1, 1);
+        atlasView = mCreateTextureView.invoke(device, atlasTexture);
+        atlasSampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: atlas d'icônes créé (" + ATLAS_SIZE + "x" + ATLAS_SIZE + ")");
+    }
+
+    /** @return {@code [u0,v0,u1,v1]} du sous-rect de {@code cacheKey} dans l'atlas partagé, {@code null} si l'atlas est plein (icône ignorée — journalisé une fois, voir currentStage/failureLogCount habituels). */
+    private static float[] ensureIconInAtlas(String cacheKey, BufferedImage img) throws Exception {
+        float[] cached = ICON_UV.get(cacheKey);
         if (cached != null) return cached;
 
         int w = img.getWidth(), h = img.getHeight();
-        Object nativeImage = bufferedImageToNativeImage(img, w, h);
+        if (shelfX + w + ATLAS_PADDING > ATLAS_SIZE) {
+            shelfX = ATLAS_PADDING;
+            shelfY += shelfRowH + ATLAS_PADDING;
+            shelfRowH = 0;
+        }
+        if (shelfY + h + ATLAS_PADDING > ATLAS_SIZE) {
+            LauncherLog.err("[UiRenderer] UiTextBlaze3D: atlas d'icônes plein (" + ATLAS_SIZE + "x" + ATLAS_SIZE + "), '" + cacheKey + "' ignorée");
+            return null;
+        }
+        int px = shelfX, py = shelfY;
+        shelfX += w + ATLAS_PADDING;
+        shelfRowH = Math.max(shelfRowH, h);
 
         Object device = mGetDevice.invoke(null);
-        final String label = "yuyuframe_icon_" + cacheKey;
-        java.util.function.Supplier<String> labelSupplier = () -> label;
-        Object texture = mCreateTexture.invoke(device, labelSupplier, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, w, h, 1, 1);
+        ensureAtlasTexture(device);
+        Object nativeImage = bufferedImageToNativeImage(img, w, h);
         Object encoder = mCreateCommandEncoder.invoke(device);
-        mWriteToTexture.invoke(encoder, texture, nativeImage);
-        Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+        // writeToTexture(target, source, mipLevel, depth, offsetX, offsetY, width, height, skipPixels, skipRows)
+        // — écrit SEULEMENT le sous-rect de cette icône, pas l'atlas entier.
+        mWriteToTextureMip.invoke(encoder, atlasTexture, nativeImage, 0, 0, px, py, w, h, 0, 0);
 
-        Object[] result = {texture, textureView, sampler};
-        ICON_TEXTURES.put(cacheKey, result);
-        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: icône '" + cacheKey + "' créée (w=" + w + " h=" + h + ")");
-        return result;
+        float[] uv = {
+            px / (float) ATLAS_SIZE, py / (float) ATLAS_SIZE,
+            (px + w) / (float) ATLAS_SIZE, (py + h) / (float) ATLAS_SIZE
+        };
+        ICON_UV.put(cacheKey, uv);
+        LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: icône '" + cacheKey + "' packée dans l'atlas (w=" + w + " h=" + h + " @" + px + "," + py + ")");
+        return uv;
     }
 
     /**
@@ -237,9 +281,9 @@ public final class Blaze3DRect {
             Object colorView = mGetColorAttachmentView.invoke(fb);
             if (colorView == null) return false;
 
-            currentStage = "ensureIconTexture";
-            Object[] icon = ensureIconTexture(cacheKey, img);
-            Object iconView = icon[1], iconSampler = icon[2];
+            currentStage = "ensureIconInAtlas";
+            float[] uv = ensureIconInAtlas(cacheKey, img);
+            if (uv == null) return false; // atlas plein, déjà journalisé
             currentStage = "ensureWhiteTexture(icon)";
             Object[] white = ensureWhiteTexture();
 
@@ -251,13 +295,16 @@ public final class Blaze3DRect {
             int rgba = 0xFFFFFFFF;
             short light0 = 0, light1 = 0;
             ByteBuffer verts = ensureStagingBuffer(4 * 28);
-            // UV pleine image (0,0)-(1,1) — même correspondance top/bottom↔v0/v1
-            // que le texte (yTop↔v0 haut de l'image, yBottom↔v1 bas), voir
-            // putVertexPCTL/putRectQuad pour la convention Y-UP déjà établie.
-            putVertexPCTL(verts, x0, y1, rgba, 0f, 0f, light0, light1);
-            putVertexPCTL(verts, x0, y0, rgba, 0f, 1f, light0, light1);
-            putVertexPCTL(verts, x1, y0, rgba, 1f, 1f, light0, light1);
-            putVertexPCTL(verts, x1, y1, rgba, 1f, 0f, light0, light1);
+            // UV = sous-rect de cette icône DANS L'ATLAS partagé (plus le
+            // 0-1 plein d'une texture dédiée, voir ensureIconInAtlas) — même
+            // correspondance top/bottom↔v0/v1 que le texte (yTop↔v0 haut de
+            // l'image, yBottom↔v1 bas), voir putVertexPCTL/putRectQuad pour
+            // la convention Y-UP déjà établie.
+            float u0 = uv[0], v0 = uv[1], u1 = uv[2], v1 = uv[3];
+            putVertexPCTL(verts, x0, y1, rgba, u0, v0, light0, light1);
+            putVertexPCTL(verts, x0, y0, rgba, u0, v1, light0, light1);
+            putVertexPCTL(verts, x1, y0, rgba, u1, v1, light0, light1);
+            putVertexPCTL(verts, x1, y1, rgba, u1, v0, light0, light1);
             verts.flip();
 
             currentStage = "ensureVertexBuffer(icon)";
@@ -299,7 +346,7 @@ public final class Blaze3DRect {
                 currentStage = "setUniform(DynamicTransforms)(icon)";
                 mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
                 currentStage = "bindTexture(Sampler0)(icon)";
-                mBindTexture.invoke(pass, "Sampler0", iconView, iconSampler);
+                mBindTexture.invoke(pass, "Sampler0", atlasView, atlasSampler);
                 currentStage = "bindTexture(Sampler2)(icon)";
                 mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
                 currentStage = "setVertexBuffer(icon)";
@@ -324,6 +371,150 @@ public final class Blaze3DRect {
                 Throwable cause = t;
                 while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
                 LauncherLog.err("[UiRenderer] UiTextBlaze3D.drawIcon a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
+    }
+
+    // ── Rects BATCHÉS (roadmap Phase 5.5) — N rects (bornes/couleur propres,
+    // MÊME rayon partagé) en UN SEUL draw call, voir Blaze3DCore.RECT_BATCH_
+    // FRAGMENT_SRC pour le calcul de SDF en espace local. Empilé dans la
+    // MÊME file que tout le reste (Blaze3DCore.enqueue) — occupe UN SEUL
+    // "slot" Z, comme n'importe quel autre dessin, jamais de réordonnancement
+    // avec les dessins interleavés autour (voir le commentaire de section sur
+    // ensureIconInAtlas pour pourquoi une fusion inter-widgets n'est PAS
+    // tentée — ce batch est un opt-in explicite côté appelant, pas un
+    // regroupement automatique).
+
+    /**
+     * @param bounds  un {@code float[4]} {@code {x0,y0,x1,y1}} par rect.
+     * @param colors  une couleur par rect, même taille que {@code bounds}.
+     * @param radius  rayon PARTAGÉ par tout le batch (pas par coin — voir le commentaire de {@link Blaze3DCore#RECT_BATCH_VERTEX_SRC}).
+     */
+    public static void queueRectBatch(float[][] bounds, UiColor[] colors, float radius, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        Blaze3DCore.enqueue(() -> drawRectBatch(bounds, colors, radius, vpWidth, vpHeight));
+    }
+
+    /** Toggle via {@code /yf batchpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
+    public static volatile boolean batchTestEnabled = false;
+
+    /** 40 rects de couleurs/tailles variées, MÊME rayon, en UN SEUL draw call — preuve de mécanisme, dessiné en direct (comme drawTestPanel/drawTestParagraph). */
+    public static void drawTestBatch(int vpWidth, int vpHeight) {
+        int cols = 10, rows = 4;
+        float cell = 44f, gap = 8f, x0 = 40f, y0 = 200f;
+        float[][] bounds = new float[cols * rows][4];
+        UiColor[] colors = new UiColor[cols * rows];
+        int i = 0;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                float x = x0 + c * (cell + gap), y = y0 + r * (cell + gap);
+                bounds[i] = new float[]{ x, y, x + cell, y + cell };
+                float t = (r * cols + c) / (float) (cols * rows - 1);
+                colors[i] = UiColor.lerp(new UiColor(139, 124, 255, 255), new UiColor(230, 95, 95, 255), t);
+                i++;
+            }
+        }
+        // Appel DIRECT (pas queueRectBatch/enqueue) — même convention que
+        // Blaze3DBlur.drawTestPanel : un POC isolé n'a pas besoin de passer
+        // par la file différée (flushQueued, appelée depuis un tout autre
+        // point du frame, voir GuiFlushMixin), dessine directement ici.
+        drawRectBatch(bounds, colors, 10f, vpWidth, vpHeight);
+    }
+
+    private static boolean drawRectBatch(float[][] bounds, UiColor[] colors, float radius, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        if (bounds.length == 0) return true;
+        try {
+            currentStage = "minecraftClient(rectbatch)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(rectbatch)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(rectbatch)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            currentStage = "getDevice(rectbatch)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(rectbatch)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+
+            int n = bounds.length;
+            short light0 = 0, light1 = 0;
+            ByteBuffer verts = ensureStagingBuffer(n * 4 * 28);
+            for (int i = 0; i < n; i++) {
+                float x0 = bounds[i][0], y0 = bounds[i][1], x1 = bounds[i][2], y1 = bounds[i][3];
+                UiColor c = colors[i];
+                int ri = Math.round(c.r * 255f), gi = Math.round(c.g * 255f), bi = Math.round(c.b * 255f), ai = Math.round(c.a * 255f);
+                int rgba = (ai << 24) | (bi << 16) | (gi << 8) | ri;
+                short w = (short) Math.round(x1 - x0), h = (short) Math.round(y1 - y0);
+                putVertexPCTL(verts, x0, y1, rgba, 0f, 0f, w, h);
+                putVertexPCTL(verts, x0, y0, rgba, 0f, 1f, w, h);
+                putVertexPCTL(verts, x1, y0, rgba, 1f, 1f, w, h);
+                putVertexPCTL(verts, x1, y1, rgba, 1f, 0f, w, h);
+            }
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(rectbatch)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(rectbatch)";
+            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà portée par sommet
+            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(rectbatch)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "writeBatchParams(rectbatch)";
+            Object batchParamsSlice = writeBatchParams(device, encoder, radius);
+
+            currentStage = "createRenderPass(rectbatch)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_rectbatch";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                currentStage = "setPipeline(rectbatch)";
+                ShaderPipelineFactory.precompile(device, batchPipeline, batchShaderSource);
+                mSetPipeline.invoke(pass, batchPipeline);
+                if (mDisableScissor != null) { currentStage = "disableScissor(rectbatch)"; mDisableScissor.invoke(pass); }
+                currentStage = "bindDefaultUniforms(rectbatch)";
+                mBindDefaultUniforms.invoke(null, pass);
+                currentStage = "setUniform(Projection)(rectbatch)";
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                currentStage = "setUniform(DynamicTransforms)(rectbatch)";
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                currentStage = "setUniform(BatchParams)(rectbatch)";
+                mSetUniformSlice.invoke(pass, "BatchParams", batchParamsSlice);
+                currentStage = "setVertexBuffer(rectbatch)";
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                currentStage = "shapeIndexBuffer(rectbatch)";
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                int indexCount = n * 6;
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                currentStage = "setIndexBuffer(rectbatch)";
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                currentStage = "drawIndexed(rectbatch)";
+                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+            } finally {
+                currentStage = "closePass(rectbatch)";
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D.drawRectBatch a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
             }
             return false;
         }
