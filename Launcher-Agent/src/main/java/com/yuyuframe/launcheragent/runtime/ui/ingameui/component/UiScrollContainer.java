@@ -325,7 +325,17 @@ public class UiScrollContainer {
             w.pollContinuous(input);
             visibleNow.add(w);
         }
-        if (input.leftClicked) {
+        // BUG TROUVÉ (audit input, symétrie avec UiScreenBase#dispatchClick) :
+        // seul input.leftClicked était lu ici, et le widget touché recevait
+        // l'ancien onClick() sans argument — un widget DANS un scroll (grille
+        // de cartes, la quasi-totalité du contenu réel de ce moteur) ne
+        // pouvait donc JAMAIS recevoir de clic droit/milieu, contrairement à
+        // un widget d'écran plat (UiScreenBase.dispatchClick gère déjà les 3
+        // boutons). Pas de doubleClick ici : UiInputPoller (poll brut, pas le
+        // vrai dispatch Click/MouseButtonEvent vanilla) n'a aucune notion de
+        // double-clic — limite structurelle assumée, pas une régression.
+        int clickedButton = input.leftClicked ? 0 : input.rightClicked ? 1 : input.middleClicked ? 2 : -1;
+        if (clickedButton >= 0) {
             // Hit-test centralisé (roadmap Phase 5.6, retour utilisateur :
             // "c'est ce qui est visible qui doit être cliquable") — voir
             // UiHitTest pour la règle exacte (plus petite aire gagne, PAS
@@ -334,7 +344,7 @@ public class UiScrollContainer {
             // d'ajout cœur/bande dans UiMainMenuScreen (toujours correct
             // avec la nouvelle règle, sans dépendre de cet ordre).
             UiWidget clicked = UiHitTest.find(visibleNow, input.mouseX, input.mouseY);
-            if (clicked != null) clicked.onClick();
+            if (clicked != null) clicked.onClick(clickedButton, false);
         }
     }
 

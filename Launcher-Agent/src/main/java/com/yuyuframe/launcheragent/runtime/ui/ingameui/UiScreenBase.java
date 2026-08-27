@@ -169,10 +169,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * (mêmes coordonnées que le hover/dessin, cohérence garantie).
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        LauncherLog.info("[LauncherAgent] DIAG-116: mouseClicked() appelé sur " + getClass().getSimpleName()
-            + " button=" + button + " param=(" + mouseX + "," + mouseY + ") lastInput="
-            + (lastInput == null ? "null" : "(" + lastInput.mouseX + "," + lastInput.mouseY + ")")
-            + " widgets=" + widgets.size());
         return dispatchClick(button, false); // pas de doubleClick sur cette signature historique (bracket pré-1.21.11)
     }
 
@@ -193,8 +189,6 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * "GUI scaled" que l'ancien mouseX/mouseY, voir javadoc ci-dessus).
      */
     public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubleClick) {
-        LauncherLog.info("[LauncherAgent] DIAG-E11: mouseClicked(Click) appelé sur " + getClass().getSimpleName()
-            + " button=" + click.button() + " widgets=" + widgets.size());
         return dispatchClick(click.button(), doubleClick);
     }
 

@@ -49,6 +49,25 @@ public final class UiInputPollerModern extends UiInputPoller {
     private final boolean[] buttonDown = new boolean[8];
     private final Object[] previousMouseButtonCb = new Object[1];
 
+    /**
+     * Audit input (retour utilisateur : "est-ce que le fait que ça passe par
+     * frame et pas par OS input... est réglé ?") — MÊME carence "polling lié
+     * au FPS" que {@link #buttonDown} ci-dessus, jamais étendue au clavier
+     * jusqu'ici : {@link #readMenuKeyDown}/{@link #pollAnyKeyJustPressed}/
+     * {@link #isKeyDownByName} lisaient tous l'état via {@code glfwGetKey},
+     * sondé au mieux une fois par frame RENDUE — un tap très bref de la
+     * touche d'ouverture du menu pile pendant une frame lente (chute de FPS)
+     * pouvait donc ne jamais être vu, exactement comme pour les anciens
+     * boutons souris. Tenu à jour par {@link #registerKeyCallback} au lieu
+     * d'un poll direct. Indexé par code GLFW brut (GLFW_KEY_LAST=348, 350
+     * de marge) — {@code glfwGetKey} reste utilisé ailleurs dans ce fichier
+     * (pollTextEdit) là où le poll par frame n'a jamais posé de problème
+     * (touches maintenues pour la répétition typematic, jamais des taps
+     * isolés à risque de disparaître entre deux frames).
+     */
+    private final boolean[] keyDown = new boolean[350];
+    private final Object[] previousKeyCb = new Object[1];
+
     // Touches "capturables" pour UiKeybindButton — codes GLFW standards (API
     // publique stable, pas obfusqués, littéraux sûrs comme les constantes GL
     // ailleurs dans ce package). Pas de callback clavier ici (contrairement à
@@ -88,6 +107,7 @@ public final class UiInputPollerModern extends UiInputPoller {
         registerScrollCallback();
         registerCharCallback();
         registerMouseButtonCallback();
+        registerKeyCallback();
         ACTIVE = this;
     }
 
@@ -112,7 +132,7 @@ public final class UiInputPollerModern extends UiInputPoller {
             if (isVanillaScreenOpen()) return false;
             int code = menuKeyCode(name);
             if (code < 0) return false;
-            return glfwGetKey(windowHandle, code) == 1;
+            return code < keyDown.length && keyDown[code];
         } catch (Exception e) {
             return false;
         }
@@ -308,6 +328,48 @@ public final class UiInputPollerModern extends UiInputPoller {
         }
     }
 
+    /**
+     * Même principe de chaînage ET du même correctif (wrapping via la
+     * fabrique officielle {@code GLFWKeyCallback.create(...)}) que {@link
+     * #registerScrollCallback}/{@link #registerCharCallback}/{@link
+     * #registerMouseButtonCallback} — ne casse jamais les touches vanilla
+     * (déplacement, raccourcis, ouverture d'inventaire...). Voir {@link
+     * #keyDown} pour le bug fermé par ce callback. {@code action != 0}
+     * (GLFW_PRESS ou GLFW_REPEAT) = enfoncée, {@code action == 0}
+     * (GLFW_RELEASE) = relâchée — même convention que {@link
+     * #registerMouseButtonCallback} (REPEAT n'existe que pour le clavier,
+     * mais reste correctement "toujours enfoncée" avec ce test).
+     */
+    private void registerKeyCallback() {
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWKeyCallbackI", true, gameClassLoader);
+            Class<?> cbClass = Class.forName("org.lwjgl.glfw.GLFWKeyCallback", true, gameClassLoader);
+            Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                if (method.isDefault()) return invokeDefault(p, method, args);
+                if (args != null && args.length == 5 && "invoke".equals(method.getName())) {
+                    // (long window, int key, int scancode, int action, int mods)
+                    int key = (Integer) args[1];
+                    int action = (Integer) args[3];
+                    if (key >= 0 && key < keyDown.length) {
+                        keyDown[key] = action != 0;
+                    }
+                    Object prev = previousKeyCb[0];
+                    if (prev != null) {
+                        try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                    }
+                }
+                return null;
+            });
+            Method create = cbClass.getMethod("create", cbIface);
+            Object realCallback = create.invoke(null, proxy);
+            Method setCb = glfwClass.getMethod("glfwSetKeyCallback", long.class, cbIface);
+            previousKeyCb[0] = setCb.invoke(null, windowHandle, realCallback);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiInputPollerModern] registerKeyCallback: " + rootCause(t));
+        }
+    }
+
     /** InvocationTargetException.toString() cache la vraie cause — la déballer pour un log utile. */
     private static String rootCause(Throwable t) {
         Throwable cur = t;
@@ -395,7 +457,7 @@ public final class UiInputPollerModern extends UiInputPoller {
     protected boolean readMenuKeyDown() throws Exception {
         int code = menuKeyCode(menuKeyName);
         if (code < 0) return false;
-        return glfwGetKey(windowHandle, code) == 1; // GLFW_PRESS
+        return code < keyDown.length && keyDown[code]; // callback natif, voir registerKeyCallback
     }
 
     /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
@@ -444,7 +506,7 @@ public final class UiInputPollerModern extends UiInputPoller {
         try {
             for (Object[] entry : CAPTURABLE_KEYS) {
                 int code = (Integer) entry[0];
-                boolean down = glfwGetKey(windowHandle, code) == 1;
+                boolean down = code < keyDown.length && keyDown[code]; // callback natif, voir registerKeyCallback
                 boolean was = Boolean.TRUE.equals(prevKeyDown.get(code));
                 prevKeyDown.put(code, down);
                 if (down && !was) return (String) entry[1];
