@@ -67,6 +67,14 @@ public class UiMainMenuScreen extends UiScreenBase {
     private float CARD_H = 76f;
     private float SEARCH_H = 36f;
 
+    /**
+     * Étages de flou de l'arrière-plan de verre (rework UI 2026-08-27) — 4 sur
+     * 5 possibles : le 5e étage n'apporte quasiment rien de visible (à ce
+     * stade l'image est déjà réduite à 1/32 de la résolution) pour une passe
+     * de rendu plein écran de plus. Voir {@code UiRenderer.beginGlassFrame}.
+     */
+    private static final int GLASS_PASSES = 4;
+
     private final Object lastScreen;
     private UiTextField searchField;
     /** Grille de cartes mods — SÉPARÉE de {@code widgets} (voir UiScrollContainer/ConfigScreenBuilder pour le même motif) : permet de scroller quand le nombre de mods dépasse la hauteur visible, ce que {@code widgets} seul ne permet pas (pas de clipping/offset). */
@@ -99,6 +107,15 @@ public class UiMainMenuScreen extends UiScreenBase {
             lastLayoutHeight = screenHeight;
             lastUiScale = UiTheme.UI_SCALE;
         }
+        // Arrière-plan flouté PARTAGÉ par toutes les surfaces de verre de ce
+        // frame (sidebar, cartes, recherche) — DOIT être empilé avant tout le
+        // reste : la file de rendu s'exécute dans l'ordre d'empilement, donc
+        // cet appel en tête = la chaîne de flou capture le monde du jeu SEUL,
+        // avant qu'un pixel d'interface ne soit posé dessus. Un seul calcul
+        // pour tout l'écran, quel que soit le nombre de panneaux (voir
+        // UiRenderer.beginGlassFrame — sans ça, CHAQUE panneau paierait ses
+        // propres 9 passes plein écran).
+        UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
@@ -170,6 +187,27 @@ public class UiMainMenuScreen extends UiScreenBase {
         } catch (Throwable ignored) {}
     }
 
+    /**
+     * Voile de fond ALLÉGÉ quand le verre est disponible (rework UI
+     * 2026-08-27) — {@code UiTheme.OVERLAY_BG} par défaut est quasi-opaque
+     * (alpha 235) : il masquait entièrement le monde du jeu, ce qui rendait
+     * tout arrière-plan flouté strictement invisible (on ne peut pas flouter
+     * ce qui est déjà caché). {@code GLASS_SCRIM} laisse le décor transparaître
+     * — c'est LUI que les panneaux de verre floutent, et c'est ce contraste
+     * entre décor net (hors panneaux) et décor flouté (sous les panneaux) qui
+     * fait tout l'effet.
+     *
+     * Repli inchangé sur les brackets sans Blaze3D : aucun panneau n'y sera du
+     * verre (voir {@code UiRenderer.drawGlassPanel}), donc un fond transparent
+     * n'y donnerait qu'une interface illisible par-dessus le jeu en mouvement.
+     */
+    @Override
+    protected UiColor overlayColor() {
+        return UiRenderer.get(getClass().getClassLoader()).isGlassAvailable()
+            ? UiTheme.GLASS_SCRIM
+            : UiTheme.OVERLAY_BG;
+    }
+
     private void rebuildAll() {
         // Recalculées à CHAQUE reconstruction (pas juste au premier appel) —
         // seule façon de refléter un changement de "Taille de l'interface"
@@ -182,43 +220,154 @@ public class UiMainMenuScreen extends UiScreenBase {
         SEARCH_H = UiTheme.scaled(36f);
 
         widgets.clear();
+        gridNodeSeq = 0;
 
-        widgets.add(new SidebarBackground());
-        // Repoussés plus bas qu'avant (84->104, 114->134) — laisse plus de
-        // place réelle au logo/son halo juste au-dessus (voir uiDraw()) au
-        // lieu de les coller l'un à l'autre.
-        widgets.add(new SidebarItem(MARGIN, screenHeight - UiTheme.scaled(104f), SIDEBAR_W - MARGIN * 2, "Accueil", true, null));
-        widgets.add(new SidebarItem(MARGIN, screenHeight - UiTheme.scaled(134f), SIDEBAR_W - MARGIN * 2, "Parametres", false,
-            () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, GlobalUiSettings.INSTANCE))));
-        // Épinglé en bas de la sidebar (pas empilé sous les items du haut) —
-        // même position quel que soit le nombre d'items ajoutés au-dessus.
-        widgets.add(new SidebarItem(MARGIN, MARGIN, SIDEBAR_W - MARGIN * 2, "Modifier le HUD", false,
-            () -> closeTo(new UiHudEditorScreen(UiMainMenuScreen.this))));
         float closeSize = UiTheme.scaled(28f), closeMargin = UiTheme.scaled(24f);
-        widgets.add(new CloseButton(screenWidth - closeMargin - closeSize, screenHeight - closeMargin - closeSize, closeSize));
+        float navH = UiTheme.scaled(26f);
+        float layoutBtnGap = UiTheme.scaled(8f);
+        float layoutBtnSize = SEARCH_H;
+        // Écart entre la barre de recherche et le haut de la zone défilante.
+        // BUG D'ORIGINE CONSERVÉ TEL QUEL (voir viewportTop dans l'ancienne
+        // version) : doit rester > UiScrollContainer.EDGE_FADE_ZONE (46
+        // scaled), sinon une carte peut encore être partiellement visible en
+        // train de s'estomper alors qu'elle chevauche déjà la barre.
+        float searchToGridGap = UiTheme.scaled(50f);
 
-        float contentX = SIDEBAR_W + MARGIN;
-        float contentW = screenWidth - contentX - MARGIN;
+        // ── Arbre de layout de l'écran ──────────────────────────────────────
+        //
+        // Remplace le calcul de position à la main (rework 2026-08-27, demande
+        // explicite "change toutes les positions pour passer par taffy"). Ce
+        // qui était auparavant une suite de soustractions depuis les bords
+        // (`screenHeight - scaled(104f)`, `screenWidth - closeMargin -
+        // closeSize`, ...) devient une STRUCTURE : une rangée [sidebar |
+        // contenu], chacune une colonne, plus le bouton de fermeture ancré au
+        // coin. Les nombres magiques qui restent sont des ESPACEMENTS
+        // (paddings/gaps), plus des coordonnées — c'est là toute la
+        // différence : ils ne se recalculent plus les uns à partir des autres,
+        // donc en changer un ne casse plus les voisins.
+        TaffyNode screen = new TaffyNode("screen", new TaffyStyle()
+            .size(TaffyStyle.px(screenWidth), TaffyStyle.px(screenHeight)));
+
+        // Sidebar — les items s'étirent d'eux-mêmes à la largeur du contenu
+        // (alignItems: stretch, défaut flex), d'où l'absence de largeur
+        // explicite : c'est le padding latéral qui donne l'ancien
+        // `SIDEBAR_W - MARGIN * 2`.
+        TaffyStyle sidebarStyle = new TaffyStyle();
+        sidebarStyle.flexDirection = "column";
+        sidebarStyle.width = TaffyStyle.px(SIDEBAR_W);
+        sidebarStyle.height = TaffyStyle.pct(100);
+        sidebarStyle.flexShrink = 0f;
+        sidebarStyle.gapRow = TaffyStyle.px(UiTheme.scaled(4f));
+        // Padding haut = ancien `scaled(104) - navH` : laisse la place du
+        // logo et de son halo dessinés par uiDraw() au-dessus des items.
+        sidebarStyle.padding = new String[]{
+            TaffyStyle.px(UiTheme.scaled(104f) - navH), TaffyStyle.px(MARGIN),
+            TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
+        TaffyNode sidebar = new TaffyNode("sidebar", sidebarStyle);
+        sidebar.child(navNode("nav.home", navH));
+        sidebar.child(navNode("nav.settings", navH));
+        // Cale élastique — c'est ELLE qui épingle "Modifier le HUD" en bas,
+        // à la place de l'ancienne position absolue `(MARGIN, MARGIN)` :
+        // ajouter un item au-dessus ne demande plus aucun recalcul.
+        sidebar.child(LayoutSolver.spacer());
+        sidebar.child(navNode("nav.hud", navH));
+        screen.child(sidebar);
+
+        TaffyStyle contentStyle = new TaffyStyle();
+        contentStyle.flexDirection = "column";
+        contentStyle.flexGrow = 1f;
+        contentStyle.gapRow = TaffyStyle.px(searchToGridGap);
+        contentStyle.padding = new String[]{
+            TaffyStyle.px(UiTheme.scaled(64f)), TaffyStyle.px(MARGIN),
+            TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
+        TaffyNode content = new TaffyNode("content", contentStyle);
+
+        TaffyStyle topbarStyle = new TaffyStyle();
+        topbarStyle.gapCol = TaffyStyle.px(layoutBtnGap);
+        topbarStyle.height = TaffyStyle.px(SEARCH_H);
+        topbarStyle.flexShrink = 0f;
+        TaffyNode topbar = new TaffyNode("topbar", topbarStyle);
+        // Largeur souhaitée 380, mais AUTORISÉE À RÉTRÉCIR (flexShrink=1 par
+        // défaut) — reproduit exactement l'ancien `Math.min(scaled(380),
+        // contentW - gap - bouton)` sans le calculer : si les trois éléments
+        // ne tiennent pas, seule la recherche cède, le bouton gardant sa
+        // taille (flexShrink=0 ci-dessous).
+        TaffyStyle searchStyle = new TaffyStyle();
+        searchStyle.width = TaffyStyle.px(UiTheme.scaled(380f));
+        searchStyle.height = TaffyStyle.px(SEARCH_H);
+        topbar.child(new TaffyNode("search", searchStyle));
+        topbar.child(LayoutSolver.box("layoutbtn", layoutBtnSize, layoutBtnSize));
+        content.child(topbar);
+
+        TaffyStyle viewportStyle = new TaffyStyle();
+        viewportStyle.flexGrow = 1f;
+        content.child(new TaffyNode("viewport", viewportStyle));
+        screen.child(content);
+
+        // Ancré au coin haut-droit de l'ÉCRAN (hors du flux, donc il ne
+        // pousse ni la sidebar ni le contenu) — ancien `screenWidth -
+        // closeMargin - closeSize`.
+        screen.child(LayoutSolver.anchored("close", closeSize, closeSize, closeMargin, closeMargin, null, null));
+
+        LayoutSolver.Solved layout = LayoutSolver.solve(screen, screenWidth, screenHeight);
 
         if (searchField == null) {
             // Recréé la grille (pas tout l'écran) à chaque frappe — même
             // instance de champ conservée, voir javadoc de la classe.
             searchField = new UiTextField(0, 0, 0, 0, Lang.tr("Rechercher un mod..."), v -> rebuildAll()).searchIcon();
         }
-        searchField.x = contentX;
-        searchField.y = screenHeight - UiTheme.scaled(64f) - SEARCH_H;
-        // Réserve la place du bouton d'agencement (voir LayoutSwitchButton
-        // ci-dessous) — sinon la barre de recherche pleine largeur (380
-        // scaled) le chevaucherait.
-        float layoutBtnGap = UiTheme.scaled(8f);
-        float layoutBtnSize = SEARCH_H;
-        searchField.w = Math.min(UiTheme.scaled(380f), contentW - layoutBtnGap - layoutBtnSize);
-        searchField.h = SEARCH_H;
-        widgets.add(searchField);
+
+        SidebarBackground sidebarBg = new SidebarBackground();
+        SidebarItem navHome = new SidebarItem("Accueil", true, null);
+        SidebarItem navSettings = new SidebarItem("Parametres", false,
+            () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, GlobalUiSettings.INSTANCE)));
+        SidebarItem navHud = new SidebarItem("Modifier le HUD", false,
+            () -> closeTo(new UiHudEditorScreen(UiMainMenuScreen.this)));
+        CloseButton closeButton = new CloseButton(0, 0, closeSize);
         // Icône à côté de la barre de recherche (demandé explicitement :
         // "choisir avec une icon a coté de la bar de recherche") — cycle
         // Détaillé -> Compacte -> Grille d'icônes -> Détaillé au clic.
-        widgets.add(new LayoutSwitchButton(searchField.x + searchField.w + layoutBtnGap, searchField.y, layoutBtnSize));
+        LayoutSwitchButton layoutButton = new LayoutSwitchButton(0, 0, layoutBtnSize);
+
+        float contentX, contentW, viewportBottom, viewportH;
+        if (layout != null) {
+            layout.apply("sidebar", sidebarBg);
+            layout.apply("nav.home", navHome);
+            layout.apply("nav.settings", navSettings);
+            layout.apply("nav.hud", navHud);
+            layout.apply("close", closeButton);
+            layout.apply("search", searchField);
+            layout.apply("layoutbtn", layoutButton);
+            TaffyLayoutResult.Rect vp = layout.get("viewport");
+            contentX = vp.x;
+            contentW = vp.w;
+            viewportBottom = vp.y;
+            viewportH = vp.h;
+        } else {
+            // Repli — voir fallbackChrome() : content_core.dll absente ou
+            // Taffy en erreur (toujours journalisé par LayoutSolver, jamais
+            // silencieux). Volontairement conservé malgré la duplication :
+            // cet écran est le POINT D'ENTRÉE de tout l'agent, un layout
+            // effondré ici empêcherait même d'atteindre les réglages pour
+            // diagnostiquer.
+            contentX = SIDEBAR_W + MARGIN;
+            contentW = screenWidth - contentX - MARGIN;
+            viewportBottom = MARGIN;
+            fallbackChrome(sidebarBg, navHome, navSettings, navHud, closeButton, layoutButton,
+                closeSize, closeMargin, navH, contentX, contentW, layoutBtnGap, layoutBtnSize);
+            viewportH = Math.max(1f, (searchField.y - searchToGridGap) - viewportBottom);
+        }
+
+        // Ordre d'AJOUT = ordre de PEINTURE (le fond de sidebar doit rester
+        // derrière les items de nav) — le clic, lui, ne dépend plus de cet
+        // ordre depuis UiHitTest (voir javadoc de classe).
+        widgets.add(sidebarBg);
+        widgets.add(navHome);
+        widgets.add(navSettings);
+        widgets.add(navHud);
+        widgets.add(closeButton);
+        widgets.add(searchField);
+        widgets.add(layoutButton);
 
         // Chaque entrée est SOIT un LauncherModule (carte + toggle propre,
         // comme avant), SOIT un ModuleGroup (carte seule, pas de toggle —
@@ -303,26 +452,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             cardW = (cardAreaW - CARD_GAP) / 2f;
             rowH = CARD_H;
         }
-        // Grille positionnée dans un repère LOCAL arbitraire (contrairement à
-        // avant, où "top" dérivait de searchField.y, un repère ÉCRAN absolu) —
-        // UiScrollContainer se charge lui-même de replacer ce contenu dans le
-        // viewport réel via un offset recalculé chaque frame (voir sa javadoc
-        // et ConfigScreenBuilder pour le même motif) : peu importe l'origine
-        // choisie ici, seules les positions RELATIVES entre cartes comptent.
-        float top = 0f;
-
-        float viewportBottom = MARGIN;
-        // BUG TROUVÉ (retour utilisateur : "les cards du haut disparaissent
-        // trop tard et chevauchent la barre de navigation") — UiScrollContainer
-        // continue de dessiner (en s'estompant progressivement, voir clipFade)
-        // un widget jusqu'à EDGE_FADE_ZONE (46 scaled) AU-DELÀ du viewport,
-        // pas juste jusqu'à son bord — cet écart n'était que de 24 scaled ici,
-        // donc une carte pouvait encore être visible (partiellement) jusqu'à
-        // 46-24=22px DANS la zone de la barre de recherche. Porté à 50
-        // (> EDGE_FADE_ZONE) pour que le fondu se termine TOUJOURS avant
-        // d'atteindre la barre.
-        float viewportTop = searchField.y - UiTheme.scaled(50f);
-        modScroll = new UiScrollContainer(contentX, viewportBottom, contentW, Math.max(1f, viewportTop - viewportBottom));
+        modScroll = new UiScrollContainer(contentX, viewportBottom, contentW, Math.max(1f, viewportH));
 
         // Favoris — demandé explicitement ("mets tout les favoris devant
         // déjà même sans l'option activée") — TOUJOURS remontés en tête,
@@ -341,45 +471,261 @@ public class UiMainMenuScreen extends UiScreenBase {
             else otherEntries.add(entry);
         }
 
-        if (!GlobalUiSettings.INSTANCE.separateFavorites || favoriteEntries.isEmpty() || otherEntries.isEmpty()) {
+        boolean separated = GlobalUiSettings.INSTANCE.separateFavorites
+            && !favoriteEntries.isEmpty() && !otherEntries.isEmpty();
+        List<Object> combined = new ArrayList<>(favoriteEntries.size() + otherEntries.size());
+        combined.addAll(favoriteEntries);
+        combined.addAll(otherEntries);
+        float headerH = sectionHeaderH();
+
+        // ── Arbre de layout de la grille ────────────────────────────────────
+        //
+        // Résolu SÉPARÉMENT du chrome de l'écran, dans son propre repère local
+        // et à hauteur LIBRE (availH = 0 -> Taffy déduit la hauteur naturelle
+        // du contenu) : c'est exactement ce dont UiScrollContainer a besoin —
+        // il replace lui-même ce contenu dans le viewport réel via un décalage
+        // recalculé à chaque frame, seules les positions RELATIVES entre
+        // cartes comptent ici.
+        //
+        // Ce que Taffy remplace concrètement : l'empilement vertical et le
+        // cumul d'écarts entre sections, auparavant tenus à la main par un
+        // curseur `top` décrémenté à chaque étape (`top -= headerH + CARD_GAP`,
+        // puis `top -= CARD_GAP`, puis la valeur de retour de layoutGrid...) —
+        // la source d'erreur classique, où oublier un gap décale silencieusement
+        // TOUT ce qui suit.
+        TaffyNode grid = LayoutSolver.column("grid", CARD_GAP);
+        grid.style.width = TaffyStyle.px(cardAreaW);
+        if (separated) {
+            grid.child(LayoutSolver.box("hdr.fav", cardAreaW, headerH));
+            addSectionRows(grid, favoriteEntries, "fav", cols, cardW, rowH, cardLayout);
+            // Marge HAUTE en plus du gap régulier de la colonne — reproduit
+            // exactement l'ancien double écart entre la fin d'une section et
+            // le titre de la suivante (gap + margin = 2 x CARD_GAP), sans le
+            // calculer.
+            TaffyNode otherHeader = LayoutSolver.box("hdr.oth", cardAreaW, headerH);
+            otherHeader.style.margin = new String[]{ TaffyStyle.px(CARD_GAP), "0", "0", "0" };
+            grid.child(otherHeader);
+            addSectionRows(grid, otherEntries, "oth", cols, cardW, rowH, cardLayout);
+        } else {
             // Pas de séparation visuelle à afficher (réglage désactivé, OU
             // rien à séparer — une seule des deux listes non vide) : une
             // seule grille continue, favoris déjà en tête via l'ordre de
             // concaténation.
-            List<Object> combined = new ArrayList<>(favoriteEntries.size() + otherEntries.size());
-            combined.addAll(favoriteEntries);
-            combined.addAll(otherEntries);
-            layoutGrid(combined, contentX, top, cols, cardW, rowH, cardLayout);
+            addSectionRows(grid, combined, "all", cols, cardW, rowH, cardLayout);
+        }
+
+        LayoutSolver.Solved gridLayout = LayoutSolver.solve(grid, cardAreaW, 0f);
+        if (gridLayout != null) {
+            if (separated) {
+                SectionTitle favTitle = new SectionTitle(Lang.tr("Favoris").toUpperCase(Locale.ROOT));
+                gridLayout.apply("hdr.fav", favTitle, contentX, 0f);
+                modScroll.add(favTitle);
+                emitCards(favoriteEntries, "fav", gridLayout, contentX, cardLayout);
+                SectionTitle othTitle = new SectionTitle(Lang.tr("Autres modules").toUpperCase(Locale.ROOT));
+                gridLayout.apply("hdr.oth", othTitle, contentX, 0f);
+                modScroll.add(othTitle);
+                emitCards(otherEntries, "oth", gridLayout, contentX, cardLayout);
+            } else {
+                emitCards(combined, "all", gridLayout, contentX, cardLayout);
+            }
         } else {
-            // Séparation demandée ("tu sépare les deux liste avec des titre
-            // en majuscule et tu met les favori sur la liste du haut") — un
-            // en-tête + section par liste, favoris d'abord.
-            float headerH = sectionHeaderH();
-            modScroll.add(new SectionTitle(contentX, top - headerH, cardAreaW, headerH, Lang.tr("Favoris").toUpperCase(Locale.ROOT)));
-            top -= headerH + CARD_GAP;
-            top = layoutGrid(favoriteEntries, contentX, top, cols, cardW, rowH, cardLayout);
-            top -= CARD_GAP;
-            modScroll.add(new SectionTitle(contentX, top - headerH, cardAreaW, headerH, Lang.tr("Autres modules").toUpperCase(Locale.ROOT)));
-            top -= headerH + CARD_GAP;
-            layoutGrid(otherEntries, contentX, top, cols, cardW, rowH, cardLayout);
+            // Repli — même raison que pour le chrome (voir plus haut).
+            fallbackGrid(separated, favoriteEntries, otherEntries, combined,
+                contentX, cardAreaW, headerH, cols, cardW, rowH, cardLayout);
+        }
+    }
+
+    /** Nœud d'un item de navigation — largeur laissée libre : la colonne sidebar l'étire d'elle-même à sa largeur de contenu. */
+    private static TaffyNode navNode(String id, float h) {
+        TaffyStyle s = new TaffyStyle();
+        s.height = TaffyStyle.px(h);
+        s.flexShrink = 0f;
+        return new TaffyNode(id, s);
+    }
+
+    /**
+     * Ajoute à {@code grid} une ligne de nœuds par rangée de cartes.
+     *
+     * <p>Rangées EXPLICITES plutôt que {@code flex-wrap} sur une seule liste :
+     * les largeurs de carte sont calculées pour remplir {@code cardAreaW} au
+     * pixel près, or la moindre erreur d'arrondi flottant sur cette somme
+     * ferait basculer une carte à la ligne suivante — une grille 2 colonnes
+     * deviendrait silencieusement une grille 1 colonne. Découper nous-mêmes en
+     * rangées de {@code cols} rend le résultat déterministe, et laisse quand
+     * même à Taffy tout ce qui compte vraiment ici : l'empilement vertical,
+     * les écarts, et l'ancrage des sous-contrôles dans chaque carte.
+     */
+    private void addSectionRows(TaffyNode grid, List<Object> entries, String prefix,
+                                 int cols, float cardW, float rowH, int cardLayout) {
+        for (int start = 0; start < entries.size(); start += cols) {
+            TaffyNode rowNode = LayoutSolver.row(prefix + ".row:" + start, CARD_GAP);
+            rowNode.style.height = TaffyStyle.px(rowH);
+            rowNode.style.flexShrink = 0f;
+            for (int c = 0; c < cols && start + c < entries.size(); c++) {
+                int idx = start + c;
+                Object entry = entries.get(idx);
+                TaffyNode cardNode = LayoutSolver.box(prefix + ".card:" + idx, cardW, rowH);
+                // Sous-contrôles ANCRÉS AUX BORDS de la carte — remplace
+                // l'arithmétique `cx + cardW - taille - marge` répétée à chaque
+                // agencement : changer la taille d'une carte ne demande plus de
+                // repositionner quoi que ce soit.
+                if (cardLayout == 2) {
+                    float barH = iconGridBarH();
+                    float heartSize = iconGridHeartSize();
+                    cardNode.child(LayoutSolver.anchored(prefix + ".heart:" + idx, heartSize, heartSize,
+                        null, UiTheme.scaled(8f), (barH - heartSize) / 2f, null));
+                    if (entry instanceof LauncherModule) {
+                        cardNode.child(LayoutSolver.anchored(prefix + ".band:" + idx, cardW, barH,
+                            null, null, 0f, 0f));
+                    }
+                } else if (entry instanceof LauncherModule) {
+                    cardNode.child(LayoutSolver.anchored(prefix + ".toggle:" + idx, toggleW(), toggleH(),
+                        toggleGapY(), toggleGapX(), null, null));
+                }
+                rowNode.child(cardNode);
+            }
+            grid.child(rowNode);
         }
     }
 
     /**
-     * Construit les cartes (+ toggles) d'une liste d'entrées dans la grille,
-     * à partir de {@code startTop} — extrait de l'ancienne boucle unique de
-     * rebuildAll() (demande explicite : séparer favoris/autres en 2 sections,
-     * voir son appelant) pour pouvoir l'appeler 1 ou 2 fois selon {@link
-     * GlobalUiSettings#separateFavorites}. Retourne le nouveau "top" (bord
-     * BAS de la dernière ligne, repère LOCAL comme le reste de la grille)
-     * pour permettre d'enchaîner une 2ᵉ section juste en dessous.
+     * Emplacements résolus d'une carte et de ses sous-contrôles — pivot commun
+     * entre le chemin Taffy ({@link #slotsFromTaffy}) et le repli manuel
+     * ({@link #slotsManual}), pour que la CRÉATION des widgets ({@link
+     * #emitCards}) n'existe qu'en un seul exemplaire. Sans ce pivot, le repli
+     * aurait dupliqué toute la logique carte/bascule/cœur/appariement, avec la
+     * dérive garantie que ça implique entre deux copies.
      */
-    private float layoutGrid(List<Object> entries, float contentX, float startTop, int cols, float cardW, float rowH, int cardLayout) {
+    private static final class CardSlot {
+        float x, y, w, h;
+        /** Bascule d'activation (agencements 0/1) OU bande cliquable (agencement 2) — {@code w <= 0} si cette carte n'en a pas. */
+        float tx, ty, tw, th;
+        /** Cœur favori — {@code w <= 0} si absent. */
+        float hx, hy, hw, hh;
+    }
+
+    private List<CardSlot> slotsFromTaffy(List<Object> entries, String prefix, LayoutSolver.Solved solved,
+                                           float offsetX, int cardLayout) {
+        List<CardSlot> out = new ArrayList<>(entries.size());
+        for (int i = 0; i < entries.size(); i++) {
+            CardSlot s = new CardSlot();
+            TaffyLayoutResult.Rect card = solved.get(prefix + ".card:" + i);
+            if (card == null) return null; // arbre incohérent — repli complet plutôt qu'une grille à trous
+            s.x = card.x + offsetX; s.y = card.y; s.w = card.w; s.h = card.h;
+            TaffyLayoutResult.Rect toggle = solved.get(prefix + (cardLayout == 2 ? ".band:" : ".toggle:") + i);
+            if (toggle != null) { s.tx = toggle.x + offsetX; s.ty = toggle.y; s.tw = toggle.w; s.th = toggle.h; }
+            TaffyLayoutResult.Rect heart = solved.get(prefix + ".heart:" + i);
+            if (heart != null) { s.hx = heart.x + offsetX; s.hy = heart.y; s.hw = heart.w; s.hh = heart.h; }
+            out.add(s);
+        }
+        return out;
+    }
+
+    /**
+     * Repli — mêmes formules qu'avant le passage à Taffy (voir historique) :
+     * position dérivée de l'indice dans la grille, sous-contrôles calculés
+     * depuis les bords de la carte. Conservé parce que cet écran est le POINT
+     * D'ENTRÉE de l'agent : si {@code content_core.dll} manque, mieux vaut une
+     * grille correcte qu'un menu effondré d'où on ne peut même plus atteindre
+     * les réglages pour comprendre ce qui se passe.
+     */
+    private List<CardSlot> slotsManual(List<Object> entries, float contentX, float startTop,
+                                        int cols, float cardW, float rowH, int cardLayout) {
+        List<CardSlot> out = new ArrayList<>(entries.size());
         for (int i = 0; i < entries.size(); i++) {
             Object entry = entries.get(i);
             int col = i % cols, row = i / cols;
-            float cx = contentX + col * (cardW + CARD_GAP);
-            float cy = startTop - row * (rowH + CARD_GAP) - rowH;
+            CardSlot s = new CardSlot();
+            s.x = contentX + col * (cardW + CARD_GAP);
+            s.y = startTop - row * (rowH + CARD_GAP) - rowH;
+            s.w = cardW;
+            s.h = rowH;
+            if (cardLayout == 2) {
+                float barH = iconGridBarH();
+                float heartSize = iconGridHeartSize();
+                s.hw = heartSize; s.hh = heartSize;
+                s.hx = s.x + cardW - heartSize - UiTheme.scaled(8f);
+                s.hy = s.y + (barH - heartSize) / 2f;
+                if (entry instanceof LauncherModule) {
+                    s.tx = s.x; s.ty = s.y; s.tw = cardW; s.th = barH;
+                }
+            } else if (entry instanceof LauncherModule) {
+                s.tw = toggleW(); s.th = toggleH();
+                s.tx = s.x + cardW - s.tw - toggleGapX();
+                s.ty = s.y + rowH - s.th - toggleGapY();
+            }
+            out.add(s);
+        }
+        return out;
+    }
+
+    /** Hauteur totale occupée par une section en repli manuel — sert au curseur `top` de {@link #fallbackGrid}. */
+    private float manualSectionHeight(int count, int cols, float rowH) {
+        int rows = count == 0 ? 0 : (int) Math.ceil(count / (float) cols);
+        return rows * (rowH + CARD_GAP);
+    }
+
+    private void fallbackGrid(boolean separated, List<Object> favoriteEntries, List<Object> otherEntries,
+                               List<Object> combined, float contentX, float cardAreaW, float headerH,
+                               int cols, float cardW, float rowH, int cardLayout) {
+        float top = 0f;
+        if (!separated) {
+            emitCards(combined, slotsManual(combined, contentX, top, cols, cardW, rowH, cardLayout), cardLayout);
+            return;
+        }
+        SectionTitle favTitle = new SectionTitle(Lang.tr("Favoris").toUpperCase(Locale.ROOT));
+        favTitle.x = contentX; favTitle.y = top - headerH; favTitle.w = cardAreaW; favTitle.h = headerH;
+        modScroll.add(favTitle);
+        top -= headerH + CARD_GAP;
+        emitCards(favoriteEntries, slotsManual(favoriteEntries, contentX, top, cols, cardW, rowH, cardLayout), cardLayout);
+        top -= manualSectionHeight(favoriteEntries.size(), cols, rowH) + CARD_GAP;
+        SectionTitle othTitle = new SectionTitle(Lang.tr("Autres modules").toUpperCase(Locale.ROOT));
+        othTitle.x = contentX; othTitle.y = top - headerH; othTitle.w = cardAreaW; othTitle.h = headerH;
+        modScroll.add(othTitle);
+        top -= headerH + CARD_GAP;
+        emitCards(otherEntries, slotsManual(otherEntries, contentX, top, cols, cardW, rowH, cardLayout), cardLayout);
+    }
+
+    private void fallbackChrome(SidebarBackground sidebarBg, SidebarItem navHome, SidebarItem navSettings,
+                                 SidebarItem navHud, CloseButton closeButton, LayoutSwitchButton layoutButton,
+                                 float closeSize, float closeMargin, float navH,
+                                 float contentX, float contentW, float layoutBtnGap, float layoutBtnSize) {
+        float navW = SIDEBAR_W - MARGIN * 2;
+        sidebarBg.x = 0; sidebarBg.y = 0; sidebarBg.w = SIDEBAR_W; sidebarBg.h = screenHeight;
+        navHome.x = MARGIN; navHome.y = screenHeight - UiTheme.scaled(104f); navHome.w = navW; navHome.h = navH;
+        navSettings.x = MARGIN; navSettings.y = screenHeight - UiTheme.scaled(134f); navSettings.w = navW; navSettings.h = navH;
+        navHud.x = MARGIN; navHud.y = MARGIN; navHud.w = navW; navHud.h = navH;
+        closeButton.x = screenWidth - closeMargin - closeSize;
+        closeButton.y = screenHeight - closeMargin - closeSize;
+        closeButton.w = closeSize; closeButton.h = closeSize;
+        searchField.x = contentX;
+        searchField.y = screenHeight - UiTheme.scaled(64f) - SEARCH_H;
+        searchField.w = Math.min(UiTheme.scaled(380f), contentW - layoutBtnGap - layoutBtnSize);
+        searchField.h = SEARCH_H;
+        layoutButton.x = searchField.x + searchField.w + layoutBtnGap;
+        layoutButton.y = searchField.y;
+        layoutButton.w = layoutBtnSize; layoutButton.h = layoutBtnSize;
+    }
+
+    private void emitCards(List<Object> entries, String prefix, LayoutSolver.Solved solved, float offsetX, int cardLayout) {
+        List<CardSlot> slots = slotsFromTaffy(entries, prefix, solved, offsetX, cardLayout);
+        if (slots == null) {
+            LauncherLog.err("[UiMainMenuScreen] grille Taffy incomplete (prefixe '" + prefix + "') — cartes non creees");
+            return;
+        }
+        emitCards(entries, slots, cardLayout);
+    }
+
+    /**
+     * Crée les cartes et leurs sous-contrôles aux emplacements déjà résolus —
+     * SEUL endroit qui construit ces widgets, quel que soit le mode de calcul
+     * (Taffy ou repli, voir {@link CardSlot}).
+     */
+    private void emitCards(List<Object> entries, List<CardSlot> slots, int cardLayout) {
+        for (int i = 0; i < entries.size(); i++) {
+            Object entry = entries.get(i);
+            CardSlot slot = slots.get(i);
+            float cx = slot.x, cy = slot.y, cardW = slot.w, rowH = slot.h;
 
             // Délai croissant par index (voir UiStagger) — les cartes
             // apparaissent en cascade plutôt que toutes d'un coup, à chaque
@@ -407,11 +753,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // posé ici, voir ModCard#drawIconGrid), comportement déjà
                 // existant avant cet ajout, inchangé.
                 if (cardLayout == 2) {
-                    float barH = iconGridBarH();
-                    float heartSize = iconGridHeartSize();
-                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
-                    float heartY = cy + (barH - heartSize) / 2f;
-                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, group.favorite,
+                    UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, group.favorite,
                         v -> { group.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
                     modScroll.add(favoriteToggle);
                     card.pairFavorite(favoriteToggle);
@@ -428,11 +770,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // loadActionFavorite/saveActionFavorite si une 2ᵉ apparaît un
                 // jour (identifiant à généraliser à ce moment-là).
                 if (cardLayout == 2) {
-                    float barH = iconGridBarH();
-                    float heartSize = iconGridHeartSize();
-                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
-                    float heartY = cy + (barH - heartSize) / 2f;
-                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, action.favorite,
+                    UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, action.favorite,
                         v -> { HudConfigStore.saveActionFavorite("modrinth", v); rebuildAll(); }).heartStyle();
                     modScroll.add(favoriteToggle);
                     card.pairFavorite(favoriteToggle);
@@ -471,14 +809,10 @@ public class UiMainMenuScreen extends UiScreenBase {
                     // d'ajout précis dans modScroll : peu importe lequel des
                     // deux est ajouté en premier, le cœur (plus petit)
                     // l'emporte toujours sur la bande à cet endroit précis.
-                    float barH = iconGridBarH();
-                    UiToggle enableToggle = new UiToggle(cx, cy, cardW, barH, mod.isEnabled(),
+                    UiToggle enableToggle = new UiToggle(slot.tx, slot.ty, slot.tw, slot.th, mod.isEnabled(),
                         v -> { mod.setEnabled(v); HudConfigStore.save(); }).invisibleStyle();
 
-                    float heartSize = iconGridHeartSize();
-                    float heartX = cx + cardW - heartSize - UiTheme.scaled(8f);
-                    float heartY = cy + (barH - heartSize) / 2f;
-                    UiToggle favoriteToggle = new UiToggle(heartX, heartY, heartSize, heartSize, mod.favorite,
+                    UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, mod.favorite,
                         v -> { mod.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
 
                     modScroll.add(favoriteToggle);
@@ -489,9 +823,9 @@ public class UiMainMenuScreen extends UiScreenBase {
                     // Position du toggle DÉPENDANTE de l'agencement — Compacte
                     // réutilise l'apparence (et donc la position toggle) de
                     // Détaillé telle quelle (voir commentaire plus haut).
-                    float togX = cx + cardW - toggleW() - toggleGapX();
-                    float togY = cy + rowH - toggleH() - toggleGapY();
-                    UiToggle toggle = new UiToggle(togX, togY, mod.isEnabled(),
+                    // Ancrée par Taffy au coin haut-droit de la carte (voir
+                    // addSectionRows) — plus de `cx + cardW - taille - marge` ici.
+                    UiToggle toggle = new UiToggle(slot.tx, slot.ty, mod.isEnabled(),
                         v -> { mod.setEnabled(v); HudConfigStore.save(); });
                     modScroll.add(toggle);
                     // Suit le soulèvement au survol de sa carte (voir ModCard#pairToggle) —
@@ -681,23 +1015,50 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            // Dégradé (plus clair/teinté violet en haut, SIDEBAR_BG normal en
-            // bas) plutôt qu'un fond plat — c'est LA sidebar qui porte le
-            // dégradé "clair en haut, foncé en bas" (pas le fond général du
-            // reste de l'écran, qui reste plat, voir UiScreenBase).
-            UiColor top = new UiColor(
-                Math.min(1f, UiTheme.SIDEBAR_BG.r + 0.07f),
-                Math.min(1f, UiTheme.SIDEBAR_BG.g + 0.05f),
-                Math.min(1f, UiTheme.SIDEBAR_BG.b + 0.14f),
-                UiTheme.SIDEBAR_BG.a);
-            renderer.drawGradientRect(0, 0, SIDEBAR_W, vpHeight, 0, UiTheme.SIDEBAR_BG, top, vpWidth, vpHeight);
             // Séparation de profondeur avec le contenu — l'ombre de TOUTE la
             // bande sidebar (pas juste son bord, sinon rectangle dégénéré de
             // largeur nulle) : ne se voit que là où elle déborde du fond plein
             // de la sidebar, donc uniquement comme un dégradé sombre qui
             // mord sur le contenu à droite.
+            //
+            // Dessinée AVANT le fond (et non plus après) depuis le passage au
+            // verre : un panneau de verre est OPAQUE dans ses bornes, il
+            // recouvre donc proprement la partie de l'ombre qui tombe sur
+            // lui-même — alors qu'une ombre posée PAR-DESSUS le verre en
+            // ternirait le flou. Aucun changement visible sur le repli opaque
+            // (le fond y était déjà plein et recouvrait la même zone).
             renderer.drawShadow(0, 0, SIDEBAR_W, vpHeight, 0f, 10f, 0f,
                 new UiColor(0, 0, 0, 100), vpWidth, vpHeight);
+
+            if (renderer.isGlassAvailable()) {
+                // Slab de verre pleine hauteur — la surface la plus teintée de
+                // l'écran (GLASS_STRENGTH_SIDEBAR) : c'est le support de la
+                // navigation, son texte doit rester lisible quel que soit le
+                // décor derrière (ciel clair, neige, lave...).
+                renderer.drawGlassPanel(0, 0, SIDEBAR_W, vpHeight, 0f,
+                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_SIDEBAR, UiTheme.SIDEBAR_BG, vpWidth, vpHeight);
+                // Liseré de lumière sur la TRANCHE DROITE (pas le bord haut
+                // comme sur une carte) — cette bande touche le haut ET le bas
+                // de l'écran : son seul bord "libre", donc le seul qui puisse
+                // capter la lumière, est celui qui donne sur le contenu.
+                float hairline = Math.max(1f, UiTheme.scaled(1f));
+                renderer.drawRoundedRect(SIDEBAR_W - hairline, 0, SIDEBAR_W, vpHeight, 0f,
+                    UiTheme.GLASS_HAIRLINE, vpWidth, vpHeight);
+            } else {
+                // Repli sans Blaze3D — dégradé opaque d'origine (plus clair/
+                // teinté violet en haut, SIDEBAR_BG en bas) : c'est LA sidebar
+                // qui porte le dégradé "clair en haut, foncé en bas" (pas le
+                // fond général de l'écran, qui reste plat, voir UiScreenBase).
+                // Gardé en branche explicite plutôt que via le paramètre
+                // `fallback` de drawGlassPanel — celui-ci ne prend qu'une
+                // couleur PLEINE, incapable d'exprimer un dégradé.
+                UiColor top = new UiColor(
+                    Math.min(1f, UiTheme.SIDEBAR_BG.r + 0.07f),
+                    Math.min(1f, UiTheme.SIDEBAR_BG.g + 0.05f),
+                    Math.min(1f, UiTheme.SIDEBAR_BG.b + 0.14f),
+                    UiTheme.SIDEBAR_BG.a);
+                renderer.drawGradientRect(0, 0, SIDEBAR_W, vpHeight, 0, UiTheme.SIDEBAR_BG, top, vpWidth, vpHeight);
+            }
         }
     }
 
@@ -920,8 +1281,27 @@ public class UiMainMenuScreen extends UiScreenBase {
                 UiTheme.scaled(18f) + hoverT * UiTheme.scaled(6f), UiTheme.scaled(3f),
                 shadowColor, vpWidth, vpHeight);
 
+            // Carte de verre — le survol n'éclaircit plus un aplat mais
+            // DÉTEND la teinte (moins de teinte = plus de décor flouté visible
+            // à travers) : sur du verre, "la carte s'allume au survol" se lit
+            // comme un matériau qui devient plus transparent, pas comme un gris
+            // qui monte d'un cran. L'alpha (fondu de bord de zone défilante /
+            // apparition en cascade) passe par la couleur de repli, qui pilote
+            // AUSSI l'opacité du verre — voir UiRenderer.drawGlassPanel.
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(alpha);
-            renderer.drawRoundedRect(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD, bg, vpWidth, vpHeight);
+            float glassStrength = UiTheme.GLASS_STRENGTH_CARD - hoverT * 0.1f;
+            renderer.drawGlassPanel(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD,
+                UiTheme.GLASS_TINT, glassStrength, bg, vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                // Tranche haute éclairée — signature du verre épais (macOS/iOS).
+                // Sans elle, une carte floutée n'a plus aucune limite nette dès
+                // que le décor derrière est clair, et la grille "fond" dans le
+                // paysage. Suit l'alpha de la carte pour rester solidaire de
+                // son fondu.
+                float hairline = Math.max(1f, UiTheme.scaled(1f));
+                renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, drawY + h - hairline, x + w - UiTheme.RADIUS_MD, drawY + h, 0f,
+                    UiTheme.GLASS_HAIRLINE.multiplyAlpha(alpha), vpWidth, vpHeight);
+            }
 
             // Traduit UNE FOIS ici, à l'affichage — "cardName"/"cardDescription"
             // restent le texte source (français) dans les champs de la

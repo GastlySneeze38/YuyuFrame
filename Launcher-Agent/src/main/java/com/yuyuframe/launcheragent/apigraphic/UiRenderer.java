@@ -445,6 +445,80 @@ public final class UiRenderer {
             passes, tint, tintStrength, vpWidth, vpHeight);
     }
 
+    /**
+     * {@code true} si {@link #drawGlassPanel} produira un VRAI panneau de
+     * verre (flou du décor derrière) plutôt que son repli opaque — permet à un
+     * écran d'adapter le RESTE de sa composition (voile de fond plus léger,
+     * liseré de lumière...) au lieu de poser un décor conçu pour du verre sur
+     * un bracket qui n'en aura jamais. Era E (Blaze3D) uniquement pour
+     * l'instant.
+     */
+    public boolean isGlassAvailable() {
+        return com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.isGlassAvailable();
+    }
+
+    /**
+     * Ouvre un frame "verre dépoli" — calcule UNE SEULE FOIS l'arrière-plan
+     * flouté que tous les {@link #drawGlassPanel} de ce frame partageront.
+     * À appeler AVANT eux (typiquement en toute première ligne du {@code
+     * uiDraw} d'un écran), sinon chaque panneau paye sa propre chaîne de flou
+     * — voir {@link com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur#queueFrameChain}
+     * pour le détail du coût (9 passes plein écran pour TOUT le frame ici, vs
+     * 9 PAR PANNEAU sans ça) et la conséquence visuelle assumée (le verre
+     * floute le monde du jeu, jamais l'UI dessinée avant lui).
+     *
+     * No-op silencieux hors era E — {@link #drawGlassPanel} bascule alors sur
+     * son repli, rien à changer côté appelant.
+     *
+     * @param passes étages de flou {@code [1,5]} — 4 = "verre dépoli" franc, 2 = voile léger.
+     */
+    public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
+    }
+
+    /**
+     * Surface de verre : le décor derrière est flouté (chaîne partagée du
+     * frame, voir {@link #beginGlassFrame}) puis teinté par {@code tint}/{@code
+     * tintStrength}, découpé aux coins arrondis PAR COIN.
+     *
+     * <p>{@code fallback} est la couleur PLEINE utilisée quand le verre n'est
+     * pas disponible (legacy/modern GL, où aucun flou n'existe) — paramètre
+     * EXPLICITE plutôt qu'une couleur devinée à partir de {@code tint} : un
+     * verre à 35% de teinte sur fond flouté et un aplat à 35% d'opacité sur
+     * fond net ne se ressemblent pas du tout, et c'est l'écran (pas le moteur)
+     * qui sait de quoi son panneau doit avoir l'air quand il ne peut pas être
+     * du verre. Passer le token de thème habituel du panneau (ex:
+     * {@code UiTheme.PANEL_BG}) y redonne exactement l'apparence d'avant ce
+     * rework.
+     *
+     * <p>L'ALPHA de {@code fallback} pilote aussi l'opacité du VERRE — un seul
+     * réglage pour les deux chemins, impossible à désynchroniser : un appelant
+     * qui estompe son panneau (carte en bord de zone défilante via {@code
+     * clipFade}, apparition en cascade {@code UiStagger}) passe simplement
+     * {@code CARD_BG.multiplyAlpha(a)} et obtient le même fondu avec ou sans
+     * verre, sans paramètre supplémentaire à penser.
+     *
+     * @param tintStrength {@code [0,1]} — 0 = flou pur, 1 = couleur plate (verre invisible).
+     */
+    public void drawGlassPanel(float x1, float y1, float x2, float y2,
+                                float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                UiColor tint, float tintStrength, UiColor fallback, int vpWidth, int vpHeight) {
+        if (isGlassAvailable()) {
+            com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueGlassPanel(
+                x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+                tint, tintStrength, fallback.a, vpWidth, vpHeight);
+        } else {
+            drawRoundedRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+                fallback, vpWidth, vpHeight);
+        }
+    }
+
+    /** Raccourci rayon uniforme — voir {@link #drawGlassPanel(float, float, float, float, float, float, float, float, UiColor, float, UiColor, int, int)}. */
+    public void drawGlassPanel(float x1, float y1, float x2, float y2, float radius,
+                                UiColor tint, float tintStrength, UiColor fallback, int vpWidth, int vpHeight) {
+        drawGlassPanel(x1, y1, x2, y2, radius, radius, radius, radius, tint, tintStrength, fallback, vpWidth, vpHeight);
+    }
+
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
                                        UiColor color, int vpWidth, int vpHeight) {
         primitives.drawRoundedRectBorder(x1, y1, x2, y2, radius, borderWidth, color, vpWidth, vpHeight);

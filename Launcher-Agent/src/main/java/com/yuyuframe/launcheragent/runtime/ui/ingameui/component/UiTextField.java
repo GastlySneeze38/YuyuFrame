@@ -169,8 +169,18 @@ public class UiTextField extends UiWidget implements UiFocusable {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-            focused ? UiTheme.ACCENT_DIM : UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+        // Pilule de verre (rework UI 2026-08-27) — c'est sur une petite
+        // surface comme celle-ci que le flou du décor se lit le mieux, d'où la
+        // teinte la plus légère de la palette (GLASS_STRENGTH_FIELD). Le fond
+        // ACCENT_DIM du focus, lui, RESTE un aplat par-dessus le verre : c'est
+        // un signal d'état, il doit garder exactement la même couleur quel que
+        // soit le décor derrière (un accent qui change de teinte selon le
+        // paysage ne se lit plus comme un état).
+        renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+        if (focused) {
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM, vpWidth, vpHeight);
+        }
 
         // Liseré animé — même signal que le fond (focused) mais interpolé en
         // douceur (UiAnimatedFloat) plutôt qu'un simple binaire, pour un

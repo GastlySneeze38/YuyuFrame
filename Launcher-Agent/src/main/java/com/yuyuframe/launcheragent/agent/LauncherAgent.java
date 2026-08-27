@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-27-v834";
+    private static final String BUILD_VERSION = "2026-08-27-v837";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }

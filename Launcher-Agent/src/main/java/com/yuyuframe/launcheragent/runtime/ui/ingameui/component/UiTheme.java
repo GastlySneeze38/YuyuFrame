@@ -52,6 +52,53 @@ public final class UiTheme {
 
     public static UiColor TRACK_OFF = new UiColor(55, 55, 65, 255);
 
+    // ── Verre dépoli (rework UI 2026-08-27) ─────────────────────────────────
+    //
+    // Une surface de verre n'est PAS un aplat translucide : le décor derrière
+    // est flouté (voir UiRenderer.drawGlassPanel/beginGlassFrame) puis TEINTÉ
+    // par GLASS_TINT à hauteur de GLASS_*_STRENGTH. Le résultat est OPAQUE
+    // dans les bornes du panneau (le shader écrit alpha=1 × couverture SDF) —
+    // ce qui se règle ici est donc "combien de décor flouté reste visible
+    // à travers", pas une opacité classique.
+    //
+    // Chaque token de verre va par PAIRE avec un token opaque déjà existant
+    // (SIDEBAR_BG/CARD_BG/PANEL_BG_ALT), passé en `fallback` à drawGlassPanel :
+    // sur un bracket sans Blaze3D (pas de flou possible), l'écran retombe
+    // EXACTEMENT sur l'apparence d'avant ce rework, sans code conditionnel
+    // côté écran.
+
+    /** Teinte mélangée par-dessus le décor flouté — presque noire, très légèrement violette pour rester dans la même famille qu'{@link #ACCENT} (un gris pur "salit" le verre par contraste avec l'accent). */
+    public static UiColor GLASS_TINT = new UiColor(13, 13, 19, 255);
+
+    /** Sidebar — la plus teintée : c'est le support de la navigation, le texte doit y être lisible quel que soit le décor derrière (ciel clair, neige...). */
+    public static float GLASS_STRENGTH_SIDEBAR = 0.66f;
+    /** Cartes de mods — un peu plus transparentes que la sidebar : elles sont nombreuses, un verre trop dense redonnerait un aplat plein écran (donc aucun intérêt au flou). */
+    public static float GLASS_STRENGTH_CARD = 0.58f;
+    /** Champs/pilules (recherche, barres) — les plus légers, ce sont de petites surfaces où le flou se voit le mieux. */
+    public static float GLASS_STRENGTH_FIELD = 0.52f;
+    // (Pas de GLASS_STRENGTH_MODAL pour l'instant : les tiroirs/modales
+    // — ModrinthContentScreen — ne sont pas encore passés au verre. Ajouter le
+    // token AVEC l'écran qui le consomme, jamais avant : c'est exactement le
+    // motif "capacité construite pour la généralité, zéro appelant" relevé par
+    // l'audit du moteur du 2026-08-27, à ne pas réamorcer ici.)
+
+    /**
+     * Liseré de lumière sur le bord HAUT d'une surface de verre — signature
+     * visuelle du verre dans les UI modernes (macOS/iOS) : simule la tranche
+     * éclairée d'un matériau épais. Sans lui, un panneau flouté "flotte" sans
+     * limite nette et se confond avec le décor dès que celui-ci est clair.
+     */
+    public static UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 30);
+
+    /**
+     * Voile de fond quand le verre est disponible — REMPLACE {@link #OVERLAY_BG}
+     * (quasi-opaque, alpha 235) dans ce cas : un fond opaque masquerait le monde
+     * du jeu, or c'est précisément lui que le verre est censé laisser deviner,
+     * flouté. Assez sombre pour garder le contraste du texte hors panneaux,
+     * assez clair pour que le décor reste lisible.
+     */
+    public static UiColor GLASS_SCRIM = new UiColor(6, 6, 10, 140);
+
     /**
      * Palette LIGHT — fond quasi-blanc légèrement teinté violet (pas un gris
      * pur, cohérent avec {@link #ACCENT}), même hiérarchie de contraste que
@@ -77,6 +124,14 @@ public final class UiTheme {
         static final UiColor TEXT_MUTED     = new UiColor(140, 137, 150, 255);
 
         static final UiColor TRACK_OFF = new UiColor(214, 212, 222, 255);
+
+        // Verre clair — teinte quasi-blanche (le décor flouté "éclaircit" le
+        // panneau au lieu de l'assombrir) et liseré de lumière PLUS FORT que
+        // l'équivalent sombre : sur fond clair, un liseré blanc à 30 d'alpha
+        // disparaîtrait complètement.
+        static final UiColor GLASS_TINT     = new UiColor(250, 250, 253, 255);
+        static final UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 120);
+        static final UiColor GLASS_SCRIM    = new UiColor(245, 245, 250, 130);
     }
 
     private static final class Dark {
@@ -98,6 +153,10 @@ public final class UiTheme {
         static final UiColor TEXT_MUTED     = new UiColor(105, 105, 118, 255);
 
         static final UiColor TRACK_OFF = new UiColor(55, 55, 65, 255);
+
+        static final UiColor GLASS_TINT     = new UiColor(13, 13, 19, 255);
+        static final UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 30);
+        static final UiColor GLASS_SCRIM    = new UiColor(6, 6, 10, 140);
     }
 
     /**
@@ -117,6 +176,7 @@ public final class UiTheme {
             ACCENT = Light.ACCENT; ACCENT_DIM = Light.ACCENT_DIM; DANGER = Light.DANGER;
             TEXT_PRIMARY = Light.TEXT_PRIMARY; TEXT_SECONDARY = Light.TEXT_SECONDARY; TEXT_MUTED = Light.TEXT_MUTED;
             TRACK_OFF = Light.TRACK_OFF;
+            GLASS_TINT = Light.GLASS_TINT; GLASS_HAIRLINE = Light.GLASS_HAIRLINE; GLASS_SCRIM = Light.GLASS_SCRIM;
         } else {
             OVERLAY_BG = Dark.OVERLAY_BG; SIDEBAR_BG = Dark.SIDEBAR_BG; SIDEBAR_HOVER = Dark.SIDEBAR_HOVER;
             SIDEBAR_ACTIVE = Dark.SIDEBAR_ACTIVE; PANEL_BG = Dark.PANEL_BG; PANEL_BG_ALT = Dark.PANEL_BG_ALT;
@@ -124,6 +184,7 @@ public final class UiTheme {
             ACCENT = Dark.ACCENT; ACCENT_DIM = Dark.ACCENT_DIM; DANGER = Dark.DANGER;
             TEXT_PRIMARY = Dark.TEXT_PRIMARY; TEXT_SECONDARY = Dark.TEXT_SECONDARY; TEXT_MUTED = Dark.TEXT_MUTED;
             TRACK_OFF = Dark.TRACK_OFF;
+            GLASS_TINT = Dark.GLASS_TINT; GLASS_HAIRLINE = Dark.GLASS_HAIRLINE; GLASS_SCRIM = Dark.GLASS_SCRIM;
         }
     }
 

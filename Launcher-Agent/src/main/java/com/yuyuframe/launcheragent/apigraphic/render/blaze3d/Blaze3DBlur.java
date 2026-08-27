@@ -36,6 +36,21 @@ public final class Blaze3DBlur {
     /** Toggle via {@code /yf blurpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
     public static volatile boolean testEnabled = false;
 
+    /**
+     * {@code true} si un vrai panneau de verre est dessinable sur ce bracket —
+     * classes Blaze3D présentes ET pipelines de flou effectivement construits.
+     * Exposé publiquement (contrairement à {@code isAvailable()}/{@code
+     * resolve()}, importés statiquement depuis {@link Blaze3DCore} donc
+     * invisibles hors de ce package) pour que {@link
+     * com.yuyuframe.launcheragent.apigraphic.UiRenderer#drawGlassPanel} sache
+     * s'il doit basculer sur son repli opaque. {@code resolve()} est
+     * idempotent/mis en cache ({@code resolveAttempted}), donc appelable à
+     * chaque frame sans coût après le premier appel.
+     */
+    public static boolean isGlassAvailable() {
+        return isAvailable() && resolve() && compositePipeline != null;
+    }
+
     /** Panneau de test fixe (centré, 420×260, coins 24/24/4/4 pour vérifier le rayon par coin en même temps, teinte violette 25%) — dessiné en direct (PAS via {@link Blaze3DCore#enqueue}, même style que {@code UiSolidPipelinePoc}, POC autonome). */
     public static void drawTestPanel(int vpWidth, int vpHeight) {
         float w = 420f, h = 260f;
@@ -403,13 +418,101 @@ public final class Blaze3DBlur {
             passes, tint, tintStrength, vpWidth, vpHeight));
     }
 
+    /**
+     * Chaîne de flou PARTAGÉE par tout un frame — à empiler UNE SEULE FOIS,
+     * AVANT tous les {@link #queueGlassPanel} qui la consommeront (rework UI
+     * "verre dépoli à la Apple", 2026-08-27).
+     *
+     * <p>POURQUOI CETTE SÉPARATION (limite RÉELLE de {@link #queueBlurredPanel},
+     * mesurée sur le papier avant d'écrire la moindre ligne d'écran) : cette
+     * dernière recalcule TOUTE la chaîne dual-Kawase à chaque appel, soit
+     * jusqu'à 5 passes de downsample + 4 d'upsample = <b>9 passes de rendu
+     * plein écran par panneau</b>. Acceptable pour UN panneau isolé (l'usage
+     * pour lequel elle avait été écrite en Phase 5.1), catastrophique dès
+     * qu'une interface en pose beaucoup : une sidebar + une barre de recherche
+     * + 15 cartes de mods = ~17 panneaux × 9 = <b>150+ passes plein écran par
+     * frame</b>, pour un résultat visuel identique puisqu'ils échantillonnent
+     * TOUS le même arrière-plan.
+     *
+     * <p>Ce découplage ramène ça à <b>9 passes pour tout le frame</b>, quel que
+     * soit le nombre de panneaux — exactement le modèle des vraies UI "vibrancy"
+     * (macOS/iOS) : un seul backdrop flouté calculé une fois, échantillonné par
+     * autant de surfaces de verre que voulu.
+     *
+     * <p>CONSÉQUENCE VISUELLE ASSUMÉE (et souhaitable ici) : puisque la chaîne
+     * est calculée AVANT que le moindre élément d'UI ne soit dessiné (elle est
+     * en tête de la file {@link Blaze3DCore#enqueue}, exécutée à
+     * {@code flushQueued}), chaque panneau floute <b>le monde du jeu</b>, jamais
+     * l'UI dessinée avant lui. Deux panneaux de verre qui se chevauchent ne se
+     * floutent donc pas l'un l'autre — c'est le comportement voulu (et celui de
+     * macOS), pas une limite : du verre qui floute du verre vire vite à la
+     * bouillie opaque. Pour un vrai empilement de flous (une modale qui doit
+     * flouter l'écran de verre derrière elle), utiliser {@link
+     * #queueBlurredPanel} pour CE panneau-là : il recalcule la chaîne à son
+     * propre tour dans la file, donc voit bien tout ce qui a été dessiné avant.
+     */
+    public static void queueFrameChain(int passes, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        Blaze3DCore.enqueue(() -> renderFrameChain(passes, vpWidth, vpHeight));
+    }
+
+    private static boolean renderFrameChain(int passes, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
+        return renderBlurChain(vpWidth, vpHeight, passes);
+    }
+
+    /**
+     * Panneau de verre qui RÉUTILISE la chaîne déjà calculée par {@link
+     * #queueFrameChain} — aucun recalcul, juste la passe de composite (1 draw).
+     * Voir {@link #queueFrameChain} pour le pourquoi et les paramètres
+     * {@code tint}/{@code tintStrength}.
+     *
+     * <p>Filet de sécurité : si aucune chaîne n'a été calculée pour ce frame
+     * (appelant qui a oublié {@code queueFrameChain}, ou tout premier frame),
+     * le composite en calcule une lui-même plutôt que d'échantillonner une
+     * texture nulle — donc jamais de panneau invisible/noir, au pire le coût
+     * de l'ancien comportement.
+     */
+    public static void queueGlassPanel(float x0, float y0, float x1, float y1,
+                                        float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                        UiColor tint, float tintStrength, float opacity, int vpWidth, int vpHeight) {
+        if (!isAvailable()) return;
+        Blaze3DCore.enqueue(() -> drawGlassComposite(x0, y0, x1, y1, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            tint, tintStrength, opacity, vpWidth, vpHeight));
+    }
+
+    /** Nombre d'étages par défaut quand un composite doit se rabattre sur son propre calcul de chaîne (voir {@link #queueGlassPanel}). */
+    private static final int DEFAULT_PASSES = 4;
+
     private static boolean drawBlurredPanel(float x0, float y0, float x1, float y1,
                                              float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
                                              int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
+        currentStage = "drawBlurredPanel/renderBlurChain";
+        if (!renderBlurChain(vpWidth, vpHeight, passes)) return false;
+        return drawGlassComposite(x0, y0, x1, y1, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            tint, tintStrength, 1f, vpWidth, vpHeight);
+    }
+
+    /**
+     * @param opacity {@code [0,1]} — opacité du panneau ENTIER (pas la force
+     *        de teinte, voir {@code tintStrength}) : appliquée via la couleur
+     *        de sommet, donc {@code 0.5} laisse voir ce qui a été dessiné
+     *        SOUS le panneau à travers le verre. Indispensable pour un
+     *        panneau qui s'estompe (carte en bord de zone défilante, voir
+     *        {@code UiWidget#clipFade}, ou apparition en cascade {@code
+     *        UiStagger}) : sans lui, le composite écrit toujours alpha=1 et
+     *        une carte en train de disparaître resterait pleinement opaque
+     *        jusqu'à sa suppression, d'un coup sec.
+     */
+    private static boolean drawGlassComposite(float x0, float y0, float x1, float y1,
+                                               float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                               UiColor tint, float tintStrength, float opacity, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "drawBlurredPanel/renderBlurChain";
-            if (!renderBlurChain(vpWidth, vpHeight, passes)) return false;
+            // Chaîne absente (queueFrameChain jamais appelée ce frame, ou
+            // viewport recréé entre-temps) — voir javadoc de queueGlassPanel.
+            if (levelView[0] == null && !renderBlurChain(vpWidth, vpHeight, DEFAULT_PASSES)) return false;
 
             currentStage = "minecraftClient(blurpanel)";
             Object mc = McReflect.minecraftClient();
@@ -432,7 +535,11 @@ public final class Blaze3DBlur {
             currentStage = "createCommandEncoder(blurpanel)";
             Object encoder = mCreateCommandEncoder.invoke(device);
 
-            int rgba = 0xFFFFFFFF;
+            // Blanc × opacité — même empaquetage ABGR que Blaze3DRect
+            // (a<<24 | b<<16 | g<<8 | r) ; seul l'alpha varie, la couleur du
+            // verre venant du flou + de la teinte dans le fragment shader.
+            int alphaByte = Math.max(0, Math.min(255, Math.round(opacity * 255f)));
+            int rgba = (alphaByte << 24) | 0x00FFFFFF;
             short light0 = 0, light1 = 0;
             ByteBuffer verts = ensureStagingBuffer(4 * 28);
             putSolidQuad(verts, x0, x1, y0, y1, rgba, light0, light1);
@@ -498,7 +605,7 @@ public final class Blaze3DBlur {
                 failureLogCount++;
                 Throwable cause = t;
                 while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
-                LauncherLog.err("[UiRenderer] Blaze3DBlur.drawBlurredPanel a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+                LauncherLog.err("[UiRenderer] Blaze3DBlur.drawGlassComposite a échoué #" + failureLogCount + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
             }
             return false;
         }
