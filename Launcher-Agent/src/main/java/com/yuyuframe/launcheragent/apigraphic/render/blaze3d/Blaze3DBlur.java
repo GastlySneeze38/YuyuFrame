@@ -226,7 +226,7 @@ public final class Blaze3DBlur {
 
     static Object writeBlurParams(Object device, Object encoder, float texelW, float texelH) throws Exception {
         Object buffer = ensureBlurParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(16);
         data.putFloat(texelW).putFloat(texelH).putFloat(0f).putFloat(0f);
         data.flip();
         Object slice = mBufferSlice.invoke(buffer, 0L, 16L);
@@ -245,7 +245,7 @@ public final class Blaze3DBlur {
     static Object writeCompositeParams(Object device, Object encoder, float screenW, float screenH,
                                         float tintR, float tintG, float tintB, float tintStrength) throws Exception {
         Object buffer = ensureCompositeParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(32);
         data.putFloat(screenW).putFloat(screenH).putFloat(0f).putFloat(0f);
         data.putFloat(tintR).putFloat(tintG).putFloat(tintB).putFloat(tintStrength);
         data.flip();
@@ -551,9 +551,9 @@ public final class Blaze3DBlur {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(blurpanel)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object colorMod = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
 

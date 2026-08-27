@@ -318,7 +318,7 @@ public final class Blaze3DCore {
 
     static Object writeBatchParams(Object device, Object encoder, float radius) throws Exception {
         Object buffer = ensureBatchParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(16);
         data.putFloat(radius).putFloat(0f).putFloat(0f).putFloat(0f);
         data.flip();
         Object slice = mBufferSlice.invoke(buffer, 0L, 16L);
@@ -343,7 +343,7 @@ public final class Blaze3DCore {
     static Object writeRectParams(Object device, Object encoder, float x0, float y0, float x1, float y1,
                                    float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight) throws Exception {
         Object buffer = ensureRectParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(32);
         data.putFloat(x0).putFloat(y0).putFloat(x1).putFloat(y1);
         data.putFloat(radiusTopLeft).putFloat(radiusTopRight).putFloat(radiusBottomLeft).putFloat(radiusBottomRight);
         data.flip();
@@ -801,6 +801,57 @@ public final class Blaze3DCore {
     static ByteBuffer stagingBuffer;
     static int stagingBufferCapacity;
 
+    /**
+     * Tampons natifs RÉUTILISÉS pour les écritures d'uniformes (RectParams,
+     * BlurParams, projection...) — un par TAILLE demandée.
+     *
+     * <p>AUDIT PERF : ces écritures faisaient un {@code
+     * ByteBuffer.allocateDirect(...)} À CHAQUE DRAW. Une allocation directe
+     * n'est pas un simple {@code new} : elle passe par un {@code malloc} natif
+     * et enregistre un {@code Cleaner} auprès du GC, pour 16 à 64 octets, des
+     * dizaines de fois par frame. Le tampon de SOMMETS avait déjà été corrigé
+     * ainsi (voir {@link #ensureStagingBuffer}) — les tampons d'UNIFORMES
+     * avaient été oubliés.
+     *
+     * <p>Indexé par taille : ces écritures sont toutes séquentielles dans une
+     * même passe (remplir puis envoyer, jamais deux en vol simultanément),
+     * donc un tampon par taille suffit — pas besoin d'un pool.
+     */
+    private static final java.util.Map<Integer, ByteBuffer> SCRATCH = new java.util.HashMap<>();
+
+    static ByteBuffer scratch(int bytes) {
+        ByteBuffer b = SCRATCH.get(bytes);
+        if (b == null) {
+            b = ByteBuffer.allocateDirect(bytes).order(java.nio.ByteOrder.nativeOrder());
+            SCRATCH.put(bytes, b);
+        }
+        b.clear();
+        return b;
+    }
+
+    /**
+     * Matrice identité et vecteur nul PARTAGÉS — ces deux valeurs sont
+     * strictement constantes et ne sont que LUES par {@code
+     * DynamicUniforms.write} (recopiées dans un tampon d'uniformes).
+     *
+     * <p>AUDIT PERF : chaque draw faisait {@code clsMatrix4f.getConstructor()}
+     * — une RECHERCHE réflexive de constructeur, jamais mise en cache (elle
+     * refait un contrôle d'accès et une copie défensive du tableau de
+     * constructeurs à chaque appel) — puis un {@code newInstance}, pour
+     * reconstruire à l'identique un objet qui ne change jamais.
+     */
+    private static Object identity4Cached, zero3Cached;
+
+    static Object identityMatrix4f() throws Exception {
+        if (identity4Cached == null) identity4Cached = clsMatrix4f.getConstructor().newInstance();
+        return identity4Cached;
+    }
+
+    static Object zeroVector3f() throws Exception {
+        if (zero3Cached == null) zero3Cached = ctorVector3f.newInstance(0f, 0f, 0f);
+        return zero3Cached;
+    }
+
     static ByteBuffer ensureStagingBuffer(int neededBytes) {
         if (stagingBuffer != null && neededBytes <= stagingBufferCapacity) {
             stagingBuffer.clear();
@@ -862,7 +913,7 @@ public final class Blaze3DCore {
         // clipping GPU silencieux sur z=0, inchangé).
         mMatrixSetOrtho.invoke(ortho, 0f, (float) vpWidth, 0f, (float) vpHeight, -1000f, 1000f);
         float[] cols = (float[]) mMatrixGetFloatArray.invoke(ortho, (Object) new float[16]);
-        ByteBuffer data = ByteBuffer.allocateDirect(64).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(64);
         for (float v : cols) data.putFloat(v);
         data.flip();
         Object slice = mBufferSlice.invoke(projectionBuffer, 0L, 64L);
@@ -875,7 +926,16 @@ public final class Blaze3DCore {
 
     static int failureLogCount;
 
-    static volatile String currentStage = "?";
+    /**
+     * Étape courante, pour situer une exception dans les logs.
+     *
+     * <p>NON volatile (AUDIT PERF) : il y en a ~180 écritures par frame
+     * (69 rien que dans Blaze3DRect), et chaque écriture volatile est une
+     * barrière mémoire. C'est un champ de DIAGNOSTIC, lu uniquement depuis le
+     * même thread de rendu qui l'écrit, dans un {@code catch} — la visibilité
+     * inter-threads qu'apportait {@code volatile} n'a jamais servi à rien ici.
+     */
+    static String currentStage = "?";
 
     // ── File d'attente d'un frame (rendu différé) ───────────────────────────
     //

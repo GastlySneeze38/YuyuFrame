@@ -55,6 +55,12 @@ public final class HudOverlayRenderer {
         // effet si l'option "Fond flouté (HUD)" est désactivée) — voir
         // HudPanelRenderer#ensureGlassChain.
         HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight);
+        // Tout le texte du HUD en UNE passe par police au lieu d'une par
+        // chaîne — voir UiRenderer.beginTextBatch. L'ordre Z convient ici :
+        // le texte se retrouve au-dessus de TOUS les fonds de panneaux, ce
+        // qui est exactement le rendu voulu (et les panneaux ne se
+        // chevauchent pas entre eux).
+        renderer.beginTextBatch();
         for (HudElement element : HudRegistry.elements()) {
             // Voir HudElement.refreshSize() : un contenu de largeur variable
             // (FPS/Ping) doit être remesuré à CHAQUE frame, pas une seule fois
@@ -65,6 +71,7 @@ public final class HudOverlayRenderer {
             float y = element.screenY(vpHeight);
             HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);
         }
+        renderer.endTextBatch(vpWidth, vpHeight);
     }
 
     /**
@@ -96,6 +103,7 @@ public final class HudOverlayRenderer {
         // Même garde qu'en jeu (voir render ci-dessus) — ce chemin sert quand
         // un écran VANILLA est ouvert (inventaire, conteneur, tchat).
         HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight);
+        renderer.beginTextBatch(); // voir render() ci-dessus
         for (HudElement element : HudRegistry.elements()) {
             if (!globalShow && !element.showWhenScreenOpen) continue;
             element.refreshSize();
@@ -103,5 +111,6 @@ public final class HudOverlayRenderer {
             float y = element.screenY(vpHeight);
             HudPanelRenderer.draw(renderer, element, x, y, element.w, element.h, vpWidth, vpHeight);
         }
+        renderer.endTextBatch(vpWidth, vpHeight);
     }
 }

@@ -82,7 +82,7 @@ public final class CoordsModule extends SingleHudModule {
 
                         float yaw = playerYaw(player);
                         facing = facingLetter(yaw);
-                        biome = biomeName(player, (int) Math.floor(px), (int) Math.floor(py), (int) Math.floor(pz));
+                        biome = cachedBiomeName(player, (int) Math.floor(px), (int) Math.floor(py), (int) Math.floor(pz));
                     }
                 }
             } catch (Throwable t) {
@@ -124,6 +124,39 @@ public final class CoordsModule extends SingleHudModule {
                 float labelW = renderer.textWidth(biomeLabel, textScale);
                 renderer.drawText(biome, rowX + labelW, ty, BIOME_COLOR, textScale, vpWidth, vpHeight);
             }
+        }
+
+        /**
+         * Dernier biome résolu, mémorisé par COORDONNÉES DE BLOC.
+         *
+         * <p>AUDIT PERF : {@link #biomeName} était appelé à CHAQUE FRAME, et
+         * ce n'est pas une simple lecture de champ — c'est une chaîne complète
+         * de résolution ({@code BiomeManager} -> construction réflexive d'un
+         * {@code BlockPos} -> {@code Holder} -> {@code Optional} -> {@code
+         * Identifier} -> {@code getPath} -> découpage/{@code StringBuilder} de
+         * mise en forme), soit le module HUD le plus coûteux du lot. Or le
+         * biome ne change qu'en franchissant une frontière : le mémoriser par
+         * bloc le fait passer de ~60-200 résolutions/seconde à quelques-unes.
+         *
+         * <p>Clé = coordonnées ENTIÈRES (pas la position flottante) : c'est la
+         * granularité réelle de la requête, donc aucune péremption possible —
+         * le cache ne peut pas renvoyer le biome d'un autre bloc.
+         *
+         * <p>{@code cacheValid} distinct d'un test {@code == null} : un échec
+         * de résolution renvoie légitimement {@code null}, et le retester à
+         * chaque frame relancerait précisément le chemin le plus lourd.
+         */
+        private static int cacheBx = Integer.MIN_VALUE, cacheBy, cacheBz;
+        private static boolean biomeCacheValid;
+        private static String cachedBiome;
+
+        private String cachedBiomeName(Object player, int bx, int by, int bz) {
+            if (!biomeCacheValid || bx != cacheBx || by != cacheBy || bz != cacheBz) {
+                cacheBx = bx; cacheBy = by; cacheBz = bz;
+                cachedBiome = biomeName(player, bx, by, bz);
+                biomeCacheValid = true;
+            }
+            return cachedBiome;
         }
 
         private static Method cachedGetX, cachedGetY, cachedGetZ;

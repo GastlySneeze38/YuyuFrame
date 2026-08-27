@@ -171,6 +171,12 @@ public final class HudPanelRenderer {
                 // petit et permanent à l'écran : un liseré y attire l'œil en
                 // continu pendant le jeu, là où sur un écran de menu il sert à
                 // délimiter une grande surface qu'on regarde volontairement.
+                // Teinte identique aux champs des écrans. Une variante SANS
+                // teinte (flou pur, force 0) a été essayée puis abandonnée —
+                // retour utilisateur : "c'était mieux avant". Le flou seul,
+                // combiné à l'opacité par défaut du HUD, rendait l'effet trop
+                // discret ; la teinte est ce qui donne au panneau sa présence.
+                // Ne pas la retirer à nouveau sans demande explicite.
                 renderer.drawGlassPanel(x, y, x + w, y + h, r[0], r[1], r[2], r[3],
                     UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, panelBg, vpWidth, vpHeight);
             } else {
@@ -208,12 +214,10 @@ public final class HudPanelRenderer {
             return;
         }
 
-        String[] lines;
-        try {
-            lines = element.content.lines();
-        } catch (Throwable t) {
-            lines = new String[]{ "--" };
-        }
+        // contentLines() (pas content.lines()) — même tableau que celui déjà
+        // calculé par refreshSize() pour mesurer la boîte, au lieu de le
+        // reconstruire. Voir HudElement.contentLines.
+        String[] lines = element.contentLines();
 
         // PAS d'agrandissement automatique ici (ancien "autoFit" supprimé) :
         // depuis que w/h dérivent TOUJOURS de naturalSize()*scale (voir

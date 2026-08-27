@@ -197,7 +197,7 @@ public final class Blaze3DGradient {
             float startX, float startY, float endX, float endY, UiColor[] colors, float[] positions,
             float radius, float rectX0, float rectY0, float rectX1, float rectY1) throws Exception {
         Object buffer = ensureGradientParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(208).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(208);
         data.putFloat(startX).putFloat(startY).putFloat(endX).putFloat(endY);
         float gradTypeCode = type == UiGradientType.RADIAL ? 1f : type == UiGradientType.CONIC ? 2f : 0f;
         data.putFloat(gradTypeCode).putFloat(radius).putFloat(0f).putFloat(0f);
@@ -303,9 +303,9 @@ public final class Blaze3DGradient {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(gradrect)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
 
@@ -402,9 +402,9 @@ public final class Blaze3DGradient {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(gradrect2d)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
 
@@ -511,9 +511,9 @@ public final class Blaze3DGradient {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(msgrad)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur réelle vient de GradientParams, pas de ColorModulator
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
 

@@ -668,6 +668,35 @@ public final class UiRenderer {
 
     // ── UiTextRenderer (police bitmap UiFont) ─────────────────────────────────
 
+    /**
+     * Ouvre un lot de texte : tous les {@code drawText} suivants sont
+     * accumulés et rendus en UNE passe par police à la fermeture, au lieu
+     * d'une passe chacun.
+     *
+     * <p>Sur era E, chaque {@code drawText} ouvrait sa propre passe de rendu
+     * GPU. Sur un HUD, le texte en produit plus que les fonds (multi-lignes +
+     * suffixes d'accent dessinés à part), c'était donc le premier poste de
+     * coût du rendu.
+     *
+     * <p><b>ORDRE Z</b> — tout le texte du lot est empilé au moment du
+     * {@link #endTextBatch} : il passe donc AU-DESSUS de tout ce qui a été
+     * dessiné entre l'ouverture et la fermeture. C'est ce qu'on veut pour un
+     * HUD (le texte doit couvrir les fonds de panneaux) ; à ne PAS utiliser
+     * là où du texte doit passer SOUS un élément dessiné après lui.
+     *
+     * <p>Opt-in délibéré : fusionner automatiquement des dessins consécutifs
+     * casserait l'ordre Z ailleurs dans le moteur (même raison que pour les
+     * rects batchés). No-op hors era E.
+     */
+    public void beginTextBatch() {
+        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.beginBatch();
+    }
+
+    /** Ferme le lot ouvert par {@link #beginTextBatch} et empile son rendu (une passe par police). */
+    public void endTextBatch(int vpWidth, int vpHeight) {
+        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
+    }
+
     public float textWidth(String text, float scale) { return this.text.textWidth(text, scale); }
 
     public float textWidth(UiFont font, String text, float scale) { return this.text.textWidth(font, text, scale); }

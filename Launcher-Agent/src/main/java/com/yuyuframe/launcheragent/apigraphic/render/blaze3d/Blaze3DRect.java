@@ -199,9 +199,9 @@ public final class Blaze3DRect {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(rect)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object colorMod = ctorVector4f.newInstance(color.r, color.g, color.b, color.a);
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
 
@@ -315,11 +315,11 @@ public final class Blaze3DRect {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(icon)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             // RGB pass-through (vraies couleurs de l'image) — seul le composant
             // alpha varie (voir queueIcon(..., alpha, ...) / UiRenderer#drawIcon).
             Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, alpha);
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
 
@@ -463,9 +463,9 @@ public final class Blaze3DRect {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(rectbatch)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà portée par sommet
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
 

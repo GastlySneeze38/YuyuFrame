@@ -153,9 +153,9 @@ public final class Blaze3DBlend {
         Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
         mWriteToBuffer.invoke(encoder, slice, verts);
 
-        Object identity4 = clsMatrix4f.getConstructor().newInstance();
+        Object identity4 = identityMatrix4f();
         Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-        Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+        Object zero3 = zeroVector3f();
         Object dynUniforms = mGetDynamicUniforms.invoke(null);
         Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
 
@@ -194,7 +194,7 @@ public final class Blaze3DBlend {
 
     static Object writeBlendParams(Object device, Object encoder, UiColor top, int mode, float screenW, float screenH) throws Exception {
         Object buffer = ensureBlendParamsBuffer(device);
-        ByteBuffer data = ByteBuffer.allocateDirect(32).order(java.nio.ByteOrder.nativeOrder());
+        ByteBuffer data = scratch(32);
         data.putFloat(top.r).putFloat(top.g).putFloat(top.b).putFloat(top.a);
         data.putFloat((float) mode).putFloat(screenW).putFloat(screenH).putFloat(0f);
         data.flip();
@@ -251,9 +251,9 @@ public final class Blaze3DBlend {
             mWriteToBuffer.invoke(encoder, slice, verts);
 
             currentStage = "dynamicUniformsWrite(blendrect)";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object colorMod = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
 

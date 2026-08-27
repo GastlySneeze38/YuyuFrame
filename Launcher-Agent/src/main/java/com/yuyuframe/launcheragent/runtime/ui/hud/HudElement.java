@@ -239,7 +239,32 @@ public class HudElement {
      * taille était pas bon" : gros espace vide ou texte débordant selon le
      * texte de repli utilisé au démarrage).
      */
+    /**
+     * Lignes de contenu de la frame COURANTE.
+     *
+     * <p>AUDIT PERF : {@code content.lines()} était appelé DEUX FOIS par frame
+     * et par élément — une fois par {@link #naturalSize()} (pour mesurer la
+     * boîte) et une fois par {@code HudPanelRenderer.draw} (pour dessiner).
+     * Chaque appel alloue un {@code String[]} ET fait de la concaténation dans
+     * le module (ex: {@code fps + " FPS"}), donc tout était payé deux fois.
+     * Invalidé par {@link #refreshSize()}, appelé une fois par frame juste
+     * avant le dessin.
+     */
+    private String[] cachedLines;
+
+    public String[] contentLines() {
+        if (cachedLines == null) {
+            try {
+                cachedLines = content != null ? content.lines() : new String[]{ "--" };
+            } catch (Throwable t) {
+                cachedLines = new String[]{ "--" };
+            }
+        }
+        return cachedLines;
+    }
+
     public void refreshSize() {
+        cachedLines = null; // nouvelle frame : le contenu a pu changer
         recomputeSize();
     }
 
@@ -276,7 +301,7 @@ public class HudElement {
         }
         String[] lines;
         try {
-            lines = content.lines();
+            lines = contentLines();
         } catch (Throwable t) {
             lines = new String[]{ "--" };
         }

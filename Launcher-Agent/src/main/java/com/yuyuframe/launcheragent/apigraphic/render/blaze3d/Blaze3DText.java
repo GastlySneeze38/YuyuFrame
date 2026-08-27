@@ -51,11 +51,19 @@ public final class Blaze3DText {
         "    mat4 ProjMat;\n" +
         "};\n" +
         "in vec3 Position;\n" +
+        // Attribut DÉJÀ présent dans le format de sommet commun (POSITION_
+        // COLOR_TEXTURE_LIGHT) mais jusqu'ici jamais déclaré, donc ignoré.
+        // C'est lui qui permet de mettre PLUSIEURS couleurs dans une SEULE
+        // passe (voir beginBatch) : sans couleur par sommet, une passe = une
+        // couleur, donc une passe par chaîne de texte.
+        "in vec4 Color;\n" +
         "in vec2 UV0;\n" +
         "out vec2 texCoord0;\n" +
+        "out vec4 vertexColor;\n" +
         "void main() {\n" +
         "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
         "    texCoord0 = UV0;\n" +
+        "    vertexColor = Color;\n" +
         "}\n";
 
     /**
@@ -76,13 +84,19 @@ public final class Blaze3DText {
         "    mat4 TextureMat;\n" +
         "};\n" +
         "in vec2 texCoord0;\n" +
+        "in vec4 vertexColor;\n" +
         "out vec4 fragColor;\n" +
         "const float BIAS = 0.06;\n" +
         "void main() {\n" +
         "    float dist = texture(Sampler0, texCoord0).a + BIAS;\n" +
         "    float w = fwidth(dist);\n" +
         "    float alpha = smoothstep(0.5 - w, 0.5 + w, dist);\n" +
-        "    fragColor = vec4(ColorModulator.rgb, ColorModulator.a * alpha);\n" +
+        // MULTIPLIE les deux sources au lieu de n'utiliser que ColorModulator.
+        // RÉTRO-COMPATIBLE : le chemin non batché pose des sommets BLANCS, et
+        // blanc x ColorModulator redonne EXACTEMENT l'ancien résultat. Le
+        // chemin batché fait l'inverse (couleur par sommet, ColorModulator
+        // laissé blanc), ce qui autorise plusieurs couleurs dans une passe.
+        "    fragColor = vec4(vertexColor.rgb * ColorModulator.rgb, vertexColor.a * ColorModulator.a * alpha);\n" +
         "}\n";
 
     private static Object textPipeline, textShaderSource;
@@ -202,7 +216,253 @@ public final class Blaze3DText {
     /** Appelé depuis {@code UiRenderer.drawTextModern} — empile au lieu de dessiner immédiatement, voir commentaire ci-dessus. */
     public static void queueDraw(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         if (!isAvailable() || text == null || text.isEmpty()) return;
+        if (batching) {
+            // Accumulé plutôt qu'empilé — voir beginBatch/endBatch.
+            BATCH.add(new BatchEntry(font, text, x, y, scale, color));
+            return;
+        }
         Blaze3DCore.enqueue(() -> drawText(font, text, x, y, color, scale, vpWidth, vpHeight));
+    }
+
+
+    /**
+     * Émet les quads d'une chaîne dans {@code verts} et renvoie le nombre de
+     * sommets ajoutés — extrait de {@link #drawText} pour être PARTAGÉ avec le
+     * chemin batché ({@link #beginBatch}), qui empile plusieurs chaînes dans
+     * un même tampon avant de tout envoyer en une passe.
+     *
+     * <p>{@code rgba} est la couleur par SOMMET : blanc neutre pour le chemin
+     * classique (la couleur vient alors de {@code ColorModulator}), couleur
+     * réelle pour le chemin batché. Voir {@code TEXT_FRAGMENT_SRC}.
+     */
+    private static int appendGlyphs(ByteBuffer verts, UiFont font, String text, float x, float y, float scale, int rgba) {
+        float cs = scale * UiFont.SIZE_CORRECTION;
+        float penX = Math.round(x);
+        // Cohérent avec la projection Y-UP ci-dessus (ensureProjectionBuffer) :
+        // au-dessus de la ligne de base (ascent) = Y PLUS GRAND (Y croît
+        // vers le HAUT, comme drawRoundedRect/gl_FragCoord/la souris), en
+        // dessous (descent) = Y PLUS PETIT. Le pairage UV (yTop↔g.v0,
+        // yBottom↔g.v1, plus bas) et l'ordre d'émission des sommets
+        // restent corrects tels quels avec ce signe — vérifié par calcul
+        // direct du winding en espace NDC réel (pas juste "en théorie") :
+        // la relation NDC(yTop) > NDC(yBottom) est identique à celle de
+        // l'ancienne projection Y-DOWN, donc le MÊME winding (CCW, le
+        // seul confirmé visible) en résulte — aucun autre changement requis.
+        float yTop = Math.round(y + font.ascent * cs);
+        float yBottom = Math.round(y - font.descent * cs);
+        short light0 = 0, light1 = 0;
+
+        int vertexCount = 0;
+        for (int i = 0; i < text.length(); i++) {
+            UiFont.Glyph g = font.glyph(text.charAt(i));
+            float gw = Math.round(g.width * cs);
+            float x0 = penX, x1 = penX + gw;
+            // BUG TROUVÉ (v403 : texte totalement disparu après la
+            // correction du signe ascent/descent ci-dessus, cull=true
+            // confirmé par DIAG-PIPELINE) : jusqu'ici (v399-v402), yTop
+            // était calculé AVEC LE MAUVAIS SIGNE (y+ascent), donc
+            // NUMÉRIQUEMENT PLUS GRAND que yBottom (y-descent) — "yTop"
+            // désignait en réalité le point géométriquement BAS, et
+            // vice-versa. Mon analyse de winding en v399 ("top-left→
+            // top-right→bottom-right→bottom-left = CW, à inverser") était
+            // donc calculée sur une géométrie MAL ÉTIQUETÉE : l'ordre
+            // RÉELLEMENT produit par le code v399-v402 était bottom-left→
+            // bottom-right→top-right→top-left, soit CCW en vrai — c'est
+            // CE winding (CCW) que le culling acceptait (texte visible en
+            // v400-v402), pas CW comme je le croyais. Maintenant que
+            // yTop/yBottom ont le bon signe (yTop réellement plus petit),
+            // le MÊME ordre d'émission (x0,yTop)→(x1,yTop)→(x1,yBottom)→
+            // (x0,yBottom) produit RÉELLEMENT du CW cette fois → rejeté
+            // par le culling → texte disparu. Fix : ordre d'émission
+            // restauré à top-left→bottom-left→bottom-right→top-right
+            // (CCW, le SEUL qui ait jamais été confirmé visible), avec le
+            // pairage UV correct (yTop↔g.v0 haut d'atlas, yBottom↔g.v1
+            // bas d'atlas).
+            putVertexPCTL(verts, x0, yTop, rgba, g.u0, g.v0, light0, light1);
+            putVertexPCTL(verts, x0, yBottom, rgba, g.u0, g.v1, light0, light1);
+            putVertexPCTL(verts, x1, yBottom, rgba, g.u1, g.v1, light0, light1);
+            putVertexPCTL(verts, x1, yTop, rgba, g.u1, g.v0, light0, light1);
+            vertexCount += 4;
+            penX += Math.round(g.advance * cs);
+        }
+        return vertexCount;
+    }
+
+
+    // ── Mode BATCH : plusieurs chaînes en une seule passe ───────────────────
+    //
+    // AUDIT PERF : chaque drawText ouvrait SA propre passe de rendu
+    // (createCommandEncoder + createRenderPass). Sur le HUD, le texte produit
+    // plus de passes que les fonds (multi-lignes + suffixe d'accent dessiné à
+    // part), c'était donc le premier poste de coût.
+    //
+    // OPT-IN et non automatique : fusionner des dessins consécutifs sans que
+    // l'appelant le demande casserait l'ordre Z durement acquis de ce moteur
+    // (même raison que pour les rects batchés, voir Blaze3DRect). Ici
+    // l'appelant DÉCLARE que son texte peut être regroupé.
+    //
+    // ORDRE Z À CONNAÎTRE : tout le texte du lot est empilé au moment du
+    // endBatch(), donc APRÈS tout ce qui a été dessiné entre begin et end. Sur
+    // le HUD c'est exactement ce qu'on veut (le texte passe au-dessus de tous
+    // les fonds) ; pour un contenu où du texte doit passer SOUS un élément
+    // dessiné après lui, ne pas utiliser le batch.
+
+    private static final class BatchEntry {
+        final UiFont font; final String text; final float x, y, scale; final UiColor color;
+        BatchEntry(UiFont font, String text, float x, float y, float scale, UiColor color) {
+            this.font = font; this.text = text; this.x = x; this.y = y; this.scale = scale; this.color = color;
+        }
+    }
+
+    private static final java.util.List<BatchEntry> BATCH = new java.util.ArrayList<>();
+    private static boolean batching;
+
+    /**
+     * Ouvre un lot — tout {@link #queueText} suivant y est accumulé au lieu
+     * d'ouvrir sa propre passe. À refermer par {@link #endBatch}.
+     *
+     * <p>Un lot resté OUVERT (exception entre begin et end) serait le pire cas
+     * possible : tout le texte de l'application, écrans compris, y tomberait
+     * sans jamais être dessiné — une interface entièrement muette, sans la
+     * moindre erreur. D'où la remise à zéro défensive ci-dessous plutôt qu'une
+     * confiance au bon appariement des appels.
+     */
+    public static void beginBatch() {
+        if (!isAvailable()) return;
+        if (batching && !BATCH.isEmpty() && failureLogCount < 5) {
+            failureLogCount++;
+            LauncherLog.err("[UiRenderer] Blaze3DText: lot de texte non refermé (" + BATCH.size()
+                + " entrées perdues) — endBatch() manquant chez l'appelant précédent");
+        }
+        batching = true;
+        BATCH.clear();
+    }
+
+    /**
+     * Ferme le lot et empile UNE passe par police (les polices ont chacune leur
+     * atlas, donc leur propre texture à lier — impossible de les mélanger dans
+     * une même passe). En pratique : REGULAR + BOLD, soit 2 passes au lieu
+     * d'une par chaîne.
+     */
+    public static void endBatch(int vpWidth, int vpHeight) {
+        if (!batching) return;
+        batching = false;
+        if (BATCH.isEmpty()) return;
+        java.util.LinkedHashMap<UiFont, java.util.List<BatchEntry>> byFont = new java.util.LinkedHashMap<>();
+        for (BatchEntry e : BATCH) byFont.computeIfAbsent(e.font, k -> new java.util.ArrayList<>()).add(e);
+        BATCH.clear();
+        for (java.util.Map.Entry<UiFont, java.util.List<BatchEntry>> group : byFont.entrySet()) {
+            UiFont font = group.getKey();
+            java.util.List<BatchEntry> entries = group.getValue();
+            Blaze3DCore.enqueue(() -> drawTextBatch(font, entries, vpWidth, vpHeight));
+        }
+    }
+
+    /** Empaquette une couleur en ABGR (même convention que {@code Blaze3DRect} — little-endian RGBA). */
+    private static int packRgba(UiColor c) {
+        int r = Math.round(c.r * 255f), g = Math.round(c.g * 255f);
+        int b = Math.round(c.b * 255f), a = Math.round(c.a * 255f);
+        return (a << 24) | (b << 16) | (g << 8) | r;
+    }
+
+
+    /**
+     * Dessine TOUTES les chaînes d'une même police en UNE passe.
+     *
+     * <p>Calqué sur {@link #drawText} — mêmes précautions, notamment l'ordre
+     * imposé : toutes les écritures de tampons (sommets, DynamicTransforms,
+     * projection) AVANT {@code createRenderPass}, jamais pendant (voir le
+     * commentaire "dynamicUniformsWrite" de drawText : une écriture en pleine
+     * passe fait échouer close()).
+     *
+     * <p>Différence essentielle : {@code ColorModulator} est laissé à BLANC et
+     * la couleur voyage PAR SOMMET, ce qui permet de mélanger des chaînes de
+     * couleurs différentes dans la même passe (voir TEXT_FRAGMENT_SRC, qui
+     * multiplie les deux sources).
+     */
+    private static boolean drawTextBatch(UiFont font, java.util.List<BatchEntry> entries, int vpWidth, int vpHeight) {
+        if (!isAvailable() || !resolve() || entries.isEmpty()) return false;
+        try {
+            currentStage = "minecraftClient(textbatch)";
+            Object mc = McReflect.minecraftClient();
+            if (mc == null) return false;
+            currentStage = "getFramebuffer(textbatch)";
+            Object fb = getFramebuffer(mc);
+            if (fb == null || mGetColorAttachmentView == null) return false;
+            currentStage = "getColorAttachmentView(textbatch)";
+            Object colorView = mGetColorAttachmentView.invoke(fb);
+            if (colorView == null) return false;
+
+            currentStage = "ensureTexture(textbatch)";
+            Object[] tex = ensureTexture(font);
+            Object textureView = tex[1], sampler = tex[2];
+
+            currentStage = "getDevice(textbatch)";
+            Object device = mGetDevice.invoke(null);
+            currentStage = "createCommandEncoder(textbatch)";
+            Object encoder = mCreateCommandEncoder.invoke(device);
+
+            int totalChars = 0;
+            for (BatchEntry e : entries) totalChars += e.text.length();
+            ByteBuffer verts = ensureStagingBuffer(totalChars * 4 * 28);
+            int vertexCount = 0;
+            for (BatchEntry e : entries) {
+                // Couleur PAR SOMMET ici (ColorModulator restera blanc).
+                vertexCount += appendGlyphs(verts, font, e.text, e.x, e.y, e.scale, packRgba(e.color));
+            }
+            if (vertexCount == 0) return true;
+            verts.flip();
+
+            currentStage = "ensureVertexBuffer(textbatch)";
+            Object vbo = ensureVertexBuffer(device, verts.remaining());
+            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
+            mWriteToBuffer.invoke(encoder, slice, verts);
+
+            currentStage = "dynamicUniformsWrite(textbatch)";
+            Object identity4 = identityMatrix4f();
+            // BLANC : la couleur réelle est déjà dans les sommets.
+            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
+            Object zero3 = zeroVector3f();
+            Object dynUniforms = mGetDynamicUniforms.invoke(null);
+            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
+
+            currentStage = "ensureProjectionBuffer(textbatch)";
+            Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
+            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+
+            currentStage = "createRenderPass(textbatch)";
+            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_text_batch";
+            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            try {
+                ShaderPipelineFactory.precompile(device, textPipeline, textShaderSource);
+                mSetPipeline.invoke(pass, textPipeline);
+                if (mDisableScissor != null) mDisableScissor.invoke(pass);
+                mBindDefaultUniforms.invoke(null, pass);
+                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                mBindTexture.invoke(pass, "Sampler0", textureView, sampler);
+                mSetVertexBuffer.invoke(pass, 0, vbo);
+
+                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
+                int indexCount = (vertexCount / 4) * 6;
+                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
+                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
+                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
+                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+            } finally {
+                mClosePass.invoke(pass);
+            }
+            return true;
+        } catch (Throwable t) {
+            if (failureLogCount < 5) {
+                failureLogCount++;
+                Throwable cause = t;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                LauncherLog.err("[UiRenderer] Blaze3DText.drawTextBatch a échoué #" + failureLogCount
+                    + " à l'étape '" + currentStage + "' : " + t + " | cause réelle : " + cause);
+            }
+            return false;
+        }
     }
 
     private static boolean drawText(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
@@ -227,57 +487,10 @@ public final class Blaze3DText {
             currentStage = "createCommandEncoder";
             Object encoder = mCreateCommandEncoder.invoke(device);
 
-            float cs = scale * UiFont.SIZE_CORRECTION;
-            float penX = Math.round(x);
-            // Cohérent avec la projection Y-UP ci-dessus (ensureProjectionBuffer) :
-            // au-dessus de la ligne de base (ascent) = Y PLUS GRAND (Y croît
-            // vers le HAUT, comme drawRoundedRect/gl_FragCoord/la souris), en
-            // dessous (descent) = Y PLUS PETIT. Le pairage UV (yTop↔g.v0,
-            // yBottom↔g.v1, plus bas) et l'ordre d'émission des sommets
-            // restent corrects tels quels avec ce signe — vérifié par calcul
-            // direct du winding en espace NDC réel (pas juste "en théorie") :
-            // la relation NDC(yTop) > NDC(yBottom) est identique à celle de
-            // l'ancienne projection Y-DOWN, donc le MÊME winding (CCW, le
-            // seul confirmé visible) en résulte — aucun autre changement requis.
-            float yTop = Math.round(y + font.ascent * cs);
-            float yBottom = Math.round(y - font.descent * cs);
-            int rgba = 0xFFFFFFFF; // couleur déjà appliquée via ColorModulator — sommets en blanc neutre (Color/UV2 pas même lus par TEXT_FRAGMENT_SRC, voir sa javadoc)
-            short light0 = 0, light1 = 0;
-
             ByteBuffer verts = ensureStagingBuffer(text.length() * 4 * 28);
-            int vertexCount = 0;
-            for (int i = 0; i < text.length(); i++) {
-                UiFont.Glyph g = font.glyph(text.charAt(i));
-                float gw = Math.round(g.width * cs);
-                float x0 = penX, x1 = penX + gw;
-                // BUG TROUVÉ (v403 : texte totalement disparu après la
-                // correction du signe ascent/descent ci-dessus, cull=true
-                // confirmé par DIAG-PIPELINE) : jusqu'ici (v399-v402), yTop
-                // était calculé AVEC LE MAUVAIS SIGNE (y+ascent), donc
-                // NUMÉRIQUEMENT PLUS GRAND que yBottom (y-descent) — "yTop"
-                // désignait en réalité le point géométriquement BAS, et
-                // vice-versa. Mon analyse de winding en v399 ("top-left→
-                // top-right→bottom-right→bottom-left = CW, à inverser") était
-                // donc calculée sur une géométrie MAL ÉTIQUETÉE : l'ordre
-                // RÉELLEMENT produit par le code v399-v402 était bottom-left→
-                // bottom-right→top-right→top-left, soit CCW en vrai — c'est
-                // CE winding (CCW) que le culling acceptait (texte visible en
-                // v400-v402), pas CW comme je le croyais. Maintenant que
-                // yTop/yBottom ont le bon signe (yTop réellement plus petit),
-                // le MÊME ordre d'émission (x0,yTop)→(x1,yTop)→(x1,yBottom)→
-                // (x0,yBottom) produit RÉELLEMENT du CW cette fois → rejeté
-                // par le culling → texte disparu. Fix : ordre d'émission
-                // restauré à top-left→bottom-left→bottom-right→top-right
-                // (CCW, le SEUL qui ait jamais été confirmé visible), avec le
-                // pairage UV correct (yTop↔g.v0 haut d'atlas, yBottom↔g.v1
-                // bas d'atlas).
-                putVertexPCTL(verts, x0, yTop, rgba, g.u0, g.v0, light0, light1);
-                putVertexPCTL(verts, x0, yBottom, rgba, g.u0, g.v1, light0, light1);
-                putVertexPCTL(verts, x1, yBottom, rgba, g.u1, g.v1, light0, light1);
-                putVertexPCTL(verts, x1, yTop, rgba, g.u1, g.v0, light0, light1);
-                vertexCount += 4;
-                penX += Math.round(g.advance * cs);
-            }
+            // Sommets BLANCS : la couleur passe par ColorModulator sur ce
+            // chemin (voir TEXT_FRAGMENT_SRC, qui multiplie les deux).
+            int vertexCount = appendGlyphs(verts, font, text, x, y, scale, 0xFFFFFFFF);
             verts.flip();
 
             // BUG TROUVÉ (12 FPS constatés après le premier test fonctionnel) :
@@ -311,9 +524,9 @@ public final class Blaze3DText {
             // (juste BINDER un slice déjà écrit) reste, lui, à l'intérieur de
             // la pass — seule l'ÉCRITURE doit sortir.
             currentStage = "dynamicUniformsWrite";
-            Object identity4 = clsMatrix4f.getConstructor().newInstance();
+            Object identity4 = identityMatrix4f();
             Object white4 = ctorVector4f.newInstance(color.r, color.g, color.b, color.a);
-            Object zero3 = ctorVector3f.newInstance(0f, 0f, 0f);
+            Object zero3 = zeroVector3f();
             Object dynUniforms = mGetDynamicUniforms.invoke(null);
             Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
 
