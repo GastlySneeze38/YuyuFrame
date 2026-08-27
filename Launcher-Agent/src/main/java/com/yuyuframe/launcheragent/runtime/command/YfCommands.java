@@ -51,6 +51,7 @@ final class YfCommands {
         ClientCommandRegistry.register(debug());
         ClientCommandRegistry.register(shaderPoc());
         ClientCommandRegistry.register(blurPoc());
+        ClientCommandRegistry.register(taffyPoc());
         ClientCommandRegistry.register(reloadConfig());
         ClientCommandRegistry.register(shaderReload());
     }
@@ -228,6 +229,55 @@ final class YfCommands {
                     !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled;
                 LauncherLog.info("[YfCommands] Test panneau flouté : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled ? "activé" : "désactivé")
                     + " (panneau violet translucide centré si le mécanisme fonctionne — voir logs en cas d'échec)");
+            }
+        };
+    }
+
+    private static ClientCommand taffyPoc() {
+        return new ClientCommand() {
+            public String name() { return "yf taffypoc"; }
+            public String description() { return "Preuve de mécanisme du moteur de layout Taffy (roadmap Phase 5.2) — construit un petit arbre, calcule son layout via content-core, log le résultat"; }
+            public void execute(String[] args) {
+                com.yuyuframe.launcheragent.apigraphic.layout.TaffyBridge.ensureLoaded();
+                com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle rootStyle =
+                    new com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle()
+                        .flexDirection("row").gap(0, 10).padding(20);
+                com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode root =
+                    new com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode("root", rootStyle);
+
+                com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle fixedStyle =
+                    new com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle()
+                        .size(com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle.px(80),
+                              com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle.px(40));
+                root.child(new com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode("fixed", fixedStyle));
+
+                com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle growA =
+                    new com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle().grow(1f)
+                        .size(com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle.AUTO,
+                              com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle.px(40));
+                root.child(new com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode("growA", growA));
+
+                com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle growB =
+                    new com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle().grow(2f)
+                        .size(com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle.AUTO,
+                              com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle.px(40));
+                root.child(new com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode("growB", growB));
+
+                String treeJson = root.toJson();
+                String resultJson = com.yuyuframe.launcheragent.apigraphic.layout.TaffyBridge.computeLayout(treeJson, 500f, 0f);
+                java.util.Map<String, com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult.Rect> rects =
+                    com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult.parse(resultJson);
+                if (rects == null) {
+                    LauncherLog.err("[YfCommands] taffypoc: échec — " + com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult.lastError
+                        + " | JSON brut: " + resultJson);
+                    return;
+                }
+                // Attendu (conteneur 500px, padding 20 de chaque côté -> 460px
+                // utiles, gap 10 entre 3 enfants -> 20 de gaps -> 440px à
+                // répartir : fixed=80 (fixe), reste 360 réparti 1:2 entre
+                // growA(120)/growB(240)) : root=(0,0,500,?), fixed=(20,20,80,40),
+                // growA=(110,20,120,40), growB=(240,20,240,40).
+                LauncherLog.info("[YfCommands] taffypoc OK — " + rects.size() + " rects : " + rects);
             }
         };
     }
