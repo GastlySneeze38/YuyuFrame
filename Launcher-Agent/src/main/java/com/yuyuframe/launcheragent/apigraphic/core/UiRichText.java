@@ -77,6 +77,24 @@ public final class UiRichText {
      * @param scale    même échelle que {@link UiRenderer#drawText}.
      */
     public static Layout layout(List<UiTextSpan> spans, float maxWidth, float scale) {
+        return layout(spans, maxWidth, scale, 0);
+    }
+
+    /**
+     * Variante BORNÉE en hauteur — s'arrête après {@code maxLines} lignes et
+     * termine la dernière par un caractère de troncature.
+     *
+     * <p>Indispensable dès qu'un texte riche vit dans une boîte de hauteur
+     * FIXE (une carte, une cellule de liste) : la version non bornée passe à
+     * autant de lignes que le texte l'exige, donc un texte long déborde
+     * silencieusement sous la boîte, par-dessus ce qui suit. Le seul recours
+     * sans ce paramètre serait de pré-tronquer le texte à l'aveugle côté
+     * appelant, en devinant combien de caractères tiennent sur N lignes —
+     * exactement le calcul que ce moteur est censé faire.
+     *
+     * @param maxLines {@code <= 0} = illimité (comportement de la surcharge à 3 arguments).
+     */
+    public static Layout layout(List<UiTextSpan> spans, float maxWidth, float scale, int maxLines) {
         List<Run> runs = new ArrayList<>();
         UiFont refFont = UiFont.REGULAR; // ascent/descent quasi identiques regular/bold (même famille/taille de base), sert de référence pour l'espacement de ligne
         float lineHeight = refFont.lineHeight(scale);
@@ -87,6 +105,8 @@ public final class UiRichText {
         int lineCount = 1;
         boolean lineHasContent = false;
 
+        boolean truncated = false;
+        outer:
         for (UiTextSpan span : spans) {
             UiFont font = span.bold ? UiFont.BOLD : UiFont.REGULAR;
             float spanScale = scale * span.sizeScale;
@@ -94,6 +114,7 @@ public final class UiRichText {
             String[] paragraphs = span.text.split("\n", -1);
             for (int p = 0; p < paragraphs.length; p++) {
                 if (p > 0) {
+                    if (maxLines > 0 && lineCount >= maxLines) { truncated = true; break outer; }
                     lineCount++;
                     lineTopY -= lineHeight;
                     cursorX = 0f;
@@ -109,6 +130,10 @@ public final class UiRichText {
                     if (word.isEmpty()) continue;
                     float wordWidth = font.textWidth(word, spanScale);
                     if (lineHasContent && cursorX + wordWidth > maxWidth) {
+                        // Le mot ne tient pas sur cette ligne ET il n'y a plus
+                        // de ligne disponible : on s'arrête ici plutôt que de
+                        // déborder sous la boîte.
+                        if (maxLines > 0 && lineCount >= maxLines) { truncated = true; break outer; }
                         lineCount++;
                         lineTopY -= lineHeight;
                         cursorX = 0f;
@@ -122,8 +147,35 @@ public final class UiRichText {
             }
         }
 
+        if (truncated && !runs.isEmpty()) appendEllipsis(runs, maxWidth, scale);
+
         float height = lineCount * lineHeight;
         return new Layout(runs, height, refFont.ascent, lineHeight);
+    }
+
+    /**
+     * Remplace le dernier {@link Run} par une version suffixée de « … »,
+     * en rognant sa fin autant que nécessaire pour que le tout tienne encore
+     * dans {@code maxWidth}.
+     *
+     * <p>Sans ce rognage, ajouter le caractère de troncature ferait déborder
+     * la dernière ligne de la largeur de wrap — la troncature créerait
+     * elle-même le débordement qu'elle est censée empêcher.
+     */
+    private static void appendEllipsis(List<Run> runs, float maxWidth, float scale) {
+        int lastIdx = runs.size() - 1;
+        Run last = runs.get(lastIdx);
+        UiFont font = last.span.bold ? UiFont.BOLD : UiFont.REGULAR;
+        String base = last.text;
+        while (true) {
+            String candidate = base + "…";
+            float width = font.textWidth(candidate, last.scale);
+            if (last.x + width <= maxWidth || base.isEmpty()) {
+                runs.set(lastIdx, new Run(last.span, candidate, last.x, last.y, width, last.scale));
+                return;
+            }
+            base = base.substring(0, base.length() - 1);
+        }
     }
 
     /**
@@ -134,9 +186,26 @@ public final class UiRichText {
      * de {@link #layout}.
      */
     public static void draw(UiRenderer renderer, Layout layout, float x, float yTop, int vpWidth, int vpHeight) {
+        draw(renderer, layout, x, yTop, 1f, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante avec opacité GLOBALE — multiplie l'alpha de chaque span sans
+     * toucher au {@link Layout}.
+     *
+     * <p>Séparer l'opacité du layout est indispensable dès qu'un texte riche
+     * vit dans une UI qui s'estompe (carte au bord d'une zone défilante,
+     * apparition en cascade) : la couleur, elle, ne change RIEN aux positions
+     * calculées. Sans ce paramètre, un appelant devrait recréer ses spans avec
+     * des couleurs pré-multipliées à chaque frame, donc relancer {@link
+     * #layout} (coûteux, à mettre en cache) à chaque frame — exactement ce que
+     * la javadoc de {@link #layout} demande d'éviter.
+     */
+    public static void draw(UiRenderer renderer, Layout layout, float x, float yTop, float alpha, int vpWidth, int vpHeight) {
         for (Run run : layout.runs) {
             UiFont font = run.span.bold ? UiFont.BOLD : UiFont.REGULAR;
-            renderer.drawText(font, run.text, x + run.x, yTop + run.y, run.span.color, run.scale, vpWidth, vpHeight);
+            UiColor color = alpha >= 1f ? run.span.color : run.span.color.multiplyAlpha(alpha);
+            renderer.drawText(font, run.text, x + run.x, yTop + run.y, color, run.scale, vpWidth, vpHeight);
         }
     }
 

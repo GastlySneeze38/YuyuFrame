@@ -188,10 +188,15 @@ public class UiTextField extends UiWidget implements UiFocusable {
         // modernes : anneau de focus qui "s'allume").
         focusAnim.setTarget(focused ? 1f : 0f);
         float focusT = focusAnim.get();
-        if (focusT > 0.01f) {
-            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM, 1.5f,
-                UiTheme.ACCENT.multiplyAlpha(focusT), vpWidth, vpHeight);
-        }
+        // Contour PERMANENT sous l'anneau de focus (retour utilisateur : le
+        // verre efface les bords) — se fond vers l'accent quand le champ prend
+        // le focus, plutôt que de superposer deux contours de couleurs
+        // différentes sur le même pixel.
+        UiColor ring = UiColor.lerp(
+            renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER : UiColor.TRANSPARENT,
+            UiTheme.ACCENT, focusT);
+        renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+            Math.max(1f, UiTheme.scaled(1f)) + focusT * 0.5f, ring, vpWidth, vpHeight);
 
         float scale = scale();
         float baseline = y + h / 2f - UiTheme.scaled(5f);

@@ -47,8 +47,26 @@ public final class UiTheme {
     public static UiColor DANGER     = new UiColor(230, 95, 95, 255);
 
     public static UiColor TEXT_PRIMARY   = new UiColor(232, 232, 238, 255);
-    public static UiColor TEXT_SECONDARY = new UiColor(150, 150, 163, 255);
-    public static UiColor TEXT_MUTED     = new UiColor(105, 105, 118, 255);
+    // REMONTÉS pour le verre (2026-08-27) — 150->182 et 105->146. Sur l'ancien
+    // fond OPAQUE et uniforme, un secondaire à 150 et un atténué à 105 tenaient
+    // très bien la hiérarchie. Sur du verre, le fond n'est plus une constante :
+    // c'est le décor du jeu flouté, qui peut être clair (ciel, neige, sable) —
+    // un gris moyen s'y dissout au lieu de se lire comme "moins important".
+    // Remontés juste assez pour rester lisibles partout SANS écraser la
+    // hiérarchie avec TEXT_PRIMARY (232), qui garde une marge nette.
+    public static UiColor TEXT_SECONDARY = new UiColor(182, 182, 194, 255);
+    public static UiColor TEXT_MUTED     = new UiColor(146, 146, 158, 255);
+
+    /**
+     * Ombre portée sous un texte posé DIRECTEMENT sur le décor (titre de
+     * l'écran, titres de section) — pas sur une surface de verre. C'est la
+     * solution classique du texte sur fond d'image variable (tous les OS le
+     * font sur les fonds d'écran) : aucune couleur de texte ne peut tenir à la
+     * fois sur un ciel blanc et dans une grotte, une ombre portée règle les
+     * deux d'un coup. INUTILE sur une carte/la sidebar : le verre y est opaque
+     * dans ses bornes, le fond derrière le texte est donc déjà maîtrisé.
+     */
+    public static UiColor TEXT_SHADOW = new UiColor(0, 0, 0, 150);
 
     public static UiColor TRACK_OFF = new UiColor(55, 55, 65, 255);
 
@@ -89,6 +107,23 @@ public final class UiTheme {
      * limite nette et se confond avec le décor dès que celui-ci est clair.
      */
     public static UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 30);
+
+    /**
+     * Contour COMPLET d'une surface de verre — nettement plus marqué que
+     * {@link #GLASS_HAIRLINE} (qui n'éclaire qu'une tranche).
+     *
+     * <p>Retour utilisateur direct après le passage au verre : "on ne voit pas
+     * bien la bordure des éléments". Cause : un fond OPAQUE se détachait tout
+     * seul du fond de l'écran par sa seule couleur ; une surface de verre, elle,
+     * montre le même décor que ce qui l'entoure — juste flouté. Là où le décor
+     * est peu contrasté (ciel uni, nuit), il n'y a alors quasiment RIEN qui
+     * distingue le bord de la carte. Un contour explicite redevient donc
+     * nécessaire, alors qu'il était superflu avant.
+     */
+    public static UiColor GLASS_BORDER = new UiColor(255, 255, 255, 60);
+
+    /** Contour au survol — plus lumineux, c'est le retour visuel principal maintenant que le fond bouge peu au survol (voir ModCard). */
+    public static UiColor GLASS_BORDER_HOVER = new UiColor(255, 255, 255, 115);
 
     /**
      * Voile de fond quand le verre est disponible — REMPLACE {@link #OVERLAY_BG}
@@ -132,6 +167,12 @@ public final class UiTheme {
         static final UiColor GLASS_TINT     = new UiColor(250, 250, 253, 255);
         static final UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 120);
         static final UiColor GLASS_SCRIM    = new UiColor(245, 245, 250, 130);
+        // Contours SOMBRES en thème clair (le blanc y serait invisible) —
+        // c'est le seul token de verre dont la couleur s'inverse vraiment
+        // entre les deux thèmes, teinte et voile n'étant qu'éclaircis.
+        static final UiColor GLASS_BORDER       = new UiColor(20, 18, 30, 45);
+        static final UiColor GLASS_BORDER_HOVER = new UiColor(20, 18, 30, 95);
+        static final UiColor TEXT_SHADOW        = new UiColor(255, 255, 255, 150);
     }
 
     private static final class Dark {
@@ -149,14 +190,20 @@ public final class UiTheme {
         static final UiColor DANGER     = new UiColor(230, 95, 95, 255);
 
         static final UiColor TEXT_PRIMARY   = new UiColor(232, 232, 238, 255);
-        static final UiColor TEXT_SECONDARY = new UiColor(150, 150, 163, 255);
-        static final UiColor TEXT_MUTED     = new UiColor(105, 105, 118, 255);
+        // Doivent rester ALIGNÉS sur les champs remontés pour le verre (voir
+        // plus haut) — sans ça, un simple applyMode(DARK) restaurerait
+        // silencieusement les anciennes valeurs trop sombres.
+        static final UiColor TEXT_SECONDARY = new UiColor(182, 182, 194, 255);
+        static final UiColor TEXT_MUTED     = new UiColor(146, 146, 158, 255);
 
         static final UiColor TRACK_OFF = new UiColor(55, 55, 65, 255);
 
         static final UiColor GLASS_TINT     = new UiColor(13, 13, 19, 255);
         static final UiColor GLASS_HAIRLINE = new UiColor(255, 255, 255, 30);
         static final UiColor GLASS_SCRIM    = new UiColor(6, 6, 10, 140);
+        static final UiColor GLASS_BORDER       = new UiColor(255, 255, 255, 60);
+        static final UiColor GLASS_BORDER_HOVER = new UiColor(255, 255, 255, 115);
+        static final UiColor TEXT_SHADOW        = new UiColor(0, 0, 0, 150);
     }
 
     /**
@@ -177,6 +224,8 @@ public final class UiTheme {
             TEXT_PRIMARY = Light.TEXT_PRIMARY; TEXT_SECONDARY = Light.TEXT_SECONDARY; TEXT_MUTED = Light.TEXT_MUTED;
             TRACK_OFF = Light.TRACK_OFF;
             GLASS_TINT = Light.GLASS_TINT; GLASS_HAIRLINE = Light.GLASS_HAIRLINE; GLASS_SCRIM = Light.GLASS_SCRIM;
+            GLASS_BORDER = Light.GLASS_BORDER; GLASS_BORDER_HOVER = Light.GLASS_BORDER_HOVER;
+            TEXT_SHADOW = Light.TEXT_SHADOW;
         } else {
             OVERLAY_BG = Dark.OVERLAY_BG; SIDEBAR_BG = Dark.SIDEBAR_BG; SIDEBAR_HOVER = Dark.SIDEBAR_HOVER;
             SIDEBAR_ACTIVE = Dark.SIDEBAR_ACTIVE; PANEL_BG = Dark.PANEL_BG; PANEL_BG_ALT = Dark.PANEL_BG_ALT;
@@ -185,6 +234,8 @@ public final class UiTheme {
             TEXT_PRIMARY = Dark.TEXT_PRIMARY; TEXT_SECONDARY = Dark.TEXT_SECONDARY; TEXT_MUTED = Dark.TEXT_MUTED;
             TRACK_OFF = Dark.TRACK_OFF;
             GLASS_TINT = Dark.GLASS_TINT; GLASS_HAIRLINE = Dark.GLASS_HAIRLINE; GLASS_SCRIM = Dark.GLASS_SCRIM;
+            GLASS_BORDER = Dark.GLASS_BORDER; GLASS_BORDER_HOVER = Dark.GLASS_BORDER_HOVER;
+            TEXT_SHADOW = Dark.TEXT_SHADOW;
         }
     }
 

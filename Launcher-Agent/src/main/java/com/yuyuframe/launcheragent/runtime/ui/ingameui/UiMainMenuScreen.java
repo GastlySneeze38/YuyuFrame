@@ -8,15 +8,23 @@ import com.yuyuframe.launcheragent.runtime.ui.ModuleGroup;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAsyncFade;
+import com.yuyuframe.launcheragent.apigraphic.anim.UiBreathe;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.core.UiRemoteImage;
+import com.yuyuframe.launcheragent.apigraphic.core.UiRichText;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTextSpan;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiStagger;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
@@ -74,6 +82,14 @@ public class UiMainMenuScreen extends UiScreenBase {
      * de rendu plein écran de plus. Voir {@code UiRenderer.beginGlassFrame}.
      */
     private static final int GLASS_PASSES = 4;
+
+    /** Cycle de respiration de la bande d'activation — lent, voir {@link UiBreathe#wave} (en dessous de ~1,5 s ça devient un clignotement). */
+    private static final float BAR_BREATH_PERIOD_S = 3.2f;
+    /** Intensité de la respiration — volontairement faible : elle doit se remarquer sans jamais attirer l'œil plus que le contenu de la carte. */
+    private static final float BAR_BREATH_AMPLITUDE = 0.34f;
+
+    /** Lignes de description d'une carte en mode Détaillé — la carte ayant une hauteur fixe, au-delà ça déborderait (voir UiRichText#layout borné). */
+    private static final int DESC_MAX_LINES = 2;
 
     private final Object lastScreen;
     private UiTextField searchField;
@@ -173,9 +189,16 @@ public class UiMainMenuScreen extends UiScreenBase {
             float glowHalfH = (glowY2 - glowY1) / 2f;
             renderer.drawShadow(glowX1, glowY1, glowX2, glowY2, glowHalfH, glowBlur, 0f,
                 UiTheme.ACCENT.multiplyAlpha(0.28f), screenWidth, screenHeight);
-            renderer.drawText(UiFont.BOLD, "YuyuFrame", titleX, titleBaseline, UiTheme.TEXT_PRIMARY, titleScale, screenWidth, screenHeight);
-            renderer.drawText(Lang.tr("Mods installes"), SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
-                UiTheme.TEXT_SECONDARY, UiTheme.scaled(0.42f), screenWidth, screenHeight);
+            // Ombre portée sur les textes posés DIRECTEMENT sur le décor (voir
+            // UiTheme.TEXT_SHADOW) — le titre est sur la sidebar (donc sur du
+            // verre) mais son halo d'accent le laisse par endroits sur un fond
+            // presque transparent ; "Mods installés", lui, est franchement sur
+            // le décor. Aucune couleur de texte ne peut tenir à la fois sur un
+            // ciel blanc et dans une grotte : l'ombre règle les deux d'un coup.
+            renderer.drawTextShadowed(UiFont.BOLD, "YuyuFrame", titleX, titleBaseline,
+                UiTheme.TEXT_PRIMARY, UiTheme.TEXT_SHADOW, 1f, -1f, titleScale, screenWidth, screenHeight);
+            renderer.drawTextShadowed(Lang.tr("Mods installes"), SIDEBAR_W + MARGIN, screenHeight - UiTheme.scaled(40f),
+                UiTheme.TEXT_SECONDARY, UiTheme.TEXT_SHADOW, UiTheme.scaled(0.42f), screenWidth, screenHeight);
 
             // (Halo d'ambiance décoratif dans le coin haut-droit RETIRÉ — se
             // superposait telle une tache/cercle non identifiable au-dessus
@@ -220,7 +243,6 @@ public class UiMainMenuScreen extends UiScreenBase {
         SEARCH_H = UiTheme.scaled(36f);
 
         widgets.clear();
-        gridNodeSeq = 0;
 
         float closeSize = UiTheme.scaled(28f), closeMargin = UiTheme.scaled(24f);
         float navH = UiTheme.scaled(26f);
@@ -330,7 +352,13 @@ public class UiMainMenuScreen extends UiScreenBase {
         LayoutSwitchButton layoutButton = new LayoutSwitchButton(0, 0, layoutBtnSize);
 
         float contentX, contentW, viewportBottom, viewportH;
-        if (layout != null) {
+        // La zone défilante est la SEULE dont les bornes servent aussi de
+        // repère au reste (origine des cartes, hauteur du conteneur) — un id
+        // manquant ici donnerait un NPE sur le point d'entrée de l'agent,
+        // d'où le contrôle explicite plutôt qu'une confiance aveugle au fait
+        // que solve() a réussi.
+        TaffyLayoutResult.Rect vp = layout == null ? null : layout.get("viewport");
+        if (layout != null && vp != null) {
             layout.apply("sidebar", sidebarBg);
             layout.apply("nav.home", navHome);
             layout.apply("nav.settings", navSettings);
@@ -338,7 +366,6 @@ public class UiMainMenuScreen extends UiScreenBase {
             layout.apply("close", closeButton);
             layout.apply("search", searchField);
             layout.apply("layoutbtn", layoutButton);
-            TaffyLayoutResult.Rect vp = layout.get("viewport");
             contentX = vp.x;
             contentW = vp.w;
             viewportBottom = vp.y;
@@ -834,8 +861,6 @@ public class UiMainMenuScreen extends UiScreenBase {
                 }
             }
         }
-        int rows = entries.isEmpty() ? 0 : (int) Math.ceil(entries.size() / (float) cols);
-        return startTop - rows * (rowH + CARD_GAP);
     }
 
     /** Hauteur d'un titre de section ("FAVORIS"/"AUTRES MODULES", voir rebuildAll()) — voir SectionTitle pour le dessin. */
@@ -844,14 +869,22 @@ public class UiMainMenuScreen extends UiScreenBase {
     /** Simple étiquette de section, non cliquable — le texte est déjà préparé (traduit + majuscule) par l'appelant, voir rebuildAll(). */
     private final class SectionTitle extends UiWidget {
         private final String label;
-        SectionTitle(float x, float y, float w, float h, String label) { super(x, y, w, h); this.label = label; }
+        /** Bornes posées APRÈS coup par le layout (Taffy, ou repli manuel) — voir rebuildAll(). */
+        SectionTitle(String label) { super(0f, 0f, 0f, 0f); this.label = label; }
 
         @Override
         public boolean contains(double mx, double my) { return false; }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            renderer.drawText(label, x, y + h / 2f - UiTheme.scaled(4f), UiTheme.TEXT_MUTED.multiplyAlpha(clipFade), UiTheme.scaled(0.36f), vpWidth, vpHeight);
+            // Titre de section : posé sur le décor, JAMAIS sur une carte —
+            // ombre portée obligatoire ici (voir UiTheme.TEXT_SHADOW), sinon
+            // "FAVORIS" disparaît purement et simplement sur un ciel clair.
+            // TEXT_SECONDARY et non TEXT_MUTED : un atténué se dissout sur un
+            // fond variable même avec ombre.
+            renderer.drawTextShadowed(label, x, y + h / 2f - UiTheme.scaled(4f),
+                UiTheme.TEXT_SECONDARY.multiplyAlpha(clipFade), UiTheme.TEXT_SHADOW.multiplyAlpha(clipFade),
+                UiTheme.scaled(0.36f), vpWidth, vpHeight);
         }
     }
 
@@ -1027,7 +1060,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // lui-même — alors qu'une ombre posée PAR-DESSUS le verre en
             // ternirait le flou. Aucun changement visible sur le repli opaque
             // (le fond y était déjà plein et recouvrait la même zone).
-            renderer.drawShadow(0, 0, SIDEBAR_W, vpHeight, 0f, 10f, 0f,
+            renderer.drawShadow(x, y, x + w, y + h, 0f, 10f, 0f,
                 new UiColor(0, 0, 0, 100), vpWidth, vpHeight);
 
             if (renderer.isGlassAvailable()) {
@@ -1035,14 +1068,14 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // l'écran (GLASS_STRENGTH_SIDEBAR) : c'est le support de la
                 // navigation, son texte doit rester lisible quel que soit le
                 // décor derrière (ciel clair, neige, lave...).
-                renderer.drawGlassPanel(0, 0, SIDEBAR_W, vpHeight, 0f,
+                renderer.drawGlassPanel(x, y, x + w, y + h, 0f,
                     UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_SIDEBAR, UiTheme.SIDEBAR_BG, vpWidth, vpHeight);
                 // Liseré de lumière sur la TRANCHE DROITE (pas le bord haut
                 // comme sur une carte) — cette bande touche le haut ET le bas
                 // de l'écran : son seul bord "libre", donc le seul qui puisse
                 // capter la lumière, est celui qui donne sur le contenu.
                 float hairline = Math.max(1f, UiTheme.scaled(1f));
-                renderer.drawRoundedRect(SIDEBAR_W - hairline, 0, SIDEBAR_W, vpHeight, 0f,
+                renderer.drawRoundedRect(x + w - hairline, y, x + w, y + h, 0f,
                     UiTheme.GLASS_HAIRLINE, vpWidth, vpHeight);
             } else {
                 // Repli sans Blaze3D — dégradé opaque d'origine (plus clair/
@@ -1057,7 +1090,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                     Math.min(1f, UiTheme.SIDEBAR_BG.g + 0.05f),
                     Math.min(1f, UiTheme.SIDEBAR_BG.b + 0.14f),
                     UiTheme.SIDEBAR_BG.a);
-                renderer.drawGradientRect(0, 0, SIDEBAR_W, vpHeight, 0, UiTheme.SIDEBAR_BG, top, vpWidth, vpHeight);
+                renderer.drawGradientRect(x, y, x + w, y + h, 0, UiTheme.SIDEBAR_BG, top, vpWidth, vpHeight);
             }
         }
     }
@@ -1069,8 +1102,9 @@ public class UiMainMenuScreen extends UiScreenBase {
         private final Runnable action;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
-        SidebarItem(float x, float y, float w, String label, boolean active, Runnable action) {
-            super(x, y, w, UiTheme.scaled(26f));
+        /** Bornes posées APRÈS coup par le layout (Taffy, ou repli manuel) — voir rebuildAll(). */
+        SidebarItem(String label, boolean active, Runnable action) {
+            super(0f, 0f, 0f, UiTheme.scaled(26f));
             this.label = label;
             this.active = active;
             this.action = action;
@@ -1100,7 +1134,12 @@ public class UiMainMenuScreen extends UiScreenBase {
                 renderer.drawGradientRect(x, y + edgeInset, x + edgeW, y + h - edgeInset, edgeRadius, edgeBottom, edgeTop, vpWidth, vpHeight);
             }
             UiColor textColor = active ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.TEXT_MUTED, UiTheme.TEXT_PRIMARY, hover);
-            renderer.drawText(Lang.tr(label), x + UiTheme.scaled(12f), y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
+            // L'étiquette GLISSE vers la droite au survol — le liseré d'accent
+            // apparaît au même moment sur le bord gauche, le texte lui "cède la
+            // place" au lieu de rester planté dessus. Amplitude minuscule (3px)
+            // : au-delà, la nav se met à tressauter à chaque passage de souris.
+            float slide = hover * UiTheme.scaled(3f);
+            renderer.drawText(Lang.tr(label), x + UiTheme.scaled(12f) + slide, y + h / 2f - UiTheme.scaled(4f), textColor, UiTheme.scaled(0.4f), vpWidth, vpHeight);
         }
 
         @Override
@@ -1136,6 +1175,16 @@ public class UiMainMenuScreen extends UiScreenBase {
         private final UiAnimatedFloat barHoverAnim = new UiAnimatedFloat(0f, 16f);
         /** Fondu d'entrée de l'icône distante une fois chargée (voir UiRemoteImage, non-bloquant) — même motif que ResultCard dans ModrinthContentScreen. */
         private final UiAsyncFade iconFade = new UiAsyncFade();
+        /**
+         * Éclat joué au clic (voir onClick/draw) — {@link UiTransition} et non
+         * {@link UiAnimatedFloat} : c'est un événement qui se joue UNE fois et
+         * se termine, pas une valeur qui converge vers une cible. {@code
+         * BACK_OUT} plutôt que le {@code EASE_OUT_CUBIC} utilisé partout
+         * ailleurs jusqu'ici : il dépasse la cible avant de revenir, ce qui
+         * donne au clic un vrai "rebond" — un fondu monotone ne se ressent pas
+         * comme une réaction à un geste.
+         */
+        private final UiTransition clickAnim = new UiTransition(0.42f, 0f, UiEasing.BACK_OUT);
 
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
         ModCard(float x, float y, float w, float h, int layoutMode, String name, String description, String shortDescription, String iconUrl, float enterDelay, Runnable onOpen) {
@@ -1292,12 +1341,44 @@ public class UiMainMenuScreen extends UiScreenBase {
             float glassStrength = UiTheme.GLASS_STRENGTH_CARD - hoverT * 0.1f;
             renderer.drawGlassPanel(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD,
                 UiTheme.GLASS_TINT, glassStrength, bg, vpWidth, vpHeight);
+
+            // Éclat de clic — s'étend brièvement sous la carte puis s'efface
+            // (BACK_OUT : dépasse la taille cible avant de revenir, ce qui
+            // donne le "rebond" qu'un simple fondu n'a pas). Dessiné APRÈS le
+            // fond mais AVANT le contour, pour rester contenu dans la carte.
+            // eased() FAIT AVANCER l'horloge interne (voir UiTransition#progress)
+            // — appelé exactement une fois par frame, puis isFinished() lit
+            // l'état fraîchement avancé. Le garde passe par isFinished() et NON
+            // par la valeur elle-même : BACK_OUT DÉPASSE 1 au milieu du rebond,
+            // donc un test "clickT < 1" ferait disparaître puis réapparaître
+            // l'éclat en plein vol. Au repos (jamais cliqué) isFinished() est
+            // déjà vrai, rien n'est dessiné.
+            float clickT = clickAnim.eased();
+            if (!clickAnim.isFinished()) {
+                float spread = UiTheme.scaled(3f) * clickT;
+                // Clampé : le dépassement de BACK_OUT rendrait (1 - clickT)
+                // négatif, donc un alpha négatif silencieusement ignoré.
+                float glow = Math.max(0f, 1f - clickT);
+                renderer.drawRoundedRect(x - spread, drawY - spread, x + w + spread, drawY + h + spread,
+                    UiTheme.RADIUS_MD + spread,
+                    UiTheme.ACCENT.withAlpha(0.30f * glow * alpha), vpWidth, vpHeight);
+            }
+
             if (renderer.isGlassAvailable()) {
-                // Tranche haute éclairée — signature du verre épais (macOS/iOS).
-                // Sans elle, une carte floutée n'a plus aucune limite nette dès
-                // que le décor derrière est clair, et la grille "fond" dans le
-                // paysage. Suit l'alpha de la carte pour rester solidaire de
-                // son fondu.
+                // CONTOUR COMPLET (retour utilisateur : "on ne voit pas bien la
+                // bordure des éléments" depuis le passage au verre) — un fond
+                // opaque se détachait par sa couleur ; du verre montre le même
+                // décor que ce qui l'entoure, juste flouté, donc plus rien ne
+                // marque le bord sur un décor peu contrasté. S'illumine au
+                // survol : c'est désormais LE retour visuel principal, le fond
+                // ne bougeant presque plus (voir glassStrength ci-dessus).
+                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hoverT);
+                renderer.drawRoundedRectBorder(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD,
+                    Math.max(1f, UiTheme.scaled(1f)), border.multiplyAlpha(alpha), vpWidth, vpHeight);
+                // Tranche haute éclairée — signature du verre épais (macOS/iOS),
+                // conservée EN PLUS du contour : le contour délimite, ce liseré
+                // donne l'épaisseur. Retiré aux extrémités (RADIUS_MD) pour ne
+                // pas déborder sur les coins arrondis.
                 float hairline = Math.max(1f, UiTheme.scaled(1f));
                 renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, drawY + h - hairline, x + w - UiTheme.RADIUS_MD, drawY + h, 0f,
                     UiTheme.GLASS_HAIRLINE.multiplyAlpha(alpha), vpWidth, vpHeight);
@@ -1408,7 +1489,54 @@ public class UiMainMenuScreen extends UiScreenBase {
             // de l'interface").
             float textMaxW = (x + w) - textX - pad;
             renderer.drawText(renderer.truncate(displayName, UiTheme.scaled(0.42f), textMaxW), textX, drawY + h - UiTheme.scaled(26f), UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), UiTheme.scaled(0.42f), vpWidth, vpHeight);
-            renderer.drawText(renderer.truncate(displayDescription, UiTheme.scaled(0.4f), textMaxW), textX, drawY + h - UiTheme.scaled(46f), UiTheme.TEXT_SECONDARY.multiplyAlpha(alpha), UiTheme.scaled(0.4f), vpWidth, vpHeight);
+
+            // Description en TEXTE RICHE avec retour à la ligne (voir
+            // UiRichText) plutôt qu'une troncature à "..." sur une seule ligne :
+            // une description coupée en plein mot n'apprend rien, deux lignes
+            // complètes disent le nécessaire. Le nom, lui, reste tronqué — un
+            // titre doit tenir sur UNE ligne pour que les cartes gardent le
+            // même rythme vertical.
+            float descScale = UiTheme.scaled(0.4f);
+            UiRichText.Layout descLayout = descriptionLayout(displayDescription, textMaxW, descScale);
+            if (descLayout != null) {
+                // yTop = HAUT du bloc (voir UiRichText#draw), d'où le +
+                // hauteur de ligne par rapport à l'ancienne base de texte.
+                UiRichText.draw(renderer, descLayout, textX, drawY + h - UiTheme.scaled(34f), alpha, vpWidth, vpHeight);
+            }
+        }
+
+        // ── Cache du layout de description ──────────────────────────────────
+        //
+        // UiRichText.layout() est un calcul COMPLET (découpe en mots, mesure,
+        // retour à la ligne) — sa propre javadoc impose de le mettre en cache
+        // et de ne le refaire que si le texte ou la largeur changent. Ces
+        // cartes sont redessinées à CHAQUE frame : sans ce cache, on relancerait
+        // la découpe de tous les paragraphes visibles 60 fois par seconde.
+        //
+        // La couleur ne fait PAS partie de la clé : elle n'influence pas les
+        // positions, et l'estompement passe par le paramètre alpha de draw()
+        // (ajouté pour ce cas précis) — sinon le cache serait invalidé à chaque
+        // frame pendant un fondu, c'est-à-dire exactement quand il sert.
+        private UiRichText.Layout cachedDescLayout;
+        private String cachedDescText;
+        private float cachedDescWidth = -1f, cachedDescScale = -1f;
+
+        private UiRichText.Layout descriptionLayout(String text, float maxWidth, float scale) {
+            if (text == null || text.isEmpty()) return null;
+            if (cachedDescLayout != null && text.equals(cachedDescText)
+                    && maxWidth == cachedDescWidth && scale == cachedDescScale) {
+                return cachedDescLayout;
+            }
+            cachedDescText = text;
+            cachedDescWidth = maxWidth;
+            cachedDescScale = scale;
+            // 2 lignes MAX — la carte a une hauteur fixe (CARD_H) : sans borne,
+            // une description longue passerait à 3 lignes et déborderait sous
+            // la carte, par-dessus celle du dessous.
+            cachedDescLayout = UiRichText.layout(
+                java.util.Collections.singletonList(UiTextSpan.plain(text, UiTheme.TEXT_SECONDARY)),
+                maxWidth, scale, DESC_MAX_LINES);
+            return cachedDescLayout;
         }
 
         /**
@@ -1452,9 +1580,29 @@ public class UiMainMenuScreen extends UiScreenBase {
             float barHoverT = barHoverAnim.get();
             UiColor barBase = enabled ? UiTheme.ACCENT : UiTheme.TRACK_OFF;
             UiColor barHovered = enabled ? UiTheme.accentLight() : UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.TEXT_MUTED, 0.35f);
-            UiColor barColor = UiColor.lerp(barBase, barHovered, barHoverT).multiplyAlpha(alpha);
+            UiColor barColor = UiColor.lerp(barBase, barHovered, barHoverT);
+
+            // RESPIRATION — uniquement quand le module est ACTIF : c'est ce qui
+            // porte le sens (un module allumé "vit", un module éteint est
+            // inerte). Faire respirer les deux états n'aurait rien signalé du
+            // tout, juste ajouté du mouvement partout.
+            //
+            // Oscille vers la variante CLAIRE de l'accent, jamais vers du blanc
+            // ni vers une autre teinte : la bande doit rester identifiable
+            // comme "accent" à chaque instant du cycle — une respiration qui
+            // change la teinte se lirait comme un changement d'état, pas comme
+            // une pulsation.
+            //
+            // L'amplitude retombe à mesure que le survol monte (1 - barHoverT) :
+            // au survol, la couleur de survol devient le signal utile, et deux
+            // effets superposés au même endroit se parasitent — le curseur
+            // "fige" naturellement l'élément qu'il désigne.
+            if (enabled) {
+                float breath = UiBreathe.wave(BAR_BREATH_PERIOD_S) * BAR_BREATH_AMPLITUDE * (1f - barHoverT);
+                barColor = UiColor.lerp(barColor, UiTheme.accentLight(), breath);
+            }
             renderer.drawRoundedRect(x, drawY, x + w, drawY + barH,
-                UiTheme.RADIUS_MD, UiTheme.RADIUS_MD, 0f, 0f, barColor, vpWidth, vpHeight);
+                UiTheme.RADIUS_MD, UiTheme.RADIUS_MD, 0f, 0f, barColor.multiplyAlpha(alpha), vpWidth, vpHeight);
 
             // Icône centrée dans la zone au-dessus de la bande — réduite
             // (retour utilisateur : "met les icônes plus petites pour la
@@ -1482,27 +1630,65 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         @Override
         public void onClick() {
+            // Éclat déclenché AVANT l'action : celle-ci ouvre en général un
+            // autre écran (closeTo), donc l'animation ne serait jamais vue si
+            // elle partait après. Elle reste visible le temps de la transition
+            // de sortie de cet écran.
+            clickAnim.replay();
             onOpen.run();
         }
     }
 
     private final class CloseButton extends UiWidget {
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+        /** Voir ModCard#clickAnim — même motif (événement ponctuel, rebond BACK_OUT). */
+        private final UiTransition clickAnim = new UiTransition(0.4f, 0f, UiEasing.BACK_OUT);
 
         CloseButton(float x, float y, float size) { super(x, y, size, size); }
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
-            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverAnim.get());
-            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
+            float hoverT = hoverAnim.get();
+
+            // Le bouton GRANDIT légèrement au survol — un simple changement de
+            // couleur passait inaperçu sur du verre (le fond bouge peu). Le
+            // grossissement se fait autour du CENTRE (d'où le décalage de la
+            // moitié), sinon le bouton semblerait glisser vers le bas-droite.
+            float grow = hoverT * UiTheme.scaled(2f);
+            float bx = x - grow, by = y - grow, bw = w + grow * 2f, bh = h + grow * 2f;
+
+            UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.DANGER.multiplyAlpha(0.55f), hoverT);
+            renderer.drawGlassPanel(bx, by, bx + bw, by + bh, UiTheme.RADIUS_SM,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
+            if (renderer.isGlassAvailable()) {
+                // Vire au ROUGE au survol plutôt qu'au blanc : sur un bouton de
+                // fermeture, le contour est le seul endroit où signaler que
+                // l'action est destructrice avant le clic.
+                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.DANGER, hoverT);
+                renderer.drawRoundedRectBorder(bx, by, bx + bw, by + bh, UiTheme.RADIUS_SM,
+                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
+            }
+
+            float clickT = clickAnim.eased();
+            if (!clickAnim.isFinished()) {
+                float spread = UiTheme.scaled(4f) * clickT;
+                renderer.drawRoundedRect(bx - spread, by - spread, bx + bw + spread, by + bh + spread,
+                    UiTheme.RADIUS_SM + spread,
+                    UiTheme.DANGER.withAlpha(0.35f * Math.max(0f, 1f - clickT)), vpWidth, vpHeight);
+            }
+
             String label = "x";
             float scale = UiTheme.scaled(0.45f);
             float tw = renderer.textWidth(label, scale);
-            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - UiTheme.scaled(5f), UiTheme.TEXT_SECONDARY, scale, vpWidth, vpHeight);
+            UiColor labelColor = UiColor.lerp(UiTheme.TEXT_SECONDARY, UiTheme.TEXT_PRIMARY, hoverT);
+            renderer.drawText(label, bx + (bw - tw) / 2f, by + bh / 2f - UiTheme.scaled(5f), labelColor, scale, vpWidth, vpHeight);
         }
 
         @Override
-        public void onClick() { closeTo(lastScreen); }
+        public void onClick() {
+            clickAnim.replay();
+            closeTo(lastScreen);
+        }
     }
 }
