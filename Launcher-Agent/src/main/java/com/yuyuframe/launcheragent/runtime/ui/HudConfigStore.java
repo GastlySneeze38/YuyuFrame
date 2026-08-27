@@ -138,6 +138,18 @@ public final class HudConfigStore {
             element.offsetX = getFloat(id + ".hud.offsetX", element.offsetX);
             element.offsetY = getFloat(id + ".hud.offsetY", element.offsetY);
             element.locked = getBoolean(id + ".hud.locked", element.locked);
+            element.opacity = getFloat(id + ".hud.opacity", element.opacity);
+            // Couleur de texte : stockée en ARGB packé. Absente = on GARDE
+            // celle posée par le module (accent FPS/Ping...), on ne la force
+            // pas à blanc — d'où le test de présence plutôt qu'un défaut.
+            String packedColor = DATA.getProperty(id + ".hud.textColor");
+            if (packedColor != null) {
+                try {
+                    int argb = Integer.parseInt(packedColor.trim());
+                    element.textColor = new com.yuyuframe.launcheragent.apigraphic.core.UiColor(
+                        (argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, (argb >>> 24) & 0xFF);
+                } catch (NumberFormatException ignored) {}
+            }
             element.showWhenScreenOpen = getBoolean(id + ".hud.showWhenScreenOpen", element.showWhenScreenOpen);
             element.paddingX = getFloat(id + ".hud.paddingX", element.paddingX);
             element.paddingY = getFloat(id + ".hud.paddingY", element.paddingY);
@@ -245,6 +257,13 @@ public final class HudConfigStore {
             DATA.setProperty(id + ".hud.offsetY", String.valueOf(element.offsetY));
             DATA.setProperty(id + ".hud.scale", String.valueOf(element.scale));
             DATA.setProperty(id + ".hud.locked", String.valueOf(element.locked));
+            DATA.setProperty(id + ".hud.opacity", String.valueOf(element.opacity));
+            if (element.textColor != null) {
+                com.yuyuframe.launcheragent.apigraphic.core.UiColor c = element.textColor;
+                int argb = (Math.round(c.a * 255f) << 24) | (Math.round(c.r * 255f) << 16)
+                    | (Math.round(c.g * 255f) << 8) | Math.round(c.b * 255f);
+                DATA.setProperty(id + ".hud.textColor", String.valueOf(argb));
+            }
             DATA.setProperty(id + ".hud.showWhenScreenOpen", String.valueOf(element.showWhenScreenOpen));
             DATA.setProperty(id + ".hud.paddingX", String.valueOf(element.paddingX));
             DATA.setProperty(id + ".hud.paddingY", String.valueOf(element.paddingY));

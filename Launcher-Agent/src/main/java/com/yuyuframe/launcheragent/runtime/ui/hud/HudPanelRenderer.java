@@ -98,6 +98,43 @@ public final class HudPanelRenderer {
     static final float LINE_H = 20f;
     static final float TEXT_SCALE = 0.55f;
 
+    /**
+     * Tolérance de "collé au bord", en pixels — un panneau posé à 1 px du bord
+     * est visuellement collé, et l'arrondi y produit le même défaut qu'à 0 px.
+     * Volontairement petite : au-delà, un retrait DÉLIBÉRÉ de quelques pixels
+     * se ferait écraser et l'utilisateur perdrait ses arrondis sans comprendre
+     * pourquoi.
+     */
+    private static final float EDGE_TOLERANCE = 2f;
+
+    /**
+     * Rayons par coin, mis à zéro du côté des bords d'écran touchés.
+     *
+     * <p>ORDRE DE RETOUR : {@code {basGauche, basDroit, hautGauche, hautDroit}}
+     * — c'est l'ordre RÉEL attendu par {@code UiRenderer.drawRoundedRect} à 4
+     * rayons, dont les paramètres sont pourtant NOMMÉS {@code radiusTopLeft,
+     * radiusTopRight, radiusBottomLeft, radiusBottomRight}. Ces noms sont
+     * TROMPEURS : vérifié dans les deux backends (le shader Blaze3D mappe les
+     * deux premiers à {@code p.y < 0}, donc sous le centre en repère Y-montant ;
+     * le repli legacy découpe symétriquement en partant de {@code y1}, le bas).
+     * Le seul autre appelant réel du moteur (la bande d'activation en mode
+     * Grille, UiMainMenuScreen) confirme le même ordre. Voir l'audit HUD.
+     */
+    private static float[] edgeAwareRadii(float x, float y, float w, float h, float radius, int vpWidth, int vpHeight) {
+        if (radius <= 0f) return new float[]{ 0f, 0f, 0f, 0f };
+        boolean left   = x <= EDGE_TOLERANCE;
+        boolean right  = x + w >= vpWidth - EDGE_TOLERANCE;
+        boolean bottom = y <= EDGE_TOLERANCE;
+        boolean top    = y + h >= vpHeight - EDGE_TOLERANCE;
+        // Un coin est carré dès que L'UN de ses deux bords adjacents touche.
+        return new float[]{
+            (bottom || left)  ? 0f : radius,
+            (bottom || right) ? 0f : radius,
+            (top || left)     ? 0f : radius,
+            (top || right)    ? 0f : radius
+        };
+    }
+
     public static void draw(UiRenderer renderer, HudElement element, float x, float y, float w, float h, int vpWidth, int vpHeight) {
         // Rien à afficher CE frame (ex: ArmorDurabilityModule sans aucune
         // pièce d'armure équipée) — ni fond ni contenu, voir javadoc de
@@ -113,23 +150,35 @@ public final class HudPanelRenderer {
         // sauté, mais draw() reste appelé normalement plus bas.
         boolean skipBg = element.customRenderer != null && element.customRenderer.skipBackground();
         if (!skipBg) {
+            // Coins CARRÉS du côté où le panneau touche un bord d'écran —
+            // demande utilisateur : un coin arrondi collé au bord laisse un
+            // petit coin de vide entre l'arrondi et le bord, qui se lit comme
+            // un défaut d'alignement plutôt que comme un arrondi voulu. Un
+            // panneau ancré dans un coin ne garde donc d'arrondi que sur les
+            // coins qui donnent vers l'intérieur de l'écran.
+            float[] r = edgeAwareRadii(x, y, w, h, RADIUS, vpWidth, vpHeight);
+            // Opacité PROPRE à l'élément, multipliée par le réglage global
+            // (PANEL_BG porte déjà ce dernier) — voir HudElement.opacity.
+            UiColor panelBg = element.opacity >= 1f ? PANEL_BG : PANEL_BG.multiplyAlpha(element.opacity);
             renderer.drawShadow(x, y, x + w, y + h, RADIUS, SHADOW_BLUR, 0f, SHADOW_COLOR, vpWidth, vpHeight);
             if (USE_GLASS && renderer.isGlassAvailable()) {
                 // Repli = PANEL_BG, donc son ALPHA (réglage "Opacité du HUD")
                 // continue de piloter l'opacité du panneau même en verre —
                 // voir UiRenderer#drawGlassPanel : les deux chemins partagent
                 // ce réglage, impossible de les désynchroniser.
-                renderer.drawGlassPanel(x, y, x + w, y + h, RADIUS,
-                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, PANEL_BG, vpWidth, vpHeight);
-                // Contour : sans lui, un panneau flouté n'a plus de limite
-                // nette sur un décor peu contrasté — même constat que sur les
-                // écrans (voir UiTheme.GLASS_BORDER).
-                renderer.drawRoundedRectBorder(x, y, x + w, y + h, RADIUS,
-                    1f, UiTheme.GLASS_BORDER.multiplyAlpha(PANEL_BG.a), vpWidth, vpHeight);
+                // SANS contour — demande explicite de l'utilisateur ("je ne
+                // veux pas de bordure pour le rendu verre"). Un panneau HUD est
+                // petit et permanent à l'écran : un liseré y attire l'œil en
+                // continu pendant le jeu, là où sur un écran de menu il sert à
+                // délimiter une grande surface qu'on regarde volontairement.
+                renderer.drawGlassPanel(x, y, x + w, y + h, r[0], r[1], r[2], r[3],
+                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, panelBg, vpWidth, vpHeight);
             } else {
-                // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
-                // avec le texte différé d'une frame sur era E — voir sa javadoc.
-                renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
+                // drawRoundedRectHud (rayon unique) remplacé par la variante à
+                // 4 rayons — le texte différé d'une frame sur era E reste
+                // synchronisé, les deux passent par le même chemin Blaze3D
+                // (voir la javadoc de drawRoundedRectHud, devenue un simple alias).
+                renderer.drawRoundedRect(x, y, x + w, y + h, r[0], r[1], r[2], r[3], panelBg, vpWidth, vpHeight);
             }
         }
 
@@ -204,14 +253,18 @@ public final class HudPanelRenderer {
             // ("il ne faut pas prendre les valeurs dans fps et ms"). Sinon
             // (pas de suffixe défini/matché), toute la ligne prend
             // element.textColor si présente.
+            // Le TEXTE suit la même opacité que son panneau — sinon régler un
+            // élément en semi-transparent laissait son texte à pleine opacité,
+            // ce qui se lit comme un bug d'affichage plutôt qu'un réglage.
+            float op = element.opacity;
             if (element.textColor != null && element.accentSuffix != null && line.endsWith(element.accentSuffix)) {
                 String main = line.substring(0, line.length() - element.accentSuffix.length());
-                renderer.drawText(main, cx, ty, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+                renderer.drawText(main, cx, ty, UiTheme.TEXT_PRIMARY.multiplyAlpha(op), textScale, vpWidth, vpHeight);
                 float mainW = renderer.textWidth(main, textScale);
-                renderer.drawText(element.accentSuffix, cx + mainW, ty, element.textColor, textScale, vpWidth, vpHeight);
+                renderer.drawText(element.accentSuffix, cx + mainW, ty, element.textColor.multiplyAlpha(op), textScale, vpWidth, vpHeight);
             } else {
                 UiColor color = element.textColor != null ? element.textColor : UiTheme.TEXT_PRIMARY;
-                renderer.drawText(line, cx, ty, color, textScale, vpWidth, vpHeight);
+                renderer.drawText(line, cx, ty, color.multiplyAlpha(op), textScale, vpWidth, vpHeight);
             }
             ty -= lineH;
         }

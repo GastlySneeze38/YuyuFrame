@@ -1523,8 +1523,15 @@ public class UiMainMenuScreen extends UiScreenBase {
             // AUSSI l'opacité du verre — voir UiRenderer.drawGlassPanel.
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(alpha);
             float glassStrength = UiTheme.GLASS_STRENGTH_CARD - hoverT * 0.1f;
+            // Contour posé DERRIÈRE le panneau (voir la variante à contour de
+            // drawGlassPanel) — drawRoundedRectBorder est inerte sur era E, ses
+            // appels GL bruts corrompaient l'état GPU.
+            UiColor cardBorder = renderer.isGlassAvailable()
+                ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hoverT).multiplyAlpha(alpha)
+                : null;
             renderer.drawGlassPanel(drawX, drawY, drawX + w, drawY + h, UiTheme.RADIUS_MD,
-                UiTheme.GLASS_TINT, glassStrength, bg, vpWidth, vpHeight);
+                UiTheme.GLASS_TINT, glassStrength, bg,
+                cardBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
 
             // Éclat de clic — s'étend brièvement sous la carte puis s'efface
             // (BACK_OUT : dépasse la taille cible avant de revenir, ce qui
@@ -1549,16 +1556,6 @@ public class UiMainMenuScreen extends UiScreenBase {
             }
 
             if (renderer.isGlassAvailable()) {
-                // CONTOUR COMPLET (retour utilisateur : "on ne voit pas bien la
-                // bordure des éléments" depuis le passage au verre) — un fond
-                // opaque se détachait par sa couleur ; du verre montre le même
-                // décor que ce qui l'entoure, juste flouté, donc plus rien ne
-                // marque le bord sur un décor peu contrasté. S'illumine au
-                // survol : c'est désormais LE retour visuel principal, le fond
-                // ne bougeant presque plus (voir glassStrength ci-dessus).
-                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hoverT);
-                renderer.drawRoundedRectBorder(drawX, drawY, drawX + w, drawY + h, UiTheme.RADIUS_MD,
-                    Math.max(1f, UiTheme.scaled(1f)), border.multiplyAlpha(alpha), vpWidth, vpHeight);
                 // Tranche haute éclairée — signature du verre épais (macOS/iOS),
                 // conservée EN PLUS du contour : le contour délimite, ce liseré
                 // donne l'épaisseur. Retiré aux extrémités (RADIUS_MD) pour ne
@@ -1843,16 +1840,14 @@ public class UiMainMenuScreen extends UiScreenBase {
             float bx = x - grow, by = y - grow, bw = w + grow * 2f, bh = h + grow * 2f;
 
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.DANGER.multiplyAlpha(0.55f), hoverT);
+            // Vire au ROUGE au survol plutôt qu'au blanc : sur un bouton de
+            // fermeture, le contour est le seul endroit où signaler que
+            // l'action est destructrice avant le clic.
+            UiColor closeBorder = renderer.isGlassAvailable()
+                ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.DANGER, hoverT) : null;
             renderer.drawGlassPanel(bx, by, bx + bw, by + bh, UiTheme.RADIUS_SM,
-                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
-            if (renderer.isGlassAvailable()) {
-                // Vire au ROUGE au survol plutôt qu'au blanc : sur un bouton de
-                // fermeture, le contour est le seul endroit où signaler que
-                // l'action est destructrice avant le clic.
-                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.DANGER, hoverT);
-                renderer.drawRoundedRectBorder(bx, by, bx + bw, by + bh, UiTheme.RADIUS_SM,
-                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
-            }
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg,
+                closeBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
 
             float clickT = clickAnim.eased();
             if (!clickAnim.isFinished()) {

@@ -123,6 +123,18 @@ public class HudElement {
      * entière est peinte dans cette couleur.
      */
     public com.yuyuframe.launcheragent.apigraphic.core.UiColor textColor;
+
+    /**
+     * Opacité PROPRE à cet élément, multipliée par le réglage global
+     * "Opacité du HUD" (voir {@code HudPanelRenderer.PANEL_BG}).
+     *
+     * <p>Le réglage global seul ne suffisait pas : un module discret
+     * (coordonnées) et un module important (vie basse) étaient forcés de
+     * partager la même opacité, alors que c'est précisément la hiérarchie
+     * entre eux qu'on veut pouvoir régler. Multiplicatif et non absolu, pour
+     * que le réglage global garde son rôle de "gradateur" d'ensemble.
+     */
+    public float opacity = 1f;
     /** Suffixe littéral à isoler pour la coloration (ex: " FPS", " ms") — voir {@link #textColor}. */
     public String accentSuffix;
 
@@ -376,9 +388,51 @@ public class HudElement {
     }
 
     /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+décalage tels que déclarés à la construction, PAS la taille/l'échelle (volontairement laissées telles quelles). */
+    /**
+     * Défauts capturés PARESSEUSEMENT au premier {@link #captureDefaults()} —
+     * pas dans le constructeur : {@link #textColor}/{@link #paddingX} sont
+     * posés par le module APRÈS l'appel à {@code super(...)} (voir FpsModule,
+     * qui écrit {@code hudElement().textColor} depuis son propre
+     * constructeur), donc les lire dans le constructeur de HudElement
+     * capturerait {@code null}/0 au lieu de la vraie valeur voulue.
+     */
+    private boolean defaultsCaptured;
+    private float defaultScale = 1f, defaultPaddingX, defaultPaddingY, defaultOpacity = 1f;
+    private com.yuyuframe.launcheragent.apigraphic.core.UiColor defaultTextColor;
+
+    /** À appeler une fois que le module a fini de personnaliser cet élément — voir {@code ModuleRegistry.register}. Sans effet aux appels suivants. */
+    public void captureDefaults() {
+        if (defaultsCaptured) return;
+        defaultsCaptured = true;
+        defaultScale = scale;
+        defaultPaddingX = paddingX;
+        defaultPaddingY = paddingY;
+        defaultOpacity = opacity;
+        defaultTextColor = textColor;
+    }
+
     public void resetPosition() {
         this.anchor = defaultAnchor;
         this.offsetX = defaultOffsetX;
         this.offsetY = defaultOffsetY;
+    }
+
+    /**
+     * Remet TOUS les réglages de cet élément à leur valeur d'origine —
+     * position, mais aussi taille, marges, opacité et couleur de texte.
+     *
+     * <p>{@link #resetPosition()} ne rendait que la position : après avoir
+     * bidouillé l'échelle ou les marges, il fallait les remettre une par une à
+     * la main, en devinant les valeurs d'origine (jamais affichées nulle
+     * part). Les défauts sont capturés à la construction, donc y compris ceux
+     * qu'un module a posés lui-même (couleur d'accent de FPS/Ping...).
+     */
+    public void resetAll() {
+        resetPosition();
+        setScale(defaultScale);
+        this.paddingX = defaultPaddingX;
+        this.paddingY = defaultPaddingY;
+        this.opacity = defaultOpacity;
+        this.textColor = defaultTextColor;
     }
 }

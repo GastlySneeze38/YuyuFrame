@@ -990,12 +990,12 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // passe par la couleur de repli, qui pilote AUSSI l'opacité du
             // verre (voir UiRenderer#drawGlassPanel).
             float glassStrength = UiTheme.GLASS_STRENGTH_CARD - liftT * 0.1f;
+            UiColor resBorder = renderer.isGlassAvailable()
+                ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, liftT).multiplyAlpha(fade) : null;
             renderer.drawGlassPanel(x, dy, x + w, dy + h, UiTheme.RADIUS_MD,
-                UiTheme.GLASS_TINT, glassStrength, UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
+                UiTheme.GLASS_TINT, glassStrength, UiTheme.CARD_BG.multiplyAlpha(fade),
+                resBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
             if (renderer.isGlassAvailable()) {
-                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, liftT);
-                renderer.drawRoundedRectBorder(x, dy, x + w, dy + h, UiTheme.RADIUS_MD,
-                    Math.max(1f, UiTheme.scaled(1f)), border.multiplyAlpha(fade), vpWidth, vpHeight);
                 float hairline = Math.max(1f, UiTheme.scaled(1f));
                 renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, dy + h - hairline, x + w - UiTheme.RADIUS_MD, dy + h, 0f,
                     UiTheme.GLASS_HAIRLINE.multiplyAlpha(fade), vpWidth, vpHeight);

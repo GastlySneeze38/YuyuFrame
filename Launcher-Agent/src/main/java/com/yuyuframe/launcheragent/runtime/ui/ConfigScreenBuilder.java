@@ -339,13 +339,29 @@ public final class ConfigScreenBuilder {
         cursor = sliderRow(rows, x, w, cursor, Lang.tr("Marge verticale"),
             Lang.tr("Espace entre le bord de la boîte et le contenu (Y)."),
             0f, 20f, 1f, element.paddingY, v -> { element.paddingY = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
+        // Opacité PROPRE à cet élément — multipliée par le réglage global
+        // "Opacité du HUD" (voir HudElement.opacity) : le global reste un
+        // gradateur d'ensemble, celui-ci règle la hiérarchie entre modules.
+        cursor = sliderRow(rows, x, w, cursor, Lang.tr("Opacité"),
+            Lang.tr("Transparence de CE panneau seulement — se combine avec le réglage global \"Opacité du HUD\"."),
+            0.1f, 1f, 0.05f, element.opacity, v -> { element.opacity = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
+        // Couleur du texte : jusqu'ici figée dans le code de chaque module
+        // (accent bleu de FPS, vert de Ping...) et non persistée.
+        cursor = colorRow(rows, x, w, cursor, Lang.tr("Couleur du texte"),
+            Lang.tr("Couleur du texte de ce panneau (ou de son suffixe d'accent quand il en a un, ex. \"FPS\")."),
+            element.textColor != null ? element.textColor : UiTheme.TEXT_PRIMARY,
+            c -> { element.textColor = c; module.onConfigChanged(); HudConfigStore.save(); });
 
         // Réinitialise anchor/offset (voir HudElement.resetPosition) — devait
         // AUSSI persister le résultat, sinon le prochain redémarrage ramenait
         // la position "sauvegardée" précédente au lieu du reset qu'on vient
         // de demander (oublié avant ce correctif, aucun onConfigChanged/save
         // n'était appelé après element::resetPosition).
-        Runnable resetAction = () -> { element.resetPosition(); module.onConfigChanged(); HudConfigStore.save(); };
+        // resetAll (pas resetPosition) — remet AUSSI échelle/marges/opacité/
+        // couleur : après avoir bidouillé ces réglages, il fallait sinon les
+        // remettre un par un à la main en devinant les valeurs d'origine,
+        // jamais affichées nulle part.
+        Runnable resetAction = () -> { element.resetAll(); module.onConfigChanged(); HudConfigStore.save(); };
         if (headerActions != null) {
             // buildContinuous (demande explicite : "le bouton réinitialiser
             // la position, place le dans le titre HUD pour tout les hud") —
@@ -357,11 +373,11 @@ public final class ConfigScreenBuilder {
             // l'affichage (seul point de traduction, pour éviter de
             // traduire deux fois — voir sa javadoc).
             headerActions.put(category, resetAction);
-            headerActionLabels.put(category, "Réinitialiser la position");
+            headerActionLabels.put(category, "Tout réinitialiser");
         } else {
             // build() legacy (voir UiModGroupConfigScreen, pas d'en-tête de
             // section dans ce mode) — comportement inchangé, ligne normale.
-            cursor = buttonRow(rows, x, w, cursor, Lang.tr("Réinitialiser la position"), resetAction);
+            cursor = buttonRow(rows, x, w, cursor, Lang.tr("Tout réinitialiser"), resetAction);
         }
 
         cursors.put(category, cursor);
@@ -453,11 +469,9 @@ public final class ConfigScreenBuilder {
             // l'opacité du verre (voir UiRenderer#drawGlassPanel).
             renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
                 UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD,
-                new UiColor(0, 0, 0, 60).multiplyAlpha(clipFade), vpWidth, vpHeight);
-            if (renderer.isGlassAvailable()) {
-                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-                    Math.max(1f, UiTheme.scaled(1f)), UiTheme.GLASS_BORDER.multiplyAlpha(clipFade), vpWidth, vpHeight);
-            }
+                new UiColor(0, 0, 0, 60).multiplyAlpha(clipFade),
+                renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER.multiplyAlpha(clipFade) : null,
+                Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
         }
     }
 

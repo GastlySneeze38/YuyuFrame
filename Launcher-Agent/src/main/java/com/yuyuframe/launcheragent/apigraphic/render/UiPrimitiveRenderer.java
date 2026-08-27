@@ -1310,9 +1310,34 @@ public final class UiPrimitiveRenderer {
             color, color, false, vpWidth, vpHeight);
     }
 
-    /** Contour creux (anneau) d'épaisseur {@code borderWidth}, coins arrondis — le rect lui-même reste transparent (à dessiner par-dessus un fond déjà posé avec {@link #drawRoundedRect}, pas à sa place). */
+    /**
+     * Contour creux (anneau) d'épaisseur {@code borderWidth}, coins arrondis —
+     * le rect lui-même reste transparent (à dessiner par-dessus un fond déjà
+     * posé avec {@link #drawRoundedRect}, pas à sa place).
+     *
+     * <p><b>NO-OP sur era E (Blaze3D)</b> — MÊME garde et MÊME raison que
+     * {@link #drawShadow} : {@link #drawFx} n'a aucune branche Blaze3D, il
+     * exécute du GL BRUT ({@code glUseProgram}, changements d'état) au TAIL,
+     * APRÈS {@code presentTexture()}, alors que tout le reste passe par la file
+     * différée Blaze3D exécutée au HEAD, AVANT. Deux conséquences, toutes deux
+     * observées : le contour composait TOUJOURS par-dessus tout le reste quel
+     * que soit l'ordre d'appel, et surtout ces appels GL bruts entrelacés avec
+     * les passes Blaze3D corrompaient l'état GPU — d'où les BUGS DE TEXTURE
+     * signalés (retour utilisateur sur le fond de verre du HUD).
+     *
+     * <p>Le garde manquait ici alors qu'il existait déjà sur {@code drawShadow}
+     * : la primitive était donc déjà mal employée sur ce bracket avant le
+     * rework verre (voir {@code UiTextField}, {@code ModrinthProjectDetailScreen}),
+     * lequel n'a fait qu'en multiplier les appels et rendre le défaut visible.
+     *
+     * <p>Pour un vrai contour sur era E, voir
+     * {@link com.yuyuframe.launcheragent.apigraphic.UiRenderer#drawGlassPanel(float, float, float, float, float, float, float, float, UiColor, float, UiColor, UiColor, int, int)}
+     * — il pose le contour comme un rect PLUS GRAND dessiné DERRIÈRE le
+     * panneau, donc entièrement dans la file différée, sans aucun GL brut.
+     */
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
                                        UiColor color, int vpWidth, int vpHeight) {
+        if (Blaze3DCore.isAvailable()) return;
         drawFx(x1, y1, x2, y2, radius, 0f, borderWidth, color, color, false, vpWidth, vpHeight);
     }
 

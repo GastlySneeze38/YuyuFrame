@@ -785,12 +785,12 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
             // GLASS_BORDER quand le verre est actif : TRACK_OFF (un gris plein)
             // se voyait bien sur un fond opaque, il se confond avec le décor
             // flouté une fois le panneau translucide.
-            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
-                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG_ALT.multiplyAlpha(fade), vpWidth, vpHeight);
             UiColor panelBorder = renderer.isGlassAvailable()
                 ? UiTheme.GLASS_BORDER.multiplyAlpha(fade)
                 : UiTheme.TRACK_OFF.multiplyAlpha(fade * 0.8f);
-            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD, 1.4f, panelBorder, vpWidth, vpHeight);
+            renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG_ALT.multiplyAlpha(fade),
+                panelBorder, 1.4f, vpWidth, vpHeight);
 
             String url = urls.get(index);
             BufferedImage img = UiRemoteImage.get(url);

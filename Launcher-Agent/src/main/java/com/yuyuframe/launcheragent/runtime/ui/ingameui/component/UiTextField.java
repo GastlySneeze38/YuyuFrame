@@ -176,27 +176,21 @@ public class UiTextField extends UiWidget implements UiFocusable {
         // un signal d'état, il doit garder exactement la même couleur quel que
         // soit le décor derrière (un accent qui change de teinte selon le
         // paysage ne se lit plus comme un état).
+        // Anneau de focus / contour permanent posés DERRIÈRE le panneau — voir
+        // la variante à contour de drawGlassPanel : drawRoundedRectBorder est
+        // inerte sur era E (GL brut, corrompait l'état GPU).
+        focusAnim.setTarget(focused ? 1f : 0f);
+        float ringT = focusAnim.get();
+        UiColor ringColor = UiColor.lerp(
+            renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER : UiColor.TRANSPARENT,
+            UiTheme.ACCENT, ringT);
         renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG_ALT, vpWidth, vpHeight);
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, UiTheme.PANEL_BG_ALT,
+            ringColor, Math.max(1f, UiTheme.scaled(1f)) + ringT * 0.5f, vpWidth, vpHeight);
         if (focused) {
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.ACCENT_DIM, vpWidth, vpHeight);
         }
 
-        // Liseré animé — même signal que le fond (focused) mais interpolé en
-        // douceur (UiAnimatedFloat) plutôt qu'un simple binaire, pour un
-        // retour visuel de focus net sans à-coup (cf. barres de recherche
-        // modernes : anneau de focus qui "s'allume").
-        focusAnim.setTarget(focused ? 1f : 0f);
-        float focusT = focusAnim.get();
-        // Contour PERMANENT sous l'anneau de focus (retour utilisateur : le
-        // verre efface les bords) — se fond vers l'accent quand le champ prend
-        // le focus, plutôt que de superposer deux contours de couleurs
-        // différentes sur le même pixel.
-        UiColor ring = UiColor.lerp(
-            renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER : UiColor.TRANSPARENT,
-            UiTheme.ACCENT, focusT);
-        renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-            Math.max(1f, UiTheme.scaled(1f)) + focusT * 0.5f, ring, vpWidth, vpHeight);
 
         float scale = scale();
         float baseline = y + h / 2f - UiTheme.scaled(5f);

@@ -393,13 +393,11 @@ public class UiModGroupConfigScreen extends UiScreenBase {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hover = hoverAnim.get();
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
+            UiColor backBorder = renderer.isGlassAvailable()
+                ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover) : null;
             renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
-            if (renderer.isGlassAvailable()) {
-                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover);
-                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_SM,
-                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
-            }
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg,
+                backBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
             // "«" (chevron double, U+00AB) plutôt que "<" — voir UiModConfigScreen.BackButton pour le détail du choix.
             String arrow = "«";
             float scale = UiTheme.scaled(0.7f);

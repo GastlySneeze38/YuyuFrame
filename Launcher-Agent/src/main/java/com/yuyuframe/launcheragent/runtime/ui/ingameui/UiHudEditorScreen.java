@@ -138,13 +138,11 @@ public class UiHudEditorScreen extends UiScreenBase {
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hover = hoverAnim.get();
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hover);
+            UiColor editorBorder = renderer.isGlassAvailable()
+                ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover) : null;
             renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
-                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg, vpWidth, vpHeight);
-            if (renderer.isGlassAvailable()) {
-                UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover);
-                renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD,
-                    Math.max(1f, UiTheme.scaled(1f)), border, vpWidth, vpHeight);
-            }
+                UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, bg,
+                editorBorder, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
             // "«" (chevron double, U+00AB) plutôt que "<" — voir UiModConfigScreen.BackButton pour le détail du choix.
             // Glisse vers la gauche au survol : affordance "on te ramène en arrière".
             String label = "« " + Lang.tr("Retour");

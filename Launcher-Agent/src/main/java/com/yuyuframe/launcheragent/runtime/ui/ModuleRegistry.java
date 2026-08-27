@@ -375,6 +375,17 @@ public final class ModuleRegistry {
     public static void register(LauncherModule module) {
         MODULES.add(module);
         BY_ID.put(module.id, module);
+        // Fige les valeurs d'origine de l'élément HUD AVANT que HudConfigStore
+        // n'applique la config persistée juste en dessous — c'est le seul
+        // instant où elles sont encore intactes ET complètes : le constructeur
+        // du module vient de finir (donc textColor/paddingX posés par lui sont
+        // là), et rien n'a encore été écrasé par le disque. Les capturer dans
+        // le constructeur de HudElement serait trop TÔT (le module n'a pas
+        // encore personnalisé), ici c'est trop TARD d'une ligne si on le fait
+        // après applyTo(). Voir HudElement.captureDefaults/resetAll.
+        if (module instanceof HudElementOwner) {
+            ((HudElementOwner) module).hudElement().captureDefaults();
+        }
         // Écrase les valeurs par défaut (fixées dans le constructeur du
         // module, juste avant ce point) avec la config persistée — voir
         // HudConfigStore. Placé ICI (pas dans le bloc static{}) pour que tout

@@ -29,10 +29,10 @@ public final class UiPanel {
         // plus réutilisé du moteur (tous les écrans de config), le convertir
         // ici propage le style d'un coup au lieu de retoucher chaque écran.
         renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_MD,
-            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG, vpWidth, vpHeight);
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG,
+            renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER : null,
+            Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
         if (renderer.isGlassAvailable()) {
-            renderer.drawRoundedRectBorder(x, y, x + w, y + h, UiTheme.RADIUS_MD,
-                Math.max(1f, UiTheme.scaled(1f)), UiTheme.GLASS_BORDER, vpWidth, vpHeight);
             float hairline = Math.max(1f, UiTheme.scaled(1f));
             renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, y + h - hairline, x + w - UiTheme.RADIUS_MD, y + h, 0f,
                 UiTheme.GLASS_HAIRLINE, vpWidth, vpHeight);

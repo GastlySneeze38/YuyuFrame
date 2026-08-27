@@ -402,16 +402,24 @@ public final class UiRenderer {
     }
 
     /**
-     * Rayon PAR COIN (era E/Blaze3D uniquement — voir {@link
-     * UiPrimitiveRenderer#drawRoundedRect(float, float, float, float, float, float, float, float, UiColor, int, int)}
-     * pour la convention topLeft/topRight/bottomLeft/bottomRight et le repli
-     * legacy/modern). Remplace le hack "2 rects superposés" pour un rayon
+     * Rayon PAR COIN — remplace le hack "2 rects superposés" pour un rayon
      * différent par côté.
+     *
+     * <p><b>ORDRE RÉEL : bas-gauche, bas-droit, haut-gauche, haut-droit.</b>
+     * Les paramètres portaient les noms {@code radiusTopLeft/TopRight/
+     * BottomLeft/BottomRight}, qui décrivaient l'INVERSE de leur effet —
+     * corrigé ici après l'avoir vérifié dans les DEUX backends : le shader
+     * Blaze3D ({@code Blaze3DCore.RECT_FRAGMENT_SRC}) mappe les deux premiers
+     * à {@code p.y < 0}, c'est-à-dire SOUS le centre dans ce repère Y-MONTANT
+     * (celui de {@code gl_FragCoord}, voir la javadoc de classe) ; et le repli
+     * legacy ({@code UiPrimitiveRenderer}) découpe de la même façon en partant
+     * de {@code y1}, le bord BAS. Le piège venait de noms calqués sur CSS,
+     * dont l'axe Y descend.
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2,
-                                 float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
+                                 float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
                                  UiColor color, int vpWidth, int vpHeight) {
-        primitives.drawRoundedRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight, color, vpWidth, vpHeight);
+        primitives.drawRoundedRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight, color, vpWidth, vpHeight);
     }
 
     /** @deprecated identique à {@link #drawRoundedRect} depuis que celui-ci route par Blaze3D sur era E — gardé pour ne pas retoucher HudPanelRenderer/KeystrokesModule. */
@@ -517,6 +525,56 @@ public final class UiRenderer {
     public void drawGlassPanel(float x1, float y1, float x2, float y2, float radius,
                                 UiColor tint, float tintStrength, UiColor fallback, int vpWidth, int vpHeight) {
         drawGlassPanel(x1, y1, x2, y2, radius, radius, radius, radius, tint, tintStrength, fallback, vpWidth, vpHeight);
+    }
+
+    /**
+     * Panneau de verre AVEC contour — le contour est posé comme un rect PLUS
+     * GRAND dessiné DERRIÈRE le panneau, dont seule une bande de {@code
+     * borderWidth} dépasse.
+     *
+     * <p>C'est la SEULE façon d'avoir un contour correct sur era E.
+     * {@link #drawRoundedRectBorder} y est volontairement inerte : il repose
+     * sur du GL brut exécuté APRÈS la présentation de l'image, alors que tout
+     * le reste passe par la file différée Blaze3D exécutée AVANT — il
+     * composait donc toujours par-dessus tout, et surtout ses appels GL
+     * entrelacés avec les passes Blaze3D corrompaient l'état GPU (bugs de
+     * texture constatés). Ici, contour et panneau passent tous deux par la
+     * file : ordre garanti, aucun GL brut.
+     *
+     * <p>Fonctionne parce que le panneau est OPAQUE dans ses bornes (le
+     * composite écrit alpha = 1 × couverture) : il masque entièrement le
+     * centre du rect de contour. Ne conviendrait donc PAS à un contour sur
+     * fond transparent.
+     *
+     * @param borderColor {@code null} = pas de contour (équivaut à l'appel sans contour).
+     */
+    public void drawGlassPanel(float x1, float y1, float x2, float y2,
+                                float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
+                                UiColor tint, float tintStrength, UiColor fallback,
+                                UiColor borderColor, float borderWidth, int vpWidth, int vpHeight) {
+        if (borderColor != null && borderWidth > 0f) {
+            // Rayons agrandis d'autant que le rect, pour que la bande visible
+            // garde une épaisseur CONSTANTE le long des coins arrondis — un
+            // rayon inchangé sur un rect plus grand donnerait un contour plus
+            // fin dans les angles. Un coin CARRÉ (rayon 0) le reste : 0 + bw
+            // arrondirait un coin voulu net (voir HudPanelRenderer.edgeAwareRadii).
+            drawRoundedRect(x1 - borderWidth, y1 - borderWidth, x2 + borderWidth, y2 + borderWidth,
+                radiusBottomLeft > 0f ? radiusBottomLeft + borderWidth : 0f,
+                radiusBottomRight > 0f ? radiusBottomRight + borderWidth : 0f,
+                radiusTopLeft > 0f ? radiusTopLeft + borderWidth : 0f,
+                radiusTopRight > 0f ? radiusTopRight + borderWidth : 0f,
+                borderColor, vpWidth, vpHeight);
+        }
+        drawGlassPanel(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+            tint, tintStrength, fallback, vpWidth, vpHeight);
+    }
+
+    /** Raccourci rayon uniforme — voir la variante à 4 rayons avec contour. */
+    public void drawGlassPanel(float x1, float y1, float x2, float y2, float radius,
+                                UiColor tint, float tintStrength, UiColor fallback,
+                                UiColor borderColor, float borderWidth, int vpWidth, int vpHeight) {
+        drawGlassPanel(x1, y1, x2, y2, radius, radius, radius, radius,
+            tint, tintStrength, fallback, borderColor, borderWidth, vpWidth, vpHeight);
     }
 
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
