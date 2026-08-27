@@ -10,6 +10,10 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.core.UiRemoteImage;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
@@ -238,14 +242,54 @@ public final class ModrinthProjectDetailScreen extends UiScreenBase {
 
     private void buildLayout() {
         widgets.clear();
-        widgets.add(new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
-            "Retour", () -> closeTo(parent)));
+
+        // ── Arbre de layout du CHROME (rework 2026-08-27) ───────────────────
+        //
+        // Portée volontairement limitée au chrome (bouton retour, bouton
+        // installer, zone défilante). Le CONTENU de la description, lui, reste
+        // sur son curseur vertical (voir buildContent) — ce n'est pas un
+        // oubli : les widgets qu'il empile sont des UiLabel, dont x/y désignent
+        // une LIGNE DE BASE de texte et non une boîte (leur w/h valent 0, voir
+        // sa javadoc). Les passer à Taffy demanderait d'inventer une boîte par
+        // ligne puis de reconvertir boîte -> ligne de base via l'ascendante de
+        // la police : ça déplacerait potentiellement CHAQUE ligne de la
+        // description, et changerait aussi l'étendue de défilement (calculée
+        // par UiScrollContainer depuis ces mêmes y/h). Un flux de texte
+        // séquentiel est par ailleurs exactement ce pour quoi un curseur est
+        // fait — Taffy n'y apporterait aucune décision de mise en page.
+        TaffyNode screen = new TaffyNode("screen", new TaffyStyle()
+            .size(TaffyStyle.px(screenWidth), TaffyStyle.px(screenHeight))
+            .flexDirection("column"));
+        screen.style.padding = new String[]{ TaffyStyle.px(HEADER_H), TaffyStyle.px(MARGIN),
+            TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
+        TaffyStyle contentStyle = new TaffyStyle();
+        contentStyle.flexGrow = 1f;
+        screen.child(new TaffyNode("content", contentStyle));
+        // Les deux boutons sont ANCRÉS (hors flux) : ils flottent par-dessus la
+        // zone défilante, ils ne doivent pas la rétrécir.
+        screen.child(LayoutSolver.anchored("back", BACK_W, BACK_H, MARGIN, MARGIN, null, null));
+        // Décalé de SCROLLBAR_CLEARANCE + 8 pour ne jamais chevaucher la barre
+        // de défilement, qui vit dans la même bande verticale à droite.
+        screen.child(LayoutSolver.anchored("install", INSTALL_BTN_W, INSTALL_BTN_H,
+            null, MARGIN + SCROLLBAR_CLEARANCE + 8f, MARGIN, null));
+
+        LayoutSolver.Solved layout = LayoutSolver.solve(screen, screenWidth, screenHeight);
+
+        UiButton backBtn = new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
+            "Retour", () -> closeTo(parent));
+        if (layout != null) layout.apply("back", backBtn);
+        widgets.add(backBtn);
+
         // PAS ajouté à `widgets` (contrairement à avant) — voir sa javadoc et
         // uiDraw/uiPollInput : dessiné/cliqué à la main pour flotter au-dessus
         // du contenu défilant plutôt que suivre le dispatch générique.
         installButton = new InstallButton(installButtonX(), installButtonY(), INSTALL_BTN_W, INSTALL_BTN_H);
+        if (layout != null) layout.apply("install", installButton);
 
-        content = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
+        TaffyLayoutResult.Rect vp = layout == null ? null : layout.get("content");
+        content = vp != null
+            ? new UiScrollContainer(vp.x, vp.y, vp.w, Math.max(1f, vp.h))
+            : new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
         if (detailReady) buildContent();
     }
 

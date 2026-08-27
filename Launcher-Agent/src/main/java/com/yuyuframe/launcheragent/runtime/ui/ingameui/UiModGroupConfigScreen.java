@@ -13,6 +13,7 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiLabel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiPanel;
+import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
@@ -150,9 +151,31 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         // même fix : le viewport garde toute la largeur, les LIGNES sont
         // plus étroites).
         float scrollbarReserve = UiTheme.scaled(20f);
+        // Métriques d'onglets remontées ici (elles étaient plus bas) : l'arbre
+        // de layout en a besoin avant de pouvoir être construit. Valeurs
+        // inchangées — voir leur historique (retours utilisateur "c'est trop
+        // petit / pas assez de marge sur les titres", tabH 34->38, tabGap 38->44).
+        float tabH = UiTheme.scaled(38f), tabGap = UiTheme.scaled(44f), tabTopGap = UiTheme.scaled(44f);
+        float backSize = UiTheme.scaled(38f);
+
+        // Arbre PARTAGÉ avec UiModConfigScreen — voir ConfigChromeLayout :
+        // chrome identique des deux côtés, factorisé pour qu'un ajustement ne
+        // puisse plus être appliqué à un seul des deux écrans.
+        ConfigChromeLayout.Chrome chrome = ConfigChromeLayout.solve(screenWidth, screenHeight,
+            HEADER_H, SIDE_MARGIN, SUB_SIDEBAR_W, CONTENT_MAX_W, contentPad, panelBottom,
+            backSize, UiTheme.scaled(20f), UiTheme.scaled(16f));
+        boolean solved = chrome.complete();
+
         float rowX = contentX;
         float rowW = contentW - scrollbarReserve;
-        scroll = new UiScrollContainer(rowX, panelBottom + contentPad, contentW, (panelTop - panelBottom) - contentPad * 2f);
+        float vpX = rowX, vpY = panelBottom + contentPad, vpW = contentW, vpH = (panelTop - panelBottom) - contentPad * 2f;
+        if (solved) {
+            vpX = chrome.viewport.x; vpY = chrome.viewport.y;
+            vpW = chrome.viewport.w; vpH = chrome.viewport.h;
+            rowX = chrome.viewport.x;
+            rowW = chrome.viewport.w - scrollbarReserve;
+        }
+        scroll = new UiScrollContainer(vpX, vpY, vpW, Math.max(1f, vpH));
 
         // ── Construit CHAQUE onglet (inchangé : toggle "Activé" + réglages
         // annotés de chaque module rattaché, cursor LOCAL par onglet) PUIS
@@ -264,20 +287,32 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         this.sidebarW = SUB_SIDEBAR_W;
         this.sidebarY = panelBottom;
         this.sidebarH = panelTop - panelBottom;
+        if (solved) {
+            this.sidebarX = chrome.sidebar.x; this.sidebarY = chrome.sidebar.y;
+            this.sidebarW = chrome.sidebar.w; this.sidebarH = chrome.sidebar.h;
+        }
 
         widgets.clear();
         // EN PREMIER (voir uiDraw/SidebarPanel — z-order + non-cliquable, même
         // bug déjà rencontré et corrigé sur UiModConfigScreen).
         widgets.add(new SidebarPanel());
-        widgets.add(new BackButton());
+        BackButton back = new BackButton();
+        if (solved) {
+            back.x = chrome.back.x; back.y = chrome.back.y;
+            back.w = chrome.back.w; back.h = chrome.back.h;
+        }
+        widgets.add(back);
 
-        // Agrandi/espacé (retour utilisateur : "c'est trop petit... pas assez
-        // de marge sur les titres") — tabH 34->38, tabGap 38->44.
-        float tabH = UiTheme.scaled(38f), tabGap = UiTheme.scaled(44f), tabTopGap = UiTheme.scaled(44f);
+        // Pile d'onglets résolue à part, une fois `anchors` connu — voir
+        // ConfigChromeLayout.solveTabs pour le pourquoi de cette séparation.
+        LayoutSolver.Solved tabsLayout = ConfigChromeLayout.solveTabs(sidebarW, sidebarH,
+            anchors.size(), tabH, tabGap, tabTopGap, UiTheme.scaled(10f));
         int i = 0;
         for (String tab : anchors.keySet()) {
-            widgets.add(new TabItem(sidebarX + UiTheme.scaled(10f), panelTop - tabTopGap - i * tabGap,
-                sidebarW - UiTheme.scaled(20f), tabH, tab));
+            TabItem item = new TabItem(sidebarX + UiTheme.scaled(10f), panelTop - tabTopGap - i * tabGap,
+                sidebarW - UiTheme.scaled(20f), tabH, tab);
+            if (tabsLayout != null) tabsLayout.apply("tab:" + i, item, sidebarX, sidebarY);
+            widgets.add(item);
             i++;
         }
     }

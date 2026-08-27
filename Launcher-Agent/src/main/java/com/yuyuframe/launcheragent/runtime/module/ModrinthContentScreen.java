@@ -11,6 +11,10 @@ import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.core.UiRemoteImage;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiStagger;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
@@ -290,10 +294,72 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
     private void buildLayout() {
         widgets.clear();
+
+        // ── Arbre de layout (rework 2026-08-27) ─────────────────────────────
+        //
+        // Remplace une pile de constantes "distance depuis le haut de l'écran"
+        // (TAB_TOP_GAP, SEARCH_TOP_GAP, HEADER_H...) qui devaient rester
+        // cohérentes ENTRE ELLES à la main : décaler la barre de recherche
+        // obligeait à recalculer HEADER_H, sous peine de voir la liste de
+        // résultats la chevaucher. Elles deviennent ici de simples ÉCARTS
+        // successifs, chacun indépendant des autres.
+        //
+        // Écarts portés par des marges INDIVIDUELLES et non par un gap de
+        // colonne : les trois écarts sont différents, un gap unique ne peut
+        // pas les exprimer.
+        TaffyNode screen = new TaffyNode("screen", new TaffyStyle()
+            .size(TaffyStyle.px(screenWidth), TaffyStyle.px(screenHeight))
+            .flexDirection("column"));
+        screen.style.padding = new String[]{ "0", TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
+
+        boolean shadersTab = com.yuyuframe.launcheragent.runtime.fabric.ShaderLoaderDetector.isPresent(getClass().getClassLoader());
+
+        TaffyNode tabsRow = LayoutSolver.row("tabsRow", 10f);
+        tabsRow.style.height = TaffyStyle.px(TAB_H);
+        tabsRow.style.flexShrink = 0f;
+        tabsRow.style.margin = new String[]{ TaffyStyle.px(TAB_TOP_GAP), "0", "0", "0" };
+        tabsRow.child(LayoutSolver.box("tab:pack", TAB_W, TAB_H));
+        if (shadersTab) tabsRow.child(LayoutSolver.box("tab:shader", TAB_W, TAB_H));
+        screen.child(tabsRow);
+
+        TaffyNode searchRow = LayoutSolver.row("searchRow", 0f);
+        searchRow.style.height = TaffyStyle.px(SEARCH_H);
+        searchRow.style.flexShrink = 0f;
+        searchRow.style.margin = new String[]{
+            TaffyStyle.px(SEARCH_TOP_GAP - TAB_TOP_GAP - TAB_H), "0", "0", "0" };
+        // 460 souhaité mais AUTORISÉ À RÉTRÉCIR face à deux boutons qui, eux,
+        // gardent leur taille — reproduit l'ancien Math.min(460, ...) sans le
+        // calculer, et sans sa constante "32" qui ne correspondait à aucun des
+        // deux écarts réels (16 et 10).
+        TaffyStyle searchStyle = new TaffyStyle();
+        searchStyle.width = TaffyStyle.px(460f);
+        searchStyle.height = TaffyStyle.px(SEARCH_H);
+        searchRow.child(new TaffyNode("search", searchStyle));
+        TaffyNode findBtn = LayoutSolver.box("btn:search", SEARCH_BTN_W, SEARCH_H);
+        findBtn.style.margin = new String[]{ "0", "0", "0", TaffyStyle.px(16f) };
+        searchRow.child(findBtn);
+        TaffyNode filterBtn = LayoutSolver.box("btn:filters", FILTER_BTN_W, SEARCH_H);
+        filterBtn.style.margin = new String[]{ "0", "0", "0", TaffyStyle.px(10f) };
+        searchRow.child(filterBtn);
+        screen.child(searchRow);
+
+        TaffyStyle resultsStyle = new TaffyStyle();
+        resultsStyle.flexGrow = 1f;
+        resultsStyle.margin = new String[]{
+            TaffyStyle.px(HEADER_H - SEARCH_TOP_GAP - SEARCH_H), "0", "0", "0" };
+        screen.child(new TaffyNode("results", resultsStyle));
+
         // "Retour" en HAUT-DROITE — l'ancien placement (haut-gauche, sous le
-        // titre) chevauchait littéralement le titre (confirmé en jeu).
-        widgets.add(new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
-            "Retour", () -> closeTo(lastScreen)));
+        // titre) chevauchait littéralement le titre (confirmé en jeu). Ancré
+        // HORS FLUX : il ne doit pousser aucune des rangées ci-dessus.
+        screen.child(LayoutSolver.anchored("back", BACK_W, BACK_H, MARGIN, MARGIN, null, null));
+
+        LayoutSolver.Solved layout = LayoutSolver.solve(screen, screenWidth, screenHeight);
+
+        UiButton backBtn = new UiButton(screenWidth - MARGIN - BACK_W, screenHeight - MARGIN - BACK_H, BACK_W, BACK_H,
+            "Retour", () -> closeTo(lastScreen));
+        if (layout != null) layout.apply("back", backBtn);
+        widgets.add(backBtn);
 
         // Onglets Resource Packs / Shaders — Shaders SEULEMENT si un loader de
         // shaders compatible est détecté (même garde que l'ancien bouton
@@ -302,12 +368,16 @@ public final class ModrinthContentScreen extends UiScreenBase {
         // l'onglet Shaders était actif mais le loader a disparu entre-temps
         // (peu probable en pratique — mods rechargés seulement au lancement —
         // mais évite un écran bloqué sur un onglet qui n'existe plus).
-        boolean shadersAvailable = com.yuyuframe.launcheragent.runtime.fabric.ShaderLoaderDetector.isPresent(getClass().getClassLoader());
+        boolean shadersAvailable = shadersTab;
         if (!shadersAvailable && kind == ContentKind.SHADER) kind = ContentKind.RESOURCE_PACK;
         float tabY = screenHeight - TAB_TOP_GAP - TAB_H;
-        widgets.add(new TabButton(MARGIN, tabY, TAB_W, TAB_H, ContentKind.RESOURCE_PACK));
+        TabButton packTab = new TabButton(MARGIN, tabY, TAB_W, TAB_H, ContentKind.RESOURCE_PACK);
+        if (layout != null) layout.apply("tab:pack", packTab);
+        widgets.add(packTab);
         if (shadersAvailable) {
-            widgets.add(new TabButton(MARGIN + TAB_W + 10f, tabY, TAB_W, TAB_H, ContentKind.SHADER));
+            TabButton shaderTab = new TabButton(MARGIN + TAB_W + 10f, tabY, TAB_W, TAB_H, ContentKind.SHADER);
+            if (layout != null) layout.apply("tab:shader", shaderTab);
+            widgets.add(shaderTab);
         }
 
         float searchY = screenHeight - SEARCH_TOP_GAP - SEARCH_H;
@@ -324,13 +394,23 @@ public final class ModrinthContentScreen extends UiScreenBase {
         searchField.y = searchY;
         searchField.w = searchW;
         searchField.h = SEARCH_H;
+        if (layout != null) layout.apply("search", searchField);
         widgets.add(searchField);
-        widgets.add(new UiButton(MARGIN + searchW + 16f, searchY, SEARCH_BTN_W, SEARCH_H, "Chercher", this::triggerSearch));
-        boolean anyFilterActive = sort != SortOrder.DEFAULT || currentVersionOnly || !selectedCategories.isEmpty();
-        widgets.add(new UiButton(MARGIN + searchW + 16f + SEARCH_BTN_W + 10f, searchY, FILTER_BTN_W, SEARCH_H,
-            "Filtres" + (anyFilterActive ? " •" : ""), this::toggleFilters));
 
-        results = new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
+        UiButton findButton = new UiButton(MARGIN + searchW + 16f, searchY, SEARCH_BTN_W, SEARCH_H, "Chercher", this::triggerSearch);
+        if (layout != null) layout.apply("btn:search", findButton);
+        widgets.add(findButton);
+
+        boolean anyFilterActive = sort != SortOrder.DEFAULT || currentVersionOnly || !selectedCategories.isEmpty();
+        UiButton filterButton = new UiButton(MARGIN + searchW + 16f + SEARCH_BTN_W + 10f, searchY, FILTER_BTN_W, SEARCH_H,
+            "Filtres" + (anyFilterActive ? " •" : ""), this::toggleFilters);
+        if (layout != null) layout.apply("btn:filters", filterButton);
+        widgets.add(filterButton);
+
+        TaffyLayoutResult.Rect res = layout == null ? null : layout.get("results");
+        results = res != null
+            ? new UiScrollContainer(res.x, res.y, res.w, Math.max(1f, res.h))
+            : new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
         // Ré-affiche les résultats DÉJÀ reçus à la nouvelle géométrie — PAS un
         // nouvel appel réseau, showResults() est purement local. Vide au tout
         // premier appel (avant la toute première recherche) : rien à réafficher.

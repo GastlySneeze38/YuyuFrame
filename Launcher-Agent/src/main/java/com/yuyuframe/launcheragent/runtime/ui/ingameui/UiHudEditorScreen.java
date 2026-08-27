@@ -6,6 +6,9 @@ import com.yuyuframe.launcheragent.runtime.ui.hud.HudRegistry;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiHudBox;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
@@ -93,7 +96,21 @@ public class UiHudEditorScreen extends UiScreenBase {
 
     private void buildLayout() {
         widgets.clear();
-        widgets.add(new BackButton());
+        BackButton back = new BackButton();
+        // Bouton CENTRÉ via Taffy (justifyContent + alignItems) au lieu du
+        // `(screenWidth - W) / 2` du constructeur — c'est le seul élément
+        // positionné de cet écran, les boîtes HUD tirant leur position de leur
+        // propre modèle (ancre + décalage), jamais d'un calcul d'écran.
+        TaffyStyle rootStyle = new TaffyStyle()
+            .size(TaffyStyle.px(screenWidth), TaffyStyle.px(screenHeight))
+            .justifyContent("center")
+            .alignItems("center");
+        TaffyNode root = new TaffyNode("screen", rootStyle);
+        root.child(LayoutSolver.box("back", BackButton.W, BackButton.H));
+        LayoutSolver.Solved layout = LayoutSolver.solve(root, screenWidth, screenHeight);
+        // Repli : le constructeur a déjà posé le centrage manuel.
+        if (layout != null) layout.apply("back", back);
+        widgets.add(back);
 
         hudBoxes = new ArrayList<>();
         for (HudElement element : HudRegistry.elements()) {
@@ -111,7 +128,7 @@ public class UiHudEditorScreen extends UiScreenBase {
      * haut-gauche (l'un des coins les plus utilisés).
      */
     private final class BackButton extends UiWidget {
-        private static final float W = 100f, H = 36f;
+        static final float W = 100f, H = 36f;
         private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
 
         BackButton() { super((screenWidth - W) / 2f, (screenHeight - H) / 2f, W, H); }

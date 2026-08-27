@@ -10,6 +10,10 @@ import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiPanel;
+import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
+import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
 
@@ -159,9 +163,40 @@ public class UiModConfigScreen extends UiScreenBase {
         // scroll se dessine (~10px du bord du viewport) — même zone,
         // chevauchement garanti.
         float scrollbarReserve = UiTheme.scaled(20f);
+        // tabH/tabGap/tabTopGap : voir l'historique de leurs valeurs (retours
+        // utilisateur successifs sur la taille des onglets et la position du
+        // bouton retour) — remontés ici depuis le bas de la méthode, l'arbre de
+        // layout en a besoin avant de pouvoir être construit.
+        float tabH = UiTheme.scaled(38f), tabGap = UiTheme.scaled(44f), tabTopGap = UiTheme.scaled(44f);
+        float backSize = UiTheme.scaled(38f);
+
+        // ── Layout du chrome ────────────────────────────────────────────
+        //
+        // Arbre PARTAGÉ avec UiModGroupConfigScreen (voir ConfigChromeLayout) :
+        // les deux écrans ont exactement le même bandeau + corps
+        // [sous-sidebar | contenu], et leurs métriques ont toujours été
+        // ajustées ensemble au fil des retours utilisateur.
+        //
+        // Les valeurs manuelles calculées au-dessus restent le REPLI si le
+        // moteur natif est indisponible (LayoutSolver journalise toujours son
+        // échec) — seules les POSITIONS sont dupliquées, jamais la création
+        // des widgets.
+        ConfigChromeLayout.Chrome chrome = ConfigChromeLayout.solve(screenWidth, screenHeight,
+            HEADER_H, SIDE_MARGIN, SUB_SIDEBAR_W, CONTENT_MAX_W, contentPad, panelBottom,
+            backSize, UiTheme.scaled(20f), UiTheme.scaled(16f));
+        boolean solved = chrome.complete();
+        TaffyLayoutResult.Rect vp = solved ? chrome.viewport : null;
+        TaffyLayoutResult.Rect sb = solved ? chrome.sidebar : null;
+
         float rowX = contentX;
         float rowW = contentW - scrollbarReserve;
-        scroll = new UiScrollContainer(rowX, panelBottom + contentPad, contentW, (panelTop - panelBottom) - contentPad * 2f);
+        float vpX = rowX, vpY = panelBottom + contentPad, vpW = contentW, vpH = (panelTop - panelBottom) - contentPad * 2f;
+        if (vp != null && sb != null) {
+            vpX = vp.x; vpY = vp.y; vpW = vp.w; vpH = vp.h;
+            rowX = vp.x;
+            rowW = vp.w - scrollbarReserve;
+        }
+        scroll = new UiScrollContainer(vpX, vpY, vpW, Math.max(1f, vpH));
 
         ConfigScreenBuilder.Result result = ConfigScreenBuilder.buildContinuous(module, rowX, rowW);
         anchors = result.anchors;
@@ -183,22 +218,40 @@ public class UiModConfigScreen extends UiScreenBase {
         // assez de marge sur les titres") — même ajustement que
         // UiModGroupConfigScreen, pour rester cohérent visuellement entre les
         // deux écrans.
-        float tabH = UiTheme.scaled(38f), tabGap = UiTheme.scaled(44f), tabTopGap = UiTheme.scaled(44f);
         this.sidebarX = SIDE_MARGIN;
         this.sidebarW = SUB_SIDEBAR_W;
         this.sidebarY = panelBottom;
         this.sidebarH = panelTop - panelBottom;
+        if (sb != null) {
+            this.sidebarX = sb.x; this.sidebarY = sb.y; this.sidebarW = sb.w; this.sidebarH = sb.h;
+        }
 
         widgets.clear();
         // EN PREMIER (voir uiDraw ci-dessus pour le bug de z-order corrigé) —
         // doit se dessiner AVANT les CategoryTab ajoutés plus bas.
         widgets.add(new SidebarPanel());
-        widgets.add(new BackButton());
+        BackButton back = new BackButton();
+        if (solved) {
+            back.x = chrome.back.x; back.y = chrome.back.y;
+            back.w = chrome.back.w; back.h = chrome.back.h;
+        }
+        widgets.add(back);
+
+        // ── 2ᵉ arbre : la pile d'onglets ────────────────────────────────────
+        //
+        // Résolue à part une fois `anchors` connu (voir le commentaire sur
+        // sidebarNode plus haut). Résolue DANS les bornes de la sous-sidebar,
+        // puis replacée à l'écran via le décalage passé à apply() — même motif
+        // que la grille défilante de UiMainMenuScreen.
+        LayoutSolver.Solved tabsLayout = ConfigChromeLayout.solveTabs(sidebarW, sidebarH,
+            anchors.size(), tabH, tabGap, tabTopGap, UiTheme.scaled(10f));
 
         int i = 0;
         for (String category : anchors.keySet()) {
-            widgets.add(new CategoryTab(sidebarX + UiTheme.scaled(10f), panelTop - tabTopGap - i * tabGap,
-                sidebarW - UiTheme.scaled(20f), tabH, category));
+            CategoryTab tab = new CategoryTab(sidebarX + UiTheme.scaled(10f), panelTop - tabTopGap - i * tabGap,
+                sidebarW - UiTheme.scaled(20f), tabH, category);
+            if (tabsLayout != null) tabsLayout.apply("tab:" + i, tab, sidebarX, sidebarY);
+            widgets.add(tab);
             i++;
         }
     }
