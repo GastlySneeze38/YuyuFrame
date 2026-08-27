@@ -60,6 +60,21 @@ public abstract class UiWidget {
     public void onClick() {}
 
     /**
+     * Roadmap Phase 5.6 ({@code UiScreenBase#dispatchClick} ignorait
+     * auparavant le bouton et le double-clic) — {@code button} : 0=gauche,
+     * 1=droit, 2=milieu (mêmes indices GLFW que {@link
+     * com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller}).
+     * Implémentation par défaut : délègue à {@link #onClick()} UNIQUEMENT
+     * pour un clic GAUCHE SIMPLE — comportement 100% inchangé pour tout
+     * widget existant qui ne surcharge que {@link #onClick()} (le cas
+     * courant). Un widget qui a besoin du clic droit/du double-clic
+     * surcharge CETTE méthode à la place.
+     */
+    public void onClick(int button, boolean doubleClick) {
+        if (button == 0 && !doubleClick) onClick();
+    }
+
+    /**
      * Appelé CHAQUE frame, pour tout widget (contrairement à onClick, un seul
      * "premier widget sous le curseur" par frame) — nécessaire au drag continu
      * (UiSlider) : leftDown doit rester suivi même quand la souris sort des

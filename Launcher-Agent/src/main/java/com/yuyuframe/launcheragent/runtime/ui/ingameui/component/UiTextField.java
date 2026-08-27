@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFocusable;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 
 import java.awt.BasicStroke;
@@ -35,7 +36,7 @@ import java.util.function.Consumer;
  * changer la signature de {@link UiWidget#onClick()} (qui ne reçoit aucune
  * coordonnée) pour aucun de ces trois usages.
  */
-public class UiTextField extends UiWidget {
+public class UiTextField extends UiWidget implements UiFocusable {
 
     private final StringBuilder text = new StringBuilder();
     private String placeholder;

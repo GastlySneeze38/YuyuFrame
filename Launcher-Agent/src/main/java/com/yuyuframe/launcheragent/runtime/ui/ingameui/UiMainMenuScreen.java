@@ -36,10 +36,13 @@ import java.util.Map;
 /**
  * Écran d'accueil du moteur config custom — équivalent de OneConfigGui.create() :
  * sidebar de navigation à gauche, barre de recherche + grille de cartes mods
- * à droite. Chaque carte a son propre UiToggle (activer/désactiver,
- * enregistré AVANT le widget "corps de carte" dans {@code widgets} pour que
- * le clic sur le toggle gagne le test de collision face au clic "ouvrir la
- * config").
+ * à droite. Chaque carte a son propre UiToggle (activer/désactiver) qui doit
+ * gagner le clic face à la carte plus grande qui le contient — géré depuis
+ * 2026-08-27 par {@code UiHitTest} (roadmap Phase 5.6 : "plus petite aire
+ * gagne", PAS l'ordre d'ajout dans {@code modScroll}/{@code widgets} —
+ * l'ancien commentaire ici prétendait le contraire, resté un cran derrière
+ * le code réel après un revirement ; toggle ajouté APRÈS la carte pour des
+ * raisons de PEINTURE uniquement, voir rebuildAll()).
  *
  * Layout entièrement reconstruit (rebuildAll) au redimensionnement de fenêtre
  * ET à chaque frappe dans la recherche — sans jamais perdre d'état, car :
@@ -461,13 +464,13 @@ public class UiMainMenuScreen extends UiScreenBase {
                     //   ModCard dessine déjà tout.
                     // - le cœur, petit, en haut de la bande, favori —
                     //   INDÉPENDANT de enabled (voir LauncherModule#favorite).
-                    // Ajouté AVANT le toggle de bande dans modScroll — le
-                    // cœur est un sous-rectangle DANS la zone de la bande,
-                    // le premier widget dont contains() matche gagne le clic
-                    // (voir UiScreenBase.dispatchClick), donc le cœur doit
-                    // être testé EN PREMIER pour intercepter les clics sur
-                    // sa petite zone avant que la bande (bien plus grande)
-                    // ne les capte à sa place.
+                    // Le cœur est un sous-rectangle DANS la zone de la bande
+                    // (bien plus grande) — les deux se chevauchent donc pour
+                    // de vrai. Résolu par UiHitTest (roadmap Phase 5.6,
+                    // "plus petite aire gagne") plutôt que par un ordre
+                    // d'ajout précis dans modScroll : peu importe lequel des
+                    // deux est ajouté en premier, le cœur (plus petit)
+                    // l'emporte toujours sur la bande à cet endroit précis.
                     float barH = iconGridBarH();
                     UiToggle enableToggle = new UiToggle(cx, cy, cardW, barH, mod.isEnabled(),
                         v -> { mod.setEnabled(v); HudConfigStore.save(); }).invisibleStyle();

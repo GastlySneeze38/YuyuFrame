@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiHitTest;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
@@ -307,16 +308,33 @@ public class UiScrollContainer {
 
         applyOffsets();
 
+        // BUG ÉVITÉ (pas rencontré en jeu, repéré à l'écriture) : NE JAMAIS
+        // réutiliser une même liste "scratch" mutée en place ici — le cache
+        // de UiHitTest#find se fie à l'ÉGALITÉ DE RÉFÉRENCE de la liste pour
+        // savoir s'il doit recalculer ; une liste réutilisée (clear+refill)
+        // garde TOUJOURS la même référence même quand son CONTENU change
+        // (ex: après un scroll, les widgets visibles à cette position souris
+        // changent) — le cache renverrait alors un résultat périmé tant que
+        // la souris elle-même n'a pas bougé. Une liste FRAÎCHE à chaque appel
+        // change de référence à chaque fois, donc le cache se réinvalide
+        // correctement dès que le CONTENU (pas juste la position souris) change.
+        List<UiWidget> visibleNow = new ArrayList<>();
         for (UiWidget w : content) {
             if (!visible(w)) continue;
             w.clipFade = edgeFade(w);
             w.pollContinuous(input);
+            visibleNow.add(w);
         }
         if (input.leftClicked) {
-            for (UiWidget w : content) {
-                if (!visible(w)) continue;
-                if (w.contains(input.mouseX, input.mouseY)) { w.onClick(); break; }
-            }
+            // Hit-test centralisé (roadmap Phase 5.6, retour utilisateur :
+            // "c'est ce qui est visible qui doit être cliquable") — voir
+            // UiHitTest pour la règle exacte (plus petite aire gagne, PAS
+            // l'ordre d'insertion) : remplace l'ancien "premier match en
+            // ordre d'insertion gagne", dont dépendait fragilement l'ordre
+            // d'ajout cœur/bande dans UiMainMenuScreen (toujours correct
+            // avec la nouvelle règle, sans dépendre de cet ordre).
+            UiWidget clicked = UiHitTest.find(visibleNow, input.mouseX, input.mouseY);
+            if (clicked != null) clicked.onClick();
         }
     }
 

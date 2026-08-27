@@ -37,6 +37,23 @@ public abstract class UiInputPoller {
     public boolean leftDown, rightDown;
     protected boolean prevLeftDown, prevRightDown;
     public boolean leftClicked, rightClicked; // "juste pressé cette frame"
+
+    /**
+     * Roadmap Phase 5.6 (carence input : "seuls les index GLFW 0/1 sont
+     * lus") — clic milieu (molette cliquée, index GLFW 2) + boutons
+     * latéraux souris gaming (index GLFW 3-7, mouse4-mouse8), même motif
+     * down/clicked que {@link #leftDown}/{@link #leftClicked}. Bracket
+     * moderne (GLFW) uniquement — LWJGL2/1.8.9 n'expose que 2 boutons via
+     * {@code org.lwjgl.input.Mouse.isButtonDown}, jamais renseignés côté
+     * {@code UiInputPollerLegacy} (restent {@code false} en permanence là-bas,
+     * pas un bug — ce bracket n'a simplement pas ces boutons).
+     */
+    public boolean middleDown, middleClicked;
+    protected boolean prevMiddleDown;
+    /** Index 0..4 = boutons GLFW 3..7 (mouse4..mouse8). */
+    public final boolean[] sideButtonDown = new boolean[5];
+    public final boolean[] sideButtonClicked = new boolean[5];
+    protected final boolean[] prevSideButtonDown = new boolean[5];
     /** État brut Maj (gauche OU droite), renseigné par {@link #readState()} à chaque frame — voir ShulkerPreviewModule (Shift+survol). PAS le même champ que editShiftHeld (celui-ci ne se met à jour que quand pollTextEdit() est appelé, c-à-d un UiTextField focus). */
     public boolean shiftDown;
 
@@ -106,10 +123,14 @@ public abstract class UiInputPoller {
             ACTIVE = this;
             prevLeftDown = leftDown;
             prevRightDown = rightDown;
+            prevMiddleDown = middleDown;
+            for (int i = 0; i < sideButtonDown.length; i++) prevSideButtonDown[i] = sideButtonDown[i];
             prevMenuKeyDown = menuKeyDown;
             readState();
             leftClicked = leftDown && !prevLeftDown;
             rightClicked = rightDown && !prevRightDown;
+            middleClicked = middleDown && !prevMiddleDown;
+            for (int i = 0; i < sideButtonDown.length; i++) sideButtonClicked[i] = sideButtonDown[i] && !prevSideButtonDown[i];
             menuKeyDown = readMenuKeyDown();
             menuKeyPressed = menuKeyDown && !prevMenuKeyDown;
             scrollDelta = readScrollDelta();

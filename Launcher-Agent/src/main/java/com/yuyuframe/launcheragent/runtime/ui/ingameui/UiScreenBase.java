@@ -3,6 +3,8 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFocusable;
+import com.yuyuframe.launcheragent.apigraphic.core.UiHitTest;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
@@ -171,7 +173,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             + " button=" + button + " param=(" + mouseX + "," + mouseY + ") lastInput="
             + (lastInput == null ? "null" : "(" + lastInput.mouseX + "," + lastInput.mouseY + ")")
             + " widgets=" + widgets.size());
-        return dispatchClick(button);
+        return dispatchClick(button, false); // pas de doubleClick sur cette signature historique (bracket pré-1.21.11)
     }
 
     /**
@@ -193,7 +195,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
     public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubleClick) {
         LauncherLog.info("[LauncherAgent] DIAG-E11: mouseClicked(Click) appelé sur " + getClass().getSimpleName()
             + " button=" + click.button() + " widgets=" + widgets.size());
-        return dispatchClick(click.button());
+        return dispatchClick(click.button(), doubleClick);
     }
 
     /**
@@ -210,20 +212,41 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * {@code event.y()}.
      */
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
-        return dispatchClick(event.button());
+        return dispatchClick(event.button(), doubleClick);
     }
 
-    private boolean dispatchClick(int button) {
-        if (button != 0 || lastInput == null) return false;
+    /**
+     * Roadmap Phase 5.6 (BUG TROUVÉ : ignorait le bouton — seul {@code
+     * button==0} passait le garde-fou du haut, gauche uniquement — ET le
+     * paramètre {@code doubleClick}, fourni gratuitement par vanilla sur les
+     * 2 signatures récentes, jamais lu). Fix : gère les 3 boutons (gauche/
+     * droit/milieu — au-delà, {@code button>=3} ignoré, aucun widget de ce
+     * moteur n'a de sens pour les boutons latéraux souris), propage
+     * {@code doubleClick} au widget ciblé via {@link UiWidget#onClick(int, boolean)}
+     * — comportement de CHAQUE widget existant qui ne surcharge que l'ancien
+     * {@link UiWidget#onClick()} reste 100% inchangé (voir sa javadoc).
+     */
+    private boolean dispatchClick(int button, boolean doubleClick) {
+        if (button < 0 || button > 2 || lastInput == null) return false;
         List<UiWidget> active = modalWidgets();
         List<UiWidget> targets = active != null ? active : widgets;
-        UiWidget clicked = null;
-        for (UiWidget w : targets) {
-            if (w.contains(lastInput.mouseX, lastInput.mouseY)) {
-                clicked = w;
-                break;
-            }
-        }
+        // Hit-test centralisé (roadmap Phase 5.6, retour utilisateur : "c'est
+        // ce qui est visible qui doit être cliquable") — voir UiHitTest pour
+        // la règle exacte (plus petite aire gagne, PAS l'ordre d'insertion).
+        //
+        // BUG ÉVITÉ (pas rencontré en jeu, repéré à l'écriture) : {@code
+        // widgets} est un CHAMP mutable, vidé+repeuplé EN PLACE par
+        // rebuildAll() (même référence avant/après, ex: à chaque frappe dans
+        // la recherche) — le cache par ÉGALITÉ DE RÉFÉRENCE de UiHitTest ne
+        // verrait donc PAS un rebuild survenu entre deux clics à la même
+        // position pixel (scénario réaliste : cliquer une carte, taper un
+        // caractère qui rebuild la grille, cliquer au même endroit où une
+        // AUTRE carte est maintenant affichée). invalidate() explicite ici
+        // garantit un résultat toujours frais — coût nul en pratique (un
+        // clic est un événement rare, pas un test par frame, la mise en
+        // cache ne visait de toute façon pas ce point d'appel précis).
+        UiHitTest.invalidate();
+        UiWidget clicked = UiHitTest.find(targets, lastInput.mouseX, lastInput.mouseY);
         // Perte de focus au clic EXTÉRIEUR — barre de recherche moderne : un
         // champ texte reste focus indéfiniment sinon (pas de mécanisme
         // d'exclusivité ailleurs), curseur clignotant en fond même après avoir
@@ -233,7 +256,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         }
         if (clicked != null) {
             try {
-                clicked.onClick();
+                clicked.onClick(button, doubleClick);
             } catch (Throwable t) {
                 LauncherLog.err("[UiScreenBase] onClick: " + t);
             }
@@ -281,7 +304,47 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             handleEscape();
             return true;
         }
+        if (keyCode == 258) { // GLFW_KEY_TAB — roadmap Phase 5.6, navigation clavier/focus
+            boolean shift = lastInput != null && lastInput.shiftDown;
+            return dispatchTab(shift);
+        }
         return false;
+    }
+
+    /**
+     * Cycle le focus entre les widgets {@link UiFocusable} de l'écran
+     * (ex: {@code UiTextField}) — {@code backward} = Shift+Tab (sens
+     * inverse). Ne parcourt QUE {@link #widgets}/{@link #modalWidgets()}
+     * (même portée que {@link #dispatchClick}) — le contenu d'un {@code
+     * UiScrollContainer} séparé (ex: la grille de mods de
+     * UiMainMenuScreen) n'est pas encore inclus, aucun widget focusable n'y
+     * vit actuellement (juste des cartes/toggles, pas de champ de texte).
+     * {@code false} (non consommé, laissé à vanilla) si l'écran n'a aucun
+     * widget focusable — comportement Tab par défaut du jeu inchangé dans
+     * ce cas plutôt que d'avaler la touche pour rien.
+     */
+    private boolean dispatchTab(boolean backward) {
+        List<UiWidget> active = modalWidgets();
+        List<UiWidget> targets = active != null ? active : widgets;
+        List<UiFocusable> focusables = new ArrayList<>();
+        int currentIndex = -1;
+        for (UiWidget w : targets) {
+            if (w instanceof UiFocusable) {
+                if (((UiFocusable) w).focused()) currentIndex = focusables.size();
+                focusables.add((UiFocusable) w);
+            }
+        }
+        if (focusables.isEmpty()) return false;
+        int nextIndex;
+        if (currentIndex < 0) {
+            nextIndex = backward ? focusables.size() - 1 : 0;
+        } else {
+            nextIndex = backward ? (currentIndex - 1 + focusables.size()) % focusables.size()
+                                  : (currentIndex + 1) % focusables.size();
+        }
+        if (currentIndex >= 0) focusables.get(currentIndex).setFocused(false);
+        focusables.get(nextIndex).setFocused(true);
+        return true;
     }
 
     /**
@@ -333,7 +396,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * renommage ASM dynamique via {@code MappingsRegistry.getObfMethodName}).
      */
     public void mouseClicked(int mouseX, int mouseY, int mouseButton) {
-        dispatchClick(mouseButton);
+        dispatchClick(mouseButton, false); // pas de doubleClick sur cette signature historique (1.8.9)
     }
 
     /**

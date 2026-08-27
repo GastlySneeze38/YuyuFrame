@@ -32,6 +32,23 @@ public final class UiInputPollerModern extends UiInputPoller {
     private volatile double pendingScroll;
     private final Object[] previousScrollCb = new Object[1];
 
+    /**
+     * Roadmap Phase 5.6 (carence "polling lié au FPS plutôt qu'au vrai
+     * timing d'input") — état des boutons souris (index GLFW 0-7) tenu à
+     * jour par un VRAI callback natif ({@link #registerMouseButtonCallback})
+     * au lieu d'un {@code glfwGetMouseButton} échantillonné une fois par
+     * frame RENDUE dans {@link #readState()} (l'ancienne approche, encore
+     * utilisée par LEGACY GLFW ailleurs dans ce fichier pour {@code
+     * shiftDown} — clavier, pas souris, carence pas signalée pour lui).
+     * Minecraft appelle {@code glfwPollEvents()} depuis sa boucle
+     * principale bien plus souvent que le FPS de rendu (le jeu continue de
+     * traiter les événements même à bas FPS) — un appui+relâchement très
+     * bref entre deux frames RENDUES, qu'un simple poll pouvait manquer,
+     * déclenche quand même ce callback.
+     */
+    private final boolean[] buttonDown = new boolean[8];
+    private final Object[] previousMouseButtonCb = new Object[1];
+
     // Touches "capturables" pour UiKeybindButton — codes GLFW standards (API
     // publique stable, pas obfusqués, littéraux sûrs comme les constantes GL
     // ailleurs dans ce package). Pas de callback clavier ici (contrairement à
@@ -70,6 +87,7 @@ public final class UiInputPollerModern extends UiInputPoller {
         this.gameClassLoader = gameClassLoader;
         registerScrollCallback();
         registerCharCallback();
+        registerMouseButtonCallback();
         ACTIVE = this;
     }
 
@@ -83,10 +101,40 @@ public final class UiInputPollerModern extends UiInputPoller {
      */
     public boolean isKeyDownByName(String name) {
         try {
+            // BUG TROUVÉ (roadmap Phase 5.6, confirmé : la touche zoom "C"
+            // s'active en tapant dans le chat) : contrairement au système
+            // KeyMapping natif de Minecraft (qui se désactive automatiquement
+            // dès qu'un écran vanilla — chat, renommage, recherche
+            // d'inventaire — est ouvert), ce poll brut n'avait aucune notion
+            // d'écran ouvert. Un seul endroit centralisé (au lieu de dupliquer
+            // le check dans chaque module appelant) — ZoomModule/FreelookModule
+            // partagent déjà ce point d'entrée, voir leur javadoc.
+            if (isVanillaScreenOpen()) return false;
             int code = menuKeyCode(name);
             if (code < 0) return false;
             return glfwGetKey(windowHandle, code) == 1;
         } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * {@code true} si un écran vanilla (chat, inventaire, renommage...) OU
+     * un de nos écrans custom ({@code UiScreenBase}, ex: le menu principal)
+     * est actuellement affiché — {@code McReflect.field} avec repli nom réel
+     * (même motif que partout ailleurs dans ce projet) : nom Yarn du champ
+     * "currentScreen", renommé "screen" sur 26.1+ (voir MinecraftAccessor261
+     * pour la même confirmation déjà établie côté apimixin).
+     */
+    private static boolean isVanillaScreenOpen() {
+        try {
+            Object mc = com.yuyuframe.launcheragent.runtime.mapping.McReflect.minecraftClient();
+            if (mc == null) return false;
+            java.lang.reflect.Field f = com.yuyuframe.launcheragent.runtime.mapping.McReflect.field(
+                mc.getClass(), "net/minecraft/client/MinecraftClient", "currentScreen", "screen");
+            if (f == null) return false;
+            return f.get(mc) != null;
+        } catch (Throwable t) {
             return false;
         }
     }
@@ -222,6 +270,44 @@ public final class UiInputPollerModern extends UiInputPoller {
         }
     }
 
+    /**
+     * Même principe de chaînage ET du même correctif (wrapping via la
+     * fabrique officielle {@code GLFWMouseButtonCallback.create(...)}) que
+     * {@link #registerScrollCallback}/{@link #registerCharCallback} — ne
+     * casse jamais le clic vanilla en dehors de nos écrans custom. Action
+     * GLFW pour un bouton souris est TOUJOURS 0 (RELEASE) ou 1 (PRESS),
+     * jamais 2 (REPEAT, réservé au clavier) — {@code action != 0} suffit.
+     */
+    private void registerMouseButtonCallback() {
+        try {
+            Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
+            Class<?> cbIface = Class.forName("org.lwjgl.glfw.GLFWMouseButtonCallbackI", true, gameClassLoader);
+            Class<?> cbClass = Class.forName("org.lwjgl.glfw.GLFWMouseButtonCallback", true, gameClassLoader);
+            Object proxy = Proxy.newProxyInstance(gameClassLoader, new Class[]{ cbIface }, (p, method, args) -> {
+                if (method.isDefault()) return invokeDefault(p, method, args);
+                if (args != null && args.length == 4 && "invoke".equals(method.getName())) {
+                    // (long window, int button, int action, int mods)
+                    int button = (Integer) args[1];
+                    int action = (Integer) args[2];
+                    if (button >= 0 && button < buttonDown.length) {
+                        buttonDown[button] = action != 0;
+                    }
+                    Object prev = previousMouseButtonCb[0];
+                    if (prev != null) {
+                        try { method.invoke(prev, args); } catch (Throwable ignored) {}
+                    }
+                }
+                return null;
+            });
+            Method create = cbClass.getMethod("create", cbIface);
+            Object realCallback = create.invoke(null, proxy);
+            Method setCb = glfwClass.getMethod("glfwSetMouseButtonCallback", long.class, cbIface);
+            previousMouseButtonCb[0] = setCb.invoke(null, windowHandle, realCallback);
+        } catch (Throwable t) {
+            LauncherLog.err("[UiInputPollerModern] registerMouseButtonCallback: " + rootCause(t));
+        }
+    }
+
     /** InvocationTargetException.toString() cache la vraie cause — la déballer pour un log utile. */
     private static String rootCause(Throwable t) {
         Throwable cur = t;
@@ -295,8 +381,12 @@ public final class UiInputPollerModern extends UiInputPoller {
         if (fbW[0] > 0) fbWidth = fbW[0];
         if (fbH[0] > 0) fbHeight = fbH[0];
 
-        leftDown = glfwGetMouseButton(windowHandle, 0) == 1;  // GLFW_MOUSE_BUTTON_LEFT
-        rightDown = glfwGetMouseButton(windowHandle, 1) == 1; // GLFW_MOUSE_BUTTON_RIGHT
+        // Callback natif (registerMouseButtonCallback), plus un poll —
+        // voir sa javadoc pour le pourquoi (carence "polling lié au FPS").
+        leftDown = buttonDown[0];
+        rightDown = buttonDown[1];
+        middleDown = buttonDown[2];
+        for (int i = 0; i < sideButtonDown.length; i++) sideButtonDown[i] = buttonDown[3 + i];
 
         shiftDown = glfwGetKey(windowHandle, 340) == 1 || glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_LEFT/RIGHT_SHIFT
     }
@@ -483,9 +573,5 @@ public final class UiInputPollerModern extends UiInputPoller {
 
     private void glfwGetFramebufferSize(long handle, int[] wOut, int[] hOut) throws Exception {
         glfw("glfwGetFramebufferSize", long.class, int[].class, int[].class).invoke(null, handle, wOut, hOut);
-    }
-
-    private int glfwGetMouseButton(long handle, int button) throws Exception {
-        return (int) glfw("glfwGetMouseButton", long.class, int.class).invoke(null, handle, button);
     }
 }
