@@ -647,8 +647,9 @@ public final class Blaze3DCore {
             boolean gradientPipelineOk = Blaze3DGradient.resolveGradientPipeline();
             boolean textPipelineOk = Blaze3DText.resolveTextPipeline();
             boolean blurPipelineOk = Blaze3DBlur.resolveBlurPipeline();
+            boolean blendPipelineOk = Blaze3DBlend.resolveBlendPipeline();
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || batchPipeline == null || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk
+            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || batchPipeline == null || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk || !blendPipelineOk
                     || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
                     || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
                     || mWriteToTextureMip == null) {

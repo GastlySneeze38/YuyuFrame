@@ -29,6 +29,42 @@ public final class UiPrimitiveRenderer {
         this.gl = gl;
     }
 
+    // ── Diagnostic gamma/espace colorimétrique (roadmap Phase 5.4) ──────────
+    //
+    // Investigation faite : AUCUN des 3 pipelines (legacy/modern/Blaze3D) ne
+    // touche à un format de texture/framebuffer sRGB ni à une conversion
+    // gamma quelconque (grep sur GL_SRGB*/GL_FRAMEBUFFER_SRGB/TextureFormat
+    // sRGB dans tout apigraphic/ : zéro résultat) — Blaze3D utilise
+    // explicitement TextureFormat.RGBA8 (non-sRGB, voir
+    // Blaze3DCore#fieldTextureFormatRgba8), donc CÔTÉ NOTRE CODE, les 3
+    // backends traitent les couleurs de façon strictement identique (mélange
+    // linéaire naïf sur des valeurs gamma-encodées, comme la quasi-totalité
+    // des moteurs d'UI 2D — pas une erreur en soi, juste pas "physiquement
+    // correct" au sens rendu 3D/PBR).
+    //
+    // Ce que notre code NE PEUT PAS voir : si Minecraft lui-même active
+    // GL_FRAMEBUFFER_SRGB (conversion sRGB→linéaire AUTOMATIQUE côté GPU à
+    // l'écriture, invisible à notre niveau) différemment selon le bracket —
+    // plausible (Mojang a fait évoluer son pipeline de rendu au fil des
+    // versions) et EXACTEMENT le genre de divergence "dégradés délavés/trop
+    // saturés selon la version" que cet item de roadmap visait, mais
+    // impossible à confirmer sans lancer les DEUX brackets côte à côte. Log
+    // UNE FOIS l'état réel (au lieu de le deviner) — donnée de diagnostic
+    // prête pour une investigation future si le symptôme est un jour signalé.
+    private static volatile boolean srgbDiagLogged;
+
+    private void logSrgbDiagOnce() {
+        if (srgbDiagLogged) return;
+        srgbDiagLogged = true;
+        try {
+            boolean srgbEnabled = gl.glIsEnabled(0x8DB9); // GL_FRAMEBUFFER_SRGB
+            LauncherLog.info("[UiRenderer] Diagnostic gamma (Phase 5.4) : GL_FRAMEBUFFER_SRGB="
+                + srgbEnabled + " (bracket " + (owner.isModern() ? "moderne" : "legacy") + ")");
+        } catch (Throwable ignored) {
+            // Blaze3D (era E) : pas de GL brut à interroger ainsi, ignoré silencieusement — Blaze3DCore confirme déjà TextureFormat.RGBA8 par construction.
+        }
+    }
+
     // ── Forwarders GL (voir GlBridge) — gardent les corps de méthode ci-dessous identiques à l'original ──
     private int glCreateShader(int type) throws Exception { return gl.glCreateShader(type); }
     private void glShaderSource(int shader, String src) throws Exception { gl.glShaderSource(shader, src); }
@@ -1191,6 +1227,7 @@ public final class UiPrimitiveRenderer {
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
+        logSrgbDiagOnce();
         if (Blaze3DCore.isAvailable()) {
             Blaze3DRect.queueRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
             return;

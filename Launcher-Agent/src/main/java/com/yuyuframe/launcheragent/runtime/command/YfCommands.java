@@ -54,6 +54,8 @@ final class YfCommands {
         ClientCommandRegistry.register(taffyPoc());
         ClientCommandRegistry.register(richTextPoc());
         ClientCommandRegistry.register(batchPoc());
+        ClientCommandRegistry.register(blendPoc());
+        ClientCommandRegistry.register(particlePoc());
         ClientCommandRegistry.register(reloadConfig());
         ClientCommandRegistry.register(shaderReload());
     }
@@ -306,6 +308,32 @@ final class YfCommands {
                     !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled;
                 LauncherLog.info("[YfCommands] Test rects batchés : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled ? "activé" : "désactivé")
                     + " (grille 10x4 dégradée si le mécanisme fonctionne — voir logs en cas d'échec)");
+            }
+        };
+    }
+
+    private static ClientCommand blendPoc() {
+        return new ClientCommand() {
+            public String name() { return "yf blendpoc"; }
+            public String description() { return "Toggle 3 panneaux de test (multiply/screen/overlay, roadmap Phase 5.4) mélangés avec le fond actuel — voir Blaze3DBlend"; }
+            public void execute(String[] args) {
+                com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled;
+                LauncherLog.info("[YfCommands] Test modes de fusion : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled ? "activé" : "désactivé")
+                    + " (3 panneaux orange multiply/screen/overlay si le mécanisme fonctionne — voir logs en cas d'échec)");
+            }
+        };
+    }
+
+    private static ClientCommand particlePoc() {
+        return new ClientCommand() {
+            public String name() { return "yf particlepoc"; }
+            public String description() { return "Toggle un burst de confettis répété (roadmap Phase 5.4) — voir UiParticleSystem"; }
+            public void execute(String[] args) {
+                com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled;
+                LauncherLog.info("[YfCommands] Test particules : " + (com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled ? "activé" : "désactivé")
+                    + " (confettis en bas au centre, toutes les ~1.5s, si le mécanisme fonctionne)");
             }
         };
     }
