@@ -189,6 +189,30 @@ public class UiScrollContainer {
         return Math.max(0f, Math.min(maxScroll(), v));
     }
 
+    /** Défilement courant en pixels — à capturer AVANT une reconstruction, voir {@link #restoreScroll}. */
+    public float scrollOffset() { return scrollTarget; }
+
+    /**
+     * Restaure un défilement capturé via {@link #scrollOffset()} sur un
+     * conteneur FRAÎCHEMENT reconstruit.
+     *
+     * <p>Un écran qui se reconstruit sans perdre son contexte (ici : basculer
+     * un favori, qui réordonne la grille) crée un conteneur NEUF, donc remis à
+     * zéro — la liste resaute en haut alors que l'utilisateur n'a rien demandé
+     * de tel. C'est une bonne moitié de la raison pour laquelle le geste
+     * devient illisible : le repère visuel disparaît en même temps que la
+     * carte change de place.
+     *
+     * <p>À appeler APRÈS tous les {@link #add} : le clamp dépend de
+     * {@link #maxScroll()}, donc du contenu déjà enregistré. Pose la valeur
+     * SANS animer ({@code snapTo}) — restaurer un état n'est pas un mouvement.
+     */
+    public void restoreScroll(float offset) {
+        scrollTarget = clampScroll(offset);
+        scrollAnim.snapTo(scrollTarget);
+        lastAnimatedScroll = scrollTarget;
+    }
+
     private void applyOffsets() {
         lastAnimatedScroll = scrollAnim.get();
         float off = (vy + vh - EDGE_PADDING - contentTop) + lastAnimatedScroll;

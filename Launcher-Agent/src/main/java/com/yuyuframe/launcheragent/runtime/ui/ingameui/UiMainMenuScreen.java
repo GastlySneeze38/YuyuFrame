@@ -91,6 +91,39 @@ public class UiMainMenuScreen extends UiScreenBase {
     /** Lignes de description d'une carte en mode Détaillé — la carte ayant une hauteur fixe, au-delà ça déborderait (voir UiRichText#layout borné). */
     private static final int DESC_MAX_LINES = 2;
 
+    /**
+     * Position LOCALE (repère grille) de chaque carte à la reconstruction
+     * précédente, par identifiant d'entrée — sert à faire glisser une carte de
+     * son ancienne place vers la nouvelle quand la grille est réordonnée
+     * (voir {@code ModCard#startMove}).
+     *
+     * <p>Repère LOCAL et non écran : c'est celui dans lequel les cartes sont
+     * posées par la grille Taffy, avant que {@code UiScrollContainer} n'y
+     * ajoute son décalage de défilement. Comme ce décalage est désormais
+     * préservé d'une reconstruction à l'autre (voir {@code restoreScroll}), un
+     * écart local égale l'écart à l'écran — c'est justement ce qui rend la
+     * comparaison valide.
+     */
+    private final Map<String, float[]> prevCardLocalPos = new HashMap<>();
+    private final Map<String, float[]> cardLocalPos = new HashMap<>();
+
+    /**
+     * Identifiant de l'entrée dont le favori vient d'être basculé — la carte
+     * correspondante reçoit un éclat après reconstruction, pour qu'on voie
+     * LAQUELLE a changé (consommé une fois, remis à {@code null}).
+     */
+    private String pendingChangePulseId;
+
+    /** Identifiant stable d'une entrée de grille, tous types confondus — clé de {@link #prevCardLocalPos}. */
+    private static String entryId(Object entry) {
+        if (entry instanceof LauncherModule) return "m:" + ((LauncherModule) entry).id;
+        if (entry instanceof ModuleGroup) return "g:" + ((ModuleGroup) entry).id;
+        // Une seule ActionCard existe (Modrinth) — même identifiant en dur que
+        // HudConfigStore.loadActionFavorite, à généraliser si une 2e apparaît.
+        if (entry instanceof ActionCard) return "a:modrinth";
+        return "?";
+    }
+
     private final Object lastScreen;
     private UiTextField searchField;
     /** Grille de cartes mods — SÉPARÉE de {@code widgets} (voir UiScrollContainer/ConfigScreenBuilder pour le même motif) : permet de scroller quand le nombre de mods dépasse la hauteur visible, ce que {@code widgets} seul ne permet pas (pas de clipping/offset). */
@@ -243,6 +276,15 @@ public class UiMainMenuScreen extends UiScreenBase {
         SEARCH_H = UiTheme.scaled(36f);
 
         widgets.clear();
+        // Défilement de la grille sortante — restauré sur le conteneur neuf en
+        // fin de méthode. Sans ça, toute reconstruction (mise en favori,
+        // frappe dans la recherche) renvoie brutalement la liste en haut.
+        float previousScroll = modScroll != null ? modScroll.scrollOffset() : 0f;
+        // Bascule des positions : celles de la passe précédente deviennent la
+        // référence "d'où l'on vient", la table courante repart vide.
+        prevCardLocalPos.clear();
+        prevCardLocalPos.putAll(cardLocalPos);
+        cardLocalPos.clear();
 
         float closeSize = UiTheme.scaled(28f), closeMargin = UiTheme.scaled(24f);
         float navH = UiTheme.scaled(26f);
@@ -560,6 +602,13 @@ public class UiMainMenuScreen extends UiScreenBase {
             fallbackGrid(separated, favoriteEntries, otherEntries, combined,
                 contentX, cardAreaW, headerH, cols, cardW, rowH, cardLayout);
         }
+
+        // APRÈS tous les add() — le clamp dépend de la hauteur de contenu, qui
+        // n'est connue qu'une fois la grille peuplée (voir restoreScroll).
+        modScroll.restoreScroll(previousScroll);
+        // Consommé : l'éclat ne doit jouer qu'UNE fois, pas à chaque
+        // reconstruction ultérieure (frappe dans la recherche, resize...).
+        pendingChangePulseId = null;
     }
 
     /** Nœud d'un item de navigation — largeur laissée libre : la colonne sidebar l'étire d'elle-même à sa largeur de contenu. */
@@ -744,6 +793,36 @@ public class UiMainMenuScreen extends UiScreenBase {
     }
 
     /**
+     * Fait glisser une carte depuis sa place PRÉCÉDENTE si elle existait déjà,
+     * et déclenche l'éclat sur celle dont le favori vient de basculer.
+     *
+     * <p>BUG CORRIGÉ (retour utilisateur : "quand tu mets en favori, ça rejoue
+     * juste l'animation d'entrée, ce qui rend le geste incompréhensible,
+     * surtout avec les modules en liste séparée") — la cause : basculer un
+     * favori appelle {@code rebuildAll()}, qui recrée TOUTES les cartes, donc
+     * chacune rejouait son entrée en cascade. Résultat : la grille entière
+     * clignotait, et la carte concernée changeait de section sans qu'on voie
+     * le déplacement — on ne pouvait pas savoir ce qui venait de se passer.
+     *
+     * <p>Une carte déjà présente ne fait donc plus une ENTRÉE mais un
+     * DÉPLACEMENT : elle repart de son ancienne position et glisse jusqu'à la
+     * nouvelle. Une carte réellement nouvelle (filtre de recherche qui change)
+     * garde son animation d'entrée — c'est bien une apparition dans ce cas.
+     *
+     * <p>Seuil de 0,5 px : sans lui, une carte qui n'a pas bougé déclencherait
+     * quand même une transition (bruit inutile, et perte de son animation
+     * d'entrée légitime au tout premier affichage).
+     */
+    private void applyReorder(ModCard card, String id, float newX, float newY) {
+        float[] prev = prevCardLocalPos.get(id);
+        if (prev != null) {
+            float dx = prev[0] - newX, dy = prev[1] - newY;
+            if (Math.abs(dx) > 0.5f || Math.abs(dy) > 0.5f) card.startMove(dx, dy);
+        }
+        if (id.equals(pendingChangePulseId)) card.playChangePulse();
+    }
+
+    /**
      * Crée les cartes et leurs sous-contrôles aux emplacements déjà résolus —
      * SEUL endroit qui construit ces widgets, quel que soit le mode de calcul
      * (Taffy ou repli, voir {@link CardSlot}).
@@ -753,6 +832,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             Object entry = entries.get(i);
             CardSlot slot = slots.get(i);
             float cx = slot.x, cy = slot.y, cardW = slot.w, rowH = slot.h;
+            String id = entryId(entry);
+            cardLocalPos.put(id, new float[]{ cx, cy });
 
             // Délai croissant par index (voir UiStagger) — les cartes
             // apparaissent en cascade plutôt que toutes d'un coup, à chaque
@@ -772,6 +853,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, group.name, group.description, group.shortDescription, group.iconUrl, enterDelay,
                     () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, group)));
                 modScroll.add(card);
+                applyReorder(card, id, cx, cy);
                 // Groupes rendus favorisables (demande explicite) — SEUL le
                 // cœur existe pour un groupe, pas de bande activer/désactiver
                 // (un groupe n'a pas d'état on/off propre, chaque module
@@ -781,7 +863,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // existant avant cet ajout, inchangé.
                 if (cardLayout == 2) {
                     UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, group.favorite,
-                        v -> { group.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
+                        v -> { group.favorite = v; HudConfigStore.save(); pendingChangePulseId = id; rebuildAll(); }).heartStyle();
                     modScroll.add(favoriteToggle);
                     card.pairFavorite(favoriteToggle);
                 }
@@ -789,6 +871,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 ActionCard action = (ActionCard) entry;
                 ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, action.name, action.description, action.shortDescription, action.iconUrl, enterDelay, action.action);
                 modScroll.add(card);
+                applyReorder(card, id, cx, cy);
                 // Favorisable (demande explicite : "on ne peut pas mettre
                 // Modrinth en favori") — même principe que le groupe
                 // ci-dessus (cœur seul, pas de bande on/off, une ActionCard
@@ -798,7 +881,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // jour (identifiant à généraliser à ce moment-là).
                 if (cardLayout == 2) {
                     UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, action.favorite,
-                        v -> { HudConfigStore.saveActionFavorite("modrinth", v); rebuildAll(); }).heartStyle();
+                        v -> { HudConfigStore.saveActionFavorite("modrinth", v); pendingChangePulseId = id; rebuildAll(); }).heartStyle();
                     modScroll.add(favoriteToggle);
                     card.pairFavorite(favoriteToggle);
                 }
@@ -816,6 +899,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, mod.iconUrl, enterDelay,
                     () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
                 modScroll.add(card);
+                applyReorder(card, id, cx, cy);
 
                 if (cardLayout == 2) {
                     // Retour utilisateur, après une 1ère version où le cœur
@@ -840,7 +924,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                         v -> { mod.setEnabled(v); HudConfigStore.save(); }).invisibleStyle();
 
                     UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, mod.favorite,
-                        v -> { mod.favorite = v; HudConfigStore.save(); rebuildAll(); }).heartStyle();
+                        v -> { mod.favorite = v; HudConfigStore.save(); pendingChangePulseId = id; rebuildAll(); }).heartStyle();
 
                     modScroll.add(favoriteToggle);
                     modScroll.add(enableToggle);
@@ -1186,6 +1270,43 @@ public class UiMainMenuScreen extends UiScreenBase {
          */
         private final UiTransition clickAnim = new UiTransition(0.42f, 0f, UiEasing.BACK_OUT);
 
+        /**
+         * Glissement de l'ANCIENNE vers la NOUVELLE place quand la grille est
+         * réordonnée sans que la carte disparaisse (mise en favori — voir
+         * {@link #startMove}).
+         *
+         * <p>Technique classique "FLIP" : le layout final est déjà calculé
+         * (Taffy vient de le poser), on RÉINJECTE l'écart avec l'ancienne
+         * position et on le résorbe — la carte semble glisser alors qu'elle
+         * est déjà, logiquement, à sa destination.
+         *
+         * <p>{@code CUBIC_OUT} et non {@code BACK_OUT} : un dépassement ferait
+         * cogner la carte contre ses voisines à l'arrivée. Un déplacement doit
+         * décélérer proprement, le rebond est réservé aux retours de geste
+         * ponctuels (voir {@link #clickAnim}).
+         */
+        private final UiTransition moveAnim = new UiTransition(0.38f, 0f, UiEasing.CUBIC_OUT);
+        private float moveDx, moveDy;
+        private boolean moving;
+
+        /**
+         * @param dx/dy écart ANCIENNE position moins NOUVELLE, dans le repère
+         *        local de la grille. Coupe aussi l'animation d'entrée : cette
+         *        carte n'apparaît pas, elle se DÉPLACE — rejouer une entrée
+         *        par-dessus est précisément ce qui rendait le geste illisible.
+         */
+        void startMove(float dx, float dy) {
+            this.moveDx = dx;
+            this.moveDy = dy;
+            this.moving = true;
+            this.moveAnim.replay();
+        }
+
+        /** Éclat d'accent sur la carte dont le favori vient de basculer — repère "c'est celle-ci qui a bougé". */
+        void playChangePulse() {
+            clickAnim.replay();
+        }
+
         /** {@code name}/{@code description} générique — utilisée aussi bien pour un {@link LauncherModule} que pour un {@link ModuleGroup} (voir rebuildAll). */
         ModCard(float x, float y, float w, float h, int layoutMode, String name, String description, String shortDescription, String iconUrl, float enterDelay, Runnable onOpen) {
             super(x, y, w, h);
@@ -1199,8 +1320,21 @@ public class UiMainMenuScreen extends UiScreenBase {
             this.enterAnim.show();
         }
 
+        /**
+         * X d'origine des widgets appariés, capturé à l'appariement.
+         *
+         * <p>PIÈGE : {@code UiScrollContainer.applyOffsets()} réécrit {@code y}
+         * à chaque frame (base + décalage de défilement) mais NE TOUCHE JAMAIS
+         * {@code x}. Un {@code x += ...} par frame s'ACCUMULERAIT donc
+         * indéfiniment, et le widget dériverait hors de l'écran — alors que le
+         * même {@code y += ...} est sans danger, puisque écrasé à la frame
+         * suivante. D'où l'affectation ABSOLUE depuis cette base pour l'axe X.
+         */
+        private float pairedToggleBaseX, pairedFavoriteBaseX;
+
         void pairToggle(UiToggle toggle) {
             this.pairedToggle = toggle;
+            this.pairedToggleBaseX = toggle.x;
             // Voir UiToggle#useExternalAlphaOnly — l'opacité de ce toggle
             // vient ENTIÈREMENT de externalAlpha (poussé chaque frame dans
             // draw() ci-dessous), plus jamais de son propre clipFade (calculé
@@ -1211,6 +1345,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         /** Même principe que {@link #pairToggle} pour le cœur favori (mode Grille uniquement) — widget séparé, doit suivre le même soulèvement/fondu que la carte. */
         void pairFavorite(UiToggle favorite) {
             this.pairedFavorite = favorite;
+            this.pairedFavoriteBaseX = favorite.x;
             favorite.useExternalAlphaOnly();
         }
 
@@ -1249,7 +1384,12 @@ public class UiMainMenuScreen extends UiScreenBase {
             // autant rester explicite) — glissement vers le HAUT (Y croissant
             // vers le haut dans ce repère, voir UiRenderer) : la carte part
             // d'une position plus BASSE (y plus petit) et remonte vers y.
-            float t = Math.max(0f, Math.min(1f, enterAnim.eased()));
+            // Une carte qui SE DÉPLACE n'entre pas : `t` est forcé à 1 (pleine
+            // opacité, aucun glissement d'entrée) et enterAnim n'est même pas
+            // consultée. C'est LE correctif du geste illisible signalé — mettre
+            // en favori rejouait l'entrée de toute la grille au lieu de montrer
+            // la carte changer de place.
+            float t = moving ? 1f : Math.max(0f, Math.min(1f, enterAnim.eased()));
             // BUG TROUVÉ (retour utilisateur, comparaison avant/après scroll :
             // "la barre de recherche disparaît après un scroll") — clipFade
             // (posé CHAQUE frame par UiScrollContainer selon la proximité du
@@ -1267,7 +1407,19 @@ public class UiMainMenuScreen extends UiScreenBase {
             float alpha = t * clipFade;
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             float hoverT = hoverAnim.get();
-            float drawY = y - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
+
+            // Reste de l'écart à résorber (voir startMove) — 1 au départ,
+            // 0 à l'arrivée. eased() fait avancer l'horloge : un seul appel
+            // par frame, d'où la lecture dans une locale.
+            float moveRemain = 0f;
+            if (moving) {
+                moveRemain = 1f - moveAnim.eased();
+                if (moveAnim.isFinished()) moving = false;
+            }
+            float mdx = moveDx * moveRemain, mdy = moveDy * moveRemain;
+
+            float drawX = x + mdx;
+            float drawY = y + mdy - (1f - t) * UiTheme.scaled(14f) + hoverT * HOVER_LIFT_PX;
             // BUG TROUVÉ (retour utilisateur, capture d'écran : les toggles
             // n'apparaissent NULLE PART sur l'écran principal, pas un simple
             // chevauchement) — cette ligne ÉCRASAIT pairedToggle.y avec une
@@ -1285,7 +1437,13 @@ public class UiMainMenuScreen extends UiScreenBase {
             // toggle (déjà correctement offsettée par applyOffsets() cette
             // frame), au lieu de la remplacer par une base figée.
             if (pairedToggle != null) {
-                pairedToggle.y += hoverT * HOVER_LIFT_PX;
+                // + le glissement de réordonnancement (mdx/mdy) : sans lui, la
+                // bande resterait plantée à la position d'ARRIVÉE pendant que
+                // la carte glisse encore vers elle. X en ABSOLU depuis la base
+                // (voir pairedToggleBaseX — un += y dériverait), Y en relatif
+                // (réécrit chaque frame par applyOffsets).
+                pairedToggle.x = pairedToggleBaseX + mdx;
+                pairedToggle.y += mdy + hoverT * HOVER_LIFT_PX;
                 // BUG TROUVÉ (retour utilisateur : "le fade-in marche mais
                 // pas avec la card... vu que sa taille est plus grande [elle]
                 // peut être presque invisible alors que le toggle est bien
@@ -1309,7 +1467,8 @@ public class UiMainMenuScreen extends UiScreenBase {
             // soulèvement au survol pendant que la carte ET la bande du
             // toggle d'activation, eux, bougent ensemble.
             if (pairedFavorite != null) {
-                pairedFavorite.y += hoverT * HOVER_LIFT_PX;
+                pairedFavorite.x = pairedFavoriteBaseX + mdx;
+                pairedFavorite.y += mdy + hoverT * HOVER_LIFT_PX;
                 pairedFavorite.setExternalAlpha(alpha);
             }
 
@@ -1326,7 +1485,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // se soulève plutôt que de simplement glisser.
             UiColor shadowColor = new UiColor(0, 0, 0, 170).multiplyAlpha(alpha);
             float shadowOff = UiTheme.scaled(6f);
-            renderer.drawShadow(x, drawY - shadowOff, x + w, drawY + h - shadowOff, UiTheme.RADIUS_MD,
+            renderer.drawShadow(drawX, drawY - shadowOff, drawX + w, drawY + h - shadowOff, UiTheme.RADIUS_MD,
                 UiTheme.scaled(18f) + hoverT * UiTheme.scaled(6f), UiTheme.scaled(3f),
                 shadowColor, vpWidth, vpHeight);
 
@@ -1339,7 +1498,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // AUSSI l'opacité du verre — voir UiRenderer.drawGlassPanel.
             UiColor bg = UiColor.lerp(UiTheme.CARD_BG, UiTheme.CARD_HOVER, hoverT).multiplyAlpha(alpha);
             float glassStrength = UiTheme.GLASS_STRENGTH_CARD - hoverT * 0.1f;
-            renderer.drawGlassPanel(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD,
+            renderer.drawGlassPanel(drawX, drawY, drawX + w, drawY + h, UiTheme.RADIUS_MD,
                 UiTheme.GLASS_TINT, glassStrength, bg, vpWidth, vpHeight);
 
             // Éclat de clic — s'étend brièvement sous la carte puis s'efface
@@ -1359,7 +1518,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // Clampé : le dépassement de BACK_OUT rendrait (1 - clickT)
                 // négatif, donc un alpha négatif silencieusement ignoré.
                 float glow = Math.max(0f, 1f - clickT);
-                renderer.drawRoundedRect(x - spread, drawY - spread, x + w + spread, drawY + h + spread,
+                renderer.drawRoundedRect(drawX - spread, drawY - spread, drawX + w + spread, drawY + h + spread,
                     UiTheme.RADIUS_MD + spread,
                     UiTheme.ACCENT.withAlpha(0.30f * glow * alpha), vpWidth, vpHeight);
             }
@@ -1373,14 +1532,14 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // survol : c'est désormais LE retour visuel principal, le fond
                 // ne bougeant presque plus (voir glassStrength ci-dessus).
                 UiColor border = UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hoverT);
-                renderer.drawRoundedRectBorder(x, drawY, x + w, drawY + h, UiTheme.RADIUS_MD,
+                renderer.drawRoundedRectBorder(drawX, drawY, drawX + w, drawY + h, UiTheme.RADIUS_MD,
                     Math.max(1f, UiTheme.scaled(1f)), border.multiplyAlpha(alpha), vpWidth, vpHeight);
                 // Tranche haute éclairée — signature du verre épais (macOS/iOS),
                 // conservée EN PLUS du contour : le contour délimite, ce liseré
                 // donne l'épaisseur. Retiré aux extrémités (RADIUS_MD) pour ne
                 // pas déborder sur les coins arrondis.
                 float hairline = Math.max(1f, UiTheme.scaled(1f));
-                renderer.drawRoundedRect(x + UiTheme.RADIUS_MD, drawY + h - hairline, x + w - UiTheme.RADIUS_MD, drawY + h, 0f,
+                renderer.drawRoundedRect(drawX + UiTheme.RADIUS_MD, drawY + h - hairline, drawX + w - UiTheme.RADIUS_MD, drawY + h, 0f,
                     UiTheme.GLASS_HAIRLINE.multiplyAlpha(alpha), vpWidth, vpHeight);
             }
 
@@ -1414,9 +1573,9 @@ public class UiMainMenuScreen extends UiScreenBase {
             // différence de rendu de carte elle-même. Seule Grille d'icônes
             // (2) a un rendu vraiment distinct.
             if (layoutMode == 2) {
-                drawIconGrid(renderer, displayName, displayDescription, initial, drawY, alpha, mouseX, mouseY, vpWidth, vpHeight);
+                drawIconGrid(renderer, displayName, displayDescription, initial, drawX, drawY, alpha, mouseX, mouseY, vpWidth, vpHeight);
             } else {
-                drawDetailed(renderer, displayName, displayDescription, initial, drawY, alpha, vpWidth, vpHeight);
+                drawDetailed(renderer, displayName, displayDescription, initial, drawX, drawY, alpha, vpWidth, vpHeight);
             }
         }
 
@@ -1467,13 +1626,13 @@ public class UiMainMenuScreen extends UiScreenBase {
 
         /** Agencement d'origine, INCHANGÉ — icône en bas-gauche, nom + description empilés à droite. */
         private void drawDetailed(UiRenderer renderer, String displayName, String displayDescription, String initial,
-                float drawY, float alpha, int vpWidth, int vpHeight) {
+                float drawX, float drawY, float alpha, int vpWidth, int vpHeight) {
             this.tooltip = null;
             float iconSize = UiTheme.scaled(36f);
             float pad = UiTheme.scaled(12f);
-            drawIconOrInitial(renderer, x + pad, drawY + h - iconSize - pad, iconSize, initial, alpha, vpWidth, vpHeight);
+            drawIconOrInitial(renderer, drawX + pad, drawY + h - iconSize - pad, iconSize, initial, alpha, vpWidth, vpHeight);
 
-            float textX = x + pad + iconSize + pad;
+            float textX = drawX + pad + iconSize + pad;
             // BUG TROUVÉ (retour utilisateur : "les sous-titres des cards de
             // mod en mode grand dépassent") — ni le nom ni la description
             // n'étaient jamais bornés à la largeur réelle de la carte, texte
@@ -1487,7 +1646,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // pour l'instant (retour utilisateur : solution finale encore en
             // discussion — voir "changer le texte carrément selon la taille
             // de l'interface").
-            float textMaxW = (x + w) - textX - pad;
+            float textMaxW = (drawX + w) - textX - pad;
             renderer.drawText(renderer.truncate(displayName, UiTheme.scaled(0.42f), textMaxW), textX, drawY + h - UiTheme.scaled(26f), UiTheme.TEXT_PRIMARY.multiplyAlpha(alpha), UiTheme.scaled(0.42f), vpWidth, vpHeight);
 
             // Description en TEXTE RICHE avec retour à la ligne (voir
@@ -1552,7 +1711,7 @@ public class UiMainMenuScreen extends UiScreenBase {
          * portent chacun sa propre logique, cette méthode ne fait QUE dessiner.
          */
         private void drawIconGrid(UiRenderer renderer, String displayName, String displayDescription, String initial,
-                float drawY, float alpha, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+                float drawX, float drawY, float alpha, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             this.tooltip = displayDescription;
             float barH = iconGridBarH();
             float pad = UiTheme.scaled(8f);
@@ -1601,7 +1760,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                 float breath = UiBreathe.wave(BAR_BREATH_PERIOD_S) * BAR_BREATH_AMPLITUDE * (1f - barHoverT);
                 barColor = UiColor.lerp(barColor, UiTheme.accentLight(), breath);
             }
-            renderer.drawRoundedRect(x, drawY, x + w, drawY + barH,
+            renderer.drawRoundedRect(drawX, drawY, drawX + w, drawY + barH,
                 UiTheme.RADIUS_MD, UiTheme.RADIUS_MD, 0f, 0f, barColor.multiplyAlpha(alpha), vpWidth, vpHeight);
 
             // Icône centrée dans la zone au-dessus de la bande — réduite
@@ -1611,7 +1770,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             // de cette zone, avec la marge résultante répartie tout autour.
             float iconAreaH = h - barH;
             float iconSize = Math.max(UiTheme.scaled(18f), Math.min(w, iconAreaH) * 0.55f);
-            float iconX = x + (w - iconSize) / 2f;
+            float iconX = drawX + (w - iconSize) / 2f;
             float iconY = drawY + barH + (iconAreaH - iconSize) / 2f;
             drawIconOrInitial(renderer, iconX, iconY, iconSize, initial, alpha, vpWidth, vpHeight);
 
@@ -1624,7 +1783,7 @@ public class UiMainMenuScreen extends UiScreenBase {
             float nameScale = UiTheme.scaled(0.36f);
             float nameMaxW = w - pad * 2f - heartReserve;
             String truncName = renderer.truncate(displayName, nameScale, nameMaxW);
-            renderer.drawText(truncName, x + pad, drawY + barH / 2f - UiTheme.scaled(4f),
+            renderer.drawText(truncName, drawX + pad, drawY + barH / 2f - UiTheme.scaled(4f),
                 new UiColor(1f, 1f, 1f, 1f).multiplyAlpha(alpha), nameScale, vpWidth, vpHeight);
         }
 

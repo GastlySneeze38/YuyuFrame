@@ -48,5 +48,22 @@ public final class UiAnimatedFloat {
         return current;
     }
 
+    /**
+     * Pose la valeur SANS animer (courant ET cible d'un coup) — pour
+     * restaurer un état capturé avant une reconstruction (ex: la position de
+     * défilement d'une liste reconstruite, voir {@code
+     * UiScrollContainer#restoreScroll}).
+     *
+     * <p>{@link #setTarget} seul ne suffirait pas : il laisserait {@code
+     * current} à sa valeur d'origine, donc l'élément partirait de zéro et
+     * glisserait jusqu'à la valeur restaurée — exactement le mouvement
+     * parasite qu'une restauration cherche à éviter.
+     */
+    public void snapTo(float value) {
+        this.current = value;
+        this.target = value;
+        this.lastNanos = System.nanoTime();
+    }
+
     public float target() { return target; }
 }
