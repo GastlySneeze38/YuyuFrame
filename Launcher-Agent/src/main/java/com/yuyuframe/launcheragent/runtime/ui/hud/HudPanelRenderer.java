@@ -30,6 +30,45 @@ public final class HudPanelRenderer {
     // ("Rayon des coins (HUD)", voir sa javadoc) — CE réglage-là, et lui
     // seul, doit changer l'arrondi des panneaux HUD.
     public static float RADIUS = 2f;
+
+    /**
+     * Fond des panneaux HUD en VERRE DÉPOLI (décor du jeu flouté) au lieu de
+     * l'aplat semi-transparent {@link #PANEL_BG} — piloté par
+     * {@code GlobalUiSettings} ("Fond flouté (HUD)"), même motif de
+     * réassignation directe que {@link #PANEL_BG}/{@link #RADIUS}.
+     *
+     * <p>Option et NON valeur par défaut, délibérément : ces panneaux sont
+     * affichés EN PERMANENCE pendant le jeu, contrairement à ceux des écrans.
+     * Le flou y a un coût par frame (voir {@link #ensureGlassChain}) que tout
+     * le monde n'a pas envie de payer en gameplay, et un aplat très
+     * transparent reste le choix le plus lisible sur un décor qui bouge vite.
+     */
+    public static boolean USE_GLASS = false;
+
+    /** Étages de flou du HUD — 3 et non 4 : en jeu la fluidité prime, et ces panneaux sont petits (l'écart de qualité ne s'y voit quasiment pas). */
+    private static final int GLASS_PASSES = 3;
+
+    /**
+     * Calcule la chaîne de flou partagée UNE SEULE FOIS par frame HUD.
+     *
+     * <p>Nécessaire parce que le HUD n'a pas de {@code uiDraw} unique où
+     * placer l'appel comme les écrans : ses panneaux sont dessinés depuis
+     * plusieurs points d'entrée ({@code HudOverlayRenderer.render} en jeu,
+     * {@code renderPersistent} par-dessus un écran vanilla). Sans ce garde,
+     * chaque panneau paierait sa propre chaîne — le HUD en affiche facilement
+     * 5 ou 6 simultanément.
+     *
+     * <p>Le garde s'appuie sur la file de rendu elle-même : elle est vidée
+     * exactement une fois par frame ({@code Blaze3DCore.flushQueued}), donc sa
+     * TAILLE repart de zéro à chaque nouvelle frame. Une file vide signifie
+     * donc "nouvelle frame, chaîne pas encore empilée" — pas besoin d'un
+     * compteur de frames que ce moteur n'expose nulle part.
+     */
+    public static void ensureGlassChain(UiRenderer renderer, int vpWidth, int vpHeight) {
+        if (!USE_GLASS || !renderer.isGlassAvailable()) return;
+        if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore.queuedCount() > 0) return;
+        renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
+    }
     // Ombre légère ajoutée (voir audit runtime/ui/ : le HUD était le seul
     // "panneau" du moteur sans aucune ombre, contrairement à UiPanel/cartes
     // des écrans) — subtile (alpha bas, flou modéré) pour rester discrète en
@@ -75,9 +114,23 @@ public final class HudPanelRenderer {
         boolean skipBg = element.customRenderer != null && element.customRenderer.skipBackground();
         if (!skipBg) {
             renderer.drawShadow(x, y, x + w, y + h, RADIUS, SHADOW_BLUR, 0f, SHADOW_COLOR, vpWidth, vpHeight);
-            // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
-            // avec le texte différé d'une frame sur era E — voir sa javadoc.
-            renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
+            if (USE_GLASS && renderer.isGlassAvailable()) {
+                // Repli = PANEL_BG, donc son ALPHA (réglage "Opacité du HUD")
+                // continue de piloter l'opacité du panneau même en verre —
+                // voir UiRenderer#drawGlassPanel : les deux chemins partagent
+                // ce réglage, impossible de les désynchroniser.
+                renderer.drawGlassPanel(x, y, x + w, y + h, RADIUS,
+                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD, PANEL_BG, vpWidth, vpHeight);
+                // Contour : sans lui, un panneau flouté n'a plus de limite
+                // nette sur un décor peu contrasté — même constat que sur les
+                // écrans (voir UiTheme.GLASS_BORDER).
+                renderer.drawRoundedRectBorder(x, y, x + w, y + h, RADIUS,
+                    1f, UiTheme.GLASS_BORDER.multiplyAlpha(PANEL_BG.a), vpWidth, vpHeight);
+            } else {
+                // drawRoundedRectHud (pas drawRoundedRect direct) : reste synchronisé
+                // avec le texte différé d'une frame sur era E — voir sa javadoc.
+                renderer.drawRoundedRectHud(x, y, x + w, y + h, RADIUS, PANEL_BG, vpWidth, vpHeight);
+            }
         }
 
         // Marge = base (PADDING, commune à TOUS les HUD) + extra optionnel du

@@ -124,6 +124,16 @@ public final class GlobalUiSettings extends LauncherModule {
     @ConfigToggle(name = "Afficher dans le tchat", description = "Garde le HUD visible quand la zone de saisie du tchat est ouverte.", category = "HUD en jeu")
     public boolean showHudInChat = true;
 
+    /**
+     * Désactivé par défaut, délibérément : contrairement aux panneaux des
+     * écrans, ceux du HUD sont affichés EN PERMANENCE pendant le jeu. Le flou
+     * a un coût par frame en pleine action, et un aplat très transparent reste
+     * souvent le plus lisible sur un décor qui bouge vite — c'est donc un
+     * choix esthétique à faire, pas un défaut à imposer.
+     */
+    @ConfigToggle(name = "Fond flouté (HUD)", description = "Remplace l'aplat sombre derrière les panneaux HUD par un fond de verre dépoli qui floute le décor du jeu. Le réglage \"Opacité du HUD\" continue de s'appliquer.", category = "HUD en jeu")
+    public boolean hudGlassBackground = false;
+
     private GlobalUiSettings() {
         super("ui-settings", "Paramètres", "Réglages généraux de l'interface", true);
         // Charge les valeurs persistées AVANT de les appliquer — ce singleton
@@ -155,6 +165,7 @@ public final class GlobalUiSettings extends LauncherModule {
         // (panneaux HUD), PLUS UiTheme.RADIUS_MD (cartes du menu, reste fixe
         // à sa valeur par défaut, jamais réassignée par ce réglage).
         HudPanelRenderer.RADIUS = cornerRadius;
+        HudPanelRenderer.USE_GLASS = hudGlassBackground;
         UiTheme.ACCENT = accentColor;
         UiTheme.ACCENT_DIM = new UiColor(accentColor.r, accentColor.g, accentColor.b, 70f / 255f);
         UiTheme.SIDEBAR_ACTIVE = new UiColor(accentColor.r, accentColor.g, accentColor.b, 34f / 255f);

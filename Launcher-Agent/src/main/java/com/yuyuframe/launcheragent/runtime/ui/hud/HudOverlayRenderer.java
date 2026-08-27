@@ -51,6 +51,10 @@ public final class HudOverlayRenderer {
     }
 
     public static void render(UiRenderer renderer, int vpWidth, int vpHeight) {
+        // Une seule chaîne de flou pour TOUS les panneaux de cette frame (sans
+        // effet si l'option "Fond flouté (HUD)" est désactivée) — voir
+        // HudPanelRenderer#ensureGlassChain.
+        HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight);
         for (HudElement element : HudRegistry.elements()) {
             // Voir HudElement.refreshSize() : un contenu de largeur variable
             // (FPS/Ping) doit être remesuré à CHAQUE frame, pas une seule fois
@@ -89,6 +93,9 @@ public final class HudOverlayRenderer {
             case CHAT:      globalShow = GlobalUiSettings.INSTANCE.showHudInChat; break;
             default:        globalShow = false; break;
         }
+        // Même garde qu'en jeu (voir render ci-dessus) — ce chemin sert quand
+        // un écran VANILLA est ouvert (inventaire, conteneur, tchat).
+        HudPanelRenderer.ensureGlassChain(renderer, vpWidth, vpHeight);
         for (HudElement element : HudRegistry.elements()) {
             if (!globalShow && !element.showWhenScreenOpen) continue;
             element.refreshSize();

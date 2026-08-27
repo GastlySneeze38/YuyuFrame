@@ -917,6 +917,19 @@ public final class Blaze3DCore {
     /** Point d'entrée package-private pour Blaze3DText/Blaze3DRect/Blaze3DGradient — la file reste UNIQUE (voir commentaire ci-dessus, garantit l'ordre Z entre types de dessin). */
     static void enqueue(QueuedDraw d) { queued.add(d); }
 
+    /**
+     * Nombre de dessins empilés pour la frame EN COURS — vidée exactement une
+     * fois par frame par {@link #flushQueued()}, donc une file vide signifie
+     * "rien n'a encore été dessiné cette frame".
+     *
+     * <p>Exposé pour {@code HudPanelRenderer.ensureGlassChain} : le HUD n'a
+     * pas de point d'entrée unique par frame où empiler sa chaîne de flou
+     * partagée (plusieurs chemins de rendu selon qu'un écran vanilla est
+     * ouvert ou non), et ce moteur n'expose aucun compteur de frames — c'est
+     * l'indicateur "début de frame" le moins coûteux disponible.
+     */
+    public static int queuedCount() { return queued.size(); }
+
     /** Appelé depuis {@code GlobalUiPresentMixin} à la HEAD de blitToScreen (avant presentTexture) — dessine tout ce qui a été empilé la frame précédente. */
     public static void flushQueued() {
         if (queued.isEmpty()) return;
