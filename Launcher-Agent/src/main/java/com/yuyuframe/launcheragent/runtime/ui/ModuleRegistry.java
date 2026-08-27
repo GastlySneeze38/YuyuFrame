@@ -389,6 +389,11 @@ public final class ModuleRegistry {
         // session (régression constatée : option désactivée en config mais
         // toujours affichée au lancement).
         module.onConfigChanged();
+        // Roadmap Phase 6 — voir ungroupedCache/ungrouped() : invalide le
+        // cache à chaque enregistrement (même un module enregistré dynamiquement
+        // après le bloc static{}, voir commentaire ci-dessus) plutôt que de le
+        // supposer figé une fois la classe chargée.
+        ungroupedCache = null;
     }
 
     public static List<LauncherModule> all() { return Collections.unmodifiableList(MODULES); }
@@ -433,8 +438,21 @@ public final class ModuleRegistry {
         return declared;
     }
 
+    /**
+     * Roadmap Phase 6 ("ungrouped() refait un double-parcours O(n×m) à chaque
+     * appel") — l'appartenance module→groupe ne change qu'à l'enregistrement
+     * d'un module (voir {@link #register}, seul endroit qui invalide ce
+     * cache) ; {@link #GROUPS} lui-même n'est mutable QUE depuis le bloc
+     * {@code static{}} (aucune méthode publique pour y ajouter un groupe
+     * après coup), donc invalider sur {@code register()} seul suffit à
+     * couvrir les deux sources de changement possibles. {@code null} =
+     * jamais calculé ou invalidé depuis le dernier appel.
+     */
+    private static List<LauncherModule> ungroupedCache;
+
     /** Modules qui n'appartiennent à AUCUN {@link ModuleGroup} — ce sont ceux qui gardent leur propre carte sur l'écran d'accueil. */
     public static List<LauncherModule> ungrouped() {
+        if (ungroupedCache != null) return ungroupedCache;
         List<LauncherModule> result = new ArrayList<>();
         for (LauncherModule m : MODULES) {
             boolean grouped = false;
@@ -443,7 +461,8 @@ public final class ModuleRegistry {
             }
             if (!grouped) result.add(m);
         }
-        return result;
+        ungroupedCache = Collections.unmodifiableList(result);
+        return ungroupedCache;
     }
 
     public static LauncherModule get(String id) {

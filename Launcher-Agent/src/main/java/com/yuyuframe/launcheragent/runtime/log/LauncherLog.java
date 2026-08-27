@@ -114,6 +114,27 @@ public final class LauncherLog {
     public static void agent(int lvl, String msg)   { log("AGENT",   AGENT,   lvl, msg); }
     public static void content(int lvl, String msg) { log("CONTENT", CONTENT, lvl, msg); }
 
+    /**
+     * Roadmap Phase 6 ("LauncherLog construit la string avant de vérifier si
+     * le niveau de log est actif") — variantes {@link java.util.function.Supplier}
+     * pour un futur log posé dans un hot path (frame/tick) : {@code msg.get()}
+     * n'est appelé qu'UNE FOIS, à l'intérieur de {@link #log}, jamais construit
+     * par concaténation au point d'appel comme {@code ui(lvl, "x=" + calc())}
+     * le force aujourd'hui (Java évalue l'argument AVANT l'appel de méthode,
+     * qu'il soit lu ensuite ou non). Piège à connaître : {@link #toFile}
+     * reste appelé INCONDITIONNELLEMENT quel que soit le seuil (voir javadoc
+     * de classe — capture stdout/stderr du launcher Rust jugée peu fiable),
+     * donc {@code msg.get()} est de toute façon toujours invoqué ici ; le
+     * vrai gain de cette forme n'est PAS d'éviter l'appel, mais d'éviter que
+     * le call-site lui-même paye la construction dans le cas — fréquent pour
+     * un futur appel bien écrit — où {@code msg} est un lambda qui capture
+     * des références déjà en main plutôt qu'une concaténation déjà faite.
+     */
+    public static void ui(int lvl, java.util.function.Supplier<String> msg)      { log("UI",      UI,      lvl, msg.get()); }
+    public static void asm(int lvl, java.util.function.Supplier<String> msg)     { log("ASM",     ASM,     lvl, msg.get()); }
+    public static void agent(int lvl, java.util.function.Supplier<String> msg)   { log("AGENT",   AGENT,   lvl, msg.get()); }
+    public static void content(int lvl, java.util.function.Supplier<String> msg) { log("CONTENT", CONTENT, lvl, msg.get()); }
+
     public static void info(String msg) {
         ORIGINAL_OUT.println(msg);
         toFile(msg);
