@@ -19,12 +19,17 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
  * §19 — audit modules, retour utilisateur) : il ne relayait AUCUN HookPoint à
  * {@link LauncherModule}, rendant IMPOSSIBLE pour un sous-type de supprimer
  * l'affichage vanilla qu'il duplique — bug réel trouvé sur
- * {@code ArmorDurabilityModule}/{@code PotionEffectsModule}, qui dessinent
- * PAR-DESSUS l'armure/les effets vanilla natifs au lieu de les remplacer (les
- * mixins {@code HUD_EXTRACT_ARMOR}/{@code HUD_EXTRACT_EFFECTS} existaient déjà,
- * simplement jamais consultés). Le nouveau constructeur 5-arg comble ce trou
- * SANS toucher les autres (FPS/Ping/Coords/Keystrokes/Saturation — aucun
- * équivalent vanilla à supprimer, rien à câbler).
+ * {@code PotionEffectsModule}, qui dessinait PAR-DESSUS les effets vanilla
+ * natifs au lieu de les remplacer (le mixin {@code HUD_EXTRACT_EFFECTS}
+ * existait déjà, simplement jamais consulté). Le nouveau constructeur 5-arg
+ * comble ce trou SANS toucher les autres (FPS/Ping/Coords/Keystrokes/
+ * Saturation — aucun équivalent vanilla à supprimer, rien à câbler).
+ *
+ * ⚠️ {@code ArmorDurabilityModule} figurait aussi dans cette liste, à tort —
+ * câblage RETIRÉ le 2026-08-31 : {@code HUD_EXTRACT_ARMOR} supprime la barre
+ * de POINTS d'armure (au-dessus des cœurs), que ce module n'affiche pas. Voir
+ * son constructeur. Avant de relayer un HookPoint ici, vérifier ce que la
+ * méthode vanilla dessine RÉELLEMENT — pas ce que son nom suggère.
  */
 // PUBLIC depuis la répartition des modules en sous-paquets (2026-08-27) : la
 // visibilité paquet suffisait tant que tous les modules vivaient à plat dans

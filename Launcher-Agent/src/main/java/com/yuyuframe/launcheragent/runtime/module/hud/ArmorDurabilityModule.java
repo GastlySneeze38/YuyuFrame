@@ -1,7 +1,5 @@
 package com.yuyuframe.launcheragent.runtime.module.hud;
 
-import com.yuyuframe.launcheragent.apimixin.HookPoint;
-import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
@@ -107,23 +105,30 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     public ArmorDurabilityModule() {
         super("armor-durability", "Armure/Durabilité", "Durabilité de l'armure et de l'objet en main", false,
             new HudElement("armor-durability", "Armure/Durabilité", HudAnchor.BOTTOM_RIGHT, 8f, 8f,
-                (HudElement.CustomRenderer) RENDERER),
-            HookPoint.HUD_EXTRACT_ARMOR);
+                (HudElement.CustomRenderer) RENDERER));
         iconUrl = icons8("shield");
 
-        // BUG TROUVÉ (audit modules 2026-08-25, §19, retour utilisateur :
-        // "l'armure/durabilité [...] chevauche le HUD vanilla") — ce module
-        // dessinait sa propre rangée d'armure SANS jamais supprimer la
-        // rangée vanilla native (mixin HudExtractArmorMixin261/HookPoint
-        // HUD_EXTRACT_ARMOR déjà existants, simplement jamais consultés ici,
-        // faute d'un constructeur SingleHudModule capable de relayer un
-        // HookPoint — voir sa javadoc). Même câblage que CrosshairModule :
-        // dispatch()==true fait sauter le rendu vanilla dans
-        // HudExtractArmorMixin261 tant que CE module est actif — style
-        // "Vanilla" INCLUS (il double lui aussi l'armure, jamais la main,
-        // voir javadoc de VANILLA_SLOT_OFFSETS_GUI).
-        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_ARMOR, ctx -> isEnabled());
-
+        // ⚠️ NE PAS rebrancher HUD_EXTRACT_ARMOR ici (retour utilisateur
+        // 2026-08-31 : « notre system d'armure enlève la barre d'armure
+        // au-dessus de la vie »). Le câblage précédent (2026-08-25, §19)
+        // partait d'un contresens sur ce que supprime ce hook :
+        // {@code Gui.extractArmor} ne dessine PAS les pièces d'armure, il
+        // dessine la BARRE DE POINTS D'ARMURE (les ~10 icônes de plastron
+        // au-dessus des cœurs) — une donnée que ce module n'affiche nulle
+        // part, et donc ne duplique pas. L'annuler faisait juste disparaître
+        // l'indicateur d'armure du joueur.
+        //
+        // Vanilla n'a JAMAIS eu d'affichage de durabilité par pièce : il n'y
+        // a rien à supprimer, quel que soit le style (« Personnalisé » comme
+        // « Vanilla », qui ne fait que rendre nos propres cases à gauche de
+        // la hotbar). Le chevauchement signalé à l'époque était un problème
+        // de POSITION, pas de doublon.
+        //
+        // Conséquence voulue : plus aucun HookPoint réclamé, donc
+        // HudExtractArmorMixin261 n'est plus tissé du tout (filtre
+        // MixinHookPointRegistry) — une injection de moins dans Gui. Le mixin
+        // reste en place pour un futur module qui voudrait, lui, remplacer
+        // vraiment la barre de points d'armure.
     }
 
     /**
