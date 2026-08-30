@@ -39,7 +39,9 @@ public final class Blaze3DText {
      * ColorModulator} (voir {@link #TEXT_FRAGMENT_SRC}), pas besoin non plus
      * du lightmap (Sampler2) qu'un pipeline texte dédié n'a plus à neutraliser.
      */
-    private static final String TEXT_VERTEX_SRC =
+    // Package-private : partagé avec Blaze3DGuiText, qui construit le MÊME
+    // shader pour la voie "état de GUI vanilla" (voir rendering-pipeline.md).
+    static final String TEXT_VERTEX_SRC =
         "#version 330\n" +
         "layout(std140) uniform DynamicTransforms {\n" +
         "    mat4 ModelViewMat;\n" +
@@ -74,7 +76,7 @@ public final class Blaze3DText {
      * portée en GLSL 330 core profile ({@code texture()} pas {@code
      * texture2D()}, {@code ColorModulator} pas {@code gl_Color}).
      */
-    private static final String TEXT_FRAGMENT_SRC =
+    static final String TEXT_FRAGMENT_SRC =
         "#version 330\n" +
         "uniform sampler2D Sampler0;\n" +
         "layout(std140) uniform DynamicTransforms {\n" +
@@ -115,7 +117,8 @@ public final class Blaze3DText {
 
     private static final Map<UiFont, Object[]> TEXTURES = new HashMap<>(); // [GpuTexture, GpuTextureView, GpuSampler]
 
-    private static Object[] ensureTexture(UiFont font) throws Exception {
+    /** Package-private : Blaze3DGuiText en a besoin pour bâtir son TextureSetup. */
+    static Object[] ensureTexture(UiFont font) throws Exception {
         Object[] cached = TEXTURES.get(font);
         if (cached != null) return cached;
 

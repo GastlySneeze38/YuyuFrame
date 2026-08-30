@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.render.vanillagui;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DVanillaProbe;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
@@ -77,6 +78,8 @@ public final class VanillaGuiProbe {
     private static final UiColor VANILLA_RECT = new UiColor(0, 220, 255, 170);
     /** Vert franc — troisième teinte reconnaissable, pour le rect arrondi. */
     private static final UiColor ROUNDED_RECT = new UiColor(120, 255, 90, 190);
+    /** Texte posé sur le rect vert — noir pour trancher sur lui. */
+    private static final UiColor TEXT_COLOR = new UiColor(10, 10, 10, 255);
 
     private static boolean installed;
     private static boolean resultLogged;
@@ -144,13 +147,21 @@ public final class VanillaGuiProbe {
             boolean roundedOk = VanillaGuiLayer.roundedRect(hookContext,
                 252, top, 368, bottom, 10f, ROUNDED_RECT);
 
+            // Quatrième test : TEXTE SDF du moteur, dernière primitive à
+            // valider avant de pouvoir basculer tout le HUD. Posé SUR le rect
+            // arrondi, donc émis après lui — l'ordre d'insertion fait le
+            // z-order, exactement comme dans l'état de GUI de vanilla.
+            boolean textOk = VanillaGuiLayer.text(hookContext, UiFont.BOLD, "Yuyu 123",
+                262, bottom - 14, 0.5f, TEXT_COLOR);
+
             if (!resultLogged) {
                 resultLogged = true;
                 LauncherLog.info("[VanillaGuiProbe] émission OK — gui=" + w + "x" + h
                     + ", rect vanilla=" + vanillaOk
                     + ", pipeline maison testé=" + TEST_OWN_PIPELINE
                     + " compilé=" + compiled + " émis=" + ownOk
-                    + ", RECT ARRONDI (format maison)=" + roundedOk);
+                    + ", RECT ARRONDI (format maison)=" + roundedOk
+                    + ", TEXTE SDF=" + textOk);
             }
         } catch (Throwable t) {
             reason("exception: " + t);

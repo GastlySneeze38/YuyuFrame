@@ -18,4 +18,13 @@ public final class TextureSetup {
 
     /** Aucune texture — pour un élément de couleur pleine. */
     public static TextureSetup noTexture() { return null; }
+
+    /**
+     * Une texture et son échantillonneur — utilisé pour le TEXTE, dont
+     * l'atlas de police est produit par notre propre pipeline
+     * ({@code Blaze3DText.ensureTexture}). Vanilla lie la texture sur
+     * {@code Sampler0}, ce qu'attend justement notre shader SDF.
+     */
+    public static TextureSetup singleTexture(com.mojang.blaze3d.textures.GpuTextureView view,
+                                             com.mojang.blaze3d.textures.GpuSampler sampler) { return null; }
 }

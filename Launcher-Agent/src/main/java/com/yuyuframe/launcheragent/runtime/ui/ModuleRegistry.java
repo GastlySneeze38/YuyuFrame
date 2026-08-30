@@ -293,6 +293,11 @@ public final class ModuleRegistry {
         }
         register(new MumbleLinkModule());
 
+        // Infra de rendu (pas un module) — voir INFRA_HOOK_POINTS : place le
+        // flush des icônes d'item vanilla entre le HUD et le chat dans l'état
+        // de GUI, au lieu de l'après-coup qui les faisait passer par-dessus.
+        com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiLayer.installItemIconFlush();
+
         // Regroupement demandé — voir ModuleGroup : purement de la
         // présentation, les modules ci-dessus restent enregistrés
         // individuellement juste au-dessus (tickAll/renderOverlayAll/persistance
@@ -433,7 +438,15 @@ public final class ModuleRegistry {
      * {@link VanillaHookRegistry#auditDeclarations} le signalera aussitôt en
      * « UTILISÉS MAIS NON DÉCLARÉS ».
      */
-    private static final HookPoint[] INFRA_HOOK_POINTS = { HookPoint.CHAT_SEND };
+    private static final HookPoint[] INFRA_HOOK_POINTS = {
+        HookPoint.CHAT_SEND,
+        // Ajouté le 2026-08-30 : aucun module ne le réclame, mais l'infra de
+        // rendu s'en sert pour vider la file d'icônes d'item vanilla JUSTE
+        // AVANT le chat (voir VanillaGuiLayer.installItemIconFlush). Sans
+        // cette déclaration, le filtre HookPoint écarterait le mixin
+        // HudExtractChatMixin261 et le correctif de z-order serait silencieux.
+        HookPoint.HUD_EXTRACT_CHAT,
+    };
 
     /**
      * Union de TOUS les HookPoint déclarés statiquement : modules + infra.
