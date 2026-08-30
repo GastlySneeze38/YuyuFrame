@@ -17,6 +17,11 @@ import net.minecraft.world.item.ItemStack;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.sounds.SoundManager;
+import net.minecraft.sounds.SoundEvents;
 
 /**
  * Port de PvP-Mod ArmorDurabilityConfig/ArmorDurabilityHud — sa propre carte,
@@ -54,7 +59,24 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             "\"Personnalisé\" = position/taille libres, icône + texte de durabilité (défaut). \"Vanilla\" = position fixe façon hotbar, VRAIE case + barre de durabilité vanilla, HUD verrouillé (non déplaçable).",
             "Réglages", new String[]{ "Personnalisé", "Vanilla" }, null,
             () -> style, v -> style = v);
+
+        s.toggle("lowDurabilityAlert", "Alerte sonore",
+            "Joue un carillon quand une pièce sur le point de casser encaisse un coup.",
+            "Alerte", null, () -> lowDurabilityAlert, v -> lowDurabilityAlert = v);
+        s.slider("lowDurabilityPercent", "Seuil (% restant)",
+            "Une pièce est considérée en danger sous ce pourcentage de durabilité.",
+            "Alerte", 1f, 50f, 1f, () -> lowDurabilityAlert,
+            () -> lowDurabilityPercent, v -> lowDurabilityPercent = v);
+        s.slider("lowDurabilityPoints", "Seuil (points restants)",
+            "…ou sous ce nombre de points, quel que soit le pourcentage. Décisif pour les matériaux fragiles : 10% d'une pioche en or ne fait que quelques coups.",
+            "Alerte", 0f, 200f, 5f, () -> lowDurabilityAlert,
+            () -> lowDurabilityPoints, v -> lowDurabilityPoints = v);
     }
+
+    /** Voir {@link #tickLowDurabilityAlert()} — repris du comportement d'uku's Armor HUD. */
+    public boolean lowDurabilityAlert = true;
+    public float lowDurabilityPercent = 10f;
+    public float lowDurabilityPoints = 50f;
 
     // Défaut = main secondaire (0) : demandé explicitement par l'utilisateur
     // ("à partir des versions où on a une deuxième main, afficher la
@@ -104,6 +126,82 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
     }
 
+    /**
+     * Dernier {@code getDamageValue()} vu par emplacement — {@code -1} = pas
+     * encore observé. Voir {@link #tickLowDurabilityAlert()}.
+     */
+    private final int[] lastDamage = { -1, -1, -1, -1, -1 };
+
+    @Override
+    public void onTick() {
+        tickLowDurabilityAlert();
+    }
+
+    /**
+     * Alerte sonore de durabilité basse.
+     *
+     * <p>Approche reprise d'<b>uku's Armor HUD</b> (MIT, uku3lig/armor-hud),
+     * dont la logique de déclenchement est plus fine que le réflexe naturel :
+     * le son ne se joue PAS tant qu'une pièce est basse, mais AU MOMENT où
+     * elle encaisse un coup en étant déjà sous le seuil. Un joueur immobile
+     * avec une armure en fin de vie n'entend donc rien, et il n'y a aucun
+     * cooldown à régler — le rythme des dégâts fait le travail.
+     *
+     * <p>Deux seuils en OU, également repris de là-bas : un POURCENTAGE et un
+     * NOMBRE DE POINTS absolu. Le second est celui qui compte sur les
+     * matériaux fragiles — 10 % d'une pioche en or, c'est trois coups.
+     *
+     * <p>Le SON, lui, est vanilla ({@code AMETHYST_BLOCK_CHIME}) : celui
+     * d'uku est un asset {@code .ogg} qui leur est propre, et qu'ils tiennent
+     * eux-mêmes de Giselbaer's Durability Viewer.
+     */
+    private void tickLowDurabilityAlert() {
+        if (!lowDurabilityAlert) return;
+        try {
+            Object[] stacks = RENDERER.currentStacks();
+            boolean ring = false;
+            for (int i = 0; i < lastDamage.length && i < stacks.length; i++) {
+                if (!(stacks[i] instanceof ItemStack)) { lastDamage[i] = -1; continue; }
+                ItemStack stack = (ItemStack) stacks[i];
+                if (!stack.isDamageableItem()) { lastDamage[i] = -1; continue; }
+
+                int damage = stack.getDamageValue();
+                int previous = lastDamage[i];
+                lastDamage[i] = damage;
+                // Première observation : on mémorise sans sonner, sinon
+                // équiper une pièce déjà usée déclencherait l'alerte.
+                if (previous < 0 || damage <= previous) continue;
+                if (isLowDurability(stack)) ring = true;
+            }
+            // UN seul son même si plusieurs pièces sont touchées dans la même
+            // frame (dégâts de zone) — sinon quatre carillons superposés.
+            if (ring) playAlert();
+        } catch (Throwable t) {
+            if (!alertErrorLogged) {
+                alertErrorLogged = true;
+                LauncherLog.err("[ArmorDurabilityModule] alerte durabilité: " + t);
+            }
+        }
+    }
+
+    private boolean isLowDurability(ItemStack stack) {
+        int max = stack.getMaxDamage();
+        if (max <= 0) return false;
+        int remaining = max - stack.getDamageValue();
+        return (remaining * 100f / max) <= lowDurabilityPercent
+            || remaining <= lowDurabilityPoints;
+    }
+
+    private static boolean alertErrorLogged;
+
+    private void playAlert() {
+        SoundManager soundManager = ClientData.soundManager();
+        if (soundManager == null) return;
+        // Volume réduit : une alerte permanente à pleine puissance devient
+        // vite pénible en combat, moment où elle se déclenche le plus.
+        soundManager.play(SimpleSoundInstance.forUI(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0f, 0.5f));
+    }
+
     @Override
     public void onConfigChanged() {
         RENDERER.horizontal = layout == 1;
@@ -146,7 +244,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         // réutilisent la MÊME valeur au lieu de recalculer.
         private Object[] cachedStacks;
 
-        private Object[] currentStacks() {
+        Object[] currentStacks() {
             if (cachedStacks == null) cachedStacks = computeStacks();
             return cachedStacks;
         }
