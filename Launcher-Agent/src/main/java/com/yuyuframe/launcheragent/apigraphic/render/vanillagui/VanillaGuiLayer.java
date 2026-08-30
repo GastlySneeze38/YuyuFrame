@@ -172,7 +172,6 @@ public final class VanillaGuiLayer {
         GuiRenderState state = renderState(hookContext);
         if (state == null) return false;
         try {
-            if (!Blaze3DGuiRoundedRect.ensureCompiled()) return false;
             state.addGuiElement(new RoundedRectElement(x0, y0, x1, y1, radius, argb(color)));
             return true;
         } catch (Throwable t) {
@@ -196,7 +195,6 @@ public final class VanillaGuiLayer {
         GuiRenderState state = renderState(hookContext);
         if (state == null) return false;
         try {
-            if (!Blaze3DGuiText.ensureCompiled()) return false;
             TextureSetup atlas = Blaze3DGuiText.textureSetup(font);
             if (atlas == null) {
                 reportOnce("texte : atlas de police indisponible");

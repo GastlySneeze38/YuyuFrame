@@ -2,6 +2,8 @@ package com.yuyuframe.launcheragent.apigraphic.render.vanillagui;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiRoundedRect;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiText;
 
 /**
  * Commutateur « émettre dans l'état de GUI de vanilla » — armé le temps de la
@@ -59,6 +61,18 @@ public final class VanillaGuiTarget {
     public static boolean begin(Object hookContext, int fbWidth, int fbHeightPx) {
         int guiWidth = VanillaGuiLayer.guiWidth(hookContext);
         if (guiWidth <= 0 || fbWidth <= 0 || fbHeightPx <= 0) return false;
+        // Précompilation des deux pipelines UNE FOIS PAR PASSE, pas une fois
+        // par primitive (2026-08-30). Chaque appel traverse une invocation
+        // réflexive de precompilePipeline ; le faire par rect et par chaîne de
+        // texte, à chaque frame, était le poste de coût le plus bête du
+        // nouveau chemin. Reste appelé à chaque frame et non une seule fois :
+        // un rechargement de ressources (F3+T) vide le cache de pipelines du
+        // device, et l'appel est un no-op quand le pipeline y est déjà.
+        if (!Blaze3DGuiRoundedRect.ensureCompiled() | !Blaze3DGuiText.ensureCompiled()) {
+            // `|` et non `||` : les DEUX doivent être tentés, sinon un échec du
+            // premier empêcherait le second de se compiler pour toujours.
+            return false;
+        }
         context = hookContext;
         guiScale = (float) fbWidth / (float) guiWidth;
         fbHeight = fbHeightPx;
@@ -67,6 +81,14 @@ public final class VanillaGuiTarget {
 
     /** Désarme — À APPELER DANS UN {@code finally}, sinon tout le rendu suivant partirait dans un état de GUI périmé. */
     public static void end() {
+        // Filet : un lot laissé ouvert (exception au milieu du rendu d'un
+        // module) engloutirait silencieusement tout son texte. On le vide
+        // plutôt que de le perdre — même précaution que Blaze3DText, qui
+        // détecte les lots non refermés.
+        if (batching) {
+            flushPending();
+            batching = false;
+        }
         context = null;
     }
 
@@ -94,7 +116,65 @@ public final class VanillaGuiTarget {
     public static boolean text(UiFont font, String content, float x, float y, UiColor color, float scale,
                         int vpWidth, int vpHeight) {
         if (context == null) return false;
-        return VanillaGuiLayer.text(context, font, content,
-            x / guiScale, (fbHeight - y) / guiScale, scale / guiScale, color);
+        float guiX = x / guiScale;
+        float guiBaseline = (fbHeight - y) / guiScale;
+        float guiScaleText = scale / guiScale;
+        if (batching) {
+            pending.add(new PendingText(font, content, guiX, guiBaseline, guiScaleText, color));
+            return true;
+        }
+        return VanillaGuiLayer.text(context, font, content, guiX, guiBaseline, guiScaleText, color);
+    }
+
+    // ── Lot de texte ─────────────────────────────────────────────────────────
+    //
+    // OPTIMISATION (2026-08-30) : vanilla regroupe les éléments consécutifs qui
+    // partagent pipeline ET texture — dès que l'un des deux change, il ferme le
+    // maillage courant et en ouvre un autre (voir GuiRenderer.addElementToMesh).
+    // Le HUD émet naturellement panneau, texte, panneau, texte… : chaque
+    // alternance coûtait donc une rupture de maillage, soit un dessin par
+    // primitive.
+    //
+    // Le lot diffère TOUT le texte jusqu'à sa fermeture : l'ordre devient
+    // [tous les panneaux][tout le texte], soit deux maillages au lieu de deux
+    // par élément HUD. C'est exactement le rôle que jouait déjà
+    // Blaze3DText.beginBatch sur l'ancien chemin, pour la même raison.
+    //
+    // Le z-order y gagne aussi en clarté : tout le texte passe au-dessus de
+    // tous les fonds, ce que le HUD veut de toute façon (les éléments HUD ne se
+    // chevauchent pas entre eux).
+
+    private static final java.util.List<PendingText> pending = new java.util.ArrayList<>();
+    private static boolean batching;
+
+    private static final class PendingText {
+        final UiFont font; final String content; final float x, baseline, scale; final UiColor color;
+        PendingText(UiFont font, String content, float x, float baseline, float scale, UiColor color) {
+            this.font = font; this.content = content; this.x = x;
+            this.baseline = baseline; this.scale = scale; this.color = color;
+        }
+    }
+
+    /** @return {@code true} si le lot est pris en charge ici (cible armée). */
+    public static boolean beginTextBatch() {
+        if (context == null) return false;
+        batching = true;
+        return true;
+    }
+
+    /** @return {@code true} si le lot était pris en charge ici. */
+    public static boolean endTextBatch() {
+        if (context == null) return false;
+        flushPending();
+        batching = false;
+        return true;
+    }
+
+    private static void flushPending() {
+        if (pending.isEmpty()) return;
+        for (PendingText t : pending) {
+            VanillaGuiLayer.text(context, t.font, t.content, t.x, t.baseline, t.scale, t.color);
+        }
+        pending.clear();
     }
 }

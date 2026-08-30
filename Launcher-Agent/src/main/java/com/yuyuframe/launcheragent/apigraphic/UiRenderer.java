@@ -712,16 +712,16 @@ public final class UiRenderer {
      * rects batchés). No-op hors era E.
      */
     public void beginTextBatch() {
-        // Sans objet sur la voie vanilla : chaque chaîne y devient un élément
-        // de l'état de GUI, l'ordre d'insertion suffit à garantir le z-order
-        // que le lot servait à préserver.
-        if (VanillaGuiTarget.isArmed()) return;
+        // La voie vanilla a SON lot (voir VanillaGuiTarget) : même rôle qu'ici,
+        // regrouper tout le texte pour n'ouvrir qu'un maillage au lieu d'un par
+        // chaîne.
+        if (VanillaGuiTarget.beginTextBatch()) return;
         com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.beginBatch();
     }
 
     /** Ferme le lot ouvert par {@link #beginTextBatch} et empile son rendu (une passe par police). */
     public void endTextBatch(int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.isArmed()) return;
+        if (VanillaGuiTarget.endTextBatch()) return;
         com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
     }
 

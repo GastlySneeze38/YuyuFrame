@@ -93,11 +93,21 @@ public final class Blaze3DGuiText {
      * <p>{@code ensureTexture} renvoie {@code [GpuTexture, GpuTextureView,
      * GpuSampler]} — seuls les deux derniers nous intéressent.
      */
+    private static final java.util.Map<UiFont, TextureSetup> SETUPS = new java.util.HashMap<>();
+
     public static TextureSetup textureSetup(UiFont font) {
+        // MIS EN CACHE par police (2026-08-30) : appelé une fois par chaîne de
+        // texte et par frame, il allouait à chaque fois un TextureSetup neuf en
+        // plus de traverser ensureTexture. L'atlas d'une police ne change
+        // jamais après sa création, la valeur est donc valable pour la session.
+        TextureSetup cached = SETUPS.get(font);
+        if (cached != null) return cached;
         try {
             Object[] tex = Blaze3DText.ensureTexture(font);
             if (tex == null || tex.length < 3) return null;
-            return TextureSetup.singleTexture((GpuTextureView) tex[1], (GpuSampler) tex[2]);
+            TextureSetup setup = TextureSetup.singleTexture((GpuTextureView) tex[1], (GpuSampler) tex[2]);
+            if (setup != null) SETUPS.put(font, setup);
+            return setup;
         } catch (Throwable t) {
             LauncherLog.err("[Blaze3DGuiText] textureSetup: " + t);
             return null;
