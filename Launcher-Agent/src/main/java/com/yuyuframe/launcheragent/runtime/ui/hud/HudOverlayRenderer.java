@@ -8,6 +8,8 @@ import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
 
 import java.lang.reflect.Field;
 
@@ -69,19 +71,15 @@ public final class HudOverlayRenderer {
     }
 
     /**
-     * Vrai quand {@link #renderInVanillaGui} a déjà dessiné le HUD pour la
-     * frame en cours — sans ce garde, {@link #render}, toujours branché en
-     * TAIL de {@code blitToScreen}, le dessinerait une SECONDE fois par le
-     * chemin historique. Consommé (remis à faux) par ce même {@code render}.
+     * Affichage HUD permanent, aucun écran ouvert — délègue le dessin à
+     * {@link HudRenderer}.
+     *
+     * <p>Plus appelé sur 26.1.2 : ce bracket passe par
+     * {@link #renderInVanillaGui}. Conservé pour les AUTRES brackets, dont les
+     * mixins globaux ({@code GlobalUiPresentMixin}, {@code GlobalUiRenderMixin116},
+     * {@code …1204}) l'appellent toujours après la présentation.
      */
-    private static boolean handledByVanillaGui;
-
-    /** Affichage HUD permanent, aucun écran ouvert — délègue le dessin à {@link HudRenderer}. */
     public static void render(UiRenderer renderer, int vpWidth, int vpHeight) {
-        if (handledByVanillaGui) {
-            handledByVanillaGui = false;
-            return;
-        }
         HudRenderer.drawAll(renderer, vpWidth, vpHeight);
     }
 
@@ -95,9 +93,10 @@ public final class HudOverlayRenderer {
      * Blaze3D vidée après la présentation. C'est ce qui met le HUD SOUS le
      * chat et ses panneaux SOUS les icônes d'item.
      *
-     * <p>Ne fait rien si la cible n'a pas pu être armée (hors bracket 26.1.2,
-     * ou {@code VanillaGuiTarget.ENABLED} à faux) : le rendu par le chemin
-     * historique reste alors branché sur {@code blitToScreen}, inchangé.
+     * <p>Ne fait rien si la cible n'a pas pu être armée — cas qui ne devrait
+     * pas se produire sur ce bracket, puisque c'est désormais le SEUL chemin
+     * de rendu du HUD en 26.1.2 (l'appel après présentation a été retiré de
+     * {@code GlobalUiPresentMixin261}).
      *
      * <p>{@code end()} dans un {@code finally} : une cible restée armée
      * détournerait tout le rendu suivant, écrans de menu compris, vers un état
@@ -107,12 +106,26 @@ public final class HudOverlayRenderer {
         if (vanillaHudHidden()) return;
         UiInputPoller poller = UiInputPoller.ACTIVE;
         if (poller == null) return;
+
+        // MÊME politique de visibilité que l'ancien chemin, qui la tenait du
+        // mixin de présentation : rien en jeu ne doit changer selon QUI
+        // déclenche le rendu.
+        //   - aucun écran            → tous les éléments
+        //   - écran vanilla/mod      → seulement ceux autorisés pour ce TYPE
+        //                              d'écran (voir shouldShowPersistent)
+        //   - un de NOS écrans       → aucun HUD, le menu occupe l'écran
+        Object screen = ClientData.screen();
+        if (screen instanceof UiDrawable) return;
+
         int w = poller.fbWidth, h = poller.fbHeight;
         UiRenderer renderer = UiRenderer.get(HudOverlayRenderer.class.getClassLoader());
         if (!VanillaGuiTarget.begin(hookContext, w, h)) return;
         try {
-            HudRenderer.drawAll(renderer, w, h);
-            handledByVanillaGui = true;
+            if (screen == null) {
+                HudRenderer.drawAll(renderer, w, h);
+            } else {
+                HudRenderer.drawPersistent(renderer, shouldShowPersistent(screen), w, h);
+            }
         } catch (Throwable t) {
             LauncherLog.err("[HudOverlayRenderer] renderInVanillaGui: " + t);
         } finally {

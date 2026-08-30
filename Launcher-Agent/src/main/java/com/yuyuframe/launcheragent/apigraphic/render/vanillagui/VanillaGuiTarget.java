@@ -43,13 +43,6 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 public final class VanillaGuiTarget {
     private VanillaGuiTarget() {}
 
-    /**
-     * Coupe-circuit global. Passer à {@code false} restaure intégralement
-     * l'ancien chemin de rendu du HUD — c'est le retour arrière d'un seul
-     * geste si cette voie pose problème en jeu.
-     */
-    public static boolean ENABLED = true;
-
     private static Object context;
     private static float guiScale = 1f;
     private static int fbHeight;
@@ -64,7 +57,6 @@ public final class VanillaGuiTarget {
      *         alors rendre le HUD par le chemin habituel.
      */
     public static boolean begin(Object hookContext, int fbWidth, int fbHeightPx) {
-        if (!ENABLED) return false;
         int guiWidth = VanillaGuiLayer.guiWidth(hookContext);
         if (guiWidth <= 0 || fbWidth <= 0 || fbHeightPx <= 0) return false;
         context = hookContext;

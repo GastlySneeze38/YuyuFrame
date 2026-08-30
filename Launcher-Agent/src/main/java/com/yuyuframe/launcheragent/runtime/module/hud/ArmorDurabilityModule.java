@@ -17,8 +17,6 @@ import net.minecraft.world.item.ItemStack;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
-// Échafaudage temporaire — étape 1 de la refonte du rendu, à retirer avec la sonde.
-import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiProbe;
 
 /**
  * Port de PvP-Mod ArmorDurabilityConfig/ArmorDurabilityHud — sa propre carte,
@@ -104,11 +102,6 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         // voir javadoc de VANILLA_SLOT_OFFSETS_GUI).
         VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_ARMOR, ctx -> isEnabled());
 
-        // Échafaudage temporaire — étape 1 de la refonte du rendu. La sonde
-        // s'enregistre elle-même sur HUD_EXTRACT_CROSSHAIR (appelé à chaque
-        // frame, contrairement à HUD_EXTRACT_ARMOR qui exige de porter une
-        // pièce d'armure). À retirer avec elle.
-        VanillaGuiProbe.install();
     }
 
     @Override

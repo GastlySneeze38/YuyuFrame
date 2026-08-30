@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.User;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.sounds.SoundManager;
 
@@ -71,6 +72,20 @@ public final class ClientData {
     public static User user() {
         MinecraftAccessor261 mc = accessor();
         return mc == null ? null : mc.la$user();
+    }
+
+    /**
+     * Écran actuellement ouvert, ou {@code null} si le joueur est en jeu.
+     *
+     * <p>Ajouté le 2026-08-30 pour le rendu du HUD depuis la passe GUI : c'est
+     * le TYPE d'écran ouvert qui décide de la visibilité de chaque élément
+     * (voir {@code HudOverlayRenderer}). L'ancien chemin recevait cet écran du
+     * mixin ; en émettant depuis un hook d'extraction, il faut aller le
+     * chercher.
+     */
+    public static Screen screen() {
+        MinecraftAccessor261 mc = accessor();
+        return mc == null ? null : mc.la$screen();
     }
 
     /** HUD vanilla, ou {@code null}. */

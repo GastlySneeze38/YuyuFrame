@@ -51,16 +51,25 @@ public abstract class GlobalUiPresentMixin261 {
             Object currentScreen = GlobalUiRenderBridge261.getCurrentScreen(mc);
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
 
+            // LE HUD N'EST PLUS DESSINÉ ICI sur ce bracket (2026-08-30) — il
+            // est émis pendant la passe GUI de vanilla, depuis
+            // HUD_EXTRACT_CHAT (voir HudOverlayRenderer.renderInVanillaGui et
+            // docs/LauncherAgent/rendering-pipeline.md). Ce point-ci se situe
+            // APRÈS la présentation de la frame : tout ce qu'on y dessinait
+            // passait forcément par-dessus la GUI vanilla, chat compris, sans
+            // aucun moyen de s'intercaler.
+            //
+            // Restent ici les rendus PAS ENCORE portés, qui gardent donc
+            // l'ancien comportement : l'overlay plein écran des modules
+            // (teinte vie basse) et l'aperçu shulker.
             if (currentScreen == null) {
                 if (!HudOverlayRenderer.vanillaHudHidden()) {
-                    HudOverlayRenderer.render(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
                     ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
                 }
                 return;
             }
 
             if (!(currentScreen instanceof UiDrawable)) {
-                HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
                 ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
