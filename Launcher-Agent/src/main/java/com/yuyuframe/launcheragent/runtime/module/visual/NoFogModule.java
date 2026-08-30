@@ -3,11 +3,10 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import net.minecraft.client.renderer.fog.FogData;
 
-import java.lang.reflect.Field;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.FogRendererAccessor261;
 
 /**
  * Désactive tout le brouillard (distance de rendu, eau, lave, ténèbres,
@@ -89,9 +88,7 @@ public final class NoFogModule extends LauncherModule {
     @Override
     public void onTick() {
         try {
-            Field fogEnabledField = fogEnabledField();
-            if (fogEnabledField == null) return;
-            fogEnabledField.set(null, false);
+            FogRendererAccessor261.la$setFogEnabled(false);
         } catch (Throwable t) {
             if (!errorLogged) {
                 errorLogged = true;
@@ -104,36 +101,10 @@ public final class NoFogModule extends LauncherModule {
     protected void onEnabledChanged(boolean enabled) {
         if (enabled) return;
         try {
-            Field fogEnabledField = fogEnabledField();
-            if (fogEnabledField != null) fogEnabledField.set(null, true);
-        } catch (Throwable ignored) {
+            FogRendererAccessor261.la$setFogEnabled(true);
+        } catch (Throwable t) {
+            LauncherLog.err("[NoFogModule] restauration du brouillard: " + t);
         }
     }
 
-    private static volatile Field cachedFogEnabledField;
-    private static volatile boolean fogEnabledResolveFailed;
-
-    private Field fogEnabledField() {
-        if (cachedFogEnabledField != null) return cachedFogEnabledField;
-        if (fogEnabledResolveFailed) return null;
-        // 1.21.11+ (nom Yarn actuel) essayé en premier, repli sur
-        // BackgroundRenderer (1.16.5-1.21.4, ancien nom Yarn — voir bug
-        // ci-dessus) puis sur le nom réel Mojang 26.1.2.
-        Class<?> fogRendererClass = McReflect.yarnClass("net/minecraft/client/render/fog/FogRenderer");
-        String yarnClassPath = "net/minecraft/client/render/fog/FogRenderer";
-        if (fogRendererClass == null) {
-            fogRendererClass = McReflect.yarnClass("net/minecraft/client/render/BackgroundRenderer");
-            yarnClassPath = "net/minecraft/client/render/BackgroundRenderer";
-        }
-        if (fogRendererClass == null) {
-            fogRendererClass = McReflect.yarnClass("net/minecraft/client/render/fog/FogRenderer", "net.minecraft.client.renderer.fog.FogRenderer");
-        }
-        if (fogRendererClass == null) {
-            fogEnabledResolveFailed = true;
-            return null;
-        }
-        cachedFogEnabledField = McReflect.field(fogRendererClass, yarnClassPath, "fogEnabled");
-        if (cachedFogEnabledField == null) fogEnabledResolveFailed = true;
-        return cachedFogEnabledField;
-    }
 }

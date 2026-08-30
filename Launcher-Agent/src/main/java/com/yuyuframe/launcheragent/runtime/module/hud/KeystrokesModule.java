@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.KeyMappingAccessor261;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -10,13 +9,13 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /**
  * Port de PvP-Mod KeystrokesConfig/KeystrokesHud — sa propre carte, comme
@@ -104,37 +103,23 @@ public final class KeystrokesModule extends SingleHudModule {
             try {
                 Object forward, left, back, right, jump;
 
-                // 26.1.2 sans réflexion — Options.keyUp/keyDown/keyLeft/keyRight/
-                // keyJump (champs publics, voir stub Options) via
-                // MinecraftAccessor261#la$options() (voir directOptions() plus
-                // bas) — architecture apimixin, pas de cast/champ vanilla brut
-                // dans les modules (2026-08-25, §19/§20).
-                Options directOptions = directOptions();
-                if (directOptions != null) {
-                    forward = directOptions.keyUp;
-                    left    = directOptions.keyLeft;
-                    back    = directOptions.keyDown;
-                    right   = directOptions.keyRight;
-                    jump    = directOptions.keyJump;
-                } else {
-                    Object mc = McReflect.minecraftClient();
-                    if (mc == null) return;
-                    Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
-                    if (options == null) return;
-
-                    // BUG TROUVÉ (audit modules, voir historique de session) :
-                    // noms de champ "forwardKey"/"leftKey"/etc. (1.8.9) inversés
-                    // en 1.16.5 — "keyForward"/"keyLeft"/etc. Essaie les deux.
-                    // 26.1+ : "keyForward"/"keyBack" (Yarn 1.16.5+) sont eux-mêmes
-                    // RENOMMÉS "keyUp"/"keyDown" côté Mojang réel (vérifié par javap
-                    // sur Options.class du vrai jar 26.1.2) — "keyLeft"/"keyRight"/
-                    // "keyJump" coïncident déjà, aucun repli nécessaire pour ceux-là.
-                    forward = optionsFieldEither(options, "forwardKey", "keyForward", "keyUp");
-                    left    = optionsFieldEither(options, "leftKey", "keyLeft", null);
-                    back    = optionsFieldEither(options, "backKey", "keyBack", "keyDown");
-                    right   = optionsFieldEither(options, "rightKey", "keyRight", null);
-                    jump    = optionsFieldEither(options, "jumpKey", "keyJump", null);
-                }
+                // Options par l'accessor Mixin (ClientData) puis champs
+                // publics keyUp/keyDown/keyLeft/keyRight/keyJump (voir stub
+                // Options) — zéro réflexion.
+                //
+                // Le repli réflexif multi-bracket a été supprimé le
+                // 2026-08-27. Renommages à connaître pour un portage :
+                // "forwardKey"/"leftKey"/… (1.8.9) → "keyForward"/"keyLeft"/…
+                // (1.16.5), puis "keyForward"/"keyBack" → "keyUp"/"keyDown"
+                // côté Mojang réel en 26.1 ("keyLeft"/"keyRight"/"keyJump"
+                // coïncidant déjà).
+                Options directOptions = ClientData.options();
+                if (directOptions == null) return;
+                forward = directOptions.keyUp;
+                left    = directOptions.keyLeft;
+                back    = directOptions.keyDown;
+                right   = directOptions.keyRight;
+                jump    = directOptions.keyJump;
 
                 trackClicks();
 
@@ -187,59 +172,14 @@ public final class KeystrokesModule extends SingleHudModule {
             } catch (Throwable ignored) {}
         }
 
-        /**
-         * 26.1.2 sans réflexion — {@code MinecraftAccessor261#la$options()}
-         * (architecture apimixin, voir sa javadoc). Try/catch dédié : {@code
-         * Minecraft.getInstance()} référence le nom RÉEL, inexistant tel quel
-         * sur les autres brackets (obfusqués) — {@code null} déclenche le
-         * repli réflexion multi-bracket côté appelant.
-         */
-        private Options directOptions() {
-            try {
-                Object mc = Minecraft.getInstance();
-                if (mc instanceof MinecraftAccessor261) return ((MinecraftAccessor261) mc).la$options();
-            } catch (Throwable ignored) {}
-            return null;
-        }
 
-        private Object optionsField(Object options, String yarnField, String realFieldFallback) {
-            try {
-                Field f = realFieldFallback != null
-                    ? McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField, realFieldFallback)
-                    : McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", yarnField);
-                return f == null ? null : f.get(options);
-            } catch (Throwable t) {
-                return null;
-            }
-        }
 
-        /**
-         * Essaie {@code oldName} (1.8.9) puis {@code newName} (1.13+, souvent
-         * inchangé jusqu'en 26.1.2 aussi) puis, si fourni, {@code
-         * realFieldFallback} (nom réel Mojang, requis quand 26.1.2 a ENCORE
-         * renommé le champ par rapport au nom Yarn "named" — ex: {@code
-         * keyForward}→{@code keyUp}, {@code keyBack}→{@code keyDown}, vérifiés
-         * par javap sur le jar client 26.1.2 réel).
-         */
-        private Object optionsFieldEither(Object options, String oldName, String newName, String realFieldFallback) {
-            if (com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/GameOptions", oldName)) {
-                Object v = optionsField(options, oldName, null);
-                if (v != null) return v;
-            }
-            return optionsField(options, newName, realFieldFallback);
-        }
 
+        /** {@code KeyMappingAccessor261#la$isDown()} (champ privé) — zéro réflexion. Repli supprimé le 2026-08-27 ; renommage à connaître : KeyBinding→KeyMapping, champ "pressed"→"isDown". */
         private boolean isDown(Object keyBinding) {
-            if (keyBinding == null) return false;
-            // 26.1.2 sans réflexion — KeyMappingAccessor261#la$isDown() (champ privé).
-            if (keyBinding instanceof KeyMappingAccessor261) {
-                try {
-                    return ((KeyMappingAccessor261) keyBinding).la$isDown();
-                } catch (Throwable ignored) {}
-            }
+            if (!(keyBinding instanceof KeyMappingAccessor261)) return false;
             try {
-                // 26.1+ : KeyBinding→KeyMapping, champ "pressed"→"isDown" (vérifié javap).
-                return McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "pressed", "isDown").getBoolean(keyBinding);
+                return ((KeyMappingAccessor261) keyBinding).la$isDown();
             } catch (Throwable t) {
                 return false;
             }
@@ -258,40 +198,18 @@ public final class KeystrokesModule extends SingleHudModule {
          * {@code UiInputPollerModern#nameForKeyCode}.
          */
         private String keyLabel(Object keyBinding) {
-            if (keyBinding == null) return "?";
-            // 26.1.2 sans réflexion — KeyMappingAccessor261#la$key() (champ
-            // privé) + InputConstants.Key.getValue() (méthode publique).
-            if (keyBinding instanceof KeyMappingAccessor261) {
-                try {
-                    InputConstants.Key key = ((KeyMappingAccessor261) keyBinding).la$key();
-                    if (key != null) {
-                        int code = key.getValue();
-                        String name = com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
-                        return name == null || name.isEmpty() ? "?" : name;
-                    }
-                } catch (Throwable ignored) {}
-            }
+            // KeyMappingAccessor261#la$key() (champ privé) +
+            // InputConstants.Key.getValue() (méthode publique) — zéro
+            // réflexion. Le repli multi-bracket a été supprimé le 2026-08-27 ;
+            // renommages à connaître : KeyBinding.code (int) disparu en 1.13+,
+            // puis champ "boundKey"→"key" (type déplacé vers
+            // com.mojang.blaze3d.platform.InputConstants$Key) et méthode
+            // "getCode"→"getValue" (InputConstants$Key n'a PLUS de getCode()).
+            if (!(keyBinding instanceof KeyMappingAccessor261)) return "?";
             try {
-                Integer directCode = tryGetInt(keyBinding, "code");
-                if (directCode != null) {
-                    int code = directCode;
-                    if (code < 0) return "M" + (-code - 100);
-                    Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
-                    Method getKeyName = McReflect.rawMethod(keyboard, "getKeyName", int.class);
-                    if (getKeyName == null) return "?";
-                    String name = (String) getKeyName.invoke(null, code);
-                    return name == null || name.isEmpty() ? "?" : name;
-                }
-
-                // 26.1+ : champ "boundKey"→"key" (type déplacé vers
-                // com.mojang.blaze3d.platform.InputConstants$Key), méthode
-                // "getCode"→"getValue" (vérifiés par javap — InputConstants$Key
-                // n'a PLUS de getCode() du tout, seulement getValue()).
-                Object boundKey = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", "boundKey", "key").get(keyBinding);
-                if (boundKey == null) return "?";
-                Method getCode = McReflect.noArgMethod(boundKey.getClass(), "net/minecraft/client/util/InputUtil$Key", "getCode", "getValue");
-                if (getCode == null) return "?";
-                int code = (int) getCode.invoke(boundKey);
+                InputConstants.Key key = ((KeyMappingAccessor261) keyBinding).la$key();
+                if (key == null) return "?";
+                int code = key.getValue();
                 String name = com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
                 return name == null || name.isEmpty() ? "?" : name;
             } catch (Throwable t) {
@@ -299,27 +217,6 @@ public final class KeystrokesModule extends SingleHudModule {
             }
         }
 
-        /**
-         * {@code null} si le champ n'existe pas du tout (pas juste une
-         * valeur négative) — distingue "pas ce champ" de "valeur -1".
-         * Vérifie D'ABORD que le mapping Yarn existe vraiment (voir
-         * historique de session, même piège que CoordsModule.tryField) :
-         * sinon getObfFieldName retombe sur "code" tel quel, qui peut par
-         * coïncidence matcher un vrai champ obfusqué sans rapport (1-2
-         * lettres, faux positif silencieux).
-         */
-        private Integer tryGetInt(Object keyBinding, String yarnField) {
-            if (!com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.hasFieldMapping("net/minecraft/client/option/KeyBinding", yarnField)) {
-                return null;
-            }
-            try {
-                java.lang.reflect.Field f = McReflect.field(keyBinding.getClass(), "net/minecraft/client/option/KeyBinding", yarnField);
-                if (f == null) return null;
-                return f.getInt(keyBinding);
-            } catch (Throwable t) {
-                return null;
-            }
-        }
 
         /**
          * BUG TROUVÉ (audit modules) : passait TOUJOURS par {@code

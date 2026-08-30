@@ -241,5 +241,7 @@ public final class ChatEnhancementsModule extends LauncherModule {
     }
 
     private static boolean pingErrorLogged;
+    /** Toujours utilisé par mergeRepeatedMessageDirect — le pendant réflexif a disparu, pas celui-ci. */
+    private static boolean mergeErrorLogged;
 
 }
