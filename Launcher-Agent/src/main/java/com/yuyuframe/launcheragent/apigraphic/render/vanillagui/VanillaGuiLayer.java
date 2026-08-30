@@ -1,9 +1,12 @@
 package com.yuyuframe.launcheragent.apigraphic.render.vanillagui;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiRoundedRect;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.GuiGraphicsExtractorAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.render.TextureSetup;
+import net.minecraft.client.renderer.state.gui.GuiRenderState;
 
 /**
  * Émet du dessin DANS l'état de GUI de vanilla, à la position Z du hook
@@ -141,6 +144,55 @@ public final class VanillaGuiLayer {
             LauncherLog.err("[VanillaGuiLayer] fillWithPipeline: " + t);
             return false;
         }
+    }
+
+    /**
+     * Rect ARRONDI avec notre pipeline SDF, à la position Z du hook — première
+     * primitive du moteur réellement portée dans l'état de GUI vanilla.
+     *
+     * <p>Passe par {@code GuiRenderState.addGuiElement} (et non par
+     * {@code GuiGraphicsExtractor.fill}) parce que seul un
+     * {@code GuiElementRenderState} à nous peut écrire les attributs de sommet
+     * que le SDF réclame — voir {@link RoundedRectElement}.
+     *
+     * <p>L'état de GUI est atteint par accessor Mixin : le champ
+     * {@code guiRenderState} est privé.
+     *
+     * @param radius rayon en pixels GUI, borné à la demi-dimension par l'élément.
+     * @return {@code false} si indisponible (hors 26.1.2, accessor non tissé,
+     *         ou pipeline non compilable) — l'appelant garde son chemin habituel.
+     */
+    public static boolean roundedRect(Object hookContext, float x0, float y0, float x1, float y1,
+                                      float radius, UiColor color) {
+        GuiGraphicsExtractor g = extractor(hookContext);
+        if (g == null) return false;
+        try {
+            if (!(g instanceof GuiGraphicsExtractorAccessor261)) {
+                reportOnce("guiRenderState inaccessible — GuiGraphicsExtractorAccessor261 non tissé");
+                return false;
+            }
+            GuiRenderState state = ((GuiGraphicsExtractorAccessor261) g).la$guiRenderState();
+            if (state == null) {
+                reportOnce("guiRenderState null");
+                return false;
+            }
+            if (!Blaze3DGuiRoundedRect.ensureCompiled()) return false;
+
+            state.addGuiElement(new RoundedRectElement(x0, y0, x1, y1, radius, argb(color)));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("roundedRect: " + t);
+            return false;
+        }
+    }
+
+    private static String lastReport;
+
+    /** Journalise une raison d'échec UNE fois par raison distincte — jamais de sortie muette. */
+    private static void reportOnce(String message) {
+        if (message.equals(lastReport)) return;
+        lastReport = message;
+        LauncherLog.err("[VanillaGuiLayer] " + message);
     }
 
     /**

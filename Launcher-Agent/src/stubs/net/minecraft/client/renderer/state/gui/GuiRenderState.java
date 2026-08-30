@@ -1,19 +1,19 @@
 package net.minecraft.client.renderer.state.gui;
 
 /**
- * Stub compile-only (26.1+) — marqueur, juste assez pour typer le champ
- * privé {@code GuiRenderer.renderState} et le paramètre du constructeur de
- * {@code GuiGraphicsExtractor} — voir {@code GuiRendererAccessor261}/{@code
- * GuiGraphicsExtractorInvoker261}.
+ * Stub compile-only (26.1+) — l'état de GUI que vanilla accumule pendant
+ * {@code GameRenderer.render} puis soumet en une fois via
+ * {@code GuiRenderer.render}. Ordre du PEINTRE : le dernier ajouté est
+ * dessiné au-dessus, ce qui fait du z-order une propriété du MOMENT
+ * d'insertion.
  *
- * Package RÉEL vérifié par javap sur le jar client 26.1.2 réel (champ
- * {@code GuiRenderer.renderState} : {@code net.minecraft.renderer.state.gui.
- * GuiRenderState}) — un premier stub avait été créé par erreur sous {@code
- * net.minecraft.client.gui.render.state} (package proche mais faux), ce qui
- * compilait sans erreur mais faisait planter le jeu au lancement
- * (InvalidAccessorException, descripteur d'Accessor ne matchant aucun champ
- * réel — voir historique de session). Toujours vérifier le package RÉEL par
- * javap, jamais par supposition, même pour un simple stub marqueur.
+ * <p>Atteint via {@code GuiGraphicsExtractorAccessor261} (le champ est privé).
  */
-public abstract class GuiRenderState {
+public final class GuiRenderState {
+    private GuiRenderState() {}
+
+    public void addGuiElement(GuiElementRenderState element) {}
+
+    /** Ouvre une strate : tout ce qui suit passe au-dessus de ce qui précède. */
+    public void nextStratum() {}
 }

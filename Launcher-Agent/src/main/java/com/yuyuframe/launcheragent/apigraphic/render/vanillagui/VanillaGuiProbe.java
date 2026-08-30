@@ -75,6 +75,8 @@ public final class VanillaGuiProbe {
     public static boolean TEST_OWN_PIPELINE = true;
 
     private static final UiColor VANILLA_RECT = new UiColor(0, 220, 255, 170);
+    /** Vert franc — troisième teinte reconnaissable, pour le rect arrondi. */
+    private static final UiColor ROUNDED_RECT = new UiColor(120, 255, 90, 190);
 
     private static boolean installed;
     private static boolean resultLogged;
@@ -135,12 +137,20 @@ public final class VanillaGuiProbe {
                     Blaze3DVanillaProbe.pipeline(), 128, top, 244, bottom);
             }
 
+            // Troisième rectangle : RECT ARRONDI, notre GuiElementRenderState
+            // avec notre VertexFormat maison. C'est la primitive qui décide si
+            // tout le HUD peut être porté — un quad plein ne prouvait que le
+            // z-order et l'acceptation d'un pipeline.
+            boolean roundedOk = VanillaGuiLayer.roundedRect(hookContext,
+                252, top, 368, bottom, 10f, ROUNDED_RECT);
+
             if (!resultLogged) {
                 resultLogged = true;
                 LauncherLog.info("[VanillaGuiProbe] émission OK — gui=" + w + "x" + h
                     + ", rect vanilla=" + vanillaOk
                     + ", pipeline maison testé=" + TEST_OWN_PIPELINE
-                    + " compilé=" + compiled + " émis=" + ownOk);
+                    + " compilé=" + compiled + " émis=" + ownOk
+                    + ", RECT ARRONDI (format maison)=" + roundedOk);
             }
         } catch (Throwable t) {
             reason("exception: " + t);

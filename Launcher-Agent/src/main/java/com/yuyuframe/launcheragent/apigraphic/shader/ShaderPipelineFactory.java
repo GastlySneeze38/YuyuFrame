@@ -59,8 +59,6 @@ public final class ShaderPipelineFactory {
     private static Object fieldUniformTypeUniformBuffer;
 
     private static Object fieldRenderPipelineGuiText;
-    /** {@code RenderPipelines.GUI} — pipeline de référence NON TEXTURÉ, voir {@link #buildPipeline(String, Object, Object, String[], String[], boolean)}. {@code null} si introuvable. */
-    private static Object fieldRenderPipelineGui;
 
     /** {@code true} seulement si les classes Blaze3D existent sur ce bracket (26.1.2/1.21.6+) — voir {@code UiTextBlaze3D.isAvailable()}, même convention. */
     public static boolean isAvailable() {
@@ -145,17 +143,10 @@ public final class ShaderPipelineFactory {
                 throw new NoSuchFieldException("RenderPipelines.GUI_TEXT introuvable");
             }
 
-            // Pipeline de référence NON TEXTURÉ — voir buildPipeline(…, untextured).
-            // Résolu séparément et sans lever si absent : lui manquer ne doit pas
-            // priver tout le moteur de son chemin Blaze3D habituel, qui n'a besoin
-            // que de GUI_TEXT.
-            currentStage = "RenderPipelines.GUI";
-            try {
-                fieldRenderPipelineGui = clsRenderPipelines.getField(
-                    MappingsRegistry.getObfFieldName("net/minecraft/client/gl/RenderPipelines", "GUI")).get(null);
-            } catch (Throwable t) {
-                LauncherLog.err("[ShaderPipelineFactory] RenderPipelines.GUI introuvable (format non texturé indisponible) : " + t);
-            }
+            // NOTE : le pipeline de référence NON TEXTURÉ n'est PAS résolu ici.
+            // Il est fourni par l'appelant via l'accessor Mixin
+            // RenderPipelinesAccessor261#la$gui() — norme du projet, aucun
+            // accès à l'état du jeu par réflexion. Voir buildPipeline(…, reference).
 
             resolveOk = true;
         } catch (Throwable t) {
@@ -208,7 +199,7 @@ public final class ShaderPipelineFactory {
      */
     public static Object buildPipeline(String location, Object vertexShaderId, Object fragmentShaderId,
             String[] samplerNames, String[] uniformBufferNames) throws Exception {
-        return buildPipeline(location, vertexShaderId, fragmentShaderId, samplerNames, uniformBufferNames, false);
+        return buildPipeline(location, vertexShaderId, fragmentShaderId, samplerNames, uniformBufferNames, null, null);
     }
 
     /**
@@ -227,18 +218,21 @@ public final class ShaderPipelineFactory {
      * que le pipeline ait servi à dessiner quoi que ce soit (sa seule
      * construction suffit).
      *
-     * @param untextured {@code true} pour copier le format de
-     *        {@code RenderPipelines.GUI} (non texturé, {@code Position + Color})
-     *        au lieu de {@code GUI_TEXT} — obligatoire pour tout pipeline
-     *        destiné à être soumis via {@code VanillaGuiLayer}.
+     * @param referencePipeline pipeline dont copier format de sommet, état
+     *        couleur/profondeur et cull — {@code null} pour garder
+     *        {@code GUI_TEXT}. À fournir depuis un ACCESSOR
+     *        ({@code RenderPipelinesAccessor261#la$gui()}), jamais par
+     *        réflexion : norme du projet pour tout accès à l'état du jeu.
+     * @param vertexFormatOverride format de sommet à utiliser à la place de
+     *        celui du pipeline de référence — {@code null} pour le copier.
+     *        Sert aux pipelines qui déclarent leurs propres attributs (voir
+     *        {@code Blaze3DRoundedRectElement}).
      */
     public static Object buildPipeline(String location, Object vertexShaderId, Object fragmentShaderId,
-            String[] samplerNames, String[] uniformBufferNames, boolean untextured) throws Exception {
+            String[] samplerNames, String[] uniformBufferNames,
+            Object referencePipeline, Object vertexFormatOverride) throws Exception {
         if (!resolve()) throw new IllegalStateException("ShaderPipelineFactory indisponible sur ce bracket");
-        Object reference = untextured ? fieldRenderPipelineGui : fieldRenderPipelineGuiText;
-        if (reference == null) {
-            throw new IllegalStateException("pipeline de référence indisponible (untextured=" + untextured + ")");
-        }
+        Object reference = referencePipeline != null ? referencePipeline : fieldRenderPipelineGuiText;
         Object emptySnippets = Array.newInstance(clsSnippet, 0);
         Object builder = mBuilderStatic.invoke(null, new Object[]{ emptySnippets });
         builder = mWithLocation.invoke(builder, identifier("yuyuframe", location));
@@ -251,7 +245,8 @@ public final class ShaderPipelineFactory {
             builder = mWithUniform.invoke(builder, uniformBuffer, fieldUniformTypeUniformBuffer);
         }
 
-        Object refVertexFormat = mGetVertexFormat.invoke(reference);
+        Object refVertexFormat = vertexFormatOverride != null
+            ? vertexFormatOverride : mGetVertexFormat.invoke(reference);
         Object refVertexFormatMode = mGetVertexFormatMode.invoke(reference);
         Object refColorTargetState = mGetColorTargetState.invoke(reference);
         Object refDepthStencilState = mGetDepthStencilState.invoke(reference);

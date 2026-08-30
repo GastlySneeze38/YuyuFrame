@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.render.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.shader.ShaderPipelineFactory;
+import com.yuyuframe.launcheragent.apimixin.v26_1.render.RenderPipelinesAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 
 /**
@@ -96,12 +97,13 @@ public final class Blaze3DVanillaProbe {
                 if (!Blaze3DCore.isAvailable()) return null;
                 Object vsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_vanilla_probe.vsh");
                 Object fsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_vanilla_probe.fsh");
-                // untextured=true : format de sommet emprunté à
-                // RenderPipelines.GUI (Position + Color), PAS à GUI_TEXT qui
-                // exige en plus UV0 + UV2. C'est ce qui a fait crasher la v919 —
-                // voir la javadoc de ShaderPipelineFactory.buildPipeline(…, boolean).
+                // Référence = RenderPipelines.GUI (non texturé, Position + Color),
+                // PAS GUI_TEXT qui exige en plus UV0 + UV2 — c'est ce qui a fait
+                // crasher la v919. Récupéré par ACCESSOR Mixin, jamais par
+                // réflexion : norme du projet pour tout accès à l'état du jeu.
                 pipeline = ShaderPipelineFactory.buildPipeline("ui_vanilla_probe", vsh, fsh,
-                    new String[0], new String[]{ "DynamicTransforms", "Projection" }, true);
+                    new String[0], new String[]{ "DynamicTransforms", "Projection" },
+                    RenderPipelinesAccessor261.la$gui(), null);
                 shaderSource = ShaderPipelineFactory.shaderSource(vsh, VERTEX_SRC, fsh, FRAGMENT_SRC);
             } catch (Throwable t) {
                 buildFailed = true;

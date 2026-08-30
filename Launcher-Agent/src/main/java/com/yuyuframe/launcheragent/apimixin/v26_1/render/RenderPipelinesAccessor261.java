@@ -27,4 +27,23 @@ public interface RenderPipelinesAccessor261 {
      */
     @Accessor("GUI_TEXTURED")
     static RenderPipeline la$guiTextured() { throw new AssertionError(); }
+
+    /**
+     * {@code RenderPipelines.GUI} — pipeline NON TEXTURÉ (format
+     * {@code Position + Color}), celui qu'utilise {@code fill()}.
+     *
+     * <p>Ajouté le 2026-08-30 pour la refonte du rendu : tout pipeline à nous
+     * destiné à être soumis dans l'état de GUI de vanilla doit copier CE
+     * format-là. Avec celui de {@code GUI_TEXT} (texturé, {@code UV0 + UV2}),
+     * le client crashe dans {@code GuiRenderer.prepare} — voir
+     * {@code docs/LauncherAgent/rendering-pipeline.md}.
+     *
+     * <p>Passe par un accessor et non par {@code getField} : c'est la norme
+     * du projet pour tout accès à l'état du jeu, y compris sur un champ
+     * public, parce que la portabilité multiversion vient de ce que TOUS les
+     * accès traversent une seule interface par bracket (voir
+     * {@code MinecraftAccessor261}).
+     */
+    @Accessor("GUI")
+    static RenderPipeline la$gui() { throw new AssertionError("RenderPipelinesAccessor261 non tissé"); }
 }
