@@ -166,6 +166,12 @@ public final class FreelookModule extends LauncherModule {
     public FreelookModule() {
         super("freelook", "Freelook", "Maintenir (ou basculer) une touche pour regarder autour de soi sans changer la direction du personnage (façon OptiFine).", false,
             HookPoint.FREELOOK_TURN_INTERCEPT, HookPoint.FREELOOK_CAMERA_ROTATION_OFFSET);
+        // Sorti du groupe "Confort visuel" le 2026-08-30 (demande explicite) :
+        // il a désormais sa propre carte sur l'accueil, donc il lui faut une
+        // icône comme tout module non groupé — sans elle, ModCard retomberait
+        // sur la pastille-lettre. Nom vérifié (HTTP 200, image/png) selon la
+        // convention de LauncherModule#icons8.
+        iconUrl = icons8("rotate-camera");
         // 26.1.2 — migration apimixin (ROADMAP-agent.md §4) : MouseHandlerFreelookMixin261/
         // CameraFreelookMixin261 n'importent plus FreelookModule directement,
         // ils dispatchent via VanillaHookRegistry — c'est CE module qui

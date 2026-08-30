@@ -36,6 +36,15 @@ public final class FullbrightModule extends LauncherModule {
     public FullbrightModule() {
         super("fullbright", "Fullbright", "Éclaire toute la scène au maximum, ignore l'obscurité", false);
         iconUrl = icons8("sun");
+        // Favori PAR DÉFAUT (2026-08-30, demande explicite) : ce module vit
+        // désormais dans le groupe "Confort visuel" (voir ModuleRegistry), où
+        // il n'aurait plus de carte à lui — le favori lui en redonne une sur
+        // l'accueil, qui rouvre l'écran du groupe positionné sur ses réglages.
+        //
+        // Simple valeur de départ, pas un forçage : HudConfigStore.applyTo()
+        // n'écrase ce champ que si la clé existe déjà dans le fichier de
+        // config, donc un utilisateur qui décoche le cœur garde son choix.
+        favorite = true;
     }
 
     @Override
