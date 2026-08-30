@@ -251,7 +251,11 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         private float itemWidth(Object[] stacks) {
             float maxTextW = 0f;
             for (Object stack : stacks) {
-                String text = durabilityText(stack);
+                // rowText et NON durabilityText : depuis que la taille de pile
+                // s'affiche aussi (2026-08-31), mesurer la seule durabilité
+                // laissait le panneau trop étroit pour un "×64", qui débordait
+                // sur le bord.
+                String text = rowText(stack);
                 if (text != null) maxTextW = Math.max(maxTextW, UiFont.REGULAR.textWidth(text, TEXT_SCALE));
             }
             return maxTextW > 0f ? ICON + GAP + maxTextW : FALLBACK_WIDTH;
@@ -405,10 +409,36 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         private void drawRow(UiRenderer renderer, float x, float y, float iconSize, Object stack, float scale, int vpWidth, int vpHeight) {
             if (stack == null) return;
             renderer.drawVanillaItemIcon(stack, x, y, iconSize, vpWidth, vpHeight);
-            String text = durabilityText(stack);
+            String text = rowText(stack);
             if (text != null) {
                 float textScale = TEXT_SCALE * scale;
                 renderer.drawText(text, x + iconSize + GAP * scale, y + iconSize * 0.35f, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+            }
+        }
+
+        /**
+         * Texte affiché à droite de l'icône, en style « Personnalisé ».
+         *
+         * <p>Durabilité pour un objet qui s'use, TAILLE DE PILE sinon (demande
+         * du 2026-08-31 : un stack de blocs n'affichait que son image). Les
+         * deux ne peuvent pas se disputer la place — un objet endommageable a
+         * une pile de 1 par construction dans le jeu.
+         *
+         * <p>Rien pour une pile de 1 : afficher « ×1 » sur chaque objet à
+         * l'unité alourdirait le HUD sans rien apprendre.
+         */
+        private String rowText(Object stack) {
+            String durability = durabilityText(stack);
+            if (durability != null) return durability;
+            if (!(stack instanceof ItemStack)) return null;
+            try {
+                int count = ((ItemStack) stack).getCount();
+                // "×" (U+00D7) et non "x" : dans la plage 160-255 couverte par
+                // UiFont (voir sa javadoc), donc un vrai glyphe et pas le
+                // caractère de repli.
+                return count > 1 ? "×" + count : null;
+            } catch (Throwable t) {
+                return null;
             }
         }
 

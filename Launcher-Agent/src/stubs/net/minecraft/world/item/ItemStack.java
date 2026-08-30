@@ -11,4 +11,6 @@ public abstract class ItemStack {
     public boolean isDamageableItem() { return false; }
     public int getDamageValue() { return 0; }
     public int getMaxDamage() { return 0; }
+    /** Taille de la pile — voir {@code ArmorDurabilityModule}, qui l'affiche pour un objet empilé. Signature vérifiée sur le jar 26.1.2 ({@code getCount()I}). */
+    public int getCount() { return 0; }
 }
