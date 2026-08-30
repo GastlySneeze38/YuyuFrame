@@ -40,7 +40,12 @@ public final class VanillaGuiProbe {
     private VanillaGuiProbe() {}
 
     /** Passer à {@code false} pour éteindre la sonde sans retirer le câblage. */
-    public static boolean ENABLED = true;
+    // Éteinte depuis la v929 : les quatre primitives sont validées (quad
+    // vanilla, quad pipeline maison, rect arrondi format maison, texte SDF)
+    // et le HUD réel est désormais émis par cette voie — les rectangles de
+    // test n'apporteraient plus que du bruit à l'écran. Toute la classe est
+    // à supprimer une fois le portage terminé.
+    public static boolean ENABLED = false;
 
     /**
      * Deuxième moitié de la sonde (rectangle magenta, pipeline maison) —

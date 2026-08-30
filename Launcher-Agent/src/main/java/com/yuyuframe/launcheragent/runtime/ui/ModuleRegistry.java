@@ -293,9 +293,12 @@ public final class ModuleRegistry {
         }
         register(new MumbleLinkModule());
 
-        // Infra de rendu (pas un module) — voir INFRA_HOOK_POINTS : place le
-        // flush des icônes d'item vanilla entre le HUD et le chat dans l'état
-        // de GUI, au lieu de l'après-coup qui les faisait passer par-dessus.
+        // Infra de rendu (pas un module) — voir INFRA_HOOK_POINTS. Émet le HUD
+        // PUIS vide la file d'icônes d'item, le tout dans l'état de GUI de
+        // vanilla, entre le HUD vanilla et le chat. Remplace l'ancien dessin
+        // après-coup qui faisait passer tout notre contenu par-dessus le chat.
+        com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiLayer.setHudPass(
+            com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer::renderInVanillaGui);
         com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiLayer.installItemIconFlush();
 
         // Regroupement demandé — voir ModuleGroup : purement de la

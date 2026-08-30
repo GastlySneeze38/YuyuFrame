@@ -3,6 +3,8 @@ package com.yuyuframe.launcheragent.runtime.ui.hud;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudRenderer;
+import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
@@ -66,9 +68,56 @@ public final class HudOverlayRenderer {
         }
     }
 
+    /**
+     * Vrai quand {@link #renderInVanillaGui} a déjà dessiné le HUD pour la
+     * frame en cours — sans ce garde, {@link #render}, toujours branché en
+     * TAIL de {@code blitToScreen}, le dessinerait une SECONDE fois par le
+     * chemin historique. Consommé (remis à faux) par ce même {@code render}.
+     */
+    private static boolean handledByVanillaGui;
+
     /** Affichage HUD permanent, aucun écran ouvert — délègue le dessin à {@link HudRenderer}. */
     public static void render(UiRenderer renderer, int vpWidth, int vpHeight) {
+        if (handledByVanillaGui) {
+            handledByVanillaGui = false;
+            return;
+        }
         HudRenderer.drawAll(renderer, vpWidth, vpHeight);
+    }
+
+    /**
+     * Rendu du HUD DEPUIS LA PASSE GUI de vanilla — voir
+     * {@code docs/LauncherAgent/rendering-pipeline.md}.
+     *
+     * <p>Même dessin que {@link #render}, mais avec la cible
+     * {@code VanillaGuiTarget} armée : panneaux et texte atterrissent dans
+     * l'état de GUI de vanilla, à la profondeur du hook, au lieu de la file
+     * Blaze3D vidée après la présentation. C'est ce qui met le HUD SOUS le
+     * chat et ses panneaux SOUS les icônes d'item.
+     *
+     * <p>Ne fait rien si la cible n'a pas pu être armée (hors bracket 26.1.2,
+     * ou {@code VanillaGuiTarget.ENABLED} à faux) : le rendu par le chemin
+     * historique reste alors branché sur {@code blitToScreen}, inchangé.
+     *
+     * <p>{@code end()} dans un {@code finally} : une cible restée armée
+     * détournerait tout le rendu suivant, écrans de menu compris, vers un état
+     * de GUI périmé.
+     */
+    public static void renderInVanillaGui(Object hookContext) {
+        if (vanillaHudHidden()) return;
+        UiInputPoller poller = UiInputPoller.ACTIVE;
+        if (poller == null) return;
+        int w = poller.fbWidth, h = poller.fbHeight;
+        UiRenderer renderer = UiRenderer.get(HudOverlayRenderer.class.getClassLoader());
+        if (!VanillaGuiTarget.begin(hookContext, w, h)) return;
+        try {
+            HudRenderer.drawAll(renderer, w, h);
+            handledByVanillaGui = true;
+        } catch (Throwable t) {
+            LauncherLog.err("[HudOverlayRenderer] renderInVanillaGui: " + t);
+        } finally {
+            VanillaGuiTarget.end();
+        }
     }
 
     /**

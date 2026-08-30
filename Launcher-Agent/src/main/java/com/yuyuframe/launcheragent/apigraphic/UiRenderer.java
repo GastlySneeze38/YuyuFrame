@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apigraphic;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.render.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
@@ -396,8 +397,21 @@ public final class UiRenderer {
         primitives.drawIcon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
     }
 
+    // ── Cible « état de GUI vanilla » ────────────────────────────────────────
+    //
+    // Quand elle est armée (pendant la passe GUI de vanilla, voir
+    // VanillaGuiTarget), les primitives que le HUD utilise réellement sont
+    // émises DANS l'état de GUI de vanilla au lieu de la file Blaze3D. C'est
+    // ce qui rend le z-order du HUD choisissable — voir
+    // docs/LauncherAgent/rendering-pipeline.md.
+    //
+    // Un seul commutateur ici plutôt qu'un paramètre chez chaque appelant :
+    // les modules HUD écrivent `renderer.drawText(...)`, ils n'ont pas à
+    // savoir où ça atterrit.
+
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
@@ -419,6 +433,14 @@ public final class UiRenderer {
     public void drawRoundedRect(float x1, float y1, float x2, float y2,
                                  float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
                                  UiColor color, int vpWidth, int vpHeight) {
+        // Le SDF porté dans l'état de GUI est à rayon UNIQUE : on prend le plus
+        // grand des quatre. Seul effet visible, les coins carrés voulus au
+        // contact d'un bord d'écran (voir HudPanelRenderer.edgeAwareRadii)
+        // redeviennent arrondis — écart assumé pour cette étape, le rayon par
+        // coin demanderait un scalaire de plus par sommet.
+        float maxRadius = Math.max(Math.max(radiusBottomLeft, radiusBottomRight),
+                                   Math.max(radiusTopLeft, radiusTopRight));
+        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, maxRadius, color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight, color, vpWidth, vpHeight);
     }
 
@@ -426,6 +448,7 @@ public final class UiRenderer {
     @Deprecated
     public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                     int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRectHud(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
@@ -689,11 +712,16 @@ public final class UiRenderer {
      * rects batchés). No-op hors era E.
      */
     public void beginTextBatch() {
+        // Sans objet sur la voie vanilla : chaque chaîne y devient un élément
+        // de l'état de GUI, l'ordre d'insertion suffit à garantir le z-order
+        // que le lot servait à préserver.
+        if (VanillaGuiTarget.isArmed()) return;
         com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.beginBatch();
     }
 
     /** Ferme le lot ouvert par {@link #beginTextBatch} et empile son rendu (une passe par police). */
     public void endTextBatch(int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.isArmed()) return;
         com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
     }
 
@@ -704,11 +732,13 @@ public final class UiRenderer {
     public String truncate(String text, float scale, float maxWidth) { return this.text.truncate(text, scale, maxWidth); }
 
     public void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.text(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight)) return;
         this.text.drawText(text, x, y, color, scale, vpWidth, vpHeight);
     }
 
     public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
                           int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.text(font, text, x, y, color, scale, vpWidth, vpHeight)) return;
         this.text.drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
     }
 

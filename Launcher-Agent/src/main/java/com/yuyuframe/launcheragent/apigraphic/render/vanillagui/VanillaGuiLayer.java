@@ -255,10 +255,35 @@ public final class VanillaGuiLayer {
      * seraient tout de même dessinées (au mauvais z, mais dessinées). Une file
      * déjà vidée rend ce second flush inoffensif — c'est un no-op.
      */
+    /**
+     * Rendu du HUD à exécuter depuis la passe GUI, injecté par l'appelant.
+     *
+     * <p>Découplage volontaire : {@code apigraphic} ne doit pas dépendre de
+     * {@code runtime.ui.hud}, qui porte la POLITIQUE d'affichage (quels
+     * éléments, visibles quand). C'est {@code ModuleRegistry} qui fournit
+     * l'implémentation au moment de l'installation.
+     */
+    public interface HudPass {
+        void run(Object hookContext);
+    }
+
+    private static HudPass hudRenderer = ctx -> {};
+
+    /** Voir {@link HudPass}. À appeler AVANT {@link #installItemIconFlush()}. */
+    public static void setHudPass(HudPass pass) {
+        if (pass != null) hudRenderer = pass;
+    }
+
     public static void installItemIconFlush() {
         if (itemFlushInstalled) return;
         itemFlushInstalled = true;
         VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_CHAT, ctx -> {
+            // ORDRE VOLONTAIRE, c'est lui qui règle le second bug d'armure :
+            // le HUD d'abord (ses panneaux atterrissent dans l'état, et ses
+            // icônes d'item vont dans la file), le flush ENSUITE — les icônes
+            // se retrouvent donc au-dessus des panneaux, et l'ensemble sous le
+            // chat qui n'est pas encore extrait.
+            hudRenderer.run(ctx);
             flushItemIcons(ctx);
             return false;
         });
