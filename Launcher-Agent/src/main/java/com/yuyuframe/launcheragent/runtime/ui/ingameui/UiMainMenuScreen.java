@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
+import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleGroup;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
@@ -918,10 +919,25 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // écran-là, positionné directement sur sa section — c'est tout
                 // l'intérêt du raccourci.
                 ModuleGroup ownerGroup = ModuleRegistry.groupOf(mod);
+                // Un module non groupé qui n'a NI réglage déclaré NI élément
+                // HUD n'a rien à montrer : UiModConfigScreen s'ouvrirait
+                // totalement vide (ni onglet, ni ligne — son toggle d'activation
+                // vit sur cette carte, pas là-bas), ce qui se lit comme un bug.
+                // Sa carte bascule donc simplement le module, comme le fait
+                // déjà la bande en mode Grille (2026-08-30, demande explicite :
+                // "comment cacher le fait qu'il n'a pas de config"). Concerne
+                // aujourd'hui MumbleLink et ShulkerPreview ; tout module futur
+                // dans le même cas est couvert automatiquement.
+                boolean hasSomethingToShow = ownerGroup != null
+                    || !mod.settings().isEmpty()
+                    || mod instanceof HudElementOwner;
+                Runnable cardAction = ownerGroup != null
+                    ? () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, ownerGroup, mod))
+                    : hasSomethingToShow
+                        ? () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod))
+                        : () -> { mod.setEnabled(!mod.isEnabled()); HudConfigStore.save(); rebuildAll(); };
                 ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, mod.iconUrl, enterDelay,
-                    ownerGroup != null
-                        ? () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, ownerGroup, mod))
-                        : () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
+                    cardAction);
                 modScroll.add(card);
                 applyReorder(card, id, cx, cy);
 
