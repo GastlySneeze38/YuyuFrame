@@ -96,8 +96,12 @@ public final class Blaze3DVanillaProbe {
                 if (!Blaze3DCore.isAvailable()) return null;
                 Object vsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_vanilla_probe.vsh");
                 Object fsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_vanilla_probe.fsh");
+                // untextured=true : format de sommet emprunté à
+                // RenderPipelines.GUI (Position + Color), PAS à GUI_TEXT qui
+                // exige en plus UV0 + UV2. C'est ce qui a fait crasher la v919 —
+                // voir la javadoc de ShaderPipelineFactory.buildPipeline(…, boolean).
                 pipeline = ShaderPipelineFactory.buildPipeline("ui_vanilla_probe", vsh, fsh,
-                    new String[0], new String[]{ "DynamicTransforms", "Projection" });
+                    new String[0], new String[]{ "DynamicTransforms", "Projection" }, true);
                 shaderSource = ShaderPipelineFactory.shaderSource(vsh, VERTEX_SRC, fsh, FRAGMENT_SRC);
             } catch (Throwable t) {
                 buildFailed = true;
@@ -122,6 +126,15 @@ public final class Blaze3DVanillaProbe {
         Object p = pipeline();
         if (p == null) return false;
         try {
+            // BUG TROUVÉ (v919) : mGetDevice était null. isAvailable() ne
+            // teste que l'existence des classes Blaze3D, il ne DÉCLENCHE pas
+            // la résolution des méthodes — or on est ici appelé depuis la
+            // passe GUI, potentiellement avant que le moteur ait eu son
+            // premier rendu. resolve() est idempotent.
+            if (!Blaze3DCore.resolve() || Blaze3DCore.mGetDevice == null) {
+                LauncherLog.err("[Blaze3DVanillaProbe] Blaze3DCore non résolu — précompilation impossible");
+                return false;
+            }
             Object device = Blaze3DCore.mGetDevice.invoke(null);
             ShaderPipelineFactory.precompile(device, p, shaderSource);
             return true;

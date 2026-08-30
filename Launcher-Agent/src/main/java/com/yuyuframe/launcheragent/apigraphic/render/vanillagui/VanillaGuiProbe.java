@@ -72,7 +72,7 @@ public final class VanillaGuiProbe {
      * (étape 1b) : emprunter celui d'un pipeline vanilla NON texturé au lieu
      * de {@code GUI_TEXT}, ou déclarer un {@code VertexFormat} à nous.
      */
-    public static boolean TEST_OWN_PIPELINE = false;
+    public static boolean TEST_OWN_PIPELINE = true;
 
     private static final UiColor VANILLA_RECT = new UiColor(0, 220, 255, 170);
 
