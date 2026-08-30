@@ -5,9 +5,7 @@ import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Options;
@@ -82,12 +80,38 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  */
 public final class FreelookModule extends LauncherModule {
 
-    @ConfigKeybind(name = "Touche de freelook", category = "Réglages")
     public String freelookKey = "V";
 
-    @ConfigDropdown(name = "Mode", description = "\"Maintenir\" : freelook actif tant que la touche est enfoncée (défaut). \"Basculer\" : un appui active, un second désactive.",
-        category = "Réglages", options = { "Maintenir", "Basculer" })
     public int mode = 0;
+
+    /**
+     * La dépendance du curseur de sensibilité est ici un {@code BooleanSupplier}
+     * relu à chaque frame — l'ancien couple {@code dependsOnField}/{@code
+     * dependsOnValue} désignait le champ par son NOM, résolu par réflexion, et
+     * ne savait comparer que des {@code int}.
+     */
+    @Override
+    protected void settings(SettingList s) {
+        s.keybind("freelookKey", "Touche de freelook", "Réglages",
+            () -> freelookKey, v -> freelookKey = v);
+        s.dropdown("mode", "Mode",
+            "\"Maintenir\" : freelook actif tant que la touche est enfoncée (défaut). \"Basculer\" : un appui active, un second désactive.",
+            "Réglages", new String[]{ "Maintenir", "Basculer" }, null,
+            () -> mode, v -> mode = v);
+        s.dropdown("thirdPersonView", "Vue 3e personne",
+            "Vue forcée à l'engagement du freelook (voir onTick). \"Avant\" (défaut, face au joueur — pas de blocage en regardant vers le haut) ou \"Arrière\" (dos au joueur, la caméra se plaque contre le joueur en regardant tout en haut — limitation vanilla).",
+            "Réglages", new String[]{ "Arrière", "Avant" }, null,
+            () -> thirdPersonView, v -> thirdPersonView = v);
+        s.dropdown("sensitivityMode", "Sensibilité",
+            "\"Sensibilité du jeu\" (défaut) : suit le réglage de sensibilité de la souris du jeu, comme le reste du gameplay. \"Personnalisée\" : ignore ce réglage, utilise une valeur dédiée au freelook.",
+            "Réglages", new String[]{ "Sensibilité du jeu", "Personnalisée" }, null,
+            () -> sensitivityMode, v -> sensitivityMode = v);
+        s.slider("customSensitivity", "Sensibilité personnalisée",
+            "Utilisée seulement si \"Sensibilité\" ci-dessus est réglée sur \"Personnalisée\" — même unité que le curseur de sensibilité du jeu (pourcentage, 50% = valeur par défaut du jeu).",
+            "Réglages", 0f, 100f, 1f,
+            () -> sensitivityMode == 1,
+            () -> customSensitivity, v -> customSensitivity = v);
+    }
 
     // Défaut sur "Avant" (2026-08-25, §15) — retour utilisateur : en vue
     // Arrière, regarder tout en haut plaque la caméra contre le joueur
@@ -95,8 +119,6 @@ public final class FreelookModule extends LauncherModule {
     // javadoc de CameraFreelookMixin261 pour le détail vérifié par javap) ;
     // la vue Avant n'a PAS ce problème (son propre retournement de pitch
     // vanilla inverse le sens du rayon de recul).
-    @ConfigDropdown(name = "Vue 3e personne", description = "Vue forcée à l'engagement du freelook (voir onTick). \"Avant\" (défaut, face au joueur — pas de blocage en regardant vers le haut) ou \"Arrière\" (dos au joueur, la caméra se plaque contre le joueur en regardant tout en haut — limitation vanilla).",
-        category = "Réglages", options = { "Arrière", "Avant" })
     public int thirdPersonView = 1;
 
     // Demandé explicitement ("utilise la sensibilité du jeu normal, et
@@ -106,8 +128,6 @@ public final class FreelookModule extends LauncherModule {
     // configurable. {@link #resolveSensitivity} est le point UNIQUE où ce
     // choix est tranché, appelé par chaque Mixin après sa propre lecture
     // réflexive de la sensibilité RÉELLE du jeu (jamais dupliquée ici).
-    @ConfigDropdown(name = "Sensibilité", description = "\"Sensibilité du jeu\" (défaut) : suit le réglage de sensibilité de la souris du jeu, comme le reste du gameplay. \"Personnalisée\" : ignore ce réglage, utilise une valeur dédiée au freelook.",
-        category = "Réglages", options = { "Sensibilité du jeu", "Personnalisée" })
     public int sensitivityMode = 0;
 
     // BUG TROUVÉ (retour utilisateur : "vanilla ne va que jusqu'à 100%",
@@ -116,9 +136,6 @@ public final class FreelookModule extends LauncherModule {
     // ×200). Stockée en pourcentage — voir resolveSensitivity pour la
     // conversion vers l'échelle brute au moment de l'appliquer. Défaut 50%
     // (= 0.5 brut, valeur par défaut vanilla).
-    @ConfigSlider(name = "Sensibilité personnalisée", description = "Utilisée seulement si \"Sensibilité\" ci-dessus est réglée sur \"Personnalisée\" — même unité que le curseur de sensibilité du jeu (pourcentage, 50% = valeur par défaut du jeu).",
-        category = "Réglages", min = 0f, max = 100f, step = 1f,
-        dependsOnField = "sensitivityMode", dependsOnValue = 1)
     public float customSensitivity = 50f;
 
     // Écrits UNIQUEMENT par MouseHandlerFreelookMixin261 (une fois par

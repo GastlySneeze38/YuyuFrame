@@ -2,8 +2,7 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import net.minecraft.client.player.LocalPlayer;
@@ -29,14 +28,23 @@ public final class LowHealthTintModule extends LauncherModule {
 
     private static final int BANDS = 10;
 
-    @ConfigSlider(name = "Seuil (% de vie)", category = "Réglages", min = 5f, max = 100f, step = 5f)
     public float threshold = 30f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("threshold", "Seuil (% de vie)", "Réglages", 5f, 100f, 5f,
+            () -> threshold, v -> threshold = v);
+        s.slider("maxOpacityPercent", "Opacité max (%)", "Réglages", 5f, 100f, 5f,
+            () -> maxOpacityPercent, v -> maxOpacityPercent = v);
+        s.slider("vignetteWidthPercent", "Largeur du dégradé (% écran)", "Réglages", 10f, 80f, 5f,
+            () -> vignetteWidthPercent, v -> vignetteWidthPercent = v);
+        s.color("color", "Couleur", "Réglages", () -> color, v -> color = v);
+    }
 
     // Baissé après retour utilisateur (bord encore visible même dans le noir
     // total, sans contraste de scène en cause) : un delta d'alpha plus petit
     // sur toute la largeur du dégradé laisse plus de marge aux 256 niveaux du
     // framebuffer 8-bit pour représenter la transition sans paliers visibles.
-    @ConfigSlider(name = "Opacité max (%)", category = "Réglages", min = 5f, max = 100f, step = 5f)
     public float maxOpacityPercent = 18f;
 
     // Le dégradé shader (drawEdgeVignette) est un calcul PAR PIXEL basé sur la
@@ -49,10 +57,8 @@ public final class LowHealthTintModule extends LauncherModule {
     // à 25% le dégradé restait perceptible comme un bord net même avec une
     // courbe lisse (smootherstep) — un dégradé plus LARGE, pas juste plus
     // lisse, était nécessaire pour que la transition soit vraiment invisible.
-    @ConfigSlider(name = "Largeur du dégradé (% écran)", category = "Réglages", min = 10f, max = 80f, step = 5f)
     public float vignetteWidthPercent = 45f;
 
-    @ConfigColor(name = "Couleur", category = "Réglages")
     public UiColor color = new UiColor(255, 0, 0, 255);
 
     public LowHealthTintModule() {

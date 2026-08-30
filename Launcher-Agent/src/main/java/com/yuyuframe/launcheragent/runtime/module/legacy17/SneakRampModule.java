@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.legacy17;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Ralentissement de sneak PROGRESSIF au lieu d'instantané. Marqueur pur, toute
@@ -15,8 +15,13 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class SneakRampModule extends LauncherModule {
 
-    @ConfigSlider(name = "Durée de transition (ticks)", category = "Réglages", min = 1f, max = 20f, step = 1f)
     public float rampTicks = 4f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("rampTicks", "Durée de transition (ticks)", "Réglages", 1f, 20f, 1f,
+            () -> rampTicks, v -> rampTicks = v);
+    }
 
     public SneakRampModule() {
         super("sneak-ramp-1-7", "Sneak progressif", "Ralentissement du sneak appliqué progressivement au lieu d'instantané", false);

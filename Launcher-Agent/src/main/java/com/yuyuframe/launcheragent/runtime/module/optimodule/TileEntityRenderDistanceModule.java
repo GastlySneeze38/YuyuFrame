@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.optimodule;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Arrête de rendre les tile entities (coffres, fours, spawners, panneaux,
@@ -13,8 +13,13 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class TileEntityRenderDistanceModule extends LauncherModule {
 
-    @ConfigSlider(name = "Distance max (blocs)", category = "Réglages", min = 8f, max = 128f, step = 8f)
     public float maxDistance = 64f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("maxDistance", "Distance max (blocs)", "Réglages", 8f, 128f, 8f,
+            () -> maxDistance, v -> maxDistance = v);
+    }
 
     public TileEntityRenderDistanceModule() {
         // Nom raccourci (était "Distance de rendu (tile entities)") — voir

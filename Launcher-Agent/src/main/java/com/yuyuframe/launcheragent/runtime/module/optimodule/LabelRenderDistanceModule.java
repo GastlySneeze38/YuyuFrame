@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.optimodule;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Le vanilla a déjà une coupure de distance dans
@@ -25,11 +25,17 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class LabelRenderDistanceModule extends LauncherModule {
 
-    @ConfigSlider(name = "Distance max (blocs)", category = "Réglages", min = 8f, max = 64f, step = 4f)
     public float maxDistance = 32f;
 
-    @ConfigSlider(name = "Distance simplification (blocs)", category = "Réglages", min = 4f, max = 32f, step = 2f)
     public float simplifyDistance = 16f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("maxDistance", "Distance max (blocs)", "Réglages", 8f, 64f, 4f,
+            () -> maxDistance, v -> maxDistance = v);
+        s.slider("simplifyDistance", "Distance simplification (blocs)", "Réglages", 4f, 32f, 2f,
+            () -> simplifyDistance, v -> simplifyDistance = v);
+    }
 
     public LabelRenderDistanceModule() {
         // Nom raccourci — voir TileEntityRenderDistanceModule pour le pourquoi (même onglet groupé "Distance de rendu").

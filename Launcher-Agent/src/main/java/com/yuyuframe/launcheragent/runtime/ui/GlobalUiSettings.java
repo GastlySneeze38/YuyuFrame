@@ -2,11 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudPanelRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
@@ -46,12 +42,8 @@ public final class GlobalUiSettings extends LauncherModule {
     // les réglages individuels (accent, opacités...) doivent donc s'appliquer
     // APRÈS, sinon ils seraient écrasés par la palette de base à chaque
     // changement.
-    @ConfigDropdown(name = "Thème", description = "Palette générale de l'interface — sombre (par défaut) ou claire.",
-        category = "Apparence", options = { "Sombre", "Clair" })
     public int themeMode = 0;
 
-    @ConfigSlider(name = "Opacité du HUD (en jeu)", description = "Transparence des panneaux HUD affichés en jeu (FPS, ping, coordonnées...) — pas les cartes du menu.",
-        category = "Apparence", min = 10f, max = 100f, step = 1f)
     public float hudOpacity = BASE_HUD_BG.a * 100f;
 
     // BUG TROUVÉ (retour utilisateur : "c'est le rayon des coins des HUD et
@@ -62,15 +54,10 @@ public final class GlobalUiSettings extends LauncherModule {
     // délibéré — voir sa javadoc), donc ce réglage n'avait en réalité AUCUN
     // effet sur le HUD. Pilote désormais HudPanelRenderer.RADIUS, plus
     // UiTheme.RADIUS_MD (qui reste fixe à sa valeur par défaut pour le menu).
-    @ConfigSlider(name = "Rayon des coins (HUD)", description = "Arrondi des coins des panneaux HUD affichés en jeu — pas les cartes du menu.",
-        category = "Apparence", min = 0f, max = 16f, step = 1f)
     public float cornerRadius = HudPanelRenderer.RADIUS;
 
-    @ConfigColor(name = "Couleur d'accent", description = "Couleur principale utilisée dans tout le menu.", category = "Apparence")
     public UiColor accentColor = UiTheme.ACCENT;
 
-    @ConfigDropdown(name = "Taille de l'interface", description = "Échelle générale du menu (cartes, texte, boutons, réglages...) — pas la taille des éléments HUD affichés en jeu, qui se règlent individuellement (voir chaque module).",
-        category = "Apparence", options = { "Petite", "Normale", "Grande" })
     public int uiSize = 1;
 
     // Demandé explicitement ("plusieurs agencements comme dans Lunar, choix
@@ -81,8 +68,6 @@ public final class GlobalUiSettings extends LauncherModule {
     // mais rien n'empêche de le faire ici aussi (même champ, même source de
     // vérité). Lu directement par UiMainMenuScreen.rebuildAll() à chaque
     // reconstruction de la grille.
-    @ConfigDropdown(name = "Affichage des cartes (menu)", description = "Disposition des cartes de mods dans le menu principal.",
-        category = "Apparence", options = { "Détaillé", "Compacte", "Grille d'icônes" })
     public int cardLayout = 2; // Grille d'icônes par défaut — retour utilisateur : "la grille est parfaite, mets-la par défaut".
 
     // Demandé explicitement ("améliore le système de favori... rajoute un
@@ -91,11 +76,8 @@ public final class GlobalUiSettings extends LauncherModule {
     // comportement inconditionnel, PAS piloté par ce réglage) ; celui-ci ne
     // pilote QUE l'affichage d'une section séparée avec titres ("FAVORIS" /
     // "AUTRES MODULES") au lieu d'une simple grille continue.
-    @ConfigToggle(name = "Séparer les favoris", description = "Affiche les mods favoris dans une section dédiée, avec un titre, en haut de la grille du menu principal.",
-        category = "Apparence")
     public boolean separateFavorites = true; // Activé par défaut — retour utilisateur explicite.
 
-    @ConfigKeybind(name = "Touche du menu", description = "Touche qui ouvre/ferme le menu YuyuFrame en jeu.", category = "Général")
     public String menuKey = UiInputPoller.menuKeyName;
 
     // Choix de langue (demande explicite : "ajoute le fait que on puisse
@@ -105,8 +87,6 @@ public final class GlobalUiSettings extends LauncherModule {
     // maintenir dans chaque module). Les index de {@link Lang#LANGUAGE_IDS}/
     // {@link Lang#LANGUAGE_NAMES} pilotent directement les options ici — les
     // deux tableaux DOIVENT rester en phase.
-    @ConfigDropdown(name = "Langue", description = "Langue de l'interface du launcher (menu, réglages, HUD...). Certains écrans avancés (navigateur Modrinth) restent en français pour le moment.",
-        category = "Général", options = { "Français", "English", "Español", "Deutsch", "Português (Brasil)", "Русский" })
     public int language = 0;
 
     // Visibilité du HUD à travers les écrans vanilla/mod — réglage GLOBAL
@@ -115,13 +95,10 @@ public final class GlobalUiSettings extends LauncherModule {
     // Inventaire/Conteneurs/Tchat (choix explicite de l'utilisateur), PAS le
     // menu pause (jamais demandé, comportement vanilla-like conservé — voir
     // HudOverlayRenderer.renderPersistent/HudScreenKind).
-    @ConfigToggle(name = "Afficher dans l'inventaire", description = "Garde le HUD visible quand l'inventaire du joueur (touche E, sans conteneur ouvert) est ouvert.", category = "HUD en jeu")
     public boolean showHudInInventory = true;
 
-    @ConfigToggle(name = "Afficher dans les conteneurs", description = "Garde le HUD visible dans les écrans de conteneur (coffre, four, table de craft...).", category = "HUD en jeu")
     public boolean showHudInContainers = true;
 
-    @ConfigToggle(name = "Afficher dans le tchat", description = "Garde le HUD visible quand la zone de saisie du tchat est ouverte.", category = "HUD en jeu")
     public boolean showHudInChat = true;
 
     /**
@@ -131,8 +108,59 @@ public final class GlobalUiSettings extends LauncherModule {
      * souvent le plus lisible sur un décor qui bouge vite — c'est donc un
      * choix esthétique à faire, pas un défaut à imposer.
      */
-    @ConfigToggle(name = "Fond flouté (HUD)", description = "Remplace l'aplat sombre derrière les panneaux HUD par un fond de verre dépoli qui floute le décor du jeu. Le réglage \"Opacité du HUD\" continue de s'appliquer.", category = "HUD en jeu")
     public boolean hudGlassBackground = false;
+
+    /**
+     * Trois catégories, dans l'ordre d'apparition des onglets : "Apparence",
+     * "Général", "HUD en jeu" — l'ordre venait auparavant de celui des champs.
+     */
+    @Override
+    protected void settings(SettingList s) {
+        s.dropdown("themeMode", "Thème",
+            "Palette générale de l'interface — sombre (par défaut) ou claire.",
+            "Apparence", new String[]{ "Sombre", "Clair" }, null,
+            () -> themeMode, v -> themeMode = v);
+        s.slider("hudOpacity", "Opacité du HUD (en jeu)",
+            "Transparence des panneaux HUD affichés en jeu (FPS, ping, coordonnées...) — pas les cartes du menu.",
+            "Apparence", 10f, 100f, 1f, null, () -> hudOpacity, v -> hudOpacity = v);
+        s.slider("cornerRadius", "Rayon des coins (HUD)",
+            "Arrondi des coins des panneaux HUD affichés en jeu — pas les cartes du menu.",
+            "Apparence", 0f, 16f, 1f, null, () -> cornerRadius, v -> cornerRadius = v);
+        s.color("accentColor", "Couleur d'accent", "Couleur principale utilisée dans tout le menu.",
+            "Apparence", null, () -> accentColor, v -> accentColor = v);
+        s.dropdown("uiSize", "Taille de l'interface",
+            "Échelle générale du menu (cartes, texte, boutons, réglages...) — pas la taille des éléments HUD affichés en jeu, qui se règlent individuellement (voir chaque module).",
+            "Apparence", new String[]{ "Petite", "Normale", "Grande" }, null,
+            () -> uiSize, v -> uiSize = v);
+        s.dropdown("cardLayout", "Affichage des cartes (menu)",
+            "Disposition des cartes de mods dans le menu principal.",
+            "Apparence", new String[]{ "Détaillé", "Compacte", "Grille d'icônes" }, null,
+            () -> cardLayout, v -> cardLayout = v);
+        s.toggle("separateFavorites", "Séparer les favoris",
+            "Affiche les mods favoris dans une section dédiée, avec un titre, en haut de la grille du menu principal.",
+            "Apparence", null, () -> separateFavorites, v -> separateFavorites = v);
+
+        s.keybind("menuKey", "Touche du menu", "Touche qui ouvre/ferme le menu YuyuFrame en jeu.",
+            "Général", null, () -> menuKey, v -> menuKey = v);
+        s.dropdown("language", "Langue",
+            "Langue de l'interface du launcher (menu, réglages, HUD...). Certains écrans avancés (navigateur Modrinth) restent en français pour le moment.",
+            "Général",
+            new String[]{ "Français", "English", "Español", "Deutsch", "Português (Brasil)", "Русский" }, null,
+            () -> language, v -> language = v);
+
+        s.toggle("showHudInInventory", "Afficher dans l'inventaire",
+            "Garde le HUD visible quand l'inventaire du joueur (touche E, sans conteneur ouvert) est ouvert.",
+            "HUD en jeu", null, () -> showHudInInventory, v -> showHudInInventory = v);
+        s.toggle("showHudInContainers", "Afficher dans les conteneurs",
+            "Garde le HUD visible dans les écrans de conteneur (coffre, four, table de craft...).",
+            "HUD en jeu", null, () -> showHudInContainers, v -> showHudInContainers = v);
+        s.toggle("showHudInChat", "Afficher dans le tchat",
+            "Garde le HUD visible quand la zone de saisie du tchat est ouverte.",
+            "HUD en jeu", null, () -> showHudInChat, v -> showHudInChat = v);
+        s.toggle("hudGlassBackground", "Fond flouté (HUD)",
+            "Remplace l'aplat sombre derrière les panneaux HUD par un fond de verre dépoli qui floute le décor du jeu. Le réglage \"Opacité du HUD\" continue de s'appliquer.",
+            "HUD en jeu", null, () -> hudGlassBackground, v -> hudGlassBackground = v);
+    }
 
     private GlobalUiSettings() {
         super("ui-settings", "Paramètres", "Réglages généraux de l'interface", true);

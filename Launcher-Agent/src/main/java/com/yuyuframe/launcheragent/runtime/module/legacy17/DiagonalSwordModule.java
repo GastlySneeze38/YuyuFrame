@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.legacy17;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Épée tenue en diagonale (1ère personne) — juste un marqueur activé/
@@ -17,14 +17,18 @@ public final class DiagonalSwordModule extends LauncherModule {
     // plutôt que de son centre visuel — à angle trop élevé, ça donne un
     // rendu "bizarre" (retour utilisateur). Le petit décalage X/Y ci-dessous
     // recentre le pivot pour un tilt plus naturel.
-    @ConfigSlider(name = "Angle (°)", category = "Réglages", min = -90f, max = 90f, step = 5f)
     public float angle = 14f;
 
-    @ConfigSlider(name = "Décalage X", category = "Réglages", min = -0.3f, max = 0.3f, step = 0.01f)
     public float offsetX = -0.05f;
 
-    @ConfigSlider(name = "Décalage Y", category = "Réglages", min = -0.3f, max = 0.3f, step = 0.01f)
     public float offsetY = 0.02f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("angle", "Angle (°)", "Réglages", -90f, 90f, 5f, () -> angle, v -> angle = v);
+        s.slider("offsetX", "Décalage X", "Réglages", -0.3f, 0.3f, 0.01f, () -> offsetX, v -> offsetX = v);
+        s.slider("offsetY", "Décalage Y", "Réglages", -0.3f, 0.3f, 0.01f, () -> offsetY, v -> offsetY = v);
+    }
 
     public DiagonalSwordModule() {
         super("diagonal-sword", "Épée en diagonale", "Incline l'épée tenue en 1ère personne", false);

@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.optimodule;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Le rendu des nuages "Fancy" (grille 3D de cubes) régénère TOUTE sa
@@ -16,8 +16,13 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class CachedFancyCloudsModule extends LauncherModule {
 
-    @ConfigSlider(name = "Intervalle de reconstruction (ms)", category = "Réglages", min = 100f, max = 2000f, step = 100f)
     public float rebuildIntervalMs = 500f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("rebuildIntervalMs", "Intervalle de reconstruction (ms)", "Réglages", 100f, 2000f, 100f,
+            () -> rebuildIntervalMs, v -> rebuildIntervalMs = v);
+    }
 
     public CachedFancyCloudsModule() {
         super("cached-fancy-clouds", "Nuages Fancy mis en cache", "Ne recalcule les nuages \"Fancy\" que périodiquement au lieu de chaque frame (aucun effet en mode Fast/Off)", true);

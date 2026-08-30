@@ -4,9 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
@@ -61,40 +59,56 @@ import com.yuyuframe.launcheragent.runtime.game.PlayerData;
  */
 public final class CrosshairModule extends LauncherModule {
 
-    @ConfigSlider(name = "Taille", category = "Réglages", min = 1f, max = 32f, step = 1f)
     public float size = 8f;
 
-    @ConfigSlider(name = "Épaisseur", category = "Réglages", min = 1f, max = 6f, step = 1f)
     public float thickness = 2f;
 
-    @ConfigSlider(name = "Espacement central", category = "Réglages", min = 0f, max = 16f, step = 1f)
     public float gap = 3f;
 
-    @ConfigToggle(name = "Point au lieu d'une croix", category = "Réglages")
     public boolean dotMode = false;
 
-    @ConfigColor(name = "Couleur", category = "Réglages")
     public UiColor color = new UiColor(255, 255, 255, 255);
 
-    @ConfigToggle(name = "Afficher la barre de rechargement", category = "Rechargement")
     public boolean showCooldownBar = true;
 
-    @ConfigSlider(name = "Largeur", category = "Rechargement", min = 6f, max = 300f, step = 1f)
     public float cooldownWidth = 100f;
 
-    @ConfigSlider(name = "Hauteur", category = "Rechargement", min = 1f, max = 60f, step = 1f)
     public float cooldownHeight = 20f;
 
-    @ConfigSlider(name = "Décalage vertical", category = "Rechargement", min = 0f, max = 60f, step = 1f)
     public float cooldownOffset = 14f;
 
     /** #D7D9EA — teinte dominante du sprite vanilla "progress" (voir javadoc de tête). */
-    @ConfigColor(name = "Couleur (rempli)", category = "Rechargement")
     public UiColor cooldownColor = new UiColor(215, 217, 234, 255);
 
     /** #3A3B3C — couleur EXACTE (pixel sampling) du sprite vanilla "background". */
-    @ConfigColor(name = "Couleur (fond)", category = "Rechargement")
     public UiColor cooldownBackgroundColor = new UiColor(58, 59, 60, 255);
+
+    /**
+     * Deux catégories : les onglets apparaissent dans l'ordre de première
+     * déclaration ci-dessous ("Réglages" puis "Rechargement"), exactement
+     * comme ils suivaient l'ordre des champs auparavant.
+     */
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("size", "Taille", "Réglages", 1f, 32f, 1f, () -> size, v -> size = v);
+        s.slider("thickness", "Épaisseur", "Réglages", 1f, 6f, 1f, () -> thickness, v -> thickness = v);
+        s.slider("gap", "Espacement central", "Réglages", 0f, 16f, 1f, () -> gap, v -> gap = v);
+        s.toggle("dotMode", "Point au lieu d'une croix", "Réglages", () -> dotMode, v -> dotMode = v);
+        s.color("color", "Couleur", "Réglages", () -> color, v -> color = v);
+
+        s.toggle("showCooldownBar", "Afficher la barre de rechargement", "Rechargement",
+            () -> showCooldownBar, v -> showCooldownBar = v);
+        s.slider("cooldownWidth", "Largeur", "Rechargement", 6f, 300f, 1f,
+            () -> cooldownWidth, v -> cooldownWidth = v);
+        s.slider("cooldownHeight", "Hauteur", "Rechargement", 1f, 60f, 1f,
+            () -> cooldownHeight, v -> cooldownHeight = v);
+        s.slider("cooldownOffset", "Décalage vertical", "Rechargement", 0f, 60f, 1f,
+            () -> cooldownOffset, v -> cooldownOffset = v);
+        s.color("cooldownColor", "Couleur (rempli)", "Rechargement",
+            () -> cooldownColor, v -> cooldownColor = v);
+        s.color("cooldownBackgroundColor", "Couleur (fond)", "Rechargement",
+            () -> cooldownBackgroundColor, v -> cooldownBackgroundColor = v);
+    }
 
     /** Contour fixe (pas configurable, juste pour détacher la barre de l'arrière-plan du jeu quel qu'il soit — le vrai vanilla n'en a pas besoin, il compte sur son propre alpha, mais notre croix personnalisable peut être posée sur n'importe quel décor). Utilisé UNIQUEMENT par le repli procédural (voir javadoc de tête) — la vraie texture vanilla n'en a pas besoin. */
     private static final UiColor COOLDOWN_BORDER = new UiColor(0, 0, 0, 200);

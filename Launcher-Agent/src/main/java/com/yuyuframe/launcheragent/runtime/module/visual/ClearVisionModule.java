@@ -3,7 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import net.minecraft.client.renderer.fog.FogData;
 import net.minecraft.resources.Identifier;
 
@@ -38,14 +38,22 @@ public final class ClearVisionModule extends LauncherModule {
     // IDENTIQUE à avant tant que l'utilisateur ne désactive rien ici. Lus
     // directement par WaterFogEnvironmentMixin261/LavaFogEnvironmentMixin261/
     // PowderedSnowFogEnvironmentMixin261/ClearOverlaysMixin261 (voir chacun).
-    @ConfigToggle(name = "Eau", description = "Retire le brouillard teinté sous l'eau.", category = "Réglages")
     public boolean clearWater = true;
 
-    @ConfigToggle(name = "Lave", description = "Retire le brouillard teinté dans la lave.", category = "Réglages")
     public boolean clearLava = true;
 
-    @ConfigToggle(name = "Neige poudreuse", description = "Retire le brouillard teinté ET le givre à l'écran dans la neige poudreuse.", category = "Réglages")
     public boolean clearPowderSnow = true;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.toggle("clearWater", "Eau", "Retire le brouillard teinté sous l'eau.", "Réglages", null,
+            () -> clearWater, v -> clearWater = v);
+        s.toggle("clearLava", "Lave", "Retire le brouillard teinté dans la lave.", "Réglages", null,
+            () -> clearLava, v -> clearLava = v);
+        s.toggle("clearPowderSnow", "Neige poudreuse",
+            "Retire le brouillard teinté ET le givre à l'écran dans la neige poudreuse.", "Réglages", null,
+            () -> clearPowderSnow, v -> clearPowderSnow = v);
+    }
 
     public ClearVisionModule() {
         // Nom raccourci (était "Vision claire (eau/lave/neige)") — retour

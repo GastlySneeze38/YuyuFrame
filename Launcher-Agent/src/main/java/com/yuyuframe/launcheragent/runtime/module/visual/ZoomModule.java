@@ -5,8 +5,7 @@ import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
 
@@ -77,12 +76,29 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  */
 public final class ZoomModule extends LauncherModule {
 
-    @ConfigKeybind(name = "Touche de zoom", category = "Réglages")
     public String zoomKey = "C";
 
-    @ConfigSlider(name = "FOV en zoom (base)", description = "Niveau de zoom appliqué à l'appui sur la touche — voir \"FOV en zoom max\" pour la limite atteignable en scrollant.",
-        category = "Réglages", min = 5f, max = 60f, step = 1f)
     public float zoomFov = 20f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.keybind("zoomKey", "Touche de zoom", "Réglages", () -> zoomKey, v -> zoomKey = v);
+        s.slider("zoomFov", "FOV en zoom (base)",
+            "Niveau de zoom appliqué à l'appui sur la touche — voir \"FOV en zoom max\" pour la limite atteignable en scrollant.",
+            "Réglages", 5f, 60f, 1f, null, () -> zoomFov, v -> zoomFov = v);
+        s.slider("zoomFovMin", "FOV en zoom max",
+            "Limite la plus zoomée atteignable en scrollant pendant le zoom (molette vers le haut = zoome plus).",
+            "Réglages", 1f, 60f, 1f, null, () -> zoomFovMin, v -> zoomFovMin = v);
+        s.slider("zoomScrollStep", "Pas de zoom (molette)",
+            "Variation de FOV par cran de molette pendant le zoom.",
+            "Réglages", 0.5f, 10f, 0.5f, null, () -> zoomScrollStep, v -> zoomScrollStep = v);
+        s.slider("transitionSeconds", "Durée de transition (s)",
+            "Temps pour atteindre le niveau de zoom cible en douceur, à l'appui comme au relâchement — 0 = instantané (comportement d'origine).",
+            "Réglages", 0f, 1f, 0.05f, null, () -> transitionSeconds, v -> transitionSeconds = v);
+        s.slider("sensitivityCompensation", "Réduction de la sensibilité en zoom (%)",
+            "Ralentit la rotation de la caméra proportionnellement au niveau de zoom courant, pour un ressenti cohérent (100% = compensation complète façon longue-vue, 0% = sensibilité inchangée).",
+            "Réglages", 0f, 100f, 5f, null, () -> sensitivityCompensation, v -> sensitivityCompensation = v);
+    }
 
     // Essential-style : scroller PENDANT le zoom va encore plus loin que la
     // base (jamais en-deçà, voir javadoc de classe) — demandé explicitement
@@ -90,20 +106,12 @@ public final class ZoomModule extends LauncherModule {
     // sur la touche (pas conservé d'une session de zoom à l'autre) : plus
     // simple à comprendre ("toujours pareil au prochain appui") qu'un état
     // caché qui persiste silencieusement.
-    @ConfigSlider(name = "FOV en zoom max", description = "Limite la plus zoomée atteignable en scrollant pendant le zoom (molette vers le haut = zoome plus).",
-        category = "Réglages", min = 1f, max = 60f, step = 1f)
     public float zoomFovMin = 5f;
 
-    @ConfigSlider(name = "Pas de zoom (molette)", description = "Variation de FOV par cran de molette pendant le zoom.",
-        category = "Réglages", min = 0.5f, max = 10f, step = 0.5f)
     public float zoomScrollStep = 2f;
 
-    @ConfigSlider(name = "Durée de transition (s)", description = "Temps pour atteindre le niveau de zoom cible en douceur, à l'appui comme au relâchement — 0 = instantané (comportement d'origine).",
-        category = "Réglages", min = 0f, max = 1f, step = 0.05f)
     public float transitionSeconds = 0.15f;
 
-    @ConfigSlider(name = "Réduction de la sensibilité en zoom (%)", description = "Ralentit la rotation de la caméra proportionnellement au niveau de zoom courant, pour un ressenti cohérent (100% = compensation complète façon longue-vue, 0% = sensibilité inchangée).",
-        category = "Réglages", min = 0f, max = 100f, step = 5f)
     public float sensitivityCompensation = 100f;
 
     private String cachedKeyName;

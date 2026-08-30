@@ -4,7 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import net.minecraft.client.Options;
 
 /**
@@ -17,8 +17,12 @@ import net.minecraft.client.Options;
  */
 public final class FovModule extends LauncherModule {
 
-    @ConfigSlider(name = "FOV", category = "Réglages", min = 30f, max = 110f, step = 1f)
     public float fovValue = 90f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("fov", "FOV", "Réglages", 30f, 110f, 1f, () -> fovValue, v -> fovValue = v);
+    }
 
     private float savedVanillaFov = -1f;
     private static boolean DIAG_LOGGED = false;

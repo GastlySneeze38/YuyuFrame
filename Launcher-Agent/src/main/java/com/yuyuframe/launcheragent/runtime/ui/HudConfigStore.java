@@ -1,11 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.runtime.ui.config.Setting;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
@@ -13,12 +8,11 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.lang.reflect.Field;
 import java.util.Properties;
 
 /**
- * Sauvegarde disque des réglages de module — activation, réglages
- * {@code @Config*} annotés, et position/échelle/marges des éléments HUD (voir
+ * Sauvegarde disque des réglages de module — activation, {@link Setting}
+ * déclarés par le module, et position/échelle/marges des éléments HUD (voir
  * {@link HudElementOwner}). Avant ce fichier, tout était réinitialisé aux
  * valeurs par défaut à chaque relance de l'agent (voir l'ancien commentaire
  * sur {@code HudElement}, "pas encore de sauvegarde disque, viendra avec le
@@ -40,8 +34,16 @@ import java.util.Properties;
  * &lt;id&gt;.hud.showWhenScreenOpen=false
  * &lt;id&gt;.hud.paddingX=0.0
  * &lt;id&gt;.hud.paddingY=0.0
- * &lt;id&gt;.field.&lt;nomDuChamp&gt;=&lt;valeur&gt;   (un champ @Config* par ligne)
+ * &lt;id&gt;.setting.&lt;idDuRéglage&gt;=&lt;valeur&gt;   (un Setting déclaré par ligne)
  * </pre>
+ *
+ * La clé d'un réglage est son {@link Setting#id}, choisi explicitement par le
+ * module. C'était auparavant {@code .field.<nomDuChampJava>} : renommer un
+ * champ effaçait alors silencieusement le réglage chez tous les utilisateurs.
+ * <b>Ce changement de clé rend les fichiers antérieurs au 2026-08-30
+ * illisibles pour la partie réglages</b> (activation, favoris et position HUD
+ * restent lus normalement) — les valeurs concernées repartent sur le défaut du
+ * module, choix assumé plutôt que de traîner un pont de compatibilité.
  *
  * {@link #applyTo(LauncherModule)} est appelé par {@link ModuleRegistry#register}
  * juste après la construction du module (donc APRÈS que ses valeurs par
@@ -157,29 +159,20 @@ public final class HudConfigStore {
             element.setScale(getFloat(id + ".hud.scale", element.scale));
         }
 
-        for (Field field : module.getClass().getDeclaredFields()) {
-            field.setAccessible(true);
-            String key = id + ".field." + field.getName();
-            String raw = DATA.getProperty(key);
+        // Réglages déclarés par le module (voir Setting) — chaque type sait
+        // se relire lui-même, il n'y a plus de table annotation→type ici.
+        // Clé = l'id STABLE du réglage, plus le nom du champ Java : renommer
+        // un champ n'efface plus le réglage chez l'utilisateur.
+        for (Setting setting : module.settings()) {
+            String raw = DATA.getProperty(id + ".setting." + setting.id);
             if (raw == null) continue;
-            try {
-                if (field.isAnnotationPresent(ConfigToggle.class)) {
-                    field.setBoolean(module, Boolean.parseBoolean(raw));
-                } else if (field.isAnnotationPresent(ConfigSlider.class)) {
-                    field.setFloat(module, Float.parseFloat(raw));
-                } else if (field.isAnnotationPresent(ConfigDropdown.class)) {
-                    field.setInt(module, Integer.parseInt(raw));
-                } else if (field.isAnnotationPresent(ConfigKeybind.class)) {
-                    field.set(module, raw);
-                } else if (field.isAnnotationPresent(ConfigColor.class)) {
-                    String[] parts = raw.split(",");
-                    if (parts.length == 4) {
-                        field.set(module, new UiColor(
-                            Float.parseFloat(parts[0]), Float.parseFloat(parts[1]),
-                            Float.parseFloat(parts[2]), Float.parseFloat(parts[3])));
-                    }
-                }
-            } catch (Throwable ignored) {}
+            if (!setting.deserialize(raw)) {
+                // Valeur illisible (fichier édité à la main, format changé) :
+                // le défaut du module reste en place. Journalisé — l'ancienne
+                // version avalait ce cas en silence.
+                LauncherLog.err("[HudConfigStore] " + id + "." + setting.id
+                    + " : valeur ignorée \"" + raw + "\", défaut conservé");
+            }
         }
     }
 
@@ -269,24 +262,12 @@ public final class HudConfigStore {
             DATA.setProperty(id + ".hud.paddingY", String.valueOf(element.paddingY));
         }
 
-        for (Field field : module.getClass().getDeclaredFields()) {
-            field.setAccessible(true);
-            String key = id + ".field." + field.getName();
-            try {
-                if (field.isAnnotationPresent(ConfigToggle.class)) {
-                    DATA.setProperty(key, String.valueOf(field.getBoolean(module)));
-                } else if (field.isAnnotationPresent(ConfigSlider.class)) {
-                    DATA.setProperty(key, String.valueOf(field.getFloat(module)));
-                } else if (field.isAnnotationPresent(ConfigDropdown.class)) {
-                    DATA.setProperty(key, String.valueOf(field.getInt(module)));
-                } else if (field.isAnnotationPresent(ConfigKeybind.class)) {
-                    Object v = field.get(module);
-                    if (v != null) DATA.setProperty(key, (String) v);
-                } else if (field.isAnnotationPresent(ConfigColor.class)) {
-                    UiColor c = (UiColor) field.get(module);
-                    if (c != null) DATA.setProperty(key, c.r + "," + c.g + "," + c.b + "," + c.a);
-                }
-            } catch (Throwable ignored) {}
+        // Pendant exact de la boucle de lecture dans applyTo() — même clé,
+        // même source de vérité (la liste déclarée par le module), donc plus
+        // aucun risque qu'un réglage s'affiche sans jamais être sauvegardé.
+        for (Setting setting : module.settings()) {
+            String value = setting.serialize();
+            if (value != null) DATA.setProperty(id + ".setting." + setting.id, value);
         }
     }
 

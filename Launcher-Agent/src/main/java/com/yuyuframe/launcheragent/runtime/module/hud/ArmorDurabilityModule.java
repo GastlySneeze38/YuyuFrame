@@ -4,7 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
@@ -38,17 +38,29 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     // que KeystrokesModule.RENDERER).
     private static final Renderer RENDERER = new Renderer();
 
-    @ConfigDropdown(name = "Disposition", description = "Empilée verticalement (une ligne par emplacement) ou côte à côte horizontalement.",
-        category = "Réglages", options = { "Verticale", "Horizontale" })
     public int layout = 0;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.dropdown("layout", "Disposition",
+            "Empilée verticalement (une ligne par emplacement) ou côte à côte horizontalement.",
+            "Réglages", new String[]{ "Verticale", "Horizontale" }, null,
+            () -> layout, v -> layout = v);
+        s.dropdown("hand", "Main affichée",
+            "Quelle main afficher pour l'objet en main (1.9+ uniquement — ignoré sur 1.8.9, qui n'a pas de main secondaire).",
+            "Réglages", new String[]{ "Main secondaire", "Main principale" }, null,
+            () -> hand, v -> hand = v);
+        s.dropdown("style", "Style",
+            "\"Personnalisé\" = position/taille libres, icône + texte de durabilité (défaut). \"Vanilla\" = position fixe façon hotbar, VRAIE case + barre de durabilité vanilla, HUD verrouillé (non déplaçable).",
+            "Réglages", new String[]{ "Personnalisé", "Vanilla" }, null,
+            () -> style, v -> style = v);
+    }
 
     // Défaut = main secondaire (0) : demandé explicitement par l'utilisateur
     // ("à partir des versions où on a une deuxième main, afficher la
     // deuxième main par défaut") — ignoré sur 1.8.9, qui n'a pas de main
     // secondaire (voir currentStacks(), handClass reste null sur ce bracket,
     // repli silencieux sur la main principale).
-    @ConfigDropdown(name = "Main affichée", description = "Quelle main afficher pour l'objet en main (1.9+ uniquement — ignoré sur 1.8.9, qui n'a pas de main secondaire).",
-        category = "Réglages", options = { "Main secondaire", "Main principale" })
     public int hand = 0;
 
     // "Vanilla" : VRAI sprite de case (assets/minecraft/textures/gui/sprites/
@@ -68,8 +80,6 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     // le framework HUD sont donc IGNORÉS dans Renderer.draw() quand ce style
     // est actif (voir son code) ; anchor/offset repris tels quels au retour
     // au style "Personnalisé" (locked=false dérouille le drag normalement).
-    @ConfigDropdown(name = "Style", description = "\"Personnalisé\" = position/taille libres, icône + texte de durabilité (défaut). \"Vanilla\" = position fixe façon hotbar, VRAIE case + barre de durabilité vanilla, HUD verrouillé (non déplaçable).",
-        category = "Réglages", options = { "Personnalisé", "Vanilla" })
     public int style = 0;
 
     public ArmorDurabilityModule() {

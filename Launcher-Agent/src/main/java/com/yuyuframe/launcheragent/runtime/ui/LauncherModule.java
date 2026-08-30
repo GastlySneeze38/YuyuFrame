@@ -1,6 +1,10 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.runtime.ui.config.Setting;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
+
+import java.util.List;
 
 /**
  * Base commune de tout module réel (YuyuPvP, HUD Vanilla+...) — équivalent
@@ -133,6 +137,40 @@ public abstract class LauncherModule {
 
     /** Surchargé par un module qui doit réagir à sa propre activation/désactivation (ex: (dés)enregistrer son élément HUD). Ne fait rien par défaut. */
     protected void onEnabledChanged(boolean enabled) {}
+
+    /**
+     * Déclare les réglages exposés par ce module — surchargé par tout module
+     * qui en a. Ne fait rien par défaut (module sans réglage).
+     *
+     * <p>Remplace les annotations {@code @Config*} (supprimées le 2026-08-30) :
+     * voir {@link Setting} pour les quatre défauts de l'approche par réflexion,
+     * dont le plus coûteux — la clé de persistance était le nom du champ Java,
+     * donc un simple renommage effaçait le réglage chez tous les utilisateurs.
+     *
+     * <p>Appelé UNE SEULE FOIS, paresseusement, au premier appel de
+     * {@link #settings()} — jamais depuis le constructeur, où les champs du
+     * module ne sont pas encore initialisés.
+     */
+    protected void settings(SettingList list) {}
+
+    private List<Setting> cachedSettings;
+
+    /**
+     * Réglages de ce module, dans l'ordre de déclaration. Jamais {@code null}
+     * (liste vide si le module n'en a pas).
+     *
+     * <p>Construit à la demande puis mémorisé : les lambdas capturent
+     * {@code this}, elles restent donc valides pour toute la durée de vie du
+     * module, et l'écran de config est reconstruit à chaque ouverture.
+     */
+    public final List<Setting> settings() {
+        if (cachedSettings == null) {
+            SettingList list = new SettingList(id);
+            settings(list);
+            cachedSettings = list.build();
+        }
+        return cachedSettings;
+    }
 
     /** Appelé par {@link ConfigScreenBuilder} après CHAQUE changement d'un champ de config annoté — surchargeable pour réagir à un réglage précis. Ne fait rien par défaut. */
     public void onConfigChanged() {}

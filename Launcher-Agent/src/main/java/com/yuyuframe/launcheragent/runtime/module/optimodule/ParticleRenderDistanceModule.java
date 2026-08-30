@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.optimodule;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Arrête de rendre les particules (fumée, flammes, débris de bloc...) au-delà
@@ -20,8 +20,13 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class ParticleRenderDistanceModule extends LauncherModule {
 
-    @ConfigSlider(name = "Distance max (blocs)", category = "Réglages", min = 8f, max = 64f, step = 4f)
     public float maxDistance = 32f;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("maxDistance", "Distance max (blocs)", "Réglages", 8f, 64f, 4f,
+            () -> maxDistance, v -> maxDistance = v);
+    }
 
     public ParticleRenderDistanceModule() {
         // Nom raccourci — voir TileEntityRenderDistanceModule pour le pourquoi (même onglet groupé "Distance de rendu").

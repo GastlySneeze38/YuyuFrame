@@ -1,12 +1,9 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
+import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.ui.config.Setting;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
@@ -20,7 +17,6 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiSlider;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -29,16 +25,20 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 /**
- * Construit les lignes de réglage d'une page de config PAR RÉFLEXION à
- * partir des champs annotés (@ConfigToggle/@ConfigSlider/@ConfigColor/
- * @ConfigDropdown/@ConfigKeybind) d'un {@link LauncherModule} — équivalent
- * structurel de la génération de page OneConfig à partir d'une classe Config
- * annotée. {@link com.yuyuframe.launcheragent.runtime.ui.ingameui.UiModConfigScreen}
- * ne connaît plus AUCUN module en particulier : un futur module n'a qu'à
- * déclarer ses champs, jamais de code d'écran.
+ * Construit les lignes de réglage d'une page de config à partir des
+ * {@link Setting} déclarés par un {@link LauncherModule}.
+ * {@link com.yuyuframe.launcheragent.runtime.ui.ingameui.UiModConfigScreen}
+ * ne connaît AUCUN module en particulier : un module déclare ses réglages,
+ * jamais de code d'écran.
  *
- * Catégories groupées dans l'ordre de PREMIÈRE apparition des champs (ordre
- * de déclaration, {@link Class#getDeclaredFields()}) — pas de liste figée à
+ * <p>Ne fait plus AUCUNE réflexion depuis le 2026-08-30 : les réglages
+ * étaient auparavant découverts par {@code getDeclaredFields()} + annotations
+ * {@code @Config*}, ce qui imposait d'écrire le même mapping annotation→type
+ * ici, à la lecture du disque et à l'écriture — voir {@link Setting} pour les
+ * quatre défauts que ça entraînait.
+ *
+ * <p>Catégories groupées dans l'ordre de PREMIÈRE apparition (ordre de
+ * déclaration dans {@code settings(SettingList)}) — pas de liste figée à
  * l'avance : un module qui n'utilise qu'une seule catégorie n'affiche qu'un
  * seul onglet.
  */
@@ -94,15 +94,14 @@ public final class ConfigScreenBuilder {
                 headerActions, headerActionLabels);
         }
 
-        for (Field field : module.getClass().getDeclaredFields()) {
-            String category = categoryOf(field);
-            if (category == null) continue;
-            field.setAccessible(true);
-
-            List<UiWidget> rows = byCategory.computeIfAbsent(category, k -> new ArrayList<>());
-            float cursor = cursors.getOrDefault(category, 0f);
-            cursor = addRow(rows, field, module, x, w, cursor);
-            cursors.put(category, cursor);
+        // Réglages DÉCLARÉS par le module (plus aucune réflexion depuis le
+        // 2026-08-30, voir Setting) — ordre d'affichage = ordre de
+        // déclaration, onglets créés à la première apparition d'une catégorie.
+        for (Setting setting : module.settings()) {
+            List<UiWidget> rows = byCategory.computeIfAbsent(setting.category, k -> new ArrayList<>());
+            float cursor = cursors.getOrDefault(setting.category, 0f);
+            cursor = addRow(rows, setting, module, x, w, cursor);
+            cursors.put(setting.category, cursor);
         }
         return new Grouped(byCategory, cursors);
     }
@@ -383,46 +382,70 @@ public final class ConfigScreenBuilder {
         cursors.put(category, cursor);
     }
 
-    private static String categoryOf(Field field) {
-        if (field.isAnnotationPresent(ConfigToggle.class)) return field.getAnnotation(ConfigToggle.class).category();
-        if (field.isAnnotationPresent(ConfigSlider.class)) return field.getAnnotation(ConfigSlider.class).category();
-        if (field.isAnnotationPresent(ConfigColor.class)) return field.getAnnotation(ConfigColor.class).category();
-        if (field.isAnnotationPresent(ConfigDropdown.class)) return field.getAnnotation(ConfigDropdown.class).category();
-        if (field.isAnnotationPresent(ConfigKeybind.class)) return field.getAnnotation(ConfigKeybind.class).category();
-        return null;
-    }
+    /**
+     * Une ligne d'écran par réglage déclaré. Le {@code switch} sur le type
+     * concret remplace la cascade d'{@code isAnnotationPresent} : javac
+     * vérifie ici que chaque type de {@link Setting} est traité, ce que la
+     * version par annotations ne pouvait pas garantir.
+     */
+    private static float addRow(List<UiWidget> rows, Setting setting, LauncherModule module,
+                                float x, float w, float cursor) {
+        String label = Lang.tr(setting.name);
+        String tooltip = Lang.tr(setting.description);
+        Runnable commit = () -> { module.onConfigChanged(); HudConfigStore.save(); };
 
-    private static float addRow(List<UiWidget> rows, Field field, LauncherModule module, float x, float w, float cursor) {
-        if (field.isAnnotationPresent(ConfigToggle.class)) {
-            ConfigToggle a = field.getAnnotation(ConfigToggle.class);
-            return toggleRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), getBoolean(field, module),
-                v -> { setBoolean(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
+        if (setting instanceof Setting.Toggle) {
+            Setting.Toggle t = (Setting.Toggle) setting;
+            warnUnsupportedDependency(module, setting);
+            return toggleRow(rows, x, w, cursor, label, tooltip, t.get.getAsBoolean(),
+                v -> { t.set.accept(v); commit.run(); });
         }
-        if (field.isAnnotationPresent(ConfigSlider.class)) {
-            ConfigSlider a = field.getAnnotation(ConfigSlider.class);
-            return sliderRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), a.min(), a.max(), a.step(), getFloat(field, module),
-                v -> { setFloat(field, module, v); module.onConfigChanged(); HudConfigStore.save(); },
-                dependencySupplier(module, a.dependsOnField(), a.dependsOnValue()));
+        if (setting instanceof Setting.Slider) {
+            Setting.Slider sl = (Setting.Slider) setting;
+            return sliderRow(rows, x, w, cursor, label, tooltip, sl.min, sl.max, sl.step, sl.get.getAsFloat(),
+                v -> { sl.set.accept(v); commit.run(); }, setting.enabledWhen);
         }
-        if (field.isAnnotationPresent(ConfigColor.class)) {
-            ConfigColor a = field.getAnnotation(ConfigColor.class);
-            return colorRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), getColor(field, module),
-                v -> { setColor(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
+        if (setting instanceof Setting.Color) {
+            Setting.Color c = (Setting.Color) setting;
+            warnUnsupportedDependency(module, setting);
+            return colorRow(rows, x, w, cursor, label, tooltip, c.get.get(),
+                v -> { c.set.accept(v); commit.run(); });
         }
-        if (field.isAnnotationPresent(ConfigDropdown.class)) {
-            ConfigDropdown a = field.getAnnotation(ConfigDropdown.class);
-            List<String> translatedOptions = new ArrayList<>();
-            for (String opt : a.options()) translatedOptions.add(Lang.tr(opt));
-            return dropdownRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), translatedOptions, getInt(field, module),
-                v -> { setInt(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
+        if (setting instanceof Setting.Dropdown) {
+            Setting.Dropdown d = (Setting.Dropdown) setting;
+            warnUnsupportedDependency(module, setting);
+            List<String> translated = new ArrayList<>(d.options.size());
+            for (String opt : d.options) translated.add(Lang.tr(opt));
+            return dropdownRow(rows, x, w, cursor, label, tooltip, translated, d.get.getAsInt(),
+                v -> { d.set.accept(v); commit.run(); });
         }
-        if (field.isAnnotationPresent(ConfigKeybind.class)) {
-            ConfigKeybind a = field.getAnnotation(ConfigKeybind.class);
-            return keybindRow(rows, x, w, cursor, Lang.tr(a.name()), Lang.tr(a.description()), getString(field, module),
-                v -> { setString(field, module, v); module.onConfigChanged(); HudConfigStore.save(); });
+        if (setting instanceof Setting.Keybind) {
+            Setting.Keybind k = (Setting.Keybind) setting;
+            warnUnsupportedDependency(module, setting);
+            return keybindRow(rows, x, w, cursor, label, tooltip, k.get.get(),
+                v -> { k.set.accept(v); commit.run(); });
         }
+        LauncherLog.err("[ConfigScreenBuilder] type de réglage non géré : "
+            + setting.getClass().getSimpleName() + " (" + module.id + "." + setting.id + ")");
         return cursor;
     }
+
+    /**
+     * {@link Setting#enabledWhen} n'est honoré que par {@code UiSlider}, seul
+     * widget sachant se griser aujourd'hui. Le déclarer ailleurs n'a donc
+     * aucun effet visible — on le DIT plutôt que de l'ignorer en silence,
+     * puisque c'est précisément le genre de panne muette que le passage aux
+     * réglages déclarés supprime. À retirer le jour où toggle/dropdown/color/
+     * keybind sauront se griser eux aussi.
+     */
+    private static void warnUnsupportedDependency(LauncherModule module, Setting setting) {
+        if (setting.enabledWhen == null || WARNED_DEPENDENCY.contains(module.id + "." + setting.id)) return;
+        WARNED_DEPENDENCY.add(module.id + "." + setting.id);
+        LauncherLog.err("[ConfigScreenBuilder] " + module.id + "." + setting.id
+            + " : enabledWhen déclaré mais seul un curseur sait se griser — réglage laissé actif");
+    }
+
+    private static final java.util.Set<String> WARNED_DEPENDENCY = new java.util.HashSet<>();
 
     // ── Lignes — mêmes proportions que l'ancien UiModConfigScreen codé en dur ──
 
@@ -505,34 +528,7 @@ public final class ConfigScreenBuilder {
         return rowY - ROW_GAP;
     }
 
-    /**
-     * {@code null} si {@code dependsOnField} est vide (pas de dépendance,
-     * curseur toujours actif — comportement inchangé pour tous les curseurs
-     * existants). Sinon résout le champ int nommé UNE FOIS ici (le champ
-     * lui-même ne change pas), mais relit sa VALEUR à chaque appel de
-     * {@code getAsBoolean()} — voir {@link UiSlider#enabledSupplier} pour le
-     * pourquoi (refléter live un dropdown juste au-dessus, ex: "Sensibilité"
-     * du freelook).
-     */
-    private static java.util.function.BooleanSupplier dependencySupplier(LauncherModule module, String dependsOnField, int dependsOnValue) {
-        if (dependsOnField.isEmpty()) return null;
-        Field depField = findFieldInHierarchy(module.getClass(), dependsOnField);
-        if (depField == null) return null;
-        depField.setAccessible(true);
-        return () -> getInt(depField, module) == dependsOnValue;
-    }
 
-    private static Field findFieldInHierarchy(Class<?> owner, String fieldName) {
-        Class<?> c = owner;
-        while (c != null) {
-            try {
-                return c.getDeclaredField(fieldName);
-            } catch (NoSuchFieldException e) {
-                c = c.getSuperclass();
-            }
-        }
-        return null;
-    }
 
     private static float colorRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
                                    UiColor initial, Consumer<UiColor> onChange) {
@@ -590,20 +586,4 @@ public final class ConfigScreenBuilder {
         return rowY - ROW_GAP;
     }
 
-    // ── Accès réflexion — silencieux (throw impossible côté auteur de module : types validés par convention d'annotation) ──
-
-    private static boolean getBoolean(Field f, Object o) { try { return f.getBoolean(o); } catch (Exception e) { return false; } }
-    private static void setBoolean(Field f, Object o, boolean v) { try { f.setBoolean(o, v); } catch (Exception ignored) {} }
-
-    private static float getFloat(Field f, Object o) { try { return f.getFloat(o); } catch (Exception e) { return 0f; } }
-    private static void setFloat(Field f, Object o, float v) { try { f.setFloat(o, v); } catch (Exception ignored) {} }
-
-    private static int getInt(Field f, Object o) { try { return f.getInt(o); } catch (Exception e) { return 0; } }
-    private static void setInt(Field f, Object o, int v) { try { f.setInt(o, v); } catch (Exception ignored) {} }
-
-    private static String getString(Field f, Object o) { try { return (String) f.get(o); } catch (Exception e) { return ""; } }
-    private static void setString(Field f, Object o, String v) { try { f.set(o, v); } catch (Exception ignored) {} }
-
-    private static UiColor getColor(Field f, Object o) { try { return (UiColor) f.get(o); } catch (Exception e) { return UiColor.TRANSPARENT; } }
-    private static void setColor(Field f, Object o, UiColor v) { try { f.set(o, v); } catch (Exception ignored) {} }
 }

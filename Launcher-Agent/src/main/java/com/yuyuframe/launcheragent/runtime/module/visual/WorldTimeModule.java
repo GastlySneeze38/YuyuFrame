@@ -3,7 +3,7 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Temps du monde (client-only) — force l'heure de rendu (soleil/lune,
@@ -32,8 +32,13 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class WorldTimeModule extends LauncherModule {
 
-    @ConfigSlider(name = "Heure (ticks, 0-24000)", category = "Réglages", min = 0f, max = 24000f, step = 500f)
     public float time = 6000f; // 6000 = midi
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("time", "Heure (ticks, 0-24000)", "Réglages", 0f, 24000f, 500f,
+            () -> time, v -> time = v);
+    }
 
     public WorldTimeModule() {
         super("world-time", "Temps du monde", "Force l'heure affichée (soleil/lune/ciel), sans changer le vrai temps serveur",

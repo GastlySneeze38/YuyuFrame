@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.optimodule;
 
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
  * Le vanilla 1.8.9 crée son pool de threads de construction de meshes de
@@ -20,8 +20,13 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
  */
 public final class ChunkBuilderThreadsModule extends LauncherModule {
 
-    @ConfigSlider(name = "Nombre de threads", category = "Réglages", min = 2f, max = 16f, step = 1f)
     public float threadCount = suggestedDefault();
+
+    @Override
+    protected void settings(SettingList s) {
+        s.slider("threadCount", "Nombre de threads", "Réglages", 2f, 16f, 1f,
+            () -> threadCount, v -> threadCount = v);
+    }
 
     public ChunkBuilderThreadsModule() {
         super("chunk-builder-threads", "Threads de construction de chunks", "Nombre de threads pour reconstruire les chunks modifiés (vanilla est figé à 2, peu importe le CPU)", true);

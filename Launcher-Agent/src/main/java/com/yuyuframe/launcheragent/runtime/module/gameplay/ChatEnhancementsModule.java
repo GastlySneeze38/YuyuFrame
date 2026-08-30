@@ -5,7 +5,7 @@ import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.ChatComponentAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.User;
 import net.minecraft.client.gui.Gui;
@@ -70,11 +70,17 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  */
 public final class ChatEnhancementsModule extends LauncherModule {
 
-    @ConfigToggle(name = "Ping quand mon pseudo est mentionné", category = "Réglages")
     public boolean pingOnMention = true;
 
-    @ConfigToggle(name = "Regrouper les messages répétés", category = "Réglages")
     public boolean stackRepeats = true;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.toggle("pingOnMention", "Ping quand mon pseudo est mentionné", "Réglages",
+            () -> pingOnMention, v -> pingOnMention = v);
+        s.toggle("stackRepeats", "Regrouper les messages répétés", "Réglages",
+            () -> stackRepeats, v -> stackRepeats = v);
+    }
 
     private static final Pattern COUNTER_SUFFIX = Pattern.compile("\\s*\\(x\\d+\\)$");
     /** Tag d'expéditeur en tête de ligne (ex: "{@code <Nom> }") — voir le fix du ping sur soi-même plus bas. */

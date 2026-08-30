@@ -4,7 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.v26_1.core.KeyMappingAccessor261;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
-import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
@@ -31,8 +31,13 @@ public final class KeystrokesModule extends SingleHudModule {
 
     private static final Renderer RENDERER = new Renderer();
 
-    @ConfigToggle(name = "Afficher la barre d'espace", category = "Éléments")
     public boolean showSpaceKey = true;
+
+    @Override
+    protected void settings(SettingList s) {
+        s.toggle("showSpaceKey", "Afficher la barre d'espace", "Éléments",
+            () -> showSpaceKey, v -> showSpaceKey = v);
+    }
 
     public KeystrokesModule() {
         super("keystrokes", "Keystrokes", "Touches ZQSD/WASD + espace + CPS", false,
