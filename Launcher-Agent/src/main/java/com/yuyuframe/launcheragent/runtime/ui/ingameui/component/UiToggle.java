@@ -91,7 +91,47 @@ public class UiToggle extends UiWidget {
         this.anim = new UiAnimatedFloat(initial ? 1f : 0f, ANIM_SPEED);
     }
 
-    public boolean value() { return value; }
+    /**
+     * Source de vérité EXTERNE, ou {@code null} si ce toggle se souvient
+     * lui-même de son état.
+     *
+     * <p>BUG TROUVÉ (2026-08-30, retour utilisateur : "désynchronisation
+     * d'état activé/désactivé entre la card du module et sa config dans le
+     * groupe") : {@code value} était une COPIE, figée à la construction du
+     * widget. Deux toggles portant le même module — celui de sa carte sur
+     * l'accueil et celui de sa section dans l'écran de groupe — vivaient donc
+     * chacun avec sa propre copie : basculer l'un laissait l'autre afficher
+     * l'ancien état jusqu'à une reconstruction complète de l'écran.
+     *
+     * <p>Lié à une source, le widget n'a plus d'état du tout : il lit le
+     * modèle à chaque frame. C'est aussi ce qui permet de basculer un module
+     * depuis ailleurs (voir {@code UiMainMenuScreen}, carte d'un module sans
+     * réglages) sans reconstruire la grille — donc sans le clignotement que
+     * cette reconstruction provoquait.
+     */
+    private java.util.function.BooleanSupplier source;
+
+    /** Lie ce toggle à l'état réel du modèle — voir {@link #source}. Setter fluent. */
+    public UiToggle boundTo(java.util.function.BooleanSupplier source) {
+        this.source = source;
+        if (source != null) {
+            this.value = source.getAsBoolean();
+            this.anim.snapTo(this.value ? 1f : 0f);
+        }
+        return this;
+    }
+
+    /** Recale {@link #value}/l'animation sur la source, s'il y en a une — appelé au début de chaque {@code draw}. */
+    private void syncFromSource() {
+        if (source == null) return;
+        boolean live = source.getAsBoolean();
+        if (live != value) {
+            value = live;
+            anim.setTarget(live ? 1f : 0f);
+        }
+    }
+
+    public boolean value() { return source != null ? source.getAsBoolean() : value; }
 
     public void setExternalAlpha(float alpha) { this.externalAlpha = alpha; }
 
@@ -106,6 +146,10 @@ public class UiToggle extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        // AVANT le repli "invisible" : un toggle invisible (bande de carte en
+        // mode Grille) ne dessine rien lui-même, mais ModCard lit sa valeur
+        // pour colorer la bande — il doit donc rester synchronisé lui aussi.
+        syncFromSource();
         if (invisible) return;
         float drawAlpha = useOwnClipFade ? (clipFade * externalAlpha) : externalAlpha;
         if (heartStyle) {
@@ -193,8 +237,12 @@ public class UiToggle extends UiWidget {
 
     @Override
     public void onClick() {
-        value = !value;
-        anim.setTarget(value ? 1f : 0f);
-        if (onChange != null) onChange.accept(value);
+        // Part de la valeur RÉELLE (source liée si présente) — sinon un
+        // changement venu d'ailleurs ferait basculer ce toggle dans le
+        // mauvais sens au clic suivant.
+        boolean next = !value();
+        value = next;
+        anim.setTarget(next ? 1f : 0f);
+        if (onChange != null) onChange.accept(next);
     }
 }

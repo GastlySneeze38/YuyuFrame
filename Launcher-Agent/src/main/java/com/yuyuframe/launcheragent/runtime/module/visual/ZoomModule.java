@@ -130,6 +130,12 @@ public final class ZoomModule extends LauncherModule {
 
     public ZoomModule() {
         super("zoom", "Zoom", "Maintenir une touche zoome en douceur, scroller pendant le zoom pour aller plus loin (façon Zoomify)", false);
+        // Sorti du groupe "Confort visuel" le 2026-08-30 (demande explicite),
+        // comme le Freelook juste avant : il a sa propre carte, donc il lui
+        // faut une icône — sans elle, ModCard retomberait sur la
+        // pastille-lettre. Nom vérifié (HTTP 200, image/png) selon la
+        // convention de LauncherModule#icons8.
+        iconUrl = icons8("binoculars");
     }
 
     @Override

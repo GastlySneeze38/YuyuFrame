@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 
 /**
@@ -130,22 +131,23 @@ public final class ConfigScreenBuilder {
      * "Activé" de ce module vient ici, dans SON en-tête de section, au lieu
      * d'occuper sa propre ligne dans le contenu.
      */
-    public static UiWidget sectionHeaderWithToggle(float x, float y, float w, float h, String label,
-                                                    boolean initialToggle, Consumer<Boolean> onToggle) {
-        return new SectionHeader(x, y, w, h, label, initialToggle, onToggle, false, null);
-    }
-
     /**
-     * Même en-tête, plus un CŒUR de favori à gauche du toggle — utilisé par
-     * {@code UiModGroupConfigScreen} pour qu'un module vivant dans un groupe
-     * puisse être mis en favori (2026-08-30). Un module non groupé porte déjà
-     * son cœur sur sa carte de l'écran d'accueil ; un module groupé n'ayant
-     * pas de carte, c'est ici son seul point d'accès.
+     * En-tête de section portant le toggle d'activation du module ET un CŒUR
+     * de favori à sa gauche — utilisé par {@code UiModGroupConfigScreen} pour
+     * qu'un module vivant dans un groupe puisse être mis en favori
+     * (2026-08-30). Un module non groupé porte déjà son cœur sur sa carte de
+     * l'écran d'accueil ; un module groupé n'ayant pas de carte, c'est ici son
+     * seul point d'accès.
+     *
+     * <p>Les deux états sont des {@link BooleanSupplier} LUS À CHAQUE FRAME,
+     * pas des booléens figés : le même module peut être basculé depuis sa
+     * carte de l'accueil (s'il est favori), et les deux widgets doivent rester
+     * d'accord — voir {@code UiToggle#boundTo}.
      */
     public static UiWidget sectionHeaderWithToggleAndFavorite(float x, float y, float w, float h, String label,
-                                                              boolean initialToggle, Consumer<Boolean> onToggle,
-                                                              boolean initialFavorite, Consumer<Boolean> onFavorite) {
-        return new SectionHeader(x, y, w, h, label, initialToggle, onToggle, initialFavorite, onFavorite);
+                                                              BooleanSupplier toggleState, Consumer<Boolean> onToggle,
+                                                              BooleanSupplier favoriteState, Consumer<Boolean> onFavorite) {
+        return new SectionHeader(x, y, w, h, label, toggleState, onToggle, favoriteState, onFavorite);
     }
 
     /** Résultat de {@link #buildContinuous} — une SEULE liste (en-têtes de section + lignes déjà enchaînées, plus de pages séparées) + l'ancre de défilement de chaque catégorie (voir {@code UiScrollContainer#scrollToAnchor}). */
@@ -253,16 +255,17 @@ public final class ConfigScreenBuilder {
             this.favorite = null;
         }
 
-        SectionHeader(float x, float y, float w, float h, String label, boolean initialToggle, Consumer<Boolean> onToggle,
-                      boolean initialFavorite, Consumer<Boolean> onFavorite) {
+        SectionHeader(float x, float y, float w, float h, String label, BooleanSupplier toggleState, Consumer<Boolean> onToggle,
+                      BooleanSupplier favoriteState, Consumer<Boolean> onFavorite) {
             super(x, y, w, h);
             this.label = label;
             this.actionLabel = null;
             this.action = null;
             this.actionHoverAnim = null;
-            this.toggle = new UiToggle(0, 0, initialToggle, onToggle);
+            this.toggle = new UiToggle(0, 0, toggleState.getAsBoolean(), onToggle).boundTo(toggleState);
             this.favorite = onFavorite == null ? null
-                : new UiToggle(0, 0, UiTheme.scaled(20f), UiTheme.scaled(20f), initialFavorite, onFavorite).heartStyle();
+                : new UiToggle(0, 0, UiTheme.scaled(20f), UiTheme.scaled(20f), favoriteState.getAsBoolean(), onFavorite)
+                    .heartStyle().boundTo(favoriteState);
         }
 
         private float actionW() { return UiTheme.scaled(160f); }

@@ -935,7 +935,16 @@ public class UiMainMenuScreen extends UiScreenBase {
                     ? () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, ownerGroup, mod))
                     : hasSomethingToShow
                         ? () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod))
-                        : () -> { mod.setEnabled(!mod.isEnabled()); HudConfigStore.save(); rebuildAll(); };
+                        // PAS de rebuildAll() ici (retour utilisateur : "il y a
+                        // un mini refresh quand j'active/désactive un module
+                        // sans config, il est très visible") — reconstruire la
+                        // grille rejoue les animations d'entrée de TOUTES les
+                        // cartes. Inutile désormais : les toggles sont liés à
+                        // l'état du module (voir UiToggle#boundTo), donc la
+                        // bande de la carte suit d'elle-même à la frame
+                        // suivante. La liste des cartes, elle, ne dépend pas de
+                        // l'activation — seulement des favoris.
+                        : () -> { mod.setEnabled(!mod.isEnabled()); HudConfigStore.save(); };
                 ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, mod.iconUrl, enterDelay,
                     cardAction);
                 modScroll.add(card);
@@ -960,11 +969,16 @@ public class UiMainMenuScreen extends UiScreenBase {
                     // d'ajout précis dans modScroll : peu importe lequel des
                     // deux est ajouté en premier, le cœur (plus petit)
                     // l'emporte toujours sur la bande à cet endroit précis.
+                    // boundTo : l'état vient du MODULE, pas d'une copie figée à
+                    // la construction — sinon activer ce module depuis l'écran
+                    // de son groupe (module groupé favori) laisserait cette
+                    // bande afficher l'ancien état. Voir UiToggle#source.
                     UiToggle enableToggle = new UiToggle(slot.tx, slot.ty, slot.tw, slot.th, mod.isEnabled(),
-                        v -> { mod.setEnabled(v); HudConfigStore.save(); }).invisibleStyle();
+                        v -> { mod.setEnabled(v); HudConfigStore.save(); }).invisibleStyle().boundTo(mod::isEnabled);
 
                     UiToggle favoriteToggle = new UiToggle(slot.hx, slot.hy, slot.hw, slot.hh, mod.favorite,
-                        v -> { mod.favorite = v; HudConfigStore.save(); pendingChangePulseId = id; rebuildAll(); }).heartStyle();
+                        v -> { mod.favorite = v; HudConfigStore.save(); pendingChangePulseId = id; rebuildAll(); })
+                        .heartStyle().boundTo(() -> mod.favorite);
 
                     modScroll.add(favoriteToggle);
                     modScroll.add(enableToggle);
@@ -977,7 +991,7 @@ public class UiMainMenuScreen extends UiScreenBase {
                     // Ancrée par Taffy au coin haut-droit de la carte (voir
                     // addSectionRows) — plus de `cx + cardW - taille - marge` ici.
                     UiToggle toggle = new UiToggle(slot.tx, slot.ty, mod.isEnabled(),
-                        v -> { mod.setEnabled(v); HudConfigStore.save(); });
+                        v -> { mod.setEnabled(v); HudConfigStore.save(); }).boundTo(mod::isEnabled);
                     modScroll.add(toggle);
                     // Suit le soulèvement au survol de sa carte (voir ModCard#pairToggle) —
                     // sinon il resterait figé pendant que la carte en dessous bouge.

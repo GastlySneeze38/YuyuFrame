@@ -302,17 +302,18 @@ public final class ModuleRegistry {
         // 1.16.5 (voir IS_1_16 plus haut) : get(id) renvoie alors null, qu'il
         // faut filtrer avant de construire le groupe (sinon carte "vide"
         // cassée dans l'UI).
-        // 2026-08-30, demande explicite : le Freelook SORT du groupe (module à
-        // part entière, sa propre carte via ungrouped()) et le Fullbright y
-        // ENTRE — favori par défaut, donc il garde malgré tout une carte à lui
-        // sur l'accueil, en raccourci vers ses réglages dans le groupe (voir
-        // FullbrightModule, où ce défaut est posé, et groupedFavorites()).
-        List<LauncherModule> comfortMembers = nonNull(get("fov"), get("zoom"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
+        // 2026-08-30, demande explicite : le Freelook PUIS le Zoom SORTENT du
+        // groupe (modules à part entière, leur propre carte via ungrouped()) et
+        // le Fullbright y ENTRE — favori par défaut, donc il garde malgré tout
+        // une carte à lui sur l'accueil, en raccourci vers ses réglages dans le
+        // groupe (voir FullbrightModule, où ce défaut est posé, et
+        // groupedFavorites()).
+        List<LauncherModule> comfortMembers = nonNull(get("fov"), get("hurt-cam"), get("toggle-sprint"), get("toggle-sneak"),
             get("saturation"), get("no-darkness"), get("no-fog"),
             get("no-pumpkin-overlay"), get("clear-vision"), get("fullbright"));
         if (!comfortMembers.isEmpty()) {
             ModuleGroup comfortGroup = new ModuleGroup("comfort", "Confort visuel",
-                "FOV, Zoom, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire, Fullbright",
+                "FOV, Hurt Cam, Sprint/Sneak, Saturation, Ténèbres, Brouillard, Citrouille, Vision claire, Fullbright",
                 "Réglages de confort et d'immersion", comfortMembers);
             comfortGroup.iconUrl = LauncherModule.icons8("visible");
             GROUPS.add(comfortGroup);

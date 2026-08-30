@@ -250,15 +250,19 @@ public class UiModGroupConfigScreen extends UiScreenBase {
                     float rowY = cursor - ROW_H;
                     rows.add(new UiLabel(rowX, rowY + ROW_H / 2f - UiTheme.scaled(5f), Lang.tr(member.name), UiTheme.TEXT_PRIMARY, TAB_LABEL_SCALE_BIG));
                     float toggleX = rowX + rowW - UiTheme.scaled(44f) - UiTheme.scaled(10f);
+                    // boundTo : voir UiToggle#source — l'autre moitié de la
+                    // désynchronisation carte↔groupe, ce module pouvant aussi
+                    // être basculé depuis sa carte s'il est favori.
                     rows.add(new UiToggle(toggleX, rowY + (ROW_H - UiTheme.scaled(24f)) / 2f, member.isEnabled(),
-                        v -> { member.setEnabled(v); HudConfigStore.save(); }));
+                        v -> { member.setEnabled(v); HudConfigStore.save(); }).boundTo(member::isEnabled));
                     // Cœur de favori, à gauche du toggle — même rôle que celui
                     // de l'en-tête pour un onglet solo (voir plus bas) : c'est
                     // le seul point d'accès au favori d'un module groupé.
                     float heartSize = UiTheme.scaled(20f);
                     rows.add(new UiToggle(toggleX - heartSize - UiTheme.scaled(12f), rowY + (ROW_H - heartSize) / 2f,
                         heartSize, heartSize, member.favorite,
-                        v -> { member.favorite = v; HudConfigStore.save(); ModuleRegistry.markFavoritesChanged(); }).heartStyle());
+                        v -> { member.favorite = v; HudConfigStore.save(); ModuleRegistry.markFavoritesChanged(); })
+                        .heartStyle().boundTo(() -> member.favorite));
                     // Ancre du module = haut de SA ligne de titre (pas celle
                     // de l'onglet, qui peut en porter plusieurs).
                     memberAnchorsLocal.put(member.id, rowY + ROW_H);
@@ -305,8 +309,8 @@ public class UiModGroupConfigScreen extends UiScreenBase {
             // être mis en favori (il n'a pas de carte à lui sur l'accueil).
             UiWidget header = soloMember != null
                 ? ConfigScreenBuilder.sectionHeaderWithToggleAndFavorite(rowX, headerY, rowW, headerH, tab.label,
-                    soloMember.isEnabled(), v -> { soloMember.setEnabled(v); HudConfigStore.save(); },
-                    soloMember.favorite, v -> { soloMember.favorite = v; HudConfigStore.save(); ModuleRegistry.markFavoritesChanged(); })
+                    soloMember::isEnabled, v -> { soloMember.setEnabled(v); HudConfigStore.save(); },
+                    () -> soloMember.favorite, v -> { soloMember.favorite = v; HudConfigStore.save(); ModuleRegistry.markFavoritesChanged(); })
                 : ConfigScreenBuilder.sectionHeader(rowX, headerY, rowW, headerH, tab.label);
             combined.add(header);
             anchors.put(tab.label, headerY + headerH);
