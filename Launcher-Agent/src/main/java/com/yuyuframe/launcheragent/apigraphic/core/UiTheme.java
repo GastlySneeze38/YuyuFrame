@@ -1,6 +1,5 @@
-package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
+package com.yuyuframe.launcheragent.apigraphic.core;
 
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 
 /**
  * Palette centralisée style OneConfig (fond sombre, accent violet) —
@@ -94,7 +93,7 @@ public final class UiTheme {
     public static float GLASS_STRENGTH_CARD = 0.58f;
     /** Champs/pilules (recherche, barres) — les plus légers, ce sont de petites surfaces où le flou se voit le mieux. */
     public static float GLASS_STRENGTH_FIELD = 0.52f;
-    /** Panneaux de section des écrans de config (voir {@link UiPanel}) — ils portent du texte dense sur de grandes surfaces, donc plus teintés qu'une carte. */
+    /** Panneaux de section des écrans de config (voir {@code UiPanel}) — ils portent du texte dense sur de grandes surfaces, donc plus teintés qu'une carte. */
     public static float GLASS_STRENGTH_PANEL = 0.68f;
     /** Modales/tiroirs — les plus denses : ils doivent couper franchement avec l'écran derrière eux (tiroir de filtres de ModrinthContentScreen). */
     public static float GLASS_STRENGTH_MODAL = 0.78f;

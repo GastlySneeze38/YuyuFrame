@@ -15,7 +15,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiLabel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiPanel;
 import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
 import java.util.ArrayList;

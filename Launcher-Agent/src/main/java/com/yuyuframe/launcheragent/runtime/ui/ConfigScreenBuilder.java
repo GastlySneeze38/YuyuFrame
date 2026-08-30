@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
-import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
+import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
@@ -17,7 +17,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiLabel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiSlider;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
 import java.lang.reflect.Field;

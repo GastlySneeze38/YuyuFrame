@@ -13,6 +13,7 @@ import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /** Switch booléen style OneConfig — piste arrondie + bouton rond qui glisse, transition animée (voir UiAnimatedFloat). */
 public class UiToggle extends UiWidget {

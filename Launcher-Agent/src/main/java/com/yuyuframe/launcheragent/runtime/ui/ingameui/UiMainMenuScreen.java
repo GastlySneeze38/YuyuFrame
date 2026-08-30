@@ -27,7 +27,7 @@ import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiToggle;
 
 import java.awt.Graphics2D;

@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.hud;
+package com.yuyuframe.launcheragent.apigraphic.hud;
 
 /**
  * Un élément HUD déplaçable — un mod déclare son élément ici (voir

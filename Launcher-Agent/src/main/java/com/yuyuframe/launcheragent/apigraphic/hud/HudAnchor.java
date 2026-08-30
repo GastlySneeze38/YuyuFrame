@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.hud;
+package com.yuyuframe.launcheragent.apigraphic.hud;
 
 /**
  * Coin/bord de référence pour la position d'un élément HUD — une position

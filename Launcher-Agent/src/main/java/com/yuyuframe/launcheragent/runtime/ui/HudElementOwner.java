@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
-import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
+import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 
 /**
  * Implémenté par un module qui possède un élément HUD (voir

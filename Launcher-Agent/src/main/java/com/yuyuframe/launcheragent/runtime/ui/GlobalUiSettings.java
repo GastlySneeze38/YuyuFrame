@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
-import com.yuyuframe.launcheragent.runtime.ui.hud.HudPanelRenderer;
+import com.yuyuframe.launcheragent.apigraphic.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
@@ -9,7 +9,7 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Réglages GLOBAUX de l'interface — équivalent des préférences OneConfig

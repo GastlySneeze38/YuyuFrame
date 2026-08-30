@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.module;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
-import com.yuyuframe.launcheragent.runtime.ui.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.ui.hud.HudRegistry;
+import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
+import com.yuyuframe.launcheragent.apigraphic.hud.HudRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 

@@ -19,7 +19,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiLabel;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;

@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 
 import java.util.function.Consumer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Bouton de réassignation de touche — clic pour entrer en mode "écoute", puis

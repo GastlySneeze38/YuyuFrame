@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 
 import java.util.List;
 import java.util.function.IntConsumer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Combobox déroulant — même pattern que UiColorPicker : les lignes d'options

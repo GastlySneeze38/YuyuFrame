@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.ui.hud;
+package com.yuyuframe.launcheragent.apigraphic.hud;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -18,6 +18,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.image.BufferedImage;
 import java.util.function.Consumer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Champ de texte mono-ligne — curseur positionnable (clic/flèches), sélection

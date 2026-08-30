@@ -9,6 +9,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Défilement vertical + clipping (scissor) pour une liste de widgets dont la

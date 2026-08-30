@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Pastille de couleur + panneau déroulant. Historiquement calqué sur

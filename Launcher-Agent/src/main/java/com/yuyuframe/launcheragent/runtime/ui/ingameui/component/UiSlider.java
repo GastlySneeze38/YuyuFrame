@@ -9,6 +9,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 /**
  * Slider numérique glissable — tout l'état de drag est géré dans
