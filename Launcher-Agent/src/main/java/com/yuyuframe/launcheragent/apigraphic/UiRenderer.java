@@ -499,6 +499,10 @@ public final class UiRenderer {
      * @param passes étages de flou {@code [1,5]} — 4 = "verre dépoli" franc, 2 = voile léger.
      */
     public void beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
+        // file — sinon elle arriverait après la soumission de la GUI, et les
+        // panneaux échantillonneraient le flou de la frame précédente.
+        if (VanillaGuiTarget.beginGlassFrame(passes, vpWidth, vpHeight)) return;
         com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
     }
 
@@ -529,7 +533,13 @@ public final class UiRenderer {
     public void drawGlassPanel(float x1, float y1, float x2, float y2,
                                 float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
                                 UiColor tint, float tintStrength, UiColor fallback, int vpWidth, int vpHeight) {
-        if (isGlassAvailable()) {
+        // Voie vanilla : un GuiElementRenderState qui échantillonne la chaîne
+        // de flou. Retombe sur l'aplat ci-dessous si la chaîne n'a pas pu être
+        // calculée pour cette frame.
+        if (VanillaGuiTarget.glassPanel(x1, y1, x2, y2,
+                radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                tint, fallback, vpWidth, vpHeight)) return;
+        if (isGlassAvailable() && !VanillaGuiTarget.isArmed()) {
             com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueGlassPanel(
                 x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
                 tint, tintStrength, fallback.a, vpWidth, vpHeight);

@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apigraphic.render.vanillagui;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiRoundedRect;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiText;
 
@@ -141,6 +142,39 @@ public final class VanillaGuiTarget {
             return true;
         }
         return VanillaGuiLayer.text(context, font, content, guiX, guiBaseline, guiScaleText, color);
+    }
+
+    /**
+     * Calcule la chaîne de flou pour cette frame, IMMÉDIATEMENT.
+     *
+     * <p>La mettre en file la ferait arriver après la soumission de la GUI par
+     * vanilla : les panneaux échantillonneraient le flou de la frame
+     * précédente. Ici la scène est déjà rendue, la source est valide.
+     *
+     * @return {@code true} si la chaîne est prête — sinon l'appelant doit
+     *         retomber sur un fond plein.
+     */
+    public static boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        if (context == null) return false;
+        return Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight);
+    }
+
+    /**
+     * Panneau de verre, rayons dans l'ordre du MOTEUR (bas-gauche, bas-droit,
+     * haut-gauche, haut-droit) — réordonnés ici comme pour
+     * {@link #roundedRect}.
+     */
+    public static boolean glassPanel(float x1, float y1, float x2, float y2,
+                                     float rBottomLeft, float rBottomRight, float rTopLeft, float rTopRight,
+                                     UiColor tint, UiColor background, int vpWidth, int vpHeight) {
+        if (context == null) return false;
+        float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
+        float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
+        return VanillaGuiLayer.glassPanel(context,
+            Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom,
+            rTopLeft / guiScale, rTopRight / guiScale,
+            rBottomLeft / guiScale, rBottomRight / guiScale,
+            tint, background);
     }
 
     // ── Lot de texte ─────────────────────────────────────────────────────────

@@ -462,6 +462,39 @@ public final class Blaze3DBlur {
     }
 
     /**
+     * Calcule la chaîne IMMÉDIATEMENT, sans passer par la file — pour la voie
+     * « état de GUI vanilla » (2026-08-31).
+     *
+     * <p>Sur cette voie, ce n'est plus nous qui dessinons : vanilla soumet nos
+     * panneaux pendant {@code GuiRenderer.render}, donc AVANT que la file
+     * Blaze3D ne soit vidée. Une chaîne mise en file arriverait trop tard — les
+     * panneaux échantillonneraient le flou de la frame précédente, ou rien du
+     * tout à la première.
+     *
+     * <p>Appelée depuis le hook d'extraction : la scène y est déjà rendue dans
+     * le framebuffer principal, la source du flou est donc valide.
+     */
+    public static boolean renderChainNow(int passes, int vpWidth, int vpHeight) {
+        return renderFrameChain(passes, vpWidth, vpHeight);
+    }
+
+    /**
+     * Vue sur le résultat de la chaîne ({@code levelView[0]}, pleine
+     * résolution) — c'est elle que le composite échantillonne, et donc ce que
+     * doit référencer un {@code TextureSetup} côté état de GUI vanilla.
+     *
+     * <p>{@code null} tant qu'aucune chaîne n'a été calculée.
+     */
+    public static Object blurredView() {
+        return levelView[0];
+    }
+
+    /** Échantillonneur linéaire utilisé par le composite — même filtrage des deux côtés. */
+    public static Object blurSampler() {
+        return linearSampler;
+    }
+
+    /**
      * Panneau de verre qui RÉUTILISE la chaîne déjà calculée par {@link
      * #queueFrameChain} — aucun recalcul, juste la passe de composite (1 draw).
      * Voir {@link #queueFrameChain} pour le pourquoi et les paramètres

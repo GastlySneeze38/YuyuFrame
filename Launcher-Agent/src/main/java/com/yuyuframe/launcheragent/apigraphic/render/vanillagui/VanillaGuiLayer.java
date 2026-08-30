@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.render.vanillagui;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiGlass;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiRoundedRect;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiText;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
@@ -217,6 +218,41 @@ public final class VanillaGuiLayer {
             return true;
         } catch (Throwable t) {
             reportOnce("text: " + t);
+            return false;
+        }
+    }
+
+    /**
+     * Panneau de VERRE DÉPOLI (fond flouté + teinte), rayon par coin.
+     *
+     * <p>La chaîne de flou doit avoir été calculée AVANT dans la même frame —
+     * voir {@code VanillaGuiTarget.beginGlassFrame}. Sans elle, il n'y a pas
+     * de texture à échantillonner et l'appel se dégrade à {@code false},
+     * l'appelant se rabattant sur un aplat.
+     */
+    public static boolean glassPanel(Object hookContext, float x0, float y0, float x1, float y1,
+                                     float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,
+                                     UiColor tint, UiColor background) {
+        GuiRenderState state = renderState(hookContext);
+        if (state == null) return false;
+        try {
+            if (!Blaze3DGuiGlass.ensureCompiled()) return false;
+            TextureSetup blurred = Blaze3DGuiGlass.textureSetup();
+            if (blurred == null) {
+                reportOnce("verre : chaîne de flou absente pour cette frame");
+                return false;
+            }
+            // rgb = teinte, a = opacité finale : le fragment mélange le flou
+            // avec la teinte puis applique l'alpha (voir Blaze3DGuiGlass).
+            int argb = (Math.round(background.a * 255f) << 24)
+                     | (Math.round(tint.r * 255f) << 16)
+                     | (Math.round(tint.g * 255f) << 8)
+                     |  Math.round(tint.b * 255f);
+            state.addGuiElement(new GlassPanelElement(x0, y0, x1, y1,
+                rTopLeft, rTopRight, rBottomLeft, rBottomRight, argb, blurred));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("glassPanel: " + t);
             return false;
         }
     }
