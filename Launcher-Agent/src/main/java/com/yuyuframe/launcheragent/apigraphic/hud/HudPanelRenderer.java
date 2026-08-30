@@ -66,6 +66,15 @@ public final class HudPanelRenderer {
      */
     public static void ensureGlassChain(UiRenderer renderer, int vpWidth, int vpHeight) {
         if (!USE_GLASS || !renderer.isGlassAvailable()) return;
+        // Voie « état de GUI vanilla » : le garde par taille de file ne vaut
+        // plus rien (le HUD n'alimente plus cette file, elle reste vide et
+        // laisserait CHAQUE panneau recalculer sa chaîne). C'est
+        // VanillaGuiTarget.beginGlassFrame qui est idempotent sur la durée de
+        // la passe — voir sa javadoc.
+        if (com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget.isArmed()) {
+            renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
+            return;
+        }
         if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore.queuedCount() > 0) return;
         renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
     }

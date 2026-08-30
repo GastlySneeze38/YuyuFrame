@@ -40,6 +40,9 @@ public final class TextElement implements GuiElementRenderState {
     private final int argb;
     private final TextureSetup textureSetup;
 
+    /** Bornes calculées UNE FOIS ici — voir {@link #bounds()}. */
+    private final ScreenRectangle bounds;
+
     public TextElement(UiFont font, String text, float x, float baselineY, float scale,
                        int argb, TextureSetup textureSetup) {
         this.font = font;
@@ -49,6 +52,21 @@ public final class TextElement implements GuiElementRenderState {
         this.scale = scale;
         this.argb = argb;
         this.textureSetup = textureSetup;
+
+        // Largeur mesurée au constructeur et non dans bounds() : vanilla
+        // appelle bounds() à chaque insertion, donc à chaque frame, et la
+        // mesure parcourt toute la chaîne glyphe par glyphe. Les paramètres
+        // étant tous finaux, le résultat ne peut pas changer.
+        float cs = scale * UiFont.SIZE_CORRECTION;
+        int width = 0;
+        for (int i = 0; i < text.length(); i++) {
+            width += Math.round(font.glyph(text.charAt(i)).advance * cs);
+        }
+        this.bounds = new ScreenRectangle(
+            Math.round(x),
+            Math.round(baselineY - font.ascent * cs),
+            Math.max(1, width),
+            Math.max(1, Math.round((font.ascent + font.descent) * cs)));
     }
 
     @Override
@@ -91,13 +109,6 @@ public final class TextElement implements GuiElementRenderState {
 
     @Override
     public ScreenRectangle bounds() {
-        float cs = scale * UiFont.SIZE_CORRECTION;
-        int top = Math.round(baselineY - font.ascent * cs);
-        int height = Math.round((font.ascent + font.descent) * cs);
-        int width = 0;
-        for (int i = 0; i < text.length(); i++) {
-            width += Math.round(font.glyph(text.charAt(i)).advance * cs);
-        }
-        return new ScreenRectangle(Math.round(x), top, Math.max(1, width), Math.max(1, height));
+        return bounds;
     }
 }

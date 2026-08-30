@@ -77,6 +77,7 @@ public final class VanillaGuiTarget {
         context = hookContext;
         guiScale = (float) fbWidth / (float) guiWidth;
         fbHeight = fbHeightPx;
+        glassChainDone = false;
         return true;
     }
 
@@ -156,8 +157,19 @@ public final class VanillaGuiTarget {
      */
     public static boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
         if (context == null) return false;
-        return Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight);
+        // IDEMPOTENT sur la durée d'une passe : chaque panneau appelle
+        // ensureGlassChain avant de se dessiner, mais UNE chaîne suffit pour
+        // tous. Sans ce garde, six panneaux HUD = six chaînes par frame.
+        //
+        // L'ancien garde (HudPanelRenderer) déduisait « nouvelle frame » de la
+        // TAILLE de la file Blaze3D. Il ne tient plus ici : le HUD n'alimente
+        // plus cette file, elle reste vide, et le garde laissait tout passer.
+        if (glassChainDone) return true;
+        glassChainDone = Blaze3DBlur.renderChainNow(passes, vpWidth, vpHeight);
+        return glassChainDone;
     }
+
+    private static boolean glassChainDone;
 
     /**
      * Panneau de verre, rayons dans l'ordre du MOTEUR (bas-gauche, bas-droit,

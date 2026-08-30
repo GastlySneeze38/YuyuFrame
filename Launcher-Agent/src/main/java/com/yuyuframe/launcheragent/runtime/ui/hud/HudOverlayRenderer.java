@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
 
@@ -55,6 +56,19 @@ public final class HudOverlayRenderer {
      * persisté).
      */
     public static boolean vanillaHudHidden() {
+        // 26.1.2 : accessor Mixin, zéro réflexion (2026-08-31). C'était le
+        // dernier accès réflexif du chemin de rendu du HUD, appelé à chaque
+        // frame. Repli réflexif conservé pour les autres brackets, où ni
+        // Options ni l'accessor n'existent sous ces noms.
+        try {
+            Object options = ClientData.options();
+            if (options instanceof OptionsAccessor261) {
+                return ((OptionsAccessor261) options).la$hideGui();
+            }
+        } catch (Throwable ignored) {
+            // NoClassDefFoundError attendu hors 26.1.2 — le repli ci-dessous
+            // prend le relais, inutile de le journaliser à chaque frame.
+        }
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return false;
