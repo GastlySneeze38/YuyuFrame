@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.mixin.client.v1_21_4;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
-import com.yuyuframe.launcheragent.runtime.module.FreelookModule;
+import com.yuyuframe.launcheragent.runtime.module.visual.FreelookModule;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

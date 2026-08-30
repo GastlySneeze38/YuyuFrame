@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_21_4;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.module.WorldTimeModule;
+import com.yuyuframe.launcheragent.runtime.module.visual.WorldTimeModule;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import org.spongepowered.asm.mixin.Mixin;

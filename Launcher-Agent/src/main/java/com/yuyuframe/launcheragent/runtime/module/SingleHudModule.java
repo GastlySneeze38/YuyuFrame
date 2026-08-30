@@ -26,7 +26,11 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
  * SANS toucher les autres (FPS/Ping/Coords/Keystrokes/Saturation — aucun
  * équivalent vanilla à supprimer, rien à câbler).
  */
-abstract class SingleHudModule extends LauncherModule implements HudElementOwner {
+// PUBLIC depuis la répartition des modules en sous-paquets (2026-08-27) : la
+// visibilité paquet suffisait tant que tous les modules vivaient à plat dans
+// runtime.module, elle ne suffit plus maintenant que les modules HUD sont dans
+// runtime.module.hud. LauncherModule/HudElementOwner étaient déjà publics.
+public abstract class SingleHudModule extends LauncherModule implements HudElementOwner {
 
     private final HudElement element;
 

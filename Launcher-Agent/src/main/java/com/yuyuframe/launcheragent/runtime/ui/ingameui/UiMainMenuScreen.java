@@ -460,7 +460,7 @@ public class UiMainMenuScreen extends UiScreenBase {
         // ModrinthContentScreen.buildLayout, pas ici).
         ActionCard modrinthCard = new ActionCard("Modrinth Install", "Rechercher et installer un resource pack ou un shader pack",
             "Resource packs et shaders",
-            () -> closeTo(new com.yuyuframe.launcheragent.runtime.module.ModrinthContentScreen(UiMainMenuScreen.this)));
+            () -> closeTo(new com.yuyuframe.launcheragent.runtime.ui.ingameui.modrinth.ModrinthContentScreen(UiMainMenuScreen.this)));
         modrinthCard.iconUrl = LauncherModule.icons8("puzzle");
         modrinthCard.favorite = HudConfigStore.loadActionFavorite("modrinth");
         if (filter.isEmpty() || modrinthCard.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(modrinthCard);

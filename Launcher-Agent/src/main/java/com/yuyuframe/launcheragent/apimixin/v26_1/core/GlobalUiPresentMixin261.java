@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.module.ShulkerPreviewModule;
+import com.yuyuframe.launcheragent.runtime.module.gameplay.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;

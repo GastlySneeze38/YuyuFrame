@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.module.WorldTimeModule;
+import com.yuyuframe.launcheragent.runtime.module.visual.WorldTimeModule;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import net.minecraft.core.Holder;
