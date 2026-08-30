@@ -38,12 +38,26 @@ import net.minecraft.client.renderer.state.gui.GuiElementRenderState;
 public final class RoundedRectElement implements GuiElementRenderState {
 
     private final float x0, y0, x1, y1;
-    private final float radius;
+    /** Rayons en pixels GUI, repère Y VERS LE BAS : haut-gauche, haut-droit, bas-gauche, bas-droit. */
+    private final float rTopLeft, rTopRight, rBottomLeft, rBottomRight;
     private final int argb;
 
+    /** Rayon uniforme aux quatre coins. */
     public RoundedRectElement(float x0, float y0, float x1, float y1, float radius, int argb) {
+        this(x0, y0, x1, y1, radius, radius, radius, radius, argb);
+    }
+
+    /**
+     * Rayon PAR COIN — c'est ce qui permet à un panneau collé à un bord
+     * d'écran de garder ses coins carrés de ce côté (voir
+     * {@code HudPanelRenderer.edgeAwareRadii}, qui décide lesquels).
+     */
+    public RoundedRectElement(float x0, float y0, float x1, float y1,
+                              float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,
+                              int argb) {
         this.x0 = x0; this.y0 = y0; this.x1 = x1; this.y1 = y1;
-        this.radius = radius;
+        this.rTopLeft = rTopLeft; this.rTopRight = rTopRight;
+        this.rBottomLeft = rBottomLeft; this.rBottomRight = rBottomRight;
         this.argb = argb;
     }
 
@@ -51,18 +65,30 @@ public final class RoundedRectElement implements GuiElementRenderState {
     public void buildVertices(VertexConsumer consumer) {
         float halfW = (x1 - x0) * 0.5f;
         float halfH = (y1 - y0) * 0.5f;
-        // Rayon borné à la demi-dimension : au-delà, le SDF produirait des
-        // coins qui se recouvrent et une forme incohérente.
-        int r = Math.round(Math.max(0f, Math.min(radius, Math.min(halfW, halfH))));
         int hw = Math.round(halfW), hh = Math.round(halfH);
+
+        // Deux rayons par entier court, 8 bits chacun — voir Blaze3DGuiRoundedRect.
+        int packedTop = (clampRadius(rTopLeft, halfW, halfH) << 8) | clampRadius(rTopRight, halfW, halfH);
+        int packedBottom = (clampRadius(rBottomLeft, halfW, halfH) << 8) | clampRadius(rBottomRight, halfW, halfH);
 
         // Les quatre coins, dans le même ordre que ColoredRectangleRenderState
         // (haut-gauche, bas-gauche, bas-droit, haut-droit) — l'ordre compte
         // pour le mode QUADS hérité du pipeline de référence.
-        vertex(consumer, x0, y0, -halfW, -halfH, hw, hh, r);
-        vertex(consumer, x0, y1, -halfW, +halfH, hw, hh, r);
-        vertex(consumer, x1, y1, +halfW, +halfH, hw, hh, r);
-        vertex(consumer, x1, y0, +halfW, -halfH, hw, hh, r);
+        vertex(consumer, x0, y0, -halfW, -halfH, hw, hh, packedTop, packedBottom);
+        vertex(consumer, x0, y1, -halfW, +halfH, hw, hh, packedTop, packedBottom);
+        vertex(consumer, x1, y1, +halfW, +halfH, hw, hh, packedTop, packedBottom);
+        vertex(consumer, x1, y0, +halfW, -halfH, hw, hh, packedTop, packedBottom);
+    }
+
+    /**
+     * Borne un rayon à la demi-dimension (au-delà, les coins se recouvrent et
+     * la forme devient incohérente) ET à 255, la capacité d'un octet de
+     * l'empaquetage. Aucune contrainte en pratique : le réglage d'interface
+     * plafonne à 16 pixels GUI.
+     */
+    private static int clampRadius(float radius, float halfW, float halfH) {
+        float bounded = Math.max(0f, Math.min(radius, Math.min(halfW, halfH)));
+        return Math.min(255, Math.round(bounded));
     }
 
     /**
@@ -72,12 +98,12 @@ public final class RoundedRectElement implements GuiElementRenderState {
      * {@code GuiRenderer.prepare}.
      */
     private void vertex(VertexConsumer c, float px, float py,
-                        float localX, float localY, int hw, int hh, int r) {
+                        float localX, float localY, int hw, int hh, int packedTop, int packedBottom) {
         c.addVertex(px, py, 0f)
          .setColor(argb)
          .setUv(localX, localY)
          .setUv1(hw, hh)
-         .setUv2(r, 0);
+         .setUv2(packedTop, packedBottom);
     }
 
     @Override

@@ -23,7 +23,9 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
  * Color     vec4    couleur de remplissage
  * UV0       vec2    position locale, relative au centre du rect (flottants)
  * UV1       ivec2   (demi-largeur, demi-hauteur)      entiers courts
- * UV2       ivec2   (rayon, 0)                        entiers courts
+ * UV2       ivec2   4 rayons, empaquetés 2 par entier entiers courts
+ *                   x = (hautGauche &lt;&lt; 8) | hautDroit
+ *                   y = (basGauche  &lt;&lt; 8) | basDroit
  * </pre>
  *
  * <p>Ces trois derniers ne sont pas des UV au sens texture : ce sont les seuls
@@ -67,13 +69,17 @@ public final class Blaze3DGuiRoundedRect {
         // flat : constants par primitive, jamais interpolés — seule localPos
         // doit varier d'un sommet à l'autre.
         "flat out vec2 halfSize;\n" +
-        "flat out float radius;\n" +
+        "flat out vec4 radii;\n" +
         "void main() {\n" +
         "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
         "    vertexColor = Color;\n" +
         "    localPos = UV0;\n" +
         "    halfSize = vec2(UV1);\n" +
-        "    radius = float(UV2.x);\n" +
+        // DEUX rayons par entier court : chacun tient sur 8 bits (0-255 pixels
+        // GUI, très au-delà du maximum réglable de 16). C'est ce qui permet
+        // QUATRE rayons sans ajouter d'attribut au format de sommet.
+        "    radii = vec4(float((UV2.x >> 8) & 255), float(UV2.x & 255),\n" +
+        "                 float((UV2.y >> 8) & 255), float(UV2.y & 255));\n" +
         "}\n";
 
     /** SDF de boîte arrondie (formule d'Inigo Quilez), antialiasée sur un pixel. */
@@ -88,9 +94,17 @@ public final class Blaze3DGuiRoundedRect {
         "in vec4 vertexColor;\n" +
         "in vec2 localPos;\n" +
         "flat in vec2 halfSize;\n" +
-        "flat in float radius;\n" +
+        // (haut-gauche, haut-droit, bas-gauche, bas-droit) — repère Y VERS LE
+        // BAS, celui de la GUI vanilla : localPos.y négatif = haut de l'écran.
+        "flat in vec4 radii;\n" +
         "out vec4 fragColor;\n" +
         "void main() {\n" +
+        // Le rayon est choisi PAR FRAGMENT selon le quadrant : c'est ce qui
+        // permet à un panneau collé à un bord d'écran de garder ses coins
+        // carrés de ce côté-là (voir HudPanelRenderer.edgeAwareRadii).
+        "    float radius = (localPos.y < 0.0)\n" +
+        "        ? ((localPos.x < 0.0) ? radii.x : radii.y)\n" +
+        "        : ((localPos.x < 0.0) ? radii.z : radii.w);\n" +
         "    vec2 q = abs(localPos) - halfSize + radius;\n" +
         "    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;\n" +
         "    float alpha = 1.0 - smoothstep(-0.5, 0.5, d);\n" +

@@ -433,14 +433,9 @@ public final class UiRenderer {
     public void drawRoundedRect(float x1, float y1, float x2, float y2,
                                  float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
                                  UiColor color, int vpWidth, int vpHeight) {
-        // Le SDF porté dans l'état de GUI est à rayon UNIQUE : on prend le plus
-        // grand des quatre. Seul effet visible, les coins carrés voulus au
-        // contact d'un bord d'écran (voir HudPanelRenderer.edgeAwareRadii)
-        // redeviennent arrondis — écart assumé pour cette étape, le rayon par
-        // coin demanderait un scalaire de plus par sommet.
-        float maxRadius = Math.max(Math.max(radiusBottomLeft, radiusBottomRight),
-                                   Math.max(radiusTopLeft, radiusTopRight));
-        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, maxRadius, color, vpWidth, vpHeight)) return;
+        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2,
+                radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight, color, vpWidth, vpHeight);
     }
 

@@ -99,6 +99,21 @@ public final class VanillaGuiTarget {
     /** @return {@code true} si le dessin a été pris en charge par la voie vanilla. */
     public static boolean roundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                int vpWidth, int vpHeight) {
+        return roundedRect(x1, y1, x2, y2, radius, radius, radius, radius, color, vpWidth, vpHeight);
+    }
+
+    /**
+     * Variante à RAYON PAR COIN. Les paramètres suivent l'ordre du moteur —
+     * bas-gauche, bas-droit, haut-gauche, haut-droit — et sont réordonnés ici
+     * pour la convention Y-DOWN de la GUI vanilla.
+     *
+     * <p>Le « bas » du moteur reste le bas de l'ÉCRAN : l'inversion d'axe
+     * change les nombres, pas la géométrie. Seul l'ordre des paramètres diffère
+     * entre les deux API, d'où ce réordonnancement plutôt qu'une inversion.
+     */
+    public static boolean roundedRect(float x1, float y1, float x2, float y2,
+                                      float rBottomLeft, float rBottomRight, float rTopLeft, float rTopRight,
+                                      UiColor color, int vpWidth, int vpHeight) {
         if (context == null) return false;
         // y1/y2 sont en Y-UP : le plus GRAND est le haut de l'écran, donc le
         // plus PETIT une fois converti.
@@ -106,7 +121,9 @@ public final class VanillaGuiTarget {
         float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
         return VanillaGuiLayer.roundedRect(context,
             Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom,
-            radius / guiScale, color);
+            rTopLeft / guiScale, rTopRight / guiScale,
+            rBottomLeft / guiScale, rBottomRight / guiScale,
+            color);
     }
 
     /**

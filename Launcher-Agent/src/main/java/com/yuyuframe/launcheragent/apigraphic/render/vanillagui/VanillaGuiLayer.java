@@ -169,10 +169,23 @@ public final class VanillaGuiLayer {
      */
     public static boolean roundedRect(Object hookContext, float x0, float y0, float x1, float y1,
                                       float radius, UiColor color) {
+        return roundedRect(hookContext, x0, y0, x1, y1, radius, radius, radius, radius, color);
+    }
+
+    /**
+     * Variante à RAYON PAR COIN — rayons en pixels GUI, repère Y vers le bas.
+     *
+     * <p>Sert aux panneaux HUD collés à un bord d'écran, qui doivent garder
+     * leurs coins carrés de ce côté (voir {@code HudPanelRenderer.edgeAwareRadii}).
+     */
+    public static boolean roundedRect(Object hookContext, float x0, float y0, float x1, float y1,
+                                      float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,
+                                      UiColor color) {
         GuiRenderState state = renderState(hookContext);
         if (state == null) return false;
         try {
-            state.addGuiElement(new RoundedRectElement(x0, y0, x1, y1, radius, argb(color)));
+            state.addGuiElement(new RoundedRectElement(x0, y0, x1, y1,
+                rTopLeft, rTopRight, rBottomLeft, rBottomRight, argb(color)));
             return true;
         } catch (Throwable t) {
             reportOnce("roundedRect: " + t);
