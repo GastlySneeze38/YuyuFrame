@@ -262,6 +262,20 @@ public final class Blaze3DBlur {
     // change de taille (resize fenêtre/gui scale), PAS à chaque frame.
 
     private static final int LEVELS = 5;
+
+    /**
+     * Niveau de la pyramide que le composite échantillonne — {@code 1} = quart
+     * d'écran.
+     *
+     * <p>Était implicitement {@code 0} (demi-écran) : la remontée finissait
+     * par une passe qui réécrivait un demi-écran entier, de loin la plus chère
+     * des sept, pour une différence invisible une fois l'image floutée. Passer
+     * à {@code 1} supprime cette passe ET divise par quatre la surface
+     * échantillonnée par chaque panneau.
+     *
+     * <p>Remettre à {@code 0} restaure exactement le rendu d'avant.
+     */
+    private static final int COMPOSITE_LEVEL = 1;
     private static Object[] levelTexture = new Object[LEVELS];
     private static Object[] levelView = new Object[LEVELS];
     private static int[] levelW = new int[LEVELS], levelH = new int[LEVELS];
@@ -349,7 +363,7 @@ public final class Blaze3DBlur {
     /**
      * Calcule la chaîne dual-Kawase complète pour le frame courant — à
      * appeler UNE FOIS avant de composer un ou plusieurs panneaux "verre
-     * dépoli" (le résultat, {@code levelView[0]}, reste valide tant qu'aucun
+     * dépoli" (le résultat, {@code levelView[COMPOSITE_LEVEL]}, reste valide tant qu'aucun
      * autre appel à cette méthode n'a lieu dans le même frame). {@code
      * passes} borné à {@code [1, LEVELS]}.
      */
@@ -380,7 +394,13 @@ public final class Blaze3DBlur {
                 curW = levelW[i];
                 curH = levelH[i];
             }
-            for (int i = p - 1; i >= 1; i--) {
+            // La remontée s'arrête à COMPOSITE_LEVEL et ne redescend PLUS
+            // jusqu'au niveau 0 : c'était la passe la plus chère de toute la
+            // chaîne (un demi-écran écrit, avec 8 prélèvements par pixel) pour
+            // un gain nul — le composite rééchantillonne de toute façon en
+            // bilinéaire, et sur une image aussi floue la différence entre un
+            // quart et un demi d'écran ne se voit pas.
+            for (int i = p - 1; i > COMPOSITE_LEVEL; i--) {
                 drawBlurPass(device, encoder, upPipeline, upShaderSource,
                     levelView[i], linearSampler, levelW[i], levelH[i], levelView[i - 1], levelW[i - 1], levelH[i - 1], "up" + i);
             }
@@ -456,8 +476,31 @@ public final class Blaze3DBlur {
         Blaze3DCore.enqueue(() -> renderFrameChain(passes, vpWidth, vpHeight));
     }
 
+    /**
+     * Recalcule la chaîne une frame sur N. {@code 1} = à chaque frame
+     * (comportement d'origine).
+     *
+     * <p>OPTIMISATION (2026-08-31, « le flou prend énormément de perf ») : la
+     * chaîne coûtait 7 passes par frame sur les écrans (4 descentes + 3
+     * remontées), la première écrivant un demi-écran entier. Or un fond flouté
+     * est une image BASSE FRÉQUENCE : la recalculer 60 fois par seconde
+     * n'apporte rien de visible. Une frame sur deux divise le coût par deux,
+     * et le décalage n'est perceptible que si le décor change brutalement —
+     * jamais le cas derrière un menu, et invisible derrière un petit panneau
+     * de HUD.
+     */
+    public static int RECOMPUTE_INTERVAL = 2;
+
+    private static int frameCounter;
+
     private static boolean renderFrameChain(int passes, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
+        // Réutilisation temporelle. Un changement de viewport force le recalcul :
+        // les textures sont recréées, celles d'avant ne veulent plus rien dire.
+        boolean viewportChanged = (vpWidth != chainVpWidth || vpHeight != chainVpHeight);
+        if (!viewportChanged && levelTexture[0] != null && RECOMPUTE_INTERVAL > 1) {
+            if ((++frameCounter % RECOMPUTE_INTERVAL) != 0) return true;
+        }
         return renderBlurChain(vpWidth, vpHeight, passes);
     }
 
@@ -479,14 +522,14 @@ public final class Blaze3DBlur {
     }
 
     /**
-     * Vue sur le résultat de la chaîne ({@code levelView[0]}, pleine
+     * Vue sur le résultat de la chaîne ({@code levelView[COMPOSITE_LEVEL]}, quart de
      * résolution) — c'est elle que le composite échantillonne, et donc ce que
      * doit référencer un {@code TextureSetup} côté état de GUI vanilla.
      *
      * <p>{@code null} tant qu'aucune chaîne n'a été calculée.
      */
     public static Object blurredView() {
-        return levelView[0];
+        return levelView[COMPOSITE_LEVEL];
     }
 
     /** Échantillonneur linéaire utilisé par le composite — même filtrage des deux côtés. */
@@ -545,7 +588,7 @@ public final class Blaze3DBlur {
         try {
             // Chaîne absente (queueFrameChain jamais appelée ce frame, ou
             // viewport recréé entre-temps) — voir javadoc de queueGlassPanel.
-            if (levelView[0] == null && !renderBlurChain(vpWidth, vpHeight, DEFAULT_PASSES)) return false;
+            if (levelView[COMPOSITE_LEVEL] == null && !renderBlurChain(vpWidth, vpHeight, DEFAULT_PASSES)) return false;
 
             currentStage = "minecraftClient(blurpanel)";
             Object mc = McReflect.minecraftClient();
@@ -620,7 +663,7 @@ public final class Blaze3DBlur {
                 // au composite lisse déjà cet écart, gain négligeable pour un
                 // coût de passe en plus (même compromis que la plupart des
                 // implémentations dual-Kawase de blur Minecraft référencées).
-                mBindTexture.invoke(pass, "Sampler0", levelView[0], linearSampler);
+                mBindTexture.invoke(pass, "Sampler0", levelView[COMPOSITE_LEVEL], linearSampler);
                 currentStage = "setVertexBuffer(blurpanel)";
                 mSetVertexBuffer.invoke(pass, 0, vbo);
 
