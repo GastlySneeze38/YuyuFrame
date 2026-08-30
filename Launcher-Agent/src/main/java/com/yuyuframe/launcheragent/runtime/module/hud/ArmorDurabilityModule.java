@@ -6,6 +6,7 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -58,6 +59,10 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             "Réglages", new String[]{ "Personnalisé", "Vanilla" }, null,
             () -> style, v -> style = v);
 
+        s.toggle("durabilityColor", "Couleur selon la durabilité",
+            "Colore le texte de durabilité du vert au rouge en passant par le jaune, exactement comme la barre de durabilité vanilla. Sans effet sur le style \"Vanilla\" (qui affiche la vraie barre, déjà colorée) ni sur le nombre d'objets d'une pile.",
+            "Réglages", null, () -> durabilityColor, v -> durabilityColor = v);
+
         s.toggle("lowDurabilityAlert", "Alerte sonore",
             "Joue un carillon quand une pièce sur le point de casser encaisse un coup.",
             "Alerte", null, () -> lowDurabilityAlert, v -> lowDurabilityAlert = v);
@@ -70,6 +75,9 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             "Alerte", 0f, 200f, 5f, () -> lowDurabilityAlert,
             () -> lowDurabilityPoints, v -> lowDurabilityPoints = v);
     }
+
+    /** Voir {@code Renderer.rowColor()}. */
+    public boolean durabilityColor = true;
 
     /** Voir {@link #tickLowDurabilityAlert()} — repris du comportement d'uku's Armor HUD. */
     public boolean lowDurabilityAlert = true;
@@ -219,6 +227,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         RENDERER.horizontal = layout == 1;
         RENDERER.mainHand = hand == 1;
         RENDERER.vanillaStyle = style == 1;
+        RENDERER.durabilityColor = durabilityColor;
         hudElement().locked = RENDERER.vanillaStyle;
     }
 
@@ -244,6 +253,8 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         volatile boolean mainHand = false;
         /** Mutable directement par ArmorDurabilityModule.onConfigChanged() — false = style "Personnalisé" (défaut), voir draw()/drawRow(). */
         volatile boolean vanillaStyle = false;
+        /** Mutable directement par ArmorDurabilityModule.onConfigChanged() — voir rowColor(). */
+        volatile boolean durabilityColor = true;
 
         // AUDIT PERF (demandé explicitement par l'utilisateur) : naturalSize()/
         // hasContent()/draw() appelaient CHACUN currentStacks() séparément —
@@ -531,8 +542,61 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             String text = rowText(stack);
             if (text != null) {
                 float textScale = TEXT_SCALE * scale;
-                renderer.drawText(text, x + iconSize + GAP * scale, y + iconSize * 0.35f, UiTheme.TEXT_PRIMARY, textScale, vpWidth, vpHeight);
+                renderer.drawText(text, x + iconSize + GAP * scale, y + iconSize * 0.35f, rowColor(stack), textScale, vpWidth, vpHeight);
             }
+        }
+
+        /**
+         * Couleur du texte d'une ligne — dégradé de durabilité, ou couleur de
+         * thème si le réglage est coupé / si la ligne n'affiche pas une
+         * durabilité (taille de pile, voir rowText()).
+         */
+        private UiColor rowColor(Object stack) {
+            if (!durabilityColor || !(stack instanceof ItemStack)) return UiTheme.TEXT_PRIMARY;
+            try {
+                ItemStack is = (ItemStack) stack;
+                if (!is.isDamageableItem()) return UiTheme.TEXT_PRIMARY;
+                int max = is.getMaxDamage();
+                if (max <= 0) return UiTheme.TEXT_PRIMARY;
+                return durabilityColor((float) (max - is.getDamageValue()) / max);
+            } catch (Throwable t) {
+                if (!colorErrorLogged) {
+                    colorErrorLogged = true;
+                    LauncherLog.err("[ArmorDurabilityModule] rowColor: " + t);
+                }
+                return UiTheme.TEXT_PRIMARY;
+            }
+        }
+
+        private static boolean colorErrorLogged;
+
+        /**
+         * Vert → jaune → rouge selon la durabilité restante — la FORMULE
+         * EXACTE de vanilla ({@code ItemStack.getBarColor()} :
+         * {@code Mth.hsvToRgb(remaining / 3f, 1f, 1f)}), pas une palette
+         * réinventée, pour que le texte et la vraie barre de durabilité
+         * s'accordent au pixel de teinte près (même norme que le reste du
+         * module, qui utilise déjà les vrais sprites/barres vanilla).
+         *
+         * <p>Développé à la main plutôt que par un appel à {@code Mth} : avec
+         * {@code s = v = 1}, la conversion HSV se réduit à deux segments
+         * linéaires, et ça évite un stub de plus.
+         *
+         * @param remaining fraction restante, 1 = neuf, 0 = sur le point de casser.
+         */
+        private static UiColor durabilityColor(float remaining) {
+            float sector = Math.min(1f, Math.max(0f, remaining)) * 2f; // (h/3) * 6
+            int i = (int) sector;
+            float f = sector - i;
+            int r, g;
+            if (i <= 0) {          // 0 → 50 % : rouge vers jaune
+                r = 255; g = Math.round(f * 255f);
+            } else if (i == 1) {   // 50 → 100 % : jaune vers vert
+                r = Math.round((1f - f) * 255f); g = 255;
+            } else {               // exactement 100 % (sector == 2, f == 0)
+                r = 0; g = 255;
+            }
+            return new UiColor(r, g, 0, 255);
         }
 
         /**
