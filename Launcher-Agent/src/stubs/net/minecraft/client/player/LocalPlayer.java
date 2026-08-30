@@ -25,7 +25,8 @@ import java.util.UUID;
 public abstract class LocalPlayer {
     public Collection<MobEffectInstance> getActiveEffects() { return null; }
     public boolean hasEffect(Holder<MobEffect> effect) { return false; }
-    public void removeEffect(Holder<MobEffect> effect) {}
+    /** Renvoie {@code boolean} (vrai si un effet a bien été retiré), PAS void — le type de retour fait partie du descripteur d'appel, voir le stub {@code SoundEngine}. Vérifié sur {@code LivingEntity.removeEffect(Holder)Z} du jar 26.1.2. */
+    public boolean removeEffect(Holder<MobEffect> effect) { return false; }
     public FoodData getFoodData() { return null; }
     public ItemStack getItemBySlot(EquipmentSlot slot) { return null; }
     public ItemStack getItemInHand(InteractionHand hand) { return null; }
@@ -45,5 +46,6 @@ public abstract class LocalPlayer {
     // de la passe de compilation des stubs (isolée, voir build.bat) — cast
     // vers com.mojang.authlib.GameProfile côté appelant (classpath complet
     // là-bas), voir MumbleLinkModule.
-    public Object getGameProfile() { return null; }
+    /** Renvoie {@code GameProfile} (authlib), PAS {@code Object} : le déclarer en Object produisait un descripteur {@code ()Ljava/lang/Object;} introuvable au runtime. Voir le stub {@code com.mojang.authlib.GameProfile}. */
+    public com.mojang.authlib.GameProfile getGameProfile() { return null; }
 }

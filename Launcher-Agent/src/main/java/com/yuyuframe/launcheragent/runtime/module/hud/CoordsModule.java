@@ -174,15 +174,18 @@ public final class CoordsModule extends SingleHudModule {
 
 
         /**
-         * 26.1.2 sans réflexion — {@code Minecraft.level} (champ public) →
-         * {@code getBiomeManager()} → {@code getBiome(BlockPos)} → {@code
-         * Holder<Biome>} (méthodes publiques vérifiées par javap, voir
-         * javadoc de {@link #modernGetBiome}). {@code Holder.getKey()}/{@code
-         * ResourceKey.getValue()} reprennent EXACTEMENT les mêmes noms que
-         * l'ancien chemin réflexif ({@link #registryEntryKeyPath}, jamais
-         * revérifié pour 26.1.2 spécifiquement mais repris par cohérence
-         * plutôt que de deviner un autre nom — voir stub {@code Holder}/
-         * {@code ResourceKey}).
+         * Monde par l'accessor Mixin ({@code PlayerData}) → {@code
+         * getBiomeManager()} → {@code getBiome(BlockPos)} → {@code
+         * Holder<Biome>} → {@code unwrapKey()} → {@code identifier()}.
+         *
+         * <p>BUG TROUVÉ (2026-08-27, signalé en jeu) : les deux derniers
+         * maillons s'appelaient {@code getKey()} et {@code getValue()}, noms
+         * repris de l'ancien chemin réflexif et jamais vérifiés pour 26.1.2 —
+         * ils n'existent pas. Le {@code NoSuchMethodError} tombait dans le
+         * {@code catch (Throwable)} muet ci-dessous, donc AUCUN log : le
+         * biome ne s'affichait que grâce au repli réflexif, et sa suppression
+         * a rendu la panne visible. Vrais noms lus dans {@code Holder.class}
+         * et {@code ResourceKey.class} du jar client 26.1.2.
          */
         private String biomeDirect(int bx, int by, int bz) {
             try {
@@ -192,14 +195,23 @@ public final class CoordsModule extends SingleHudModule {
                 if (biomeManager == null) return null;
                 Holder<Biome> holder = biomeManager.getBiome(new BlockPos(bx, by, bz));
                 if (holder == null) return null;
-                Optional<ResourceKey<Biome>> keyOpt = holder.getKey();
+                Optional<ResourceKey<Biome>> keyOpt = holder.unwrapKey();
                 if (keyOpt == null || !keyOpt.isPresent()) return null;
-                Identifier id = keyOpt.get().getValue();
+                Identifier id = keyOpt.get().identifier();
                 return id != null ? prettifyBiomePath(id.getPath()) : null;
             } catch (Throwable t) {
+                // Ce catch était MUET, d'où le bug ci-dessus resté invisible.
+                // Une fois par session : une erreur de signature de stub ne
+                // doit plus jamais se cacher derrière un biome vide.
+                if (!BIOME_EXC_LOGGED) {
+                    BIOME_EXC_LOGGED = true;
+                    com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[CoordsModule] biomeDirect: " + t);
+                }
                 return null;
             }
         }
+
+        private static boolean BIOME_EXC_LOGGED = false;
 
 
 

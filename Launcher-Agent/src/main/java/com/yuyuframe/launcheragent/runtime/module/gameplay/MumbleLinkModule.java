@@ -7,6 +7,7 @@ import net.minecraft.client.player.LocalPlayer;
 
 import java.lang.reflect.Method;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
+import com.mojang.authlib.GameProfile;
 
 /**
  * Port de PvP-Mod MumbleLinkHandler/MumbleLinkConfig — envoie position/
@@ -61,13 +62,15 @@ public final class MumbleLinkModule extends LauncherModule {
 
 
     /** {@code GameProfile.getName()} par réflexion directe — voir javadoc de classe (bibliothèque externe, hors classpath de compilation). */
-    private String profileName(Object profile) {
-        try {
-            if (profile == null) return null;
-            Object name = profile.getClass().getMethod("getName").invoke(profile);
-            return name != null ? name.toString() : null;
-        } catch (Throwable t) {
-            return null;
-        }
+    /**
+     * BUG TROUVÉ (2026-08-27) : cette méthode lisait le pseudo par réflexion
+     * sur {@code getName()} — or {@code GameProfile} est devenu un RECORD,
+     * dont l'accesseur s'appelle {@code name()}. La recherche échouait, le
+     * {@code catch} renvoyait {@code null}, et Mumble recevait un pseudo vide
+     * sans le moindre log. Le stub {@code com.mojang.authlib.GameProfile}
+     * (ajouté en même temps) supprime la réflexion ET l'erreur de nom.
+     */
+    private String profileName(GameProfile profile) {
+        return profile == null ? null : profile.name();
     }
 }
