@@ -130,6 +130,8 @@ public class UiMainMenuScreen extends UiScreenBase {
     private UiScrollContainer modScroll;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
     private float lastUiScale = -1f;
+    /** Voir {@link ModuleRegistry#favoritesRevision()} — un favori coché depuis l'écran d'un groupe doit faire apparaître sa carte ici au retour, sans attendre un redimensionnement. */
+    private int lastFavoritesRevision = -1;
 
     public UiMainMenuScreen(Object lastScreen) {
         super("YuyuFrame");
@@ -150,11 +152,13 @@ public class UiMainMenuScreen extends UiScreenBase {
     @Override
     public void uiDraw(double mouseX, double mouseY) {
         if (screenWidth > 0 && screenHeight > 0
-                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight || UiTheme.UI_SCALE != lastUiScale)) {
+                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight || UiTheme.UI_SCALE != lastUiScale
+                    || ModuleRegistry.favoritesRevision() != lastFavoritesRevision)) {
             rebuildAll();
             lastLayoutWidth = screenWidth;
             lastLayoutHeight = screenHeight;
             lastUiScale = UiTheme.UI_SCALE;
+            lastFavoritesRevision = ModuleRegistry.favoritesRevision();
         }
         // Arrière-plan flouté PARTAGÉ par toutes les surfaces de verre de ce
         // frame (sidebar, cartes, recherche) — DOIT être empilé avant tout le
@@ -468,6 +472,15 @@ public class UiMainMenuScreen extends UiScreenBase {
             if (filter.isEmpty() || g.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(g);
         }
         for (LauncherModule m : ModuleRegistry.ungrouped()) {
+            if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
+        }
+        // Membres de groupe mis en favori : carte à part, EN PLUS de celle de
+        // leur groupe (2026-08-30, demande explicite — "le module mis en
+        // favori apparaisse comme un module a part"). Volontairement pas
+        // retirés de leur groupe : la carte du groupe continue de les
+        // contenir, celle-ci n'est qu'un raccourci vers leurs réglages (voir
+        // emitCards, qui rouvre l'écran du groupe positionné dessus).
+        for (LauncherModule m : ModuleRegistry.groupedFavorites()) {
             if (filter.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(filter)) filtered.add(m);
         }
 
@@ -899,8 +912,16 @@ public class UiMainMenuScreen extends UiScreenBase {
                 // pairedToggle.contains() (voir ModCard.contains()), donc aucune
                 // géométrie à dupliquer/désynchroniser ici quel que soit
                 // l'agencement.
+                // Un module MEMBRE D'UN GROUPE n'a pas d'écran de config à lui :
+                // ses réglages vivent dans l'écran du groupe. Sa carte (qui
+                // n'existe que s'il est favori, voir plus haut) rouvre donc cet
+                // écran-là, positionné directement sur sa section — c'est tout
+                // l'intérêt du raccourci.
+                ModuleGroup ownerGroup = ModuleRegistry.groupOf(mod);
                 ModCard card = new ModCard(cx, cy, cardW, rowH, cardLayout, mod.name, mod.description, mod.shortDescription, mod.iconUrl, enterDelay,
-                    () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
+                    ownerGroup != null
+                        ? () -> closeTo(new UiModGroupConfigScreen(UiMainMenuScreen.this, ownerGroup, mod))
+                        : () -> closeTo(new UiModConfigScreen(UiMainMenuScreen.this, mod)));
                 modScroll.add(card);
                 applyReorder(card, id, cx, cy);
 

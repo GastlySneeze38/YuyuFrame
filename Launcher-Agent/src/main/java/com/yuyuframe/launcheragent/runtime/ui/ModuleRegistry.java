@@ -476,6 +476,68 @@ public final class ModuleRegistry {
         return ungroupedCache;
     }
 
+    /**
+     * Groupe auquel appartient {@code module}, ou {@code null} s'il n'est
+     * membre d'aucun — exact complément de {@link #ungrouped()}.
+     *
+     * <p>Ajouté pour les FAVORIS DE MODULE GROUPÉ (2026-08-30) : un membre de
+     * groupe mis en favori réapparaît comme une carte à part sur l'écran
+     * d'accueil, dont le clic doit rouvrir l'écran de SON groupe. Il faut donc
+     * pouvoir remonter du module vers son groupe, ce que le modèle ne
+     * permettait que dans le sens inverse ({@link ModuleGroup#members}).
+     *
+     * <p>Parcours direct, sans cache : appelé une poignée de fois par
+     * reconstruction de l'écran d'accueil (une par module favori groupé), pas
+     * à chaque frame — contrairement à {@link #ungrouped()}, qui lui avait
+     * bien un coût mesurable.
+     */
+    public static ModuleGroup groupOf(LauncherModule module) {
+        if (module == null) return null;
+        for (ModuleGroup g : GROUPS) {
+            if (g.members.contains(module)) return g;
+        }
+        return null;
+    }
+
+    /**
+     * Membres de groupe marqués favoris — ceux qui obtiennent une carte à part
+     * sur l'écran d'accueil EN PLUS de la carte de leur groupe (voir
+     * {@link #groupOf}). Les modules non groupés n'y sont PAS : ils ont déjà
+     * leur propre carte, favoris ou non.
+     */
+    public static List<LauncherModule> groupedFavorites() {
+        List<LauncherModule> result = new ArrayList<>();
+        for (ModuleGroup g : GROUPS) {
+            for (LauncherModule m : g.members) {
+                if (m != null && m.favorite) result.add(m);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Compteur incrémenté à chaque changement de favori fait AILLEURS que sur
+     * l'écran d'accueil (aujourd'hui : les cœurs de
+     * {@code UiModGroupConfigScreen}).
+     *
+     * <p>BUG ÉVITÉ (2026-08-30) : {@code UiMainMenuScreen.rebuildAll()} n'est
+     * déclenché QUE par un changement de taille de fenêtre ou d'échelle
+     * d'interface. Mettre un module groupé en favori depuis l'écran de son
+     * groupe, puis revenir à l'accueil, affichait donc la grille TELLE
+     * QU'ELLE ÉTAIT — sans la nouvelle carte — jusqu'au prochain
+     * redimensionnement. L'écran d'accueil compare ce compteur à chaque frame
+     * et se reconstruit s'il a bougé.
+     *
+     * <p>Les cœurs de l'écran d'accueil lui-même n'en ont pas besoin : ils
+     * appellent déjà {@code rebuildAll()} directement.
+     */
+    private static int favoritesRevision;
+
+    public static int favoritesRevision() { return favoritesRevision; }
+
+    /** À appeler après avoir modifié un {@code favorite} hors de l'écran d'accueil — voir {@link #favoritesRevision()}. */
+    public static void markFavoritesChanged() { favoritesRevision++; }
+
     public static LauncherModule get(String id) {
         return BY_ID.get(id);
     }

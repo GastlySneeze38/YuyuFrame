@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.runtime.ui.ConfigScreenBuilder;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleGroup;
+import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
@@ -74,6 +75,23 @@ public class UiModGroupConfigScreen extends UiScreenBase {
     private final Object lastScreen;
     private final ModuleGroup group;
     private LinkedHashMap<String, Float> anchors = new LinkedHashMap<>();
+    /**
+     * Ancre par MODULE ({@code module.id} → Y), en plus de {@link #anchors}
+     * qui est par ONGLET. Les deux coïncident pour un onglet à un seul module,
+     * mais pas pour un onglet qui en cumule plusieurs : c'est ce qui permet
+     * d'ouvrir l'écran directement sur le bon module, pas juste sur son onglet
+     * (voir {@link #focusModuleId}).
+     */
+    private LinkedHashMap<String, Float> moduleAnchors = new LinkedHashMap<>();
+    /**
+     * Module sur lequel se positionner à l'ouverture, ou {@code null} pour
+     * démarrer en haut. Renseigné quand l'écran est ouvert depuis la carte
+     * d'un module groupé mis en favori (voir {@code UiMainMenuScreen}) —
+     * cliquer cette carte doit ramener EXACTEMENT à ses réglages.
+     */
+    private final String focusModuleId;
+    /** Le défilement initial vers {@link #focusModuleId} ne doit se faire qu'UNE fois, pas à chaque relayout (redimensionnement, changement d'échelle). */
+    private boolean focusApplied;
     private String activeTab;
     private UiScrollContainer scroll;
     private float sidebarX, sidebarY, sidebarW, sidebarH;
@@ -81,10 +99,16 @@ public class UiModGroupConfigScreen extends UiScreenBase {
     private float lastUiScale = -1f;
 
     public UiModGroupConfigScreen(Object lastScreen, ModuleGroup group) {
+        this(lastScreen, group, null);
+    }
+
+    /** @param focusModule module sur lequel se positionner à l'ouverture, ou {@code null} — voir {@link #focusModuleId}. */
+    public UiModGroupConfigScreen(Object lastScreen, ModuleGroup group, LauncherModule focusModule) {
         super(group.name);
         this.lastScreen = lastScreen;
         this.escapeTarget = lastScreen;
         this.group = group;
+        this.focusModuleId = focusModule != null ? focusModule.id : null;
     }
 
     @Override
@@ -185,6 +209,7 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         // même traitement que UiModConfigScreen.
         List<UiWidget> combined = new ArrayList<>();
         anchors = new LinkedHashMap<>();
+        moduleAnchors = new LinkedHashMap<>();
         float headerH = ConfigScreenBuilder.sectionHeaderHeight();
         float sectionGapBefore = ConfigScreenBuilder.sectionGapBeforeHeight();
         float headerToRowGap = ConfigScreenBuilder.headerToRowGapHeight();
@@ -193,6 +218,11 @@ public class UiModGroupConfigScreen extends UiScreenBase {
 
         for (ModuleGroup.Tab tab : group.tabs) {
             List<UiWidget> rows = new ArrayList<>();
+            // Ancres de module en coordonnées LOCALES à cet onglet, décalées
+            // du même "shift" que les lignes une fois la position finale de
+            // l'onglet connue (voir plus bas) — exactement le même traitement
+            // que `rows`, pour ne pas dupliquer le calcul de décalage.
+            LinkedHashMap<String, Float> memberAnchorsLocal = new LinkedHashMap<>();
             float cursor = 0f;
             // Sous-titre par module UNIQUEMENT utile quand l'onglet en cumule
             // plusieurs (voir javadoc de classe) — avec un seul module, le nom
@@ -219,8 +249,19 @@ public class UiModGroupConfigScreen extends UiScreenBase {
                     // discret.
                     float rowY = cursor - ROW_H;
                     rows.add(new UiLabel(rowX, rowY + ROW_H / 2f - UiTheme.scaled(5f), Lang.tr(member.name), UiTheme.TEXT_PRIMARY, TAB_LABEL_SCALE_BIG));
-                    rows.add(new UiToggle(rowX + rowW - UiTheme.scaled(44f) - UiTheme.scaled(10f), rowY + (ROW_H - UiTheme.scaled(24f)) / 2f, member.isEnabled(),
+                    float toggleX = rowX + rowW - UiTheme.scaled(44f) - UiTheme.scaled(10f);
+                    rows.add(new UiToggle(toggleX, rowY + (ROW_H - UiTheme.scaled(24f)) / 2f, member.isEnabled(),
                         v -> { member.setEnabled(v); HudConfigStore.save(); }));
+                    // Cœur de favori, à gauche du toggle — même rôle que celui
+                    // de l'en-tête pour un onglet solo (voir plus bas) : c'est
+                    // le seul point d'accès au favori d'un module groupé.
+                    float heartSize = UiTheme.scaled(20f);
+                    rows.add(new UiToggle(toggleX - heartSize - UiTheme.scaled(12f), rowY + (ROW_H - heartSize) / 2f,
+                        heartSize, heartSize, member.favorite,
+                        v -> { member.favorite = v; HudConfigStore.save(); ModuleRegistry.markFavoritesChanged(); }).heartStyle());
+                    // Ancre du module = haut de SA ligne de titre (pas celle
+                    // de l'onglet, qui peut en porter plusieurs).
+                    memberAnchorsLocal.put(member.id, rowY + ROW_H);
                     cursor = rowY - ROW_GAP;
                 }
                 // Sinon (onglet à un seul module) : aucune ligne "Activé" du
@@ -259,18 +300,27 @@ public class UiModGroupConfigScreen extends UiScreenBase {
 
             globalCursor -= headerH;
             float headerY = globalCursor;
+            // Onglet solo : le cœur vit dans l'en-tête, à côté du toggle
+            // d'activation — c'est le seul endroit où un module groupé peut
+            // être mis en favori (il n'a pas de carte à lui sur l'accueil).
             UiWidget header = soloMember != null
-                ? ConfigScreenBuilder.sectionHeaderWithToggle(rowX, headerY, rowW, headerH, tab.label,
-                    soloMember.isEnabled(), v -> { soloMember.setEnabled(v); HudConfigStore.save(); })
+                ? ConfigScreenBuilder.sectionHeaderWithToggleAndFavorite(rowX, headerY, rowW, headerH, tab.label,
+                    soloMember.isEnabled(), v -> { soloMember.setEnabled(v); HudConfigStore.save(); },
+                    soloMember.favorite, v -> { soloMember.favorite = v; HudConfigStore.save(); ModuleRegistry.markFavoritesChanged(); })
                 : ConfigScreenBuilder.sectionHeader(rowX, headerY, rowW, headerH, tab.label);
             combined.add(header);
             anchors.put(tab.label, headerY + headerH);
+            // Onglet solo : l'ancre du module EST celle de sa section.
+            if (soloMember != null) moduleAnchors.put(soloMember.id, headerY + headerH);
 
             globalCursor -= headerToRowGap;
             float shift = globalCursor;
             for (UiWidget w : rows) {
                 w.y += shift;
                 combined.add(w);
+            }
+            for (Map.Entry<String, Float> e : memberAnchorsLocal.entrySet()) {
+                moduleAnchors.put(e.getKey(), e.getValue() + shift);
             }
             globalCursor = shift + cursor;
         }
@@ -279,6 +329,18 @@ public class UiModGroupConfigScreen extends UiScreenBase {
 
         if (activeTab == null || !anchors.containsKey(activeTab)) {
             activeTab = anchors.isEmpty() ? null : anchors.keySet().iterator().next();
+        }
+
+        // Ouverture depuis la carte d'un module groupé favori : on se place
+        // directement sur ses réglages. UNE seule fois — sinon un
+        // redimensionnement de fenêtre (qui relance buildLayout) ramènerait
+        // l'utilisateur de force à ce module alors qu'il a scrollé ailleurs.
+        if (!focusApplied && focusModuleId != null) {
+            Float anchor = moduleAnchors.get(focusModuleId);
+            if (anchor != null) {
+                scroll.scrollToAnchor(anchor);
+                focusApplied = true;
+            }
         }
 
         // Carte à toute la hauteur disponible (voir UiModConfigScreen — choix

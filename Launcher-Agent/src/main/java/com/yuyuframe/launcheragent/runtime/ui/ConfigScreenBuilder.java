@@ -132,7 +132,20 @@ public final class ConfigScreenBuilder {
      */
     public static UiWidget sectionHeaderWithToggle(float x, float y, float w, float h, String label,
                                                     boolean initialToggle, Consumer<Boolean> onToggle) {
-        return new SectionHeader(x, y, w, h, label, initialToggle, onToggle);
+        return new SectionHeader(x, y, w, h, label, initialToggle, onToggle, false, null);
+    }
+
+    /**
+     * Même en-tête, plus un CŒUR de favori à gauche du toggle — utilisé par
+     * {@code UiModGroupConfigScreen} pour qu'un module vivant dans un groupe
+     * puisse être mis en favori (2026-08-30). Un module non groupé porte déjà
+     * son cœur sur sa carte de l'écran d'accueil ; un module groupé n'ayant
+     * pas de carte, c'est ici son seul point d'accès.
+     */
+    public static UiWidget sectionHeaderWithToggleAndFavorite(float x, float y, float w, float h, String label,
+                                                              boolean initialToggle, Consumer<Boolean> onToggle,
+                                                              boolean initialFavorite, Consumer<Boolean> onFavorite) {
+        return new SectionHeader(x, y, w, h, label, initialToggle, onToggle, initialFavorite, onFavorite);
     }
 
     /** Résultat de {@link #buildContinuous} — une SEULE liste (en-têtes de section + lignes déjà enchaînées, plus de pages séparées) + l'ancre de défilement de chaque catégorie (voir {@code UiScrollContainer#scrollToAnchor}). */
@@ -226,6 +239,8 @@ public final class ConfigScreenBuilder {
         // position est recalée à chaque frame dans draw() pour rester
         // ancrée à droite de CET en-tête précis.
         private final UiToggle toggle;
+        /** Cœur de favori, à GAUCHE de {@link #toggle} — {@code null} si cet en-tête n'en porte pas (voir sectionHeaderWithToggleAndFavorite). */
+        private final UiToggle favorite;
 
         SectionHeader(float x, float y, float w, float h, String label, String actionLabel, Runnable action) {
             super(x, y, w, h);
@@ -235,15 +250,19 @@ public final class ConfigScreenBuilder {
             this.actionHoverAnim = action != null
                 ? new com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat(0f, 16f) : null;
             this.toggle = null;
+            this.favorite = null;
         }
 
-        SectionHeader(float x, float y, float w, float h, String label, boolean initialToggle, Consumer<Boolean> onToggle) {
+        SectionHeader(float x, float y, float w, float h, String label, boolean initialToggle, Consumer<Boolean> onToggle,
+                      boolean initialFavorite, Consumer<Boolean> onFavorite) {
             super(x, y, w, h);
             this.label = label;
             this.actionLabel = null;
             this.action = null;
             this.actionHoverAnim = null;
             this.toggle = new UiToggle(0, 0, initialToggle, onToggle);
+            this.favorite = onFavorite == null ? null
+                : new UiToggle(0, 0, UiTheme.scaled(20f), UiTheme.scaled(20f), initialFavorite, onFavorite).heartStyle();
         }
 
         private float actionW() { return UiTheme.scaled(160f); }
@@ -256,12 +275,23 @@ public final class ConfigScreenBuilder {
             // Marge droite agrandie (même retour) — 10->16.
             toggle.x = x + w - toggle.w - UiTheme.scaled(16f);
             toggle.y = y + (h - toggle.h) / 2f;
+            if (favorite != null) {
+                // Juste à gauche du toggle, même axe vertical.
+                favorite.x = toggle.x - favorite.w - UiTheme.scaled(12f);
+                favorite.y = y + (h - favorite.h) / 2f;
+            }
         }
 
         @Override
         public boolean contains(double mx, double my) {
             if (toggle != null) {
                 layoutToggle();
+                lastClickX = mx;
+                lastClickY = my;
+                // Le cœur est TESTÉ EN PREMIER : les deux zones ne se
+                // chevauchent pas, mais l'ordre rend l'intention explicite et
+                // évite toute ambiguïté si les marges venaient à se resserrer.
+                if (favorite != null && favorite.contains(mx, my)) return true;
                 return toggle.contains(mx, my);
             }
             if (action == null) return false;
@@ -270,9 +300,23 @@ public final class ConfigScreenBuilder {
 
         @Override
         public void onClick() {
-            if (toggle != null) { toggle.onClick(); return; }
+            if (toggle != null) {
+                layoutToggle();
+                if (favorite != null && favorite.contains(lastClickX, lastClickY)) { favorite.onClick(); return; }
+                toggle.onClick();
+                return;
+            }
             if (action != null) action.run();
         }
+
+        /**
+         * Dernières coordonnées vues par {@link #contains} — {@code onClick()}
+         * ne reçoit PAS la position du clic (voir {@code UiWidget}), or il
+         * faut ici décider entre le cœur et le toggle. {@code contains} est
+         * toujours appelé juste avant par la répartition des clics, donc ces
+         * valeurs sont celles du clic en cours.
+         */
+        private double lastClickX, lastClickY;
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
@@ -298,6 +342,7 @@ public final class ConfigScreenBuilder {
 
             if (toggle != null) {
                 layoutToggle();
+                if (favorite != null) favorite.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
                 toggle.draw(renderer, mouseX, mouseY, vpWidth, vpHeight);
                 return;
             }
