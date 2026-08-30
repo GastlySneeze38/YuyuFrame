@@ -3,7 +3,6 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
@@ -11,13 +10,11 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigToggle;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
 /**
  * Crosshair personnalisé — port du vrai PvP-Mod
@@ -255,24 +252,13 @@ public final class CrosshairModule extends LauncherModule {
      * du tout, pas juste replier sur "toujours prêt" (voir javadoc de tête).
      */
     private float attackCooldownProgress() {
-        // 26.1.2 sans réflexion — Minecraft.player + getAttackStrengthScale
-        // (méthode publique, voir stub LocalPlayer). Try/catch dédié : nom de
-        // classe RÉEL, inexistant tel quel sur les autres brackets (obfusqués).
+        // Joueur par l'accessor Mixin (PlayerData), cooldown par la méthode
+        // publique getAttackStrengthScale (voir stub LocalPlayer) — zéro
+        // réflexion. Repli réflexif multi-bracket supprimé le 2026-08-27.
+        LocalPlayer player = PlayerData.player();
+        if (player == null) return -1f;
         try {
-            LocalPlayer directPlayer = Minecraft.getInstance().player;
-            if (directPlayer != null) return directPlayer.getAttackStrengthScale(0f);
-        } catch (Throwable ignored) {}
-        try {
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return -1f;
-            Field playerField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player");
-            if (playerField == null) return -1f;
-            Object player = playerField.get(mc);
-            if (player == null) return -1f;
-            Method getAttackCooldownProgress = McReflect.oneArgMethod(player.getClass(),
-                "net/minecraft/entity/player/PlayerEntity", "getAttackCooldownProgress", "getAttackStrengthScale", float.class);
-            if (getAttackCooldownProgress == null) return -1f;
-            return (float) getAttackCooldownProgress.invoke(player, 0f);
+            return player.getAttackStrengthScale(0f);
         } catch (Throwable t) {
             if (!cooldownErrorLogged) {
                 cooldownErrorLogged = true;

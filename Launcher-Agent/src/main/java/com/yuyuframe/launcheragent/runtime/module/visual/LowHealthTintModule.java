@@ -1,16 +1,14 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigColor;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 
-import java.lang.reflect.Method;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
 /**
  * Teinte l'écran (vignette) quand la vie descend sous un seuil réglable —
@@ -117,27 +115,17 @@ public final class LowHealthTintModule extends LauncherModule {
     }
 
     /**
-     * 26.1.2 sans réflexion (2026-08-26, §22 — audit modules) —
-     * {@code Minecraft.player} + {@code LivingEntity.getHealth()/getMaxHealth()}
-     * (méthodes publiques, vérifiées javap — pas de champ privé en jeu ici,
-     * aucun Accessor Mixin pertinent). Repli réflexion multi-bracket sinon.
+     * Joueur par l'accessor Mixin ({@code PlayerData}), santé par les méthodes
+     * publiques {@code getHealth()}/{@code getMaxHealth()} de
+     * {@code LivingEntity} — zéro réflexion. Le repli réflexif multi-bracket a
+     * été supprimé le 2026-08-27 avec le reste de l'accès aux données du jeu.
      * @return {@code float[]{health, maxHealth}} ou {@code null} si indisponible.
      */
     private float[] healthAndMax() {
+        LocalPlayer player = PlayerData.player();
+        if (player == null) return null;
         try {
-            LocalPlayer directPlayer = Minecraft.getInstance().player;
-            if (directPlayer != null) return new float[]{ directPlayer.getHealth(), directPlayer.getMaxHealth() };
-        } catch (Throwable ignored) {}
-        try {
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return null;
-            Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
-            if (player == null) return null;
-
-            Method getHealth = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getHealth");
-            Method getMaxHealth = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getMaxHealth");
-            if (getHealth == null || getMaxHealth == null) return null;
-            return new float[]{ (float) getHealth.invoke(player), (float) getMaxHealth.invoke(player) };
+            return new float[]{ player.getHealth(), player.getMaxHealth() };
         } catch (Throwable t) {
             return null;
         }

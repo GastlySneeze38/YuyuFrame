@@ -10,6 +10,7 @@ import net.minecraft.world.effect.MobEffects;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import com.yuyuframe.launcheragent.runtime.module.hud.PotionEffectsModule;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
 /**
  * Retire l'effet Ténèbres (Warden / Sculk Shrieker, ajouté en 1.19) dès
@@ -39,43 +40,15 @@ public final class NoDarknessModule extends LauncherModule {
 
     @Override
     public void onTick() {
-        // 26.1.2 sans réflexion — Minecraft.player (champ public) +
-        // hasEffect/removeEffect (méthodes publiques, voir stub LocalPlayer).
-        // Try/catch dédié : nom de classe RÉEL, inexistant tel quel sur les
-        // autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
+        // Joueur par l'accessor Mixin (PlayerData) + hasEffect/removeEffect
+        // (méthodes publiques, voir stub LocalPlayer) — zéro réflexion. Le
+        // repli réflexif multi-bracket (résolution de Holder/StatusEffects et
+        // du champ statique DARKNESS) a été supprimé le 2026-08-27 ; à noter
+        // pour un futur portage : DARKNESS n'existe pas avant la 1.19.
         try {
-            LocalPlayer directPlayer = Minecraft.getInstance().player;
-            if (directPlayer != null) {
-                if (directPlayer.hasEffect(MobEffects.DARKNESS)) directPlayer.removeEffect(MobEffects.DARKNESS);
-                return;
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-            Field playerField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player");
-            if (playerField == null) return;
-            Object player = playerField.get(mc);
+            LocalPlayer player = PlayerData.player();
             if (player == null) return;
-
-            // Holder direct — voir javadoc de tête, PAS de déballage value() ici.
-            Class<?> holderClass = McReflect.yarnClass("net/minecraft/registry/entry/RegistryEntry", "net.minecraft.core.Holder");
-            if (holderClass == null) return;
-
-            Class<?> statusEffectsClass = McReflect.yarnClass("net/minecraft/entity/effect/StatusEffects", "net.minecraft.world.effect.MobEffects");
-            if (statusEffectsClass == null) return; // absent avant 1.19, voir javadoc de tête
-            Field darknessField = McReflect.field(statusEffectsClass, "net/minecraft/entity/effect/StatusEffects", "DARKNESS");
-            if (darknessField == null) return;
-            Object darkness = darknessField.get(null);
-            if (darkness == null) return;
-
-            Method hasEffect = McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity",
-                "hasStatusEffect", "hasEffect", holderClass);
-            Method removeEffect = McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity",
-                "removeStatusEffect", "removeEffect", holderClass);
-            if (hasEffect == null || removeEffect == null) return;
-
-            if ((boolean) hasEffect.invoke(player, darkness)) removeEffect.invoke(player, darkness);
+            if (player.hasEffect(MobEffects.DARKNESS)) player.removeEffect(MobEffects.DARKNESS);
         } catch (Throwable t) {
             if (!errorLogged) {
                 errorLogged = true;

@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import net.minecraft.client.Minecraft;
 
 import java.lang.reflect.Field;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /**
  * Fullbright — force {@code GameOptions.gamma} bien au-delà du maximum
@@ -80,57 +81,31 @@ public final class FullbrightModule extends LauncherModule {
      * voir {@link McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue}.
      */
     private float readGamma(Object handle, Object options) throws Exception {
-        if (handle instanceof OptionInstanceAccessor261) {
-            return ((Number) ((OptionInstanceAccessor261) handle).la$value()).floatValue();
-        }
-        Field gammaField = (Field) handle;
-        if (gammaField.getType() == double.class) return (float) gammaField.getDouble(options);
-        if (gammaField.getType() == float.class) return gammaField.getFloat(options);
-        return (float) McReflect.simpleOptionGetValue(gammaField.get(options));
+        return ((Number) ((OptionInstanceAccessor261) handle).la$value()).floatValue();
     }
 
     private void writeGamma(Object handle, Object options, float value) throws Exception {
-        if (handle instanceof OptionInstanceAccessor261) {
-            // gamma est un OptionInstance<Double> (vérifié javap) — boxing fixe,
-            // contrairement à ZoomModule.fov/sensitivity (Integer/Float/Double
-            // selon le champ) qui doivent détecter le type de la valeur courante.
-            ((OptionInstanceAccessor261) handle).la$setValue(Double.valueOf(value));
-            return;
-        }
-        Field gammaField = (Field) handle;
-        if (gammaField.getType() == double.class) { gammaField.setDouble(options, value); return; }
-        if (gammaField.getType() == float.class) { gammaField.setFloat(options, value); return; }
-        McReflect.simpleOptionSetValue(gammaField.get(options), value);
+        // gamma est un OptionInstance<Double> (vérifié javap) — boxing fixe,
+        // contrairement à ZoomModule.fov/sensitivity (Integer/Float/Double
+        // selon le champ) qui doivent détecter le type de la valeur courante.
+        // Écrit le champ value DIRECTEMENT : setValue() déclencherait la
+        // validation vanilla, qui clampe (voir OptionInstanceAccessor261).
+        ((OptionInstanceAccessor261) handle).la$setValue(Double.valueOf(value));
     }
 
-    /**
-     * 26.1.2 sans réflexion — {@code MinecraftAccessor261#la$options()}
-     * (architecture apimixin, 2026-08-26 §22). Repli réflexion multi-bracket
-     * sinon.
-     */
+    /** Options par l'accessor Mixin, via {@code ClientData} — zéro réflexion (repli multi-bracket supprimé le 2026-08-27). */
     private Object optionsInstance() throws Exception {
-        try {
-            Object mc = Minecraft.getInstance();
-            if (mc instanceof MinecraftAccessor261) {
-                Object options = ((MinecraftAccessor261) mc).la$options();
-                if (options != null) return options;
-            }
-        } catch (Throwable ignored) {}
-        Object mc = McReflect.minecraftClient();
-        if (mc == null) return null;
-        return McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+        return ClientData.options();
     }
 
     /**
-     * @return soit un {@code OptionInstanceAccessor261} (26.1.2, voir {@link
-     * OptionsAccessor261#la$gamma()}), soit un {@code Field} (repli réflexion
-     * multi-bracket) — même détection que {@code ZoomModule#fovHandle}.
+     * @return l'{@code OptionInstanceAccessor261} de {@code Options.gamma}
+     * (voir {@link OptionsAccessor261#la$gamma()}), ou {@code null} hors
+     * bracket 26.1.2 — même forme que {@code ZoomModule#fovHandle}.
      */
     private Object gammaHandle(Object options) throws Exception {
-        if (options instanceof OptionsAccessor261) {
-            Object gammaOption = ((OptionsAccessor261) options).la$gamma();
-            if (gammaOption instanceof OptionInstanceAccessor261) return gammaOption;
-        }
-        return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "gamma");
+        if (!(options instanceof OptionsAccessor261)) return null;
+        Object gammaOption = ((OptionsAccessor261) options).la$gamma();
+        return (gammaOption instanceof OptionInstanceAccessor261) ? gammaOption : null;
     }
 }

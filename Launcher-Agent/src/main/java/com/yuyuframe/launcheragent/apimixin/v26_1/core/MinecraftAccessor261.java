@@ -1,6 +1,8 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import net.minecraft.client.MouseHandler;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.Options;
 import net.minecraft.client.User;
 import com.mojang.blaze3d.platform.Window;
@@ -73,4 +75,23 @@ public interface MinecraftAccessor261 {
     /** Ajouté pour {@code ChatEnhancementsModule} (2026-08-26, §22) — {@code Gui} est public (vérifié javap), routé ici pour rester sur UNE seule surface d'accès à l'état interne de {@code Minecraft}, voir la javadoc de classe. */
     @Accessor("gui")
     Gui la$gui();
+
+    /**
+     * Joueur courant — {@code null} hors partie (écran titre, déconnexion).
+     *
+     * <p>{@code player} est un champ PUBLIC sur 26.1.2, donc un accès direct
+     * compilerait aussi. Il passe quand même par un accessor, sur demande
+     * explicite (2026-08-27) : la portabilité multiversion vient de ce que
+     * TOUS les accès à l'état du jeu traversent une seule interface par
+     * bracket. Le jour où un champ change de nom ou de visibilité sur une
+     * autre version, seul l'accessor de CE bracket bouge — aucun appelant.
+     * Mélanger accès directs et accessors ferait perdre exactement cette
+     * propriété.
+     */
+    @Accessor("player")
+    LocalPlayer la$player();
+
+    /** Monde client courant — {@code null} hors partie. Même raison que {@link #la$player()} de passer par un accessor malgré un champ public. */
+    @Accessor("level")
+    ClientLevel la$level();
 }

@@ -2,9 +2,7 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
@@ -12,11 +10,10 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
 import net.minecraft.client.CameraType;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 
-import java.lang.reflect.Method;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.ShulkerPreviewModule;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /**
  * Freelook façon OptiFine : maintenir une touche découple la CAMÉRA de la
@@ -330,10 +327,6 @@ public final class FreelookModule extends LauncherModule {
         return thirdPersonView == 1 ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK;
     }
 
-    /** @return le nom du champ de {@code CameraType}/{@code Perspective} (Yarn) correspondant à {@link #thirdPersonView} — pour le repli réflexion cross-bracket, voir {@link #onTick}. */
-    private String targetCameraTypeFieldName() {
-        return thirdPersonView == 1 ? "THIRD_PERSON_FRONT" : "THIRD_PERSON_BACK";
-    }
 
     /**
      * Force la vue 3e personne choisie ({@link #thirdPersonView}) dès que le
@@ -354,64 +347,31 @@ public final class FreelookModule extends LauncherModule {
             if (engaged == wasEngaged) return;
             wasEngaged = engaged;
 
-            if (applyCameraTypeViaAccessor(engaged)) return;
-
-            // Repli réflexion — uniquement atteint si Minecraft.getInstance()
-            // a levé (autre bracket que 26.1.2, nom réel inexistant) : chemin
-            // IDENTIQUE à avant.
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return;
-            java.lang.reflect.Field fOptions = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options");
-            if (fOptions == null) return;
-            Object options = fOptions.get(mc);
-            if (options == null) return;
-
-            Method getCameraType = McReflect.noArgMethod(options.getClass(),
-                "net/minecraft/client/option/GameOptions", "getPerspective", "getCameraType");
-            if (getCameraType == null) return;
-            Method setCameraType = McReflect.method(options.getClass(),
-                "net/minecraft/client/option/GameOptions", "setPerspective", "setCameraType",
-                getCameraType.getReturnType());
-            if (setCameraType == null) return;
-
-            if (engaged) {
-                savedCameraType = getCameraType.invoke(options);
-                Class<?> cameraTypeClass = McReflect.yarnClass(
-                    "net/minecraft/client/option/Perspective", "net.minecraft.client.CameraType");
-                if (cameraTypeClass == null) return;
-                java.lang.reflect.Field fTarget = McReflect.field(cameraTypeClass,
-                    "net/minecraft/client/option/Perspective", targetCameraTypeFieldName());
-                if (fTarget == null) return;
-                setCameraType.invoke(options, fTarget.get(null));
-            } else if (savedCameraType != null) {
-                setCameraType.invoke(options, savedCameraType);
-                savedCameraType = null;
-            }
+            // Repli réflexif (résolution de getPerspective/getCameraType, de
+            // setPerspective/setCameraType et de la constante Perspective)
+            // supprimé le 2026-08-27 : tout passe par l'accessor.
+            applyCameraTypeViaAccessor(engaged);
         } catch (Throwable t) {
             LauncherLog.err("[FreelookModule] onTick: " + t);
         }
     }
 
     /**
-     * Chemin SANS réflexion — force/restaure la vue 3e personne via {@code
-     * Options.getCameraType()}/{@code setCameraType(CameraType)} et
-     * {@code MinecraftAccessor261#la$options()} (architecture apimixin,
-     * 2026-08-25 §19/§20 — voir la javadoc du stub {@code Minecraft.java}
-     * pour l'historique du VerifyError, RÉSOLU, qui avait fait éviter tout
-     * Accessor sur cette classe). {@code true} si utilisé avec succès, auquel
-     * cas l'appelant NE DOIT PAS retomber sur la réflexion.
+     * Force/restaure la vue 3e personne — zéro réflexion : options par
+     * l'accessor Mixin ({@code ClientData} → {@code
+     * MinecraftAccessor261#la$options()}), vue par les méthodes publiques
+     * {@code Options.getCameraType()}/{@code setCameraType(CameraType)}.
+     * {@code false} hors bracket 26.1.2 (plus aucun repli depuis le
+     * 2026-08-27 : l'appelant n'a plus rien vers quoi retomber).
      *
-     * Enveloppé dans son propre try/catch (pas seulement celui de l'appelant) :
-     * {@code Minecraft.getInstance()} référence directement {@code
-     * net.minecraft.client.Minecraft} — nom RÉEL, inexistant tel quel sur les
-     * autres brackets (1.8.9-1.21.11, obfusqués) — {@code NoClassDefFoundError}
-     * y est attendu et doit rester silencieux, jamais logué comme une erreur.
+     * Garde son propre try/catch, distinct de celui de l'appelant : les noms
+     * de classes référencés ici sont RÉELS, donc absents des brackets
+     * obfusqués — le {@code NoClassDefFoundError} qui en découle est attendu
+     * et doit rester silencieux, jamais logué comme une erreur.
      */
     private boolean applyCameraTypeViaAccessor(boolean engaged) {
         try {
-            Object mc = Minecraft.getInstance();
-            if (!(mc instanceof MinecraftAccessor261)) return false;
-            Options options = ((MinecraftAccessor261) mc).la$options();
+            Options options = ClientData.options();
             if (options == null) return false;
             if (engaged) {
                 savedCameraType = options.getCameraType();
@@ -457,22 +417,7 @@ public final class FreelookModule extends LauncherModule {
             // laisser bloquée en 3e personne, même chemin que onTick()
             // sinon suivi (le module ne tourne plus, wasEngaged ne
             // redeviendrait jamais faux tout seul).
-            if (wasEngaged && savedCameraType != null && !restoreCameraTypeViaAccessor()) {
-                // Repli réflexion — voir applyCameraTypeViaAccessor(), même principe.
-                try {
-                    Object mc = McReflect.minecraftClient();
-                    if (mc != null) {
-                        java.lang.reflect.Field fOptions = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options");
-                        Object options = fOptions != null ? fOptions.get(mc) : null;
-                        if (options != null) {
-                            Method setCameraType = McReflect.method(options.getClass(),
-                                "net/minecraft/client/option/GameOptions", "setPerspective", "setCameraType",
-                                savedCameraType.getClass());
-                            if (setCameraType != null) setCameraType.invoke(options, savedCameraType);
-                        }
-                    }
-                } catch (Throwable ignored) {}
-            }
+            if (wasEngaged && savedCameraType != null) restoreCameraTypeViaAccessor();
             wasEngaged = false;
             savedCameraType = null;
         }
@@ -481,9 +426,7 @@ public final class FreelookModule extends LauncherModule {
     /** Chemin SANS réflexion pour la restauration — voir {@link #applyCameraTypeViaAccessor}, même principe (y compris le try/catch dédié). */
     private boolean restoreCameraTypeViaAccessor() {
         try {
-            Object mc = Minecraft.getInstance();
-            if (!(mc instanceof MinecraftAccessor261)) return false;
-            Options options = ((MinecraftAccessor261) mc).la$options();
+            Options options = ClientData.options();
             if (options == null) return false;
             options.setCameraType((CameraType) savedCameraType);
             return true;

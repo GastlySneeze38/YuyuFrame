@@ -4,21 +4,19 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigDropdown;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.ItemStack;
 
-import java.lang.reflect.Method;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
 /**
  * Port de PvP-Mod ArmorDurabilityConfig/ArmorDurabilityHud — sa propre carte,
@@ -264,85 +262,30 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * javadoc pour le pourquoi.
          */
         private Object[] computeStacks() {
-            // 26.1.2 sans réflexion — Minecraft.player + getItemInHand/
-            // getItemBySlot (méthodes publiques, voir stub LocalPlayer). Try/
-            // catch dédié : nom de classe RÉEL, inexistant tel quel sur les
-            // autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
+            // Joueur par l'accessor Mixin (PlayerData) + getItemInHand/
+            // getItemBySlot (méthodes publiques, voir stub LocalPlayer) —
+            // zéro réflexion.
+            //
+            // Le repli réflexif multi-bracket a été supprimé le 2026-08-27.
+            // À savoir avant tout portage : getStackInHand() n'est PAS no-arg
+            // (il prend un Hand — une recherche no-arg ne le trouve jamais, et
+            // la « première main » restait vide) ; Hand→InteractionHand et
+            // getStackInHand→getItemInHand en 26.1 ; Hand n'existe pas du tout
+            // avant la 1.9 ; l'armure se lisait par getArmorSlot(int) avant
+            // que getEquippedStack/getItemBySlot(EquipmentSlot) ne le remplace.
+            LocalPlayer player = PlayerData.player();
+            if (player == null) return new Object[]{ null, null, null, null, null };
             try {
-                LocalPlayer directPlayer = Minecraft.getInstance().player;
-                if (directPlayer != null) {
-                    Object held = directPlayer.getItemInHand(mainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
-                    Object helmet = directPlayer.getItemBySlot(EquipmentSlot.HEAD);
-                    Object chest = directPlayer.getItemBySlot(EquipmentSlot.CHEST);
-                    Object legs = directPlayer.getItemBySlot(EquipmentSlot.LEGS);
-                    Object boots = directPlayer.getItemBySlot(EquipmentSlot.FEET);
-                    return new Object[]{ helmet, chest, legs, boots, held };
-                }
-            } catch (Throwable ignored) {}
+                Object held = player.getItemInHand(mainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
+                Object helmet = player.getItemBySlot(EquipmentSlot.HEAD);
+                Object chest = player.getItemBySlot(EquipmentSlot.CHEST);
+                Object legs = player.getItemBySlot(EquipmentSlot.LEGS);
+                Object boots = player.getItemBySlot(EquipmentSlot.FEET);
+                return new Object[]{ helmet, chest, legs, boots, held };
+            } catch (Throwable ignored) {
+                return new Object[]{ null, null, null, null, null };
+            }
 
-            Object helmet = null, chest = null, legs = null, boots = null, held = null;
-            try {
-                Object mc = McReflect.minecraftClient();
-                if (mc != null) {
-                    Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
-                    if (player != null) {
-                        // BUG TROUVÉ (audit modules, voir historique de session) :
-                        // getStackInHand() n'est PAS no-arg — prend un paramètre
-                        // Hand (mappings 1.16.5 : (Laot;)Lbmb; b method_5998
-                        // getStackInHand) — la recherche no-arg ne le trouvait
-                        // donc jamais, "première main" toujours vide.
-                        // 26.1+ : Hand→InteractionHand (package déplacé de
-                        // net.minecraft.util vers net.minecraft.world, constante
-                        // MAIN_HAND inchangée), getStackInHand→getItemInHand
-                        // (vérifiés par javap sur le jar client 26.1.2 réel).
-                        //
-                        // Choix de main (voir champ mainHand, piloté par
-                        // ArmorDurabilityModule.hand) : main secondaire par
-                        // défaut, demandé explicitement par l'utilisateur.
-                        // handClass reste null sur 1.8.9 (pas de Hand du tout
-                        // avant 1.9) — cette branche entière est silencieusement
-                        // sautée, "hand"/OFF_HAND n'existent nulle part pour ce
-                        // bracket, cohérent avec "à partir des versions où on a
-                        // une deuxième main".
-                        Class<?> handClass = McReflect.yarnClass("net/minecraft/util/Hand", "net.minecraft.world.InteractionHand");
-                        Method getStackInHand = handClass != null
-                            ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand", "getItemInHand", handClass)
-                            : null;
-                        if (getStackInHand != null && handClass != null) {
-                            String constantName = mainHand ? "MAIN_HAND" : "OFF_HAND";
-                            Object handConstant = McReflect.field(handClass, "net/minecraft/util/Hand", constantName).get(null);
-                            held = getStackInHand.invoke(player, handConstant);
-                        }
-
-                        Method getArmorSlot = McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getArmorSlot", int.class);
-                        if (getArmorSlot != null) {
-                            helmet = getArmorSlot.invoke(player, 3);
-                            chest = getArmorSlot.invoke(player, 2);
-                            legs = getArmorSlot.invoke(player, 1);
-                            boots = getArmorSlot.invoke(player, 0);
-                        } else {
-                            // 26.1+ : EquipmentSlot déplacé de net.minecraft.entity
-                            // vers net.minecraft.world.entity (constantes HEAD/CHEST/
-                            // LEGS/FEET inchangées), getEquippedStack→getItemBySlot.
-                            Class<?> slotClass = McReflect.yarnClass("net/minecraft/entity/EquipmentSlot", "net.minecraft.world.entity.EquipmentSlot");
-                            Method getEquippedStack = slotClass != null
-                                ? McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getEquippedStack", "getItemBySlot", slotClass)
-                                : null;
-                            if (slotClass != null && getEquippedStack != null) {
-                                helmet = getEquippedStack.invoke(player, equipmentSlot(slotClass, "HEAD"));
-                                chest = getEquippedStack.invoke(player, equipmentSlot(slotClass, "CHEST"));
-                                legs = getEquippedStack.invoke(player, equipmentSlot(slotClass, "LEGS"));
-                                boots = getEquippedStack.invoke(player, equipmentSlot(slotClass, "FEET"));
-                            }
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
-            return new Object[]{ helmet, chest, legs, boots, held };
-        }
-
-        private Object equipmentSlot(Class<?> slotClass, String yarnConstantName) throws Exception {
-            return McReflect.field(slotClass, "net/minecraft/entity/EquipmentSlot", yarnConstantName).get(null);
         }
 
         @Override
@@ -433,41 +376,16 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * réellement affichée, pas systématiquement.
          */
         private boolean vanillaOffhandVisibleOnLeft() {
-            // 26.1.2 sans réflexion — voir computeStacks() pour le principe.
+            // Joueur par l'accessor Mixin — voir computeStacks() pour le
+            // principe et pour l'historique des renommages de mappings.
+            LocalPlayer player = PlayerData.player();
+            if (player == null) return false;
             try {
-                LocalPlayer directPlayer = Minecraft.getInstance().player;
-                if (directPlayer != null) {
-                    Object offHandStackObj = directPlayer.getItemInHand(InteractionHand.OFF_HAND);
-                    if (!(offHandStackObj instanceof ItemStack) || ((ItemStack) offHandStackObj).isEmpty()) return false;
-                    return directPlayer.getMainArm() == HumanoidArm.RIGHT;
-                }
-            } catch (Throwable ignored) {}
-            try {
-                Object mc = McReflect.minecraftClient();
-                if (mc == null) return false;
-                Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
-                if (player == null) return false;
-
-                Class<?> handClass = McReflect.yarnClass("net/minecraft/util/Hand", "net.minecraft.world.InteractionHand");
-                if (handClass == null) return false; // 1.8.9 : pas de main secondaire du tout
-                Method getStackInHand = McReflect.oneArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getStackInHand", "getItemInHand", handClass);
-                if (getStackInHand == null) return false;
-                Object offHandConstant = McReflect.field(handClass, "net/minecraft/util/Hand", "OFF_HAND").get(null);
-                Object offHandStack = getStackInHand.invoke(player, offHandConstant);
-                if (offHandStack == null) return false;
-                Method isEmpty = McReflect.noArgMethod(offHandStack.getClass(), "net/minecraft/item/ItemStack", "isEmpty");
-                if (isEmpty == null || (boolean) isEmpty.invoke(offHandStack)) return false;
-
+                Object offHandStackObj = player.getItemInHand(InteractionHand.OFF_HAND);
+                if (!(offHandStackObj instanceof ItemStack) || ((ItemStack) offHandStackObj).isEmpty()) return false;
                 // "Arm" (Yarn) == "HumanoidArm" (vrai nom 26.1.2, confirmé par
-                // désassemblage Gui.extractItemHotbar réel) — getMainArm est
-                // déclaré sur LivingEntity dans les deux cas (même nom "getMainArm"
-                // partout, pas de repli nécessaire pour la méthode elle-même).
-                Class<?> armClass = McReflect.yarnClass("net/minecraft/util/Arm", "net.minecraft.world.entity.HumanoidArm");
-                Method getMainArm = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/LivingEntity", "getMainArm");
-                if (armClass == null || getMainArm == null) return false;
-                Object mainArm = getMainArm.invoke(player);
-                Object rightConstant = McReflect.field(armClass, "net/minecraft/util/Arm", "RIGHT").get(null);
-                return mainArm == rightConstant;
+                // désassemblage de Gui.extractItemHotbar réel).
+                return player.getMainArm() == HumanoidArm.RIGHT;
             } catch (Throwable t) {
                 return false;
             }
@@ -485,23 +403,16 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
         private String durabilityText(Object stack) {
             if (stack == null) return null;
-            // 26.1.2 sans réflexion — voir computeStacks() pour le principe.
+            // Méthodes publiques d'ItemStack — zéro réflexion. Repli
+            // multi-bracket supprimé le 2026-08-27 ; renommages 26.1 à
+            // connaître pour un portage : isDamageable→isDamageableItem,
+            // getDamage→getDamageValue (getMaxDamage inchangé).
+            if (!(stack instanceof ItemStack)) return null;
             try {
-                if (stack instanceof ItemStack) {
-                    ItemStack is = (ItemStack) stack;
-                    if (!is.isDamageableItem()) return null;
-                    int max = is.getMaxDamage();
-                    int dmg = is.getDamageValue();
-                    return (max - dmg) + "/" + max;
-                }
-            } catch (Throwable ignored) {}
-            try {
-                // 26.1+ : isDamageable→isDamageableItem, getDamage→getDamageValue
-                // (vérifiés par javap sur le jar client 26.1.2 réel) ; getMaxDamage inchangé.
-                Method isDamageable = McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "isDamageable", "isDamageableItem");
-                if (isDamageable == null || !(boolean) isDamageable.invoke(stack)) return null;
-                int max = (int) McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "getMaxDamage").invoke(stack);
-                int dmg = (int) McReflect.noArgMethod(stack.getClass(), "net/minecraft/item/ItemStack", "getDamage", "getDamageValue").invoke(stack);
+                ItemStack is = (ItemStack) stack;
+                if (!is.isDamageableItem()) return null;
+                int max = is.getMaxDamage();
+                int dmg = is.getDamageValue();
                 return (max - dmg) + "/" + max;
             } catch (Throwable t) {
                 return null;

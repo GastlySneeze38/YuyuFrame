@@ -1,6 +1,5 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
@@ -10,10 +9,8 @@ import com.yuyuframe.launcheragent.runtime.ui.config.ConfigKeybind;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.Options;
 
-import java.lang.reflect.Field;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /**
  * Zoom façon Essential Mod/Zoomify — touche maintenue réduit le FOV vers un
@@ -288,40 +285,29 @@ public final class ZoomModule extends LauncherModule {
      * sensitivity} (même famille d'objet sur 26.1.2 : {@code OptionInstance<
      * Double>}, confirmé par javap) — voir applySensitivityScale().
      *
-     * {@code handle} est soit un {@code Field} (repli réflexion multi-bracket,
-     * comportement inchangé), soit un {@code OptionInstanceAccessor261}
-     * (26.1.2 sans réflexion — voir {@link #fovHandle()}/{@link
-     * #sensitivityHandle}) : le champ {@code .value} de {@code OptionInstance}
-     * est écrit DIRECTEMENT via l'accessor, jamais via {@code setValue()} —
-     * même raison que {@link McReflect#simpleOptionSetValue} (validation
-     * vanilla qui clampe fov/sensibilité, voir sa javadoc) — et la MÊME
-     * détection de boxing Integer/Float/Double par le type de la valeur
-     * COURANTE, reprise ici à l'identique.
+     * {@code handle} est un {@code OptionInstanceAccessor261} (voir {@link
+     * #fovHandle()}/{@link #sensitivityHandle}) — le repli {@code Field}
+     * multi-bracket a été supprimé le 2026-08-27. Le champ {@code .value} de
+     * {@code OptionInstance} est écrit DIRECTEMENT via l'accessor, jamais via
+     * {@code setValue()} : ce dernier déclenche la validation vanilla, qui
+     * clampe fov et sensibilité.
      */
     private double readOptionValue(Object handle, Object options) throws Exception {
-        if (handle instanceof OptionInstanceAccessor261) {
-            return ((Number) ((OptionInstanceAccessor261) handle).la$value()).doubleValue();
-        }
-        Field field = (Field) handle;
-        if (field.getType() == double.class) return field.getDouble(options);
-        if (field.getType() == float.class) return field.getFloat(options);
-        return McReflect.simpleOptionGetValue(field.get(options));
+        return ((Number) ((OptionInstanceAccessor261) handle).la$value()).doubleValue();
     }
 
     private void writeOptionValue(Object handle, Object options, double value) throws Exception {
-        if (handle instanceof OptionInstanceAccessor261) {
-            OptionInstanceAccessor261 acc = (OptionInstanceAccessor261) handle;
-            Object current = acc.la$value();
-            Object boxed = current instanceof Integer ? (Object) Integer.valueOf((int) Math.round(value))
-                : current instanceof Float ? (Object) Float.valueOf((float) value)
-                : (Object) Double.valueOf(value);
-            acc.la$setValue(boxed);
-            return;
-        }
-        Field field = (Field) handle;
-        if (field.getType() == double.class) { field.setDouble(options, value); return; }
-        if (field.getType() == float.class) { field.setFloat(options, (float) value); return; }
-        McReflect.simpleOptionSetValue(field.get(options), value);
+        OptionInstanceAccessor261 acc = (OptionInstanceAccessor261) handle;
+        Object current = acc.la$value();
+        // Boxing d'après le type de la valeur COURANTE : fov est un
+        // OptionInstance<Integer>, sensitivity un OptionInstance<Double>
+        // (tous deux vérifiés javap) — écrire le mauvais type compilerait
+        // (le champ est vu comme Object côté accessor) mais planterait au
+        // premier déballage côté vanilla.
+        Object boxed = current instanceof Integer ? (Object) Integer.valueOf((int) Math.round(value))
+            : current instanceof Float ? (Object) Float.valueOf((float) value)
+            : (Object) Double.valueOf(value);
+        acc.la$setValue(boxed);
     }
 
     /**
@@ -377,11 +363,9 @@ public final class ZoomModule extends LauncherModule {
      * compensation de sensibilité ne s'applique pas).
      */
     private Object sensitivityHandle(Object options) {
-        if (options instanceof OptionsAccessor261) {
-            Object sensOption = ((OptionsAccessor261) options).la$sensitivity();
-            if (sensOption instanceof OptionInstanceAccessor261) return sensOption;
-        }
-        return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "mouseSensitivity", "sensitivity");
+        if (!(options instanceof OptionsAccessor261)) return null;
+        Object sensOption = ((OptionsAccessor261) options).la$sensitivity();
+        return (sensOption instanceof OptionInstanceAccessor261) ? sensOption : null;
     }
 
     /**
@@ -406,22 +390,11 @@ public final class ZoomModule extends LauncherModule {
     }
 
     /**
-     * 26.1.2 sans réflexion — {@code MinecraftAccessor261#la$options()}
-     * (architecture apimixin, 2026-08-25 §19/§20). Try/catch dédié : {@code
-     * Minecraft.getInstance()} référence le nom RÉEL, inexistant tel quel sur
-     * les autres brackets (obfusqués) — repli réflexion multi-bracket sinon.
+     * Options par l'accessor Mixin, via {@code ClientData} — zéro réflexion
+     * (repli multi-bracket supprimé le 2026-08-27).
      */
     private Object optionsInstance() throws Exception {
-        try {
-            Object mc = Minecraft.getInstance();
-            if (mc instanceof MinecraftAccessor261) {
-                Options options = ((MinecraftAccessor261) mc).la$options();
-                if (options != null) return options;
-            }
-        } catch (Throwable ignored) {}
-        Object mc = McReflect.minecraftClient();
-        if (mc == null) return null;
-        return McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+        return ClientData.options();
     }
 
     /**
@@ -431,11 +404,8 @@ public final class ZoomModule extends LauncherModule {
      */
     private Object fovHandle() throws Exception {
         Object options = optionsInstance();
-        if (options == null) return null;
-        if (options instanceof OptionsAccessor261) {
-            Object fovOption = ((OptionsAccessor261) options).la$fov();
-            if (fovOption instanceof OptionInstanceAccessor261) return fovOption;
-        }
-        return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "fov");
+        if (!(options instanceof OptionsAccessor261)) return null;
+        Object fovOption = ((OptionsAccessor261) options).la$fov();
+        return (fovOption instanceof OptionInstanceAccessor261) ? fovOption : null;
     }
 }

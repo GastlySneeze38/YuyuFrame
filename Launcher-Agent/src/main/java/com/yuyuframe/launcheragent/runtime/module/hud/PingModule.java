@@ -12,6 +12,8 @@ import net.minecraft.client.player.LocalPlayer;
 import java.lang.reflect.Method;
 import java.util.UUID;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /** Port de PvP-Mod PingConfig/PingHud — sa propre carte, comme dans la référence. */
 public final class PingModule extends SingleHudModule {
@@ -27,77 +29,29 @@ public final class PingModule extends SingleHudModule {
     private static final class ContentSource implements HudElement.ContentSource {
         @Override
         public String[] lines() {
-            // 26.1.2 sans réflexion — Minecraft.player (champ public) +
-            // getConnection()/getPlayerInfo()/getLatency() (méthodes publiques,
-            // voir stubs). Try/catch dédié : nom de classe RÉEL, inexistant tel
-            // quel sur les autres brackets (obfusqués) — repli réflexion sinon.
+            // Joueur par l'accessor Mixin (PlayerData), connexion par
+            // ClientData (getConnection(), méthode publique) — zéro réflexion.
+            //
+            // Le repli réflexif multi-bracket a été supprimé le 2026-08-27.
+            // HISTORIQUE à connaître avant de porter ce module vers un autre
+            // bracket : {@code Entity.getUuid()} n'a AUCUNE entrée nommée dans
+            // les mappings Yarn 1.20.4 (seul le CHAMP uuid l'est — vérifié dans
+            // mappings/yarn-1.20.4-mergedv2.jar : "f Ljava/util/UUID; ay
+            // field_6021 uuid", aucune ligne "m ... getUuid"). Une résolution
+            // par nom de méthode y renvoyait null, et l'appel qui suivait
+            // partait en NullPointerException avalée par le catch — "-- ms" en
+            // boucle sans le moindre log. L'accessor rend ce piège sans objet
+            // ici, mais il se reposera tel quel sur un bracket obfusqué.
             try {
-                LocalPlayer directPlayer = Minecraft.getInstance().player;
-                if (directPlayer != null) {
-                    ClientPacketListener connection = Minecraft.getInstance().getConnection();
-                    if (connection != null) {
-                        PlayerInfo info = connection.getPlayerInfo(directPlayer.getUUID());
-                        if (info != null) return new String[]{ info.getLatency() + " ms" };
-                    }
-                }
-            } catch (Throwable ignored) {}
-            try {
-                Object mc = McReflect.minecraftClient();
-                if (mc == null) return new String[]{ "-- ms" };
-
-                Object player = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player").get(mc);
+                LocalPlayer player = PlayerData.player();
                 if (player == null) return new String[]{ "-- ms" };
-
-                Object uuid = playerUuid(player);
-                if (uuid == null) return new String[]{ "-- ms" };
-
-                // 26.1+ : getNetworkHandler()→getConnection(), getPlayerListEntry()→
-                // getPlayerInfo() — vérifiés par javap sur le jar client 26.1.2 réel.
-                Object handler = McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "getNetworkHandler", "getConnection").invoke(mc);
-                if (handler == null) return new String[]{ "-- ms" };
-
-                Object entry = McReflect.oneArgMethod(handler.getClass(),
-                        "net/minecraft/client/network/ClientPlayNetworkHandler", "getPlayerListEntry", "getPlayerInfo", UUID.class)
-                        .invoke(handler, uuid);
-                if (entry == null) return new String[]{ "-- ms" };
-
-                int latency = (int) McReflect.noArgMethod(entry.getClass(),
-                        "net/minecraft/client/network/PlayerListEntry", "getLatency").invoke(entry);
-                return new String[]{ latency + " ms" };
+                ClientPacketListener connection = ClientData.connection();
+                if (connection == null) return new String[]{ "-- ms" };
+                PlayerInfo info = connection.getPlayerInfo(player.getUUID());
+                return info == null ? new String[]{ "-- ms" } : new String[]{ info.getLatency() + " ms" };
             } catch (Throwable t) {
                 return new String[]{ "-- ms" };
             }
-        }
-
-        /**
-         * BUG TROUVÉ (1.20.4, test utilisateur) : {@code Entity.getUuid()}
-         * n'a AUCUNE entrée nommée dans les mappings Yarn 1.20.4 (seul le
-         * champ {@code uuid} lui-même est nommé — vérifié dans
-         * mappings/yarn-1.20.4-mergedv2.jar : {@code f Ljava/util/UUID; ay
-         * field_6021 uuid}, pas de ligne {@code m ... getUuid}) —
-         * {@code McReflect.noArgMethod(...)} retombe donc sur le nom Yarn
-         * "getUuid" INCHANGÉ (aucune méthode obfusquée réelle ne s'appelle
-         * ainsi), renvoie {@code null}, et l'ancien code appelait directement
-         * {@code .invoke(player)} dessus SANS vérifier null — NullPointerException
-         * avalée silencieusement par le catch de {@code lines()} (aucun log),
-         * d'où "-- ms" en boucle sans le moindre indice dans les logs. Lit le
-         * champ {@code uuid} directement en repli (comme {@code
-         * CoordsModule.playerPos} pour x/y/z) plutôt que de dépendre d'un nom
-         * de méthode qui n'existe pas forcément dans les mappings chargées.
-         */
-        private static Method cachedGetUuid;
-        private static boolean getUuidResolveAttempted;
-
-        private Object playerUuid(Object player) throws Exception {
-            Method m = cachedGetUuid;
-            if (m == null && !getUuidResolveAttempted) {
-                getUuidResolveAttempted = true;
-                // 26.1+ : getUuid()→getUUID() (casse différente), vérifié par javap.
-                m = McReflect.noArgMethod(player.getClass(), "net/minecraft/entity/Entity", "getUuid", "getUUID");
-                cachedGetUuid = m;
-            }
-            if (m != null) return m.invoke(player);
-            return McReflect.field(player.getClass(), "net/minecraft/entity/Entity", "uuid").get(player);
         }
     }
 }

@@ -1,10 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.ConfigSlider;
-
-import java.lang.reflect.Field;
+import net.minecraft.client.Options;
 
 /**
  * FOV personnalisé — port de PvP-Mod FovConfig/FovHandler. Fixe
@@ -26,17 +27,27 @@ public final class FovModule extends LauncherModule {
         super("fov", "FOV", "Remplace le FOV vanilla (sprint/ralenti compris)", false);
     }
 
+    /**
+     * BUG TROUVÉ (2026-08-27, migration vers les accessors) : ce module lisait
+     * {@code GameOptions.fov} comme un CHAMP {@code float}
+     * ({@code Field.getFloat}). Depuis la 1.19, {@code Options.fov} n'est plus
+     * un float mais un {@code OptionInstance<Integer>} (vérifié : c'est le
+     * type que déclare {@code OptionsAccessor261#la$fov()}) — {@code getFloat}
+     * y levait donc un {@code IllegalArgumentException} à chaque tick, avalé
+     * par le {@code catch} en simple ligne de diag. <b>Le module ne faisait
+     * rien du tout sur 26.1.2.</b> Il passe désormais par les mêmes accessors
+     * que {@code ZoomModule}, qui avait déjà le traitement correct.
+     */
     @Override
     public void onTick() {
+        OptionInstanceAccessor261 fov = fovOption();
+        if (fov == null) { diag("fovOption == null"); return; }
         try {
-            Object options = optionsInstance();
-            Field fovField = fovField();
-            if (fovField == null) { diag("fovField == null, options=" + options); return; }
-            float before = fovField.getFloat(options);
+            Object current = fov.la$value();
+            float before = (current instanceof Number) ? ((Number) current).floatValue() : -1f;
             if (savedVanillaFov < 0f) savedVanillaFov = before;
-            fovField.setFloat(options, fovValue);
-            float after = fovField.getFloat(options);
-            diag("options=" + options + " before=" + before + " target=" + fovValue + " after=" + after);
+            fov.la$setValue(boxLike(current, fovValue));
+            diag("before=" + before + " target=" + fovValue);
         } catch (Throwable t) {
             diag("exception: " + t);
         }
@@ -53,23 +64,38 @@ public final class FovModule extends LauncherModule {
         if (enabled) return;
         try {
             if (savedVanillaFov < 0f) return;
-            Field fovField = fovField();
-            if (fovField != null) fovField.setFloat(optionsInstance(), savedVanillaFov);
-        } catch (Throwable ignored) {
+            OptionInstanceAccessor261 fov = fovOption();
+            if (fov != null) fov.la$setValue(boxLike(fov.la$value(), savedVanillaFov));
+        } catch (Throwable t) {
+            diag("restauration: " + t);
         } finally {
             savedVanillaFov = -1f;
         }
     }
 
-    private Object optionsInstance() throws Exception {
-        Object mc = McReflect.minecraftClient();
-        if (mc == null) return null;
-        return McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
+    /**
+     * {@code Options.fov} par les accessors Mixin ({@code ClientData} →
+     * {@code OptionsAccessor261} → {@code OptionInstanceAccessor261}) — zéro
+     * réflexion, et le même chemin que {@code ZoomModule}, qui écrit lui aussi
+     * le champ {@code value} DIRECTEMENT plutôt que par {@code setValue()} :
+     * ce dernier déclenche la validation vanilla, qui clampe la valeur.
+     */
+    private OptionInstanceAccessor261 fovOption() {
+        Options options = ClientData.options();
+        if (!(options instanceof OptionsAccessor261)) return null;
+        Object fov = ((OptionsAccessor261) options).la$fov();
+        return (fov instanceof OptionInstanceAccessor261) ? (OptionInstanceAccessor261) fov : null;
     }
 
-    private Field fovField() throws Exception {
-        Object options = optionsInstance();
-        if (options == null) return null;
-        return McReflect.field(options.getClass(), "net/minecraft/client/option/GameOptions", "fov");
+    /**
+     * Réencapsule dans le MÊME type que la valeur courante. {@code
+     * OptionInstance<Integer>} pour le FOV sur 26.1.2 : y écrire un
+     * {@code Float} compilerait (le champ est déclaré {@code Object} côté
+     * accessor) mais planterait au premier déballage côté vanilla.
+     */
+    private static Object boxLike(Object current, float value) {
+        if (current instanceof Integer) return Integer.valueOf(Math.round(value));
+        if (current instanceof Double) return Double.valueOf(value);
+        return Float.valueOf(value);
     }
 }

@@ -2,18 +2,15 @@ package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.FoodDataAccessor261;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.food.FoodData;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Locale;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
+import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
 /**
  * Équivalent AppleSkin — révèle Saturation et Exhaustion, deux valeurs
@@ -44,45 +41,19 @@ public final class SaturationModule extends SingleHudModule {
 
         @Override
         public String[] lines() {
-            // 26.1.2 sans réflexion — Minecraft.player + getFoodData()/
-            // getSaturationLevel() (méthodes publiques) + FoodDataAccessor261
-            // (exhaustionLevel, champ privé). Try/catch dédié : nom de classe
-            // RÉEL, inexistant tel quel sur les autres brackets (obfusqués).
+            // Joueur par l'accessor Mixin (PlayerData), saturation par la
+            // méthode publique getSaturationLevel(), exhaustion par
+            // FoodDataAccessor261 (champ privé) — zéro réflexion. Le repli
+            // réflexif multi-bracket a été supprimé le 2026-08-27.
             try {
-                LocalPlayer directPlayer = Minecraft.getInstance().player;
-                if (directPlayer != null) {
-                    FoodData foodData = directPlayer.getFoodData();
-                    if (foodData != null) {
-                        float saturation = foodData.getSaturationLevel();
-                        float exhaustion = (foodData instanceof FoodDataAccessor261)
-                            ? ((FoodDataAccessor261) foodData).la$exhaustionLevel() : Float.NaN;
-                        String satText = Float.isNaN(saturation) ? "--" : String.format(Locale.ROOT, "%.1f", saturation);
-                        String exhText = Float.isNaN(exhaustion) ? "--" : String.format(Locale.ROOT, "%.2f", exhaustion);
-                        return new String[]{ "Saturation : " + satText, "Exhaustion : " + exhText };
-                    }
-                }
-            } catch (Throwable ignored) {}
-            try {
-                Object mc = McReflect.minecraftClient();
-                if (mc == null) return fallback();
-                Field playerField = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "player");
-                if (playerField == null) return fallback();
-                Object player = playerField.get(mc);
+                LocalPlayer player = PlayerData.player();
                 if (player == null) return fallback();
+                FoodData foodData = player.getFoodData();
+                if (foodData == null) return fallback();
 
-                Method getHungerManager = McReflect.noArgMethod(player.getClass(),
-                    "net/minecraft/entity/player/PlayerEntity", "getHungerManager", "getFoodData");
-                if (getHungerManager == null) return fallback();
-                Object hungerManager = getHungerManager.invoke(player);
-                if (hungerManager == null) return fallback();
-
-                Method getSaturation = McReflect.noArgMethod(hungerManager.getClass(),
-                    "net/minecraft/entity/player/HungerManager", "getSaturationLevel");
-                float saturation = getSaturation != null ? (float) getSaturation.invoke(hungerManager) : Float.NaN;
-
-                Field exhaustionField = McReflect.field(hungerManager.getClass(),
-                    "net/minecraft/entity/player/HungerManager", "exhaustion", "exhaustionLevel");
-                float exhaustion = exhaustionField != null ? exhaustionField.getFloat(hungerManager) : Float.NaN;
+                float saturation = foodData.getSaturationLevel();
+                float exhaustion = (foodData instanceof FoodDataAccessor261)
+                    ? ((FoodDataAccessor261) foodData).la$exhaustionLevel() : Float.NaN;
 
                 String satText = Float.isNaN(saturation) ? "--" : String.format(Locale.ROOT, "%.1f", saturation);
                 String exhText = Float.isNaN(exhaustion) ? "--" : String.format(Locale.ROOT, "%.2f", exhaustion);
