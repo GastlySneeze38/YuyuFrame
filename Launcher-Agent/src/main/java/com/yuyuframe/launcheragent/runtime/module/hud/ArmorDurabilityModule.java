@@ -158,7 +158,14 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     private void tickLowDurabilityAlert() {
         if (!lowDurabilityAlert) return;
         try {
-            Object[] stacks = RENDERER.currentStacks();
+            // computeStacks() et NON currentStacks() : ce dernier sert un
+            // cache que seul naturalSize() rafraîchit, donc UNIQUEMENT quand
+            // le HUD est effectivement dessiné. L'alerte, elle, doit sonner
+            // même HUD masqué (F1, écran ouvert, module HUD replié) — sinon
+            // elle lirait indéfiniment la dernière armure vue avant le
+            // masquage. Un recalcul par tick (20/s) au lieu d'un par frame :
+            // moins cher que le chemin de rendu, pas plus.
+            Object[] stacks = RENDERER.computeStacks();
             boolean ring = false;
             for (int i = 0; i < lastDamage.length && i < stacks.length; i++) {
                 if (!(stacks[i] instanceof ItemStack)) { lastDamage[i] = -1; continue; }
@@ -374,7 +381,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * {@link #currentStacks()} (cache), jamais ailleurs — voir sa
          * javadoc pour le pourquoi.
          */
-        private Object[] computeStacks() {
+        Object[] computeStacks() {
             // Joueur par l'accessor Mixin (PlayerData) + getItemInHand/
             // getItemBySlot (méthodes publiques, voir stub LocalPlayer) —
             // zéro réflexion.
@@ -395,11 +402,20 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                 Object legs = player.getItemBySlot(EquipmentSlot.LEGS);
                 Object boots = player.getItemBySlot(EquipmentSlot.FEET);
                 return new Object[]{ helmet, chest, legs, boots, held };
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
+                // Journalisé UNE fois : appelé à chaque frame, un log par
+                // frame noierait la console — mais un échec silencieux ici
+                // vide le HUD sans laisser la moindre trace.
+                if (!stacksErrorLogged) {
+                    stacksErrorLogged = true;
+                    LauncherLog.err("[ArmorDurabilityModule] computeStacks: " + t);
+                }
                 return new Object[]{ null, null, null, null, null };
             }
 
         }
+
+        private static boolean stacksErrorLogged;
 
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
