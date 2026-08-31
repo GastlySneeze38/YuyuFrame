@@ -83,20 +83,119 @@ public final class ChatEnhancementsModule extends LauncherModule {
     }
 
     private static final Pattern COUNTER_SUFFIX = Pattern.compile("\\s*\\(x\\d+\\)$");
-    /** Tag d'expéditeur en tête de ligne (ex: "{@code <Nom> }") — voir le fix du ping sur soi-même plus bas. */
-    private static final Pattern SENDER_TAG_PREFIX = Pattern.compile("^<[^>]+>\\s*");
+    /** Gris du compteur "(xN)" — la même valeur que le gris vanilla ({@code ChatFormatting.GRAY}), en RGB pour éviter un stub d'énumération. */
+    private static final int COUNTER_COLOR = 0xAAAAAA;
 
     private Object la$lastProcessedMessage;
     private String la$lastDistinctBase;
+    /**
+     * Le composant D'ORIGINE de la première occurrence — conservé pour
+     * reconstruire la ligne fusionnée SANS perdre sa mise en forme, voir
+     * {@link #mergeRepeatedMessageDirect}.
+     */
+    private Component la$lastDistinctContent;
     private int la$repeatCount = 1;
 
     public ChatEnhancementsModule() {
         super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false,
-            HookPoint.CHAT_RECEIVE);
+            HookPoint.CHAT_RECEIVE, HookPoint.CHAT_SEND);
         iconUrl = icons8("chat");
         // 26.1.2 — voir apimixin/v26_1/chat/ChatReceiveMixin261 (réconciliation
         // de l'ancien mixin.client.v26_1.ChatListenerMixin261, même déclencheur).
         VanillaHookRegistry.register(HookPoint.CHAT_RECEIVE, ctx -> { onChatMessageObserved(); return false; });
+        // Voir consumeOwnEcho() : on note ce que le joueur ENVOIE pour
+        // reconnaître l'écho du serveur, quel que soit le format d'affichage.
+        // Retour false SYSTÉMATIQUE — purement notificatif, ce hook est
+        // annulable (ClientCommandRegistry s'en sert pour intercepter des
+        // commandes client) et un true ici empêcherait le message de partir.
+        // Enregistré même module désactivé : sans ça, activer le module au
+        // milieu d'une conversation laisserait l'historique d'envois vide.
+        VanillaHookRegistry.register(HookPoint.CHAT_SEND, ctx -> {
+            if (ctx instanceof String) onChatSent((String) ctx);
+            return false;
+        });
+    }
+
+    // ── Reconnaissance de nos PROPRES messages ────────────────────────────
+    //
+    // BUG TROUVÉ (retour utilisateur 2026-08-31) : « vu que le nom du joueur
+    // qui a parlé s'est déplacé, ça nous ping quand on parle ». L'ancienne
+    // approche cherchait le pseudo APRÈS avoir retiré un en-tête au format
+    // vanilla "<Nom> " (SENDER_TAG_PREFIX, supprimé). Ça ne tient que sur un
+    // serveur vanilla : dès qu'un serveur préfixe un grade, colore, ou change
+    // le séparateur ("[MVP+] Nom » ..."), l'en-tête n'est plus reconnu, notre
+    // propre pseudo reste dans le texte analysé, et chacun de nos messages
+    // nous ping. Toute variante de cette approche est condamnée à courir
+    // après les formats de chaque serveur.
+    //
+    // APPROCHE STRUCTURELLE retenue, indépendante du format : le client SAIT
+    // ce qu'il a envoyé. On mémorise chaque message sortant (HookPoint
+    // CHAT_SEND → ClientPacketListener.sendChat) ; quand une ligne arrive et
+    // qu'elle CONTIENT un de ces envois récents, c'est notre écho — peu
+    // importe comment le serveur l'a habillé. L'entrée est alors CONSOMMÉE
+    // (un envoi ne peut masquer qu'une seule ligne reçue), ce qui borne les
+    // dégâts si un autre joueur écrit par hasard exactement la même chose.
+    //
+    // Même principe que ChatNotify (github.com/TerminalMC/ChatNotify), qui a
+    // déjà rencontré ce problème sur serveurs modifiés.
+    //
+    // Limite connue : un serveur qui RÉÉCRIT le message (censure, troncature)
+    // casse la correspondance. Le repli exact serait de comparer l'UUID de
+    // l'expéditeur sur handlePlayerChatMessage — mais ce chemin ne couvre que
+    // le chat signé vanilla ; la plupart des serveurs modifiés (Hypixel…)
+    // passent TOUT par handleSystemMessage, sans expéditeur, là où l'écho
+    // fonctionne.
+    private static final long SENT_ECHO_WINDOW_MS = 15_000L;
+    private static final int SENT_HISTORY_MAX = 8;
+
+    private static final class Sent {
+        final String text;
+        final long at;
+        Sent(String text, long at) { this.text = text; this.at = at; }
+    }
+
+    private final java.util.ArrayDeque<Sent> la$sent = new java.util.ArrayDeque<Sent>();
+
+    private void onChatSent(String content) {
+        if (content == null || content.isEmpty()) return;
+        synchronized (la$sent) {
+            la$sent.addLast(new Sent(content, System.currentTimeMillis()));
+            while (la$sent.size() > SENT_HISTORY_MAX) la$sent.removeFirst();
+        }
+    }
+
+    /** {@code true} si {@code plain} est l'écho d'un de nos envois récents — l'entrée correspondante est retirée au passage. */
+    private boolean consumeOwnEcho(String plain) {
+        long now = System.currentTimeMillis();
+        synchronized (la$sent) {
+            java.util.Iterator<Sent> it = la$sent.iterator();
+            while (it.hasNext()) {
+                Sent sent = it.next();
+                if (now - sent.at > SENT_ECHO_WINDOW_MS) { it.remove(); continue; }
+                if (plain.contains(sent.text)) { it.remove(); return true; }
+            }
+        }
+        return false;
+    }
+
+    // ── Détection de la mention ───────────────────────────────────────────
+    //
+    // Recherche par LIMITES DE MOT plutôt que par contains() brut : sans ça,
+    // un joueur nommé "GhastlySneeze38x" — ou n'importe quel mot contenant le
+    // pseudo — déclenche le ping. Le motif est compilé une fois et gardé tant
+    // que le pseudo ne change pas (il ne change jamais en session, mais le
+    // cache évite une compilation de regex par message reçu).
+    private String la$mentionPatternFor;
+    private Pattern la$mentionPattern;
+
+    private boolean mentions(String body, String username) {
+        if (!username.equals(la$mentionPatternFor) || la$mentionPattern == null) {
+            la$mentionPattern = Pattern.compile(
+                "(?<![A-Za-z0-9_])" + Pattern.quote(username) + "(?![A-Za-z0-9_])",
+                Pattern.CASE_INSENSITIVE);
+            la$mentionPatternFor = username;
+        }
+        return la$mentionPattern.matcher(body).find();
     }
 
     /** Appelé par {@code ChatListenerMixin261} (mixin/) ou {@code ChatReceiveMixin261} (apimixin/) — voir javadoc de tête pour le pourquoi (fiabilité face au polling par tick). */
@@ -123,14 +222,13 @@ public final class ChatEnhancementsModule extends LauncherModule {
      * MinecraftAccessor261#la$gui()} pour rester sur une seule surface
      * d'accès à {@code Minecraft}) puis {@link ChatComponentAccessor261}
      * pour {@code allMessages}/{@code addMessage(...)} (privés, voir sa
-     * javadoc). Logique IDENTIQUE au chemin réflexion ci-dessous (dédup par
-     * IDENTITÉ d'objet, retrait du tag d'expéditeur avant la recherche du
-     * pseudo, fusion des répétitions) — voir les commentaires de {@link
-     * #checkChatState} pour l'historique de chaque bug déjà corrigé.
+     * javadoc). Trois étapes : dédup par IDENTITÉ d'objet, ping de mention
+     * (voir {@link #consumeOwnEcho} et {@link #mentions}), fusion des
+     * répétitions (voir {@link #mergeRepeatedMessageDirect}).
      *
-     * @return {@code true} si traité ICI (pas de repli réflexion à faire —
-     * y compris quand il n'y avait rien de neuf à traiter), {@code false}
-     * si indisponible sur ce bracket (repli réflexion complet côté appelant).
+     * @return {@code true} si traité ICI — y compris quand il n'y avait rien
+     * de neuf à traiter ; {@code false} si le chat n'est pas encore
+     * disponible.
      */
     /**
      * Le chemin par accessors est le SEUL depuis le 2026-08-27 — le repli
@@ -164,40 +262,69 @@ public final class ChatEnhancementsModule extends LauncherModule {
         if (headLine == la$lastProcessedMessage) return true;
         la$lastProcessedMessage = headLine;
 
-        if (pingOnMention) {
+        // Consommé AVANT la branche du ping, et hors du "if (pingOnMention)" :
+        // l'historique d'envois doit s'écouler au même rythme que le chat,
+        // sinon couper le ping laisserait des entrées périmées derrière lui.
+        boolean ownEcho = consumeOwnEcho(plain);
+
+        if (pingOnMention && !ownEcho) {
             String username = null;
             try {
                 User user = ClientData.user();
                 if (user != null) username = user.getName();
             } catch (Throwable ignored) {}
-            String body = SENDER_TAG_PREFIX.matcher(plain).replaceFirst("");
-            boolean matched = username != null && !username.isEmpty() && body.toLowerCase().contains(username.toLowerCase());
-            if (matched) playPingSound();
+            if (username != null && !username.isEmpty() && mentions(plain, username)) playPingSound();
         }
 
         if (stackRepeats) {
             String base = COUNTER_SUFFIX.matcher(plain).replaceAll("");
-            if (base.equals(la$lastDistinctBase)) {
+            if (base.equals(la$lastDistinctBase) && la$lastDistinctContent != null) {
                 la$repeatCount++;
-                String combinedText = base + " (x" + la$repeatCount + ")";
-                if (mergeRepeatedMessageDirect(chatAcc, chat, messages, headLine, combinedText)) {
+                if (mergeRepeatedMessageDirect(chatAcc, chat, messages, headLine, la$repeatCount)) {
                     if (!messages.isEmpty()) la$lastProcessedMessage = messages.get(0);
                 }
             } else {
                 la$repeatCount = 1;
                 la$lastDistinctBase = base;
+                // Le composant de la PREMIÈRE occurrence, celui qui porte la
+                // mise en forme du serveur — les répétitions suivantes se
+                // réaffichent à partir de lui, jamais à partir de la ligne
+                // déjà fusionnée (qui traîne son propre " (xN)").
+                la$lastDistinctContent = content;
             }
         }
         return true;
     }
 
-    /** Version directe (accessor) de {@link #mergeRepeatedMessage} — voir sa javadoc pour le détail de chaque champ repris tel quel (source/tag) et pourquoi {@code rescaleChat()} est nécessaire après. */
-    private boolean mergeRepeatedMessageDirect(ChatComponentAccessor261 chatAcc, ChatComponent chat, List<GuiMessage> messages, GuiMessage headLine, String combinedText) {
+    /**
+     * Remplace les deux dernières lignes (la répétition + la ligne déjà
+     * affichée) par une seule, comptée.
+     *
+     * <p>BUG TROUVÉ (retour utilisateur 2026-08-31 : « ça stack les messages
+     * mais sans garder la typo d'origine ») — la ligne fusionnée était
+     * reconstruite par {@code Component.literal(texteBrut + " (xN)")}, donc à
+     * partir du texte APLATI : couleurs, gras, grades, survols et clics du
+     * message d'origine disparaissaient. Invisible sur un serveur vanilla
+     * (chat blanc), flagrant dès qu'un serveur met en forme ses messages.
+     *
+     * <p>Fix : on repart du COMPOSANT d'origine ({@link #la$lastDistinctContent},
+     * celui de la première occurrence) et on lui ajoute le compteur comme
+     * enfant — {@code copy()} pour ne pas modifier un composant que le jeu
+     * garde peut-être ailleurs. Le compteur est teinté en gris pour rester
+     * lisible par-dessus n'importe quelle mise en forme, sans imiter celle du
+     * message.
+     *
+     * <p>{@code source}/{@code tag} sont repris tels quels de la ligne
+     * remplacée, et {@code rescaleChat()} reconstruit les lignes visibles
+     * (retour à la ligne) à partir de la liste modifiée.
+     */
+    private boolean mergeRepeatedMessageDirect(ChatComponentAccessor261 chatAcc, ChatComponent chat, List<GuiMessage> messages, GuiMessage headLine, int repeatCount) {
         try {
             GuiMessageSource sourceValue = headLine.source();
             GuiMessageTag tagValue = headLine.tag();
             if (messages.size() >= 2) { messages.remove(0); messages.remove(0); }
-            Component combined = Component.literal(combinedText);
+            Component combined = la$lastDistinctContent.copy()
+                .append(Component.literal(" (x" + repeatCount + ")").withColor(COUNTER_COLOR));
             chatAcc.la$addMessage(combined, null, sourceValue, tagValue);
             chat.rescaleChat();
             return true;
