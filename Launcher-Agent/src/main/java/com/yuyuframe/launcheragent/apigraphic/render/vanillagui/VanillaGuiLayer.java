@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiGlass;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiRoundedRect;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiText;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiIcon;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiVignette;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
@@ -191,6 +192,39 @@ public final class VanillaGuiLayer {
             return true;
         } catch (Throwable t) {
             reportOnce("roundedRect: " + t);
+            return false;
+        }
+    }
+
+    /**
+     * Icône RGBA — voir {@link IconElement}.
+     *
+     * <p>{@code cacheKey} identifie l'image dans l'atlas partagé : la même clé
+     * ne provoque qu'UNE copie GPU, quel que soit le nombre de frames.
+     * L'{@code alpha} module l'opacité sans toucher aux couleurs de l'image.
+     *
+     * <p>Pipeline compilé à la demande, comme la vignette et pour la même
+     * raison : toutes les passes de HUD n'affichent pas d'icône, et un échec
+     * ici ne doit pas emporter le reste du HUD.
+     */
+    public static boolean icon(Object hookContext, String cacheKey, java.awt.image.BufferedImage img,
+                               float x0, float y0, float x1, float y1, float alpha) {
+        if (img == null) return false;
+        GuiRenderState state = renderState(hookContext);
+        if (state == null) return false;
+        try {
+            if (!Blaze3DGuiIcon.ensureCompiled()) {
+                reportOnce("icône : pipeline indisponible");
+                return false;
+            }
+            Object[] entry = Blaze3DGuiIcon.atlasEntry(cacheKey, img);
+            if (entry == null) return false; // atlas plein / Blaze3D absent, déjà journalisé
+            int a = Math.max(0, Math.min(255, Math.round(alpha * 255f)));
+            state.addGuiElement(new IconElement(x0, y0, x1, y1, (float[]) entry[0],
+                (a << 24) | 0x00FFFFFF, (TextureSetup) entry[1]));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("icon: " + t);
             return false;
         }
     }

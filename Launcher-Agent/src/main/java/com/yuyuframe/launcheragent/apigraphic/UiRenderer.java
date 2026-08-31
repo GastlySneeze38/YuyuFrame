@@ -398,15 +398,25 @@ public final class UiRenderer {
     }
 
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
-        primitives.drawIcon(cacheKey, img, x, y, size, vpWidth, vpHeight);
+        drawIcon(cacheKey, img, x, y, size, size, 1f, vpWidth, vpHeight);
     }
 
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h, int vpWidth, int vpHeight) {
-        primitives.drawIcon(cacheKey, img, x, y, w, h, vpWidth, vpHeight);
+        drawIcon(cacheKey, img, x, y, w, h, 1f, vpWidth, vpHeight);
     }
 
+    /**
+     * Routé vers l'état de GUI de vanilla quand la cible est armée (2026-08-31)
+     * — c'était la dernière primitive du HUD à ne pas l'être, donc la dernière
+     * à passer par-dessus le chat. Voir {@code IconElement}.
+     *
+     * <p>{@code x}/{@code y} sont le coin BAS-GAUCHE et {@code w}/{@code h} des
+     * tailles, contrairement aux coins opposés qu'attend la cible — d'où
+     * l'addition ici plutôt que chez elle.
+     */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                           float alpha, int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.icon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight)) return;
         primitives.drawIcon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
     }
 

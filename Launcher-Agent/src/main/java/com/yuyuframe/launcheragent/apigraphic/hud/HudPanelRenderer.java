@@ -114,6 +114,18 @@ public final class HudPanelRenderer {
      * se ferait écraser et l'utilisateur perdrait ses arrondis sans comprendre
      * pourquoi.
      */
+    /**
+     * Marge en dessous de laquelle un panneau est considéré COLLÉ à un bord
+     * d'écran, pour la mise au carré de ses coins.
+     *
+     * <p>⚠️ Contact STRICT, pas « du côté de » : la marge par défaut d'un
+     * élément HUD étant de 8 unités, un panneau posé contre le bord droit de
+     * l'écran ne satisfait PAS ce test. {@code PotionEffectsModule} l'avait
+     * emprunté pour décider de l'alignement de ses boîtes, qui ne se
+     * déclenchait donc jamais — il raisonne désormais en bandes (voir son
+     * {@code V_SIDE_BAND}). Les deux notions se ressemblent mais ne se
+     * remplacent pas.
+     */
     private static final float EDGE_TOLERANCE = 2f;
 
     /**

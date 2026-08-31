@@ -59,6 +59,34 @@ public final class Blaze3DRect {
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: atlas d'icônes créé (" + ATLAS_SIZE + "x" + ATLAS_SIZE + ")");
     }
 
+    /**
+     * Entrée d'atlas pour l'ÉTAT DE GUI de vanilla — ouvre au reste du moteur
+     * ce que {@link #ensureIconInAtlas} garde pour la file Blaze3D.
+     *
+     * <p>Ajouté le 2026-08-31 avec {@code Blaze3DGuiIcon} : jusque-là, une
+     * icône ne pouvait partir que par la file, donc APRÈS la présentation,
+     * donc par-dessus le chat. Le même atlas sert désormais les deux chemins —
+     * une icône déjà packée pour l'un est immédiatement disponible pour
+     * l'autre, sans seconde copie GPU.
+     *
+     * <p>À appeler sur le thread de rendu, device disponible (c'est le cas
+     * pendant la passe d'extraction de la GUI).
+     *
+     * @return {@code [float[]{u0,v0,u1,v1}, GpuTextureView, GpuSampler]}, ou
+     *         {@code null} si Blaze3D est indisponible ou l'atlas plein.
+     */
+    public static Object[] guiAtlasEntry(String cacheKey, BufferedImage img) {
+        if (!isAvailable() || !resolve()) return null;
+        try {
+            float[] uv = ensureIconInAtlas(cacheKey, img);
+            if (uv == null) return null; // atlas plein, déjà journalisé
+            return new Object[]{ uv, atlasView, atlasSampler };
+        } catch (Throwable t) {
+            LauncherLog.err("[Blaze3DRect] guiAtlasEntry('" + cacheKey + "'): " + t);
+            return null;
+        }
+    }
+
     /** @return {@code [u0,v0,u1,v1]} du sous-rect de {@code cacheKey} dans l'atlas partagé, {@code null} si l'atlas est plein (icône ignorée — journalisé une fois, voir currentStage/failureLogCount habituels). */
     private static float[] ensureIconInAtlas(String cacheKey, BufferedImage img) throws Exception {
         float[] cached = ICON_UV.get(cacheKey);

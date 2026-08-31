@@ -48,8 +48,20 @@ public final class PotionEffectsModule extends SingleHudModule {
     /** Secondes restantes sous lesquelles la durée clignote ; 0 = jamais. */
     public float blinkSeconds = 5f;
 
+    /**
+     * 0 = « Personnalisé » (un seul panneau, pastille de couleur), 1 =
+     * « Vanilla » (une boîte par effet, VRAIE icône du jeu) — même paire de
+     * styles que {@code ArmorDurabilityModule}, à la demande de
+     * l'utilisateur. Voir {@code Renderer.drawVanilla}.
+     */
+    public int style = 0;
+
     @Override
     protected void settings(SettingList s) {
+        s.dropdown("style", "Style",
+            "\"Personnalisé\" = un panneau unique, pastille de la couleur du liquide. \"Vanilla\" = une boîte par effet avec la VRAIE icône du jeu, alignée sur le bord d'écran le plus proche (centrée si le HUD ne touche ni la gauche ni la droite).",
+            "Réglages", new String[]{ "Personnalisé", "Vanilla" }, null,
+            () -> style, v -> style = v);
         s.toggle("showDuration", "Afficher la durée",
             "La seconde ligne sous chaque effet. Décoché, le panneau se réduit à une ligne par effet.",
             "Réglages", null, () -> showDuration, v -> showDuration = v);
@@ -87,6 +99,7 @@ public final class PotionEffectsModule extends SingleHudModule {
         RENDERER.showDuration = showDuration;
         RENDERER.sortMode = sortMode;
         RENDERER.blinkSeconds = blinkSeconds;
+        RENDERER.vanillaStyle = style == 1;
     }
 
     /**
@@ -112,10 +125,63 @@ public final class PotionEffectsModule extends SingleHudModule {
         private static final float FALLBACK_WIDTH = 100f;
         private static final int FALLBACK_COUNT = 2;
 
+        // ── Style « Vanilla » (voir drawVanilla) ──────────────────────────
+        //
+        // Toutes ces valeurs ont été multipliées par ~1,8 le 2026-08-31 après
+        // comparaison directe avec la maquette de l'utilisateur (« trop
+        // petit ») : à la première passe, une boîte faisait à peu près la
+        // moitié de la hauteur de la référence. Elles restent des unités de
+        // dessin, multipliées ensuite par l'échelle propre du HUD.
+        /** Taille de l'icône vanilla, en unités de dessin (×{@code scale}). */
+        private static final float V_ICON = 26f;
+        private static final float V_PAD_X = 9f;
+        private static final float V_GAP = 7f;
+        private static final float V_ROW_H = 43f;
+        private static final float V_RADIUS = 9f;
+        private static final float V_BORDER = 2.5f;
+        // Réduites le 2026-08-31 (retour utilisateur : « le texte est
+        // beaucoup trop grand pour la taille de la box »). La boîte et
+        // l'icône gardent leur taille, seul le texte redescend — c'est le
+        // rapport entre les deux qui n'allait pas, pas l'échelle générale.
+        private static final float V_NAME_SCALE = 0.55f;
+        private static final float V_TIME_SCALE = 0.40f;
+
+        /**
+         * Hauteur laissée VIDE en bas de chaque boîte, sous le texte —
+         * demandée explicitement (« vanilla laisse une petite marge entre le
+         * dessous du texte et le bord de la box pour que le chevauchement soit
+         * plus prononcé »).
+         *
+         * <p>C'est ce qui rend le chevauchement lisible : la boîte suivante
+         * vient se superposer sur cette bande, donc sur du vide, au lieu de
+         * frôler les glyphes de la durée. Sans elle, l'empilement se lit comme
+         * un défaut d'alignement plutôt que comme un effet voulu.
+         *
+         * <p>Doit rester supérieure à {@link #V_ROW_OVERLAP}, sinon la boîte
+         * du dessous mord de nouveau sur le texte.
+         */
+        private static final float V_BOTTOM_MARGIN = 8f;
+        /**
+         * CHEVAUCHEMENT vertical entre deux boîtes consécutives — valeur
+         * NÉGATIVE d'espacement, demandée explicitement (« il n'y a pas ce
+         * chevauchement comme sur vanilla »).
+         *
+         * <p>C'est ce qui donne l'aspect « chaîne » de la référence : la boîte
+         * du dessous, dessinée APRÈS, recouvre le contour bas de celle du
+         * dessus sur cette hauteur, et les deux liserés se fondent en un seul
+         * trait au lieu de laisser deux lignes parallèles séparées par un
+         * vide. Réglé à deux fois l'épaisseur du contour, exactement de quoi
+         * absorber les deux liserés qui se font face.
+         */
+        private static final float V_ROW_OVERLAP = V_BORDER * 2f;
+        /** Repli de largeur quand aucun effet n'est actif (le HUD garde une taille manipulable dans l'éditeur). */
+        private static final float V_FALLBACK_WIDTH = 160f;
+
         /** Mutables directement par PotionEffectsModule.onConfigChanged(). */
         volatile boolean showDuration = true;
         volatile int sortMode = 0;
         volatile float blinkSeconds = 5f;
+        volatile boolean vanillaStyle = false;
 
         private static final class EffectRow {
             final String name, time;
@@ -123,9 +189,18 @@ public final class PotionEffectsModule extends SingleHudModule {
             /** Secondes restantes, {@code -1} pour un effet infini — sert au clignotement et au tri. */
             final int secondsLeft;
             final boolean beneficial;
-            EffectRow(String name, String time, UiColor color, int secondsLeft, boolean beneficial) {
+            /**
+             * Chemin de registre de l'effet ({@code speed},
+             * {@code hero_of_the_village}…) — c'est LUI qui nomme la texture
+             * vanilla, voir {@link Renderer#iconOf}. {@code null} si le
+             * {@code Holder} n'est pas enregistré (effet d'un mod tiers non
+             * résolu, par exemple).
+             */
+            final String iconKey;
+            EffectRow(String name, String time, UiColor color, int secondsLeft, boolean beneficial, String iconKey) {
                 this.name = name; this.time = time; this.color = color;
                 this.secondsLeft = secondsLeft; this.beneficial = beneficial;
+                this.iconKey = iconKey;
             }
         }
 
@@ -141,6 +216,20 @@ public final class PotionEffectsModule extends SingleHudModule {
             // Premier appel du cycle HUD de ce frame — c'est ICI qu'on
             // rafraîchit ; draw() réutilise.
             cachedRows = computeRows();
+
+            if (vanillaStyle) {
+                if (cachedRows.isEmpty()) return new float[]{ V_FALLBACK_WIDTH, V_ROW_H };
+                float maxBoxW = 0f;
+                for (EffectRow row : cachedRows) maxBoxW = Math.max(maxBoxW, vanillaBoxWidth(row));
+                // Les boîtes se CHEVAUCHENT : la hauteur totale retire un
+                // chevauchement par intervalle, sinon la boîte englobante du
+                // HUD serait plus haute que ce qui se dessine et laisserait un
+                // vide en bas (visible dans l'éditeur).
+                return new float[]{
+                    maxBoxW,
+                    cachedRows.size() * V_ROW_H - (cachedRows.size() - 1) * V_ROW_OVERLAP
+                };
+            }
 
             if (cachedRows.isEmpty()) return new float[]{ FALLBACK_WIDTH, FALLBACK_COUNT * lineHeight() };
             float maxTextW = 0f;
@@ -187,10 +276,11 @@ public final class PotionEffectsModule extends SingleHudModule {
 
                     rows.add(new EffectRow(
                         nameOf(effect, instance.getAmplifier()),
-                        durationText(instance),
+                        vanillaStyle ? clockText(instance) : durationText(instance),
                         colorOf(effect),
                         instance.isInfiniteDuration() ? -1 : instance.getDuration() / 20,
-                        effect != null && effect.isBeneficial()));
+                        effect != null && effect.isBeneficial(),
+                        registryPath(holder)));
                 }
                 sort(rows);
             } catch (Throwable t) {
@@ -268,6 +358,88 @@ public final class PotionEffectsModule extends SingleHudModule {
             return (seconds >= 60 ? (seconds / 60) + "m " : "") + (seconds % 60) + "s";
         }
 
+        /**
+         * Format horloge {@code MM:SS} du style « Vanilla » — la maquette
+         * fournie par l'utilisateur l'affiche ainsi. Le style « Personnalisé »
+         * garde son {@code 1m 5s}, plus court quand la place manque.
+         */
+        private String clockText(MobEffectInstance instance) {
+            if (instance.isInfiniteDuration()) return "∞";
+            int seconds = Math.max(0, instance.getDuration() / 20);
+            int m = seconds / 60, s = seconds % 60;
+            return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+        }
+
+        /**
+         * Chemin de registre de l'effet ({@code speed},
+         * {@code hero_of_the_village}…), qui nomme aussi sa texture.
+         *
+         * <p>{@code unwrapKey()} et {@code identifier()} sont les VRAIS noms
+         * 26.1.2 — deux pièges déjà payés au prix fort sur le biome de
+         * {@code CoordsModule} (les noms « évidents » {@code getKey()} /
+         * {@code getValue()} n'existent pas), voir les javadocs des stubs
+         * {@code Holder} et {@code ResourceKey}.
+         */
+        private String registryPath(Holder<MobEffect> holder) {
+            if (holder == null) return null;
+            try {
+                java.util.Optional<net.minecraft.resources.ResourceKey<MobEffect>> key = holder.unwrapKey();
+                if (key == null || !key.isPresent()) return null;
+                net.minecraft.resources.Identifier id = key.get().identifier();
+                return id != null ? id.getPath() : null;
+            } catch (Throwable t) {
+                if (!keyErrorLogged) {
+                    keyErrorLogged = true;
+                    LauncherLog.err("[PotionEffectsModule] registryPath: " + t);
+                }
+                return null;
+            }
+        }
+
+        private static boolean keyErrorLogged;
+
+        // ── Textures d'effets vanilla ─────────────────────────────────────
+        //
+        // Un PNG 18x18 par effet dans le jar du jeu — PAS un atlas, chaque
+        // effet a son propre fichier (vérifié : 40 fichiers sous
+        // assets/minecraft/textures/mob_effect/). Chargement paresseux et une
+        // seule fois par effet, y compris en cas d'échec : la valeur nulle est
+        // mémorisée, sinon un effet moddé sans texture relancerait une lecture
+        // de ressource à chaque frame.
+        //
+        // Même mécanisme que CrosshairModule.loadVanillaSprite — c'est le
+        // classloader du jeu qui sert le jar, on ne l'ouvre pas nous-mêmes.
+        private static final java.util.Map<String, java.awt.image.BufferedImage> ICONS =
+            new java.util.HashMap<String, java.awt.image.BufferedImage>();
+
+        private java.awt.image.BufferedImage iconOf(String registryPath) {
+            if (registryPath == null) return null;
+            if (ICONS.containsKey(registryPath)) return ICONS.get(registryPath);
+            java.awt.image.BufferedImage img = null;
+            try {
+                String path = "assets/minecraft/textures/mob_effect/" + registryPath + ".png";
+                ClassLoader cl = Thread.currentThread().getContextClassLoader();
+                java.io.InputStream in = cl != null ? cl.getResourceAsStream(path) : null;
+                if (in == null) in = PotionEffectsModule.class.getClassLoader().getResourceAsStream(path);
+                if (in != null) {
+                    try {
+                        img = javax.imageio.ImageIO.read(in);
+                    } finally {
+                        in.close();
+                    }
+                }
+            } catch (Throwable t) {
+                if (!iconErrorLogged) {
+                    iconErrorLogged = true;
+                    LauncherLog.err("[PotionEffectsModule] iconOf('" + registryPath + "'): " + t);
+                }
+            }
+            ICONS.put(registryPath, img);
+            return img;
+        }
+
+        private static boolean iconErrorLogged;
+
         private UiColor colorOf(MobEffect effect) {
             if (effect == null) return UiTheme.ACCENT;
             int rgb = effect.getColor();
@@ -309,8 +481,169 @@ public final class PotionEffectsModule extends SingleHudModule {
             }
         }
 
+        /** Le style « Vanilla » dessine SA PROPRE boîte par effet — pas de panneau HUD générique par-dessus (même mécanisme qu'{@code ArmorDurabilityModule}). */
+        @Override
+        public boolean skipBackground() {
+            return vanillaStyle;
+        }
+
+        /**
+         * Largeur EXTÉRIEURE d'une boîte (contour compris), ajustée à SON
+         * contenu — c'est ce qui rend les boîtes de largeurs différentes, donc
+         * l'alignement visible. Extérieure et non intérieure pour que
+         * {@code naturalSize()} et {@code drawVanilla()} parlent de la même
+         * chose : une boîte alignée sur un bord doit voir son CONTOUR toucher
+         * ce bord, pas son remplissage.
+         */
+        private float vanillaBoxWidth(EffectRow row) {
+            float textW = Math.max(
+                UiFont.REGULAR.textWidth(row.name, V_NAME_SCALE),
+                showDuration ? UiFont.REGULAR.textWidth(row.time, V_TIME_SCALE) : 0f);
+            return 2f * V_BORDER + V_PAD_X * 2f + V_ICON + V_GAP + textW;
+        }
+
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
+            if (vanillaStyle) {
+                drawVanilla(renderer, x, y, w, h, scale, vpWidth, vpHeight);
+                return;
+            }
+            drawCustom(renderer, x, y, w, h, scale, vpWidth, vpHeight);
+        }
+
+        /**
+         * Style « Vanilla » — une boîte par effet, taillée à son contenu, avec
+         * la VRAIE icône du jeu (maquette fournie par l'utilisateur).
+         *
+         * <h2>Alignement (la demande précise)</h2>
+         *
+         * Les boîtes n'ont pas la même largeur ; il faut donc décider de quel
+         * côté elles s'alignent dans la boîte englobante du HUD :
+         * <ul>
+         *   <li>HUD collé au bord GAUCHE → boîtes alignées à gauche ;</li>
+         *   <li>collé au bord DROIT → alignées à droite, et le contenu est
+         *       MIROITÉ : icône côté droit, textes alignés à droite, pour que
+         *       les icônes restent en colonne contre le bord ;</li>
+         *   <li>ni l'un ni l'autre → boîtes centrées.</li>
+         * </ul>
+         *
+         * <h2>Pourquoi PAS {@code EDGE_TOLERANCE}</h2>
+         *
+         * La première version testait le contact strict au bord (2 pixels,
+         * la tolérance qui sert à mettre les coins au carré). Elle ne se
+         * déclenchait JAMAIS : la marge par défaut d'un élément HUD est de 8
+         * unités, il n'est donc jamais « collé » au sens de ces 2 pixels, et
+         * tout retombait sur le centrage — le bug signalé (« le truc de quand
+         * c'est collé à un coin ne marche pas »). On raisonne désormais en
+         * BANDES : le HUD appartient au bord dont il est à moins de
+         * {@link #V_SIDE_BAND} de la largeur d'écran. Une marge de 8 pixels
+         * tombe évidemment dedans, un HUD réellement au milieu n'y tombe pas.
+         */
+        private void drawVanilla(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
+            List<EffectRow> rows = currentRows();
+            if (rows.isEmpty()) return;
+
+            float band = vpWidth * V_SIDE_BAND;
+            boolean nearLeft = x < band;
+            boolean nearRight = (x + w) > vpWidth - band;
+            // Dans les deux bandes à la fois (HUD presque aussi large que
+            // l'écran, ou écran très étroit) : on centre — choisir un bord
+            // serait arbitraire.
+            int align = (nearLeft == nearRight) ? 0 : (nearLeft ? -1 : 1); // -1 gauche, 0 centre, 1 droite
+
+            float rowH = V_ROW_H * scale, overlap = V_ROW_OVERLAP * scale;
+            float icon = V_ICON * scale, padX = V_PAD_X * scale, gap = V_GAP * scale;
+            float border = V_BORDER * scale, radius = V_RADIUS * scale;
+
+            // Repère Y-montant : la PREMIÈRE ligne est en haut de la boîte
+            // englobante, donc au Y le plus grand.
+            float top = y + h;
+            for (EffectRow row : rows) {
+                float outerW = vanillaBoxWidth(row) * scale;
+                float outerX = align < 0 ? x : (align > 0 ? x + w - outerW : x + (w - outerW) * 0.5f);
+                float outerBottom = top - rowH;
+
+                // Contour puis remplissage INSÉRÉ : deux rects arrondis, donc
+                // même pipeline et même texture — ils se regroupent en un seul
+                // maillage (voir GuiRenderer.addElementToMesh). Le coût réel
+                // est un draw call pour tout le panneau, pas deux par ligne.
+                //
+                // Chaque boîte est dessinée APRÈS la précédente : là où elles
+                // se chevauchent, c'est le contour de la boîte du dessous qui
+                // l'emporte, et les deux liserés se lisent comme un seul trait
+                // — l'aspect « chaîne » de la référence.
+                renderer.drawRoundedRect(outerX, outerBottom, outerX + outerW, top,
+                    radius, borderColor(row), vpWidth, vpHeight);
+                renderer.drawRoundedRect(outerX + border, outerBottom + border, outerX + outerW - border, top - border,
+                    Math.max(0f, radius - border), UiTheme.PANEL_BG, vpWidth, vpHeight);
+
+                // BANDE DE CONTENU : tout ce qui se dessine (icône comprise)
+                // vit entre le haut de la boîte et la marge basse — la bande
+                // que la boîte suivante recouvrira reste vide. Centrer sur la
+                // boîte ENTIÈRE, comme le faisait la version précédente,
+                // ramenait le texte contre le bord bas et annulait l'effet.
+                float bandBottom = outerBottom + border + V_BOTTOM_MARGIN * scale;
+                float bandTop = top - border;
+                float bandH = bandTop - bandBottom;
+
+                boolean mirrored = align > 0;
+                float innerLeft = outerX + border + padX;
+                float innerRight = outerX + outerW - border - padX;
+                float iconX = mirrored ? innerRight - icon : innerLeft;
+                float iconY = bandBottom + (bandH - icon) * 0.5f;
+                drawEffectIcon(renderer, row, iconX, iconY, icon, vpWidth, vpHeight);
+
+                float nameW = UiFont.REGULAR.textWidth(row.name, V_NAME_SCALE * scale);
+                float timeW = UiFont.REGULAR.textWidth(row.time, V_TIME_SCALE * scale);
+                float textRight = iconX - gap;
+                float textLeft = iconX + icon + gap;
+                float nameX = mirrored ? textRight - nameW : textLeft;
+                float timeX = mirrored ? textRight - timeW : textLeft;
+
+                // Fractions de la BANDE, pas de la boîte : deux lignes quand
+                // la durée est affichée, une seule sinon (le nom se recentre
+                // alors au lieu de flotter en haut).
+                float nameBaseline = bandBottom + (showDuration ? bandH * 0.52f : bandH * 0.32f);
+                renderer.drawText(row.name, nameX, nameBaseline, UiTheme.TEXT_PRIMARY, V_NAME_SCALE * scale, vpWidth, vpHeight);
+                if (showDuration) {
+                    renderer.drawText(row.time, timeX, bandBottom + bandH * 0.14f,
+                        timeColor(row), V_TIME_SCALE * scale, vpWidth, vpHeight);
+                }
+
+                top -= rowH - overlap;
+            }
+        }
+
+        /**
+         * Largeur de la bande, en fraction de l'écran, dans laquelle un HUD
+         * est considéré comme appartenant à ce bord — voir
+         * {@link #drawVanilla}. 20 % : assez large pour attraper les marges
+         * usuelles (8 unités) comme un placement « à gauche » à vue d'œil,
+         * assez étroit pour qu'un HUD franchement au milieu reste centré.
+         */
+        private static final float V_SIDE_BAND = 0.20f;
+
+        /**
+         * Vraie icône vanilla, ou pastille de couleur en repli — un effet de
+         * mod sans texture sous {@code mob_effect/} ne doit pas laisser un
+         * trou dans la boîte.
+         */
+        private void drawEffectIcon(UiRenderer renderer, EffectRow row, float iconX, float iconY, float icon,
+                                    int vpWidth, int vpHeight) {
+            java.awt.image.BufferedImage img = iconOf(row.iconKey);
+            if (img != null) {
+                renderer.drawIcon("mob_effect/" + row.iconKey, img, iconX, iconY, icon, icon, vpWidth, vpHeight);
+            } else {
+                renderer.drawRoundedRect(iconX, iconY, iconX + icon, iconY + icon, icon / 2f, row.color, vpWidth, vpHeight);
+            }
+        }
+
+        /** Contour teinté par la NATURE de l'effet — bénéfique dans l'accent du thème, néfaste en rouge : lisible d'un coup d'œil sans lire les noms. */
+        private UiColor borderColor(EffectRow row) {
+            return row.beneficial ? UiTheme.ACCENT : UiTheme.DANGER;
+        }
+
+        private void drawCustom(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
             List<EffectRow> rows = currentRows();
             float icon = ICON * scale, lineH = lineHeight() * scale;
 

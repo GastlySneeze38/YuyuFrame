@@ -129,6 +129,23 @@ public final class VanillaGuiTarget {
     }
 
     /**
+     * Icône RGBA — voir {@link IconElement}.
+     *
+     * <p>Même conversion de repère que {@link #roundedRect} : {@code y1}/{@code y2}
+     * arrivent en Y vers le HAUT, le plus grand est donc le haut de l'écran et
+     * devient le plus petit une fois converti.
+     */
+    public static boolean icon(String cacheKey, java.awt.image.BufferedImage img,
+                               float x1, float y1, float x2, float y2, float alpha,
+                               int vpWidth, int vpHeight) {
+        if (context == null) return false;
+        float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
+        float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
+        return VanillaGuiLayer.icon(context, cacheKey, img,
+            Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom, alpha);
+    }
+
+    /**
      * Dégradé de bord plein écran — voir {@link VignetteElement}.
      *
      * <p>Le quad couvre TOUT l'écran, la conversion se limite donc à une
