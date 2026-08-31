@@ -586,4 +586,18 @@ public final class ModuleRegistry {
             }
         }
     }
+
+    /** Pendant de {@link #renderOverlayAll} pour la passe GUI de vanilla — voir {@link LauncherModule#onRenderInVanillaGui}. */
+    public static void renderInVanillaGuiAll(UiRenderer renderer, int vpWidth, int vpHeight) {
+        for (LauncherModule m : MODULES) {
+            if (m.isEnabled()) {
+                try {
+                    m.onRenderInVanillaGui(renderer, vpWidth, vpHeight);
+                } catch (Throwable t) {
+                    com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+                        "[ModuleRegistry] onRenderInVanillaGui(" + m.id + "): " + t);
+                }
+            }
+        }
+    }
 }

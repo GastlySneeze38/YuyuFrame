@@ -377,10 +377,23 @@ public final class UiRenderer {
 
     // ── UiPrimitiveRenderer (rect/vignette/fx/gradient2D/icône) ──────────────
 
-    /** {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se replier sur une approximation par bandes. */
-    public boolean isVignetteAvailable() { return primitives.isVignetteAvailable(); }
+    /**
+     * {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se
+     * replier sur une approximation par bandes.
+     *
+     * <p>Toujours vrai quand la cible vanilla est armée : dans la passe GUI, le
+     * repli par bandes n'a pas lieu d'être (il existait pour les GPU où la
+     * compilation GLSL du chemin GL brut échouait) et un échec du pipeline se
+     * traduit par « rien à l'écran », jamais par du dessin GL brut — voir
+     * {@link VanillaGuiTarget#vignette}.
+     */
+    public boolean isVignetteAvailable() {
+        if (VanillaGuiTarget.isArmed()) return true;
+        return primitives.isVignetteAvailable();
+    }
 
     public void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.vignette(edgeColor, vSize, vpWidth, vpHeight)) return;
         primitives.drawEdgeVignette(edgeColor, vSize, vpWidth, vpHeight);
     }
 

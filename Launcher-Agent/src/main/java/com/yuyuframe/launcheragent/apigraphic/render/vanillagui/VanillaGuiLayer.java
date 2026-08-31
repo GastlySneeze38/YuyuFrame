@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiGlass;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiRoundedRect;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiText;
+import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGuiVignette;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
@@ -190,6 +191,35 @@ public final class VanillaGuiLayer {
             return true;
         } catch (Throwable t) {
             reportOnce("roundedRect: " + t);
+            return false;
+        }
+    }
+
+    /**
+     * Dégradé de bord plein écran (vignette) — voir {@link VignetteElement}.
+     *
+     * <p>{@code color.a} est l'opacité AU BORD ; elle retombe à zéro à
+     * {@code vSize} pixels GUI du bord le plus proche.
+     *
+     * <p>Contrairement au rect et au texte, ce pipeline est compilé À LA
+     * DEMANDE ici plutôt que dans {@code VanillaGuiTarget.begin()} : la
+     * vignette ne sert qu'à un module, et seulement à vie basse — inutile
+     * d'en faire payer la construction à chaque passe de HUD, et un échec de
+     * sa part ne doit pas faire tomber le HUD entier.
+     */
+    public static boolean vignette(Object hookContext, float x0, float y0, float x1, float y1,
+                                   float vSize, UiColor color) {
+        GuiRenderState state = renderState(hookContext);
+        if (state == null) return false;
+        try {
+            if (!Blaze3DGuiVignette.ensureCompiled()) {
+                reportOnce("vignette : pipeline indisponible");
+                return false;
+            }
+            state.addGuiElement(new VignetteElement(x0, y0, x1, y1, vSize, argb(color)));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("vignette: " + t);
             return false;
         }
     }

@@ -136,6 +136,12 @@ public final class HudOverlayRenderer {
         if (!VanillaGuiTarget.begin(hookContext, w, h)) return;
         try {
             if (screen == null) {
+                // AVANT le HUD : l'ordre de soumission fait la profondeur dans
+                // l'état de GUI, et un overlay plein écran (teinte vie basse)
+                // doit passer SOUS nos propres panneaux, pas par-dessus.
+                // Même condition d'écran que l'appel après présentation qu'il
+                // remplace (voir GlobalUiPresentMixin261).
+                com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry.renderInVanillaGuiAll(renderer, w, h);
                 HudRenderer.drawAll(renderer, w, h);
             } else {
                 HudRenderer.drawPersistent(renderer, shouldShowPersistent(screen), w, h);

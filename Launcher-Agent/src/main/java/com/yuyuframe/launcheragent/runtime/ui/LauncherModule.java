@@ -190,4 +190,24 @@ public abstract class LauncherModule {
      * d'overlay plein écran (ex: teinte vie basse). Ne fait rien par défaut.
      */
     public void onRenderOverlay(com.yuyuframe.launcheragent.apigraphic.UiRenderer renderer, int vpWidth, int vpHeight) {}
+
+    /**
+     * Même rôle que {@link #onRenderOverlay}, mais appelé DANS la passe GUI de
+     * vanilla (26.1.2 uniquement, via {@code HudOverlayRenderer.renderInVanillaGui})
+     * — donc AVANT la présentation de la frame, avec la cible
+     * {@code VanillaGuiTarget} armée. Ne fait rien par défaut.
+     *
+     * <p>Deux points d'entrée plutôt qu'un seul déplacé : tout ce que fait un
+     * module dans {@link #onRenderOverlay} ne sait pas forcément s'émettre en
+     * élément de GUI. {@code CrosshairModule}, par exemple, mélange des rects
+     * (qui savent) et une icône (qui ne sait pas encore) — le basculer d'office
+     * couperait son rendu en deux passes différentes. Chaque module migre donc
+     * quand il est prêt, en surchargeant CETTE méthode ; les autres gardent
+     * l'ancien chemin après présentation.
+     *
+     * <p>Un module qui surcharge les deux doit se garder du double-dessin : la
+     * passe GUI et l'appel après présentation ont lieu dans la MÊME frame (voir
+     * {@code LowHealthTintModule}, qui note qu'il a déjà dessiné).
+     */
+    public void onRenderInVanillaGui(com.yuyuframe.launcheragent.apigraphic.UiRenderer renderer, int vpWidth, int vpHeight) {}
 }

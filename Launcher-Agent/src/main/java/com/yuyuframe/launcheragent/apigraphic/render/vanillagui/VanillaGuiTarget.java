@@ -129,6 +129,27 @@ public final class VanillaGuiTarget {
     }
 
     /**
+     * Dégradé de bord plein écran — voir {@link VignetteElement}.
+     *
+     * <p>Le quad couvre TOUT l'écran, la conversion se limite donc à une
+     * division par l'échelle : pas d'inversion d'axe à faire, l'écran entier
+     * est symétrique.
+     *
+     * <p>Retourne {@code true} MÊME si le pipeline est indisponible, dès lors
+     * que la cible est armée. C'est délibéré : le repli de l'appelant est un
+     * dessin en OpenGL brut, et c'est exactement ce qu'il ne faut plus faire
+     * au milieu de la passe GUI de vanilla — c'était la cause des corruptions
+     * d'état sur ce bracket. Ne rien afficher vaut mieux que corrompre la
+     * frame ; l'échec est journalisé une fois par {@code VanillaGuiLayer}.
+     */
+    public static boolean vignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        if (context == null) return false;
+        VanillaGuiLayer.vignette(context, 0f, 0f, vpWidth / guiScale, fbHeight / guiScale,
+            vSize / guiScale, edgeColor);
+        return true;
+    }
+
+    /**
      * @param y ligne de base en Y-UP — {@code TextElement} raisonne en Y-DOWN,
      *          d'où l'inversion ici et non chez lui.
      */

@@ -67,22 +67,42 @@ public final class LowHealthTintModule extends LauncherModule {
         iconUrl = icons8("heart-monitor");
     }
 
-    // Diagnostic — un seul log par frame de test, throttlé à 1x/seconde
-    // (pas à chaque frame, sinon spam de plusieurs centaines de lignes/s) —
-    // pour vérifier les valeurs RÉELLES utilisées (vpWidth/vpHeight/vSize)
-    // plutôt que de deviner à l'aveugle si la distance calculée par le shader
-    // part d'une résolution correcte.
-    private long la$lastDiagLog;
-    // Compte les appels RÉELS à onRenderOverlay dans la fenêtre d'1s — pour
-    // vérifier si drawEdgeVignette est appelé plusieurs fois par frame AFFICHÉE
-    // (auquel cas le blend alpha s'empile à chaque appel, ce qui rendrait un
-    // dégradé mathématiquement lisse beaucoup plus abrupt visuellement — les
-    // alpha loggués (18-25% max) semblent trop faibles pour expliquer le rouge
-    // très saturé observé en jeu, d'où ce compteur pour vérifier l'hypothèse).
-    private int la$callsThisWindow;
+    /**
+     * Marque que la passe GUI a déjà dessiné la vignette dans CETTE frame —
+     * voir {@link #onRenderOverlay}.
+     *
+     * <p>Le module est branché sur les DEUX points d'entrée : la passe GUI de
+     * vanilla (26.1.2) et l'appel après présentation (autres brackets). Les
+     * deux existent dans la même frame sur 26.1.2, d'où ce drapeau plutôt
+     * qu'un test de version — il se corrige tout seul si une frame passe sans
+     * passe GUI (écran ouvert, hook absent), là où un test de bracket
+     * laisserait le module muet.
+     */
+    private boolean la$drawnInGuiPass;
+
+    /**
+     * 26.1.2 — la vignette est émise DANS l'état de GUI de vanilla, comme
+     * n'importe quel autre élément, au lieu d'être peinte en OpenGL brut après
+     * la présentation. Voir {@code Blaze3DGuiVignette} pour le pourquoi
+     * (corruptions d'état signalées dès l'activation du module).
+     */
+    @Override
+    public void onRenderInVanillaGui(UiRenderer renderer, int vpWidth, int vpHeight) {
+        la$drawnInGuiPass = true;
+        draw(renderer, vpWidth, vpHeight);
+    }
 
     @Override
     public void onRenderOverlay(UiRenderer renderer, int vpWidth, int vpHeight) {
+        // La passe GUI a déjà dessiné cette frame : ne pas repasser par-dessus
+        // (double blend, et retour du dessin GL brut qu'on vient justement de
+        // quitter). Le drapeau est consommé, donc une frame sans passe GUI
+        // reprend automatiquement ce chemin.
+        if (la$drawnInGuiPass) { la$drawnInGuiPass = false; return; }
+        draw(renderer, vpWidth, vpHeight);
+    }
+
+    private void draw(UiRenderer renderer, int vpWidth, int vpHeight) {
         try {
             float[] hp = healthAndMax();
             if (hp == null) return;
@@ -98,27 +118,21 @@ public final class LowHealthTintModule extends LauncherModule {
 
             float vSize = Math.min(vpWidth, vpHeight) * (vignetteWidthPercent / 100f);
 
-            la$callsThisWindow++;
-            long now = System.currentTimeMillis();
-            if (now - la$lastDiagLog > 1000) {
-                LauncherLog.info("[LowHealthTintModule] diag: vpWidth=" + vpWidth + " vpHeight=" + vpHeight
-                    + " vignetteWidthPercent=" + vignetteWidthPercent + " vSize=" + vSize
-                    + " maxOpacityPercent=" + maxOpacityPercent + " healthPercent=" + healthPercent
-                    + " threshold=" + threshold + " alpha=" + alpha
-                    + " shaderAvailable=" + renderer.isVignetteAvailable()
-                    + " callsInLastWindow=" + la$callsThisWindow);
-                la$lastDiagLog = now;
-                la$callsThisWindow = 0;
-            }
-
             if (renderer.isVignetteAvailable()) {
                 UiColor edgeColor = new UiColor(color.r, color.g, color.b, (alpha / 255f));
                 renderer.drawEdgeVignette(edgeColor, vSize, vpWidth, vpHeight);
             } else {
                 drawVignetteBands(renderer, vpWidth, vpHeight, vSize, alpha);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            if (!la$drawErrorLogged) {
+                la$drawErrorLogged = true;
+                LauncherLog.err("[LowHealthTintModule] draw: " + t);
+            }
+        }
     }
+
+    private static boolean la$drawErrorLogged;
 
     /**
      * Joueur par l'accessor Mixin ({@code PlayerData}), santé par les méthodes
