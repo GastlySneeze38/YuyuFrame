@@ -26,6 +26,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      }
+    },
     "icon": ["icons/icon.ico"],
     "createUpdaterArtifacts": true,
     "resources": {

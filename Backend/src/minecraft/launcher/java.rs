@@ -5,18 +5,35 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use std::sync::atomic::AtomicU64;
-use super::classpath::download_file;
+use super::classpath::download_verified;
 use super::jvm_args::JvmVendor;
 use super::progress::set_progress_monotonic;
 
+/// Délai au-delà duquel on considère que ce `java` ne répondra pas.
+///
+/// Sans timeout, un exécutable qui se bloque — install corrompue, binaire sur
+/// un lecteur réseau déconnecté, antivirus qui inspecte le process au premier
+/// lancement — figeait TOUT le lancement, sans message ni moyen d'annuler.
+/// Cinq secondes sont très larges pour un `java -version`, qui répond
+/// normalement en moins de 200 ms.
+const JAVA_VERSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
-    let out = tokio::process::Command::new(java)
-        .arg("-version")
-        .output()
-        .await
-        .ok()?;
-    // java -version écrit sur stderr
-    let text = String::from_utf8_lossy(&out.stderr);
+    let out = tokio::time::timeout(
+        JAVA_VERSION_TIMEOUT,
+        tokio::process::Command::new(java).arg("-version").output(),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    // `java -version` écrit sur stderr — mais pas TOUS les JVM : certaines
+    // distributions et wrappers écrivent sur stdout, et `--version` (double
+    // tiret, JDK 9+) y écrit toujours. On concatène les deux plutôt que de
+    // parier : une détection qui échoue ici fait retomber l'appelant sur un
+    // téléchargement complet du runtime, ou pire, sur « Java non détecté ».
+    let mut text = String::from_utf8_lossy(&out.stderr).into_owned();
+    text.push('\n');
+    text.push_str(&String::from_utf8_lossy(&out.stdout));
     for line in text.lines() {
         if line.contains("version") {
             // Formats : `"21.0.2"` ou `"1.8.0_xxx"`
@@ -111,8 +128,11 @@ pub(super) async fn ensure_java(
         }
     }
 
-    // 2. Installation système
-    if let Some(java) = find_system_java(required_major) {
+    // 2. Installation système — reconnaissance par nom de dossier, puis
+    // vérification par exécution si elle ne donne rien (voir
+    // find_system_java_verified : c'est ce second passage qui règle les
+    // « Java non détecté » remontés par les utilisateurs).
+    if let Some(java) = find_system_java_verified(required_major).await {
         return Ok((java, required_major));
     }
 
@@ -123,7 +143,10 @@ pub(super) async fn ensure_java(
     if component == "jre-legacy" {
         let temurin_dir = mc_dir.join("runtime").join("jre-legacy-temurin");
         let temurin_exe = temurin_dir.join("bin").join(java_exe_name());
-        if temurin_exe.exists() {
+        // Même contrôle de COMPLÉTUDE que pour le runtime Mojang : une
+        // extraction de zip interrompue laisse elle aussi un java.exe orphelin
+        // (voir runtime_is_complete).
+        if runtime_is_complete(&temurin_dir, &temurin_exe) {
             return Ok((temurin_exe.to_string_lossy().to_string(), required_major));
         }
         if cfg!(target_os = "windows") {
@@ -137,15 +160,21 @@ pub(super) async fn ensure_java(
         }
     }
 
-    // 4. Runtime Mojang déjà téléchargé
+    // 4. Runtime Mojang déjà téléchargé — et COMPLET.
     let runtime_dir = mc_dir.join("runtime").join(component);
     let java_exe = if cfg!(target_os = "macos") {
         runtime_dir.join("jre.bundle").join("Contents").join("Home").join("bin").join("java")
     } else {
         runtime_dir.join("bin").join(java_exe_name())
     };
-    if java_exe.exists() {
+    if runtime_is_complete(&runtime_dir, &java_exe) {
         return Ok((java_exe.to_string_lossy().to_string(), required_major));
+    }
+    if java_exe.exists() {
+        tracing::warn!(
+            "Runtime Java {} présent mais INCOMPLET à {} — retéléchargement",
+            required_major, runtime_dir.display()
+        );
     }
 
     // 5. Téléchargement depuis Mojang
@@ -158,6 +187,69 @@ pub(super) async fn ensure_java(
     } else {
         Err(anyhow!("Runtime Java installé mais introuvable à {}", java_exe.display()))
     }
+}
+
+/// Marqueur écrit UNIQUEMENT après un téléchargement de runtime entièrement
+/// terminé — voir [`runtime_is_complete`].
+const RUNTIME_COMPLETE_MARKER: &str = ".yuyuframe-complete";
+
+/// `true` si ce runtime est utilisable, pas seulement « présent ».
+///
+/// BUG LE PLUS COURANT chez les utilisateurs (capture fournie) :
+/// ```text
+/// Error: could not find java.dll
+/// Error: Could not find Java SE Runtime Environment.
+/// ```
+/// `java.exe` se lance mais ne trouve pas son propre runtime. La cause n'est
+/// pas la détection de Java — c'est que le test d'installation se réduisait à
+/// `java_exe.exists()`. Un téléchargement interrompu (fermeture du launcher,
+/// coupure réseau, antivirus) laisse `bin/java.exe` écrit et des centaines
+/// d'autres fichiers manquants ; au lancement suivant, cette condition est
+/// vraie, le launcher répond « déjà téléchargé », saute l'étape 5 et lance un
+/// runtime mutilé. **Définitivement** : rien ne redéclenche jamais le
+/// téléchargement, l'utilisateur est bloqué jusqu'à suppression manuelle du
+/// dossier.
+///
+/// Deux critères, dans cet ordre :
+/// 1. le MARQUEUR, écrit seulement après un téléchargement complet — fiable
+///    quel que soit le fichier manquant ;
+/// 2. à défaut, la présence de la bibliothèque de la VM elle-même, pour les
+///    runtimes installés par une version antérieure du launcher, qui n'ont
+///    évidemment pas de marqueur. Sans ce repli, tout le monde
+///    retéléchargerait son runtime une fois après la mise à jour.
+fn runtime_is_complete(runtime_dir: &Path, java_exe: &Path) -> bool {
+    if !java_exe.exists() {
+        return false;
+    }
+    if runtime_dir.join(RUNTIME_COMPLETE_MARKER).exists() {
+        return true;
+    }
+
+    // `java_home` = le dossier qui contient bin/ — diffère sur macOS, où le
+    // runtime Mojang est empaqueté dans jre.bundle/Contents/Home.
+    let Some(java_home) = java_exe.parent().and_then(Path::parent) else {
+        return false;
+    };
+    // Exactement ce dont l'absence produit le message ci-dessus : sur Windows
+    // java.exe charge bin/java.dll puis bin/server/jvm.dll ; ailleurs c'est
+    // lib/libjava.* et lib/server/libjvm.*.
+    let vm_lib_candidates = if cfg!(target_os = "windows") {
+        vec![
+            java_home.join("bin").join("java.dll"),
+            java_home.join("bin").join("server").join("jvm.dll"),
+        ]
+    } else if cfg!(target_os = "macos") {
+        vec![
+            java_home.join("lib").join("libjava.dylib"),
+            java_home.join("lib").join("server").join("libjvm.dylib"),
+        ]
+    } else {
+        vec![
+            java_home.join("lib").join("libjava.so"),
+            java_home.join("lib").join("server").join("libjvm.so"),
+        ]
+    };
+    vm_lib_candidates.iter().all(|p| p.exists())
 }
 
 /// P1-6 (audit launcher, Phase 6) : résout un runtime OpenJ9 pour
@@ -176,7 +268,8 @@ async fn ensure_openj9(
 ) -> Result<(String, u32)> {
     let dir = mc_dir.join("runtime").join(format!("openj9-{required_major}"));
     let exe = dir.join("bin").join(java_exe_name());
-    if exe.exists() {
+    // Complétude, pas simple présence — voir runtime_is_complete.
+    if runtime_is_complete(&dir, &exe) {
         return Ok((exe.to_string_lossy().to_string(), required_major));
     }
     if !cfg!(target_os = "windows") {
@@ -232,17 +325,36 @@ async fn download_mojang_runtime(
         match info["type"].as_str().unwrap_or("") {
             "file" => {
                 let url = info["downloads"]["raw"]["url"].as_str().unwrap_or("").to_string();
+                // Le manifeste Mojang fournit le SHA1 et la taille JUSTE À CÔTÉ
+                // de l'URL — ils étaient ignorés, faisant du runtime Java le
+                // SEUL téléchargement non vérifié de toute la chaîne, alors
+                // que c'est le plus sensible de tous : l'exécutable qui va
+                // lancer le jeu. Les bibliothèques et le client jar, eux,
+                // étaient déjà vérifiés.
+                let sha1 = info["downloads"]["raw"]["sha1"].as_str().map(str::to_string);
+                let expected_size = info["downloads"]["raw"]["size"].as_u64();
                 let executable = info["executable"].as_bool().unwrap_or(false);
                 let file_dest = dest.join(rel_path);
                 let sem = sem.clone();
                 let client = client.clone();
                 tasks.spawn(async move {
-                    if !file_dest.exists() {
+                    // Un fichier PRÉSENT mais de mauvaise taille est retéléchargé.
+                    // Avant, la simple existence suffisait : un runtime tronqué
+                    // par une coupure réseau restait cassé indéfiniment, sans
+                    // aucun moyen de s'en sortir sans suppression manuelle —
+                    // exactement le défaut déjà corrigé pour les natives, où la
+                    // taille décompressée est comparée avant de sauter.
+                    let up_to_date = match (file_dest.metadata(), expected_size) {
+                        (Ok(m), Some(expected)) => m.len() == expected,
+                        (Ok(_), None) => true,   // taille inconnue : on garde l'ancien comportement
+                        (Err(_), _) => false,    // absent
+                    };
+                    if !up_to_date {
                         let _permit = sem.acquire().await.unwrap();
                         if let Some(p) = file_dest.parent() {
                             tokio::fs::create_dir_all(p).await?;
                         }
-                        download_file(&client, &url, &file_dest).await?;
+                        download_verified(&client, &url, &file_dest, sha1.as_deref()).await?;
                     }
                     #[cfg(unix)]
                     if executable {
@@ -275,6 +387,13 @@ async fn download_mojang_runtime(
                 &format!("Java runtime {}/{}", done, total));
         }
     }
+
+    // Marqueur posé EN DERNIER, après que toutes les tâches se soient
+    // terminées sans erreur (`r??` ci-dessus propage le premier échec). C'est
+    // ce qui rend l'installation vérifiable au lancement suivant — voir
+    // `runtime_is_complete`. Best-effort : son absence ne fait que déclencher
+    // le repli sur la détection des bibliothèques de la VM.
+    let _ = tokio::fs::write(dest.join(RUNTIME_COMPLETE_MARKER), b"ok").await;
     Ok(())
 }
 
@@ -356,8 +475,77 @@ fn mojang_platform_key() -> &'static str {
 /// Cherche un JDK système compatible avec `required_major`.
 /// Java 8 : version exacte requise (LaunchWrapper incompatible Java 9+).
 /// Java 9+ : version minimale (n'importe quelle version >= required_major convient).
-fn find_system_java(required_major: u32) -> Option<String> {
-    let roots: &[&str] = if cfg!(target_os = "windows") {
+/// Variante ASYNCHRONE de [`find_system_java`] : même balayage par NOM de
+/// dossier, puis — s'il ne donne rien — vérification par EXÉCUTION.
+///
+/// Pourquoi les deux : la reconnaissance par nom est instantanée mais suppose
+/// une convention de nommage. Or les conventions varient par vendeur et par
+/// gestionnaire (`zulu21.32...`, `21.0.2-tem` de SDKMAN, `graalvm-jdk-21`,
+/// un lien `default-java`, un dossier renommé à la main…). Un JDK
+/// parfaitement valide dans un dossier au nom inattendu était purement et
+/// simplement ignoré — c'est le « Java non détecté » remonté par les
+/// utilisateurs, alors que `java -version` aurait répondu correctement.
+///
+/// La vérification par exécution est le contraire : elle demande son avis à
+/// la JVM elle-même, donc elle ne peut pas se tromper, mais elle coûte un
+/// process par candidat. D'où l'ordre — le chemin rapide d'abord, et le
+/// chemin sûr seulement quand le rapide a échoué, c'est-à-dire dans le seul
+/// cas où l'on s'apprêtait à retélécharger un runtime entier pour rien.
+pub(super) async fn find_system_java_verified(required_major: u32) -> Option<String> {
+    if let Some(java) = find_system_java(required_major) {
+        return Some(java);
+    }
+
+    // PATH d'abord : `java` y est de très loin la manière la plus courante
+    // d'avoir un JDK, et il n'était consulté NULLE PART — ni ici, ni via
+    // JAVA_HOME (qui n'est pas toujours posé, notamment quand Java vient
+    // d'un gestionnaire de paquets).
+    if let Some(v) = detect_java_major_version(java_exe_name()).await {
+        if v == required_major {
+            return Some(java_exe_name().to_string());
+        }
+    }
+
+    for dir in candidate_java_dirs() {
+        let exe = if cfg!(target_os = "macos") {
+            dir.join("Contents").join("Home").join("bin").join("java")
+        } else {
+            dir.join("bin").join(java_exe_name())
+        };
+        if !exe.exists() {
+            continue;
+        }
+        let path = exe.to_string_lossy().to_string();
+        if detect_java_major_version(&path).await == Some(required_major) {
+            tracing::info!(
+                "Java {} trouvé par vérification à l'exécution : {} (nom de dossier non reconnu)",
+                required_major, path
+            );
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Tous les sous-dossiers des racines connues, sans aucun filtre sur le nom —
+/// candidats bruts pour la vérification par exécution.
+fn candidate_java_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    for root in java_roots() {
+        let Ok(entries) = std::fs::read_dir(&root) else { continue };
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                dirs.push(entry.path());
+            }
+        }
+    }
+    dirs
+}
+
+/// Racines à balayer — les emplacements historiques, plus ceux de
+/// [`extra_java_roots`].
+fn java_roots() -> Vec<PathBuf> {
+    let fixed: &[&str] = if cfg!(target_os = "windows") {
         &[
             r"C:\Program Files\Java",
             r"C:\Program Files\Eclipse Adoptium",
@@ -371,6 +559,16 @@ fn find_system_java(required_major: u32) -> Option<String> {
     } else {
         &["/usr/lib/jvm", "/usr/local/lib/jvm", "/opt/java"]
     };
+    let mut roots: Vec<PathBuf> = fixed.iter().map(PathBuf::from).collect();
+    roots.extend(extra_java_roots());
+    roots
+}
+
+fn find_system_java(required_major: u32) -> Option<String> {
+    // Racines partagées avec la vérification par exécution — une seule liste,
+    // sinon les emplacements ajoutés (Temurin installé « pour moi
+    // uniquement », SDKMAN, Zulu…) ne profiteraient qu'au chemin lent.
+    let roots = java_roots();
 
     // Java 8 : version exacte (LaunchWrapper incompatible Java 9+).
     // Java 9+ : version exacte uniquement — versions plus récentes (ex : Java 24 avec MC
@@ -379,7 +577,7 @@ fn find_system_java(required_major: u32) -> Option<String> {
     let max_major = required_major;
 
     let mut best: Option<(u32, String)> = None;
-    for root in roots {
+    for root in &roots {
         let Ok(entries) = std::fs::read_dir(root) else { continue };
         for entry in entries.flatten() {
             let dir_name = entry.file_name().to_string_lossy().to_lowercase();
@@ -409,13 +607,21 @@ fn java_exe_name() -> &'static str {
 /// sans ce cas, ces JDK système ne matchaient jamais `required_major` et étaient
 /// silencieusement ignorés (retéléchargement inutile du runtime Mojang).
 fn java_major_from_dir_name(name: &str) -> Option<u32> {
-    let stripped = name
-        .strip_prefix("jdk-")
-        .or_else(|| name.strip_prefix("jre-"))
-        .or_else(|| name.strip_prefix("java-"))
-        .or_else(|| name.strip_prefix("temurin-"))
-        .or_else(|| name.strip_prefix("corretto-"))
-        .or_else(|| name.strip_prefix("semeru-"))?;
+    const PREFIXES: [&str; 10] = [
+        // Ordre important : les plus LONGS d'abord. "openjdk-21" doit être
+        // reconnu par "openjdk-", pas laissé au "jdk-" qui ne matche pas en
+        // début de chaîne — et "microsoft-jdk-21" doit passer par son propre
+        // préfixe.
+        "microsoft-jdk-", "graalvm-jdk-", "graalvm-", "openjdk-",
+        "corretto-", "temurin-", "semeru-", "zulu", "jdk-", "jre-",
+    ];
+    let stripped = PREFIXES
+        .iter()
+        .find_map(|p| name.strip_prefix(p))
+        // "java-21-openjdk-amd64" (Debian/RHEL) et "java-1.8.0-openjdk" :
+        // testé APRÈS les autres, sinon "java-" avalerait des noms mieux
+        // couverts au-dessus.
+        .or_else(|| name.strip_prefix("java-"))?;
     let mut segments = stripped.split(['.', '+', '-', '_']);
     let first: u32 = segments.next()?.parse().ok()?;
     if first == 1 {
@@ -423,4 +629,38 @@ fn java_major_from_dir_name(name: &str) -> Option<u32> {
     } else {
         Some(first)
     }
+}
+
+/// Chemins où chercher des JDK, en plus des racines fixes.
+///
+/// Le manque le plus courant en pratique : une installation Eclipse Temurin
+/// « pour moi uniquement » (sans droits admin) atterrit sous
+/// `%LOCALAPPDATA%\Programs\Eclipse Adoptium\` et n'était jamais parcourue —
+/// l'utilisateur avait bien Java, le launcher ne le voyait pas et
+/// retéléchargeait un runtime complet, ou échouait.
+fn extra_java_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if cfg!(target_os = "windows") {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let programs = PathBuf::from(&local).join("Programs");
+            roots.push(programs.join("Eclipse Adoptium"));
+            roots.push(programs.join("Microsoft"));
+            roots.push(programs.join("Zulu"));
+        }
+        for pf in ["ProgramFiles", "ProgramFiles(x86)"] {
+            if let Ok(dir) = std::env::var(pf) {
+                for vendor in ["Zulu", "Java", "Eclipse Adoptium", "Microsoft",
+                               "BellSoft", "Amazon Corretto", "Semeru Runtime", "GraalVM"] {
+                    roots.push(PathBuf::from(&dir).join(vendor));
+                }
+            }
+        }
+    } else if let Ok(home) = std::env::var("HOME") {
+        // SDKMAN : de très loin le gestionnaire de JDK le plus répandu sous
+        // Linux/macOS, et ses dossiers (`21.0.2-tem`) ne portent AUCUN des
+        // préfixes reconnus — d'où la vérification par exécution ci-dessous.
+        roots.push(PathBuf::from(&home).join(".sdkman").join("candidates").join("java"));
+        roots.push(PathBuf::from(&home).join(".jdks")); // IntelliJ IDEA
+    }
+    roots
 }

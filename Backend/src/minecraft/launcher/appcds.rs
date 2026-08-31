@@ -2,6 +2,28 @@ use std::path::{Path, PathBuf};
 
 use sha1::{Digest, Sha1};
 
+/// ⚠️ AppCDS DÉSACTIVÉ (2026-08-31) — décision explicite, en attendant sa
+/// stabilisation.
+///
+/// À `false`, [`appcds_jvm_args`] rend une liste vide : plus aucun
+/// `-XX:SharedArchiveFile` ni `-XX:ArchiveClassesAtExit` n'est passé à la
+/// JVM, et plus aucune archive `.jsa` n'est créée. Le lancement redevient
+/// exactement ce qu'il était avant l'introduction d'AppCDS — on perd le gain
+/// de temps au démarrage, rien d'autre.
+///
+/// Interrupteur unique plutôt que retrait du code : tout le mécanisme reste
+/// en place et documenté (détection de l'archive CDS de base, clé de cache,
+/// déverrouillage pour javaagent, élagage), il se réactive en un mot. Le
+/// coupe-circuit est posé au SEUL point d'entrée du module, donc aucun
+/// appelant n'a besoin de le connaître.
+///
+/// ⚠️ Effet de bord à connaître : les archives `.jsa` déjà générées restent
+/// sur disque sous `<instance>/.appcds/` (une par instance, ~50-150 Mo). Elles
+/// ne sont plus ni lues ni élaguées — l'élagage vit dans la fonction
+/// court-circuitée ci-dessous. À supprimer à la main, ou en réactivant le
+/// temps d'un lancement.
+const APPCDS_ENABLED: bool = false;
+
 /// Dossier où vivent les archives AppCDS de cette instance — un fichier par
 /// combinaison (version, loader, classpath, mods) rencontrée. L'ancien
 /// fichier est nettoyé dès qu'une nouvelle combinaison apparaît (voir
@@ -93,6 +115,9 @@ pub(super) async fn appcds_jvm_args(
     classpath_str: &str,
     prune_stale: bool,
 ) -> Vec<String> {
+    if !APPCDS_ENABLED {
+        return Vec::new();
+    }
     if java_major < 17 || !has_base_cds_archive(java) {
         return Vec::new();
     }
