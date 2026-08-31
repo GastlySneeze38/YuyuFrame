@@ -71,6 +71,7 @@
     "v26_1.keybind.KeybindCategoryRegisterMixin261",
     "v26_1.chat.ChatReceiveMixin261",
     "v26_1.chat.ChatSendMixin261",
+    "v26_1.combat.PiercingAttackMixin261",
     "v26_1.item.ItemTooltipMixin261",
     "v26_1.lifecycle.ClientTickMixin261",
     "v26_1.lifecycle.ClientLevelLoadMixin261",

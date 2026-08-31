@@ -51,6 +51,8 @@ public abstract class LocalPlayer {
     public boolean onGround() { return false; }
     /** Passager d'une monture/d'un véhicule : le déplacement ne coûte alors rien au joueur. */
     public boolean isPassenger() { return false; }
+    /** Vol à l'élytre — l'une des conditions qui DÉSACTIVENT le lunge de la lance, voir {@code SaturationModule}. */
+    public boolean isFallFlying() { return false; }
     public ItemStack getItemBySlot(EquipmentSlot slot) { return null; }
     public ItemStack getItemInHand(InteractionHand hand) { return null; }
     public HumanoidArm getMainArm() { return null; }

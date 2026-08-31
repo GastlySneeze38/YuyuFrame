@@ -184,6 +184,19 @@ public enum HookPoint {
     ATTACK_BLOCK,
     /** Voir {@code client.MinecraftMixin} (events-interaction-v0) — pré-attaque. */
     PRE_ATTACK,
+    /**
+     * Attaque PERÇANTE côté client — {@code MultiPlayerGameMode.piercingAttack},
+     * le coup de lance chargé de la 26.1. Pas un point d'accroche Fabric API :
+     * ajouté pour {@code SaturationModule}, parce que l'enchantement « lunge »
+     * y consomme 4 d'épuisement par niveau et que c'est le SEUL enchantement
+     * du jeu à toucher à la faim (vérifié : {@code apply_exhaustion}
+     * n'apparaît que dans {@code data/minecraft/enchantment/lunge.json}).
+     *
+     * <p>Ce hook existe parce que le lunge est l'unique action qui prend
+     * l'estimation locale de saturation totalement en défaut : un saut de 4 à
+     * 12 d'épuisement d'un coup, invisible du client sans lui.
+     */
+    PIERCING_ATTACK,
 
     // ── Raccourcis clavier (fabric-key-mapping-api-v1) ────────────────────────
     /** Voir {@code OptionsMixin} — enregistrement de {@code KeyMapping} custom. */

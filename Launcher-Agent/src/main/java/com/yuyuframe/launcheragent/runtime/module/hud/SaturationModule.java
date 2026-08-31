@@ -3,8 +3,18 @@ package com.yuyuframe.launcheragent.runtime.module.hud;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.DataComponentsAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.FoodDataAccessor261;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+
+import java.util.Optional;
+import java.util.Set;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -106,8 +116,95 @@ public final class SaturationModule extends LauncherModule {
         // ModuleRegistry) ; l'attribution AppleSkin reste dans la description.
         super("saturation", "Saturation",
             "Saturation, épuisement et aperçu de l'aliment tenu, façon AppleSkin — dessinés sur les barres vanilla",
-            "Saturation et épuisement sur les barres vanilla", false);
+            "Saturation et épuisement sur les barres vanilla", false,
+            // DÉCLARÉ, sinon PiercingAttackMixin261 n'est pas tissé du tout :
+            // le filtre de MixinHookPointRegistry ne retient que les mixins
+            // dont le HookPoint est réclamé par au moins un module.
+            HookPoint.PIERCING_ATTACK);
         iconUrl = icons8("steak");
+
+        // Le coup de lance chargé — voir onPiercingAttack(). Enregistré même
+        // module désactivé : sans ça, activer le module en pleine partie
+        // repartirait d'un accumulateur qui a raté des coups. Retour false
+        // systématique, ce hook est une notification pure.
+        VanillaHookRegistry.register(HookPoint.PIERCING_ATTACK, ctx -> { onPiercingAttack(); return false; });
+    }
+
+    /**
+     * Coup de lance chargé : l'enchantement « lunge » consomme
+     * <b>4 d'épuisement par niveau</b> (base 4, +4 par niveau au-dessus du
+     * premier — lu dans {@code data/minecraft/enchantment/lunge.json} du jar
+     * 26.1.2), soit 1 à 3 points de saturation d'un coup.
+     *
+     * <p>C'est LE trou de l'estimation locale, signalé par l'utilisateur : le
+     * sprint use la saturation en continu et se laisse suivre, la lance la
+     * fait chuter d'un bloc entier sans que le client en sache rien. Le hook
+     * {@link HookPoint#PIERCING_ATTACK} le rend observable — l'attaque part du
+     * client, aucun besoin de quoi que ce soit côté serveur.
+     *
+     * <p>Les conditions reproduisent celles du fichier d'enchantement : le
+     * lunge ne se déclenche pas en monture, en vol à l'élytre, dans l'eau, ni
+     * sous 7 de faim. Les reproduire évite de facturer un coût qui n'a pas été
+     * prélevé — une surestimation ferait descendre le liseré trop vite, plus
+     * visible qu'un léger retard.
+     *
+     * <p>« lunge » est le SEUL enchantement du jeu à toucher à la faim :
+     * {@code apply_exhaustion} n'apparaît dans aucun autre fichier de données
+     * (vérifié sur l'ensemble du jar). Pas besoin d'un mécanisme générique.
+     */
+    private void onPiercingAttack() {
+        if (!estimateSaturation) return;
+        try {
+            LocalPlayer player = PlayerData.player();
+            if (player == null) return;
+            if (player.isPassenger() || player.isFallFlying() || player.isInWater()) return;
+
+            FoodData foodData = player.getFoodData();
+            if (!(foodData instanceof FoodDataAccessor261)) return;
+            if (((FoodDataAccessor261) foodData).la$foodLevel() < LUNGE_MIN_FOOD) return;
+
+            int level = lungeLevel(player.getItemInHand(InteractionHand.MAIN_HAND));
+            if (level <= 0) return;
+            estimator.addExhaustion(LUNGE_EXHAUSTION_PER_LEVEL * level);
+        } catch (Throwable t) {
+            if (!lungeErrorLogged) {
+                lungeErrorLogged = true;
+                LauncherLog.err("[SaturationModule] onPiercingAttack: " + t);
+            }
+        }
+    }
+
+    private static boolean lungeErrorLogged;
+
+    /** Voir {@code data/minecraft/enchantment/lunge.json} : {@code apply_exhaustion}, base 4, +4 par niveau. */
+    private static final float LUNGE_EXHAUSTION_PER_LEVEL = 4f;
+    /** Idem : le lunge exige au moins ce niveau de faim. */
+    private static final int LUNGE_MIN_FOOD = 7;
+
+    /**
+     * Niveau de « lunge » sur l'objet tenu, 0 s'il ne l'a pas.
+     *
+     * <p>Parcourt les enchantements de l'objet et compare le CHEMIN DE
+     * REGISTRE, plutôt que de chercher {@code Enchantments.LUNGE} dans le
+     * registre : un {@code Holder} porte déjà sa clé
+     * ({@code unwrapKey().identifier()}), là où une recherche en registre
+     * demanderait un {@code HolderLookup.Provider}, donc l'accès au monde,
+     * depuis un chemin appelé en plein combat.
+     */
+    private int lungeLevel(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return 0;
+        ItemEnchantments enchantments = stack.get(DataComponentsAccessor261.la$enchantments());
+        if (enchantments == null || enchantments.isEmpty()) return 0;
+        Set<Holder<Enchantment>> keys = enchantments.keySet();
+        if (keys == null) return 0;
+        for (Holder<Enchantment> holder : keys) {
+            if (holder == null) continue;
+            Optional<ResourceKey<Enchantment>> key = holder.unwrapKey();
+            if (key == null || !key.isPresent()) continue;
+            Identifier id = key.get().identifier();
+            if (id != null && "lunge".equals(id.getPath())) return enchantments.getLevel(holder);
+        }
+        return 0;
     }
 
     // ── Géométrie des barres vanilla ──────────────────────────────────────
@@ -293,6 +390,16 @@ public final class SaturationModule extends LauncherModule {
          * courante sur cette mécanique, et la compter ferait fondre
          * l'estimation bien trop vite.
          */
+        /**
+         * Coup de lance chargé — voir {@link SaturationModule#onPiercingAttack}.
+         * Appelé depuis le hook, hors du tick : l'épuisement est simplement
+         * ajouté à l'accumulateur, la conversion en saturation se fera au tick
+         * suivant comme pour tout le reste.
+         */
+        void addExhaustion(float amount) {
+            exhaustion += amount;
+        }
+
         private float movementExhaustion(LocalPlayer player, double dx, double dy, double dz) {
             if (player.isSwimming()) {
                 double d = Math.sqrt(dx * dx + dy * dy + dz * dz);

@@ -108,6 +108,7 @@ public final class MixinHookPointRegistry {
         // ── Chat ───────────────────────────────────────────────────────────
         put("ChatReceiveMixin261", HookPoint.CHAT_RECEIVE);
         put("ChatSendMixin261", HookPoint.CHAT_SEND);
+        put("PiercingAttackMixin261", HookPoint.PIERCING_ATTACK);
 
         // ── Item ───────────────────────────────────────────────────────────
         put("ItemTooltipMixin261", HookPoint.ITEM_TOOLTIP);

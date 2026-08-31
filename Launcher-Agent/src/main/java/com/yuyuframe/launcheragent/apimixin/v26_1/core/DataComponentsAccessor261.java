@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -22,4 +23,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface DataComponentsAccessor261 {
     @Accessor("FOOD")
     static DataComponentType<FoodProperties> la$food() { throw new AssertionError("DataComponentsAccessor261 non tissé"); }
+
+    /** Enchantements d'un objet — {@code SaturationModule} y lit le niveau de « lunge », seul enchantement du jeu à consommer de la faim. */
+    @Accessor("ENCHANTMENTS")
+    static DataComponentType<ItemEnchantments> la$enchantments() { throw new AssertionError("DataComponentsAccessor261 non tissé"); }
 }
