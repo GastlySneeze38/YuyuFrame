@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.mojang.blaze3d.platform.Window;
 
 import java.lang.reflect.Method;
 
@@ -102,6 +104,29 @@ public final class UiVanillaItemRenderer {
      * {@code framebufferPx / guiScale(vpWidth)}.
      */
     public static float guiScale(int vpWidth) {
+        // 26.1.2 : accessor Mixin, ZÉRO réflexion — et pas de cache non plus.
+        //
+        // AUDIT (2026-08-31) : c'était le dernier accès réflexif réellement
+        // emprunté à chaque frame sur ce bracket (ArmorDurabilityModule et
+        // SaturationModule positionnent tout leur rendu dessus). Le cache de
+        // 200 ms qui l'entourait n'avait de sens que pour amortir cette
+        // réflexion ; deux appels de méthode ne le justifient plus, et le
+        // retirer supprime au passage un défaut discret — pendant un
+        // redimensionnement de fenêtre, l'échelle restait périmée jusqu'à 200 ms,
+        // donc le HUD se posait brièvement au mauvais endroit.
+        try {
+            Window window = ClientData.window();
+            if (window != null) {
+                int scaled = window.getGuiScaledWidth();
+                if (scaled > 0) return (float) vpWidth / scaled;
+            }
+        } catch (Throwable ignored) {
+            // NoClassDefFoundError attendu hors 26.1.2 (Window/accessor
+            // inexistants sur un bracket obfusqué) — le repli réflexif
+            // ci-dessous prend le relais, inutile de journaliser par frame.
+        }
+
+        // Autres brackets : chemin réflexif inchangé, cache compris.
         long now = System.nanoTime();
         if (vpWidth == cachedGuiScaleVpWidth && (now - cachedGuiScaleAtNanos) < GUI_SCALE_CACHE_NANOS) {
             return cachedGuiScale;
@@ -206,12 +231,14 @@ public final class UiVanillaItemRenderer {
      * Correctif : mise en FILE D'ATTENTE ({@code pendingModernGuiBlits},
      * partagée avec le chemin "Deferred") au lieu d'un dessin synchrone
      * isolé — vidée par {@link #flushPendingImmediateGuiBlits(Object)},
-     * appelé depuis un NOUVEAU point d'accroche Mixin en TAIL de {@code
-     * HandledScreen.drawForeground(DrawContext,I,I)V} (voir {@code
-     * HandledScreenBlitFlushMixin1214}) — déclaré DIRECTEMENT sur {@code
-     * HandledScreen} (PAS la classe {@code Screen} partagée par tous les
-     * écrans, y compris nos écrans custom — voir la leçon de
-     * {@code ShulkerPreviewModule} sur ce risque précis), et appelé APRÈS le
+     * appelé depuis un point d'accroche Mixin en TAIL de {@code
+     * HandledScreen.drawForeground(DrawContext,I,I)V} — mixin
+     * {@code HandledScreenBlitFlushMixin1214}, SUPPRIMÉ le 2026-08-31 avec le
+     * dernier consommateur de cette file (voir
+     * {@link #flushPendingImmediateGuiBlits}). Il était déclaré DIRECTEMENT
+     * sur {@code HandledScreen} (PAS la classe {@code Screen} partagée par
+     * tous les écrans, y compris nos écrans custom — leçon coûteuse de
+     * l'ancien aperçu shulker sur ce risque précis), et appelé APRÈS le
      * fond/les cases/objets du conteneur mais AVANT les tooltips vanilla —
      * exactement où doit apparaître notre panneau. Décalage d'une frame
      * comme pour les icônes (imperceptible tant que Maj reste maintenue).
@@ -231,12 +258,22 @@ public final class UiVanillaItemRenderer {
     }
 
     /**
-     * Appelé depuis {@code HandledScreenBlitFlushMixin1214}, en TAIL de
-     * {@code HandledScreen.drawForeground(DrawContext,I,I)V}, avec le VRAI
-     * paramètre {@code DrawContext} de cet appel (celui que l'écran
-     * d'inventaire ouvert utilise lui-même pour tout son rendu — jamais une
-     * instance reconstruite). Voir la javadoc de
-     * {@link #drawVanillaContainerTextureModernImmediate} pour le pourquoi.
+     * ⚠️ PLUS AUCUN APPELANT depuis le 2026-08-31.
+     *
+     * <p>Son unique point d'accroche, {@code HandledScreenBlitFlushMixin1214},
+     * a été supprimé : il s'injectait dans {@code HandledScreen.render()} à
+     * CHAQUE frame, sur tout écran de conteneur, pour vider une file que plus
+     * personne ne remplit depuis le retrait de l'aperçu shulker. Le seul
+     * producteur était {@link #drawVanillaContainerTextureModernImmediate},
+     * lui-même sans appelant.
+     *
+     * <p>La méthode et sa file sont conservées telles quelles : elles portent
+     * une vraie capacité du moteur (afficher un fond de fenêtre de conteneur
+     * vanilla sur le bracket 1.21.4, qui n'a pas d'architecture différée) et
+     * ne coûtent plus rien tant que personne ne les appelle. Les rebrancher
+     * demande de recréer le mixin — voir l'historique juste au-dessus pour le
+     * point d'accroche exact et pourquoi il vise {@code HandledScreen} et non
+     * {@code Screen}.
      */
     public void flushPendingImmediateGuiBlits(Object realDrawContext) {
         java.util.List<PendingGuiBlit> batchBlits;

@@ -43,6 +43,7 @@ public final class UiMacroPickerScreen extends UiScreenBase {
     private float px, py, pw, ph;
     private int lastW = -1, lastH = -1;
     private float lastScale = -1f;
+    private int lastRevision = -1;
 
     public UiMacroPickerScreen(MacroModule module) {
         super("Macros");
@@ -59,10 +60,17 @@ public final class UiMacroPickerScreen extends UiScreenBase {
 
     @Override
     public void uiDraw(double mouseX, double mouseY) {
+        // La révision du module s'ajoute aux trois conditions habituelles —
+        // même raison que dans UiModConfigScreen : la liste des macros peut
+        // changer pendant que cet écran est ouvert (une commande client, un
+        // autre écran) sans que la taille ni l'échelle ne bougent. Le compteur
+        // existait déjà côté module, autant s'y brancher.
         if (screenWidth > 0 && screenHeight > 0
-                && (screenWidth != lastW || screenHeight != lastH || UiTheme.UI_SCALE != lastScale)) {
+                && (screenWidth != lastW || screenHeight != lastH
+                    || UiTheme.UI_SCALE != lastScale || module.settingsRevision != lastRevision)) {
             buildLayout();
             lastW = screenWidth; lastH = screenHeight; lastScale = UiTheme.UI_SCALE;
+            lastRevision = module.settingsRevision;
         }
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         renderer.beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);

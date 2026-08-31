@@ -122,6 +122,19 @@ public final class ClientData {
 
     /** Connexion réseau au serveur, ou {@code null} hors partie. Méthode publique, pas un champ. */
     /**
+     * Fenêtre du jeu — {@code null} hors bracket 26.1.2.
+     *
+     * <p>Ajouté pour {@code UiVanillaItemRenderer.guiScale()}, qui positionne
+     * tout le rendu relatif au HUD vanilla et était appelé à chaque frame par
+     * réflexion. {@code getGuiScaledWidth()} est une méthode publique, seul
+     * l'accès au champ {@code window} demandait l'accessor.
+     */
+    public static com.mojang.blaze3d.platform.Window window() {
+        MinecraftAccessor261 mc = accessor();
+        return mc == null ? null : mc.la$window();
+    }
+
+    /**
      * Gestionnaire de ressources du jeu — {@code null} hors bracket 26.1.2.
      *
      * <p>C'est par LUI qu'il faut charger toute texture que l'on veut voir

@@ -175,11 +175,17 @@ public final class ModuleRegistry {
      * façon optimisée »). Tout ce qui existait UNIQUEMENT pour lui dans le
      * moteur est devenu du code mort mais reste en place, faute d'être
      * dangereux : {@code UiRenderer.drawVanillaContainerTexture} et son
-     * chemin "Immediate" 1.21.4 ({@code HandledScreenBlitFlushMixin1214}, qui
-     * vide désormais une file toujours vide), plus le HookPoint
+     * chemin "Immediate" 1.21.4, plus le HookPoint
      * {@code CONTAINER_SCREEN_EXTRACT_TOOLTIP} et son mixin — que plus aucun
      * module ne réclame, donc que le filtre de {@code MixinHookPointRegistry}
      * ne tisse plus.
+     *
+     * <p>EXCEPTION (2026-08-31, audit final) : {@code
+     * HandledScreenBlitFlushMixin1214} a bel et bien été SUPPRIMÉ, lui. Le
+     * laisser n'était pas neutre — contrairement aux autres reliquats, il
+     * s'injectait dans {@code HandledScreen.render()} et tournait donc à
+     * chaque frame, sur tout écran de conteneur, pour vider une file
+     * désormais toujours vide.
      *
      * {@code ClearVisionModule}/{@code NoFogModule} (refonte FogEnvironment) :
      * même statut que 1.21.11 pour Vision claire (jamais tenté, architecture
