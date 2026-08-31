@@ -26,7 +26,7 @@ import java.lang.reflect.Modifier;
  * mais contexte OpenGL encore en dessous de 3.2 Core Profile — le dessin
  * immédiat (glBegin/glMatrixMode, voir {@code UiRenderer.drawXxxLegacy})
  * fonctionne donc ENCORE ici, contrairement à 1.17+ (voir
- * {@link com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector#supportsFixedFunctionDrawing}
+ * {@link com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector#supportsFixedFunctionDrawing}
  * — c'est CETTE méthode, pas la présence de ce Mixin, qui décide du style de
  * dessin réel dans {@code UiRenderer}).
  *

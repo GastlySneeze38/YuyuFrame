@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.version;
+package com.yuyuframe.launcheragent.apimixin.version;
 
 import java.util.function.Predicate;
 
@@ -30,15 +30,39 @@ public final class VersionBracket {
     public final String yarnJarNameHint;
     public final Predicate<String> matcher;
 
+    /**
+     * Faux = tranche DÉCLARÉE mais pas active : {@link VersionBracketRegistry#resolve}
+     * l'ignore, donc le bootstrap Mixin s'arrête proprement sur cette version
+     * (message clair, agent qui continue de tourner, aucun mixin appliqué).
+     *
+     * <p>Existe pour geler les brackets en attente de rework sans supprimer
+     * leur déclaration — celle-ci porte le matcher, le nom de config, l'indice
+     * de jar Yarn et surtout les commentaires expliquant POURQUOI chaque
+     * tranche est resserrée à une version exacte. Les commenter ferait perdre
+     * tout ça ; un booléen les garde relisibles et les réactive en un mot.
+     */
+    public final boolean enabled;
+
     public VersionBracket(String key, String mixinConfigResource, String yarnJarNameHint, Predicate<String> matcher) {
-        this(key, mixinConfigResource, null, yarnJarNameHint, matcher);
+        this(key, mixinConfigResource, null, yarnJarNameHint, matcher, true);
     }
 
     public VersionBracket(String key, String mixinConfigResource, String apiMixinConfigResource, String yarnJarNameHint, Predicate<String> matcher) {
+        this(key, mixinConfigResource, apiMixinConfigResource, yarnJarNameHint, matcher, true);
+    }
+
+    public VersionBracket(String key, String mixinConfigResource, String apiMixinConfigResource,
+                          String yarnJarNameHint, Predicate<String> matcher, boolean enabled) {
         this.key = key;
         this.mixinConfigResource = mixinConfigResource;
         this.apiMixinConfigResource = apiMixinConfigResource;
         this.yarnJarNameHint = yarnJarNameHint;
         this.matcher = matcher;
+        this.enabled = enabled;
+    }
+
+    /** Même tranche, gelée — voir {@link #enabled}. Fluent, pour que la déclaration reste lisible telle quelle. */
+    public VersionBracket disabled() {
+        return new VersionBracket(key, mixinConfigResource, apiMixinConfigResource, yarnJarNameHint, matcher, false);
     }
 }

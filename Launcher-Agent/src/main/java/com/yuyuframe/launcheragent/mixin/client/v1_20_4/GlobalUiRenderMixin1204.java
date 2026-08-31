@@ -23,7 +23,7 @@ import java.lang.reflect.Modifier;
  * bracket "C" (voir VersionBracketRegistry, docs/LauncherAgent) : Core
  * Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé), donc {@code
  * UiRenderer.modern} vaut {@code true} ici (voir
- * {@link com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector#supportsFixedFunctionDrawing}),
+ * {@link com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector#supportsFixedFunctionDrawing}),
  * contrairement à 1.16.5 où il vaut {@code false} — c'est la SEULE différence
  * de comportement réelle entre ces deux brackets pour ce fichier : le point
  * d'accroche, l'input (LWJGL3/GLFW) et toute la logique de dessin/sondage

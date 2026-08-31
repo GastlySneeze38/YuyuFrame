@@ -9,7 +9,7 @@ import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.render.UiTextRenderer;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.version.MinecraftVersionDetector;
+import com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector;
 
 import java.nio.FloatBuffer;
 

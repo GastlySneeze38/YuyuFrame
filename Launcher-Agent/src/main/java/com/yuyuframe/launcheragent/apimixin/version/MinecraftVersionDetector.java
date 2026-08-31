@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.version;
+package com.yuyuframe.launcheragent.apimixin.version;
 
 /**
  * Détecte la version Minecraft au runtime, avant tout chargement de Mixin.

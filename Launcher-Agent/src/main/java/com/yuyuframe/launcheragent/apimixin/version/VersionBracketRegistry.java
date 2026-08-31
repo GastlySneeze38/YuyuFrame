@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.version;
+package com.yuyuframe.launcheragent.apimixin.version;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +24,32 @@ import java.util.List;
  *   4. Ajouter UNE entrée {@link VersionBracket} ci-dessous. Aucun autre
  *      fichier n'a besoin de changer (build.bat compile tout par wildcard,
  *      le système de mappings est déjà générique).
+ *
+ * <h2>⚠️ SEULE la 26.1.2 est active (2026-08-31)</h2>
+ *
+ * Décision de l'utilisateur, en attendant son rework des autres versions :
+ * les quatre autres tranches sont GELÉES ({@code .disabled()}). Elles restent
+ * DÉCLARÉES — leurs commentaires expliquent pourquoi chacune est resserrée à
+ * une version exacte, ce qui n'a aucune raison de disparaître — mais
+ * {@link #resolve} les ignore.
+ *
+ * <p>Conséquence sur une version gelée : le bootstrap Mixin s'arrête
+ * proprement, l'agent reste chargé et ne tisse RIEN. Le jeu se lance
+ * normalement, simplement sans aucune fonctionnalité de l'agent. C'est
+ * volontairement le même chemin qu'une version inconnue, avec un message qui
+ * distingue les deux cas.
+ *
+ * <p>Pour réactiver une tranche : retirer son {@code .disabled()}. Rien
+ * d'autre — les configs Mixin, les refmaps et les mixins eux-mêmes n'ont pas
+ * bougé.
+ *
+ * <h2>Pourquoi ce paquet vit dans {@code apimixin/}</h2>
+ *
+ * Déplacé de {@code runtime/version/} le 2026-08-31. Le système de brackets ne
+ * sert QU'AU bootstrap Mixin : quelle config charger, quel jar de mappings,
+ * quels mixins tisser. Rien dans {@code runtime/} (modules, interface, HUD) ne
+ * décide de ça — c'est de la mécanique de tissage, elle appartient à la couche
+ * qui la consomme.
  */
 public final class VersionBracketRegistry {
 
@@ -36,7 +62,7 @@ public final class VersionBracketRegistry {
             "1_8_9",
             "mixins.launcheragent-1.8.json",
             "1.8.9",
-            MinecraftVersionDetector::isLegacy189));
+            MinecraftVersionDetector::isLegacy189).disabled());
 
         // Resserré à la version exacte (avant : tout ce qui n'était pas
         // 1.8.x tombait implicitement ici) — une version 1.21.x non testée
@@ -46,7 +72,7 @@ public final class VersionBracketRegistry {
             "1_21_11",
             "mixins.launcheragent.json",
             "1.21.11",
-            version -> "1.21.11".equals(version)));
+            version -> "1.21.11".equals(version)).disabled());
 
         // Bracket "B" (voir historique de session) — 1.13 à 1.16.x : LWJGL3/
         // GLFW comme le pipeline 1.21.11, mais contexte GL encore en dessous
@@ -61,7 +87,7 @@ public final class VersionBracketRegistry {
             "1_16",
             "mixins.launcheragent-1.16.json",
             "1.16.5",
-            version -> version != null && version.startsWith("1.16")));
+            version -> version != null && version.startsWith("1.16")).disabled());
 
         // Bracket "C" (voir historique de session) — 1.17 à 1.20.4 : Core
         // Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé, voir
@@ -78,7 +104,7 @@ public final class VersionBracketRegistry {
             "1_20_4",
             "mixins.launcheragent-1.20.4.json",
             "1.20.4",
-            version -> "1.20.4".equals(version)));
+            version -> "1.20.4".equals(version)).disabled());
 
         // Bracket "D" (voir historique de session) — ~1.21 à 1.21.5 : même
         // profil OpenGL Core que le bracket "C" (1.20.4), mais
@@ -94,7 +120,7 @@ public final class VersionBracketRegistry {
             "1_21_4",
             "mixins.launcheragent-1.21.4.json",
             "1.21.4",
-            version -> "1.21.4".equals(version)));
+            version -> "1.21.4".equals(version)).disabled());
 
         // Bracket "E" — 26.1.2 : MC N'EST PLUS OBFUSQUÉ à partir de la ligne
         // 26.1.x (Mojang a arrêté de publier des mappings d'obfuscation,
@@ -139,10 +165,30 @@ public final class VersionBracketRegistry {
             version -> "26.1.2".equals(version)));
     }
 
-    /** Résout la tranche correspondant à la version détectée, ou {@code null} si aucune ne correspond. */
+    /**
+     * Résout la tranche correspondant à la version détectée, ou {@code null}
+     * si aucune ne correspond OU si celle qui correspond est gelée.
+     *
+     * <p>Une tranche gelée est traitée exactement comme une version inconnue :
+     * l'appelant journalise et abandonne le bootstrap Mixin proprement, l'agent
+     * continue de tourner sans rien tisser (voir {@code IsolatedBootstrap}).
+     * C'est le comportement voulu — mieux vaut un agent inerte qu'un agent qui
+     * applique des mixins non retestés.
+     *
+     * <p>Le message distingue les deux cas, sinon « version non supportée » sur
+     * une 1.8.9 qui marchait la veille serait incompréhensible.
+     */
     public static VersionBracket resolve(String mcVersion) {
         for (VersionBracket bracket : BRACKETS) {
-            if (bracket.matcher.test(mcVersion)) return bracket;
+            if (!bracket.matcher.test(mcVersion)) continue;
+            if (!bracket.enabled) {
+                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+                    "[LauncherAgent] Version MC \"" + mcVersion + "\" reconnue (bracket " + bracket.key
+                    + ") mais GELÉE — voir VersionBracketRegistry, en attente du rework de cette version. "
+                    + "Aucun mixin ne sera appliqué.");
+                return null;
+            }
+            return bracket;
         }
         return null;
     }
