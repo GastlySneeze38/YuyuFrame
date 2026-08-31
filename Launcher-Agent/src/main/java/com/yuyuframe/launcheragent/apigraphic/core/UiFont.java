@@ -125,6 +125,10 @@ public final class UiFont {
         for (int cp = 160; cp <= 255; cp++) chars.add((char) cp);
         chars.add((char) 338); // Œ
         chars.add((char) 339); // œ
+        // ∞ (U+221E) — durée d'un effet de potion infini, voir
+        // PotionEffectsModule. Hors Latin-1 comme Œ/œ, donc à déclarer ici
+        // sous peine de tomber sur le glyphe de repli.
+        chars.add((char) 8734); // ∞
 
         // Shelf packing simple : largeur d'atlas fixe, on avance en X puis on
         // saute de ligne (hauteur de cellule fixe = cellHeight) quand ça déborde.
