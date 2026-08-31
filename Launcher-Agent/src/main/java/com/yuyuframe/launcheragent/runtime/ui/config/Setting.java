@@ -236,16 +236,39 @@ public abstract class Setting {
         public final String placeholder;
         public final Supplier<String> textGet;
         public final Consumer<String> textSet;
+        /**
+         * SECOND champ, à gauche du principal — {@code null} s'il n'y en a
+         * pas. Ajouté pour le NOM d'une macro : l'utilisateur veut le nommer
+         * « tout en restant sur une seule ligne dans les config ».
+         */
+        public final String namePlaceholder;
+        public final Supplier<String> nameGet;
+        public final Consumer<String> nameSet;
         /** Bouton de suppression, sur LA MÊME ligne — c'était l'autre moitié de la demande. */
         public final Runnable delete;
+        /**
+         * Masque le champ principal et ajoute un œil pour le révéler — pour un
+         * mot de passe. Réglé après construction (voir {@code masked()}) plutôt
+         * qu'ajouté au constructeur : il n'est vrai que pour un cas sur deux,
+         * et la signature en compte déjà onze.
+         */
+        public boolean masked;
+
+        /** Fluent — voir {@link #masked}. */
+        public Inline masked() {
+            this.masked = true;
+            return this;
+        }
 
         Inline(String id, String category, String fixedLabel,
                Supplier<String> keyGet, Consumer<String> keySet,
+               String namePlaceholder, Supplier<String> nameGet, Consumer<String> nameSet,
                String placeholder, Supplier<String> textGet, Consumer<String> textSet,
                Runnable delete) {
             super(id, id, null, category, null);
             this.fixedLabel = fixedLabel;
             this.keyGet = keyGet; this.keySet = keySet;
+            this.namePlaceholder = namePlaceholder; this.nameGet = nameGet; this.nameSet = nameSet;
             this.placeholder = placeholder;
             this.textGet = textGet; this.textSet = textSet;
             this.delete = delete;

@@ -673,15 +673,94 @@ public final class ConfigScreenBuilder {
                 v -> { inline.keySet.accept(v); commit.run(); }));
         }
 
-        float fieldW = Math.max(UiTheme.scaled(60f), w - leftW - delW - gap * 2f);
-        UiTextField field = new UiTextField(x + leftW + gap, ctrlY, fieldW, ctrlH,
+        // Champ secondaire optionnel (le NOM d'une macro), inséré entre le
+        // bouton de touche et le champ principal — largeur fixe : c'est un
+        // libellé court, alors que le champ principal porte une commande dont
+        // la longueur est imprévisible et doit prendre ce qui reste.
+        float cursorX = x + leftW + gap;
+        float usedW = leftW + gap;
+        if (inline.nameGet != null) {
+            float nameW = UiTheme.scaled(120f);
+            UiTextField nameField = new UiTextField(cursorX, ctrlY, nameW, ctrlH,
+                inline.namePlaceholder, v -> { inline.nameSet.accept(v); commit.run(); });
+            String initialName = inline.nameGet.get();
+            if (initialName != null) nameField.setText(initialName);
+            rows.add(nameField);
+            cursorX += nameW + gap;
+            usedW += nameW + gap;
+        }
+
+        // L'œil prend sa place SUR la ligne, comme la croix : le champ se
+        // rétrécit d'autant plutôt que de passer dessous.
+        float eyeW = inline.masked ? UiTheme.scaled(30f) + gap : 0f;
+        float fieldW = Math.max(UiTheme.scaled(60f), w - usedW - delW - eyeW - gap);
+        final UiTextField field = new UiTextField(cursorX, ctrlY, fieldW, ctrlH,
             inline.placeholder, v -> { inline.textSet.accept(v); commit.run(); });
         String initial = inline.textGet.get();
         if (initial != null) field.setText(initial);
+        if (inline.masked) field.masked();
         rows.add(field);
+
+        if (inline.masked) {
+            rows.add(new EyeButton(x + w - delW - eyeW, ctrlY, UiTheme.scaled(30f), ctrlH, field));
+        }
 
         rows.add(new UiButton(x + w - delW, ctrlY, delW, ctrlH, "×", inline.delete));
         return rowY - ROW_GAP;
+    }
+
+    /**
+     * Œil de révélation d'un champ masqué.
+     *
+     * <p>Widget dédié plutôt qu'un {@code UiButton} à libellé : le libellé
+     * d'un bouton est figé à la construction, il ne changerait donc qu'au
+     * prochain recalcul de la page — l'œil resterait « fermé » alors que le
+     * mot de passe est visible. Ici l'état est relu à chaque frame depuis le
+     * champ lui-même, seule source de vérité.
+     *
+     * <p>Bascule et non maintien : sur un mot de passe qu'on est en train de
+     * corriger, garder le bouton enfoncé d'une main tout en tapant de l'autre
+     * n'est pas praticable.
+     */
+    private static final class EyeButton extends UiWidget {
+        private final UiTextField field;
+
+        EyeButton(float x, float y, float w, float h, UiTextField field) {
+            super(x, y, w, h);
+            this.field = field;
+        }
+
+        @Override
+        public void onClick() {
+            field.setRevealed(!field.isRevealed());
+        }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            boolean hovered = contains(mouseX, mouseY);
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                hovered ? UiTheme.CARD_HOVER : UiTheme.CARD_BG, vpWidth, vpHeight);
+
+            UiColor ink = field.isRevealed() ? UiTheme.ACCENT : UiTheme.TEXT_SECONDARY;
+            float cx = x + w / 2f, cy = y + h / 2f;
+            float eyeW = w * 0.44f, eyeH = h * 0.18f;
+
+            // Œil schématique : une paupière (barre horizontale arrondie) et
+            // une pupille. Assez lisible à 30 px de large, et sans dépendre
+            // d'un glyphe qui pourrait manquer de la police.
+            renderer.drawRoundedRect(cx - eyeW, cy - eyeH, cx + eyeW, cy + eyeH,
+                eyeH, ink, vpWidth, vpHeight);
+            float pupil = Math.min(eyeH, w * 0.10f);
+            renderer.drawRoundedRect(cx - pupil, cy - pupil, cx + pupil, cy + pupil,
+                pupil, UiTheme.PANEL_BG, vpWidth, vpHeight);
+
+            if (field.isRevealed()) {
+                // Barre oblique — l'œil OUVERT (contenu visible) est l'état
+                // exceptionnel, c'est donc lui qu'on marque.
+                float t = Math.max(1f, UiTheme.scaled(1.5f));
+                renderer.drawRoundedRect(cx - eyeW, cy - t, cx + eyeW, cy + t, t, ink, vpWidth, vpHeight);
+            }
+        }
     }
 
     /** Libellé figé d'une {@link Setting.Inline} — {@code contains()} faux, sinon il intercepterait les clics des contrôles de sa propre ligne. */

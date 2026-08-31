@@ -28,4 +28,7 @@ public abstract class ClientPacketListener {
 
     /** Entrée de liste des serveurs de la connexion en cours — {@code null} en solo. Descripteur vérifié : {@code ()Lnet/minecraft/client/multiplayer/ServerData;}. */
     public ServerData getServerData() { return null; }
+
+    /** Connexion réseau brute — repli quand {@link #getServerData()} est nul, voir {@code MacroModule}. Descripteur vérifié : {@code ()Lnet/minecraft/network/Connection;}. */
+    public net.minecraft.network.Connection getConnection() { return null; }
 }

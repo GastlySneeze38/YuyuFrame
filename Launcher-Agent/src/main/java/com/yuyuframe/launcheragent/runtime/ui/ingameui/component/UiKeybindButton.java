@@ -60,9 +60,23 @@ public class UiKeybindButton extends UiWidget {
         renderer.drawText(label, x + (w - tw) / 2f, baseline, listening ? UiTheme.ACCENT : UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
     }
 
+    /**
+     * Une capture est en cours quelque part à l'écran.
+     *
+     * <p>Statique parce que le consommateur — {@code UiScreenBase.handleEscape}
+     * — n'a aucun moyen de savoir QUEL widget écoute, et qu'il ne peut y avoir
+     * qu'une capture à la fois de toute façon. Même idiome que
+     * {@code UiInputPoller.textInputActive}, pour la même raison : Échap doit
+     * être arbitré globalement, avant d'arriver aux widgets.
+     */
+    private static boolean capturing;
+
+    public static boolean captureInProgress() { return capturing; }
+
     @Override
     public void onClick() {
         listening = true;
+        capturing = true;
         captured.clear();
     }
 
@@ -101,6 +115,7 @@ public class UiKeybindButton extends UiWidget {
             if (pressed != null) {
                 keyName = pressed;
                 listening = false;
+                capturing = false;
                 if (onChange != null) onChange.accept(keyName);
             }
             return;
@@ -130,6 +145,7 @@ public class UiKeybindButton extends UiWidget {
             ? "NONE" : String.join("+", captured);
         captured.clear();
         listening = false;
+        capturing = false;
         keyName = result;
         if (onChange != null) onChange.accept(keyName);
     }

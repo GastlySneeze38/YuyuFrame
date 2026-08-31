@@ -120,18 +120,33 @@ public final class SettingList {
     // ── Keybind ──────────────────────────────────────────────────────────────
 
     /** Ligne compacte « touche + commande + supprimer » — voir {@link Setting.Inline}. */
-    public SettingList inlineKeyed(String id, String category, String placeholder,
+    public SettingList inlineKeyed(String id, String category,
                                    Supplier<String> keyGet, Consumer<String> keySet,
-                                   Supplier<String> textGet, Consumer<String> textSet,
+                                   String namePlaceholder, Supplier<String> nameGet, Consumer<String> nameSet,
+                                   String placeholder, Supplier<String> textGet, Consumer<String> textSet,
                                    Runnable delete) {
-        return add(new Setting.Inline(id, category, null, keyGet, keySet, placeholder, textGet, textSet, delete));
+        return add(new Setting.Inline(id, category, null, keyGet, keySet,
+            namePlaceholder, nameGet, nameSet, placeholder, textGet, textSet, delete));
     }
 
     /** Ligne compacte « libellé figé + champ + oublier » — voir {@link Setting.Inline}. */
     public SettingList inlineLabeled(String id, String category, String fixedLabel, String placeholder,
                                      Supplier<String> textGet, Consumer<String> textSet,
                                      Runnable delete) {
-        return add(new Setting.Inline(id, category, fixedLabel, null, null, placeholder, textGet, textSet, delete));
+        return inlineLabeled(id, category, fixedLabel, placeholder, textGet, textSet, delete, false);
+    }
+
+    /**
+     * Variante à champ MASQUÉ (mot de passe), avec un œil pour le révéler —
+     * voir {@link Setting.Inline#masked}.
+     */
+    public SettingList inlineLabeled(String id, String category, String fixedLabel, String placeholder,
+                                     Supplier<String> textGet, Consumer<String> textSet,
+                                     Runnable delete, boolean masked) {
+        Setting.Inline inline = new Setting.Inline(id, category, fixedLabel, null, null,
+            null, null, null, placeholder, textGet, textSet, delete);
+        if (masked) inline.masked();
+        return add(inline);
     }
 
     /** Champ de saisie d'une ligne. */

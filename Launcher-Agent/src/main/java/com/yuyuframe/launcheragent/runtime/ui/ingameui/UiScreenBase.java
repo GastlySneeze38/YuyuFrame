@@ -10,6 +10,7 @@ import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
@@ -350,6 +351,17 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * vers {@link #escapeTarget}.
      */
     private void handleEscape() {
+        // CAPTURE DE TOUCHE en cours : Échap lui appartient, il sert à
+        // n'assigner AUCUNE touche (voir UiKeybindButton.pollContinuous).
+        //
+        // BUG TROUVÉ (retour utilisateur 2026-08-31 : « quand on ne veut pas
+        // bind de touche sur les macros il faut mettre Échap pour que le
+        // composant le détecte comme none »). Le widget gérait déjà ce cas,
+        // mais il ne voyait jamais la touche : Échap était intercepté ICI en
+        // premier — fermant la modale de création, ou l'écran — bien avant que
+        // la capture n'ait la main.
+        if (UiKeybindButton.captureInProgress()) return;
+
         // Modal actif (voir modalWidgets()) : Échap le ferme, RIEN d'autre —
         // ne doit ni faire perdre le focus d'un champ de l'écran DERRIÈRE le
         // modal (inaccessible tant qu'il est ouvert) ni fermer l'écran entier

@@ -369,6 +369,23 @@ public class UiScrollContainer {
             // d'ajout cœur/bande dans UiMainMenuScreen (toujours correct
             // avec la nouvelle règle, sans dépendre de cet ordre).
             UiWidget clicked = UiHitTest.find(visibleNow, input.mouseX, input.mouseY);
+
+            // PERTE DE FOCUS au clic extérieur — même règle que
+            // UiScreenBase.dispatchClick, qui ne pouvait pas l'appliquer ici :
+            // il ne parcourt que les widgets de l'ÉCRAN, alors que la
+            // quasi-totalité des champs de saisie réels vivent dans un scroll.
+            //
+            // BUG TROUVÉ (retour utilisateur 2026-08-31 : « on ne peut pas
+            // un focus au click exterieur les champ de texte dans l'écrant de
+            // config ») : un champ gardait son curseur clignotant
+            // indéfiniment, et continuait de capter la frappe, même après un
+            // clic ailleurs. On parcourt TOUT le contenu et pas seulement le
+            // visible : un champ focus puis défilé hors du viewport doit
+            // perdre le focus lui aussi.
+            for (UiWidget w : content) {
+                if (w instanceof UiTextField && w != clicked) ((UiTextField) w).setFocused(false);
+            }
+
             if (clicked != null) clicked.onClick(clickedButton, false);
         }
     }

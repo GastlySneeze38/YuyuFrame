@@ -129,6 +129,10 @@ public final class UiFont {
         // PotionEffectsModule. Hors Latin-1 comme Œ/œ, donc à déclarer ici
         // sous peine de tomber sur le glyphe de repli.
         chars.add((char) 8734); // ∞
+        // • (U+2022) — masquage d'un mot de passe, voir UiTextField.masked().
+        // Hors Latin-1 comme les précédents : sans cette ligne, un champ masqué
+        // n'afficherait que des glyphes de repli.
+        chars.add((char) 8226); // •
 
         // Shelf packing simple : largeur d'atlas fixe, on avance en X puis on
         // saute de ligne (hauteur de cellule fixe = cellHeight) quand ça déborde.

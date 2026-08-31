@@ -59,14 +59,24 @@ import java.util.Map;
  */
 public final class MacroModule extends LauncherModule {
 
-    /** Une touche, une commande. La commande est stockée SANS le slash initial. */
+    /** Un nom, une touche, une commande. La touche peut être vide : la macro n'existe alors que dans la palette. */
     public static final class Macro {
         public String key;
+        /** Libellé affiché dans la palette — vide, on retombe sur la commande. */
+        public String name;
         public String command;
 
-        public Macro(String key, String command) {
+        public Macro(String key, String name, String command) {
             this.key = key == null ? "" : key;
+            this.name = name == null ? "" : name;
             this.command = command == null ? "" : command;
+        }
+
+        /** Ce qu'affiche la palette : le nom s'il existe, sinon la commande — jamais rien. */
+        public String label() {
+            if (name != null && !name.trim().isEmpty()) return name.trim();
+            if (command != null && !command.trim().isEmpty()) return command.trim();
+            return "(vide)";
         }
     }
 
@@ -80,13 +90,27 @@ public final class MacroModule extends LauncherModule {
      */
     public final Map<String, String> logins = new LinkedHashMap<String, String>();
 
+    /**
+     * Touche qui ouvre la palette de macros — {@code NONE} par défaut, à
+     * assigner. Pas de défaut arbitraire : toute touche libre en vanilla est
+     * revendiquée par un mod ou un autre, et un conflit silencieux serait plus
+     * pénible à comprendre qu'un réglage à faire une fois.
+     */
+    public String menuKey = "NONE";
+
     public boolean autoLogin = true;
 
     @Override
     protected void settings(SettingList s) {
+        s.keybind("menuKey", "Touche de la palette",
+            "Ouvre en jeu une liste cliquable de toutes les macros — pratique quand on en a trop pour leur donner chacune une touche. Une macro sans touche assignée n'apparaît QUE là.",
+            "Macros", null, () -> menuKey, v -> menuKey = v);
+
+        // Catégorie « Auto-login » et non « Connexion automatique » : ce
+        // libellé sert d'onglet dans la sous-sidebar, où il débordait.
         s.toggle("autoLogin", "Connexion automatique",
-            "Envoie /login sur les serveurs qui déclarent cette commande. Le mot de passe est enregistré par adresse de serveur, dans l'écran du module.",
-            "Réglages", null, () -> autoLogin, v -> autoLogin = v);
+            "Envoie /login sur les serveurs qui déclarent cette commande. Le mot de passe est enregistré par adresse de serveur, plus bas.",
+            "Auto-login", null, () -> autoLogin, v -> autoLogin = v);
 
         // Les deux listes : persistées ICI, en un seul réglage chacune.
         // Les lignes d'édition ci-dessous sont ENGENDRÉES à partir d'elles et
@@ -105,29 +129,39 @@ public final class MacroModule extends LauncherModule {
         for (int i = 0; i < macros.size(); i++) {
             final Macro macro = macros.get(i);
             final int index = i;
-            s.inlineKeyed("macro" + i, "Macros", "/spawn",
+            s.inlineKeyed("macro" + i, "Macros",
                 () -> macro.key, v -> macro.key = v,
-                () -> macro.command, v -> macro.command = v,
+                "nom", () -> macro.name, v -> macro.name = v,
+                "/spawn", () -> macro.command, v -> macro.command = v,
                 () -> { macros.remove(index); invalidateSettings(); });
         }
         s.action("macro.add", "Ajouter une macro",
-            "Choisis la touche, puis la commande.", "Macros",
+            "Touche (facultative), nom affiché, puis commande.", "Macros",
             () -> SettingModal.request(new SettingModal("Nouvelle macro", answers -> {
-                macros.add(new Macro(answers.get(0), answers.get(1)));
+                macros.add(new Macro(answers.get(0), answers.get(1), answers.get(2)));
                 invalidateSettings();
             },
-            SettingModal.Step.key("Sur quelle touche ?"),
+            // La touche EN PREMIER et facultative (Échap = aucune) : une macro
+            // sans touche ne vit que dans la palette, ce qui est le cas
+            // d'usage principal dès qu'on en a beaucoup.
+            SettingModal.Step.key("Sur quelle touche ? (Échap pour aucune)"),
+            SettingModal.Step.text("Nom affiché dans la palette", "Retour au spawn"),
             SettingModal.Step.text("Quelle commande envoyer ?", "/spawn"))));
 
         for (Map.Entry<String, String> entry : new ArrayList<Map.Entry<String, String>>(logins.entrySet())) {
             final String address = entry.getKey();
-            s.inlineLabeled("login." + address, "Connexion automatique", address, "mot de passe",
+            // masked = true : le champ affiche des points et gagne un œil pour
+            // révéler à la demande. Un mot de passe lisible en permanence dans
+            // un écran qu'on ouvre en jeu, potentiellement en partageant son
+            // écran, n'avait pas de raison d'être le défaut.
+            s.inlineLabeled("login." + address, "Auto-login", address, "mot de passe",
                 () -> logins.get(address), v -> logins.put(address, v),
-                () -> { logins.remove(address); invalidateSettings(); });
+                () -> { logins.remove(address); invalidateSettings(); },
+                true);
         }
         s.action("login.add", "Ajouter un serveur",
             "L'adresse est pré-remplie avec le serveur en cours. Le mot de passe part par /login, jamais en chat public, et est stocké en clair dans la configuration.",
-            "Connexion automatique",
+            "Auto-login",
             () -> {
                 // Adresse PRÉ-REMPLIE avec le serveur courant plutôt qu'une
                 // saisie libre : une faute de frappe donnerait une entrée qui
@@ -153,6 +187,24 @@ public final class MacroModule extends LauncherModule {
         iconUrl = icons8("keyboard");
     }
 
+    // ⚠️ Les deux désérialiseurs se terminent par invalidateSettings().
+    //
+    // BUG TROUVÉ (retour utilisateur 2026-08-31 : « des fois on ne voit pas
+    // les macros enregistrées dès l'ouverture de la config du module, il faut
+    // créer une macro pour qu'elles apparaissent toutes »). Enchaînement
+    // exact : LauncherModule.settings() MÉMORISE la liste au premier appel, et
+    // ce premier appel vient de HudConfigStore, qui la parcourt pour relire la
+    // configuration. À cet instant `macros` est encore VIDE — aucune ligne
+    // n'est donc engendrée. La lecture remplit ensuite la liste, mais trop
+    // tard : la liste de réglages mémorisée, elle, ne contient toujours pas
+    // les lignes. Créer une macro appelait invalidateSettings() et faisait
+    // apparaître tout le monde d'un coup, ce qui donnait au bug son air
+    // aléatoire.
+    //
+    // Invalider ICI, au moment où la donnée arrive réellement, referme le
+    // trou : le prochain settings() reconstruit avec les lignes. Sans risque
+    // de boucle — invalidateSettings() ne fait que vider le cache, il ne
+    // redéclenche aucune lecture.
     // ── Sérialisation ─────────────────────────────────────────────────────
     //
     // Le magasin de configuration est un .properties : une chaîne par
@@ -172,9 +224,9 @@ public final class MacroModule extends LauncherModule {
     private String serializeMacros() {
         StringBuilder sb = new StringBuilder();
         for (Macro m : macros) {
-            if (m.key.isEmpty() && m.command.isEmpty()) continue;
+            if (m.key.isEmpty() && m.name.isEmpty() && m.command.isEmpty()) continue;
             if (sb.length() > 0) sb.append(ENTRY_SEP);
-            sb.append(m.key).append(FIELD_SEP).append(m.command);
+            sb.append(m.key).append(FIELD_SEP).append(m.name).append(FIELD_SEP).append(m.command);
         }
         return sb.toString();
     }
@@ -184,10 +236,15 @@ public final class MacroModule extends LauncherModule {
         if (raw == null || raw.isEmpty()) return;
         for (String entry : raw.split(String.valueOf(ENTRY_SEP), -1)) {
             if (entry.isEmpty()) continue;
-            int sep = entry.indexOf(FIELD_SEP);
-            if (sep < 0) continue;
-            macros.add(new Macro(entry.substring(0, sep), entry.substring(sep + 1)));
+            // Deux champs = ancien format (touche + commande), écrit avant
+            // que les macros ne puissent porter un nom. Relu tel quel plutôt
+            // qu'ignoré : personne ne doit perdre ses macros en mettant à
+            // jour.
+            String[] parts = entry.split(String.valueOf(FIELD_SEP), -1);
+            if (parts.length == 2) macros.add(new Macro(parts[0], "", parts[1]));
+            else if (parts.length >= 3) macros.add(new Macro(parts[0], parts[1], parts[2]));
         }
+        invalidateSettings();
     }
 
     private String serializeLogins() {
@@ -209,6 +266,7 @@ public final class MacroModule extends LauncherModule {
             if (sep < 0) continue;
             logins.put(entry.substring(0, sep), entry.substring(sep + 1));
         }
+        invalidateSettings();
     }
 
     // ── Macros ────────────────────────────────────────────────────────────
@@ -251,6 +309,15 @@ public final class MacroModule extends LauncherModule {
             return;
         }
 
+        // Palette : même détection de front montant que les macros, donc la
+        // touche s'ouvre une fois et pas vingt fois par seconde.
+        if (menuKey != null && !menuKey.isEmpty() && !"NONE".equals(menuKey)) {
+            boolean down = poller.isKeyDownByName(menuKey);
+            if (down && !heldLastTick.contains(menuKey)) openPicker();
+            if (down) heldLastTick.add(menuKey);
+            else heldLastTick.remove(menuKey);
+        }
+
         for (Macro macro : macros) {
             if (macro.key == null || macro.key.isEmpty()) continue;
             if (macro.command == null || macro.command.trim().isEmpty()) continue;
@@ -262,6 +329,40 @@ public final class MacroModule extends LauncherModule {
             if (down) heldLastTick.add(macro.key);
             else heldLastTick.remove(macro.key);
         }
+    }
+
+    /**
+     * Ouvre la palette de macros.
+     *
+     * <p>Par réflexion, pour une raison d'architecture et non de commodité :
+     * un module ne référence JAMAIS une classe d'écran (voir la javadoc de
+     * {@link LauncherModule}), sans quoi la couche des modules dépendrait de
+     * la couche d'interface. L'écran, lui, a parfaitement le droit de
+     * connaître ce module — la dépendance ne va que dans ce sens.
+     */
+    private void openPicker() {
+        try {
+            Class<?> screenClass = Class.forName(
+                "com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMacroPickerScreen",
+                true, getClass().getClassLoader());
+            Object screen = screenClass.getConstructor(MacroModule.class).newInstance(this);
+            net.minecraft.client.Minecraft client = ClientData.client();
+            if (client == null) return;
+            client.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+        } catch (Throwable t) {
+            if (!pickerErrorLogged) {
+                pickerErrorLogged = true;
+                LauncherLog.err("[MacroModule] ouverture de la palette : " + t);
+            }
+        }
+    }
+
+    private static boolean pickerErrorLogged;
+
+    /** Exécute une macro — appelé par la touche assignée ET par la palette (voir {@code UiMacroPickerScreen}). */
+    public void runMacro(Macro macro) {
+        if (macro == null || macro.command == null) return;
+        run(macro.command);
     }
 
     /**
@@ -310,11 +411,20 @@ public final class MacroModule extends LauncherModule {
 
         String address = serverAddress(connection);
         if (address == null) return;                 // solo, ou serveur pas encore connu
-        String password = logins.get(address);
-        if (password == null || password.isEmpty()) return;
+        String password = passwordFor(address);
+        if (password == null || password.isEmpty()) {
+            // Journalisé UNE fois par adresse : c'est LE cas où l'utilisateur
+            // se demande pourquoi rien ne se passe, et l'adresse vue par le
+            // jeu peut différer de celle qu'il croit avoir enregistrée.
+            reportOnce("aucun mot de passe enregistré pour " + address);
+            return;
+        }
 
         String command = declaredLoginCommand(connection);
-        if (command == null) return;                 // pas de système de login ici
+        if (command == null) {
+            reportOnce(address + " ne déclare aucune commande de connexion — rien à envoyer");
+            return;
+        }
 
         // Marqué AVANT l'envoi : si sendCommand lève, on ne veut surtout pas
         // réessayer à chaque tick avec un mot de passe.
@@ -351,6 +461,15 @@ public final class MacroModule extends LauncherModule {
 
     private static boolean commandsErrorLogged;
 
+    /** Journalise une raison d'abandon UNE fois par raison distincte — sans ça, un auto-login muet est indiagnosticable. */
+    private static String lastReport;
+
+    private static void reportOnce(String reason) {
+        if (reason.equals(lastReport)) return;
+        lastReport = reason;
+        LauncherLog.info("[MacroModule] " + reason);
+    }
+
     /**
      * Adresse du serveur courant, telle qu'elle apparaît dans la liste des
      * serveurs — c'est la clé sous laquelle le mot de passe est rangé.
@@ -369,9 +488,30 @@ public final class MacroModule extends LauncherModule {
     private static String serverAddress(ClientPacketListener connection) {
         try {
             ServerData server = connection.getServerData();
-            if (!(server instanceof ServerDataAccessor261)) return null;   // solo, ou hors 26.1.2
-            String ip = ((ServerDataAccessor261) server).la$ip();
-            return (ip == null || ip.isEmpty()) ? null : ip;
+            if (server instanceof ServerDataAccessor261) {
+                String ip = ((ServerDataAccessor261) server).la$ip();
+                if (ip != null && !ip.isEmpty()) return normalizeAddress(ip);
+            }
+
+            // BUG TROUVÉ (retour utilisateur 2026-08-31 : « l'auto-login ne
+            // marchait pas quand on se connecte directement au serveur en
+            // lançant le jeu directement sur l'IP »). Sur ce chemin — le
+            // « quick play » du lanceur — le jeu ne construit pas forcément
+            // d'entrée de liste de serveurs : getServerData() rend null, et
+            // toute la connexion automatique s'arrêtait là, sans un mot.
+            //
+            // La CONNEXION, elle, existe toujours : c'est par définition ce
+            // qui nous relie au serveur. Son adresse distante est donc le
+            // repli qui ne peut pas manquer.
+            net.minecraft.network.Connection raw = connection.getConnection();
+            if (raw != null) {
+                java.net.SocketAddress remote = raw.getRemoteAddress();
+                if (remote != null) {
+                    String address = hostOf(remote);
+                    if (address != null && !address.isEmpty()) return normalizeAddress(address);
+                }
+            }
+            return null;
         } catch (Throwable t) {
             if (!addressErrorLogged) {
                 addressErrorLogged = true;
@@ -382,4 +522,50 @@ public final class MacroModule extends LauncherModule {
     }
 
     private static boolean addressErrorLogged;
+
+    /**
+     * Nom d'hôte d'une adresse de socket, sans la partie résolue.
+     *
+     * <p>{@code InetSocketAddress.toString()} rend
+     * {@code jouer.exemple.fr/1.2.3.4:25565} : on garde ce qui précède le
+     * {@code /} quand il y en a, c'est-à-dire ce que le joueur a réellement
+     * saisi. Sans hôte (IP nue), on retombe sur l'adresse littérale.
+     */
+    private static String hostOf(java.net.SocketAddress remote) {
+        if (remote instanceof java.net.InetSocketAddress) {
+            java.net.InetSocketAddress inet = (java.net.InetSocketAddress) remote;
+            String host = inet.getHostString();
+            if (host != null && !host.isEmpty()) {
+                return inet.getPort() == DEFAULT_PORT ? host : host + ":" + inet.getPort();
+            }
+        }
+        String text = String.valueOf(remote);
+        int slash = text.indexOf('/');
+        return slash > 0 ? text.substring(0, slash) : text;
+    }
+
+    private static final int DEFAULT_PORT = 25565;
+
+    /**
+     * Forme canonique d'une adresse : minuscules, port par défaut retiré.
+     *
+     * <p>Sans ça, {@code Jouer.Exemple.fr} saisi dans la liste des serveurs et
+     * {@code jouer.exemple.fr:25565} vu à la connexion seraient deux clés
+     * différentes — le mot de passe enregistré ne serait jamais retrouvé, et
+     * rien n'expliquerait pourquoi.
+     */
+    private static String normalizeAddress(String address) {
+        String a = address.trim().toLowerCase(java.util.Locale.ROOT);
+        if (a.endsWith(":" + DEFAULT_PORT)) a = a.substring(0, a.length() - (String.valueOf(DEFAULT_PORT).length() + 1));
+        return a;
+    }
+
+    /** Mot de passe enregistré pour {@code address}, en comparant les formes canoniques des deux côtés. */
+    private String passwordFor(String address) {
+        String target = normalizeAddress(address);
+        for (Map.Entry<String, String> e : logins.entrySet()) {
+            if (e.getKey() != null && normalizeAddress(e.getKey()).equals(target)) return e.getValue();
+        }
+        return null;
+    }
 }

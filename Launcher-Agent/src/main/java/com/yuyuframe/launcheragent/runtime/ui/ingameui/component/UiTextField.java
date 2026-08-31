@@ -67,6 +67,46 @@ public class UiTextField extends UiWidget implements UiFocusable {
         return this;
     }
 
+    /**
+     * Masque le contenu à l'affichage (mot de passe) — le texte RÉEL reste
+     * intact, seul le rendu change. Fluent.
+     *
+     * <p>Le masquage porte sur {@link #displayed()}, pas sur {@link #text},
+     * pour que la sélection, le placement du curseur et le presse-papiers
+     * continuent de travailler sur la vraie chaîne. Une seule exception
+     * volontaire : la copie est refusée tant que le champ est masqué, voir
+     * {@link #copySelection}.
+     */
+    public UiTextField masked() {
+        this.masked = true;
+        return this;
+    }
+
+    private boolean masked;
+    private boolean revealed;
+
+    /** {@code true} si ce champ masque son contenu — l'appelant peut alors proposer un œil, voir {@link #setRevealed}. */
+    public boolean isMasked() { return masked; }
+
+    /** L'œil : montre temporairement le contenu d'un champ masqué. */
+    public void setRevealed(boolean revealed) { this.revealed = revealed; }
+
+    public boolean isRevealed() { return revealed; }
+
+    /**
+     * Ce que l'utilisateur VOIT — points de masquage ou texte réel.
+     *
+     * <p>Le caractère « • » (U+2022) est hors Latin-1, il a donc fallu
+     * l'ajouter au jeu de caractères d'{@code UiFont} : sans ça on obtenait le
+     * glyphe de repli, exactement comme pour le « ∞ » de la saturation.
+     */
+    private String displayed() {
+        if (!masked || revealed) return text.toString();
+        StringBuilder dots = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) dots.append('•');
+        return dots.toString();
+    }
+
     /** Callback de soumission (Entrée) — fluent, voir {@link #onSubmit}. */
     public UiTextField onSubmit(Runnable callback) {
         this.onSubmit = callback;
@@ -135,7 +175,12 @@ public class UiTextField extends UiWidget implements UiFocusable {
 
     /** Index de caractère le plus proche de {@code mx} (espace framebuffer) — recherche linéaire sur les largeurs de préfixe, largement assez rapide pour une requête de recherche. */
     private int caretIndexForX(UiRenderer renderer, double mx) {
-        String s = text.toString();
+        // displayed() : sur un champ masqué, les points n'ont pas la largeur
+        // des vrais caractères — mesurer le texte réel placerait le curseur
+        // à côté du clic. Les INDEX, eux, sont les mêmes dans les deux
+        // chaînes (un point par caractère), donc le résultat reste valide
+        // pour la vraie chaîne.
+        String s = displayed();
         float startX = textStartX();
         float sc = scale();
         float best = Float.MAX_VALUE;
@@ -211,7 +256,11 @@ public class UiTextField extends UiWidget implements UiFocusable {
             return;
         }
 
-        String shown = text.toString();
+        // displayed() et non text : sur un champ masqué, tout ce qui suit
+        // (surlignage, position du curseur) doit se mesurer sur ce qui est
+        // RÉELLEMENT dessiné, sinon le curseur se placerait selon la largeur
+        // du vrai texte et flotterait à côté des points.
+        String shown = displayed();
 
         // Surlignage de sélection — DERRIÈRE le texte, voir ordre de dessin.
         if (focused && hasSelection()) {
@@ -407,7 +456,12 @@ public class UiTextField extends UiWidget implements UiFocusable {
             caret = text.length();
         }
         if (input.editCopy || input.editCut) {
-            String toCopy = hasSelection() ? text.substring(selectionStart(), selectionEnd()) : text.toString();
+            // Copie REFUSÉE sur un champ masqué non révélé : masquer à
+            // l'écran puis laisser Ctrl+C extraire le mot de passe en clair
+            // n'aurait aucun sens. La coupe reste possible une fois l'œil
+            // ouvert, où le contenu est déjà visible.
+            String toCopy = (masked && !revealed) ? ""
+                : (hasSelection() ? text.substring(selectionStart(), selectionEnd()) : text.toString());
             if (!toCopy.isEmpty()) {
                 copyToClipboard(toCopy);
                 if (input.editCut) {
