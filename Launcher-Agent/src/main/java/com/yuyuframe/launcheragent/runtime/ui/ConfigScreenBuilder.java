@@ -486,7 +486,17 @@ public final class ConfigScreenBuilder {
         if (setting instanceof Setting.Action) {
             Setting.Action a2 = (Setting.Action) setting;
             warnUnsupportedDependency(module, setting);
-            return buttonRow(rows, x, w, cursor, label, a2.run);
+            // BUG TROUVÉ (retour utilisateur 2026-08-31 : « il y a un bug de
+            // persistance de la config des macros ») : l'action était câblée
+            // BRUTE, sans commit — contrairement à tous les autres types de
+            // réglage, qui enveloppent leur setter. Modifier le texte d'une
+            // macro était donc sauvegardé, mais en AJOUTER ou en SUPPRIMER une
+            // ne l'était jamais : la liste repartait telle qu'au dernier
+            // changement de texte.
+            //
+            // Commit APRÈS l'action, jamais avant : c'est l'état résultant
+            // qu'on veut sur le disque.
+            return buttonRow(rows, x, w, cursor, label, () -> { a2.run.run(); commit.run(); });
         }
         if (setting instanceof Setting.Opaque) {
             // Persisté mais volontairement invisible ici — le module l'édite
@@ -705,7 +715,10 @@ public final class ConfigScreenBuilder {
             rows.add(new EyeButton(x + w - delW - eyeW, ctrlY, UiTheme.scaled(30f), ctrlH, field));
         }
 
-        rows.add(new UiButton(x + w - delW, ctrlY, delW, ctrlH, "×", inline.delete));
+        // Commit après la suppression, même raison que pour Setting.Action :
+        // sans lui, l'entrée revenait au prochain chargement.
+        rows.add(new UiButton(x + w - delW, ctrlY, delW, ctrlH, "×",
+            () -> { inline.delete.run(); commit.run(); }));
         return rowY - ROW_GAP;
     }
 
@@ -741,26 +754,66 @@ public final class ConfigScreenBuilder {
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
                 hovered ? UiTheme.CARD_HOVER : UiTheme.CARD_BG, vpWidth, vpHeight);
 
-            UiColor ink = field.isRevealed() ? UiTheme.ACCENT : UiTheme.TEXT_SECONDARY;
-            float cx = x + w / 2f, cy = y + h / 2f;
-            float eyeW = w * 0.44f, eyeH = h * 0.18f;
-
-            // Œil schématique : une paupière (barre horizontale arrondie) et
-            // une pupille. Assez lisible à 30 px de large, et sans dépendre
-            // d'un glyphe qui pourrait manquer de la police.
-            renderer.drawRoundedRect(cx - eyeW, cy - eyeH, cx + eyeW, cy + eyeH,
-                eyeH, ink, vpWidth, vpHeight);
-            float pupil = Math.min(eyeH, w * 0.10f);
-            renderer.drawRoundedRect(cx - pupil, cy - pupil, cx + pupil, cy + pupil,
-                pupil, UiTheme.PANEL_BG, vpWidth, vpHeight);
-
-            if (field.isRevealed()) {
-                // Barre oblique — l'œil OUVERT (contenu visible) est l'état
-                // exceptionnel, c'est donc lui qu'on marque.
-                float t = Math.max(1f, UiTheme.scaled(1.5f));
-                renderer.drawRoundedRect(cx - eyeW, cy - t, cx + eyeW, cy + t, t, ink, vpWidth, vpHeight);
-            }
+            // Vrai glyphe dessiné (amande + pupille), pas un empilement de
+            // rectangles arrondis — la première version, une barre horizontale
+            // avec un point noir, ressemblait à tout sauf à un œil. Même
+            // technique que la loupe d'UiTextField : tracé Java2D antialiasé
+            // mis en cache, puis dessiné comme une icône.
+            boolean revealed = field.isRevealed();
+            float size = Math.min(w, h) * 0.62f;
+            renderer.drawIcon(revealed ? "ui:eye-open" : "ui:eye-closed",
+                eyeGlyph(revealed), x + (w - size) / 2f, y + (h - size) / 2f, size, vpWidth, vpHeight);
         }
+    }
+
+    private static volatile java.awt.image.BufferedImage eyeOpenGlyph, eyeClosedGlyph;
+
+    private static java.awt.image.BufferedImage eyeGlyph(boolean revealed) {
+        if (revealed) {
+            if (eyeOpenGlyph == null) eyeOpenGlyph = renderEyeGlyph(true, UiTheme.ACCENT);
+            return eyeOpenGlyph;
+        }
+        if (eyeClosedGlyph == null) eyeClosedGlyph = renderEyeGlyph(false, UiTheme.TEXT_SECONDARY);
+        return eyeClosedGlyph;
+    }
+
+    /**
+     * Œil en amande : deux courbes symétriques se rejoignant aux coins, plus
+     * une pupille. Barré quand le contenu est RÉVÉLÉ — c'est l'état
+     * exceptionnel, donc celui qu'on signale.
+     */
+    private static java.awt.image.BufferedImage renderEyeGlyph(boolean revealed, UiColor color) {
+        int size = 64;
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = img.createGraphics();
+        try {
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(java.awt.RenderingHints.KEY_STROKE_CONTROL, java.awt.RenderingHints.VALUE_STROKE_PURE);
+            g.setColor(new java.awt.Color(color.r, color.g, color.b, color.a));
+            float stroke = size * 0.085f;
+            g.setStroke(new java.awt.BasicStroke(stroke, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+
+            float cx = size * 0.5f, cy = size * 0.5f;
+            float halfW = size * 0.36f, lid = size * 0.22f;
+
+            java.awt.geom.Path2D.Float almond = new java.awt.geom.Path2D.Float();
+            almond.moveTo(cx - halfW, cy);
+            almond.quadTo(cx, cy - lid * 2f, cx + halfW, cy);
+            almond.quadTo(cx, cy + lid * 2f, cx - halfW, cy);
+            almond.closePath();
+            g.draw(almond);
+
+            float pupil = size * 0.115f;
+            g.fill(new java.awt.geom.Ellipse2D.Float(cx - pupil, cy - pupil, pupil * 2f, pupil * 2f));
+
+            if (revealed) {
+                g.draw(new java.awt.geom.Line2D.Float(cx - halfW * 0.95f, cy + halfW * 0.95f,
+                    cx + halfW * 0.95f, cy - halfW * 0.95f));
+            }
+        } finally {
+            g.dispose();
+        }
+        return img;
     }
 
     /** Libellé figé d'une {@link Setting.Inline} — {@code contains()} faux, sinon il intercepterait les clics des contrôles de sa propre ligne. */

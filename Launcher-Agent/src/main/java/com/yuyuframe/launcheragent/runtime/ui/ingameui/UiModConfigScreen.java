@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.runtime.ui.ConfigScreenBuilder;
+import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
@@ -136,7 +137,22 @@ public class UiModConfigScreen extends UiScreenBase {
         // Une demande de modale posée par un module au frame précédent (clic
         // sur « Ajouter… ») — voir SettingModal.
         SettingModal requested = SettingModal.consume();
-        if (requested != null) modal = new UiModalForm(requested, () -> modal = null);
+        if (requested != null) {
+            // Sauvegarde à la FERMETURE de la modale, pas au clic qui l'ouvre.
+            //
+            // BUG TROUVÉ (retour utilisateur 2026-08-31, persistance des
+            // macros) : l'action « Ajouter une macro » ne fait que DEMANDER la
+            // modale — l'entrée n'est créée que plus tard, quand l'utilisateur
+            // valide la dernière étape. Sauvegarder au moment du clic écrivait
+            // donc l'état d'AVANT l'ajout. Ici on écrit une fois la modale
+            // refermée, quand la donnée existe vraiment. Une annulation
+            // réenregistre un état inchangé, ce qui est sans effet.
+            modal = new UiModalForm(requested, () -> {
+                modal = null;
+                module.onConfigChanged();
+                HudConfigStore.save();
+            });
+        }
 
         UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
