@@ -266,6 +266,9 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         // TOUJOURS déclenché) rafraîchit ce cache ; hasContent()/draw()
         // réutilisent la MÊME valeur au lieu de recalculer.
         private Object[] cachedStacks;
+        private long cachedStacksAtMs;
+        /** Un tick de jeu — voir naturalSize(). */
+        private static final long STACKS_REFRESH_MS = 50L;
 
         Object[] currentStacks() {
             if (cachedStacks == null) cachedStacks = computeStacks();
@@ -357,7 +360,18 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             // explicitement le cache ICI, hasContent()/draw() (plus bas)
             // réutilisent ensuite currentStacks() sans recalculer (voir
             // javadoc de cachedStacks).
-            cachedStacks = computeStacks();
+            //
+            // AUDIT PERF (2026-08-31) : recalcul plafonné à un TICK de jeu au
+            // lieu d'une fois par frame. Ce n'est pas une approximation — la
+            // durabilité d'un objet est une valeur entière qui ne bouge qu'au
+            // tick ; recalculer à 120 fps produisait six fois la même réponse,
+            // en allouant un tableau et, plus loin, une chaîne et une couleur
+            // par emplacement à chaque fois.
+            long now = System.currentTimeMillis();
+            if (cachedStacks == null || now - cachedStacksAtMs >= STACKS_REFRESH_MS) {
+                cachedStacks = computeStacks();
+                cachedStacksAtMs = now;
+            }
 
             // Largeur = icône + espace + texte le plus large parmi les 5
             // emplacements, RECALCULÉE À CHAQUE FRAME (comme FPS/Ping, voir

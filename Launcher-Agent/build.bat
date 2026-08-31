@@ -272,15 +272,39 @@ if errorlevel 1 (
 for %%F in ("%JAR%") do set /a JAR_KB=%%~zF / 1024
 echo [Build] JAR cree : build\launcher-agent.jar (%JAR_KB% Ko)
 
-:: Garde-fou final : le jar reel fait ~330 Ko (184 classes). En dessous de
-:: 50 Ko, quelque chose s'est mal passe en amont (OUT_MAIN quasi vide malgre
-:: les gardes-fous ci-dessus) — ne JAMAIS deployer/publier un agent dans cet
-:: etat (deja arrive : jar de 3 Ko, juste le manifeste, cause un
-:: ClassNotFoundException/FATAL ERROR -javaagent au lancement du jeu).
+:: Garde-fou final, DEUX niveaux.
+::
+:: 1) Plancher absolu : un jar sous 50 Ko ne contient au mieux que le
+::    manifeste — deja arrive (3 Ko), cause un ClassNotFoundException /
+::    FATAL ERROR -javaagent au lancement du jeu.
+::
+:: 2) Comparaison au build PRECEDENT. Le plancher seul ne protegeait plus
+::    rien : le jar reel fait ~890 Ko, et le commentaire d'origine parlait
+::    encore de "~330 Ko". Le 2026-08-31, TROIS builds casses sont passes
+::    (754, 628 et 543 Ko) — chacun avec une erreur javac, "Compilation OK"
+::    affiche quand meme, et un deploiement effectif par-dessus un agent qui
+::    marchait. javac peut echouer sur UNE classe et emettre toutes les
+::    autres : le jar reste gros, mais amoure. Une chute brutale de taille
+::    est le signal fiable, pas la taille absolue.
+::
+::    Seuil a 80 %% : laisse passer une suppression de code normale (le
+::    retrait de l'apercu shulker a fait -6 Ko, soit -0,7 %%) et attrape les
+::    trois cas ci-dessus (-15 %% au moins).
+set "LAST_KB_FILE=%AGENT_DIR%build\.last-jar-kb"
+
 if %JAR_KB% LSS 50 (
     echo [ERREUR] JAR anormalement petit ^(%JAR_KB% Ko^) — compilation probablement vide, build interrompu.
     goto :error
 )
+
+set "PREV_KB="
+if exist "%LAST_KB_FILE%" set /p PREV_KB=<"%LAST_KB_FILE%"
+if defined PREV_KB (
+    set /a MIN_KB=%PREV_KB% * 80 / 100
+    call :checkShrink
+    if errorlevel 1 goto :error
+)
+echo %JAR_KB%>"%LAST_KB_FILE%"
 
 :: --- Deployer dans AppData\YuyuFrame\agent\ ----------------------------------
 :: Sous-dossier dedie, separe de %APPDATA%\YuyuFrame\p2p\ — ne jamais melanger
@@ -324,6 +348,28 @@ echo  ================================================
 echo.
 if not defined CI pause
 exit /b 0
+
+:: Sous-routine et non test en ligne : dans un bloc if(...) parenthese, cmd
+:: developpe TOUTES les variables au moment ou il lit le bloc — %MIN_KB%,
+:: calcule juste au-dessus DANS le meme bloc, y vaudrait sa valeur d'AVANT.
+:: Un call re-developpe a l'execution, sans dependre de setlocal
+:: enabledelayedexpansion (que ce script n'active pas).
+:checkShrink
+if %JAR_KB% GEQ %MIN_KB% exit /b 0
+echo.
+echo [ERREUR] JAR anormalement PETIT par rapport au build precedent :
+echo          %JAR_KB% Ko contre %PREV_KB% Ko ^(seuil : %MIN_KB% Ko^).
+echo          javac a probablement echoue sur une classe tout en emettant
+echo          les autres — relire la sortie de compilation ci-dessus, le
+echo          "Compilation OK" ne veut rien dire dans ce cas.
+echo          Si la baisse est VOULUE (grosse suppression de code) :
+echo          supprimer build\.last-jar-kb puis relancer.
+::
+:: VOLONTAIREMENT pas d'auto-guerison (ecrire la nouvelle taille malgre
+:: l'echec, pour qu'un second lancement passe) : c'est exactement le reflexe
+:: qu'on a en cas d'echec — relancer — et le garde-fou serait alors muet la
+:: ou il vient de detecter un vrai probleme. Il faut un geste explicite.
+exit /b 1
 
 :error
 echo.

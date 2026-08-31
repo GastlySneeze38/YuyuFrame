@@ -174,7 +174,9 @@ public final class KeystrokesModule extends SingleHudModule {
                 nextY -= cpsH;
                 drawCpsBox(renderer, cpsX0, nextY, cpsW, cpsH, "LMB", leftClicks.size(), scale, vpWidth, vpHeight);
                 drawCpsBox(renderer, cpsX0 + cpsW + gap, nextY, cpsW, cpsH, "RMB", rightClicks.size(), scale, vpWidth, vpHeight);
-            } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                reportOnce(t);
+            }
         }
 
 
@@ -253,7 +255,9 @@ public final class KeystrokesModule extends SingleHudModule {
 
                 if (rightDown && !prevRightDown) rightClicks.addLast(System.currentTimeMillis());
                 prevRightDown = rightDown;
-            } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                reportOnce(t);
+            }
 
             long now = System.currentTimeMillis();
             trimOld(leftClicks, now);
@@ -289,6 +293,16 @@ public final class KeystrokesModule extends SingleHudModule {
             float countScale = 0.24f * scale;
             float cw = renderer.textWidth(count, countScale);
             renderer.drawText(count, x + (w - cw) / 2f, y + h * 0.2f, UiTheme.TEXT_PRIMARY, countScale, vpWidth, vpHeight);
+        }
+
+        /** Journalise UNE fois par cause distincte — ces deux chemins tournent à chaque frame. */
+        private static String lastReport;
+
+        private static void reportOnce(Throwable t) {
+            String reason = String.valueOf(t);
+            if (reason.equals(lastReport)) return;
+            lastReport = reason;
+            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[KeystrokesModule] " + reason);
         }
     }
 }

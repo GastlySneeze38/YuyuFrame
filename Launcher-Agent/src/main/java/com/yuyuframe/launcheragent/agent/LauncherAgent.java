@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-08-31-v985";
+    private static final String BUILD_VERSION = "2026-08-31-v989";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -61,7 +61,15 @@ public class LauncherAgent {
         // (try/catch complet), sûr même si le classloader Fabric isolé est
         // déjà en cours de démontage.
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.save(); } catch (Throwable ignored) {}
+            // flush() et NON save() : depuis que l'écriture est différée
+            // (2026-08-31), save() ne fait plus que marquer la config comme
+            // sale — et le tick qui l'écrirait ne tournera plus, le jeu est en
+            // train de se fermer. flush() écrit sur place.
+            try { com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.flush(); } catch (Throwable t) {
+                // Journalisation impossible à ce stade (classloader isolé
+                // potentiellement déjà démonté) — c'est le seul catch muet
+                // légitime de ce fichier, et il est volontaire.
+            }
         }, "YuyuFrame-ConfigSave"));
 
         // Phase 4.5 (ROADMAP-agent.md) — système de commandes client. RETIRÉ

@@ -208,8 +208,55 @@ public final class HudConfigStore {
         save();
     }
 
-    /** Sérialise l'état COURANT de tous les modules enregistrés — voir ConfigScreenBuilder (chaque callback de changement) et UiMainMenuScreen (toggle d'activation). */
+    /**
+     * Demande une sauvegarde — <b>différée</b>, pas écrite tout de suite.
+     *
+     * <p>AUDIT PERF (2026-08-31) : cette méthode est appelée depuis CHAQUE
+     * callback de changement de {@code ConfigScreenBuilder}, donc à chaque
+     * frappe dans un champ de texte et à chaque cran de curseur pendant un
+     * drag. Elle re-sérialisait les 30 modules PUIS réécrivait tout le
+     * fichier de façon synchrone : taper {@code /spawn} dans une macro = six
+     * sérialisations complètes et six écritures disque. Invisible tant que
+     * les réglages n'étaient que des toggles ; les champs de texte l'ont
+     * rendu réel.
+     *
+     * <p>Différer le TOUT (sérialisation comprise, pas seulement l'écriture)
+     * est ce qui fait vraiment tomber le coût : une rafale de vingt frappes
+     * ne produit plus qu'une seule sérialisation, celle de l'état final.
+     *
+     * <p>{@link #flush()} force l'écriture immédiate — appelé à la fermeture
+     * d'un écran et à l'arrêt de l'agent, les deux moments où on ne peut plus
+     * compter sur le tick.
+     */
     public static synchronized void save() {
+        dirty = true;
+        dirtySinceMs = System.currentTimeMillis();
+    }
+
+    private static boolean dirty;
+    private static long dirtySinceMs;
+
+    /**
+     * Délai d'inactivité avant écriture. 400 ms : au-delà du rythme de frappe
+     * le plus rapide (une rafale reste donc une seule écriture), bien en deçà
+     * du temps de fermer un écran.
+     */
+    private static final long SAVE_DELAY_MS = 400L;
+
+    /** Appelé à chaque tick client (voir {@code ModuleRegistry.tickAll}) — écrit si la fenêtre d'inactivité est passée. */
+    public static synchronized void tick() {
+        if (!dirty) return;
+        if (System.currentTimeMillis() - dirtySinceMs < SAVE_DELAY_MS) return;
+        writeNow();
+    }
+
+    /** Écriture immédiate si quelque chose est en attente — fermeture d'écran, arrêt de l'agent. */
+    public static synchronized void flush() {
+        if (dirty) writeNow();
+    }
+
+    private static synchronized void writeNow() {
+        dirty = false;
         if (CONFIG_PATH == null) return;
         try {
             for (LauncherModule module : ModuleRegistry.all()) {

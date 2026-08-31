@@ -56,7 +56,12 @@ public final class FullbrightModule extends LauncherModule {
             if (handle == null) return;
             if (Float.isNaN(savedVanillaGamma)) savedVanillaGamma = readGamma(handle, options);
             writeGamma(handle, options, GAMMA_VALUE);
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            // Journalisé une fois : sans ça, un fullbright qui n'éclaire rien
+            // ne laissait AUCUNE trace — le mode d'échec le plus coûteux de ce
+            // projet (voir la norme sur les catch muets).
+            reportOnce("application du gamma : " + t);
+        }
     }
 
     @Override
@@ -67,7 +72,8 @@ public final class FullbrightModule extends LauncherModule {
             Object options = optionsInstance();
             Object handle = options != null ? gammaHandle(options) : null;
             if (handle != null) writeGamma(handle, options, savedVanillaGamma);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            reportOnce("restauration du gamma : " + t);
         } finally {
             savedVanillaGamma = Float.NaN;
         }
@@ -116,5 +122,14 @@ public final class FullbrightModule extends LauncherModule {
         if (!(options instanceof OptionsAccessor261)) return null;
         Object gammaOption = ((OptionsAccessor261) options).la$gamma();
         return (gammaOption instanceof OptionInstanceAccessor261) ? gammaOption : null;
+    }
+
+    /** Journalise une raison d'échec UNE fois par raison distincte — ces chemins tournent à chaque tick. */
+    private static String lastReport;
+
+    private static void reportOnce(String reason) {
+        if (reason.equals(lastReport)) return;
+        lastReport = reason;
+        com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[FullbrightModule] " + reason);
     }
 }

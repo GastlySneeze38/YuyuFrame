@@ -566,10 +566,40 @@ public final class ModuleRegistry {
         return result;
     }
 
+    /**
+     * Journalise l'échec d'un module UNE fois par couple (module, phase).
+     *
+     * <p>Ces deux boucles tournent 20 à 120 fois par seconde : journaliser à
+     * chaque passage noierait la console, mais tout avaler — ce qu'elles
+     * faisaient — rend une panne de module totalement muette. Le déduplication
+     * garde le premier signalement, celui qui porte la vraie cause.
+     */
+    private static final java.util.Set<String> REPORTED_FAILURES = new java.util.HashSet<>();
+
+    private static void reportModuleFailure(String phase, LauncherModule module, Throwable t) {
+        String key = phase + ":" + module.id;
+        if (!REPORTED_FAILURES.add(key)) return;
+        com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+            "[ModuleRegistry] " + phase + "(" + module.id + ") a levé : " + t);
+    }
+
     public static void tickAll() {
+        // Écriture différée de la configuration — voir HudConfigStore.save().
+        // Ici plutôt que dans un mixin : c'est le seul point de tick déjà
+        // partagé par tous les brackets.
+        HudConfigStore.tick();
+
         for (LauncherModule m : MODULES) {
             if (m.isEnabled()) {
-                try { m.onTick(); } catch (Throwable ignored) {}
+                try {
+                    m.onTick();
+                } catch (Throwable t) {
+                    // Journalisé UNE fois par module : un module qui lève à
+                    // chaque tick le ferait 20 fois par seconde, mais l'avaler
+                    // entièrement — ce qui était le cas — rendait sa panne
+                    // parfaitement invisible pendant toute la session.
+                    reportModuleFailure("onTick", m, t);
+                }
             }
         }
     }
@@ -577,7 +607,11 @@ public final class ModuleRegistry {
     public static void renderOverlayAll(UiRenderer renderer, int vpWidth, int vpHeight) {
         for (LauncherModule m : MODULES) {
             if (m.isEnabled()) {
-                try { m.onRenderOverlay(renderer, vpWidth, vpHeight); } catch (Throwable ignored) {}
+                try {
+                    m.onRenderOverlay(renderer, vpWidth, vpHeight);
+                } catch (Throwable t) {
+                    reportModuleFailure("onRenderOverlay", m, t);
+                }
             }
         }
     }

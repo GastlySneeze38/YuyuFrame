@@ -210,12 +210,32 @@ public final class PotionEffectsModule extends SingleHudModule {
         // premier. Chaque appel parcourait les effets, allouait une liste et
         // deux chaînes par effet.
         private List<EffectRow> cachedRows;
+        private long cachedAtMs;
+
+        /**
+         * Période de rafraîchissement des lignes — 50 ms, soit un TICK de jeu.
+         *
+         * <p>AUDIT PERF (2026-08-31) : {@code computeRows()} tournait à chaque
+         * FRAME et allouait une liste, un {@code EffectRow}, une
+         * {@code UiColor} et deux chaînes PAR EFFET. Avec sept effets à 120
+         * fps, ça faisait plusieurs milliers d'objets par seconde pour un
+         * panneau qui ne peut pas changer plus vite qu'un tick.
+         *
+         * <p>Ce n'est pas une approximation : les durées sont exprimées en
+         * ticks, elles ne changent donc que 20 fois par seconde. Recalculer
+         * plus souvent produisait exactement la même chose.
+         */
+        private static final long ROWS_REFRESH_MS = 50L;
 
         @Override
         public float[] naturalSize() {
             // Premier appel du cycle HUD de ce frame — c'est ICI qu'on
             // rafraîchit ; draw() réutilise.
-            cachedRows = computeRows();
+            long now = System.currentTimeMillis();
+            if (cachedRows == null || now - cachedAtMs >= ROWS_REFRESH_MS) {
+                cachedRows = computeRows();
+                cachedAtMs = now;
+            }
 
             if (vanillaStyle) {
                 if (cachedRows.isEmpty()) return new float[]{ V_FALLBACK_WIDTH, V_ROW_H };

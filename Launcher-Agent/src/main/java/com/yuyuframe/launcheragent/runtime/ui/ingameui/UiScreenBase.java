@@ -502,6 +502,13 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
         // javadoc) — remis à false ICI, inconditionnellement, à CHAQUE
         // fermeture d'écran custom, quel que soit l'état de focus au moment.
         UiInputPoller.textInputActive = false;
+
+        // Les changements de configuration sont écrits en différé (voir
+        // HudConfigStore.save) : on force l'écriture ICI, sinon fermer l'écran
+        // moins d'une demi-seconde après la dernière frappe — ce qui est le
+        // geste normal — perdrait cette dernière modification.
+        com.yuyuframe.launcheragent.runtime.ui.HudConfigStore.flush();
+
         navigationTarget = lastScreen;
         navigationRequested = true;
     }
