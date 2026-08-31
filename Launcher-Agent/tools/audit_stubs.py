@@ -40,6 +40,11 @@ APPDATA = os.environ.get("APPDATA", "")
 JARS = [
     os.path.join(APPDATA, r"YuyuFrame\.minecraft\versions\26.1.2\26.1.2.jar"),
     os.path.join(APPDATA, r"YuyuFrame\.minecraft\libraries\com\mojang\authlib\9.0.75\authlib-9.0.75.jar"),
+    # brigadier n'est PAS dans le jar du jeu (bibliotheque a part, et absente
+    # du classpath de compilation de l'agent — voir build.bat). Sans cette
+    # entree, les stubs de l'arbre de commandes utilises par MacroModule
+    # seraient ranges dans "classes absentes des jars", donc jamais verifies.
+    os.path.join(APPDATA, r"YuyuFrame\.minecraft\libraries\com\mojang\brigadier\1.3.10\brigadier-1.3.10.jar"),
 ]
 HERE = os.path.dirname(os.path.abspath(__file__))
 STUBS = os.path.normpath(os.path.join(HERE, "..", "src", "stubs"))

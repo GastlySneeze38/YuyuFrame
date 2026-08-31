@@ -196,6 +196,38 @@ public abstract class Setting {
         }
     }
 
+    /**
+     * Réglage PERSISTÉ mais NON AFFICHÉ dans l'écran de configuration
+     * standard — pour une donnée que le module édite ailleurs, typiquement
+     * dans un écran à lui.
+     *
+     * <p>Créé pour {@code MacroModule} (2026-08-31), dont les deux données
+     * sont des LISTES de longueur variable : la liste des macros et les mots
+     * de passe par serveur. Le modèle de réglages déclarés est statique par
+     * construction — un {@code Toggle} par macro n'aurait aucun sens — mais le
+     * magasin de configuration, lui, sait très bien stocker une chaîne. Ce
+     * type fait exactement le pont : la sérialisation du module, sans la
+     * ligne d'interface.
+     *
+     * <p>{@code ConfigScreenBuilder} le saute explicitement : sans ce type, il
+     * aurait journalisé « réglage non géré » à chaque ouverture.
+     */
+    public static final class Opaque extends Setting {
+        public final Supplier<String> get;
+        public final Consumer<String> set;
+
+        Opaque(String id, Supplier<String> get, Consumer<String> set) {
+            super(id, id, null, null, null);
+            this.get = get; this.set = set;
+        }
+
+        @Override public String serialize() { return get.get(); }
+        @Override public boolean deserialize(String raw) {
+            set.accept(raw);
+            return true;
+        }
+    }
+
     // ── Interfaces fonctionnelles manquantes en Java 8 ───────────────────────
     // L'agent compile en --release 8 : java.util.function fournit
     // Int/Long/Double mais RIEN pour float. Les déclarer ici évite

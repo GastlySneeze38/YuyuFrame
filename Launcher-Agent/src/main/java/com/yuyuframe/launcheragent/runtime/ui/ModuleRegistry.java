@@ -14,6 +14,7 @@ import com.yuyuframe.launcheragent.runtime.module.visual.FullbrightModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.HurtCamModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.KeystrokesModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.LowHealthTintModule;
+import com.yuyuframe.launcheragent.runtime.module.gameplay.MacroModule;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.MumbleLinkModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoDarknessModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoFogModule;
@@ -279,6 +280,13 @@ public final class ModuleRegistry {
             register(new BorderlessWindowModule());
         }
         register(new MumbleLinkModule());
+        // Macros + connexion automatique — 26.1.2 seulement : la détection du
+        // login lit l'arbre de commandes via des accessors qui n'existent que
+        // sur ce bracket, et la lecture de touche par NOM demande le poller
+        // moderne (GLFW), absent en 1.8.9.
+        if (IS_26_1) {
+            register(new MacroModule());
+        }
 
         // Infra de rendu (pas un module) — voir INFRA_HOOK_POINTS. Émet le HUD
         // PUIS vide la file d'icônes d'item, le tout dans l'état de GUI de

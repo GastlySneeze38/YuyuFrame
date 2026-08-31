@@ -473,6 +473,12 @@ public final class ConfigScreenBuilder {
             return keybindRow(rows, x, w, cursor, label, tooltip, k.get.get(),
                 v -> { k.set.accept(v); commit.run(); });
         }
+        if (setting instanceof Setting.Opaque) {
+            // Persisté mais volontairement invisible ici — le module l'édite
+            // dans son propre écran (voir Setting.Opaque). Ce n'est pas un
+            // type « non géré » : le sauter est le comportement voulu.
+            return cursor;
+        }
         LauncherLog.err("[ConfigScreenBuilder] type de réglage non géré : "
             + setting.getClass().getSimpleName() + " (" + module.id + "." + setting.id + ")");
         return cursor;

@@ -119,6 +119,11 @@ public final class SettingList {
 
     // ── Keybind ──────────────────────────────────────────────────────────────
 
+    /** Donnée persistée que le module édite dans son PROPRE écran — voir {@link Setting.Opaque}. */
+    public SettingList opaque(String id, Supplier<String> get, Consumer<String> set) {
+        return add(new Setting.Opaque(id, get, set));
+    }
+
     public SettingList keybind(String id, String name, String category,
                                Supplier<String> get, Consumer<String> set) {
         return keybind(id, name, "", category, null, get, set);

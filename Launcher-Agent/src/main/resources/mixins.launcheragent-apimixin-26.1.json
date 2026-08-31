@@ -18,6 +18,7 @@
     "v26_1.core.KeyMappingAccessor261",
     "v26_1.core.FoodDataAccessor261",
     "v26_1.core.DataComponentsAccessor261",
+    "v26_1.core.ServerDataAccessor261",
     "v26_1.core.ChatComponentAccessor261",
     "v26_1.core.FogRendererAccessor261",
     "v26_1.core.GuiGraphicsExtractorAccessor261",
