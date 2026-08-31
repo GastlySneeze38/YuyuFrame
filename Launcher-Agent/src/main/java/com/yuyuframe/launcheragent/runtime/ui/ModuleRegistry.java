@@ -24,7 +24,6 @@ import com.yuyuframe.launcheragent.runtime.module.legacy17.OldItemRotationsModul
 import com.yuyuframe.launcheragent.runtime.module.hud.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PotionEffectsModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.SaturationModule;
-import com.yuyuframe.launcheragent.runtime.module.gameplay.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.module.legacy17.SneakRampModule;
 import com.yuyuframe.launcheragent.runtime.module.legacy17.SwingSpeedModule;
 import com.yuyuframe.launcheragent.runtime.module.legacy17.SwingWhileBlockingModule;
@@ -142,11 +141,11 @@ public final class ModuleRegistry {
      * fonctionnel sur 1.21.11 en plus de 26.1.2 (même point d'accroche
      * {@code InGameHud.renderOverlay}/{@code Gui.renderTextureOverlay},
      * juste des noms Yarn différents — voir {@code ClearOverlaysMixin}).
-     * {@code ShulkerPreviewModule} ET {@code FreelookModule} portés vers
-     * 1.21.11 également (voir leurs javadoc respectives — McReflect pour le
-     * premier, deux Mixins dédiés {@code MouseHandlerFreelookMixin}/{@code
-     * CameraFreelookMixin} pour le second, architecture Camera.update()
-     * vérifiée par javap, distincte de 26.1.2).
+     * {@code FreelookModule} porté vers 1.21.11 également (voir sa javadoc —
+     * deux Mixins dédiés {@code MouseHandlerFreelookMixin}/{@code
+     * CameraFreelookMixin}, architecture Camera.update() vérifiée par javap,
+     * distincte de 26.1.2). {@code ShulkerPreviewModule} l'avait été aussi,
+     * mais il a été SUPPRIMÉ le 2026-08-31 (voir plus bas).
      * {@code ClearVisionModule} reste 26.1.2-only pour l'instant : son
      * portage vers 1.21.11 s'est heurté à une architecture de brouillard
      * {@code FogModifier} (1.21.11) totalement différente de {@code
@@ -166,29 +165,20 @@ public final class ModuleRegistry {
      * à 1.21.11 par désassemblage complet (javap sur le vrai jar 1.21.4 :
      * mêmes IDs intermediary EXACTS pour Camera.update/moveBy/setRotation,
      * même structure bytecode — deux call sites de moveBy(FFF)V aux offsets
-     * 309/368) — {@code NoPumpkinOverlayModule}/{@code ShulkerPreviewModule}/
-     * {@code FreelookModule} portés en conséquence (voir {@code
-     * ClearOverlaysMixin1214}/{@code MouseHandlerFreelookMixin1214}/{@code
-     * CameraFreelookMixin1214}).
+     * 309/368) — {@code NoPumpkinOverlayModule}/{@code FreelookModule}
+     * portés en conséquence (voir {@code ClearOverlaysMixin1214}/{@code
+     * MouseHandlerFreelookMixin1214}/{@code CameraFreelookMixin1214}).
      *
-     * Différence notable pour {@code ShulkerPreviewModule} : ce bracket n'a
-     * PAS l'architecture "Deferred" (pas de {@code GuiRenderState}/{@code
-     * GuiRenderer}, introduits entre la 1.21.4 et la 1.21.11) — le fond de
-     * fenêtre du panneau (texture vanilla brute) utilise donc un chemin
-     * "Immediate" séparé ({@code UiRenderer.drawVanillaContainerTextureModernImmediate},
-     * nouveau cette session), qui reconstruit le {@code
-     * java.util.function.Function<Identifier,RenderLayer>} attendu par
-     * {@code DrawContext.drawTexture} via un {@link java.lang.reflect.Proxy}
-     * enveloppant {@code RenderLayer.getGuiTextured} (référence de méthode
-     * statique utilisée par vanilla lui-même — retrouvée dans la table
-     * BootstrapMethods de {@code HandledScreen}, désassemblage du vrai jar
-     * 1.21.4) plutôt qu'un {@code RenderPipeline} direct (qui n'existe pas
-     * encore sur ce bracket). Le hook lui-même (contrairement à 1.21.11) n'a
-     * PAS besoin d'un second point d'accroche différé façon {@code
-     * GuiFlushMixin} : le pipeline Immediate dessine de façon SYNCHRONE dès
-     * l'appel, directement depuis {@code GlobalUiRenderMixin1214} (TAIL de
-     * {@code GameRenderer.render()}, donc déjà après {@code Screen.render()}
-     * — bon z-order garanti sans complexité supplémentaire).
+     * ⚠️ {@code ShulkerPreviewModule} SUPPRIMÉ le 2026-08-31 (décision
+     * utilisateur : « trop de boulot à faire pour ce qu'un mod peut faire de
+     * façon optimisée »). Tout ce qui existait UNIQUEMENT pour lui dans le
+     * moteur est devenu du code mort mais reste en place, faute d'être
+     * dangereux : {@code UiRenderer.drawVanillaContainerTexture} et son
+     * chemin "Immediate" 1.21.4 ({@code HandledScreenBlitFlushMixin1214}, qui
+     * vide désormais une file toujours vide), plus le HookPoint
+     * {@code CONTAINER_SCREEN_EXTRACT_TOOLTIP} et son mixin — que plus aucun
+     * module ne réclame, donc que le filtre de {@code MixinHookPointRegistry}
+     * ne tisse plus.
      *
      * {@code ClearVisionModule}/{@code NoFogModule} (refonte FogEnvironment) :
      * même statut que 1.21.11 pour Vision claire (jamais tenté, architecture
@@ -231,14 +221,11 @@ public final class ModuleRegistry {
         if (IS_26_1) {
             register(new ClearVisionModule());
         }
-        // Contenu stocké via DataComponents.CONTAINER (refonte "Data
-        // Components", ~1.20.5) — lu par réflexion à noms RÉELS directs sur
-        // 26.1.2, à noms Yarn + repli réel via McReflect sur 1.21.11/1.21.4
-        // (voir sa javadoc) — aucun équivalent 1.8.9/1.16.5/1.20.4 pour
-        // l'instant (stockage NBT pré-refonte, lecture entièrement différente).
-        if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
-            register(new ShulkerPreviewModule());
-        }
+        // ShulkerPreviewModule SUPPRIMÉ le 2026-08-31 (décision utilisateur :
+        // « il y a trop de boulot à faire pour ce qu'un mod peut faire de
+        // façon optimisée »). Il restait le dernier gros consommateur de
+        // réflexion de l'agent (22 appels) et le seul rendu à devoir
+        // s'intercaler dans un écran de conteneur vanilla.
         // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11/
         // 1.21.4) + rappelle Camera.setRotation (voir sa javadoc) — aucun
         // équivalent 1.8.9/1.16.5/1.20.4 pour l'instant.

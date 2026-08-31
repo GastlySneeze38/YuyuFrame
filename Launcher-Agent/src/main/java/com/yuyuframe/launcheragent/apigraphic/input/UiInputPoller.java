@@ -54,7 +54,7 @@ public abstract class UiInputPoller {
     public final boolean[] sideButtonDown = new boolean[5];
     public final boolean[] sideButtonClicked = new boolean[5];
     protected final boolean[] prevSideButtonDown = new boolean[5];
-    /** État brut Maj (gauche OU droite), renseigné par {@link #readState()} à chaque frame — voir ShulkerPreviewModule (Shift+survol). PAS le même champ que editShiftHeld (celui-ci ne se met à jour que quand pollTextEdit() est appelé, c-à-d un UiTextField focus). */
+    /** État brut Maj (gauche OU droite), renseigné par {@link #readState()} à chaque frame — voir {@code UiScreenBase} (raccourcis Maj+clic). PAS le même champ que editShiftHeld (celui-ci ne se met à jour que quand pollTextEdit() est appelé, c-à-d un UiTextField focus). */
     public boolean shiftDown;
 
     /**

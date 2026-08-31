@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.module.gameplay.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -108,7 +107,6 @@ public abstract class GlobalUiPresentMixin {
                 // vanilla/mod) — visibilité selon le TYPE d'écran (voir
                 // HudOverlayRenderer.renderPersistent/HudScreenKind/GlobalUiSettings).
                 HudOverlayRenderer.renderPersistent(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
-                ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
                 return;
             }
 

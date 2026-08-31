@@ -10,7 +10,6 @@ import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Options;
 
-import com.yuyuframe.launcheragent.runtime.module.gameplay.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /**
@@ -30,7 +29,7 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  * {@code MouseHandlerFreelookMixin261}/{@code CameraFreelookMixin261} pour
  * 26.1.2, {@code MouseHandlerFreelookMixin}/{@code CameraFreelookMixin} —
  * package base, sans suffixe — pour 1.21.11, même gate {@code (IS_26_1 ||
- * IS_1_21_11)} que ShulkerPreviewModule/NoPumpkinOverlayModule) :
+ * IS_1_21_11)} que NoPumpkinOverlayModule) :
  * <pre>
  *   MouseHandlerFreelookMixin261 : annule MouseHandler.turnPlayer(D)V
  *   (@At HEAD, cancellable) quand la touche est maintenue — lit/vide
@@ -69,7 +68,8 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  *
  * PAS de Mixin sur {@code LocalPlayer}/{@code Entity} (hiérarchie commune à
  * TOUTE entité du jeu, risque de casse identique à celui rencontré avec
- * {@code Screen} pour ShulkerPreviewModule — voir sa javadoc) : le blocage
+ * {@code Screen}, qui avait cassé en cascade tous les Mixins de cette classe
+ * cible — voir docs/LauncherAgent/module-bracket-audit.md) : le blocage
  * de la rotation réelle du joueur passe entièrement par l'annulation de
  * {@code MouseHandler.turnPlayer}/{@code Mouse.updateMouse} (classe
  * UTILITAIRE non sous-classée, même profil de risque que GameRenderer/

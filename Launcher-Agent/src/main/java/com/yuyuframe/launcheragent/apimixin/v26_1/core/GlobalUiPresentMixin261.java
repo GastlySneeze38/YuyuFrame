@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.module.gameplay.ShulkerPreviewModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
@@ -69,10 +68,10 @@ public abstract class GlobalUiPresentMixin261 {
                 return;
             }
 
-            if (!(currentScreen instanceof UiDrawable)) {
-                ShulkerPreviewModule.renderIfApplicable(renderer, currentScreen, inputPoller, inputPoller.fbWidth, inputPoller.fbHeight);
-                return;
-            }
+            // Écran vanilla/mod ouvert : plus rien à dessiner ici depuis la
+            // suppression de l'aperçu shulker (2026-08-31) — le HUD, lui, part
+            // de la passe GUI, pas d'ici.
+            if (!(currentScreen instanceof UiDrawable)) return;
 
             UiDrawable ui = (UiDrawable) currentScreen;
             ui.uiPollInput(inputPoller);
