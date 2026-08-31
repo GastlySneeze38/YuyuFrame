@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
 
@@ -69,7 +70,7 @@ public final class MacroModule extends LauncherModule {
         }
     }
 
-    /** Édité par {@code UiMacroScreen} ; persisté via un réglage opaque, voir {@link #settings}. */
+    /** Édité ligne par ligne dans l'écran de configuration ; persisté en bloc par un réglage opaque, voir {@link #settings}. */
     public final List<Macro> macros = new ArrayList<Macro>();
 
     /**
@@ -87,12 +88,63 @@ public final class MacroModule extends LauncherModule {
             "Envoie /login sur les serveurs qui déclarent cette commande. Le mot de passe est enregistré par adresse de serveur, dans l'écran du module.",
             "Réglages", null, () -> autoLogin, v -> autoLogin = v);
 
-        // Les deux listes : persistées, mais éditées dans l'écran du module —
-        // le modèle de réglages déclarés est statique, il ne peut pas décrire
-        // une liste de longueur variable. Voir Setting.Opaque.
+        // Les deux listes : persistées ICI, en un seul réglage chacune.
+        // Les lignes d'édition ci-dessous sont ENGENDRÉES à partir d'elles et
+        // marquées non-persistantes — sans quoi elles seraient sauvegardées en
+        // double, et relues alors que les listes sont encore vides.
         s.opaque("macros", this::serializeMacros, this::deserializeMacros);
         s.opaque("logins", this::serializeLogins, this::deserializeLogins);
+
+        // ── Une ligne par macro, UNE SEULE ligne ──────────────────────────
+        //
+        // Setting.Inline porte tous les contrôles d'une entrée sur la même
+        // ligne : touche, commande, suppression. La version précédente en
+        // étalait trois, chacune avec son libellé — « ce qui est horrible
+        // c'est la configuration de la macro dans l'écran de config […] ça
+        // doit prendre 1 seule ligne pour toutes ses composantes ».
+        for (int i = 0; i < macros.size(); i++) {
+            final Macro macro = macros.get(i);
+            final int index = i;
+            s.inlineKeyed("macro" + i, "Macros", "/spawn",
+                () -> macro.key, v -> macro.key = v,
+                () -> macro.command, v -> macro.command = v,
+                () -> { macros.remove(index); invalidateSettings(); });
+        }
+        s.action("macro.add", "Ajouter une macro",
+            "Choisis la touche, puis la commande.", "Macros",
+            () -> SettingModal.request(new SettingModal("Nouvelle macro", answers -> {
+                macros.add(new Macro(answers.get(0), answers.get(1)));
+                invalidateSettings();
+            },
+            SettingModal.Step.key("Sur quelle touche ?"),
+            SettingModal.Step.text("Quelle commande envoyer ?", "/spawn"))));
+
+        for (Map.Entry<String, String> entry : new ArrayList<Map.Entry<String, String>>(logins.entrySet())) {
+            final String address = entry.getKey();
+            s.inlineLabeled("login." + address, "Connexion automatique", address, "mot de passe",
+                () -> logins.get(address), v -> logins.put(address, v),
+                () -> { logins.remove(address); invalidateSettings(); });
+        }
+        s.action("login.add", "Ajouter un serveur",
+            "L'adresse est pré-remplie avec le serveur en cours. Le mot de passe part par /login, jamais en chat public, et est stocké en clair dans la configuration.",
+            "Connexion automatique",
+            () -> {
+                // Adresse PRÉ-REMPLIE avec le serveur courant plutôt qu'une
+                // saisie libre : une faute de frappe donnerait une entrée qui
+                // ne se déclenche jamais, sans rien pour l'expliquer. Elle
+                // reste modifiable, pour préparer un serveur hors ligne.
+                final String current = currentServerAddress();
+                SettingModal.request(new SettingModal("Nouveau serveur", answers -> {
+                    String address = answers.get(0).trim();
+                    if (address.isEmpty()) return;
+                    logins.put(address, answers.get(1));
+                    invalidateSettings();
+                },
+                new SettingModal.Step("Adresse du serveur", current == null ? "jouer.exemple.fr" : current, false),
+                SettingModal.Step.text("Mot de passe", "mot de passe")));
+            });
     }
+
 
     public MacroModule() {
         super("macros", "Macros",

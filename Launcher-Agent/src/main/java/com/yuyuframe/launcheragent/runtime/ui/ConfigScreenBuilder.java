@@ -9,6 +9,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiColorPicker;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiDropdown;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
@@ -473,6 +474,20 @@ public final class ConfigScreenBuilder {
             return keybindRow(rows, x, w, cursor, label, tooltip, k.get.get(),
                 v -> { k.set.accept(v); commit.run(); });
         }
+        if (setting instanceof Setting.Inline) {
+            return inlineRow(rows, x, w, cursor, (Setting.Inline) setting, commit);
+        }
+        if (setting instanceof Setting.Text) {
+            Setting.Text t = (Setting.Text) setting;
+            warnUnsupportedDependency(module, setting);
+            return textRow(rows, x, w, cursor, label, tooltip, t.placeholder, t.get.get(),
+                v -> { t.set.accept(v); commit.run(); });
+        }
+        if (setting instanceof Setting.Action) {
+            Setting.Action a2 = (Setting.Action) setting;
+            warnUnsupportedDependency(module, setting);
+            return buttonRow(rows, x, w, cursor, label, a2.run);
+        }
         if (setting instanceof Setting.Opaque) {
             // Persisté mais volontairement invisible ici — le module l'édite
             // dans son propre écran (voir Setting.Opaque). Ce n'est pas un
@@ -627,6 +642,85 @@ public final class ConfigScreenBuilder {
         float kw = UiTheme.scaled(110f);
         float kh = UiTheme.scaled(26f);
         rows.add(new UiKeybindButton(x + w - kw - UiTheme.scaled(10f), rowY + (ROW_H - kh) / 2f, kw, kh, initialKey, onChange));
+        return rowY - ROW_GAP;
+    }
+
+    /**
+     * Ligne COMPACTE : tous les contrôles d'une entrée sur UNE ligne, sans
+     * colonne de libellé — voir {@link Setting.Inline} pour le pourquoi.
+     *
+     * <p>Le champ de texte prend toute la largeur restante : c'est lui qui
+     * porte le contenu long (une commande), les deux autres contrôles ont une
+     * largeur fixe. Le bouton de suppression est à droite, sur la même ligne —
+     * c'était l'autre moitié de la demande.
+     */
+    private static float inlineRow(List<UiWidget> rows, float x, float w, float cursor,
+                                    Setting.Inline inline, Runnable commit) {
+        float rowY = cursor - ROW_H;
+        float ctrlH = UiTheme.scaled(26f);
+        float ctrlY = rowY + (ROW_H - ctrlH) / 2f;
+        float gap = UiTheme.scaled(8f);
+        float delW = UiTheme.scaled(30f);
+        float leftW = UiTheme.scaled(inline.fixedLabel != null ? 190f : 120f);
+
+        if (inline.fixedLabel != null) {
+            // Libellé NON cliquable — un libellé large posé avant les
+            // contrôles leur volerait le clic (voir RowBackground pour le
+            // même piège, UiScrollContainer dispatche au premier qui matche).
+            rows.add(new InlineLabel(x, rowY, leftW, ROW_H, inline.fixedLabel));
+        } else {
+            rows.add(new UiKeybindButton(x, ctrlY, leftW, ctrlH, inline.keyGet.get(),
+                v -> { inline.keySet.accept(v); commit.run(); }));
+        }
+
+        float fieldW = Math.max(UiTheme.scaled(60f), w - leftW - delW - gap * 2f);
+        UiTextField field = new UiTextField(x + leftW + gap, ctrlY, fieldW, ctrlH,
+            inline.placeholder, v -> { inline.textSet.accept(v); commit.run(); });
+        String initial = inline.textGet.get();
+        if (initial != null) field.setText(initial);
+        rows.add(field);
+
+        rows.add(new UiButton(x + w - delW, ctrlY, delW, ctrlH, "×", inline.delete));
+        return rowY - ROW_GAP;
+    }
+
+    /** Libellé figé d'une {@link Setting.Inline} — {@code contains()} faux, sinon il intercepterait les clics des contrôles de sa propre ligne. */
+    private static final class InlineLabel extends UiWidget {
+        private final String text;
+
+        InlineLabel(float x, float y, float w, float h, String text) {
+            super(x, y, w, h);
+            this.text = text;
+        }
+
+        @Override public boolean contains(double mx, double my) { return false; }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            renderer.drawText(text, x, y + h / 2f - UiTheme.scaled(4f),
+                UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
+        }
+    }
+
+    /**
+     * Ligne CHAMP DE SAISIE. Plus large que les autres contrôles (280 contre
+     * 190 pour un curseur) : ce qu'on y tape est du texte libre — une
+     * commande, un mot de passe — et non une valeur courte.
+     *
+     * <p>{@code setText} après construction plutôt qu'un paramètre : le
+     * constructeur d'{@code UiTextField} ne prend qu'un placeholder, la
+     * valeur initiale se pose ensuite.
+     */
+    private static float textRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
+                                  String placeholder, String initial, Consumer<String> onChange) {
+        float rowY = cursor - ROW_H;
+        rowLabel(rows, x, w, rowY, label, tooltip);
+        float fw = UiTheme.scaled(280f);
+        float fh = UiTheme.scaled(26f);
+        UiTextField field = new UiTextField(x + w - fw - UiTheme.scaled(10f), rowY + (ROW_H - fh) / 2f, fw, fh,
+            placeholder, onChange);
+        if (initial != null) field.setText(initial);
+        rows.add(field);
         return rowY - ROW_GAP;
     }
 

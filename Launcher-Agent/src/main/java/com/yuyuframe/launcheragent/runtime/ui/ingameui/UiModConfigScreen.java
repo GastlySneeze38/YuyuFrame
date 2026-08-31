@@ -15,6 +15,8 @@ import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiModalForm;
+import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
 import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 
 import java.util.LinkedHashMap;
@@ -78,6 +80,14 @@ public class UiModConfigScreen extends UiScreenBase {
     private UiScrollContainer scroll;
     private float sidebarX, sidebarY, sidebarW, sidebarH;
     private int lastLayoutWidth = -1, lastLayoutHeight = -1;
+    private int lastSettingsRevision = -1;
+
+    /**
+     * Formulaire modal en cours, ou {@code null}. Demandé par un module via
+     * {@link SettingModal#request} — voir sa javadoc pour pourquoi le module
+     * ne peut pas l'ouvrir lui-même.
+     */
+    private UiModalForm modal;
     private float lastUiScale = -1f;
 
     public UiModConfigScreen(Object lastScreen, LauncherModule module) {
@@ -94,12 +104,19 @@ public class UiModConfigScreen extends UiScreenBase {
 
     @Override
     public void uiDraw(double mouseX, double mouseY) {
+        // La révision du module s'ajoute aux trois conditions habituelles :
+        // un module peut changer le NOMBRE de ses lignes en cours de route
+        // (MacroModule, quand on ajoute ou supprime une macro), sans que la
+        // taille de l'écran ni l'échelle ne bougent. Sans ça, la nouvelle
+        // ligne n'apparaissait qu'après un redimensionnement.
         if (screenWidth > 0 && screenHeight > 0
-                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight || UiTheme.UI_SCALE != lastUiScale)) {
+                && (screenWidth != lastLayoutWidth || screenHeight != lastLayoutHeight
+                    || UiTheme.UI_SCALE != lastUiScale || module.settingsRevision != lastSettingsRevision)) {
             buildLayout();
             lastLayoutWidth = screenWidth;
             lastLayoutHeight = screenHeight;
             lastUiScale = UiTheme.UI_SCALE;
+            lastSettingsRevision = module.settingsRevision;
         }
         // BUG TROUVÉ (retour utilisateur : "la sidebar y'a rien qui va, le
         // z-order est pas bon") : UiPanel.draw() était appelé ICI, APRÈS
@@ -116,6 +133,11 @@ public class UiModConfigScreen extends UiScreenBase {
         // frame — DOIT précéder tout dessin (voir UiRenderer#beginGlassFrame :
         // la file s'exécute dans l'ordre d'empilement, donc la chaîne capture
         // le monde seul). Un seul calcul pour l'écran entier.
+        // Une demande de modale posée par un module au frame précédent (clic
+        // sur « Ajouter… ») — voir SettingModal.
+        SettingModal requested = SettingModal.consume();
+        if (requested != null) modal = new UiModalForm(requested, () -> modal = null);
+
         UiRenderer.get(getClass().getClassLoader()).beginGlassFrame(GLASS_PASSES, screenWidth, screenHeight);
         super.uiDraw(mouseX, mouseY);
         try {
@@ -124,6 +146,10 @@ public class UiModConfigScreen extends UiScreenBase {
                 UiTheme.TEXT_PRIMARY, UiTheme.scaled(0.68f), screenWidth, screenHeight);
             updateActiveCategory();
             if (scroll != null) scroll.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
+            // APRÈS la liste : la modale doit couvrir le contenu, pas
+            // l'inverse. Son voile plein écran absorbe aussi les clics
+            // alentour, puisque modalWidgets() rend sa liste exclusive.
+            if (modal != null) modal.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             // Ré-appliqué ici (déjà dessiné une fois dans super.uiDraw()) — voir
             // sa javadoc : sans ça, le titre/panneau ci-dessus apparaîtrait
             // d'un coup sec, jamais couvert par le voile.
@@ -132,9 +158,22 @@ public class UiModConfigScreen extends UiScreenBase {
     }
 
     @Override
+    protected java.util.List<com.yuyuframe.launcheragent.apigraphic.core.UiWidget> modalWidgets() {
+        return modal == null ? null : modal.widgets();
+    }
+
+    /** Échap ferme d'abord la modale, pas l'écran — sinon on perdrait la saisie en cours en voulant juste annuler une étape. */
+    @Override
+    protected void onModalEscape() {
+        modal = null;
+    }
+
+    @Override
     public void uiPollInput(UiInputPoller input) {
         super.uiPollInput(input);
-        if (scroll != null) scroll.pollInput(input);
+        // La liste ne défile plus tant qu'une modale est ouverte : le contenu
+        // derrière n'est pas censé bouger.
+        if (scroll != null && modal == null) scroll.pollInput(input);
     }
 
     private void buildLayout() {

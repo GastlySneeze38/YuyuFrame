@@ -163,6 +163,23 @@ public abstract class LauncherModule {
      * {@code this}, elles restent donc valides pour toute la durée de vie du
      * module, et l'écran de config est reconstruit à chaque ouverture.
      */
+    /**
+     * Incrémenté à chaque {@link #invalidateSettings()} — l'écran de
+     * configuration s'en sert pour savoir qu'il doit se reconstruire, sans
+     * avoir à comparer les listes.
+     */
+    public int settingsRevision;
+
+    /**
+     * Jette la liste mémorisée : à appeler quand le module change le NOMBRE
+     * de ses réglages, pas seulement leur valeur (voir {@code MacroModule},
+     * qui engendre une ligne par macro et laisse l'utilisateur en ajouter).
+     */
+    public final void invalidateSettings() {
+        cachedSettings = null;
+        settingsRevision++;
+    }
+
     public final List<Setting> settings() {
         if (cachedSettings == null) {
             SettingList list = new SettingList(id);

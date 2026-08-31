@@ -164,6 +164,7 @@ public final class HudConfigStore {
         // Clé = l'id STABLE du réglage, plus le nom du champ Java : renommer
         // un champ n'efface plus le réglage chez l'utilisateur.
         for (Setting setting : module.settings()) {
+            if (!setting.persistent) continue;   // voir Setting.persistent
             String raw = DATA.getProperty(id + ".setting." + setting.id);
             if (raw == null) continue;
             if (!setting.deserialize(raw)) {
@@ -266,6 +267,7 @@ public final class HudConfigStore {
         // même source de vérité (la liste déclarée par le module), donc plus
         // aucun risque qu'un réglage s'affiche sans jamais être sauvegardé.
         for (Setting setting : module.settings()) {
+            if (!setting.persistent) continue;   // voir Setting.persistent
             String value = setting.serialize();
             if (value != null) DATA.setProperty(id + ".setting." + setting.id, value);
         }

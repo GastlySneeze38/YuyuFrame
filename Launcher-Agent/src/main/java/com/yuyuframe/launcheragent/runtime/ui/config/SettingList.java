@@ -119,6 +119,39 @@ public final class SettingList {
 
     // ── Keybind ──────────────────────────────────────────────────────────────
 
+    /** Ligne compacte « touche + commande + supprimer » — voir {@link Setting.Inline}. */
+    public SettingList inlineKeyed(String id, String category, String placeholder,
+                                   Supplier<String> keyGet, Consumer<String> keySet,
+                                   Supplier<String> textGet, Consumer<String> textSet,
+                                   Runnable delete) {
+        return add(new Setting.Inline(id, category, null, keyGet, keySet, placeholder, textGet, textSet, delete));
+    }
+
+    /** Ligne compacte « libellé figé + champ + oublier » — voir {@link Setting.Inline}. */
+    public SettingList inlineLabeled(String id, String category, String fixedLabel, String placeholder,
+                                     Supplier<String> textGet, Consumer<String> textSet,
+                                     Runnable delete) {
+        return add(new Setting.Inline(id, category, fixedLabel, null, null, placeholder, textGet, textSet, delete));
+    }
+
+    /** Champ de saisie d'une ligne. */
+    public SettingList text(String id, String name, String description, String category,
+                            BooleanSupplier enabledWhen, String placeholder,
+                            Supplier<String> get, Consumer<String> set) {
+        return add(new Setting.Text(id, name, description, category, enabledWhen, placeholder, get, set, true));
+    }
+
+    /** Champ de saisie NON persisté — pour une ligne engendrée depuis une liste, voir {@link Setting#persistent}. */
+    public SettingList transientText(String id, String name, String description, String category,
+                                     String placeholder, Supplier<String> get, Consumer<String> set) {
+        return add(new Setting.Text(id, name, description, category, null, placeholder, get, set, false));
+    }
+
+    /** Ligne bouton — une action, aucune valeur. */
+    public SettingList action(String id, String name, String description, String category, Runnable run) {
+        return add(new Setting.Action(id, name, description, category, null, run));
+    }
+
     /** Donnée persistée que le module édite dans son PROPRE écran — voir {@link Setting.Opaque}. */
     public SettingList opaque(String id, Supplier<String> get, Consumer<String> set) {
         return add(new Setting.Opaque(id, get, set));

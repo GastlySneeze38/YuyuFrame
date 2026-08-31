@@ -62,6 +62,19 @@ public abstract class Setting {
      */
     public final BooleanSupplier enabledWhen;
 
+    /**
+     * Faux = ce réglage n'est NI écrit NI relu par le magasin de
+     * configuration. Vrai par défaut : c'est le cas de tous les réglages
+     * déclarés en dur par un module.
+     *
+     * <p>Existe pour les lignes ENGENDRÉES à partir d'une liste (voir
+     * {@code MacroModule}) : leur valeur est déjà sauvegardée par le réglage
+     * {@link Opaque} qui porte la liste entière. Les persister en double
+     * casserait au rechargement — au moment où la configuration est relue, la
+     * liste est encore vide, donc ces lignes-là n'existent pas.
+     */
+    public boolean persistent = true;
+
     protected Setting(String id, String name, String description, String category, BooleanSupplier enabledWhen) {
         this.id = id;
         this.name = name;
@@ -197,6 +210,53 @@ public abstract class Setting {
     }
 
     /**
+     * UNE ligne portant PLUSIEURS contrôles, sans colonne de libellé.
+     *
+     * <p>Existe pour représenter une ENTRÉE composite — une macro, c'est une
+     * touche ET une commande ET un bouton de suppression. Le modèle habituel
+     * (libellé à gauche, un contrôle à droite) obligeait à l'étaler sur trois
+     * lignes, ce que l'utilisateur a jugé sans appel : « ce qui est horrible
+     * c'est la configuration de la macro dans l'écran de config […] ça doit
+     * prendre 1 seule ligne pour toutes ses composantes ».
+     *
+     * <p>Deux formes selon {@link #fixedLabel} :
+     * <ul>
+     *   <li>{@code null} — bouton de capture de touche à gauche (macro) ;</li>
+     *   <li>non nul — texte figé à gauche (adresse de serveur, qu'on ne
+     *       modifie pas : on l'oublie et on la rajoute).</li>
+     * </ul>
+     *
+     * <p>Jamais persisté : la donnée appartient à une liste, sauvegardée en
+     * bloc par un {@link Opaque}. Voir {@link Setting#persistent}.
+     */
+    public static final class Inline extends Setting {
+        public final String fixedLabel;
+        public final Supplier<String> keyGet;
+        public final Consumer<String> keySet;
+        public final String placeholder;
+        public final Supplier<String> textGet;
+        public final Consumer<String> textSet;
+        /** Bouton de suppression, sur LA MÊME ligne — c'était l'autre moitié de la demande. */
+        public final Runnable delete;
+
+        Inline(String id, String category, String fixedLabel,
+               Supplier<String> keyGet, Consumer<String> keySet,
+               String placeholder, Supplier<String> textGet, Consumer<String> textSet,
+               Runnable delete) {
+            super(id, id, null, category, null);
+            this.fixedLabel = fixedLabel;
+            this.keyGet = keyGet; this.keySet = keySet;
+            this.placeholder = placeholder;
+            this.textGet = textGet; this.textSet = textSet;
+            this.delete = delete;
+            this.persistent = false;
+        }
+
+        @Override public String serialize() { return null; }
+        @Override public boolean deserialize(String raw) { return true; }
+    }
+
+    /**
      * Réglage PERSISTÉ mais NON AFFICHÉ dans l'écran de configuration
      * standard — pour une donnée que le module édite ailleurs, typiquement
      * dans un écran à lui.
@@ -212,6 +272,53 @@ public abstract class Setting {
      * <p>{@code ConfigScreenBuilder} le saute explicitement : sans ce type, il
      * aurait journalisé « réglage non géré » à chaque ouverture.
      */
+    /**
+     * Champ de saisie d'une ligne.
+     *
+     * <p>{@code persistent} à {@code false} pour les lignes ENGENDRÉES par un
+     * module à partir d'une liste (voir {@code MacroModule}) : leur contenu
+     * est déjà sauvegardé par le réglage {@link Opaque} qui porte la liste
+     * entière, et les persister en double casserait au rechargement — les
+     * lignes n'existent pas encore au moment où la configuration est relue.
+     */
+    public static final class Text extends Setting {
+        public final Supplier<String> get;
+        public final Consumer<String> set;
+        public final String placeholder;
+
+        Text(String id, String name, String desc, String cat, BooleanSupplier enabledWhen,
+             String placeholder, Supplier<String> get, Consumer<String> set, boolean persistent) {
+            super(id, name, desc, cat, enabledWhen);
+            this.get = get; this.set = set; this.placeholder = placeholder;
+            this.persistent = persistent;
+        }
+
+        @Override public String serialize() { return persistent ? get.get() : null; }
+        @Override public boolean deserialize(String raw) {
+            if (!persistent) return true;
+            set.accept(raw);
+            return true;
+        }
+    }
+
+    /**
+     * Ligne BOUTON — une action, aucune valeur. Rien à persister par
+     * construction, d'où {@code serialize()} nul (le magasin ignore les
+     * valeurs nulles).
+     */
+    public static final class Action extends Setting {
+        public final Runnable run;
+
+        Action(String id, String name, String desc, String cat, BooleanSupplier enabledWhen, Runnable run) {
+            super(id, name, desc, cat, enabledWhen);
+            this.run = run;
+            this.persistent = false;
+        }
+
+        @Override public String serialize() { return null; }
+        @Override public boolean deserialize(String raw) { return true; }
+    }
+
     public static final class Opaque extends Setting {
         public final Supplier<String> get;
         public final Consumer<String> set;
