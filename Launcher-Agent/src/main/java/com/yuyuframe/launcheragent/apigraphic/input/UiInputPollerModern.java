@@ -130,6 +130,21 @@ public final class UiInputPollerModern extends UiInputPoller {
             // le check dans chaque module appelant) — ZoomModule/FreelookModule
             // partagent déjà ce point d'entrée, voir leur javadoc.
             if (isVanillaScreenOpen()) return false;
+            if (name == null || name.isEmpty() || "NONE".equals(name)) return false;
+
+            // COMBINAISON : « LCTRL+K » n'est vrai que si TOUTES ses touches
+            // sont maintenues. Le « + » est un séparateur sûr — aucun nom de
+            // la table ne le contient (le plus du pavé s'appelle NUMADD).
+            if (name.indexOf('+') >= 0) {
+                for (String part : name.split("\\+")) {
+                    String key = part.trim();
+                    if (key.isEmpty()) continue;
+                    int c = menuKeyCode(key);
+                    if (c < 0 || c >= keyDown.length || !keyDown[c]) return false;
+                }
+                return true;
+            }
+
             int code = menuKeyCode(name);
             if (code < 0) return false;
             return code < keyDown.length && keyDown[code];
@@ -169,6 +184,21 @@ public final class UiInputPollerModern extends UiInputPoller {
         m.put(342, "LALT"); m.put(346, "RALT");
         m.put(263, "LEFT"); m.put(262, "RIGHT"); m.put(265, "UP"); m.put(264, "DOWN");
         m.put(259, "BACKSPACE"); m.put(261, "DELETE"); m.put(280, "CAPSLOCK"); m.put(96, "GRAVE");
+        m.put(260, "INSERT"); m.put(268, "HOME"); m.put(269, "END");
+        m.put(266, "PAGEUP"); m.put(267, "PAGEDOWN");
+        m.put(45, "MINUS"); m.put(61, "EQUAL");
+        m.put(91, "LBRACKET"); m.put(93, "RBRACKET"); m.put(92, "BACKSLASH");
+        m.put(59, "SEMICOLON"); m.put(39, "APOSTROPHE");
+        m.put(44, "COMMA"); m.put(46, "PERIOD"); m.put(47, "SLASH");
+
+        // PAVÉ NUMÉRIQUE — absent jusqu'ici, donc invisible pour la capture
+        // de touche (demande utilisateur). Les codes GLFW du pavé sont
+        // DISTINCTS de ceux de la rangée de chiffres : KP_0 vaut 320, pas 48.
+        // Sans ces entrées, appuyer sur le 4 du pavé ne produisait rien du
+        // tout, sans le moindre message.
+        for (int i = 0; i <= 9; i++) m.put(320 + i, "NUM" + i);
+        m.put(330, "NUMDECIMAL"); m.put(331, "NUMDIVIDE"); m.put(332, "NUMMULTIPLY");
+        m.put(333, "NUMSUBTRACT"); m.put(334, "NUMADD"); m.put(335, "NUMENTER"); m.put(336, "NUMEQUAL");
         Object[][] out = new Object[m.size()][2];
         int idx = 0;
         for (Map.Entry<Integer, String> e : m.entrySet()) out[idx++] = new Object[]{ e.getKey(), e.getValue() };
@@ -461,6 +491,39 @@ public final class UiInputPollerModern extends UiInputPoller {
     }
 
     /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
+    /**
+     * Noms des touches capturables ACTUELLEMENT maintenues, modificateurs
+     * d'abord — pour {@link com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton},
+     * qui compose une combinaison.
+     *
+     * <p>Ordre canonique et non ordre d'appui : « LCTRL+MAJ+K » doit
+     * s'afficher pareil qu'on ait pressé Ctrl ou Maj en premier, sinon deux
+     * captures de la même combinaison donneraient deux chaînes différentes,
+     * donc deux réglages incompatibles.
+     *
+     * <p>Ne consomme aucun état — c'est un instantané, appelé chaque frame
+     * pendant la capture.
+     */
+    public java.util.List<String> heldCapturableKeys() {
+        java.util.List<String> modifiers = new java.util.ArrayList<String>();
+        java.util.List<String> others = new java.util.ArrayList<String>();
+        for (Object[] entry : CAPTURABLE_KEYS) {
+            int code = (Integer) entry[0];
+            if (code < 0 || code >= keyDown.length || !keyDown[code]) continue;
+            String name = (String) entry[1];
+            if (isModifier(name)) modifiers.add(name);
+            else others.add(name);
+        }
+        modifiers.addAll(others);
+        return modifiers;
+    }
+
+    private static boolean isModifier(String name) {
+        return "LCTRL".equals(name) || "RCTRL".equals(name)
+            || "LSHIFT".equals(name) || "RSHIFT".equals(name)
+            || "LALT".equals(name) || "RALT".equals(name);
+    }
+
     private static int menuKeyCode(String name) {
         for (Object[] entry : CAPTURABLE_KEYS) {
             if (entry[1].equals(name)) return (Integer) entry[0];

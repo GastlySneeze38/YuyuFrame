@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
 
@@ -41,9 +42,20 @@ public class UiKeybindButton extends UiWidget {
         UiColor bg = listening ? UiTheme.ACCENT_DIM : UiColor.lerp(BASE, HOVER, hoverAnim.get());
         renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
 
-        String label = listening ? "..." : keyName;
+        // Pendant la capture, on montre ce qui est déjà retenu : sans ce
+        // retour, composer une combinaison se fait à l'aveugle.
+        String label = listening
+            ? (captured.isEmpty() ? "..." : String.join("+", captured))
+            : keyName;
         float scale = UiTheme.scaled(0.48f);
         float tw = renderer.textWidth(label, scale);
+        // Une combinaison à trois touches déborde du bouton — on rétrécit
+        // plutôt que de laisser le texte sortir de son fond.
+        float maxW = w - UiTheme.scaled(8f);
+        if (tw > maxW && tw > 0f) {
+            scale *= maxW / tw;
+            tw = renderer.textWidth(label, scale);
+        }
         float baseline = y + h / 2f - (UiFont.REGULAR.ascent - UiFont.REGULAR.descent) * scale * UiFont.SIZE_CORRECTION / 2f;
         renderer.drawText(label, x + (w - tw) / 2f, baseline, listening ? UiTheme.ACCENT : UiTheme.TEXT_PRIMARY, scale, vpWidth, vpHeight);
     }
@@ -51,16 +63,74 @@ public class UiKeybindButton extends UiWidget {
     @Override
     public void onClick() {
         listening = true;
+        captured.clear();
     }
 
+    /** Nombre maximum de touches d'une combinaison — trois, comme demandé. */
+    private static final int MAX_KEYS = 3;
+
+    /**
+     * Touches vues maintenues depuis le début de la capture. {@code Linked}
+     * pour garder l'ordre canonique fourni par le poller (modificateurs
+     * d'abord), pas l'ordre d'arrivée.
+     */
+    private final java.util.LinkedHashSet<String> captured = new java.util.LinkedHashSet<String>();
+
+    /**
+     * Capture une COMBINAISON jusqu'à {@link #MAX_KEYS} touches.
+     *
+     * <p>Principe : tant que la capture est active, on accumule tout ce qui
+     * est maintenu ; la combinaison est validée au RELÂCHEMENT complet. C'est
+     * ce qui permet « Ctrl + Maj + K » — valider à la première touche pressée,
+     * comme le faisait la version précédente, rendrait toute combinaison
+     * impossible à saisir, puisqu'un modificateur descend forcément en
+     * premier.
+     *
+     * <p>Le poller donne l'ordre canonique à chaque frame, donc on repart de
+     * sa liste plutôt que d'ajouter au fil de l'eau : deux captures de la même
+     * combinaison produisent ainsi exactement la même chaîne, quel que soit
+     * l'ordre d'appui.
+     */
     @Override
     public void pollContinuous(UiInputPoller input) {
         if (!listening) return;
-        String pressed = input.pollAnyKeyJustPressed();
-        if (pressed != null) {
-            keyName = pressed;
-            listening = false;
-            if (onChange != null) onChange.accept(keyName);
+        if (!(input instanceof UiInputPollerModern)) {
+            // Bracket sans poller moderne (1.8.9) : on garde l'ancien
+            // comportement à une touche plutôt que de ne rien capturer.
+            String pressed = input.pollAnyKeyJustPressed();
+            if (pressed != null) {
+                keyName = pressed;
+                listening = false;
+                if (onChange != null) onChange.accept(keyName);
+            }
+            return;
         }
+
+        java.util.List<String> held = ((UiInputPollerModern) input).heldCapturableKeys();
+        if (!held.isEmpty()) {
+            for (String name : held) {
+                if (captured.size() >= MAX_KEYS && !captured.contains(name)) continue;
+                captured.add(name);
+            }
+            // Réordonne selon l'instantané courant : held est déjà canonique.
+            java.util.LinkedHashSet<String> ordered = new java.util.LinkedHashSet<String>();
+            for (String name : held) if (captured.contains(name)) ordered.add(name);
+            for (String name : captured) ordered.add(name);
+            captured.clear();
+            captured.addAll(ordered);
+            return;
+        }
+
+        if (captured.isEmpty()) return;   // rien encore appuyé, on attend
+
+        // Tout relâché : on valide. Échap seul = désassignation, convention
+        // habituelle — sans ça, une touche mal choisie serait impossible à
+        // retirer autrement qu'en éditant le fichier de configuration.
+        String result = captured.size() == 1 && captured.contains("ESCAPE")
+            ? "NONE" : String.join("+", captured);
+        captured.clear();
+        listening = false;
+        keyName = result;
+        if (onChange != null) onChange.accept(keyName);
     }
 }
