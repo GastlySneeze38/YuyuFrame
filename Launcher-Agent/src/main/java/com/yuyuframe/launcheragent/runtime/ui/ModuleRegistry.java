@@ -574,16 +574,23 @@ public final class ModuleRegistry {
         }
     }
 
-    /** Pendant de {@link #renderOverlayAll} pour la passe GUI de vanilla — voir {@link LauncherModule#onRenderInVanillaGui}. */
-    public static void renderInVanillaGuiAll(UiRenderer renderer, int vpWidth, int vpHeight) {
+    /**
+     * Pendant de {@link #renderOverlayAll} pour la passe GUI de vanilla — voir
+     * {@link LauncherModule#onRenderInVanillaGui}.
+     *
+     * @param screenOpen un écran vanilla/mod est ouvert : seuls les modules
+     *     qui le demandent explicitement sont alors appelés, voir
+     *     {@link LauncherModule#renderInVanillaGuiWhenScreenOpen()}.
+     */
+    public static void renderInVanillaGuiAll(UiRenderer renderer, int vpWidth, int vpHeight, boolean screenOpen) {
         for (LauncherModule m : MODULES) {
-            if (m.isEnabled()) {
-                try {
-                    m.onRenderInVanillaGui(renderer, vpWidth, vpHeight);
-                } catch (Throwable t) {
-                    com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
-                        "[ModuleRegistry] onRenderInVanillaGui(" + m.id + "): " + t);
-                }
+            if (!m.isEnabled()) continue;
+            if (screenOpen && !m.renderInVanillaGuiWhenScreenOpen()) continue;
+            try {
+                m.onRenderInVanillaGui(renderer, vpWidth, vpHeight);
+            } catch (Throwable t) {
+                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+                    "[ModuleRegistry] onRenderInVanillaGui(" + m.id + "): " + t);
             }
         }
     }

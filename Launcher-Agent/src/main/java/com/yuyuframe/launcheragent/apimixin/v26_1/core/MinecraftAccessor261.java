@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import net.minecraft.client.MouseHandler;
+import net.minecraft.server.packs.resources.ReloadableResourceManager;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.Options;
@@ -90,6 +91,20 @@ public interface MinecraftAccessor261 {
      */
     @Accessor("player")
     LocalPlayer la$player();
+
+    /**
+     * Gestionnaire de ressources — la SEULE voie qui applique les resource
+     * packs. Lire une texture depuis le classloader rend celle du jar,
+     * c'est-à-dire la version vanilla, en ignorant tout pack installé (voir
+     * {@code SaturationModule}, qui charge par ici ses icônes de faim, de
+     * cœur et son atlas AppleSkin).
+     *
+     * <p>Type de retour {@code ReloadableResourceManager} et non
+     * {@code ResourceManager} : Mixin synthétise le getter au type EXACT du
+     * champ.
+     */
+    @Accessor("resourceManager")
+    ReloadableResourceManager la$resourceManager();
 
     /** Monde client courant — {@code null} hors partie. Même raison que {@link #la$player()} de passer par un accessor malgré un champ public. */
     @Accessor("level")

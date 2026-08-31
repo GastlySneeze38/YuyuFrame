@@ -121,6 +121,20 @@ public final class ClientData {
     }
 
     /** Connexion réseau au serveur, ou {@code null} hors partie. Méthode publique, pas un champ. */
+    /**
+     * Gestionnaire de ressources du jeu — {@code null} hors bracket 26.1.2.
+     *
+     * <p>C'est par LUI qu'il faut charger toute texture que l'on veut voir
+     * suivre les resource packs : le classloader, lui, sert la version du
+     * jar et ignore les packs. Ajouté le 2026-08-31 après constat sur le pack
+     * « Ice Cream » de l'utilisateur, qui surcharge à la fois les sprites
+     * vanilla de faim/cœur ET l'atlas d'AppleSkin.
+     */
+    public static net.minecraft.server.packs.resources.ReloadableResourceManager resourceManager() {
+        MinecraftAccessor261 mc = accessor();
+        return mc == null ? null : mc.la$resourceManager();
+    }
+
     public static ClientPacketListener connection() {
         Minecraft mc = client();
         try {

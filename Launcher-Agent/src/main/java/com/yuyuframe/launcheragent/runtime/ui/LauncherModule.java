@@ -210,4 +210,22 @@ public abstract class LauncherModule {
      * {@code LowHealthTintModule}, qui note qu'il a déjà dessiné).
      */
     public void onRenderInVanillaGui(com.yuyuframe.launcheragent.apigraphic.UiRenderer renderer, int vpWidth, int vpHeight) {}
+
+    /**
+     * {@code true} si {@link #onRenderInVanillaGui} doit AUSSI être appelé
+     * quand un écran vanilla/mod est ouvert (tchat, inventaire, conteneur…).
+     * Défaut {@code false} : l'overlay ne s'affiche qu'en jeu, écran fermé.
+     *
+     * <p>Existe pour les overlays COLLÉS à un élément du HUD vanilla, qui,
+     * lui, continue d'être dessiné derrière les écrans : la barre de faim
+     * reste visible tchat ouvert, donc l'indicateur de saturation qui se pose
+     * dessus doit l'être aussi (retour utilisateur 2026-08-31 : « il ne
+     * s'affiche plus dans le chat, il faut qu'il s'affiche de partout »).
+     * Un overlay plein écran comme la teinte de vie basse n'a pas la même
+     * évidence — d'où un opt-in par module plutôt qu'un changement global.
+     *
+     * <p>Ne contourne PAS la touche F1 : quand le joueur masque l'interface
+     * vanilla, la barre de faim disparaît, et ce qui se pose dessus avec.
+     */
+    public boolean renderInVanillaGuiWhenScreenOpen() { return false; }
 }

@@ -10,6 +10,9 @@ import com.yuyuframe.launcheragent.apimixin.v26_1.core.FoodDataAccessor261;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 
@@ -421,6 +424,17 @@ public final class SaturationModule extends LauncherModule {
      * présentation : il passerait par-dessus le chat, et de toute façon les
      * accessors dont ce module dépend n'existent que sur ce bracket.
      */
+    /**
+     * Ces indicateurs sont COLLÉS aux barres vanilla, qui restent dessinées
+     * derrière les écrans : ils doivent l'être aussi. Sans ça, ouvrir le tchat
+     * ou l'inventaire faisait disparaître la saturation d'une barre de faim
+     * pourtant toujours visible — signalé par l'utilisateur.
+     */
+    @Override
+    public boolean renderInVanillaGuiWhenScreenOpen() {
+        return true;
+    }
+
     @Override
     public void onRenderInVanillaGui(UiRenderer renderer, int vpWidth, int vpHeight) {
         try {
@@ -495,6 +509,188 @@ public final class SaturationModule extends LauncherModule {
     }
 
     private static boolean drawErrorLogged;
+
+    // ── Sprites vanilla (aperçus fantômes) ────────────────────────────────
+    //
+    // AppleSkin dessine ses aperçus avec les VRAIES icônes du jeu — jambon et
+    // cœur — simplement rendues translucides et clignotantes. On fait pareil,
+    // et c'est aussi la norme du projet : charger le vrai asset plutôt que le
+    // recréer. Seuls ses indicateurs de saturation/épuisement utilisent son
+    // propre atlas, qui n'a pas d'équivalent vanilla.
+    //
+    // Chargement paresseux, une fois par sprite, échec compris (la valeur
+    // nulle est mémorisée) — même mécanisme que PotionEffectsModule.iconOf.
+    private static final String SPRITES = "textures/gui/sprites/hud/";
+    private static final java.util.Map<String, java.awt.image.BufferedImage> SPRITE_CACHE =
+        new java.util.HashMap<String, java.awt.image.BufferedImage>();
+
+    private static java.awt.image.BufferedImage sprite(String name) {
+        if (SPRITE_CACHE.containsKey(name)) return SPRITE_CACHE.get(name);
+        java.awt.image.BufferedImage img = load("minecraft", SPRITES + name + ".png", null);
+        SPRITE_CACHE.put(name, img);
+        return img;
+    }
+
+    /**
+     * Charge une texture PAR LE GESTIONNAIRE DE RESSOURCES du jeu — donc en
+     * appliquant les resource packs.
+     *
+     * <p>BUG TROUVÉ (retour utilisateur 2026-08-31) : la première version
+     * lisait par le classloader, qui sert le contenu du JAR et ignore
+     * totalement les packs. Un pack qui redessine la barre de faim laissait
+     * donc nos aperçus en icônes vanilla, à côté d'un HUD retexturé.
+     * Constaté concrètement sur le pack « Ice Cream » de l'utilisateur, qui
+     * surcharge à la fois {@code assets/minecraft/.../hud/food_full.png} ET
+     * {@code assets/appleskin/textures/icons.png}.
+     *
+     * <p>Conséquence voulue : en passant par l'identifiant
+     * {@code appleskin:textures/icons.png}, un pack conçu POUR AppleSkin
+     * retexture aussi le nôtre, sans rien avoir à adapter.
+     *
+     * @param fallbackResource ressource de NOTRE jar à utiliser si ni le pack
+     *     ni le jeu ne fournissent le fichier ({@code null} s'il n'y en a pas
+     *     — c'est le cas des sprites vanilla, qui existent forcément).
+     */
+    private static java.awt.image.BufferedImage load(String namespace, String path, String fallbackResource) {
+        try {
+            ResourceManager manager = ClientData.resourceManager();
+            if (manager != null) {
+                Optional<Resource> res = manager.getResource(Identifier.fromNamespaceAndPath(namespace, path));
+                if (res != null && res.isPresent()) {
+                    java.io.InputStream in = res.get().open();
+                    if (in != null) {
+                        try { return javax.imageio.ImageIO.read(in); } finally { in.close(); }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            reportOnce("ressource " + namespace + ":" + path + " : " + t);
+        }
+        if (fallbackResource == null) {
+            reportOnce("ressource absente : " + namespace + ":" + path);
+            return null;
+        }
+        // Repli sur notre propre copie embarquée — un atlas AppleSkin qu'aucun
+        // pack ne fournit, cas de loin le plus courant.
+        try {
+            java.io.InputStream in = SaturationModule.class.getResourceAsStream(fallbackResource);
+            if (in == null) {
+                reportOnce("repli absent du JAR : " + fallbackResource);
+                return null;
+            }
+            try { return javax.imageio.ImageIO.read(in); } finally { in.close(); }
+        } catch (Throwable t) {
+            reportOnce("repli " + fallbackResource + " : " + t);
+            return null;
+        }
+    }
+
+    /**
+     * Vide les images mémorisées — à appeler après un rechargement des
+     * ressources (F3+T, changement de pack), sans quoi on continuerait
+     * d'afficher les textures de l'ancien pack pour toute la session.
+     */
+    public static void invalidateTextures() {
+        SPRITE_CACHE.clear();
+        atlas = null;
+        atlasLoaded = false;
+    }
+
+    // ── Atlas AppleSkin (saturation + épuisement) ─────────────────────────
+    //
+    // Ces deux indicateurs n'ont AUCUN équivalent vanilla : ce sont des
+    // données que l'interface du jeu ne montre nulle part, donc sans sprite à
+    // réutiliser. On embarque celui d'AppleSkin — The Unlicense, domaine
+    // public, copie et redistribution explicitement autorisées. Voir
+    // resources/textures/README-appleskin.txt pour l'origine et la
+    // disposition, relevée en décodant le PNG.
+    /** Notre copie embarquée, utilisée seulement si aucun pack ne fournit {@code appleskin:textures/icons.png}. */
+    private static final String ATLAS_RESOURCE = "/textures/appleskin_icons.png";
+    /** L'identifiant D'APPLESKIN, pas le nôtre : c'est ce qui rend nos indicateurs retexturables par les packs déjà écrits pour lui. */
+    private static final String ATLAS_NAMESPACE = "appleskin";
+    private static final String ATLAS_PATH = "textures/icons.png";
+    /** Largeur en pixels d'atlas de la barre d'épuisement — elle se révèle par la DROITE, comme chez AppleSkin. */
+    private static final int ATLAS_EXHAUSTION_WIDTH = 81;
+    private static final int ATLAS_EXHAUSTION_Y = 18;
+    /** Quatre paliers de remplissage : vide, quart, moitié, plein. */
+    private static final int ATLAS_SATURATION_STEPS = 4;
+
+    private static java.awt.image.BufferedImage atlas;
+    private static boolean atlasLoaded;
+
+    private static java.awt.image.BufferedImage atlas() {
+        if (atlasLoaded) return atlas;
+        atlasLoaded = true;
+        atlas = load(ATLAS_NAMESPACE, ATLAS_PATH, ATLAS_RESOURCE);
+        return atlas;
+    }
+
+    /**
+     * Découpe et mémorise une sous-image de l'atlas.
+     *
+     * <p>Le découpage se fait ICI plutôt que par des UV au moment du dessin :
+     * {@code drawIcon} prend une image entière, et l'atlas d'icônes du moteur
+     * indexe par clé. Chaque sous-image n'est donc copiée sur le GPU qu'une
+     * fois, à sa première apparition.
+     */
+    private static java.awt.image.BufferedImage region(String key, int x, int y, int w, int h) {
+        java.awt.image.BufferedImage cached = SPRITE_CACHE.get(key);
+        if (cached != null || SPRITE_CACHE.containsKey(key)) return cached;
+        java.awt.image.BufferedImage src = atlas();
+        java.awt.image.BufferedImage sub = null;
+        try {
+            if (src != null && x >= 0 && y >= 0 && w > 0 && h > 0
+                && x + w <= src.getWidth() && y + h <= src.getHeight()) {
+                sub = src.getSubimage(x, y, w, h);
+            }
+        } catch (Throwable t) {
+            reportOnce("découpe atlas " + key + " : " + t);
+        }
+        SPRITE_CACHE.put(key, sub);
+        return sub;
+    }
+
+    /**
+     * Une rangée d'icônes 9×9 fantômes, de {@code fromHalves} à
+     * {@code toHalves} demi-points.
+     *
+     * <p>Deux passes comme AppleSkin — un fond à un quart de l'opacité puis
+     * l'avant-plan à l'opacité pleine : la première assoit l'icône sur le
+     * décor, la seconde la fait pulser. Une passe unique donnerait un fantôme
+     * qui disparaît complètement au creux du clignotement.
+     *
+     * @param rightAligned {@code true} pour la faim (les icônes se remplissent
+     *     depuis la droite), {@code false} pour la vie (depuis la gauche).
+     */
+    private void drawGhostIcons(UiRenderer renderer, String fullSprite, String halfSprite,
+                                float fromHalves, float toHalves, float origin, float rowBottom,
+                                boolean rightAligned, float alpha, float scale, int vpWidth, int vpHeight) {
+        java.awt.image.BufferedImage full = sprite(fullSprite);
+        java.awt.image.BufferedImage half = sprite(halfSprite);
+        if (full == null || half == null) return;
+
+        float size = ICON_W * scale;
+        int firstIcon = (int) Math.floor(fromHalves / 2f);
+        int lastIcon = (int) Math.ceil(toHalves / 2f) - 1;
+
+        for (int icon = Math.max(0, firstIcon); icon <= Math.min(ICONS - 1, lastIcon); icon++) {
+            // Ne rien dessiner sur un demi-point DÉJÀ acquis : l'aperçu ne
+            // montre que le gain, pas ce qu'on a déjà.
+            float iconStart = icon * 2f;
+            if (iconStart + 2f <= fromHalves) continue;
+
+            boolean isFull = toHalves >= iconStart + 2f;
+            java.awt.image.BufferedImage img = isFull ? full : half;
+            String key = SPRITES + (isFull ? fullSprite : halfSprite);
+
+            float x = rightAligned
+                ? origin - icon * ICON_STEP * scale - size
+                : origin + icon * ICON_STEP * scale;
+
+            renderer.drawIcon(key, img, x, rowBottom, size, size, alpha * 0.25f, vpWidth, vpHeight);
+            renderer.drawIcon(key, img, x, rowBottom, size, size, alpha, vpWidth, vpHeight);
+        }
+    }
 
     /**
      * Journalise UNE fois par raison DISTINCTE — pas une fois tout court :
@@ -577,10 +773,46 @@ public final class SaturationModule extends LauncherModule {
      */
     private void drawSaturation(UiRenderer renderer, float saturation,
                                 float barRight, float barBottom, float scale, int vpWidth, int vpHeight) {
-        if (saturation <= 0f) return;
-        float thickness = 1.5f * scale;
-        float y = barBottom + ICON_W * scale; // haut des icônes de faim
-        drawHalfIconRun(renderer, saturation, barRight, y, thickness, scale, SATURATION_COLOR, vpWidth, vpHeight);
+        drawSaturationRun(renderer, 0f, saturation, barRight, barBottom, 1f, scale, vpWidth, vpHeight);
+    }
+
+    /**
+     * Les cellules de saturation d'AppleSkin, superposées aux icônes de faim.
+     *
+     * <p>Chaque icône de faim vaut 2 points de saturation, et l'atlas offre
+     * quatre paliers de remplissage — donc un palier tous les 0,5 point. Le
+     * palier est choisi par ARRONDI SUPÉRIEUR : dès qu'il reste un fragment de
+     * saturation sur une icône, on montre au moins le premier palier plutôt
+     * que rien. Arrondir vers le bas ferait disparaître le dernier reste avant
+     * qu'il ne soit réellement consommé.
+     *
+     * @param from début de l'intervalle en points de saturation (0 pour la
+     *     valeur réelle ; la saturation courante pour un aperçu, qui reprend
+     *     donc là où elle s'arrête).
+     */
+    private void drawSaturationRun(UiRenderer renderer, float from, float to,
+                                   float barRight, float barBottom, float alpha,
+                                   float scale, int vpWidth, int vpHeight) {
+        if (to <= from || to <= 0f) return;
+        float size = ICON_W * scale;
+
+        for (int icon = 0; icon < ICONS; icon++) {
+            float iconStart = icon * 2f;             // 2 points de saturation par icône
+            float fill = Math.min(2f, to - iconStart);
+            if (fill <= 0f) break;                    // au-delà, plus rien à remplir
+            if (iconStart + 2f <= from) continue;     // déjà couvert par la partie réelle
+
+            int step = (int) Math.ceil(fill / 0.5f) - 1;
+            if (step < 0) continue;
+            if (step > ATLAS_SATURATION_STEPS - 1) step = ATLAS_SATURATION_STEPS - 1;
+
+            String key = "appleskin/sat_" + step;
+            java.awt.image.BufferedImage cell = region(key, step * (int) ICON_W, 0, (int) ICON_W, (int) ICON_W);
+            if (cell == null) return;                 // atlas absent, déjà journalisé
+
+            float x = barRight - icon * ICON_STEP * scale - size;
+            renderer.drawIcon(key, cell, x, barBottom, size, size, alpha, vpWidth, vpHeight);
+        }
     }
 
     /**
@@ -632,12 +864,26 @@ public final class SaturationModule extends LauncherModule {
                                 float barRight, float barBottom, float scale, int vpWidth, int vpHeight) {
         float ratio = Math.max(0f, Math.min(1f, exhaustion / MAX_EXHAUSTION));
         if (ratio <= 0f) return;
-        float full = (ICONS - 1) * ICON_STEP * scale + ICON_W * scale;
-        float w = full * ratio;
-        float thickness = 1f * scale;
-        float y = barBottom - thickness - scale;
-        renderer.drawRoundedRect(barRight - w, y, barRight, y + thickness, 0f, EXHAUSTION_COLOR, vpWidth, vpHeight);
+
+        // Découpage à la largeur EXACTE d'AppleSkin : la source est prise à
+        // (81 - largeur, 18), donc la barre se révèle par la droite. Largeur
+        // arrondie au pixel d'atlas, ce qui borne à 81 le nombre de
+        // sous-images distinctes — sinon chaque frame en créerait une nouvelle
+        // et remplirait l'atlas d'icônes du moteur.
+        int w = Math.round(ATLAS_EXHAUSTION_WIDTH * ratio);
+        if (w <= 0) return;
+
+        String key = "appleskin/exh_" + w;
+        java.awt.image.BufferedImage bar = region(key,
+            ATLAS_EXHAUSTION_WIDTH - w, ATLAS_EXHAUSTION_Y, w, (int) ICON_W);
+        if (bar == null) return;
+
+        renderer.drawIcon(key, bar, barRight - w * scale, barBottom,
+            w * scale, ICON_W * scale, EXHAUSTION_ALPHA, vpWidth, vpHeight);
     }
+
+    /** Opacité de la barre d'épuisement — la valeur d'AppleSkin, reprise telle quelle. */
+    private static final float EXHAUSTION_ALPHA = 0.75f;
 
     /**
      * Aperçu de ce que l'aliment tenu rendrait : la faim en fantôme sur les
@@ -655,10 +901,11 @@ public final class SaturationModule extends LauncherModule {
 
         int restoredFood = Math.min(20, foodLevel + food.nutrition());
         if (restoredFood > foodLevel) {
-            float y = barBottom + 1f * scale;
-            float thickness = ICON_W * scale - 2f * scale;
-            drawHalfIconRun(renderer, foodLevel, restoredFood, barRight, y, thickness, scale,
-                FOOD_GHOST.multiplyAlpha(alpha * 0.6f), vpWidth, vpHeight);
+            // VRAIES icônes de jambon vanilla, comme AppleSkin — le rectangle
+            // translucide de la première version ne ressemblait à rien une
+            // fois posé sur la barre de faim.
+            drawGhostIcons(renderer, "food_full", "food_half",
+                foodLevel, restoredFood, barRight, barBottom, true, alpha, scale, vpWidth, vpHeight);
         }
 
         if (showSaturation) {
@@ -667,9 +914,11 @@ public final class SaturationModule extends LauncherModule {
             // un aperçu faux d'un facteur ~10 sur les aliments riches.
             float restoredSat = Math.min(saturation + food.saturation(), restoredFood);
             if (restoredSat > saturation) {
-                float y = barBottom + ICON_W * scale;
-                drawHalfIconRun(renderer, saturation, restoredSat, barRight, y, 1.5f * scale, scale,
-                    SATURATION_GHOST.multiplyAlpha(alpha), vpWidth, vpHeight);
+                // Mêmes cellules que l'indicateur réel, simplement translucides
+                // et clignotantes — reprises là où la saturation courante
+                // s'arrête, jamais redessinées par-dessus elle.
+                drawSaturationRun(renderer, saturation, restoredSat, barRight, barBottom,
+                    alpha, scale, vpWidth, vpHeight);
             }
         }
     }
@@ -707,27 +956,13 @@ public final class SaturationModule extends LauncherModule {
         // Barre de vie : miroir gauche de la barre de faim, les cœurs se
         // remplissent de la GAUCHE vers la droite.
         float barLeft = (guiWidth / 2f - BAR_HALF_WIDTH) * scale;
-        float y = barBottom + ICON_W * scale;
-        float thickness = 1.5f * scale;
         float maxHalves = ICONS * 2f;
         float from = Math.min(maxHalves, health);
         float to = Math.min(maxHalves, health + healed);
-        UiColor color = HEALTH_GHOST.multiplyAlpha(alpha);
 
-        for (int half = (int) Math.floor(from); half < Math.ceil(to); half++) {
-            int icon = half / 2;
-            boolean leftHalf = (half % 2) == 0;
-            float iconLeft = barLeft + icon * ICON_STEP * scale;
-            float halfW = ICON_W * scale * 0.5f;
-            float x1 = leftHalf ? iconLeft : iconLeft + halfW;
-            float x2 = leftHalf ? iconLeft + halfW : iconLeft + ICON_W * scale;
-
-            float coverStart = Math.max(0f, from - half);
-            float coverEnd = Math.min(1f, to - half);
-            if (coverEnd <= coverStart) continue;
-            float w = x2 - x1;
-            renderer.drawRoundedRect(x1 + w * coverStart, y, x1 + w * coverEnd, y + thickness,
-                0f, color, vpWidth, vpHeight);
-        }
+        // VRAIS cœurs vanilla. La rangée de vie est à la même hauteur que
+        // celle de la faim, elle se remplit juste depuis la GAUCHE.
+        drawGhostIcons(renderer, "heart/full", "heart/half",
+            from, to, barLeft, barBottom, false, alpha, scale, vpWidth, vpHeight);
     }
 }

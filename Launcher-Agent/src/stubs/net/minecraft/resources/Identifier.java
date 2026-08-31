@@ -20,4 +20,12 @@ public final class Identifier {
      * s'appuyer dessus (voir audit ROADMAP-agent.md §3.3, moteur graphique).
      */
     public static Identifier withDefaultNamespace(String path) { return null; }
+
+    /**
+     * Fabrique à espace de noms EXPLICITE — indispensable pour viser
+     * {@code appleskin:textures/icons.png}, hors du namespace
+     * {@code minecraft}. Descripteur vérifié sur le jar 26.1.2 :
+     * {@code (Ljava/lang/String;Ljava/lang/String;)Lnet/minecraft/resources/Identifier;}.
+     */
+    public static Identifier fromNamespaceAndPath(String namespace, String path) { return null; }
 }

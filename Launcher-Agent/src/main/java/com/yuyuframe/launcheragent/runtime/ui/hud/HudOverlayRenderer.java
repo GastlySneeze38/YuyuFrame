@@ -135,13 +135,22 @@ public final class HudOverlayRenderer {
         UiRenderer renderer = UiRenderer.get(HudOverlayRenderer.class.getClassLoader());
         if (!VanillaGuiTarget.begin(hookContext, w, h)) return;
         try {
+            // AVANT le HUD : l'ordre de soumission fait la profondeur dans
+            // l'état de GUI, et un overlay (teinte vie basse, indicateurs de
+            // saturation) doit passer SOUS nos propres panneaux.
+            //
+            // Appelé dans LES DEUX cas depuis le 2026-08-31 (retour
+            // utilisateur : « il ne s'affiche plus dans le chat, il faut
+            // qu'il s'affiche de partout ») — le HUD vanilla, lui, continue
+            // d'être dessiné derrière les écrans, donc un overlay collé à la
+            // barre de faim doit suivre. C'est chaque module qui décide, via
+            // renderInVanillaGuiWhenScreenOpen() : la restriction d'origine à
+            // « aucun écran ouvert » venait de l'ancien chemin après
+            // présentation, pas d'un choix réfléchi.
+            com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry.renderInVanillaGuiAll(
+                renderer, w, h, screen != null);
+
             if (screen == null) {
-                // AVANT le HUD : l'ordre de soumission fait la profondeur dans
-                // l'état de GUI, et un overlay plein écran (teinte vie basse)
-                // doit passer SOUS nos propres panneaux, pas par-dessus.
-                // Même condition d'écran que l'appel après présentation qu'il
-                // remplace (voir GlobalUiPresentMixin261).
-                com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry.renderInVanillaGuiAll(renderer, w, h);
                 HudRenderer.drawAll(renderer, w, h);
             } else {
                 HudRenderer.drawPersistent(renderer, shouldShowPersistent(screen), w, h);
