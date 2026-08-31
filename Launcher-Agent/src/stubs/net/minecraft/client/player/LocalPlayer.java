@@ -39,6 +39,18 @@ public abstract class LocalPlayer {
      * Descripteur vérifié sur le jar 26.1.2 : {@code canEat(Z)Z}.
      */
     public boolean canEat(boolean canAlwaysEat) { return false; }
+
+    // ── Mouvement, pour l'estimation locale d'épuisement (SaturationModule) ──
+    // Descripteurs vérifiés sur le jar 26.1.2 (net.minecraft.world.entity.Entity).
+    /** Sprint : de loin la première source d'épuisement en jeu normal. */
+    public boolean isSprinting() { return false; }
+    /** Nage (posture horizontale), distincte de {@link #isInWater()}. */
+    public boolean isSwimming() { return false; }
+    public boolean isInWater() { return false; }
+    /** Au sol — sert à détecter un saut (transition sol → air). */
+    public boolean onGround() { return false; }
+    /** Passager d'une monture/d'un véhicule : le déplacement ne coûte alors rien au joueur. */
+    public boolean isPassenger() { return false; }
     public ItemStack getItemBySlot(EquipmentSlot slot) { return null; }
     public ItemStack getItemInHand(InteractionHand hand) { return null; }
     public HumanoidArm getMainArm() { return null; }

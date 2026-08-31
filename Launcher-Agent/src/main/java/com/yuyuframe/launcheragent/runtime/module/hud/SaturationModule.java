@@ -44,11 +44,11 @@ import net.minecraft.world.item.ItemStack;
  * donc dessinés au moteur de rects, ce qui donne un liseré plutôt que des
  * demi-icônes texturées.
  *
- * <h2>⚠️ La saturation affichée est PÉRIMÉE entre deux paquets</h2>
+ * <h2>La saturation du client est PÉRIMÉE — d'où {@link Estimator}</h2>
  *
  * Constat utilisateur (2026-08-31) : « la barre de saturation ne descend pas
- * petit à petit, elle disparaît d'un coup ». Ce n'est pas un défaut de calcul
- * ici — c'est le PROTOCOLE.
+ * petit à petit, elle disparaît d'un coup ». Ce n'était pas un défaut de
+ * calcul — c'est le PROTOCOLE.
  *
  * <p>Le serveur n'envoie {@code ClientboundSetHealthPacket} (le seul paquet
  * qui porte la saturation) que lorsque le niveau de FAIM change, ou que la
@@ -57,14 +57,13 @@ import net.minecraft.world.item.ItemStack;
  * Entre ces événements la valeur côté client ne bouge pas d'un pouce, puis
  * tombe d'un coup.
  *
- * <p>C'est précisément la raison d'être du composant serveur d'AppleSkin, que
- * j'avais écarté à tort en présentant ce portage comme « sans intérêt ici ».
- * Sans mod côté serveur, deux sorties seulement : afficher la dernière valeur
- * connue (ce qu'on fait — honnête, mais saccadé), ou ESTIMER l'épuisement
- * localement. Le client n'en accumule aucun de lui-même
- * ({@code Player.causeFoodExhaustion} est un no-op côté client), il faudrait
- * donc réimplémenter toute la comptabilité du serveur — approximative par
- * construction, et qui dériverait jusqu'au paquet suivant.
+ * <p>AppleSkin résout ça par un composant SERVEUR qui pousse la vraie valeur
+ * à chaque changement — inapplicable ici : l'agent doit fonctionner sur des
+ * serveurs qui ne sont pas les nôtres, où l'on ne peut rien installer. La
+ * seule voie 100 % cliente est donc d'ESTIMER l'épuisement localement, ce que
+ * fait {@link Estimator} : il rejoue la comptabilité du serveur à partir de
+ * ce que le client observe, et se RECALE sur la vérité dès que le serveur
+ * parle. Approximatif entre deux paquets, exact à chacun d'eux.
  *
  * <h2>Accès aux données</h2>
  *
@@ -80,12 +79,16 @@ public final class SaturationModule extends LauncherModule {
     public boolean showExhaustion = true;
     public boolean showFoodPreview = true;
     public boolean showHealthPreview = true;
+    public boolean estimateSaturation = true;
 
     @Override
     protected void settings(SettingList s) {
         s.toggle("showSaturation", "Indicateur de saturation",
-            "Liseré sur la barre de faim : la saturation, que l'interface vanilla cache entièrement. ⚠️ Le serveur ne l'envoie qu'aux changements de niveau de faim et au passage à zéro — le liseré tombe donc d'un coup au lieu de descendre continûment.",
+            "Liseré sur la barre de faim : la saturation, que l'interface vanilla cache entièrement.",
             "Réglages", null, () -> showSaturation, v -> showSaturation = v);
+        s.toggle("estimateSaturation", "Estimation continue",
+            "Le serveur n'envoie la saturation qu'aux changements de niveau de faim et au passage à zéro : sans estimation, le liseré reste figé puis tombe d'un coup. Activé, l'épuisement est recalculé localement (sprint, nage, saut, régénération, dégâts) et recalé sur la vraie valeur dès que le serveur parle. Décoche pour voir la valeur brute du serveur.",
+            "Réglages", () -> showSaturation, () -> estimateSaturation, v -> estimateSaturation = v);
         s.toggle("showExhaustion", "Indicateur d'épuisement",
             "Fine barre sous la faim. L'épuisement monte en courant, sautant, encaissant des dégâts ; à 4 il consomme un point de saturation.",
             "Réglages", null, () -> showExhaustion, v -> showExhaustion = v);
@@ -144,11 +147,165 @@ public final class SaturationModule extends LauncherModule {
         flashAccumulator += flashDirection * 0.125f;
         if (flashAccumulator >= 1.5f) { flashAccumulator = 1.5f; flashDirection = -1f; }
         else if (flashAccumulator <= -0.5f) { flashAccumulator = -0.5f; flashDirection = 1f; }
+
+        // L'estimation se met à jour au TICK (20/s, la cadence à laquelle le
+        // serveur fait lui-même sa comptabilité) et non à la frame, sinon elle
+        // dépendrait du nombre d'images par seconde.
+        if (!estimateSaturation) return;
+        try {
+            LocalPlayer player = PlayerData.player();
+            if (player == null) return;
+            FoodData foodData = player.getFoodData();
+            if (!(foodData instanceof FoodDataAccessor261)) return;
+            FoodDataAccessor261 food = (FoodDataAccessor261) foodData;
+            estimator.tick(player, food.la$foodLevel(), food.la$saturationLevel(), food.la$exhaustionLevel());
+        } catch (Throwable t) {
+            if (!tickErrorLogged) {
+                tickErrorLogged = true;
+                LauncherLog.err("[SaturationModule] onTick: " + t);
+            }
+        }
     }
+
+    private static boolean tickErrorLogged;
 
     private float flashAlpha() {
         return Math.max(0f, Math.min(1f, flashAccumulator));
     }
+
+    /**
+     * Rejoue côté client la comptabilité d'épuisement du serveur, pour que la
+     * saturation descende CONTINÛMENT au lieu de tomber d'un coup à la
+     * réception d'un paquet — voir la javadoc de classe pour le pourquoi.
+     *
+     * <h2>Principe</h2>
+     *
+     * Deux mouvements par tick :
+     * <ol>
+     *   <li><b>recalage</b> — si la faim ou la saturation du client ont bougé,
+     *       c'est que le serveur vient de parler : on jette l'estimation et on
+     *       repart de la vérité ;</li>
+     *   <li><b>accumulation</b> — sinon, on ajoute l'épuisement des actions
+     *       observables, et on applique la règle de {@code FoodData.tick()} :
+     *       à 4 d'épuisement, retrancher 4 et consommer 1 de saturation.</li>
+     * </ol>
+     *
+     * <h2>Ce qui est couvert, ce qui ne l'est pas</h2>
+     *
+     * Couvert : sprint, nage, déplacement dans l'eau, saut (et saut sprinté,
+     * quatre fois plus cher), régénération naturelle (6 par PV, de loin le
+     * poste dominant quand elle tourne) et dégâts reçus.
+     *
+     * <p>Non couvert, faute d'être observable sans hook dédié : casser un bloc
+     * (0,005) et attaquer (0,1). Deux termes petits devant le sprint, et dont
+     * l'absence fait sous-estimer la consommation — l'estimation retarde donc
+     * un peu, elle n'avance jamais à tort. Le recalage rattrape l'écart au
+     * paquet suivant.
+     *
+     * <p>Les taux viennent de {@code Player.checkMovementStatistics} et de la
+     * boucle de régénération de {@code FoodData.tick()}.
+     */
+    private static final class Estimator {
+        /** Épuisement à atteindre pour consommer 1 point de saturation. */
+        private static final float EXHAUSTION_PER_SATURATION = 4f;
+        private static final float SPRINT_PER_BLOCK = 0.1f;
+        private static final float SWIM_PER_BLOCK = 0.01f;
+        private static final float JUMP = 0.05f;
+        private static final float SPRINT_JUMP = 0.2f;
+        private static final float REGEN_PER_HEALTH = 6f;
+        private static final float DAMAGE_TAKEN = 0.1f;
+
+        private float saturation;
+        private float exhaustion;
+
+        private int lastServerFood = Integer.MIN_VALUE;
+        private float lastServerSaturation = Float.NaN;
+
+        private double lastX, lastY, lastZ;
+        private float lastHealth = Float.NaN;
+        private boolean wasOnGround;
+        private boolean hasPosition;
+
+        float saturation() { return saturation; }
+
+        void tick(LocalPlayer player, int serverFood, float serverSaturation, float serverExhaustion) {
+            // ── 1. Recalage ───────────────────────────────────────────────
+            // Comparaison EXACTE et non à epsilon près : ces deux valeurs ne
+            // changent côté client que par désérialisation d'un paquet, jamais
+            // par un calcul flottant local. Un changement, si minime soit-il,
+            // veut dire que le serveur a parlé.
+            if (serverFood != lastServerFood || serverSaturation != lastServerSaturation) {
+                lastServerFood = serverFood;
+                lastServerSaturation = serverSaturation;
+                saturation = serverSaturation;
+                exhaustion = serverExhaustion;
+            }
+
+            double x = player.getX(), y = player.getY(), z = player.getZ();
+            float health = player.getHealth();
+            boolean onGround = player.onGround();
+
+            if (hasPosition) {
+                // ── 2. Accumulation ───────────────────────────────────────
+                double dx = x - lastX, dy = y - lastY, dz = z - lastZ;
+
+                // En monture, c'est elle qui se déplace : le joueur ne dépense
+                // rien, alors que la distance parcourue, elle, est bien réelle.
+                if (!player.isPassenger()) {
+                    exhaustion += movementExhaustion(player, dx, dy, dz);
+                    // Saut : quitter le sol en montant. Le test sur dy évite de
+                    // compter une chute ou un pas dans le vide comme un saut.
+                    if (wasOnGround && !onGround && dy > 0.0) {
+                        exhaustion += player.isSprinting() ? SPRINT_JUMP : JUMP;
+                    }
+                }
+
+                if (!Float.isNaN(lastHealth)) {
+                    float delta = health - lastHealth;
+                    if (delta > 0f && serverFood >= 18) {
+                        // Régénération naturelle : 6 d'épuisement par PV rendu.
+                        // Un soin de potion serait compté à tort, mais il est
+                        // rare et l'écart se rattrape au recalage suivant.
+                        exhaustion += delta * REGEN_PER_HEALTH;
+                    } else if (delta < 0f) {
+                        exhaustion += DAMAGE_TAKEN;
+                    }
+                }
+
+                // ── 3. Règle de FoodData.tick() ───────────────────────────
+                // `while` et non `if` : un tick de forte dépense (régénération
+                // sur plusieurs PV) peut franchir le seuil plusieurs fois.
+                while (exhaustion >= EXHAUSTION_PER_SATURATION) {
+                    exhaustion -= EXHAUSTION_PER_SATURATION;
+                    saturation = Math.max(0f, saturation - 1f);
+                }
+            }
+
+            lastX = x; lastY = y; lastZ = z;
+            lastHealth = health;
+            wasOnGround = onGround;
+            hasPosition = true;
+        }
+
+        /**
+         * Seuls le sprint et l'eau coûtent quelque chose : marcher, s'accroupir
+         * et tomber sont GRATUITS depuis la 1.9 — c'est la confusion la plus
+         * courante sur cette mécanique, et la compter ferait fondre
+         * l'estimation bien trop vite.
+         */
+        private float movementExhaustion(LocalPlayer player, double dx, double dy, double dz) {
+            if (player.isSwimming()) {
+                double d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                return (float) (d * SWIM_PER_BLOCK);
+            }
+            double horizontal = Math.sqrt(dx * dx + dz * dz);
+            if (player.isInWater()) return (float) (horizontal * SWIM_PER_BLOCK);
+            if (player.isSprinting()) return (float) (horizontal * SPRINT_PER_BLOCK);
+            return 0f;
+        }
+    }
+
+    private final Estimator estimator = new Estimator();
 
     /**
      * Dessiné DANS la passe GUI de vanilla, donc au-dessus des barres qui
@@ -179,7 +336,10 @@ public final class SaturationModule extends LauncherModule {
             FoodDataAccessor261 food = (FoodDataAccessor261) foodData;
 
             int foodLevel = food.la$foodLevel();
-            float saturation = food.la$saturationLevel();
+            // L'ESTIMATION, pas la valeur brute — voir Estimator. Elle vaut
+            // exactement la valeur serveur au moment où celui-ci parle, et
+            // continue de descendre entre deux paquets.
+            float saturation = estimateSaturation ? estimator.saturation() : food.la$saturationLevel();
             float exhaustion = food.la$exhaustionLevel();
 
             float scale = UiVanillaItemRenderer.guiScale(vpWidth);
