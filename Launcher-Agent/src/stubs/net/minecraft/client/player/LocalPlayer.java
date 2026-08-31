@@ -28,6 +28,17 @@ public abstract class LocalPlayer {
     /** Renvoie {@code boolean} (vrai si un effet a bien été retiré), PAS void — le type de retour fait partie du descripteur d'appel, voir le stub {@code SoundEngine}. Vérifié sur {@code LivingEntity.removeEffect(Holder)Z} du jar 26.1.2. */
     public boolean removeEffect(Holder<MobEffect> effect) { return false; }
     public FoodData getFoodData() { return null; }
+    /** Mode créatif — la barre de faim vanilla n'est alors pas dessinée, nos overlays non plus (voir {@code SaturationModule}). Descripteur vérifié sur le jar 26.1.2 : {@code ()Z}. */
+    public boolean isCreative() { return false; }
+    /** Mode spectateur — même raison qu'{@link #isCreative()}. */
+    public boolean isSpectator() { return false; }
+    /**
+     * {@code true} si le joueur peut manger maintenant — {@code false} barre
+     * de faim pleine, sauf pour un aliment {@code canAlwaysEat} (pomme dorée…).
+     * C'est la garde qu'utilise vanilla lui-même avant de consommer.
+     * Descripteur vérifié sur le jar 26.1.2 : {@code canEat(Z)Z}.
+     */
+    public boolean canEat(boolean canAlwaysEat) { return false; }
     public ItemStack getItemBySlot(EquipmentSlot slot) { return null; }
     public ItemStack getItemInHand(InteractionHand hand) { return null; }
     public HumanoidArm getMainArm() { return null; }
