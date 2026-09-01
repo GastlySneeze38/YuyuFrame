@@ -18,6 +18,42 @@ use super::progress::set_progress_monotonic;
 /// normalement en moins de 200 ms.
 const JAVA_VERSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// `true` si cette JVM est une OpenJ9/Semeru — la SEULE famille dont les
+/// drapeaux GC (`-Xgcpolicy:*`) sont incompatibles avec HotSpot.
+///
+/// BUG TROUVÉ (log utilisateur 2026-08-31) :
+/// ```text
+/// Java 25 (Eclipse OpenJ9) détecté, 2048 Mo alloués — -Xgcpolicy:gencon activé
+/// Unrecognized option: -Xgcpolicy:gencon
+/// Error: Could not create the Java Virtual Machine.
+/// ```
+/// Le vendeur servant à générer les drapeaux était celui **demandé**, jamais
+/// celui **réellement obtenu**. À 2 Go le mode auto choisit OpenJ9 ;
+/// `ensure_openj9` échouait (voir `download_adoptium` — mauvaise API
+/// interrogée, 404 sur TOUTES les versions), on retombait proprement sur le
+/// runtime Mojang — qui est du HotSpot — mais les drapeaux, eux, restaient
+/// ceux d'OpenJ9. La JVM refusait de démarrer.
+///
+/// On interroge donc la JVM elle-même plutôt que le réglage : une
+/// incompatibilité de famille devient structurellement impossible, y compris
+/// avec un chemin personnalisé pointant sur une OpenJ9 alors que le réglage
+/// dit « Temurin », ou l'inverse.
+pub(super) async fn is_openj9(java: &str) -> bool {
+    let Ok(Ok(out)) = tokio::time::timeout(
+        JAVA_VERSION_TIMEOUT,
+        tokio::process::Command::new(java).arg("-version").output(),
+    )
+    .await
+    else {
+        return false;
+    };
+    let mut text = String::from_utf8_lossy(&out.stderr).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stdout));
+    // La bannière annonce "Eclipse OpenJ9 VM" ou "IBM J9 VM" selon la build.
+    let lower = text.to_ascii_lowercase();
+    lower.contains("openj9") || lower.contains("j9 vm")
+}
+
 pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
     let out = tokio::time::timeout(
         JAVA_VERSION_TIMEOUT,
@@ -405,21 +441,37 @@ async fn download_adoptium_jre8(dest: &Path, client: &reqwest::Client) -> Result
     download_adoptium(8, "hotspot", dest, client).await
 }
 
-/// Télécharge un JRE via l'API publique Adoptium et l'extrait dans `dest`
-/// (structure finale : `dest/bin/java.exe`, comme Mojang). `jvm_impl` :
-/// "hotspot" (Temurin) ou "openj9" (Eclipse OpenJ9) — même URL Adoptium pour
-/// les deux, seul ce segment change. Windows uniquement pour l'instant —
-/// Adoptium sert un .zip sur Windows mais un .tar.gz sur macOS/Linux, et
+/// Télécharge un JRE et l'extrait dans `dest` (structure finale :
+/// `dest/bin/java.exe`, comme Mojang). `jvm_impl` : "hotspot" (Temurin) ou
+/// "openj9" (Eclipse OpenJ9 / IBM Semeru). Windows uniquement pour l'instant
+/// — ces API servent un .zip sur Windows mais un .tar.gz sur macOS/Linux, et
 /// seul le crate `zip` est disponible ici.
+///
+/// ⚠️ DEUX HÔTES, PAS UN (bug corrigé le 2026-09-01) : la fondation Adoptium
+/// ne publie QUE du HotSpot (c'est la définition de Temurin). Demander
+/// `jvm_impl=openj9` à `api.adoptium.net` rend 404 quelle que soit la
+/// version — vérifié sur 17, 21 et 25, et avec les deux vendeurs `eclipse`
+/// et `ibm`. Le téléchargement OpenJ9 n'a donc JAMAIS pu aboutir depuis son
+/// introduction : le mode auto sous 2 Go demandait OpenJ9, se prenait un 404,
+/// et repartait silencieusement sur le runtime Mojang (HotSpot).
+///
+/// Les builds OpenJ9 vivent chez IBM Semeru, servies par l'API historique
+/// AdoptOpenJDK, toujours en ligne et à jour : elle redirige vers les assets
+/// GitHub de `ibmruntimes/semeru<N>-binaries` (vérifié : Java 25 rend
+/// `ibm-semeru-open-jre_x64_windows_25.0.4.x.zip`, racine unique
+/// `jdk-25.0.4+7-jre/` contenant `bin/java.exe` — compatible tel quel avec
+/// [`extract_zip_flatten_root`]).
 async fn download_adoptium(major: u32, jvm_impl: &str, dest: &Path, client: &reqwest::Client) -> Result<()> {
     let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x64" };
-    let url = format!(
-        "https://api.adoptium.net/v3/binary/latest/{major}/ga/windows/{arch}/jre/{jvm_impl}/normal/eclipse?project=jdk",
-    );
+    let url = if jvm_impl == "openj9" {
+        format!("https://api.adoptopenjdk.net/v3/binary/latest/{major}/ga/windows/{arch}/jre/openj9/normal/adoptopenjdk")
+    } else {
+        format!("https://api.adoptium.net/v3/binary/latest/{major}/ga/windows/{arch}/jre/{jvm_impl}/normal/eclipse?project=jdk")
+    };
 
     let resp = client.get(&url).send().await?;
     if !resp.status().is_success() {
-        return Err(anyhow!("Téléchargement Adoptium échoué: {}", resp.status()));
+        return Err(anyhow!("Téléchargement JRE échoué ({} {}): {}", jvm_impl, major, resp.status()));
     }
     let bytes = resp.bytes().await?;
 
@@ -429,7 +481,14 @@ async fn download_adoptium(major: u32, jvm_impl: &str, dest: &Path, client: &req
 
     let extract_result = extract_zip_flatten_root(&temp_zip, dest);
     let _ = tokio::fs::remove_file(&temp_zip).await;
-    extract_result
+    extract_result?;
+    // Même marqueur que les runtimes Mojang — voir `runtime_is_complete`.
+    // Ces runtimes-ci s'en sortaient par le repli « la bibliothèque de VM
+    // est là », mais ce repli est justement le mode dégradé : posé ici,
+    // l'extraction interrompue n'est plus jamais prise pour une install
+    // terminée.
+    let _ = tokio::fs::write(dest.join(RUNTIME_COMPLETE_MARKER), b"ok").await;
+    Ok(())
 }
 
 /// Extrait un zip Adoptium en retirant son unique dossier racine (ex :

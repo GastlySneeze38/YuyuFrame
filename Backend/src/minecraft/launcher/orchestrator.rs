@@ -15,7 +15,7 @@ use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
-use super::java::ensure_java;
+use super::java::{ensure_java, is_openj9};
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, resolve_auto_vendor, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
@@ -520,6 +520,14 @@ pub async fn download_and_launch(
     // `args` plus bas (-cp).
     let appcds_args = appcds_jvm_args(&java, java_major, &mc_game_dir, version_id, loader, &classpath_str, true).await;
 
+    // Famille de drapeaux déduite de la JVM RÉELLEMENT obtenue, pas du
+    // réglage — voir `is_openj9` pour le log utilisateur qui a révélé le
+    // problème. `ensure_java` peut légitimement rendre autre chose que le
+    // vendeur demandé (OpenJ9 indisponible pour ce Java, GraalVM jamais
+    // téléchargé, JAVA_HOME prioritaire…) ; générer des `-Xgcpolicy:*` pour
+    // une HotSpot empêche la JVM de démarrer, tout court.
+    let jvm_vendor = effective_jvm_vendor(&java, jvm_vendor).await;
+
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
     // P1-6 (Phase 6) : message de diagnostic conscient du vendeur — même
     // condition que la branche ZGC de build_hotspot_jvm_args pour ne jamais
@@ -757,6 +765,10 @@ pub async fn preview_jvm_config(
     let java_component = details.java_version.as_ref().map(|j| j.component.as_str()).unwrap_or("jre-legacy");
     let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, jvm_custom_path).await?;
 
+    // Même correction que dans le lancement réel — sans quoi l'aperçu des
+    // paramètres afficherait des drapeaux que le jeu n'utilisera jamais.
+    let jvm_vendor = effective_jvm_vendor(&java, jvm_vendor).await;
+
     let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
     args.extend(extract_mojang_jvm_args(&details, &natives_dir));
     // Classpath encore inconnu à ce stade (dépend des libs/loader/mods
@@ -770,4 +782,31 @@ pub async fn preview_jvm_config(
     args.extend(appcds_jvm_args(&java, java_major, game_dir, version_id, None, "", false).await);
 
     Ok((java, java_major, args))
+}
+
+/// Famille de drapeaux à générer pour la JVM `java` réellement résolue.
+///
+/// `requested` ne dit que ce que l'utilisateur (ou le mode auto) a DEMANDÉ ;
+/// `ensure_java` peut légitimement rendre autre chose — OpenJ9 indisponible
+/// pour cette version de Java, GraalVM jamais téléchargé par le launcher,
+/// JAVA_HOME prioritaire, repli sur le runtime Mojang. Générer des
+/// `-Xgcpolicy:*` pour une HotSpot rend la JVM impossible à démarrer (voir
+/// `java::is_openj9` pour le log utilisateur qui a révélé le problème).
+///
+/// On ne sonde QUE lorsque OpenJ9 est demandé : c'est la seule famille dont
+/// les drapeaux sont incompatibles avec les autres (Temurin, Graal CE et une
+/// JVM personnalisée partagent tous la syntaxe HotSpot `-XX:*`). Le cas
+/// courant ne paie donc aucun processus supplémentaire.
+async fn effective_jvm_vendor(java: &str, requested: JvmVendor) -> JvmVendor {
+    if requested != JvmVendor::OpenJ9 {
+        return requested;
+    }
+    if is_openj9(java).await {
+        return JvmVendor::OpenJ9;
+    }
+    tracing::warn!(
+        "OpenJ9 demandé mais la JVM résolue ({}) n'en est pas une — drapeaux HotSpot utilisés à la place",
+        java
+    );
+    JvmVendor::Temurin
 }

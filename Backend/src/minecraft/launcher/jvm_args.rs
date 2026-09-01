@@ -61,8 +61,15 @@ impl JvmVendor {
 /// ~2 Go → OpenJ9 (empreinte de base plus faible, la marge nécessaire sur un
 /// budget serré) ; au-delà → Temurin (le choix de GC exact — G1 ou ZGC — est
 /// déjà décidé par `build_hotspot_jvm_args` sur `ram_mb`/`java_major`).
+///
+/// La borne est `<= 2048`, pas `< 3072` : la grille jvm-config n'a QUE deux
+/// paliers de ce côté — "~2 Go → OpenJ9/gencon" et "3-4 Go → Temurin/G1GC".
+/// L'ancien seuil faisait basculer toute la bande 2-3 Go sur OpenJ9, donc
+/// une config 2560 Mo partait sur OpenJ9 alors que la grille la met sur
+/// Temurin. Corrigé le 2026-09-01 : la grille fait foi, tout écart est un
+/// bug d'implémentation.
 pub(super) fn resolve_auto_vendor(ram_mb: u32) -> &'static str {
-    if ram_mb < 3072 { "openj9" } else { "temurin" }
+    if ram_mb <= 2048 { "openj9" } else { "temurin" }
 }
 
 /// Extrait juste la paire `--tweakClass <classe>` d'une `minecraftArguments`
