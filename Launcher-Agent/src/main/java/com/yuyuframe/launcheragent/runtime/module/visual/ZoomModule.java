@@ -96,8 +96,8 @@ public final class ZoomModule extends LauncherModule {
             "Temps pour atteindre le niveau de zoom cible en douceur, à l'appui comme au relâchement — 0 = instantané (comportement d'origine).",
             "Réglages", 0f, 1f, 0.05f, null, () -> transitionSeconds, v -> transitionSeconds = v);
         s.slider("sensitivityCompensation", "Réduction de la sensibilité en zoom (%)",
-            "Ralentit la rotation de la caméra proportionnellement au niveau de zoom courant, pour un ressenti cohérent (100% = compensation complète façon longue-vue, 0% = sensibilité inchangée).",
-            "Réglages", 0f, 100f, 5f, null, () -> sensitivityCompensation, v -> sensitivityCompensation = v);
+            "Ralentit la rotation de la caméra proportionnellement au niveau de zoom courant, pour un ressenti cohérent (100% = compensation complète façon longue-vue, au-delà = encore plus lent qu'une longue-vue, 0% = sensibilité inchangée).",
+            "Réglages", 0f, 200f, 5f, null, () -> sensitivityCompensation, v -> sensitivityCompensation = v);
     }
 
     // Essential-style : scroller PENDANT le zoom va encore plus loin que la
@@ -172,6 +172,11 @@ public final class ZoomModule extends LauncherModule {
                     savedFov = readOptionValue(fovHandle, options);
                     effectiveFov = savedFov;
                     transitionRange = Math.max(1.0, Math.abs(savedFov - zoomFov));
+                    // Repart d'une horloge neuve : sans ça, le premier pas
+                    // mesurerait le temps écoulé depuis le zoom PRÉCÉDENT
+                    // (voir stepToward, où un dt énorme est ramené à 0,25 s —
+                    // soit une transition déjà terminée à l'appui).
+                    lastStepNanos = 0L;
                     saveSensitivity(options);
                 }
             } else if (!down && zooming) {
@@ -224,20 +229,43 @@ public final class ZoomModule extends LauncherModule {
 
     /**
      * Interpolation linéaire dans le TEMPS (pas juste "un pourcentage de
-     * l'écart restant par tick", qui donnerait une vitesse variable) — un pas
-     * fixe par tick calculé pour que {@link #transitionSeconds} corresponde
-     * au temps RÉEL pour parcourir {@link #transitionRange} (l'écart
-     * base↔cible mesuré à l'entrée en zoom), à 20 ticks/seconde.
+     * l'écart restant par appel", qui donnerait une vitesse variable) — un
+     * pas proportionnel au temps RÉELLEMENT écoulé, pour que {@link
+     * #transitionSeconds} corresponde à la durée réelle du parcours de {@link
+     * #transitionRange} (l'écart base↔cible mesuré à l'entrée en zoom).
      * {@code transitionSeconds == 0} conserve le comportement d'origine
      * (saut instantané).
+     *
+     * <p>BUG TROUVÉ (2026-09-01, même famille que le clignotement d'AppleSkin
+     * dans {@code SaturationModule}) : {@code ModuleRegistry.tickAll()} est
+     * appelé une fois par FRAME RENDUE, pas une fois par tick de jeu — voir
+     * {@code GlobalUiRenderMixin261}. Le pas fixe {@code range / (secondes ×
+     * 20)} supposait 20 appels par seconde : à 130 FPS la transition
+     * s'achevait 6,5 fois trop vite, et sa durée changeait avec le FPS. Le
+     * réglage affiché en secondes ne correspondait donc à aucune durée réelle.
+     * Mesuré ici sur l'horloge, la durée est celle annoncée quel que soit le
+     * FPS.
      */
     private double stepToward(double current, double target) {
         if (transitionSeconds <= 0f) return target;
-        double maxStep = transitionRange / (transitionSeconds * 20.0);
+        long now = System.nanoTime();
+        double dt = lastStepNanos == 0L ? 0.0 : (now - lastStepNanos) / 1_000_000_000.0;
+        lastStepNanos = now;
+        // Premier appel d'une session de zoom : pas d'écart mesurable, on ne
+        // bouge pas encore (la frame suivante donnera un dt réel).
+        if (dt <= 0.0) return current;
+        // Borne haute : après une pause (fenêtre en arrière-plan, chargement
+        // de monde), dt peut valoir plusieurs secondes et téléporterait le
+        // zoom d'un coup — ce qui est justement ce que la transition évite.
+        if (dt > 0.25) dt = 0.25;
+        double maxStep = transitionRange * dt / transitionSeconds;
         double diff = target - current;
         if (Math.abs(diff) <= maxStep) return target;
         return current + Math.signum(diff) * maxStep;
     }
+
+    /** Horodatage du dernier {@link #stepToward} — voir sa javadoc. */
+    private long lastStepNanos;
 
     @Override
     protected void onEnabledChanged(boolean enabled) {
@@ -258,6 +286,7 @@ public final class ZoomModule extends LauncherModule {
         savedFov = -1;
         effectiveFov = -1;
         scrollOffsetFov = 0;
+        lastStepNanos = 0L;
         UiInputPoller.suppressVanillaScroll = false;
     }
 
@@ -342,6 +371,13 @@ public final class ZoomModule extends LauncherModule {
             if (handle == null) return;
             double ratio = Math.min(1.0, effectiveFov / savedFov);
             double scale = 1.0 - (1.0 - ratio) * (sensitivityCompensation / 100.0);
+            // Le curseur monte à 200% (retour utilisateur 2026-09-01 : la
+            // compensation « complète » restait trop rapide à fort zoom) —
+            // au-delà de 100%, l'expression ci-dessus passe par zéro puis
+            // devient NÉGATIVE, ce qui inverserait la caméra. Plancher à 2%
+            // de la sensibilité d'origine : très lent, jamais inversé, jamais
+            // complètement figé (0 rendrait la visée impossible).
+            scale = Math.max(0.02, Math.min(1.0, scale));
             writeOptionValue(handle, options, savedSensitivity * scale);
         } catch (Throwable t) {
             LauncherLog.err("[ZoomModule] applySensitivityScale: " + t);

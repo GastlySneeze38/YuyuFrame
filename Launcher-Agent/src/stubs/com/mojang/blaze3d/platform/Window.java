@@ -17,4 +17,10 @@ package com.mojang.blaze3d.platform;
 public abstract class Window {
     public long handle() { return 0L; }
     public int getGuiScaledWidth() { return 0; }
+    /**
+     * Ajouté le 2026-09-01 pour {@code SaturationModule} (alignement exact sur
+     * la barre de faim vanilla, qui se place en coordonnées GUI). Signature
+     * confirmée sur le vrai jar 26.1.2 : {@code getGuiScaledHeight ()I}.
+     */
+    public int getGuiScaledHeight() { return 0; }
 }

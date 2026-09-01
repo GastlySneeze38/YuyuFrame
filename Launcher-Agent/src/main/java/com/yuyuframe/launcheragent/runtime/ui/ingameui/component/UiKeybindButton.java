@@ -14,9 +14,13 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
 /**
  * Bouton de réassignation de touche — clic pour entrer en mode "écoute", puis
  * la prochaine touche pressée (voir UiInputPoller.pollAnyKeyJustPressed) est
- * capturée et affichée. Stocke un NOM de touche (ex: "A", "F1"), pas un code
- * numérique brut : LWJGL2 (1.8.9) et GLFW (1.21+) n'utilisent pas le même
- * référentiel de codes, un nom textuel reste portable entre versions.
+ * capturée et affichée. Stocke un NOM de touche (ex: "A", "F1", "MOUSE4"),
+ * pas un code numérique brut : LWJGL2 (1.8.9) et GLFW (1.21+) n'utilisent pas
+ * le même référentiel de codes, un nom textuel reste portable entre versions.
+ *
+ * <p>Les BOUTONS DE SOURIS sont capturables au même titre que les touches
+ * (« MOUSE1 » à « MOUSE8 ») — voir {@code
+ * UiInputPollerModern.mouseIndexForName}.
  */
 public class UiKeybindButton extends UiWidget {
 
@@ -78,7 +82,18 @@ public class UiKeybindButton extends UiWidget {
         listening = true;
         capturing = true;
         captured.clear();
+        // Le clic qui ARME la capture est dispatché à l'ENFONCEMENT (voir
+        // UiScreenBase.dispatchClick, appelé depuis mouseClicked de vanilla) :
+        // le bouton gauche est donc encore maintenu à cet instant. Depuis que
+        // les boutons de souris sont capturables, sans ce garde-fou la capture
+        // retiendrait « MOUSE1 » immédiatement et se validerait au
+        // relâchement — rendant impossible d'assigner quoi que ce soit
+        // d'autre. On attend donc que TOUT soit relâché avant d'écouter.
+        awaitingRelease = true;
     }
+
+    /** Voir {@link #onClick()} — vrai tant que le clic d'armement n'est pas relâché. */
+    private boolean awaitingRelease;
 
     /** Nombre maximum de touches d'une combinaison — trois, comme demandé. */
     private static final int MAX_KEYS = 3;
@@ -122,6 +137,10 @@ public class UiKeybindButton extends UiWidget {
         }
 
         java.util.List<String> held = ((UiInputPollerModern) input).heldCapturableKeys();
+        if (awaitingRelease) {
+            if (held.isEmpty()) awaitingRelease = false;
+            return;
+        }
         if (!held.isEmpty()) {
             for (String name : held) {
                 if (captured.size() >= MAX_KEYS && !captured.contains(name)) continue;

@@ -139,18 +139,54 @@ public final class UiInputPollerModern extends UiInputPoller {
                 for (String part : name.split("\\+")) {
                     String key = part.trim();
                     if (key.isEmpty()) continue;
-                    int c = menuKeyCode(key);
-                    if (c < 0 || c >= keyDown.length || !keyDown[c]) return false;
+                    if (!isNamedInputDown(key)) return false;
                 }
                 return true;
             }
 
-            int code = menuKeyCode(name);
-            if (code < 0) return false;
-            return code < keyDown.length && keyDown[code];
+            return isNamedInputDown(name);
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** Préfixe des noms de boutons de souris — voir {@link #mouseIndexForName}. */
+    private static final String MOUSE_PREFIX = "MOUSE";
+
+    /**
+     * Index GLFW (0-7) du bouton de souris désigné par {@code name}
+     * (« MOUSE1 » = clic gauche, « MOUSE2 » = droit, « MOUSE3 » = molette,
+     * « MOUSE4 »/« MOUSE5 » = boutons latéraux), {@code -1} si ce n'est pas
+     * un nom de bouton.
+     *
+     * <p>BUG TROUVÉ (retour utilisateur 2026-09-01, « bouton de la souris pas
+     * détecté ») : toute la chaîne de raccourcis — capture dans {@code
+     * UiKeybindButton} comme test d'état ici — ne connaissait que le CLAVIER,
+     * via {@link #CAPTURABLE_KEYS}. Les boutons latéraux (le binding le plus
+     * naturel pour un zoom) étaient donc invisibles : la capture ne retenait
+     * rien et le module ne se déclenchait jamais. L'état des boutons, lui,
+     * était déjà tenu à jour par un vrai callback natif (voir {@link
+     * #buttonDown}) — il ne manquait qu'un nom pour le désigner.
+     */
+    private static int mouseIndexForName(String name) {
+        if (name == null || !name.startsWith(MOUSE_PREFIX)) return -1;
+        try {
+            int n = Integer.parseInt(name.substring(MOUSE_PREFIX.length()));
+            return (n >= 1 && n <= buttonDownLength()) ? n - 1 : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /** Taille de {@link #buttonDown} — statique parce que {@link #mouseIndexForName} l'est. */
+    private static int buttonDownLength() { return 8; }
+
+    /** Vrai si l'entrée nommée (touche OU bouton de souris) est actuellement maintenue. */
+    private boolean isNamedInputDown(String name) {
+        int mouse = mouseIndexForName(name);
+        if (mouse >= 0) return buttonDown[mouse];
+        int code = menuKeyCode(name);
+        return code >= 0 && code < keyDown.length && keyDown[code];
     }
 
     /**
@@ -513,6 +549,12 @@ public final class UiInputPollerModern extends UiInputPoller {
             String name = (String) entry[1];
             if (isModifier(name)) modifiers.add(name);
             else others.add(name);
+        }
+        // Boutons de souris — capturables au même titre qu'une touche (voir
+        // mouseIndexForName). Jamais des modificateurs : « MOUSE4 » se
+        // combine comme une lettre, pas comme un Ctrl.
+        for (int i = 0; i < buttonDown.length; i++) {
+            if (buttonDown[i]) others.add(MOUSE_PREFIX + (i + 1));
         }
         modifiers.addAll(others);
         return modifiers;

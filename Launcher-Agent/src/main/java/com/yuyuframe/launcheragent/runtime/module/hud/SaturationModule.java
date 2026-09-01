@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.DataComponentsAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.FoodDataAccessor261;
+import com.mojang.blaze3d.platform.Window;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -111,7 +112,14 @@ public final class SaturationModule extends LauncherModule {
         s.toggle("showHealthPreview", "Aperçu des cœurs régénérés",
             "Montre en fantôme les cœurs que la régénération naturelle rendrait après avoir mangé.",
             "Réglages", null, () -> showHealthPreview, v -> showHealthPreview = v);
+        s.slider("blinkSeconds", "Durée d'un clignotement (s)",
+            "Temps d'un aller-retour complet du clignotement des aperçus. 1,6 s reproduit exactement la cadence d'AppleSkin ; plus court = plus nerveux.",
+            "Réglages", 0.4f, 4f, 0.1f,
+            () -> showFoodPreview || showHealthPreview, () -> blinkSeconds, v -> blinkSeconds = v);
     }
+
+    /** Durée d'un cycle complet du clignotement — voir {@link #flashAccumulator}. */
+    public float blinkSeconds = 1.6f;
 
     public SaturationModule() {
         // Nom raccourci (était "Saturation (AppleSkin)") — retour utilisateur :
@@ -233,18 +241,45 @@ public final class SaturationModule extends LauncherModule {
     private static final UiColor HEALTH_GHOST = new UiColor(240, 80, 80, 255);
 
     /**
-     * Alpha du clignotement des aperçus — repris tel quel d'AppleSkin :
-     * l'accumulateur oscille entre −0,5 et 1,5 par pas de 0,125 par tick,
-     * puis est BORNÉ à [0,1]. Ce dépassement volontaire des bornes est ce qui
-     * crée les paliers pleins en haut et en bas du cycle, au lieu d'un
-     * va-et-vient continu qui ne s'arrêterait jamais sur une valeur lisible.
+     * Alpha du clignotement des aperçus — même forme d'onde qu'AppleSkin :
+     * l'accumulateur oscille entre −0,5 et 1,5, puis est BORNÉ à [0,1]. Ce
+     * dépassement volontaire des bornes est ce qui crée les paliers pleins en
+     * haut et en bas du cycle, au lieu d'un va-et-vient continu qui ne
+     * s'arrêterait jamais sur une valeur lisible.
+     *
+     * <p>BUG TROUVÉ (retour utilisateur 2026-09-01, « le clignotement est
+     * différent selon le FPS ») : AppleSkin avance son accumulateur de 0,125
+     * par TICK CLIENT, donc 20 fois par seconde, quel que soit le FPS
+     * ({@code HUDOverlayHandler.onClientTick}). On reprenait ce 0,125 tel
+     * quel — mais {@code ModuleRegistry.tickAll()} est appelé une fois par
+     * FRAME RENDUE, pas par tick de jeu (voir {@code
+     * GlobalUiRenderMixin261}) : à 130 FPS le cycle tournait 6,5 fois trop
+     * vite, et sa vitesse suivait le compteur d'images. Corrigé en mesurant
+     * le temps réellement écoulé — la durée d'un cycle est donc exactement
+     * {@link #blinkSeconds}, stable quel que soit le FPS.
+     *
+     * <p>Un cycle complet parcourt 4 unités (−0,5 → 1,5 → −0,5). La valeur
+     * par défaut de 1,6 s redonne EXACTEMENT la cadence d'AppleSkin
+     * (4 unités ÷ 1,6 s = 2,5 unités/s = 0,125 × 20).
      */
     private float flashAccumulator = 0f;
     private float flashDirection = 1f;
+    private long lastFlashNanos;
+
+    /** Unités d'accumulateur parcourues sur un cycle complet — voir {@link #flashAccumulator}. */
+    private static final float FLASH_UNITS_PER_CYCLE = 4f;
 
     @Override
     public void onTick() {
-        flashAccumulator += flashDirection * 0.125f;
+        long now = System.nanoTime();
+        float dt = lastFlashNanos == 0L ? 0f : (now - lastFlashNanos) / 1_000_000_000f;
+        lastFlashNanos = now;
+        // Borne haute : après une pause (fenêtre en arrière-plan, chargement),
+        // un dt de plusieurs secondes ferait sauter le cycle d'un coup.
+        if (dt > 0.25f) dt = 0.25f;
+        if (dt > 0f) {
+            flashAccumulator += flashDirection * (FLASH_UNITS_PER_CYCLE / Math.max(0.1f, blinkSeconds)) * dt;
+        }
         if (flashAccumulator >= 1.5f) { flashAccumulator = 1.5f; flashDirection = -1f; }
         else if (flashAccumulator <= -0.5f) { flashAccumulator = -0.5f; flashDirection = 1f; }
 
@@ -465,7 +500,16 @@ public final class SaturationModule extends LauncherModule {
 
             float scale = UiVanillaItemRenderer.guiScale(vpWidth);
             if (scale <= 0f) { reportOnce("échelle GUI invalide: " + scale); return; }
-            float guiWidth = vpWidth / scale;
+
+            // Dimensions GUI EXACTES de vanilla plutôt que reconstruites par
+            // division — voir barRight ci-dessous pour ce que ça corrige.
+            // Repli sur la reconstruction si la fenêtre n'est pas résolvable
+            // (bracket sans accessor) : c'est l'ancien comportement.
+            Window window = ClientData.window();
+            int guiW = window != null ? window.getGuiScaledWidth() : Math.round(vpWidth / scale);
+            int guiH = window != null ? window.getGuiScaledHeight() : Math.round(vpHeight / scale);
+            if (guiW <= 0 || guiH <= 0) { reportOnce("dimensions GUI invalides: " + guiW + "x" + guiH); return; }
+            float guiWidth = guiW;
 
             // BUG TROUVÉ (retour utilisateur 2026-08-31, « rien ne s'affiche ») :
             // ce repère-ci est celui du MOTEUR — pixels de framebuffer, Y vers
@@ -478,8 +522,21 @@ public final class SaturationModule extends LauncherModule {
             // Conversion : y_moteur = hauteurFB - y_gui × échelle. Les icônes
             // occupent guiY ∈ [guiH-39, guiH-30], donc ici y ∈ [30×éch, 39×éch]
             // — la hauteur d'écran s'annule, il ne reste que les constantes.
-            float barRight = (guiWidth / 2f + BAR_HALF_WIDTH) * scale;
-            float barBottom = (BAR_BOTTOM_OFFSET - ICON_W) * scale;
+            // BUG TROUVÉ (retour utilisateur 2026-09-01, « revoir l'alignement
+            // de la texture ») : vanilla place la barre à
+            // {@code largeurGUI / 2 + 91} avec une division ENTIÈRE (Gui.
+            // renderFood, largeurGUI est un int). On divisait en flottant, ce
+            // qui décale tout l'overlay d'un demi-pixel GUI dès que la largeur
+            // GUI est IMPAIRE — soit 2 à 3 pixels d'écran à l'échelle 4-6, et
+            // seulement dans certaines tailles de fenêtre, d'où un défaut qui
+            // apparaît et disparaît au redimensionnement.
+            float barRight = (guiW / 2 + BAR_HALF_WIDTH) * scale;
+            // L'axe VERTICAL a son propre rapport : la hauteur GUI est
+            // arrondie au SUPÉRIEUR indépendamment de la largeur, donc
+            // vpHeight/guiH n'égale pas exactement vpWidth/guiW. Sous-pixel,
+            // mais gratuit à corriger une fois guiH connu.
+            float scaleY = (float) vpHeight / guiH;
+            float barBottom = (BAR_BOTTOM_OFFSET - ICON_W) * scaleY;
 
             reportOnce("OK — fb=" + vpWidth + "x" + vpHeight + " éch=" + scale
                 + " barRight=" + barRight + " barBottom=" + barBottom
@@ -802,8 +859,22 @@ public final class SaturationModule extends LauncherModule {
             if (fill <= 0f) break;                    // au-delà, plus rien à remplir
             if (iconStart + 2f <= from) continue;     // déjà couvert par la partie réelle
 
-            int step = (int) Math.ceil(fill / 0.5f) - 1;
-            if (step < 0) continue;
+            // Paliers EXACTS d'AppleSkin (HUDOverlayHandler.
+            // drawSaturationOverlay, source relue le 2026-09-01) : le palier
+            // dépend de la fraction de l'ICÔNE remplie, pas d'un découpage
+            // régulier en quarts.
+            //   ]0 ; 0,25]  → vide      ]0,25 ; 0,5] → quart
+            //   ]0,5 ; 1[   → moitié     = 1          → plein
+            // On appliquait { ceil(points/0,5) − 1 }, soit des seuils réguliers
+            // à 0,25/0,5/0,75 : l'icône passait à « plein » dès trois quarts,
+            // alors qu'AppleSkin réserve ce palier à l'icône ENTIÈREMENT
+            // remplie. C'est ce qui faisait paraître le liseré en avance d'un
+            // cran sur la vraie saturation.
+            float iconFill = fill / 2f;               // fraction de l'icône, 0..1
+            int step = iconFill >= 1f ? 3
+                : iconFill > 0.5f ? 2
+                : iconFill > 0.25f ? 1
+                : 0;
             if (step > ATLAS_SATURATION_STEPS - 1) step = ATLAS_SATURATION_STEPS - 1;
 
             String key = "appleskin/sat_" + step;
@@ -870,7 +941,10 @@ public final class SaturationModule extends LauncherModule {
         // arrondie au pixel d'atlas, ce qui borne à 81 le nombre de
         // sous-images distinctes — sinon chaque frame en créerait une nouvelle
         // et remplirait l'atlas d'icônes du moteur.
-        int w = Math.round(ATLAS_EXHAUSTION_WIDTH * ratio);
+        // TRONCATURE, pas arrondi — AppleSkin fait {@code (int)(ratio * 81)}.
+        // Arrondir affichait un pixel de barre de plus dès 0,5, un décalage
+        // constant d'un demi-pixel par rapport à la référence.
+        int w = (int) (ATLAS_EXHAUSTION_WIDTH * ratio);
         if (w <= 0) return;
 
         String key = "appleskin/exh_" + w;
@@ -955,7 +1029,10 @@ public final class SaturationModule extends LauncherModule {
 
         // Barre de vie : miroir gauche de la barre de faim, les cœurs se
         // remplissent de la GAUCHE vers la droite.
-        float barLeft = (guiWidth / 2f - BAR_HALF_WIDTH) * scale;
+        // Division ENTIÈRE comme vanilla — même correctif que barRight, voir
+        // sa remarque. {@code guiWidth} porte une valeur entière exacte
+        // (largeur GUI de la fenêtre), la conversion ne perd rien.
+        float barLeft = ((int) guiWidth / 2 - BAR_HALF_WIDTH) * scale;
         float maxHalves = ICONS * 2f;
         float from = Math.min(maxHalves, health);
         float to = Math.min(maxHalves, health + healed);
