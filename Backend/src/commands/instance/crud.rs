@@ -19,6 +19,10 @@ pub struct Instance {
     pub jvm_custom_path: Option<String>,
     /// "auto" (défaut) ou une policy explicite — voir `build_jvm_args`.
     pub gc_policy: String,
+    /// Drapeaux JVM saisis à la main (écran "Configuration JVM"), texte brut.
+    pub jvm_extra_args: String,
+    /// "append" (défaut) | "replace" — voir `merge_jvm_args`.
+    pub jvm_args_mode: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -36,13 +40,18 @@ struct InstanceMeta {
     jvm_custom_path: Option<String>,
     #[serde(default = "default_gc_policy")]
     gc_policy: String,
+    #[serde(default)]
+    jvm_extra_args: String,
+    #[serde(default = "default_jvm_args_mode")]
+    jvm_args_mode: String,
 }
 
 fn default_jvm_vendor() -> String { "auto".to_string() }
 fn default_gc_policy() -> String { "auto".to_string() }
+fn default_jvm_args_mode() -> String { "append".to_string() }
 
 #[allow(clippy::too_many_arguments)]
-fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32, description: &str, jvm_vendor: &str, jvm_custom_path: Option<&str>, gc_policy: &str) {
+fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32, description: &str, jvm_vendor: &str, jvm_custom_path: Option<&str>, gc_policy: &str, jvm_extra_args: &str, jvm_args_mode: &str) {
     let meta = InstanceMeta {
         id: id.to_string(),
         name: name.to_string(),
@@ -53,6 +62,8 @@ fn write_meta(id: &str, name: &str, mc_version: &str, loader: &str, ram_mb: u32,
         jvm_vendor: jvm_vendor.to_string(),
         jvm_custom_path: jvm_custom_path.map(str::to_string),
         gc_policy: gc_policy.to_string(),
+        jvm_extra_args: jvm_extra_args.to_string(),
+        jvm_args_mode: jvm_args_mode.to_string(),
     };
     match serde_json::to_string_pretty(&meta) {
         Ok(json) => {
@@ -124,6 +135,7 @@ fn row_to_instance(r: db::InstanceRow) -> Instance {
         id: r.id, name: r.name, mc_version: r.mc_version, loader: r.loader, ram_mb: r.ram_mb,
         favorite: r.favorite, description: r.description,
         jvm_vendor: r.jvm_vendor, jvm_custom_path: r.jvm_custom_path, gc_policy: r.gc_policy,
+        jvm_extra_args: r.jvm_extra_args, jvm_args_mode: r.jvm_args_mode,
     }
 }
 
@@ -163,6 +175,8 @@ pub async fn instance_create(
     jvm_vendor: Option<String>,
     jvm_custom_path: Option<String>,
     gc_policy: Option<String>,
+    jvm_extra_args: Option<String>,
+    jvm_args_mode: Option<String>,
 ) -> Result<Instance, String> {
     if name.trim().is_empty() {
         return Err("Le nom de l'instance est requis".into());
@@ -171,21 +185,23 @@ pub async fn instance_create(
     let name = name.trim().to_string();
     let jvm_vendor = jvm_vendor.unwrap_or_else(default_jvm_vendor);
     let gc_policy = gc_policy.unwrap_or_else(default_gc_policy);
+    let jvm_extra_args = jvm_extra_args.unwrap_or_default();
+    let jvm_args_mode = jvm_args_mode.unwrap_or_else(default_jvm_args_mode);
     let id = gen_id(&name);
     tokio::fs::create_dir_all(instance_dir(&id))
         .await
         .map_err(|e| e.to_string())?;
-    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy);
+    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode);
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy)
+    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
         .map_err(|e| e.to_string())?;
     crate::integrations::analytics::capture("instance_created", serde_json::json!({
         "mc_version": &mc_version,
         "loader": &loader,
     }));
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode })
 }
 
 #[tauri::command]
@@ -237,17 +253,21 @@ pub async fn instance_update(
     jvm_vendor: Option<String>,
     jvm_custom_path: Option<String>,
     gc_policy: Option<String>,
+    jvm_extra_args: Option<String>,
+    jvm_args_mode: Option<String>,
 ) -> Result<Instance, String> {
     let name = name.trim().to_string();
     let description = description.unwrap_or_default().trim().to_string();
     let jvm_vendor = jvm_vendor.unwrap_or_else(default_jvm_vendor);
     let gc_policy = gc_policy.unwrap_or_else(default_gc_policy);
+    let jvm_extra_args = jvm_extra_args.unwrap_or_default();
+    let jvm_args_mode = jvm_args_mode.unwrap_or_else(default_jvm_args_mode);
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy)
+    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
         .map_err(|e| e.to_string())?;
-    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy);
+    write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode);
     let row = db::instance_get(&db, &id, uid)
         .map_err(|e| e.to_string())?
         .ok_or("Instance introuvable")?;
@@ -267,14 +287,14 @@ pub async fn instance_duplicate(
     }
     let name = name.trim().to_string();
 
-    let (loader, jvm_vendor, jvm_custom_path, gc_policy) = {
+    let (loader, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode) = {
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
         let src = db::instance_get(&db, &source_id, uid)
             .map_err(|e| e.to_string())?
             .ok_or("Instance source introuvable")?;
-        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy)
+        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy, src.jvm_extra_args, src.jvm_args_mode)
     };
 
     let new_id = gen_id(&name);
@@ -295,15 +315,15 @@ pub async fn instance_duplicate(
         }
     }
 
-    write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy);
+    write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode);
 
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy)
+    db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
         .map_err(|e| e.to_string())?;
 
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy })
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode })
 }
 
 /// Copie `options.txt` de l'instance vers un template global dans le dossier
@@ -390,7 +410,7 @@ pub async fn instance_startup_sync(
                 let meta_path = instances_root.join(&id).join("meta.json");
                 if let Ok(json) = std::fs::read_to_string(&meta_path) {
                     if let Ok(meta) = serde_json::from_str::<InstanceMeta>(&json) {
-                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description, &meta.jvm_vendor, meta.jvm_custom_path.as_deref(), &meta.gc_policy).ok();
+                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description, &meta.jvm_vendor, meta.jvm_custom_path.as_deref(), &meta.gc_policy, &meta.jvm_extra_args, &meta.jvm_args_mode).ok();
                     }
                 }
                 // Pas de meta.json → on laisse le dossier, impossible d'importer

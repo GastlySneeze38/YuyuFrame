@@ -16,7 +16,7 @@ use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
 use super::java::{ensure_java, is_openj9};
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, resolve_auto_vendor, JvmVendor};
+use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, parse_user_jvm_args, resolve_auto_vendor, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
@@ -69,6 +69,8 @@ pub async fn download_and_launch(
     jvm_vendor: &str,
     jvm_custom_path: Option<&str>,
     gc_policy: &str,
+    jvm_extra_args: &str,
+    jvm_args_mode: &str,
 ) -> Result<Vec<String>> {
     // P1-6 : "auto" couvre toute la config (vendeur ET GC), résolu une seule
     // fois ici avant toute utilisation — voir doc de `resolve_auto_vendor`.
@@ -528,21 +530,42 @@ pub async fn download_and_launch(
     // une HotSpot empêche la JVM de démarrer, tout court.
     let jvm_vendor = effective_jvm_vendor(&java, jvm_vendor).await;
 
-    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
-    // P1-6 (Phase 6) : message de diagnostic conscient du vendeur — même
-    // condition que la branche ZGC de build_hotspot_jvm_args pour ne jamais
-    // annoncer un GC qui n'est pas réellement celui appliqué.
-    let gc_msg = match jvm_vendor {
-        JvmVendor::OpenJ9 => {
-            let policy = match gc_policy { "optthruput" | "optavgpause" | "balanced" | "metronome" => gc_policy, _ => "gencon" };
-            format!("Java {} (Eclipse OpenJ9) détecté, {} Mo alloués — -Xgcpolicy:{} activé", java_major, ram_mb, policy)
-        }
-        _ if gc_policy != "g1" && java_major >= 21 && ram_mb >= 6144 => {
-            format!("Java {} ({}) détecté, {} Mo alloués — ZGC Generational activé", java_major, jvm_vendor.as_str(), ram_mb)
-        }
-        _ => format!("Java {} ({}) détecté, {} Mo alloués — G1GC client activé", java_major, jvm_vendor.as_str(), ram_mb),
-    };
+    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy, jvm_extra_args, jvm_args_mode);
+    // P1-6 (Phase 6) : message de diagnostic conscient du vendeur. Lu dans
+    // les drapeaux RÉELLEMENT produits plutôt que redéduit des mêmes
+    // conditions que build_jvm_args — depuis l'écran "Configuration JVM",
+    // l'utilisateur peut poser son propre sélecteur (`-XX:+UseShenandoahGC`)
+    // ou tout remplacer, et une reconstitution du raisonnement annoncerait
+    // alors un GC qui n'est pas celui appliqué.
+    let gc_label = args
+        .iter()
+        .find_map(|a| {
+            a.strip_prefix("-Xgcpolicy:")
+                .map(|p| format!("-Xgcpolicy:{}", p))
+                .or_else(|| {
+                    a.strip_prefix("-XX:+Use")
+                        .filter(|n| n.ends_with("GC"))
+                        .map(str::to_string)
+                })
+        })
+        .unwrap_or_else(|| "GC par défaut de la JVM".to_string());
+    let gc_msg = format!(
+        "Java {} ({}) détecté, {} Mo alloués — {} activé",
+        java_major, jvm_vendor.as_str(), ram_mb, gc_label,
+    );
     log_to_console(&app, &console_label, &gc_msg, "out");
+    if !jvm_extra_args.trim().is_empty() || jvm_args_mode == "replace" {
+        log_to_console(
+            &app,
+            &console_label,
+            &format!(
+                "Configuration JVM manuelle active (mode {}) — {} drapeau(x) fournis",
+                jvm_args_mode,
+                parse_user_jvm_args(jvm_extra_args).len(),
+            ),
+            "out",
+        );
+    }
     // Correctifs OS spécifiques suggérés par Mojang (ex: -XstartOnFirstThread
     // obligatoire sur macOS) — en plus de notre tuning GC ci-dessus, jamais à
     // sa place. Voir extract_mojang_jvm_args pour ce qui est filtré/substitué.
@@ -732,6 +755,8 @@ pub async fn preview_jvm_config(
     jvm_vendor: &str,
     jvm_custom_path: Option<&str>,
     gc_policy: &str,
+    jvm_extra_args: &str,
+    jvm_args_mode: &str,
 ) -> Result<(String, u32, Vec<String>)> {
     tracing::info!("[JVM preview] instance={} version={}", instance_id, version_id);
     let (jvm_vendor, gc_policy) = if jvm_vendor == "auto" {
@@ -769,7 +794,7 @@ pub async fn preview_jvm_config(
     // paramètres afficherait des drapeaux que le jeu n'utilisera jamais.
     let jvm_vendor = effective_jvm_vendor(&java, jvm_vendor).await;
 
-    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy);
+    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy, jvm_extra_args, jvm_args_mode);
     args.extend(extract_mojang_jvm_args(&details, &natives_dir));
     // Classpath encore inconnu à ce stade (dépend des libs/loader/mods
     // résolus au lancement réel, pas nécessaire pour ce qu'affiche cet

@@ -82,6 +82,12 @@ export interface ImportProgressEvent {
 
 export type JvmVendor = 'auto' | 'temurin' | 'openj9' | 'graal' | 'custom'
 
+/** Comment les drapeaux tapés dans l'écran "Configuration JVM" se combinent
+ * avec ceux générés par le launcher — voir `merge_jvm_args` côté Rust.
+ * "append" : ils s'ajoutent et écrasent leurs homologues. "replace" : seule
+ * la base obligatoire (heap + library path) est gardée. */
+export type JvmArgsMode = 'append' | 'replace'
+
 export interface Instance {
   id: string
   name: string
@@ -94,6 +100,22 @@ export interface Instance {
   jvm_custom_path: string | null
   /** "auto" (défaut) ou une policy explicite — le jeu de valeurs valides dépend de `jvm_vendor`. */
   gc_policy: string
+  /** Drapeaux JVM tapés à la main dans l'écran "Configuration JVM" (texte brut). */
+  jvm_extra_args: string
+  jvm_args_mode: JvmArgsMode
+}
+
+/** Le bloc JVM d'une instance tel qu'édité dans l'UI. Regroupé en un objet
+ * plutôt qu'en paramètres positionnels : `instance_create`/`instance_update`
+ * en portaient déjà trois à la suite, et cinq `undefined` alignés dans un
+ * appel finissent toujours par se décaler. */
+export interface JvmFormValues {
+  vendor: JvmVendor
+  /** Chemin vers java.exe — vide/absent = résolution automatique. */
+  customPath?: string
+  gcPolicy: string
+  extraArgs: string
+  argsMode: JvmArgsMode
 }
 
 export interface JvmConfigPreview {

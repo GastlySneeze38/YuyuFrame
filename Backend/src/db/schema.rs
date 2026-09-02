@@ -48,7 +48,9 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              created_at      INTEGER NOT NULL,
              jvm_vendor      TEXT    NOT NULL DEFAULT 'auto',
              jvm_custom_path TEXT,
-             gc_policy       TEXT    NOT NULL DEFAULT 'auto'
+             gc_policy       TEXT    NOT NULL DEFAULT 'auto',
+             jvm_extra_args  TEXT    NOT NULL DEFAULT '',
+             jvm_args_mode   TEXT    NOT NULL DEFAULT 'append'
          );
 
          CREATE TABLE IF NOT EXISTS play_sessions (
@@ -74,6 +76,11 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_vendor TEXT NOT NULL DEFAULT 'auto'", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_custom_path TEXT", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN gc_policy TEXT NOT NULL DEFAULT 'auto'", []);
+    // Écran "Configuration JVM" : drapeaux saisis à la main + mode de fusion
+    // avec ceux générés ("append" par défaut, "replace" pour ne garder que la
+    // base obligatoire — voir merge_jvm_args).
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_extra_args TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_args_mode TEXT NOT NULL DEFAULT 'append'", []);
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN is_offline INTEGER NOT NULL DEFAULT 0", []);
     // Backfill pour les comptes hors ligne créés avant l'ajout de la colonne
     // ci-dessus (feature déjà là depuis 2 jours, cf. mc_add_offline) : sans

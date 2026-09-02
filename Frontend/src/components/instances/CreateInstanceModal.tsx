@@ -148,7 +148,16 @@ export function CreateInstanceModal({
     setLoading(true); setLoadingLabel(t('instancesPage.creating'))
     api.analytics.track('instance_create_submitted', { flow_id: flowId.current, mc_version: mcVersion, loader })
     try {
-      const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim(), jvmVendor, jvmCustomPath.trim() || undefined, gcPolicy)
+      // Les arguments JVM manuels ne se saisissent pas ici : ils ont leur
+      // propre écran (`/jvm/:instanceId`), qui a besoin d'une instance
+      // existante pour calculer l'aperçu de la ligne de commande.
+      const instance = await api.instances.create(name.trim(), mcVersion, loader, ram, description.trim(), {
+        vendor: jvmVendor,
+        customPath: jvmCustomPath.trim() || undefined,
+        gcPolicy,
+        extraArgs: '',
+        argsMode: 'append',
+      })
       if (selectedPreset) {
         await installPresetMods(instance.id, selectedPreset, mcVersion, (done, total) => {
           setLoadingLabel(t('instancesPage.installingModsProgress', { done, total }))

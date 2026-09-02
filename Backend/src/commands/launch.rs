@@ -50,6 +50,8 @@ pub async fn launch_game(
         jvm_vendor: instance.jvm_vendor,
         jvm_custom_path: instance.jvm_custom_path,
         gc_policy: instance.gc_policy,
+        jvm_extra_args: instance.jvm_extra_args,
+        jvm_args_mode: instance.jvm_args_mode,
     };
 
     let game_dir = instance_dir(&instance_id);
@@ -188,6 +190,8 @@ pub async fn launch_game(
             &instance.jvm_vendor,
             instance.jvm_custom_path.as_deref(),
             &instance.gc_policy,
+            &instance.jvm_extra_args,
+            &instance.jvm_args_mode,
         )
         .await
         {
@@ -287,6 +291,7 @@ pub struct JvmConfigPreview {
 /// exactement comme un vrai lancement (voir `preview_jvm_config`), sans
 /// spawner Minecraft.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn preview_jvm_config(
     app: tauri::AppHandle,
     instance_id: String,
@@ -295,11 +300,15 @@ pub async fn preview_jvm_config(
     jvm_vendor: String,
     jvm_custom_path: Option<String>,
     gc_policy: String,
+    jvm_extra_args: Option<String>,
+    jvm_args_mode: Option<String>,
 ) -> Result<JvmConfigPreview, String> {
     let game_dir = instance_dir(&instance_id);
     let (java_path, java_major, jvm_args) = launcher::preview_jvm_config(
         &instance_id, &mc_version, ram_mb, &game_dir, app,
         &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy,
+        jvm_extra_args.as_deref().unwrap_or(""),
+        jvm_args_mode.as_deref().unwrap_or("append"),
     ).await.map_err(|e| e.to_string())?;
     Ok(JvmConfigPreview { java_path, java_major, jvm_args })
 }

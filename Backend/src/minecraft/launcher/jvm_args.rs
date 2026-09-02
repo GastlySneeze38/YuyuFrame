@@ -98,11 +98,123 @@ pub(super) fn extract_tweak_class_args(mc_args: &str) -> Vec<String> {
 /// Temurin/Graal/Custom partagent le même générateur HotSpot — Graal CE et
 /// la plupart des JVM "custom" en pratique sont HotSpot-compatibles côté
 /// flags GC (voir doc de `JvmVendor::Graal`/`JvmVendor::Custom`).
-pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32, vendor: JvmVendor, gc_policy: &str) -> Vec<String> {
-    match vendor {
+///
+/// `extra_args`/`args_mode` viennent de l'écran "Configuration JVM" (drapeaux
+/// tapés à la main) et sont appliqués en dernier — voir `merge_jvm_args`.
+pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32, vendor: JvmVendor, gc_policy: &str, extra_args: &str, args_mode: &str) -> Vec<String> {
+    let generated = match vendor {
         JvmVendor::OpenJ9 => build_openj9_jvm_args(ram_mb, natives_dir, gc_policy),
         JvmVendor::Temurin | JvmVendor::Graal | JvmVendor::Custom => build_hotspot_jvm_args(ram_mb, natives_dir, java_major, gc_policy),
+    };
+    merge_jvm_args(generated, extra_args, args_mode)
+}
+
+/// Découpe le texte libre de l'écran "Configuration JVM" en drapeaux. Une
+/// ligne vide ou commençant par `#` est ignorée (commentaires : indispensable
+/// pour garder plusieurs jeux de flags dans le champ pendant un benchmark et
+/// n'en activer qu'un).
+///
+/// Le découpage se fait sur les espaces, pas seulement sur les retours à la
+/// ligne : un jeu de flags communautaire (Aikar, brucethemoose...) se copie
+/// toujours sur une seule ligne, et le retaper une ligne par drapeau serait
+/// une corvée. Conséquence assumée : un drapeau contenant une espace (un
+/// `-D` pointant vers un chemin Windows non échappé) serait coupé en deux —
+/// les drapeaux de tuning JVM n'en contiennent jamais.
+pub(super) fn parse_user_jvm_args(raw: &str) -> Vec<String> {
+    raw.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .flat_map(str::split_whitespace)
+        .map(str::to_string)
+        .collect()
+}
+
+/// Identité d'un drapeau, pour qu'un drapeau utilisateur REMPLACE son
+/// homologue généré au lieu de s'y ajouter : `-XX:MaxGCPauseMillis=37` doit
+/// effacer le `-XX:MaxGCPauseMillis=100` généré, et `-XX:-AlwaysPreTouch`
+/// doit effacer `-XX:+AlwaysPreTouch` (d'où le `trim_start_matches` sur le
+/// signe : c'est le même réglage, pas deux drapeaux différents).
+fn arg_key(arg: &str) -> String {
+    for prefix in ["-Xmx", "-Xms", "-Xmn", "-Xss", "-Xgcpolicy:"] {
+        if arg.starts_with(prefix) {
+            return prefix.trim_end_matches(':').to_string();
+        }
     }
+    if let Some(rest) = arg.strip_prefix("-XX:") {
+        let name = rest.trim_start_matches(['+', '-']);
+        return format!("-XX:{}", name.split('=').next().unwrap_or(name));
+    }
+    if let Some(rest) = arg.strip_prefix("-D") {
+        return format!("-D{}", rest.split('=').next().unwrap_or(rest));
+    }
+    arg.to_string()
+}
+
+/// Sélecteur de ramasse-miettes (`-XX:+UseG1GC`, `-XX:+UseZGC`,
+/// `-XX:+UseShenandoahGC`, `-XX:+UseParallelGC`...). Deux sélecteurs présents
+/// en même temps font refuser le démarrage de la JVM ("Multiple garbage
+/// collectors selected") — dès que l'utilisateur en pose un, celui qui a été
+/// généré doit disparaître, sinon le simple fait de taper `-XX:+UseShenandoahGC`
+/// rendrait l'instance impossible à lancer.
+fn is_gc_selector(key: &str) -> bool {
+    key.starts_with("-XX:Use") && key.ends_with("GC")
+}
+
+/// Réglage propre à un collecteur précis (`-XX:G1*`, `-XX:Z*`,
+/// `-XX:Shenandoah*`) : inutile sous un autre collecteur, et carrément
+/// rejeté au démarrage pour ceux marqués `experimental`.
+fn is_collector_specific(key: &str) -> bool {
+    key.starts_with("-XX:G1") || key.starts_with("-XX:Z") || key.starts_with("-XX:Shenandoah")
+}
+
+/// Ce qui survit au mode "replace". Sans `-Xmx`/`-Xms` le heap retombe au
+/// défaut de la JVM (la RAM choisie dans le launcher ne servirait plus à
+/// rien), et sans les deux library path LWJGL ne trouve pas ses natives —
+/// le jeu ne démarre pas du tout. Ces quatre-là ne sont donc jamais un choix
+/// de tuning, mais l'utilisateur peut quand même les redéfinir : un `-Xmx`
+/// tapé à la main écrase le généré par `arg_key` comme n'importe quel autre.
+fn is_mandatory_base(arg: &str) -> bool {
+    arg.starts_with("-Xmx")
+        || arg.starts_with("-Xms")
+        || arg.starts_with("-Djava.library.path=")
+        || arg.starts_with("-Dorg.lwjgl.librarypath=")
+}
+
+/// Fusionne les drapeaux générés et ceux tapés dans l'écran "Configuration
+/// JVM".
+///
+/// - `"append"` (défaut) : tout le tuning généré est gardé, les drapeaux
+///   utilisateur s'ajoutent à la fin et écrasent leurs homologues.
+/// - `"replace"` : seule la base obligatoire reste (voir `is_mandatory_base`),
+///   tout le reste vient de l'utilisateur — le mode à utiliser pour tester un
+///   jeu de flags communautaire tel quel, sans que le nôtre s'y mélange.
+///
+/// Dans les deux cas, poser un sélecteur de GC retire aussi tout le bloc de
+/// réglages du collecteur généré (voir `is_gc_selector`).
+pub(super) fn merge_jvm_args(generated: Vec<String>, extra_args: &str, args_mode: &str) -> Vec<String> {
+    let user = parse_user_jvm_args(extra_args);
+    let replace = args_mode == "replace";
+    if user.is_empty() && !replace {
+        return generated;
+    }
+    let user_keys: std::collections::HashSet<String> = user.iter().map(|a| arg_key(a)).collect();
+    let user_picks_gc = user_keys.iter().any(|k| is_gc_selector(k));
+
+    let mut out: Vec<String> = generated
+        .into_iter()
+        .filter(|arg| {
+            if replace && !is_mandatory_base(arg) {
+                return false;
+            }
+            let key = arg_key(arg);
+            if user_keys.contains(&key) {
+                return false;
+            }
+            !(user_picks_gc && (is_gc_selector(&key) || is_collector_specific(&key)))
+        })
+        .collect();
+    out.extend(user);
+    out
 }
 
 /// P1-6 (audit launcher, Phase 6) : grille RAM/GC OpenJ9, alternative à
@@ -397,4 +509,80 @@ pub(super) fn extract_mojang_jvm_args(details: &VersionDetails, natives_dir: &Pa
             .replace("${launcher_version}", env!("CARGO_PKG_VERSION")))
         .filter(|s| !s.contains("${"))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{merge_jvm_args, parse_user_jvm_args};
+
+    fn generated() -> Vec<String> {
+        ["-Xmx6452m", "-Xms6452m", "-Djava.library.path=C:\natives", "-XX:+AlwaysPreTouch",
+         "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=100", "-XX:G1NewSizePercent=30"]
+            .iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_ignore_les_commentaires_et_decoupe_sur_les_espaces() {
+        let raw = "# un commentaire\n-XX:+UseNUMA -XX:MaxNodeLimit=240000\n\n  -Xss2m  ";
+        assert_eq!(parse_user_jvm_args(raw), vec!["-XX:+UseNUMA", "-XX:MaxNodeLimit=240000", "-Xss2m"]);
+    }
+
+    /// Sans arguments manuels, rien ne doit bouger — c'est le cas de la très
+    /// grande majorité des instances.
+    #[test]
+    fn append_sans_arguments_ne_change_rien() {
+        assert_eq!(merge_jvm_args(generated(), "", "append"), generated());
+    }
+
+    /// Un drapeau utilisateur écrase son homologue généré au lieu de
+    /// s'ajouter à côté : la valeur générée ne doit plus apparaître du tout.
+    #[test]
+    fn un_drapeau_utilisateur_ecrase_le_genere() {
+        let out = merge_jvm_args(generated(), "-XX:MaxGCPauseMillis=37", "append");
+        assert!(!out.contains(&"-XX:MaxGCPauseMillis=100".to_string()));
+        assert!(out.contains(&"-XX:MaxGCPauseMillis=37".to_string()));
+        assert!(out.contains(&"-XX:+UseG1GC".to_string()), "le reste du tuning généré est conservé");
+    }
+
+    /// La forme négative est le même réglage, pas un drapeau différent —
+    /// sinon `-XX:+AlwaysPreTouch` et `-XX:-AlwaysPreTouch` cohabiteraient.
+    #[test]
+    fn la_forme_negative_ecrase_la_forme_positive() {
+        let out = merge_jvm_args(generated(), "-XX:-AlwaysPreTouch", "append");
+        assert!(!out.contains(&"-XX:+AlwaysPreTouch".to_string()));
+        assert!(out.contains(&"-XX:-AlwaysPreTouch".to_string()));
+    }
+
+    /// Le cas qui rendrait l'instance impossible à lancer : deux sélecteurs
+    /// de GC ("Multiple garbage collectors selected"). Poser le sien doit
+    /// aussi emporter les réglages G1 générés, invalides ailleurs.
+    #[test]
+    fn un_selecteur_de_gc_utilisateur_retire_tout_le_bloc_gc_genere() {
+        let out = merge_jvm_args(generated(), "-XX:+UseShenandoahGC", "append");
+        assert!(!out.contains(&"-XX:+UseG1GC".to_string()));
+        assert!(!out.contains(&"-XX:G1NewSizePercent=30".to_string()));
+        assert!(out.contains(&"-XX:+UseShenandoahGC".to_string()));
+        assert!(out.contains(&"-Xmx6452m".to_string()), "le heap n'est jamais touché");
+    }
+
+    /// En "replace", seule la base sans laquelle le jeu ne démarre pas reste.
+    #[test]
+    fn replace_ne_garde_que_la_base_obligatoire() {
+        let out = merge_jvm_args(generated(), "-XX:+UseParallelGC", "replace");
+        assert_eq!(out, vec![
+            "-Xmx6452m".to_string(),
+            "-Xms6452m".to_string(),
+            "-Djava.library.path=C:\natives".to_string(),
+            "-XX:+UseParallelGC".to_string(),
+        ]);
+    }
+
+    /// Même en "replace", un -Xmx tapé à la main l'emporte sur celui déduit
+    /// de la RAM choisie — il ne doit pas se retrouver en double.
+    #[test]
+    fn replace_laisse_l_utilisateur_redefinir_le_heap() {
+        let out = merge_jvm_args(generated(), "-Xmx4g", "replace");
+        assert_eq!(out.iter().filter(|a| a.starts_with("-Xmx")).count(), 1);
+        assert!(out.contains(&"-Xmx4g".to_string()));
+    }
 }

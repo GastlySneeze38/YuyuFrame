@@ -17,10 +17,17 @@ pub struct InstanceRow {
     /// "auto" (défaut, grille RAM/loader) ou une policy explicite — le jeu
     /// de valeurs valides dépend de `jvm_vendor` (voir `build_jvm_args`).
     pub gc_policy: String,
+    /// Drapeaux JVM saisis à la main dans l'écran "Configuration JVM" (texte
+    /// brut, tel que tapé). Fusionnés aux drapeaux générés selon
+    /// `jvm_args_mode` — voir `merge_jvm_args`.
+    pub jvm_extra_args: String,
+    /// "append" (défaut) : les drapeaux manuels s'ajoutent aux générés.
+    /// "replace" : seule la base obligatoire (heap + library path) est gardée.
+    pub jvm_args_mode: String,
 }
 
 const INSTANCE_COLUMNS: &str =
-    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy";
+    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode";
 
 fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
     Ok(InstanceRow {
@@ -34,6 +41,8 @@ fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
         jvm_vendor: r.get(7)?,
         jvm_custom_path: r.get(8)?,
         gc_policy: r.get(9)?,
+        jvm_extra_args: r.get(10)?,
+        jvm_args_mode: r.get(11)?,
     })
 }
 
@@ -79,12 +88,14 @@ pub fn instance_insert(
     jvm_vendor: &str,
     jvm_custom_path: Option<&str>,
     gc_policy: &str,
+    jvm_extra_args: &str,
+    jvm_args_mode: &str,
 ) -> Result<()> {
     let now = chrono::Utc::now().timestamp();
     conn.execute(
-        "INSERT INTO instances (id, yuyu_user_id, name, mc_version, loader, ram_mb, created_at, description, jvm_vendor, jvm_custom_path, gc_policy)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        params![id, user_id, name, mc_version, loader, ram_mb, now, description, jvm_vendor, jvm_custom_path, gc_policy],
+        "INSERT INTO instances (id, yuyu_user_id, name, mc_version, loader, ram_mb, created_at, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        params![id, user_id, name, mc_version, loader, ram_mb, now, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode],
     )?;
     Ok(())
 }
@@ -102,11 +113,13 @@ pub fn instance_update(
     jvm_vendor: &str,
     jvm_custom_path: Option<&str>,
     gc_policy: &str,
+    jvm_extra_args: &str,
+    jvm_args_mode: &str,
 ) -> Result<()> {
     let n = conn.execute(
-        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5, jvm_vendor=?6, jvm_custom_path=?7, gc_policy=?8
-         WHERE id=?9 AND yuyu_user_id=?10",
-        params![name, mc_version, loader, ram_mb, description, jvm_vendor, jvm_custom_path, gc_policy, id, user_id],
+        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5, jvm_vendor=?6, jvm_custom_path=?7, gc_policy=?8, jvm_extra_args=?9, jvm_args_mode=?10
+         WHERE id=?11 AND yuyu_user_id=?12",
+        params![name, mc_version, loader, ram_mb, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, id, user_id],
     )?;
     if n == 0 {
         return Err(anyhow::anyhow!("Instance introuvable"));
