@@ -39,6 +39,17 @@ const OPENJ9_GC = [
 
 const CATEGORIES: JvmFlagCategory[] = ['jvm', 'gc', 'jit']
 
+/** Les trois catégories vivent chacune sur son propre onglet, plus un onglet
+ * d'aperçu. Empilées, elles saturaient l'écran : on ne règle qu'un sujet à la
+ * fois, et le reste ne fait qu'ajouter du bruit autour de celui qu'on édite. */
+type EditorTab = JvmFlagCategory | 'preview'
+
+const ARGS_KEY: Record<JvmFlagCategory, 'args_jvm' | 'args_gc' | 'args_jit'> = {
+  jvm: 'args_jvm',
+  gc: 'args_gc',
+  jit: 'args_jit',
+}
+
 const FAMILY_LABEL = { hotspot: 'HotSpot', openj9: 'OpenJ9', graal: 'GraalVM (HotSpot + Graal)' } as const
 
 /**
@@ -66,6 +77,7 @@ export default function JvmProfileEditor() {
   const [notFound, setNotFound] = useState(false)
   const [draft, setDraft] = useState<JvmProfile | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<EditorTab>('gc')
 
   const [previewInstanceId, setPreviewInstanceId] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
@@ -205,6 +217,51 @@ export default function JvmProfileEditor() {
         </button>
       </PageHeader>
 
+      {/* ── Navigation entre catégories ──────────────────────────────────────
+          Pleine largeur, sous l'en-tête : c'est la navigation de l'écran, pas
+          un réglage de la config — la colonne de gauche reste la grille. */}
+      <nav className="flex flex-shrink-0 items-end gap-1 border-b border-[rgba(255,255,255,0.06)] px-5">
+        {CATEGORIES.map((cat) => {
+          const n = parseJvmArgs(draft[ARGS_KEY[cat]]).length
+          const active = tab === cat
+          return (
+            <button
+              key={cat}
+              onClick={() => setTab(cat)}
+              className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[12px] font-bold transition-colors ${
+                active
+                  ? 'border-[rgba(120,105,255,0.9)] text-white'
+                  : 'border-transparent text-[rgba(255,255,255,0.38)] hover:text-[rgba(255,255,255,0.7)]'
+              }`}
+            >
+              {CATEGORY_META[cat].label}
+              <span
+                className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                  n > 0
+                    ? active
+                      ? 'bg-[rgba(75,63,207,0.4)] text-[rgba(210,205,255,0.95)]'
+                      : 'bg-[rgba(255,255,255,0.07)] text-[rgba(255,255,255,0.5)]'
+                    : 'bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.22)]'
+                }`}
+              >
+                {n}
+              </span>
+            </button>
+          )
+        })}
+        <div className="flex-1" />
+        <button
+          onClick={() => setTab('preview')}
+          className={`border-b-2 px-3 py-2.5 text-[12px] font-bold transition-colors ${
+            tab === 'preview'
+              ? 'border-[rgba(120,105,255,0.9)] text-white'
+              : 'border-transparent text-[rgba(255,255,255,0.38)] hover:text-[rgba(255,255,255,0.7)]'
+          }`}
+        >
+          Ligne de commande
+        </button>
+      </nav>
+
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── La grille ───────────────────────────────────────────────────── */}
@@ -323,42 +380,57 @@ export default function JvmProfileEditor() {
               </Warn>
             )}
 
-            {CATEGORIES.map((cat) => {
-              const key = (cat === 'jvm' ? 'args_jvm' : cat === 'gc' ? 'args_gc' : 'args_jit') as
-                'args_jvm' | 'args_gc' | 'args_jit'
+            {tab !== 'preview' && (() => {
+              const key = ARGS_KEY[tab]
               const value = draft[key]
-              const presets = presetsFor(cat, family)
-              const n = parseJvmArgs(value).length
+              const presets = presetsFor(tab, family)
+              const full = presets.filter((p) => p.full)
+              const addons = presets.filter((p) => !p.full)
               return (
-                <Card
-                  key={cat}
-                  title={CATEGORY_META[cat].label}
-                  sub={CATEGORY_META[cat].sub}
-                  right={
-                    <span className="flex-shrink-0 rounded-md bg-[rgba(255,255,255,0.05)] px-2 py-0.5 text-[10px] font-semibold text-[rgba(255,255,255,0.4)]">
-                      {n} drapeau{n > 1 ? 'x' : ''}
-                    </span>
-                  }
-                >
+                <>
+                  <div>
+                    <h2 className="text-[15px] font-black tracking-[-0.01em] text-white">{CATEGORY_META[tab].label}</h2>
+                    <p className="mt-1 max-w-[620px] text-[11px] leading-relaxed text-[rgba(255,255,255,0.4)]">
+                      {CATEGORY_META[tab].sub}
+                    </p>
+                  </div>
+
                   {presets.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {presets.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => set(key, applyPreset(value, p))}
-                          title={p.hint}
-                          className={`h-[26px] rounded-lg border px-2.5 text-[10px] font-semibold transition-all duration-150 ${
-                            p.full
-                              ? 'border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] hover:border-white/30'
-                              : 'border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.12)] text-[rgba(150,140,240,0.9)] hover:border-[rgba(75,63,207,0.7)]'
-                          }`}
-                        >
-                          {p.label}
-                        </button>
-                      ))}
-                    </div>
+                    <Card
+                      title="Jeux de drapeaux"
+                      sub={`Filtrés pour ${FAMILY_LABEL[family]}. Un jeu complet remplace le champ, un complément s'y ajoute.`}
+                    >
+                      {full.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {full.map((p) => (
+                            <button
+                              key={p.id}
+                              onClick={() => set(key, applyPreset(value, p))}
+                              title={p.hint}
+                              className="h-[28px] rounded-lg border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.06)] px-2.5 text-[11px] font-semibold text-[rgba(255,255,255,0.7)] transition-all duration-150 hover:border-white/30"
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {addons.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {addons.map((p) => (
+                            <button
+                              key={p.id}
+                              onClick={() => set(key, applyPreset(value, p))}
+                              title={p.hint}
+                              className="h-[28px] rounded-lg border border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.12)] px-2.5 text-[11px] font-semibold text-[rgba(150,140,240,0.9)] transition-all duration-150 hover:border-[rgba(75,63,207,0.7)]"
+                            >
+                              {p.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
                   ) : (
-                    <p className="text-[10px] text-[rgba(255,255,255,0.25)]">
+                    <p className="text-[11px] text-[rgba(255,255,255,0.28)]">
                       Aucun jeu vérifié pour {FAMILY_LABEL[family]} dans cette catégorie — à saisir à la main.
                     </p>
                   )}
@@ -368,12 +440,13 @@ export default function JvmProfileEditor() {
                     onChange={(e) => set(key, e.target.value)}
                     spellCheck={false}
                     placeholder={'# un ou plusieurs drapeaux par ligne\n# les lignes commençant par # sont ignorées'}
-                    className="min-h-[110px] w-full resize-y rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] p-3 font-mono text-[12px] leading-relaxed text-[rgba(255,255,255,0.85)] outline-none focus:border-[rgba(75,63,207,0.6)]"
+                    className="min-h-[320px] w-full flex-1 resize-y rounded-2xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] p-3.5 font-mono text-[12px] leading-relaxed text-[rgba(255,255,255,0.85)] outline-none focus:border-[rgba(75,63,207,0.6)]"
                   />
-                </Card>
+                </>
               )
-            })}
+            })()}
 
+            {tab === 'preview' && (
             <Card
               title="Ligne de commande réelle"
               sub="Résolue par le backend avec les mêmes fonctions qu'un lancement. Peut télécharger la JVM si elle manque."
@@ -431,6 +504,7 @@ export default function JvmProfileEditor() {
                 </div>
               )}
             </Card>
+            )}
           </div>
         </main>
       </div>
