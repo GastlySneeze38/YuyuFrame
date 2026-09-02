@@ -38,9 +38,22 @@ export function jvmArgKey(arg: string): string {
   return arg
 }
 
+/** Un sélecteur de GC **actif**. La forme négative (`-XX:-UseG1GC`) n'en est
+ * pas un : elle éteint un collecteur, elle n'en choisit aucun — et c'est même
+ * la manière normale d'en poser un autre (le jeu Shenandoah contient les deux).
+ * Les compter ensemble ferait crier au conflit sur une config parfaitement
+ * valide. */
 export function isGcSelector(arg: string): boolean {
-  const key = jvmArgKey(arg)
-  return (key.startsWith('-XX:Use') && key.endsWith('GC')) || key === '-Xgcpolicy'
+  if (arg.startsWith('-Xgcpolicy:')) return true
+  if (!arg.startsWith('-XX:+Use')) return false
+  return arg.endsWith('GC')
+}
+
+/** Nom lisible du collecteur qu'un drapeau sélectionne. */
+export function gcSelectorLabel(arg: string): string {
+  if (arg.startsWith('-Xgcpolicy:')) return arg.slice('-Xgcpolicy:'.length)
+  const name = arg.slice('-XX:+Use'.length)
+  return name === 'ShenandoahGC' ? 'Shenandoah' : name
 }
 
 // ── La grille ────────────────────────────────────────────────────────────────
@@ -358,6 +371,27 @@ export function applyPreset(current: string, preset: JvmPreset): string {
   if (preset.full) return preset.body
   const base = current.trimEnd()
   return base ? `${base}\n${preset.body}` : preset.body
+}
+
+/** Le collecteur **réellement** appliqué, et d'où il vient.
+ *
+ * Un sélecteur posé dans les drapeaux l'emporte toujours sur celui de la
+ * grille (`merge_jvm_args` retire alors tout le bloc GC généré) — afficher le
+ * réglage de la grille sans regarder les drapeaux annoncerait donc souvent un
+ * collecteur qui ne tourne pas. */
+export function effectiveGc(gcPolicy: string, family: JvmFamily, ...raws: string[]): {
+  label: string
+  fromFlags: boolean
+} {
+  const selector = raws.flatMap(parseJvmArgs).filter(isGcSelector).pop()
+  if (selector) return { label: gcSelectorLabel(selector), fromFlags: true }
+  // Les policies OpenJ9 (`gencon`, `optthruput`...) sont des noms propres en
+  // minuscules, seuls les sigles HotSpot se mettent en capitales.
+  if (gcPolicy !== 'auto') {
+    const label = gcPolicy === 'g1' ? 'G1GC' : gcPolicy === 'zgc' ? 'ZGC' : gcPolicy
+    return { label, fromFlags: false }
+  }
+  return { label: family === 'openj9' ? 'gencon' : 'G1GC ou ZGC', fromFlags: false }
 }
 
 export const ARGS_MODES: { id: JvmArgsMode; label: string; sub: string }[] = [
