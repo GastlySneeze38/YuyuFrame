@@ -3,6 +3,7 @@ pub mod analytics;
 pub mod curseforge;
 pub mod deep_link;
 pub mod instance;
+pub mod jvm_profile;
 pub mod launch;
 pub mod modrinth;
 pub mod sync;

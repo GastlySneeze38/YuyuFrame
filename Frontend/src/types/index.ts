@@ -103,6 +103,29 @@ export interface Instance {
   /** Drapeaux JVM tapés à la main dans l'écran "Configuration JVM" (texte brut). */
   jvm_extra_args: string
   jvm_args_mode: JvmArgsMode
+  /** Config JVM reliée (`JvmProfile.id`). Quand elle est là, elle remplace
+   * intégralement les trois champs ci-dessus au lancement. */
+  jvm_profile_id: string | null
+}
+
+/** Les trois sujets indépendants d'une config JVM. Ils sont édités séparément
+ * parce qu'on change de ramasse-miettes sans toucher au compilateur — mélangés
+ * dans une seule liste, impossible de dire quelle moitié d'un test a bougé. */
+export type JvmFlagCategory = 'jvm' | 'gc' | 'jit'
+
+/** Une configuration JVM réutilisable, reliable à plusieurs instances. */
+export interface JvmProfile {
+  id: string
+  name: string
+  /** `null` = garder la RAM choisie sur l'instance. */
+  ram_mb: number | null
+  jvm_vendor: JvmVendor
+  jvm_custom_path: string | null
+  gc_policy: string
+  args_mode: JvmArgsMode
+  args_jvm: string
+  args_gc: string
+  args_jit: string
 }
 
 /** Le bloc JVM d'une instance tel qu'édité dans l'UI. Regroupé en un objet

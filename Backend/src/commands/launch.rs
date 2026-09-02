@@ -32,12 +32,20 @@ pub async fn launch_game(
         s.current_yuyu_user_id().unwrap_or(0)
     };
 
-    let instance = {
+    let (instance, jvm_profile) = {
         let s = state.read().await;
         let db = s.db.lock().await;
-        db::instance_get(&db, &instance_id, yuyu_user_id)
+        let row = db::instance_get(&db, &instance_id, yuyu_user_id)
             .map_err(|e| e.to_string())?
-            .ok_or("Instance introuvable")?
+            .ok_or("Instance introuvable")?;
+        // Une config supprimée entre-temps laisse un id orphelin : on retombe
+        // silencieusement sur les réglages de l'instance plutôt que d'échouer
+        // le lancement — c'est le comportement par défaut du launcher, jamais
+        // des drapeaux inattendus.
+        let profile = row.jvm_profile_id.as_deref().and_then(|id| {
+            db::jvm_profile_get(&db, id, yuyu_user_id).ok().flatten()
+        });
+        (row, profile)
     };
     let instance = crate::commands::instance::crud::Instance {
         id: instance.id,
@@ -52,6 +60,32 @@ pub async fn launch_game(
         gc_policy: instance.gc_policy,
         jvm_extra_args: instance.jvm_extra_args,
         jvm_args_mode: instance.jvm_args_mode,
+        jvm_profile_id: instance.jvm_profile_id,
+    };
+
+    // Une config reliée remplace INTÉGRALEMENT le bloc JVM de l'instance —
+    // pas de fusion des deux, qui donnerait une troisième configuration que
+    // personne n'a écrite et rendrait tout benchmark ininterprétable. Sa RAM
+    // reste facultative : la plupart des configs ne cherchent à imposer que
+    // des drapeaux, et écraser la RAM choisie sur l'instance serait une
+    // surprise.
+    let (jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, ram_mb) = match &jvm_profile {
+        Some(p) => (
+            p.jvm_vendor.clone(),
+            p.jvm_custom_path.clone(),
+            p.gc_policy.clone(),
+            p.all_args(),
+            p.args_mode.clone(),
+            p.ram_mb.unwrap_or(instance.ram_mb),
+        ),
+        None => (
+            instance.jvm_vendor.clone(),
+            instance.jvm_custom_path.clone(),
+            instance.gc_policy.clone(),
+            instance.jvm_extra_args.clone(),
+            instance.jvm_args_mode.clone(),
+            instance.ram_mb,
+        ),
     };
 
     let game_dir = instance_dir(&instance_id);
@@ -177,7 +211,7 @@ pub async fn launch_game(
             &instance.mc_version,
             Some(&instance.loader),
             &session,
-            instance.ram_mb,
+            ram_mb,
             &game_dir,
             app.clone(),
             state_clone.clone(),
@@ -187,11 +221,11 @@ pub async fn launch_game(
             &instance_id,
             connect_server.as_deref(),
             cancel_rx,
-            &instance.jvm_vendor,
-            instance.jvm_custom_path.as_deref(),
-            &instance.gc_policy,
-            &instance.jvm_extra_args,
-            &instance.jvm_args_mode,
+            &jvm_vendor,
+            jvm_custom_path.as_deref(),
+            &gc_policy,
+            &jvm_extra_args,
+            &jvm_args_mode,
         )
         .await
         {

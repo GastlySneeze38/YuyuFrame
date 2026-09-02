@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,6 +118,20 @@ export const api = {
     // recalculée côté Rust par les mêmes fonctions qu'un vrai lancement.
     previewJvmConfig: (instanceId: string, mcVersion: string, ramMb: number, jvm: JvmFormValues) =>
       invoke<JvmConfigPreview>('preview_jvm_config', { instanceId, mcVersion, ramMb, ...jvmInvokeArgs(jvm) }),
+    setJvmProfile: (instanceId: string, profileId: string | null) =>
+      invoke<void>('instance_set_jvm_profile', { instanceId, profileId }),
+  },
+
+  // Configurations JVM réutilisables (écran /jvm) — reliables à plusieurs
+  // instances, c'est tout leur intérêt pour comparer deux jeux de drapeaux
+  // sur le même monde.
+  jvmProfiles: {
+    list: () => invoke<JvmProfile[]>('jvm_profile_list'),
+    /** `fromId` duplique une config existante au lieu de partir de zéro. */
+    create: (name: string, fromId?: string) =>
+      invoke<JvmProfile>('jvm_profile_create', { name, fromId }),
+    save: (profile: JvmProfile) => invoke<JvmProfile>('jvm_profile_save', { profile }),
+    delete: (id: string) => invoke<void>('jvm_profile_delete', { id }),
   },
 
   yuyu: {

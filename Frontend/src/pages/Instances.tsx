@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { Instance } from '@/types'
@@ -15,6 +16,7 @@ import { useT } from '@/i18n'
 
 export default function Instances() {
   const t = useT()
+  const navigate = useNavigate()
   const {
     versions, setVersions,
     instances, setInstances, addInstance, updateInstance, removeInstance,
@@ -91,6 +93,16 @@ export default function Instances() {
 
       <PageHeader px={5}>
         <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">{t('instancesPage.title')}</h1>
+        <div className="flex-1" />
+        {/* Seul point d'entrée vers la bibliothèque de configs en dehors de la
+            modal d'édition — les configs sont transverses aux instances, elles
+            n'appartiennent à aucune en particulier. */}
+        <button
+          onClick={() => navigate('/jvm')}
+          className="h-[28px] flex-shrink-0 rounded-lg border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.06)] px-2.5 text-[11px] font-semibold text-[rgba(255,255,255,0.6)] transition-colors hover:border-white/25 hover:text-[rgba(255,255,255,0.85)]"
+        >
+          Configurations JVM
+        </button>
       </PageHeader>
 
       {/* Body: sidebar + mods panel */}

@@ -23,6 +23,16 @@ pub struct Instance {
     pub jvm_extra_args: String,
     /// "append" (défaut) | "replace" — voir `merge_jvm_args`.
     pub jvm_args_mode: String,
+    /// Config JVM reliée (`db::jvm_profile`) — quand elle est là, elle
+    /// remplace les trois champs ci-dessus au lancement.
+    ///
+    /// Volontairement absent de `meta.json` : les configs elles-mêmes ne
+    /// vivent qu'en base, un `meta.json` restauré sur une DB neuve pointerait
+    /// donc vers une config qui n'existe plus. Le repli "disk_wins" retombe
+    /// sur les colonnes `jvm_*` de l'instance, ce qui est le comportement par
+    /// défaut du launcher — sûr, jamais un lancement avec des drapeaux
+    /// inattendus.
+    pub jvm_profile_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -136,6 +146,7 @@ fn row_to_instance(r: db::InstanceRow) -> Instance {
         favorite: r.favorite, description: r.description,
         jvm_vendor: r.jvm_vendor, jvm_custom_path: r.jvm_custom_path, gc_policy: r.gc_policy,
         jvm_extra_args: r.jvm_extra_args, jvm_args_mode: r.jvm_args_mode,
+        jvm_profile_id: r.jvm_profile_id,
     }
 }
 
@@ -201,7 +212,7 @@ pub async fn instance_create(
         "mc_version": &mc_version,
         "loader": &loader,
     }));
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None })
 }
 
 #[tauri::command]
@@ -323,7 +334,10 @@ pub async fn instance_duplicate(
     db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
         .map_err(|e| e.to_string())?;
 
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode })
+    // La config JVM reliée n'est PAS dupliquée : une config est justement
+    // faite pour être partagée entre instances, la copie repart donc déliée
+    // plutôt que d'hériter d'un lien que l'utilisateur n'a pas demandé.
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None })
 }
 
 /// Copie `options.txt` de l'instance vers un template global dans le dossier

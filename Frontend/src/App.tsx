@@ -31,7 +31,8 @@ const Sync = lazy(() => import('@/pages/Sync'))
 const Plans = lazy(() => import('@/pages/Plans'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Server = lazy(() => import('@/pages/Server'))
-const JvmConfig = lazy(() => import('@/pages/JvmConfig'))
+const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
+const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 
 function RouteFallback() {
   return <div className="flex h-full w-full bg-[#09090D]" />
@@ -224,7 +225,8 @@ export default function App() {
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/server" element={<Server />} />
-            <Route path="/jvm/:instanceId" element={<JvmConfig />} />
+            <Route path="/jvm" element={<JvmProfiles />} />
+            <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
           </Routes>
         </Suspense>
       </div>

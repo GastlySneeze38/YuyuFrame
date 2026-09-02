@@ -1,7 +1,8 @@
-import type { JvmArgsMode } from '@/types'
+import type { JvmArgsMode, JvmFlagCategory, JvmVendor } from '@/types'
 
 /**
- * Utilitaires de l'écran "Configuration JVM" (pages/JvmConfig).
+ * Utilitaires de l'écran "Configurations JVM" (pages/JvmProfiles,
+ * pages/JvmProfileEditor).
  *
  * Ce fichier duplique volontairement une partie du raisonnement de
  * `merge_jvm_args` côté Rust (Backend/src/minecraft/launcher/jvm_args.rs) :
@@ -39,21 +40,54 @@ export function jvmArgKey(arg: string): string {
 
 export function isGcSelector(arg: string): boolean {
   const key = jvmArgKey(arg)
-  return key.startsWith('-XX:Use') && key.endsWith('GC')
+  return (key.startsWith('-XX:Use') && key.endsWith('GC')) || key === '-Xgcpolicy'
 }
+
+// ── La grille ────────────────────────────────────────────────────────────────
+
+/** Famille de JVM réellement obtenue à partir de la grille. C'est elle, pas le
+ * libellé du vendeur, qui décide quels drapeaux ont un sens : la syntaxe GC
+ * d'OpenJ9 (`-Xgcpolicy:*`) n'a rien à voir avec celle d'HotSpot, et le JIT
+ * Graal n'existe que sur une GraalVM. */
+export type JvmFamily = 'hotspot' | 'openj9' | 'graal'
+
+/** Même règle que `resolve_auto_vendor` côté Rust — dupliquée ici uniquement
+ * pour dire ce que "Auto" choisirait, la décision réelle reste au backend. */
+export function autoVendorFor(ramMb: number): 'openj9' | 'temurin' {
+  return ramMb <= 2048 ? 'openj9' : 'temurin'
+}
+
+export function familyFor(vendor: JvmVendor, ramMb: number): JvmFamily {
+  const resolved = vendor === 'auto' ? autoVendorFor(ramMb) : vendor
+  if (resolved === 'openj9') return 'openj9'
+  if (resolved === 'graal') return 'graal'
+  return 'hotspot'
+}
+
+/** Une GraalVM reste une HotSpot côté GC et mémoire : elle n'ajoute qu'un
+ * compilateur. Tout ce qui vaut pour HotSpot vaut donc aussi pour elle. */
+function familyMatches(preset: JvmPreset, family: JvmFamily): boolean {
+  if (preset.families.includes(family)) return true
+  return family === 'graal' && preset.families.includes('hotspot')
+}
+
+// ── Analyse du champ ─────────────────────────────────────────────────────────
 
 export interface JvmArgsLint {
   count: number
-  /** Drapeaux définis deux fois dans le champ — le dernier gagne, mais c'est
-   * presque toujours une coquille (un preset collé deux fois). */
+  /** Drapeaux définis deux fois — le dernier gagne, mais c'est presque
+   * toujours une coquille (un jeu de drapeaux collé deux fois). */
   duplicates: string[]
   /** Plusieurs sélecteurs de GC : la JVM refuse de démarrer
    * ("Multiple garbage collectors selected"). */
   gcSelectors: string[]
 }
 
-export function lintJvmArgs(raw: string): JvmArgsLint {
-  const args = parseJvmArgs(raw)
+/** Analyse l'ensemble des catégories d'un coup : un doublon entre la catégorie
+ * GC et la catégorie JIT est exactement aussi cassant qu'un doublon interne, et
+ * ne se verrait pas en analysant chaque champ isolément. */
+export function lintJvmArgs(...raws: string[]): JvmArgsLint {
+  const args = raws.flatMap(parseJvmArgs)
   const seen = new Map<string, number>()
   for (const a of args) {
     const k = jvmArgKey(a)
@@ -66,71 +100,104 @@ export function lintJvmArgs(raw: string): JvmArgsLint {
   }
 }
 
+// ── Jeux de drapeaux ─────────────────────────────────────────────────────────
+
 export interface JvmPreset {
   id: string
   label: string
-  /** Une phrase — ce que ce jeu de flags cherche à obtenir, et sa provenance. */
+  /** Une phrase — ce que ce jeu cherche à obtenir, et sa provenance. */
   hint: string
-  /** `true` : jeu complet, remplace le contenu du champ et bascule en mode
-   * "replace". `false` : complément, s'ajoute à ce qui est déjà tapé. */
+  category: JvmFlagCategory
+  /** Familles de JVM pour lesquelles ce jeu a un sens. */
+  families: JvmFamily[]
+  /** `true` : jeu complet, remplace le contenu de sa catégorie.
+   * `false` : complément, s'ajoute à ce qui est déjà là. */
   full: boolean
-  mode: JvmArgsMode
   body: string
 }
 
+export const CATEGORY_META: Record<JvmFlagCategory, { label: string; sub: string }> = {
+  jvm: {
+    label: 'Moteur',
+    sub: "Mémoire, threads, comportement général de la JVM. Ce qui ne dépend ni du ramasse-miettes ni du compilateur.",
+  },
+  gc: {
+    label: 'Ramasse-miettes',
+    sub: "Le sélecteur de GC et son réglage. Poser un sélecteur ici remplace celui de la grille et tout le bloc généré avec.",
+  },
+  jit: {
+    label: 'Compilateur',
+    sub: "Ce que la JVM accepte de compiler en code natif, et la place qu'elle garde pour le stocker.",
+  },
+}
+
 /**
- * Jeux de drapeaux prêts à tester. Tous vérifiés comme acceptés par un
- * Java 25 (`-XX:+PrintFlagsFinal` / démarrage réel) — plusieurs drapeaux des
- * listes communautaires d'origine ont été RETIRÉS parce qu'ils ont disparu
- * des JDK récents et qu'un `-XX` inconnu empêche la JVM de démarrer tout
- * court : `G1ConcRSHotCardLimit` et `G1ConcRefinementServiceIntervalMillis`
- * (brucethemoose), `ShenandoahGCMode=iu` (mode supprimé).
+ * Jeux de drapeaux prêts à tester, filtrés par la grille (voir
+ * `presetsFor`). Tous vérifiés comme acceptés par un Java 25 — plusieurs
+ * drapeaux des listes communautaires d'origine ont été RETIRÉS parce qu'ils
+ * ont disparu des JDK récents et qu'un `-XX` inconnu empêche la JVM de
+ * démarrer tout court : `G1ConcRSHotCardLimit` et
+ * `G1ConcRefinementServiceIntervalMillis` (brucethemoose),
+ * `ShenandoahGCMode=iu` (mode supprimé).
  */
 export const JVM_PRESETS: JvmPreset[] = [
+  // ── Moteur ─────────────────────────────────────────────────────────────────
   {
-    id: 'aikar',
-    label: 'Aikar',
-    hint: "La référence côté SERVEUR : dimensionnée pour tenir un tick de 50 ms, pas pour une frame de 3 ms. À comparer, pas à prendre par défaut sur un client.",
+    id: 'engine-client',
+    label: 'Base client',
+    hint: "Ce que le launcher pose déjà de son côté : tas pré-touché, System.gc() des mods ignoré, pas de fichier perf OS.",
+    category: 'jvm',
+    families: ['hotspot'],
     full: true,
-    mode: 'replace',
     body: [
-      '# Aikar (référence serveur) — https://docs.papermc.io/paper/aikars-flags',
-      '-XX:+UseG1GC',
-      '-XX:+ParallelRefProcEnabled',
-      '-XX:MaxGCPauseMillis=200',
-      '-XX:+UnlockExperimentalVMOptions',
-      '-XX:+DisableExplicitGC',
       '-XX:+AlwaysPreTouch',
-      '-XX:G1NewSizePercent=30',
-      '-XX:G1MaxNewSizePercent=40',
-      '-XX:G1HeapRegionSize=8M',
-      '-XX:G1ReservePercent=20',
-      '-XX:G1HeapWastePercent=5',
-      '-XX:G1MixedGCCountTarget=4',
-      '-XX:InitiatingHeapOccupancyPercent=15',
-      '-XX:G1MixedGCLiveThresholdPercent=90',
-      '-XX:G1RSetUpdatingPauseTimePercent=5',
-      '-XX:SurvivorRatio=32',
+      '-XX:+DisableExplicitGC',
       '-XX:+PerfDisableSharedMem',
-      '-XX:MaxTenuringThreshold=1',
+      '-XX:+UseStringDeduplication',
     ].join('\n'),
   },
   {
-    id: 'brucethemoose',
+    id: 'engine-numa',
+    label: '+ NUMA',
+    hint: "N'a d'effet que sur une machine multi-socket ou un Ryzen à plusieurs CCX ; inoffensif ailleurs.",
+    category: 'jvm',
+    families: ['hotspot'],
+    full: false,
+    body: '-XX:+UseNUMA',
+  },
+  {
+    id: 'engine-stack',
+    label: '+ Pile large',
+    hint: "2 Mo de pile par thread — utile quand un mod à récursion profonde déclenche des StackOverflowError.",
+    category: 'jvm',
+    families: ['hotspot', 'openj9'],
+    full: false,
+    body: '-Xss2m',
+  },
+  {
+    id: 'engine-openj9',
+    label: 'Base OpenJ9',
+    hint: "Le strict nécessaire côté OpenJ9 : rien de plus n'a été vérifié en conditions réelles, et un drapeau inconnu empêche la JVM de démarrer.",
+    category: 'jvm',
+    families: ['openj9'],
+    full: true,
+    body: ['-XX:+UseCompressedOops', '-Xdisableexplicitgc'].join('\n'),
+  },
+
+  // ── Ramasse-miettes ────────────────────────────────────────────────────────
+  {
+    id: 'gc-brucethemoose',
     label: 'brucethemoose (client)',
     hint: "Le jeu benchmarké CÔTÉ CLIENT : beaucoup de pauses très courtes plutôt que quelques longues, parce qu'une frame ne peut rien amortir.",
+    category: 'gc',
+    families: ['hotspot'],
     full: true,
-    mode: 'replace',
     body: [
       '# brucethemoose/Minecraft-Performance-Flags-Benchmarks (client, G1)',
-      '# Drapeaux retirés car absents des JDK récents : G1ConcRSHotCardLimit,',
-      '# G1ConcRefinementServiceIntervalMillis.',
       '-XX:+UseG1GC',
       '-XX:+ParallelRefProcEnabled',
       '-XX:MaxGCPauseMillis=37',
       '-XX:+UnlockExperimentalVMOptions',
-      '-XX:+DisableExplicitGC',
-      '-XX:+AlwaysPreTouch',
       '-XX:G1NewSizePercent=23',
       '-XX:G1MaxNewSizePercent=40',
       '-XX:G1HeapRegionSize=16M',
@@ -141,90 +208,159 @@ export const JVM_PRESETS: JvmPreset[] = [
       '-XX:G1MixedGCLiveThresholdPercent=90',
       '-XX:G1RSetUpdatingPauseTimePercent=0',
       '-XX:SurvivorRatio=32',
-      '-XX:+PerfDisableSharedMem',
       '-XX:MaxTenuringThreshold=1',
-      '-XX:+UseNUMA',
-      '-XX:-DontCompileHugeMethods',
-      '-XX:MaxNodeLimit=240000',
-      '-XX:NodeLimitFudgeFactor=8000',
-      '-XX:ReservedCodeCacheSize=400M',
-      '-XX:NonNMethodCodeHeapSize=12M',
-      '-XX:ProfiledCodeHeapSize=194M',
-      '-XX:NonProfiledCodeHeapSize=194M',
     ].join('\n'),
   },
   {
-    id: 'shenandoah',
+    id: 'gc-aikar',
+    label: 'Aikar (serveur)',
+    hint: "La référence côté SERVEUR : dimensionnée pour tenir un tick de 50 ms, pas une frame de 3 ms. À comparer, pas à prendre par défaut sur un client.",
+    category: 'gc',
+    families: ['hotspot'],
+    full: true,
+    body: [
+      '# Aikar — https://docs.papermc.io/paper/aikars-flags',
+      '-XX:+UseG1GC',
+      '-XX:+ParallelRefProcEnabled',
+      '-XX:MaxGCPauseMillis=200',
+      '-XX:+UnlockExperimentalVMOptions',
+      '-XX:G1NewSizePercent=30',
+      '-XX:G1MaxNewSizePercent=40',
+      '-XX:G1HeapRegionSize=8M',
+      '-XX:G1ReservePercent=20',
+      '-XX:G1HeapWastePercent=5',
+      '-XX:G1MixedGCCountTarget=4',
+      '-XX:InitiatingHeapOccupancyPercent=15',
+      '-XX:G1MixedGCLiveThresholdPercent=90',
+      '-XX:G1RSetUpdatingPauseTimePercent=5',
+      '-XX:SurvivorRatio=32',
+      '-XX:MaxTenuringThreshold=1',
+    ].join('\n'),
+  },
+  {
+    id: 'gc-shenandoah',
     label: 'Shenandoah',
     hint: "Évacuation concurrente : des pauses courtes sans la taxe de débit des barrières de lecture de ZGC. Le mode `iu` a été supprimé, `generational` le remplace.",
+    category: 'gc',
+    families: ['hotspot'],
     full: true,
-    mode: 'replace',
     body: [
-      '# Shenandoah (Java 25) — la négation de UseG1GC est OBLIGATOIRE, sinon',
-      '# la JVM refuse de démarrer ("Multiple garbage collectors selected").',
+      '# La négation de UseG1GC est OBLIGATOIRE, sinon la JVM refuse de',
+      '# démarrer ("Multiple garbage collectors selected").',
       '-XX:-UseG1GC',
       '-XX:+UseShenandoahGC',
       '-XX:ShenandoahGCMode=generational',
-      '-XX:+AlwaysPreTouch',
-      '-XX:+DisableExplicitGC',
-      '-XX:+PerfDisableSharedMem',
     ].join('\n'),
   },
   {
-    id: 'parallel',
-    label: 'ParallelGC',
-    hint: "Débit brut maximum, pauses longues assumées. Le point de comparaison qui dit combien coûtent réellement les GC concurrents.",
+    id: 'gc-zgc',
+    label: 'ZGC générationnel',
+    hint: "Pauses sous la milliseconde, payées par une barrière sur chaque lecture de référence — mesuré ici à ~26 % de débit en moins. Utile comme point de comparaison.",
+    category: 'gc',
+    families: ['hotspot'],
     full: true,
-    mode: 'replace',
-    body: [
-      '# ParallelGC — plancher de comparaison "débit brut"',
-      '-XX:-UseG1GC',
-      '-XX:+UseParallelGC',
-      '-XX:+AlwaysPreTouch',
-      '-XX:+DisableExplicitGC',
-      '-XX:+PerfDisableSharedMem',
-    ].join('\n'),
+    body: ['-XX:-UseG1GC', '-XX:+UseZGC', '-XX:ZAllocationSpikeTolerance=5.0'].join('\n'),
   },
   {
-    id: 'graal-jit',
-    label: '+ JIT Graal',
-    hint: "Active le compilateur Graal via JVMCI — n'a d'effet que sur une Oracle GraalVM (mesuré à +5 % ici). Ignoré ailleurs, mais refusé au démarrage sur certaines JVM.",
-    full: false,
-    mode: 'append',
-    body: [
-      '# JIT Graal (Oracle GraalVM uniquement)',
-      '-XX:+UnlockExperimentalVMOptions',
-      '-XX:+EnableJVMCI',
-      '-XX:+UseJVMCICompiler',
-    ].join('\n'),
-  },
-  {
-    id: 'jit-unleashed',
-    label: '+ JIT débridé',
-    hint: "Lève la limite des 8000 bytecodes (HotSpot refuse de compiler les grosses méthodes, dont plusieurs boucles chaudes de Minecraft) et agrandit le code cache pour qu'il ne sature pas en cours de session.",
-    full: false,
-    mode: 'append',
-    body: [
-      '# Débride le JIT — MaxNodeLimit/NodeLimitFudgeFactor sont obligatoires',
-      '# avec -XX:-DontCompileHugeMethods, sinon C2 abandonne sur ces méthodes.',
-      '-XX:-DontCompileHugeMethods',
-      '-XX:MaxNodeLimit=240000',
-      '-XX:NodeLimitFudgeFactor=8000',
-      '-XX:ReservedCodeCacheSize=400M',
-      '-XX:NonNMethodCodeHeapSize=12M',
-      '-XX:ProfiledCodeHeapSize=194M',
-      '-XX:NonProfiledCodeHeapSize=194M',
-    ].join('\n'),
+    id: 'gc-parallel',
+    label: 'ParallelGC',
+    hint: "Débit brut maximum, pauses longues assumées. Le plancher qui dit combien coûtent réellement les GC concurrents.",
+    category: 'gc',
+    families: ['hotspot'],
+    full: true,
+    body: ['-XX:-UseG1GC', '-XX:+UseParallelGC'].join('\n'),
   },
   {
     id: 'gc-log',
     label: '+ Journal GC',
-    hint: "Écrit chaque pause dans gc.log à côté du jeu — c'est ce qui permet de dire si une chute de FPS vient bien du GC plutôt que du meshing de chunks.",
+    hint: "Écrit chaque pause dans gc.log à côté du jeu — le seul moyen de dire si une chute de FPS vient du GC plutôt que du meshing de chunks.",
+    category: 'gc',
+    families: ['hotspot'],
     full: false,
-    mode: 'append',
+    body: '-Xlog:gc*:file=gc.log:time,uptime,level,tags:filecount=5,filesize=10M',
+  },
+  {
+    id: 'gc-j9-gencon',
+    label: 'gencon',
+    hint: "Générationnel concurrent — adapté aux objets à durée de vie courte de Minecraft (entités, particules, paquets).",
+    category: 'gc',
+    families: ['openj9'],
+    full: true,
+    body: '-Xgcpolicy:gencon',
+  },
+  {
+    id: 'gc-j9-optthruput',
+    label: 'optthruput',
+    hint: "Débit d'abord, pauses plus longues — l'équivalent OpenJ9 de ParallelGC.",
+    category: 'gc',
+    families: ['openj9'],
+    full: true,
+    body: '-Xgcpolicy:optthruput',
+  },
+  {
+    id: 'gc-j9-balanced',
+    label: 'balanced',
+    hint: "Régions, pensé pour les gros tas — le seul qui ait un intérêt au-delà de ~4 Go sur OpenJ9.",
+    category: 'gc',
+    families: ['openj9'],
+    full: true,
+    body: '-Xgcpolicy:balanced',
+  },
+
+  // ── Compilateur ────────────────────────────────────────────────────────────
+  {
+    id: 'jit-unleashed',
+    label: 'JIT débridé',
+    hint: "Lève la limite des 8000 bytecodes — HotSpot refuse par défaut de compiler les grosses méthodes, dont plusieurs boucles chaudes de Minecraft.",
+    category: 'jit',
+    families: ['hotspot'],
+    full: true,
     body: [
-      '# Journal des pauses GC (fichier gc.log dans le dossier de travail)',
-      '-Xlog:gc*:file=gc.log:time,uptime,level,tags:filecount=5,filesize=10M',
+      '# MaxNodeLimit/NodeLimitFudgeFactor sont obligatoires avec',
+      '# -XX:-DontCompileHugeMethods, sinon C2 abandonne sur ces méthodes.',
+      '-XX:-DontCompileHugeMethods',
+      '-XX:MaxNodeLimit=240000',
+      '-XX:NodeLimitFudgeFactor=8000',
     ].join('\n'),
   },
+  {
+    id: 'jit-codecache',
+    label: '+ Code cache large',
+    hint: "Le code cache par défaut (240 Mo) peut saturer en cours de session : le JIT arrête alors définitivement de compiler, sans rien dire.",
+    category: 'jit',
+    families: ['hotspot'],
+    full: false,
+    body: [
+      '-XX:ReservedCodeCacheSize=400M',
+      '-XX:NonNMethodCodeHeapSize=12M',
+      '-XX:ProfiledCodeHeapSize=194M',
+      '-XX:NonProfiledCodeHeapSize=194M',
+    ].join('\n'),
+  },
+  {
+    id: 'jit-graal',
+    label: '+ JIT Graal',
+    hint: "Remplace C2 par Graal via JVMCI — mesuré à +5 % ici. N'existe que sur une Oracle GraalVM : ailleurs, la JVM refuse de démarrer.",
+    category: 'jit',
+    families: ['graal'],
+    full: false,
+    body: ['-XX:+UnlockExperimentalVMOptions', '-XX:+EnableJVMCI', '-XX:+UseJVMCICompiler'].join('\n'),
+  },
+]
+
+/** Les jeux qui ont un sens pour cette catégorie ET cette grille. */
+export function presetsFor(category: JvmFlagCategory, family: JvmFamily): JvmPreset[] {
+  return JVM_PRESETS.filter((p) => p.category === category && familyMatches(p, family))
+}
+
+/** Applique un jeu au contenu actuel d'une catégorie. */
+export function applyPreset(current: string, preset: JvmPreset): string {
+  if (preset.full) return preset.body
+  const base = current.trimEnd()
+  return base ? `${base}\n${preset.body}` : preset.body
+}
+
+export const ARGS_MODES: { id: JvmArgsMode; label: string; sub: string }[] = [
+  { id: 'append', label: 'Compléter la base', sub: 'Le tuning du launcher est conservé, vos drapeaux écrasent leurs homologues.' },
+  { id: 'replace', label: 'Remplacer la base', sub: 'Seuls -Xmx/-Xms et les library path survivent. Tout le reste vient de vous.' },
 ]

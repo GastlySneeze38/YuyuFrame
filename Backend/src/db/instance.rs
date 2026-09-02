@@ -24,10 +24,14 @@ pub struct InstanceRow {
     /// "append" (défaut) : les drapeaux manuels s'ajoutent aux générés.
     /// "replace" : seule la base obligatoire (heap + library path) est gardée.
     pub jvm_args_mode: String,
+    /// Config JVM reliée (`db::jvm_profile`). Quand elle est renseignée, elle
+    /// remplace intégralement les champs `jvm_*` ci-dessus au lancement —
+    /// ceux-ci ne servent plus que de repli pour une instance sans config.
+    pub jvm_profile_id: Option<String>,
 }
 
 const INSTANCE_COLUMNS: &str =
-    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode";
+    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id";
 
 fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
     Ok(InstanceRow {
@@ -43,6 +47,7 @@ fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
         gc_policy: r.get(9)?,
         jvm_extra_args: r.get(10)?,
         jvm_args_mode: r.get(11)?,
+        jvm_profile_id: r.get(12)?,
     })
 }
 

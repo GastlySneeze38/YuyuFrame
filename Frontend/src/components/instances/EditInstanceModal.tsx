@@ -6,7 +6,6 @@ import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
-import { parseJvmArgs } from '@/lib/jvmFlags'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { useT } from '@/i18n'
 
@@ -40,7 +39,16 @@ export function EditInstanceModal({
   // cette RAM existait déjà sur l'instance — un avertissement suffit.
   const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
 
-  const jvmArgCount = parseJvmArgs(instance.jvm_extra_args).length
+  // Nom de la config JVM reliée. Récupéré ici plutôt que porté par l'instance :
+  // le lien est une relation, et une config renommée doit se refléter partout
+  // sans avoir à retoucher les instances.
+  const [jvmProfileName, setJvmProfileName] = useState<string | null>(null)
+  useEffect(() => {
+    if (!instance.jvm_profile_id) { setJvmProfileName(null); return }
+    api.jvmProfiles.list()
+      .then((list) => setJvmProfileName(list.find((p) => p.id === instance.jvm_profile_id)?.name ?? null))
+      .catch(() => {})
+  }, [instance.jvm_profile_id])
 
   const handleSave = async () => {
     if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
@@ -85,18 +93,18 @@ export function EditInstanceModal({
             de drapeaux, aperçu de la ligne de commande réelle), ce qu'une
             section repliable de modal ne pouvait pas porter. */}
         <button
-          onClick={() => { onClose(); navigate(`/jvm/${instance.id}`) }}
+          onClick={() => { onClose(); navigate(instance.jvm_profile_id ? `/jvm/${instance.jvm_profile_id}` : '/jvm') }}
           className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5 text-left transition-colors hover:border-white/20"
         >
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-[rgba(255,255,255,0.75)]">Configuration JVM</p>
             <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)]">
-              {instance.jvm_vendor === 'auto' ? 'Auto' : instance.jvm_vendor}
-              {' · '}GC {instance.gc_policy}
-              {jvmArgCount > 0 && ` · ${jvmArgCount} drapeau${jvmArgCount > 1 ? 'x' : ''} manuel${jvmArgCount > 1 ? 's' : ''}`}
+              {jvmProfileName ?? 'Aucune — drapeaux générés par le launcher'}
             </p>
           </div>
-          <span className="flex-shrink-0 text-[11px] font-semibold text-[rgba(150,140,240,0.9)]">Ouvrir →</span>
+          <span className="flex-shrink-0 text-[11px] font-semibold text-[rgba(150,140,240,0.9)]">
+            {jvmProfileName ? 'Ouvrir →' : 'Choisir →'}
+          </span>
         </button>
 
         {mcVersion !== instance.mc_version && (
