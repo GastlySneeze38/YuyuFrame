@@ -56,6 +56,116 @@ export function gcSelectorLabel(arg: string): string {
   return name === 'ShenandoahGC' ? 'Shenandoah' : name
 }
 
+// ── Drapeaux structurés ──────────────────────────────────────────────────────
+
+/**
+ * Un drapeau décomposé en nom + valeur, pour l'éditeur en liste.
+ *
+ * Le nom ne se retape jamais une fois le drapeau ajouté : c'est là que se
+ * logent les fautes de frappe, et un `-XX:MaxGCPauseMilis` mal orthographié
+ * empêche la JVM de démarrer sans que rien n'indique lequel des vingt drapeaux
+ * est en cause. La valeur, elle, reste librement modifiable — c'est ce qu'on
+ * fait varier d'un test à l'autre.
+ *
+ * Les lignes de commentaire sont conservées comme des entrées à part entière :
+ * les jeux de drapeaux livrés en contiennent, et les perdre à la première
+ * modification effacerait l'explication de ce qu'on est en train de tester.
+ */
+export type JvmArgKind = 'boolean' | 'value' | 'flag' | 'comment'
+
+export interface JvmArgEntry {
+  id: number
+  kind: JvmArgKind
+  /** Nom seul, signe et valeur exclus : `-XX:MaxGCPauseMillis`, `-XX:AlwaysPreTouch`, `-Xmx`. */
+  name: string
+  /** Séparateur d'origine, pour réécrire le drapeau à l'identique : `-XX:Foo=1`
+   * (`=`), `-Xgcpolicy:gencon` (`:`), `-Xmx6g` (aucun). */
+  sep: '' | '=' | ':'
+  /** `boolean` : `+` ou `-`. `value` : la valeur. `comment` : la ligne entière. */
+  value: string
+}
+
+let nextEntryId = 1
+
+const SIZE_FLAGS = ['-Xmx', '-Xms', '-Xmn', '-Xss']
+
+/** Décompose un drapeau. Jamais de rejet : ce qui n'entre dans aucune forme
+ * connue devient un drapeau sans valeur, réécrit tel quel. */
+export function parseArgEntry(token: string): JvmArgEntry {
+  const id = nextEntryId++
+  if (/^-XX:[+-]/.test(token)) {
+    return { id, kind: 'boolean', name: `-XX:${token.slice(5)}`, sep: '', value: token[4] }
+  }
+  if (token.startsWith('-XX:') || token.startsWith('-D')) {
+    const eq = token.indexOf('=')
+    if (eq === -1) return { id, kind: 'flag', name: token, sep: '', value: '' }
+    return { id, kind: 'value', name: token.slice(0, eq), sep: '=', value: token.slice(eq + 1) }
+  }
+  for (const p of SIZE_FLAGS) {
+    if (token.startsWith(p)) return { id, kind: 'value', name: p, sep: '', value: token.slice(p.length) }
+  }
+  const colon = token.indexOf(':')
+  if (token.startsWith('-X') && colon > 0) {
+    return { id, kind: 'value', name: token.slice(0, colon), sep: ':', value: token.slice(colon + 1) }
+  }
+  return { id, kind: 'flag', name: token, sep: '', value: '' }
+}
+
+export function serializeArgEntry(e: JvmArgEntry): string {
+  switch (e.kind) {
+    case 'comment': return e.value
+    case 'boolean': return `-XX:${e.value}${e.name.slice(4)}`
+    case 'value': return `${e.name}${e.sep}${e.value}`
+    default: return e.name
+  }
+}
+
+/** Texte brut → entrées. Même découpage que `parse_user_jvm_args` côté Rust
+ * (plusieurs drapeaux par ligne acceptés), commentaires préservés. */
+export function parseArgEntries(raw: string): JvmArgEntry[] {
+  const out: JvmArgEntry[] = []
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('#')) {
+      out.push({ id: nextEntryId++, kind: 'comment', name: '', sep: '', value: trimmed })
+      continue
+    }
+    for (const token of trimmed.split(/\s+/)) {
+      if (token) out.push(parseArgEntry(token))
+    }
+  }
+  return out
+}
+
+export function serializeArgEntries(entries: JvmArgEntry[]): string {
+  return entries.map(serializeArgEntry).join('\n')
+}
+
+/** Recolle une valeur saisie séparément au nom, avec le séparateur qu'attend
+ * la forme du drapeau : `-XX:Foo` prend `=`, `-Xmx` ne prend rien,
+ * `-Xgcpolicy` prend `:`. */
+export function attachArgValue(name: string, value: string): string {
+  if (!value) return name
+  if (name.startsWith('-XX:') || name.startsWith('-D')) return `${name}=${value}`
+  if (SIZE_FLAGS.includes(name)) return `${name}${value}`
+  if (name.startsWith('-X')) return `${name}:${value}`
+  return `${name}=${value}`
+}
+
+/** Noms de drapeaux connus pour cette catégorie et cette famille, tirés des
+ * jeux livrés — proposés en autocomplétion pour éviter d'avoir à les taper. */
+export function suggestionsFor(category: JvmFlagCategory, family: JvmFamily): string[] {
+  const names = new Set<string>()
+  for (const preset of presetsFor(category, family)) {
+    for (const token of parseJvmArgs(preset.body)) {
+      const e = parseArgEntry(token)
+      names.add(e.kind === 'boolean' ? `-XX:+${e.name.slice(4)}` : e.name)
+    }
+  }
+  return [...names].sort()
+}
+
 // ── La grille ────────────────────────────────────────────────────────────────
 
 /** Famille de JVM réellement obtenue à partir de la grille. C'est elle, pas le

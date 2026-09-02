@@ -6,7 +6,9 @@ import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import {
   ARGS_MODES, CATEGORY_META, applyPreset, autoVendorFor, familyFor, lintJvmArgs, parseJvmArgs, presetsFor,
+  suggestionsFor,
 } from '@/lib/jvmFlags'
+import { ArgsEditor } from '@/components/jvm/ArgsEditor'
 import { Card, Field, Segmented, Warn } from '@/components/jvm/controls'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { RamPicker } from '@/components/ui/RamPicker'
@@ -435,12 +437,11 @@ export default function JvmProfileEditor() {
                     </p>
                   )}
 
-                  <textarea
+                  <ArgsEditor
                     value={value}
-                    onChange={(e) => set(key, e.target.value)}
-                    spellCheck={false}
-                    placeholder={'# un ou plusieurs drapeaux par ligne\n# les lignes commençant par # sont ignorées'}
-                    className="min-h-[320px] w-full flex-1 resize-y rounded-2xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] p-3.5 font-mono text-[12px] leading-relaxed text-[rgba(255,255,255,0.85)] outline-none focus:border-[rgba(75,63,207,0.6)]"
+                    onChange={(v) => set(key, v)}
+                    suggestions={suggestionsFor(tab, family)}
+                    listId={`jvm-flags-${tab}`}
                   />
                 </>
               )
