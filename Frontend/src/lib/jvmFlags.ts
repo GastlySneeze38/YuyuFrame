@@ -239,18 +239,21 @@ export interface JvmPreset {
   body: string
 }
 
-export const CATEGORY_META: Record<JvmFlagCategory, { label: string; sub: string }> = {
+export const CATEGORY_META: Record<JvmFlagCategory, { label: string; sub: string; empty: string }> = {
   jvm: {
     label: 'Moteur',
-    sub: "Mémoire, threads, comportement général de la JVM. Ce qui ne dépend ni du ramasse-miettes ni du compilateur.",
+    sub: "Mémoire, threads, comportement général de la JVM.",
+    empty: 'Aucun réglage moteur',
   },
   gc: {
     label: 'Ramasse-miettes',
-    sub: "Le sélecteur de GC et son réglage. Poser un sélecteur ici remplace celui de la grille et tout le bloc généré avec.",
+    sub: "Le collecteur et son réglage. En poser un ici remplace celui des réglages JVM.",
+    empty: 'Aucun réglage de ramasse-miettes',
   },
   jit: {
     label: 'Compilateur',
     sub: "Ce que la JVM accepte de compiler en code natif, et la place qu'elle garde pour le stocker.",
+    empty: 'Aucun réglage de compilateur',
   },
 }
 

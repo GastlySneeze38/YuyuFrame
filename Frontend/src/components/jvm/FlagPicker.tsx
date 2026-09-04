@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CATEGORY_META, type JvmFamily } from '@/lib/jvmFlags'
 import { searchDocs, type JvmFlagDoc } from '@/lib/jvmCatalog'
+import { JvmModal } from './Modal'
 import type { JvmFlagCategory } from '@/types'
 
 const CATEGORY_FILTERS: { id: JvmFlagCategory | 'all'; label: string }[] = [
@@ -35,12 +36,6 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
   const [filter, setFilter] = useState<JvmFlagCategory | 'all'>(category)
   const [values, setValues] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   const results = useMemo(() => {
     const docs = searchDocs(query, family)
     return filter === 'all' ? docs : docs.filter((d) => d.category === filter)
@@ -66,51 +61,39 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex items-start justify-center bg-[rgba(5,5,10,0.72)] p-8" onClick={onClose}>
-      <div
-        className="flex max-h-full w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.12)] bg-[#111018] shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex flex-col gap-2.5 border-b border-[rgba(255,255,255,0.07)] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[14px] font-black tracking-[-0.01em] text-white">Ajouter un drapeau</h2>
+    <JvmModal
+      title="Ajouter un drapeau"
+      sub="Le drapeau part dans sa catégorie, pas dans celle affichée."
+      onClose={onClose}
+      width={720}
+    >
+      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-[rgba(255,255,255,0.07)] bg-[#111018] px-5 py-3">
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Chercher — un nom, ou ce que ça fait (« pause », « code cache »)"
+          className="h-[34px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
+        />
+        <div className="flex flex-wrap gap-1">
+          {CATEGORY_FILTERS.map((c) => (
             <button
-              onClick={onClose}
-              className="flex h-[26px] w-[26px] items-center justify-center rounded-lg text-[rgba(255,255,255,0.35)] transition-colors hover:bg-[rgba(255,255,255,0.07)] hover:text-white"
+              key={c.id}
+              onClick={() => setFilter(c.id)}
+              className={`h-[24px] rounded-lg border px-2.5 text-[10px] font-semibold transition-colors ${
+                filter === c.id
+                  ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.3)] text-white'
+                  : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.42)] hover:border-white/25'
+              }`}
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
-                <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-              </svg>
+              {c.label}
             </button>
-          </div>
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Chercher — un nom, ou ce que ça fait (« pause », « code cache »)"
-            className="h-[34px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
-          />
-          <div className="flex flex-wrap gap-1">
-            {CATEGORY_FILTERS.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setFilter(c.id)}
-                className={`h-[24px] rounded-lg border px-2.5 text-[10px] font-semibold transition-colors ${
-                  filter === c.id
-                    ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.3)] text-white'
-                    : 'border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] text-[rgba(255,255,255,0.42)] hover:border-white/25'
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
-            <span className="ml-auto self-center text-[10px] text-[rgba(255,255,255,0.28)]">
-              Le drapeau part dans sa catégorie, pas dans celle affichée.
-            </span>
-          </div>
+          ))}
         </div>
+      </div>
 
-        <div className="flex-1 overflow-auto">
+      <div>
+
           {results.length === 0 && (
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
               <p className="text-[12px] text-[rgba(255,255,255,0.35)]">Aucun drapeau documenté ne correspond.</p>
@@ -207,8 +190,7 @@ export function FlagPicker({ family, category, present, onAdd, onClose }: {
               </div>
             )
           })}
-        </div>
       </div>
-    </div>
+    </JvmModal>
   )
 }

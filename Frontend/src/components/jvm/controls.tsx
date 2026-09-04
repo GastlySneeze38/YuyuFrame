@@ -45,22 +45,3 @@ export function Warn({ children }: { children: ReactNode }) {
   return <p className="text-[11px] leading-relaxed text-[rgba(240,180,90,0.75)]">⚠ {children}</p>
 }
 
-export function Card({ title, sub, right, children }: {
-  title: string
-  sub?: string
-  right?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-[12px] font-black uppercase tracking-[0.12em] text-[rgba(255,255,255,0.75)]">{title}</h2>
-          {sub && <p className="mt-1 text-[11px] leading-relaxed text-[rgba(255,255,255,0.35)]">{sub}</p>}
-        </div>
-        {right}
-      </div>
-      {children}
-    </section>
-  )
-}

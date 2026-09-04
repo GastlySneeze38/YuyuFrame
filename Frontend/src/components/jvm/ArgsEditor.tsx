@@ -19,10 +19,9 @@ import { flagDoc } from '@/lib/jvmCatalog'
  * Le stockage reste le texte d'avant (un drapeau par ligne) : le backend n'a
  * pas changé.
  */
-export function ArgsEditor({ value, onChange, onRequestAdd }: {
+export function ArgsEditor({ value, onChange }: {
   value: string
   onChange: (v: string) => void
-  onRequestAdd: () => void
 }) {
   // Les entrées vivent en état local plutôt que d'être redérivées du texte à
   // chaque frappe : vider le champ valeur d'un `-Xmx` produirait le texte
@@ -60,42 +59,11 @@ export function ArgsEditor({ value, onChange, onRequestAdd }: {
     keyCounts.set(k, (keyCounts.get(k) ?? 0) + 1)
   }
 
-  const flagCount = entries.filter((e) => e.kind !== 'comment').length
-
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.35)]">
-          {flagCount} drapeau{flagCount > 1 ? 'x' : ''}
-        </span>
-        <div className="flex items-center gap-2">
-          {entries.length > 0 && (
-            <button
-              onClick={() => commit([])}
-              className="text-[10px] font-semibold text-[rgba(255,255,255,0.3)] transition-colors hover:text-[rgba(255,150,150,0.9)]"
-            >
-              Tout retirer
-            </button>
-          )}
-          <button
-            onClick={onRequestAdd}
-            className="flex h-[30px] items-center gap-1.5 rounded-xl border border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.4)] px-3 text-[11px] font-bold text-white transition-colors hover:bg-[rgba(75,63,207,0.55)]"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11} className="flex-shrink-0">
-              <path d="M11 5h2v14h-2z" />
-              <path d="M5 11h14v2H5z" />
-            </svg>
-            Ajouter un drapeau
-          </button>
-        </div>
-      </div>
-
       {entries.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.1)] px-4 py-10 text-center">
-          <p className="text-[12px] text-[rgba(255,255,255,0.3)]">Aucun drapeau dans cette catégorie.</p>
-          <p className="mt-1 text-[10px] text-[rgba(255,255,255,0.22)]">
-            Le launcher appliquera ce qu'il génère lui-même.
-          </p>
+        <div className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.1)] px-4 py-6 text-center">
+          <p className="text-[11px] text-[rgba(255,255,255,0.28)]">Aucun drapeau.</p>
         </div>
       ) : (
         <div className="flex flex-col overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.09)]">
