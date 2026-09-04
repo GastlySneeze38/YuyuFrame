@@ -10,6 +10,7 @@ import { categoryOf, flagDoc } from '@/lib/jvmCatalog'
 import { ArgsEditor } from '@/components/jvm/ArgsEditor'
 import { BaseModal } from '@/components/jvm/BaseModal'
 import { FlagPicker } from '@/components/jvm/FlagPicker'
+import { ImportModal } from '@/components/jvm/ImportModal'
 import { GridModal, GridSummary } from '@/components/jvm/GridModal'
 import { Warn } from '@/components/jvm/controls'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -62,6 +63,7 @@ export default function JvmProfileEditor() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [gridOpen, setGridOpen] = useState(false)
   const [baseOpen, setBaseOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const [previewInstanceId, setPreviewInstanceId] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
@@ -130,6 +132,34 @@ export default function JvmProfileEditor() {
     set(key, current.trim() ? `${current.trimEnd()}\n${token}` : token)
     setPickerOpen(false)
     if (category !== tab) setTab(category)
+  }
+
+  /**
+   * Import d'un jeu collé. Il touche les trois catégories d'un coup (une ligne
+   * de commande Aikar contient du GC et du moteur), d'où son traitement ici
+   * plutôt que dans la modale de la catégorie affichée.
+   *
+   * En mode "Remplacer", les bases sont oubliées : les drapeaux ne viennent
+   * plus d'un jeu du catalogue, laisser « basée sur X » afficherait des écarts
+   * calculés contre une origine qui n'est plus la bonne.
+   */
+  const importFlags = (byCategory: Record<JvmFlagCategory, string[]>, mode: 'append' | 'replace') => {
+    setDraft((d) => {
+      if (!d) return d
+      const next = { ...d }
+      for (const category of CATEGORIES) {
+        const key = ARGS_KEY[category]
+        const added = byCategory[category].join('\n')
+        if (mode === 'replace') {
+          next[key] = added
+        } else if (added) {
+          next[key] = next[key].trim() ? `${next[key].trimEnd()}\n${added}` : added
+        }
+      }
+      if (mode === 'replace') next.base_presets = ''
+      return next
+    })
+    setBaseOpen(false)
   }
 
   const previewInstance = instances.find((i) => i.id === previewInstanceId) ?? null
@@ -413,8 +443,13 @@ export default function JvmProfileEditor() {
           baseId={bases[editableTab] ?? null}
           onChange={(v) => set(ARGS_KEY[editableTab], v)}
           onBaseChange={(id) => setBase(editableTab, id)}
+          onImport={() => setImportOpen(true)}
           onClose={() => setBaseOpen(false)}
         />
+      )}
+
+      {importOpen && (
+        <ImportModal onImport={importFlags} onClose={() => setImportOpen(false)} />
       )}
 
       {pickerOpen && (

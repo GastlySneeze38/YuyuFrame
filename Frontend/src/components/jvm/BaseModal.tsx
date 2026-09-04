@@ -20,13 +20,16 @@ import type { JvmFlagCategory } from '@/types'
  * En modale et non sur la page : sept jeux et leurs fiches occupaient la moitié
  * de l'écran en permanence, y compris pour une catégorie qu'on ne touche pas.
  */
-export function BaseModal({ category, family, value, baseId, onChange, onBaseChange, onClose }: {
+export function BaseModal({ category, family, value, baseId, onChange, onBaseChange, onImport, onClose }: {
   category: JvmFlagCategory
   family: JvmFamily
   value: string
   baseId: string | null
   onChange: (v: string) => void
   onBaseChange: (id: string | null) => void
+  /** Ouvre l'import d'un jeu collé — il concerne toute la config, pas
+   * seulement cette catégorie, donc il est traité par l'écran parent. */
+  onImport: () => void
   onClose: () => void
 }) {
   const presets = presetsFor(category, family)
@@ -149,14 +152,22 @@ export function BaseModal({ category, family, value, baseId, onChange, onBaseCha
         </button>
       ) : undefined}
     >
-      <div className="sticky top-0 z-10 border-b border-[rgba(255,255,255,0.07)] bg-[#111018] px-5 py-3">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[rgba(255,255,255,0.07)] bg-[#111018] px-5 py-3">
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Chercher un jeu — nom, intention (« pauses ») ou drapeau (« Shenandoah »)"
-          className="h-[32px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
+          className="h-[32px] min-w-0 flex-1 rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
         />
+        {/* Un jeu trouvé ailleurs se colle au lieu de se chercher — même
+            question ("d'où viennent ces drapeaux ?"), donc même endroit. */}
+        <button
+          onClick={onImport}
+          className="h-[32px] flex-shrink-0 rounded-xl border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.05)] px-3 text-[11px] font-semibold text-[rgba(255,255,255,0.6)] transition-colors hover:border-white/25 hover:text-[rgba(255,255,255,0.9)]"
+        >
+          Coller un jeu…
+        </button>
       </div>
 
       <div className="flex flex-col gap-2 px-5 py-4">

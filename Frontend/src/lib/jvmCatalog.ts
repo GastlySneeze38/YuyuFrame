@@ -1,5 +1,5 @@
 import type { JvmFlagCategory } from '@/types'
-import type { JvmFamily } from './jvmFlags'
+import { parseArgEntry, parseJvmArgs, type JvmFamily } from './jvmFlags'
 
 /**
  * Catalogue documenté des drapeaux JVM.
@@ -353,6 +353,68 @@ export function categoryOf(name: string): JvmFlagCategory {
 /** Fiches proposables pour une catégorie et une famille de JVM. */
 export function docsFor(category: JvmFlagCategory, family: JvmFamily): JvmFlagDoc[] {
   return JVM_FLAG_DOCS.filter((d) => d.category === category && d.families.includes(family))
+}
+
+// ── Import d'un jeu collé ────────────────────────────────────────────────────
+
+export interface ImportAnalysis {
+  /** Drapeaux retenus, rangés par catégorie. */
+  byCategory: Record<JvmFlagCategory, string[]>
+  /** Total retenu. */
+  count: number
+  /** `-Xmx`/`-Xms` rencontrés : volontairement écartés, la mémoire se règle
+   * ailleurs dans le launcher (et il la calcule depuis la RAM de l'instance). */
+  memory: string[]
+  /** Jetons qui ne sont pas des drapeaux JVM — noms de fichier, `nogui`,
+   * `java`, `-jar`… On importe souvent une ligne de commande complète de
+   * serveur : la refuser en bloc serait absurde, l'avaler telle quelle
+   * empêcherait le jeu de démarrer. */
+  ignored: string[]
+  /** Drapeaux retenus mais absents du catalogue — importés quand même, juste
+   * sans explication. */
+  unknown: string[]
+}
+
+/** Jetons qui n'ont de sens que sur une ligne de commande, jamais comme
+ * réglage de JVM — on les rencontre dès qu'on colle une commande de serveur. */
+const COMMAND_LINE_NOISE = new Set(['-jar', '-cp', '-classpath', '-server', '-client'])
+
+/**
+ * Analyse un jeu de drapeaux collé, avant de l'importer.
+ *
+ * Les sources communautaires se présentent presque toujours comme une ligne de
+ * commande entière (`java -Xmx4G -XX:… -jar server.jar nogui`). L'analyse dit
+ * ce qui sera retenu, ce qui part dans quelle catégorie et ce qui sera écarté —
+ * pour qu'aucune surprise n'arrive après l'import, quand il faudrait retrouver
+ * à la main lequel des vingt drapeaux ne va pas.
+ */
+export function analyzeImport(raw: string): ImportAnalysis {
+  const byCategory: Record<JvmFlagCategory, string[]> = { jvm: [], gc: [], jit: [] }
+  const memory: string[] = []
+  const ignored: string[] = []
+  const unknown: string[] = []
+
+  for (const token of parseJvmArgs(raw)) {
+    if (!token.startsWith('-') || COMMAND_LINE_NOISE.has(token)) {
+      ignored.push(token)
+      continue
+    }
+    if (/^-Xm[xs]/.test(token)) {
+      memory.push(token)
+      continue
+    }
+    const { name } = parseArgEntry(token)
+    byCategory[categoryOf(name)].push(token)
+    if (!BY_NAME.has(name)) unknown.push(token)
+  }
+
+  return {
+    byCategory,
+    count: byCategory.jvm.length + byCategory.gc.length + byCategory.jit.length,
+    memory,
+    ignored,
+    unknown,
+  }
 }
 
 /** Recherche libre dans tout le catalogue — nom ET explication, pour qu'on
