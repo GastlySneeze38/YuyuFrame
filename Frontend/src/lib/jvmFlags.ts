@@ -476,6 +476,82 @@ export function presetsFor(category: JvmFlagCategory, family: JvmFamily): JvmPre
   return JVM_PRESETS.filter((p) => p.category === category && familyMatches(p, family))
 }
 
+// ── Écarts par rapport au jeu de départ ──────────────────────────────────────
+
+export interface ArgsDiffItem {
+  /** Identité du réglage (voir `jvmArgKey`) — sert de clé et de cible aux
+   * opérations de rétablissement. */
+  key: string
+  /** Le drapeau tel qu'il apparaît, pour l'affichage. */
+  label: string
+  /** Valeur du jeu d'origine, absente si le drapeau n'y était pas. */
+  from?: string
+  /** Valeur actuelle, absente si le drapeau a été retiré. */
+  to?: string
+}
+
+export interface ArgsDiff {
+  added: ArgsDiffItem[]
+  modified: ArgsDiffItem[]
+  removed: ArgsDiffItem[]
+}
+
+function shownValue(e: JvmArgEntry): string {
+  return e.kind === 'boolean' ? (e.value === '+' ? 'activé' : 'désactivé') : e.value
+}
+
+/** Ce qui a bougé depuis le jeu de départ. Les commentaires sont ignorés : ils
+ * n'ont aucun effet au lancement, et les compter ferait clignoter un "1 écart"
+ * pour une ligne d'explication déplacée. */
+export function diffAgainstPreset(current: string, presetBody: string): ArgsDiff {
+  const byKey = (raw: string) => {
+    const map = new Map<string, JvmArgEntry>()
+    for (const e of parseArgEntries(raw)) {
+      if (e.kind === 'comment') continue
+      map.set(jvmArgKey(serializeArgEntry(e)), e)
+    }
+    return map
+  }
+  const base = byKey(presetBody)
+  const now = byKey(current)
+  const diff: ArgsDiff = { added: [], modified: [], removed: [] }
+
+  for (const [key, e] of now) {
+    const b = base.get(key)
+    if (!b) {
+      diff.added.push({ key, label: e.name, to: shownValue(e) })
+    } else if (b.value !== e.value) {
+      diff.modified.push({ key, label: e.name, from: shownValue(b), to: shownValue(e) })
+    }
+  }
+  for (const [key, e] of base) {
+    if (!now.has(key)) diff.removed.push({ key, label: e.name, from: shownValue(e) })
+  }
+  return diff
+}
+
+export function diffCount(d: ArgsDiff): number {
+  return d.added.length + d.modified.length + d.removed.length
+}
+
+/** Remet un réglage dans l'état du jeu de départ : la valeur d'origine si le
+ * jeu le contenait, sa suppression sinon. Une seule fonction pour les trois
+ * sortes d'écart — c'est le même geste du point de vue de l'utilisateur. */
+export function restoreFromPreset(current: string, presetBody: string, key: string): string {
+  const original = parseArgEntries(presetBody).find(
+    (e) => e.kind !== 'comment' && jvmArgKey(serializeArgEntry(e)) === key,
+  )
+  const entries = parseArgEntries(current)
+  const idx = entries.findIndex((e) => e.kind !== 'comment' && jvmArgKey(serializeArgEntry(e)) === key)
+
+  if (!original) {
+    return serializeArgEntries(idx === -1 ? entries : entries.filter((_, i) => i !== idx))
+  }
+  const restored: JvmArgEntry = { ...original, id: idx === -1 ? original.id : entries[idx].id }
+  if (idx === -1) return serializeArgEntries([...entries, restored])
+  return serializeArgEntries(entries.map((e, i) => (i === idx ? restored : e)))
+}
+
 /** Applique un jeu au contenu actuel d'une catégorie. */
 export function applyPreset(current: string, preset: JvmPreset): string {
   if (preset.full) return preset.body

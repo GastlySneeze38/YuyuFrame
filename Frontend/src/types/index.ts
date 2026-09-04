@@ -126,6 +126,10 @@ export interface JvmProfile {
   args_jvm: string
   args_gc: string
   args_jit: string
+  /** Jeu de drapeaux dont chaque catégorie est issue, en JSON
+   * (`{"gc":"gc-brucethemoose"}`). Sert à rappeler d'où part la config et à
+   * montrer les écarts introduits depuis — jamais interprété au lancement. */
+  base_presets: string
 }
 
 /** Le bloc JVM d'une instance tel qu'édité dans l'UI. Regroupé en un objet

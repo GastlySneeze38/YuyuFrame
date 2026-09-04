@@ -71,7 +71,8 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              args_mode       TEXT    NOT NULL DEFAULT 'append',
              args_jvm        TEXT    NOT NULL DEFAULT '',
              args_gc         TEXT    NOT NULL DEFAULT '',
-             args_jit        TEXT    NOT NULL DEFAULT ''
+             args_jit        TEXT    NOT NULL DEFAULT '',
+             base_presets    TEXT    NOT NULL DEFAULT ''
          );
 
          CREATE TABLE IF NOT EXISTS play_sessions (
@@ -105,6 +106,10 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // Config JVM reliée. NULL = aucune, l'instance retombe sur ses propres
     // colonnes jvm_* ci-dessus (donc sur les drapeaux générés par défaut).
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_profile_id TEXT", []);
+    // Jeu de drapeaux dont chaque catégorie est issue, en JSON
+    // (`{"gc":"gc-brucethemoose"}`) : purement informatif côté launcher, c'est
+    // l'interface qui s'en sert pour montrer les écarts introduits depuis.
+    let _ = conn.execute("ALTER TABLE jvm_profiles ADD COLUMN base_presets TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN is_offline INTEGER NOT NULL DEFAULT 0", []);
     // Backfill pour les comptes hors ligne créés avant l'ajout de la colonne
     // ci-dessus (feature déjà là depuis 2 jours, cf. mc_add_offline) : sans

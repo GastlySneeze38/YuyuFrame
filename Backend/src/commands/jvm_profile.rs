@@ -45,6 +45,7 @@ pub async fn jvm_profile_create(
             args_jvm: String::new(),
             args_gc: String::new(),
             args_jit: String::new(),
+            base_presets: String::new(),
         },
     };
     let profile = JvmProfileRow {

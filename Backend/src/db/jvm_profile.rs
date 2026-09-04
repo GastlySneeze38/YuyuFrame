@@ -31,6 +31,12 @@ pub struct JvmProfileRow {
     pub args_gc: String,
     /// Compilateur : `-XX:-DontCompileHugeMethods`, JVMCI/Graal, code cache.
     pub args_jit: String,
+    /// Jeu de drapeaux dont chaque catégorie est issue, en JSON
+    /// (`{"gc":"gc-brucethemoose"}`). Le launcher ne l'interprète jamais : il
+    /// sert uniquement à l'interface, pour rappeler d'où part la config et
+    /// montrer les écarts introduits depuis. Opaque ici exprès — le catalogue
+    /// des jeux vit côté frontend, la base n'a pas à en connaître les noms.
+    pub base_presets: String,
 }
 
 impl JvmProfileRow {
@@ -49,7 +55,7 @@ impl JvmProfileRow {
 }
 
 const COLUMNS: &str =
-    "id, name, ram_mb, jvm_vendor, jvm_custom_path, gc_policy, args_mode, args_jvm, args_gc, args_jit";
+    "id, name, ram_mb, jvm_vendor, jvm_custom_path, gc_policy, args_mode, args_jvm, args_gc, args_jit, base_presets";
 
 fn row_to_profile(r: &rusqlite::Row) -> rusqlite::Result<JvmProfileRow> {
     Ok(JvmProfileRow {
@@ -63,6 +69,7 @@ fn row_to_profile(r: &rusqlite::Row) -> rusqlite::Result<JvmProfileRow> {
         args_jvm: r.get(7)?,
         args_gc: r.get(8)?,
         args_jit: r.get(9)?,
+        base_presets: r.get(10)?,
     })
 }
 
@@ -89,10 +96,10 @@ pub fn jvm_profile_get(conn: &Connection, id: &str, user_id: i64) -> Result<Opti
 
 pub fn jvm_profile_insert(conn: &Connection, user_id: i64, p: &JvmProfileRow) -> Result<()> {
     conn.execute(
-        "INSERT INTO jvm_profiles (id, yuyu_user_id, name, created_at, ram_mb, jvm_vendor, jvm_custom_path, gc_policy, args_mode, args_jvm, args_gc, args_jit)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        "INSERT INTO jvm_profiles (id, yuyu_user_id, name, created_at, ram_mb, jvm_vendor, jvm_custom_path, gc_policy, args_mode, args_jvm, args_gc, args_jit, base_presets)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![p.id, user_id, p.name, chrono::Utc::now().timestamp(), p.ram_mb, p.jvm_vendor,
-                p.jvm_custom_path, p.gc_policy, p.args_mode, p.args_jvm, p.args_gc, p.args_jit],
+                p.jvm_custom_path, p.gc_policy, p.args_mode, p.args_jvm, p.args_gc, p.args_jit, p.base_presets],
     )?;
     Ok(())
 }
@@ -100,10 +107,10 @@ pub fn jvm_profile_insert(conn: &Connection, user_id: i64, p: &JvmProfileRow) ->
 pub fn jvm_profile_update(conn: &Connection, user_id: i64, p: &JvmProfileRow) -> Result<()> {
     let n = conn.execute(
         "UPDATE jvm_profiles SET name=?1, ram_mb=?2, jvm_vendor=?3, jvm_custom_path=?4, gc_policy=?5,
-                                 args_mode=?6, args_jvm=?7, args_gc=?8, args_jit=?9
-         WHERE id=?10 AND yuyu_user_id=?11",
+                                 args_mode=?6, args_jvm=?7, args_gc=?8, args_jit=?9, base_presets=?10
+         WHERE id=?11 AND yuyu_user_id=?12",
         params![p.name, p.ram_mb, p.jvm_vendor, p.jvm_custom_path, p.gc_policy,
-                p.args_mode, p.args_jvm, p.args_gc, p.args_jit, p.id, user_id],
+                p.args_mode, p.args_jvm, p.args_gc, p.args_jit, p.base_presets, p.id, user_id],
     )?;
     if n == 0 {
         return Err(anyhow::anyhow!("Configuration JVM introuvable"));

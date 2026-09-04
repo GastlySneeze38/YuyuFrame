@@ -5,10 +5,12 @@ import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import {
-  ARGS_MODES, CATEGORY_META, applyPreset, autoVendorFor, familyFor, lintJvmArgs, parseJvmArgs, presetsFor,
-  suggestionsFor,
+  ARGS_MODES, CATEGORY_META, autoVendorFor, familyFor, lintJvmArgs, parseArgEntry, parseJvmArgs,
 } from '@/lib/jvmFlags'
+import { categoryOf, flagDoc } from '@/lib/jvmCatalog'
 import { ArgsEditor } from '@/components/jvm/ArgsEditor'
+import { BasePanel } from '@/components/jvm/BasePanel'
+import { FlagPicker } from '@/components/jvm/FlagPicker'
 import { Card, Field, Segmented, Warn } from '@/components/jvm/controls'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { RamPicker } from '@/components/ui/RamPicker'
@@ -80,6 +82,7 @@ export default function JvmProfileEditor() {
   const [draft, setDraft] = useState<JvmProfile | null>(null)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<EditorTab>('gc')
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const [previewInstanceId, setPreviewInstanceId] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
@@ -111,6 +114,44 @@ export default function JvmProfileEditor() {
 
   const set = <K extends keyof JvmProfile>(key: K, value: JvmProfile[K]) =>
     setDraft((d) => (d ? { ...d, [key]: value } : d))
+
+  // `base_presets` est stocké en JSON opaque côté base : le catalogue des jeux
+  // vit ici, pas dans le backend. Un contenu illisible (config écrite par une
+  // version antérieure, JSON tronqué) ne doit jamais casser l'écran — on
+  // retombe sur "aucune base", qui est un état parfaitement valide.
+  const bases: Partial<Record<JvmFlagCategory, string>> = useMemo(() => {
+    if (!draft?.base_presets) return {}
+    try {
+      const parsed = JSON.parse(draft.base_presets)
+      return typeof parsed === 'object' && parsed !== null ? parsed : {}
+    } catch {
+      return {}
+    }
+  }, [draft?.base_presets])
+
+  const setBase = (category: JvmFlagCategory, id: string | null) => {
+    const next = { ...bases }
+    if (id) next[category] = id
+    else delete next[category]
+    set('base_presets', Object.keys(next).length ? JSON.stringify(next) : '')
+  }
+
+  /**
+   * Ajoute un drapeau venu du catalogue — dans SA catégorie, pas dans celle
+   * qu'on regardait. Savoir si `-XX:+UseNUMA` relève du moteur ou du GC est un
+   * travail de comptable qui n'a aucune incidence sur le lancement (les trois
+   * catégories sont concaténées) mais qui décide si on retrouvera son drapeau
+   * plus tard. Le catalogue le sait, l'utilisateur n'a pas à le savoir.
+   */
+  const addFlag = (token: string) => {
+    const entry = parseArgEntry(token)
+    const category = categoryOf(entry.name)
+    const key = ARGS_KEY[category]
+    const current = draft?.[key] ?? ''
+    set(key, current.trim() ? `${current.trimEnd()}\n${token}` : token)
+    setPickerOpen(false)
+    if (category !== tab) setTab(category)
+  }
 
   const previewInstance = instances.find((i) => i.id === previewInstanceId) ?? null
   // La RAM de la config prime, sinon celle de l'instance d'aperçu — c'est
@@ -199,9 +240,17 @@ export default function JvmProfileEditor() {
 
   const gcOptions = family === 'openj9' ? OPENJ9_GC : HOTSPOT_GC
   const autoVendor = autoVendorFor(effectiveRam)
+  // Noms déjà posés, toutes catégories confondues — le catalogue s'en sert pour
+  // dire "déjà dans la config" plutôt que de laisser ajouter un doublon.
+  const presentFlags = new Set(
+    [draft.args_jvm, draft.args_gc, draft.args_jit].flatMap(parseJvmArgs).map((a) => parseArgEntry(a).name),
+  )
+  const missingUnlock = draft.args_mode !== 'replace' || presentFlags.has('-XX:UnlockExperimentalVMOptions')
+    ? []
+    : [...presentFlags].filter((n) => flagDoc(n)?.experimental)
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
       <PageHeader backTo="/jvm">
         <PageHeaderSeparator />
         <input
@@ -381,13 +430,27 @@ export default function JvmProfileEditor() {
                 (<span className="font-mono">-XX:-UseG1GC</span>).
               </Warn>
             )}
+            {/* Piège classique, et le message de la JVM ne dit pas quoi faire :
+                un drapeau expérimental sans son déverrouillage empêche le
+                démarrage. En mode "Compléter", le déverrouillage vient déjà de
+                la base générée — l'avertissement ne vaut qu'en "Remplacer". */}
+            {missingUnlock.length > 0 && (
+              <Warn>
+                <span className="font-mono">{missingUnlock.join(', ')}</span>{' '}
+                {missingUnlock.length > 1 ? 'sont expérimentaux' : 'est expérimental'} et la config remplace la base :
+                sans <span className="font-mono">-XX:+UnlockExperimentalVMOptions</span>, la JVM refusera de démarrer.{' '}
+                <button
+                  onClick={() => addFlag('-XX:+UnlockExperimentalVMOptions')}
+                  className="font-semibold text-[rgba(150,140,240,0.95)] underline underline-offset-2 hover:text-[rgba(190,183,255,1)]"
+                >
+                  Ajouter le drapeau
+                </button>
+              </Warn>
+            )}
 
             {tab !== 'preview' && (() => {
               const key = ARGS_KEY[tab]
               const value = draft[key]
-              const presets = presetsFor(tab, family)
-              const full = presets.filter((p) => p.full)
-              const addons = presets.filter((p) => !p.full)
               return (
                 <>
                   <div>
@@ -397,51 +460,19 @@ export default function JvmProfileEditor() {
                     </p>
                   </div>
 
-                  {presets.length > 0 ? (
-                    <Card
-                      title="Jeux de drapeaux"
-                      sub={`Filtrés pour ${FAMILY_LABEL[family]}. Un jeu complet remplace le champ, un complément s'y ajoute.`}
-                    >
-                      {full.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {full.map((p) => (
-                            <button
-                              key={p.id}
-                              onClick={() => set(key, applyPreset(value, p))}
-                              title={p.hint}
-                              className="h-[28px] rounded-lg border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.06)] px-2.5 text-[11px] font-semibold text-[rgba(255,255,255,0.7)] transition-all duration-150 hover:border-white/30"
-                            >
-                              {p.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {addons.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {addons.map((p) => (
-                            <button
-                              key={p.id}
-                              onClick={() => set(key, applyPreset(value, p))}
-                              title={p.hint}
-                              className="h-[28px] rounded-lg border border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.12)] px-2.5 text-[11px] font-semibold text-[rgba(150,140,240,0.9)] transition-all duration-150 hover:border-[rgba(75,63,207,0.7)]"
-                            >
-                              {p.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-                  ) : (
-                    <p className="text-[11px] text-[rgba(255,255,255,0.28)]">
-                      Aucun jeu vérifié pour {FAMILY_LABEL[family]} dans cette catégorie — à saisir à la main.
-                    </p>
-                  )}
+                  <BasePanel
+                    category={tab}
+                    family={family}
+                    value={value}
+                    baseId={bases[tab] ?? null}
+                    onChange={(v) => set(key, v)}
+                    onBaseChange={(id) => setBase(tab, id)}
+                  />
 
                   <ArgsEditor
                     value={value}
                     onChange={(v) => set(key, v)}
-                    suggestions={suggestionsFor(tab, family)}
-                    listId={`jvm-flags-${tab}`}
+                    onRequestAdd={() => setPickerOpen(true)}
                   />
                 </>
               )
@@ -509,6 +540,16 @@ export default function JvmProfileEditor() {
           </div>
         </main>
       </div>
+
+      {pickerOpen && (
+        <FlagPicker
+          family={family}
+          category={tab === 'preview' ? 'gc' : tab}
+          present={presentFlags}
+          onAdd={addFlag}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   )
 }
