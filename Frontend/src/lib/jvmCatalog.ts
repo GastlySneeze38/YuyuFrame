@@ -90,6 +90,21 @@ export const JVM_FLAG_DOCS: JvmFlagDoc[] = [
     hint: "Nombre de cœurs que la JVM croit avoir. Sert à réserver des cœurs au reste de la machine (OBS, Discord).",
   },
   {
+    name: '-XX:UseLargePages', kind: 'boolean', category: 'jvm', families: HOTSPOT,
+    default: 'désactivé',
+    hint: "Pages mémoire de 2 Mo au lieu de 4 Ko : moins de défauts de cache d'adresses sur un gros tas. Exige le privilège Windows « Verrouiller les pages en mémoire », sinon la JVM avertit et continue sans.",
+  },
+  {
+    name: '-XX:UseThreadPriorities', kind: 'boolean', category: 'jvm', families: HOTSPOT,
+    default: 'activé',
+    hint: "Laisse la JVM appliquer ses priorités de threads. Déjà actif : n'a d'intérêt qu'avec ThreadPriorityPolicy.",
+  },
+  {
+    name: '-XX:ThreadPriorityPolicy', kind: 'value', category: 'jvm', families: HOTSPOT,
+    default: '0', range: '0 ou 1',
+    hint: "À 1, les priorités de threads sont réellement transmises à l'OS — le rendu passe devant les tâches de fond. Sous Linux sans droits root, la JVM avertit et l'ignore.",
+  },
+  {
     name: '-Xdisableexplicitgc', kind: 'boolean', category: 'jvm', families: ['openj9'],
     default: 'désactivé',
     hint: "Équivalent OpenJ9 de -XX:+DisableExplicitGC : les System.gc() des mods sont ignorés.",
@@ -120,6 +135,21 @@ export const JVM_FLAG_DOCS: JvmFlagDoc[] = [
     name: '-XX:UseSerialGC', kind: 'boolean', category: 'gc', families: HOTSPOT,
     default: 'désactivé',
     hint: "Un seul thread de collecte. Sur un petit tas et peu de cœurs, il bat parfois G1 — ailleurs, non.",
+  },
+  {
+    name: '-Xlog', kind: 'value', category: 'gc', families: HOTSPOT,
+    default: 'aucun journal', range: 'gc*:file=gc.log:time,uptime,level,tags',
+    hint: "Journalise l'activité de la JVM. Avec `gc*`, écrit chaque pause dans un fichier — le seul moyen de dire si une chute de FPS vient du ramasse-miettes.",
+  },
+  {
+    name: '-XX:UseEpsilonGC', kind: 'boolean', category: 'gc', families: HOTSPOT,
+    default: 'désactivé', experimental: true,
+    hint: "Ne collecte rien du tout : le jeu plante dès que le tas est plein. Sert uniquement à mesurer ce que le ramasse-miettes coûte, en le retirant.",
+  },
+  {
+    name: '-Xmn', kind: 'value', category: 'gc', families: ['hotspot', 'graal', 'openj9'],
+    default: 'ergonomique', range: 'ex. 1g',
+    hint: "Taille fixe de la zone des objets jeunes. Fige ce que le collecteur ajustait tout seul — à ne poser que si on sait pourquoi.",
   },
   {
     name: '-Xgcpolicy', kind: 'value', category: 'gc', families: ['openj9'],
@@ -254,6 +284,16 @@ export const JVM_FLAG_DOCS: JvmFlagDoc[] = [
     name: '-XX:MaxInlineLevel', kind: 'value', category: 'jit', families: HOTSPOT,
     default: '15', range: '15 à 20',
     hint: "Profondeur d'appels que le compilateur fusionne. Utile sur du code très en couches comme les mods Fabric.",
+  },
+  {
+    name: '-XX:MaxInlineSize', kind: 'value', category: 'jit', families: HOTSPOT,
+    default: '35', range: '35 à 60',
+    hint: "Taille maximale (en bytecodes) d'une méthode peu appelée pour être fusionnée dans son appelant.",
+  },
+  {
+    name: '-XX:FreqInlineSize', kind: 'value', category: 'jit', families: HOTSPOT,
+    default: '325', range: '325 à 500',
+    hint: "Même chose pour une méthode très appelée — la limite qui compte vraiment sur une boucle de rendu.",
   },
   {
     name: '-XX:TieredCompilation', kind: 'boolean', category: 'jit', families: HOTSPOT,

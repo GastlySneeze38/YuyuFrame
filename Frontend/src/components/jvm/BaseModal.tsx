@@ -33,6 +33,7 @@ export function BaseModal({ category, family, value, baseId, onChange, onBaseCha
   const base = presets.find((p) => p.id === baseId) ?? null
   const [browsing, setBrowsing] = useState(!base)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const diff = base ? diffAgainstPreset(value, base.body) : null
   const n = diff ? diffCount(diff) : 0
@@ -124,8 +125,15 @@ export function BaseModal({ category, family, value, baseId, onChange, onBaseCha
   }
 
   // ── Choix d'un jeu ─────────────────────────────────────────────────────────
-  const full = presets.filter((p) => p.full)
-  const addons = presets.filter((p) => !p.full)
+  // La recherche porte aussi sur l'intention ET sur le contenu : on cherche
+  // « pauses » ou « Shenandoah » sans savoir sous quel nom le jeu est rangé.
+  const q = query.trim().toLowerCase()
+  const matching = q
+    ? presets.filter((p) => `${p.label} ${p.hint} ${p.body}`.toLowerCase().includes(q))
+    : presets
+  const full = matching.filter((p) => p.full)
+  const addons = matching.filter((p) => !p.full)
+
   return (
     <JvmModal
       title={base ? 'Changer de jeu de départ' : 'Partir d’un jeu de drapeaux'}
@@ -141,7 +149,28 @@ export function BaseModal({ category, family, value, baseId, onChange, onBaseCha
         </button>
       ) : undefined}
     >
+      <div className="sticky top-0 z-10 border-b border-[rgba(255,255,255,0.07)] bg-[#111018] px-5 py-3">
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Chercher un jeu — nom, intention (« pauses ») ou drapeau (« Shenandoah »)"
+          className="h-[32px] w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none placeholder:text-[rgba(255,255,255,0.25)] focus:border-[rgba(75,63,207,0.6)]"
+        />
+      </div>
+
       <div className="flex flex-col gap-2 px-5 py-4">
+        {matching.length === 0 && (
+          <p className="py-8 text-center text-[12px] text-[rgba(255,255,255,0.3)]">
+            Aucun jeu ne correspond.
+          </p>
+        )}
+
+        {full.length > 0 && (
+          <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
+            Jeux complets — remplacent la catégorie
+          </p>
+        )}
         {full.map((p) => (
           <PresetCard
             key={p.id} preset={p} current={value}
