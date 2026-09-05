@@ -137,12 +137,12 @@ public final class LauncherLog {
 
     public static void info(String msg) {
         ORIGINAL_OUT.println(msg);
-        toFile(msg);
+        toFile(msg, 1);
     }
 
     public static Fatal fatal(String msg) {
         ORIGINAL_ERR.println("[FATAL] " + msg);
-        toFile("[FATAL] " + msg);
+        toFile("[FATAL] " + msg, 3);
         throw new Fatal(msg);
     }
 
@@ -150,14 +150,14 @@ public final class LauncherLog {
         public Fatal(String msg) { super(msg); }
     }
 
-    public static void err(String msg)  { ORIGINAL_ERR.println("[ERR] " + msg); toFile("[ERR] " + msg); }
-    public static void warn(String msg) { ORIGINAL_ERR.println("[WARN] " + msg); toFile("[WARN] " + msg); }
+    public static void err(String msg)  { ORIGINAL_ERR.println("[ERR] " + msg); toFile("[ERR] " + msg, 3); }
+    public static void warn(String msg) { ORIGINAL_ERR.println("[WARN] " + msg); toFile("[WARN] " + msg, 3); }
 
     private static void log(String category, int threshold, int level, String msg) {
         String line = (level >= 3 ? "[!] " : "")
                     + (SHOW_CATEGORY ? "[" + category + "] " : "")
                     + msg;
-        toFile(line);
+        toFile(line, level);
         if (threshold == 0 || level < threshold) return;
         ORIGINAL_OUT.println(line);
     }
@@ -169,15 +169,51 @@ public final class LauncherLog {
             ? System.getenv("APPDATA") + "\\YuyuFrame\\agent\\logs\\launcher-agent.log"
             : null;
 
-    private static synchronized void toFile(String line) {
-        if (LOG_PATH == null) return;
+    private static java.io.Writer fileWriter;
+    /** Une fois le journal fichier en échec, ne plus jamais retenter : sinon on
+     * repaie une exception d'E/S à chaque ligne, ce que cette méthode est
+     * précisément censée éviter. */
+    private static boolean fileDisabled;
+
+    /**
+     * BUG TROUVÉ (2026-09-04, écart de FPS d'un facteur deux avec un launcher
+     * concurrent) : cette méthode ouvrait un {@code FileWriter} — précédé d'un
+     * {@code mkdirs()} — et le refermait <b>à chaque ligne</b>. Avec un module
+     * HUD qui journalise à chaque frame (voir {@code SaturationModule}), ça
+     * faisait plusieurs ouvertures/fermetures de fichier par image rendue :
+     * 771 Mo de journal pour une seule session, et le thread de rendu bloqué
+     * sur le disque à chaque appel.
+     *
+     * <p>Un seul writer, ouvert à la première ligne et tamponné, règle les
+     * deux. Le tampon n'est vidé que sur un avertissement/erreur ({@code level
+     * >= 3}) et à l'arrêt de la JVM : une ligne d'information perdue lors d'un
+     * crash brutal ne coûte rien, alors qu'un {@code flush} par ligne
+     * ramènerait l'essentiel du problème.
+     */
+    private static synchronized void toFile(String line, int level) {
+        if (LOG_PATH == null || fileDisabled) return;
         try {
-            java.io.File f = new java.io.File(LOG_PATH);
-            java.io.File dir = f.getParentFile();
-            if (dir != null) dir.mkdirs();
-            try (java.io.FileWriter fw = new java.io.FileWriter(f, true)) {
-                fw.write("[" + System.currentTimeMillis() + "] " + line + "\n");
+            if (fileWriter == null) {
+                java.io.File f = new java.io.File(LOG_PATH);
+                java.io.File dir = f.getParentFile();
+                if (dir != null) dir.mkdirs();
+                fileWriter = new java.io.BufferedWriter(new java.io.FileWriter(f, true), 1 << 16);
+                Runtime.getRuntime().addShutdownHook(new Thread(LauncherLog::closeFile, "yuyu-log-close"));
             }
-        } catch (Throwable ignored) {}
+            fileWriter.write("[" + System.currentTimeMillis() + "] " + line + "\n");
+            if (level >= 3) fileWriter.flush();
+        } catch (Throwable t) {
+            // On EST le journal : impossible de se logger soi-même ici sans
+            // risquer la récursion. Une ligne sur la sortie d'origine, et on
+            // se désactive.
+            fileDisabled = true;
+            ORIGINAL_ERR.println("[ERR] [LauncherLog] journal fichier désactivé : " + t);
+        }
+    }
+
+    private static synchronized void closeFile() {
+        if (fileWriter == null) return;
+        try { fileWriter.flush(); fileWriter.close(); } catch (Throwable ignored) {}
+        fileWriter = null;
     }
 }

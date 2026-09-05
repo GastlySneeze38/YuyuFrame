@@ -538,7 +538,7 @@ public final class SaturationModule extends LauncherModule {
             float scaleY = (float) vpHeight / guiH;
             float barBottom = (BAR_BOTTOM_OFFSET - ICON_W) * scaleY;
 
-            reportOnce("OK — fb=" + vpWidth + "x" + vpHeight + " éch=" + scale
+            reportOnce("OK", "OK — fb=" + vpWidth + "x" + vpHeight + " éch=" + scale
                 + " barRight=" + barRight + " barBottom=" + barBottom
                 + " faim=" + foodLevel + " sat=" + saturation + " épuis=" + exhaustion);
 
@@ -760,9 +760,22 @@ public final class SaturationModule extends LauncherModule {
     private static String lastReport;
 
     private static void reportOnce(String reason) {
-        if (reason.equals(lastReport)) return;
-        lastReport = reason;
-        LauncherLog.info("[SaturationModule] " + reason);
+        reportOnce(reason, reason);
+    }
+
+    /**
+     * BUG TROUVÉ (2026-09-04, écart de FPS d'un facteur deux avec un launcher
+     * concurrent) : la ligne « OK » embarquait faim/saturation/épuisement —
+     * des valeurs qui changent en continu. La déduplication portant sur le
+     * texte complet, elle ne dédupliquait rien : le module journalisait à
+     * chaque frame, et chaque ligne coûtait une ouverture de fichier (voir
+     * {@code LauncherLog.toFile}). La clé doit être stable ; seul le message
+     * affiché peut varier.
+     */
+    private static void reportOnce(String key, String message) {
+        if (key.equals(lastReport)) return;
+        lastReport = key;
+        LauncherLog.info("[SaturationModule] " + message);
     }
 
     /**
