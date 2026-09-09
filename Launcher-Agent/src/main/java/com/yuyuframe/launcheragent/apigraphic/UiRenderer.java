@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
 import com.yuyuframe.launcheragent.apigraphic.draw.geometry.GradientStops;
+import com.yuyuframe.launcheragent.apigraphic.draw.shape.UiShapes;
 import com.yuyuframe.launcheragent.apigraphic.text.UiTextLayout;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.RenderEra;
@@ -696,24 +697,35 @@ public final class UiRenderer {
         primitives.drawMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, stopColors, stopPositions, vpWidth, vpHeight);
     }
 
+    /**
+     * Rect arrondi à flou et/ou contour — primitive générale, exposée pour
+     * {@code draw/shape/UiShapes.glow} qui empile trois passes de flou avec
+     * deux couleurs distinctes, ce que {@link #drawShadow} ne permet pas.
+     */
+    public void drawFx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
+                        UiColor colorA, UiColor colorB, boolean gradient, int vpWidth, int vpHeight) {
+        if (backend().fx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight)) return;
+        primitives.drawFx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
+    }
+
     public void drawGlow(float x1, float y1, float x2, float y2, float radius, float intensity, UiColor color,
                           int vpWidth, int vpHeight) {
-        primitives.drawGlow(x1, y1, x2, y2, radius, intensity, color, vpWidth, vpHeight);
+        UiShapes.glow(this, x1, y1, x2, y2, radius, intensity, color, vpWidth, vpHeight);
     }
 
     public void drawRipple(float centerX, float centerY, float maxRadius, float progress01, float startAlpha,
                             UiColor color, int vpWidth, int vpHeight) {
-        primitives.drawRipple(centerX, centerY, maxRadius, progress01, startAlpha, color, vpWidth, vpHeight);
+        UiShapes.ripple(this, centerX, centerY, maxRadius, progress01, startAlpha, color, vpWidth, vpHeight);
     }
 
     public void drawSkeletonShimmer(float x1, float y1, float x2, float y2, float radius, float phase01,
                                      UiColor baseColor, UiColor highlightColor, int vpWidth, int vpHeight) {
-        primitives.drawSkeletonShimmer(x1, y1, x2, y2, radius, phase01, baseColor, highlightColor, vpWidth, vpHeight);
+        UiShapes.skeletonShimmer(this, x1, y1, x2, y2, radius, phase01, baseColor, highlightColor, vpWidth, vpHeight);
     }
 
     public void drawSpinner(float centerX, float centerY, float radius, float dotRadius, float rotationDeg,
                              UiColor color, int vpWidth, int vpHeight) {
-        primitives.drawSpinner(centerX, centerY, radius, dotRadius, rotationDeg, color, vpWidth, vpHeight);
+        UiShapes.spinner(this, centerX, centerY, radius, dotRadius, rotationDeg, color, vpWidth, vpHeight);
     }
 
     // ── UiVanillaItemRenderer (icône ItemStack vanilla / fond de conteneur) ──

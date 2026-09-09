@@ -163,6 +163,20 @@ public interface UiBackend {
                                           UiColor[] colors, float[] positions,
                                           int vpWidth, int vpHeight) { return false; }
 
+    /**
+     * Rectangle arrondi à flou et/ou contour — la primitive GÉNÉRALE dont
+     * {@link #shadow} (contour nul, une seule couleur) et
+     * {@link #roundedRectBorder} (flou nul) sont des cas particuliers.
+     *
+     * <p>Exposée parce que les formes composées de {@code draw/shape/} en ont
+     * besoin : {@code glow} empile trois passes de flou décroissant, ce qu'on
+     * ne peut pas exprimer avec {@code shadow} seul (celui-ci force les deux
+     * couleurs identiques).
+     */
+    default boolean fx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
+                       UiColor colorA, UiColor colorB, boolean gradient,
+                       int vpWidth, int vpHeight) { return false; }
+
     /** Ouvre un clip à coins arrondis (stencil). */
     default boolean beginRoundedClip(float x1, float y1, float x2, float y2, float radius,
                                      int vpWidth, int vpHeight) { return false; }
