@@ -1,14 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import net.minecraft.client.Minecraft;
 
 import java.lang.reflect.Field;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 
 /**
  * Fullbright — force {@code GameOptions.gamma} bien au-delà du maximum
@@ -19,7 +16,8 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  * onEnabledChanged restaure).
  *
  * 26.1.2 sans réflexion (2026-08-26, §22 — audit modules) —
- * {@link OptionsAccessor261#la$gamma()}/{@link OptionInstanceAccessor261}
+ * {@code AccessPoint.OPTIONS_GAMMA}/{@code OPTION_VALUE} via
+ * {@link GameOptions}, qui route vers l'accessor de la tranche active
  * (architecture apimixin, même famille que {@code ZoomModule}.fov/sensitivity :
  * {@code OptionInstance<Double>}, vérifié javap). Écrit DIRECTEMENT le champ
  * {@code .value} via l'accessor, jamais {@code OptionInstance.set()} — même
@@ -86,9 +84,9 @@ public final class FullbrightModule extends LauncherModule {
      * {@code getFloat}/{@code setFloat} levait {@code IllegalArgumentException}
      * sur ce dernier, avalée silencieusement, fullbright totalement
      * inopérant. Lit le VRAI type du champ au lieu de supposer — repli
-     * réflexion UNIQUEMENT (voir {@link #gammaHandle}) : sur 26.1.2, la
-     * valeur passe désormais par {@link OptionInstanceAccessor261}, qui gère
-     * son propre boxing (voir {@link #writeGamma}).
+     * réflexion UNIQUEMENT (voir {@link #gammaHandle}) : sur une tranche liée,
+     * la valeur passe désormais par {@link GameOptions}, qui gère la
+     * réencapsulation (voir {@link #writeGamma}).
      *
      * BUG TROUVÉ #2 (1.20.4, même refonte "SimpleOption" que ZoomModule.fov) :
      * {@code gamma} n'est plus un float/double DU TOUT ici — objet {@code
@@ -96,16 +94,16 @@ public final class FullbrightModule extends LauncherModule {
      * voir {@link McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue}.
      */
     private float readGamma(Object handle, Object options) throws Exception {
-        return ((Number) ((OptionInstanceAccessor261) handle).la$value()).floatValue();
+        return (float) GameOptions.value(handle, Float.NaN);
     }
 
     private void writeGamma(Object handle, Object options, float value) throws Exception {
-        // gamma est un OptionInstance<Double> (vérifié javap) — boxing fixe,
-        // contrairement à ZoomModule.fov/sensitivity (Integer/Float/Double
-        // selon le champ) qui doivent détecter le type de la valeur courante.
-        // Écrit le champ value DIRECTEMENT : setValue() déclencherait la
-        // validation vanilla, qui clampe (voir OptionInstanceAccessor261).
-        ((OptionInstanceAccessor261) handle).la$setValue(Double.valueOf(value));
+        // La réencapsulation (gamma est un OptionInstance<Double> sur 26.1.2)
+        // et l'écriture DIRECTE du champ value — plutôt que setValue(), qui
+        // déclenche la validation vanilla et clampe — vivent désormais dans
+        // GameOptions, partagées avec ZoomModule/FovModule qui portaient
+        // chacun leur copie de la même règle.
+        GameOptions.setValue(handle, value);
     }
 
     /** Options par l'accessor Mixin, via {@code ClientData} — zéro réflexion (repli multi-bracket supprimé le 2026-08-27). */
@@ -114,14 +112,13 @@ public final class FullbrightModule extends LauncherModule {
     }
 
     /**
-     * @return l'{@code OptionInstanceAccessor261} de {@code Options.gamma}
-     * (voir {@link OptionsAccessor261#la$gamma()}), ou {@code null} hors
-     * bracket 26.1.2 — même forme que {@code ZoomModule#fovHandle}.
+     * @return la poignée d'option de {@code Options.gamma}, ou {@code null}
+     * hors tranche liée — même forme que {@code ZoomModule#fovHandle}. Le
+     * paramètre {@code options} n'est plus lu : la poignée se demande
+     * directement à {@link GameOptions}, qui repart du client courant.
      */
     private Object gammaHandle(Object options) throws Exception {
-        if (!(options instanceof OptionsAccessor261)) return null;
-        Object gammaOption = ((OptionsAccessor261) options).la$gamma();
-        return (gammaOption instanceof OptionInstanceAccessor261) ? gammaOption : null;
+        return GameOptions.gammaHandle();
     }
 
     /** Journalise une raison d'échec UNE fois par raison distincte — ces chemins tournent à chaque tick. */

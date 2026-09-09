@@ -5,8 +5,8 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.DataComponentsAccessor261;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.FoodDataAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
@@ -83,9 +83,11 @@ import net.minecraft.world.item.ItemStack;
  *
  * TOUT passe par des accessors, y compris là où un getter public existe
  * ({@code getFoodLevel()}/{@code getSaturationLevel()}) et là où le champ est
- * public ({@code DataComponents.FOOD}) — consigne explicite, voir la javadoc
- * de {@link FoodDataAccessor261}. Ce module ne fait donc rien hors 26.1.2,
- * seul bracket où ces accessors existent ; il s'efface proprement ailleurs.
+ * public ({@code DataComponents.FOOD}) — consigne explicite. Les accès passent
+ * par {@link AccessorRegistry} ({@code FOOD_LEVEL}, {@code FOOD_SATURATION},
+ * {@code FOOD_EXHAUSTION}, {@code COMPONENT_TYPE_*}), donc par l'accessor de
+ * la tranche active. Sur une version sans liaison, ce module ne fait rien et
+ * s'efface proprement.
  */
 public final class SaturationModule extends LauncherModule {
 
@@ -171,8 +173,9 @@ public final class SaturationModule extends LauncherModule {
             if (player.isPassenger() || player.isFallFlying() || player.isInWater()) return;
 
             FoodData foodData = player.getFoodData();
-            if (!(foodData instanceof FoodDataAccessor261)) return;
-            if (((FoodDataAccessor261) foodData).la$foodLevel() < LUNGE_MIN_FOOD) return;
+            Object foodLevelValue = AccessorRegistry.get(AccessPoint.FOOD_LEVEL, foodData);
+            if (!(foodLevelValue instanceof Number)) return;
+            if (((Number) foodLevelValue).intValue() < LUNGE_MIN_FOOD) return;
 
             int level = lungeLevel(player.getItemInHand(InteractionHand.MAIN_HAND));
             if (level <= 0) return;
@@ -204,7 +207,10 @@ public final class SaturationModule extends LauncherModule {
      */
     private int lungeLevel(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return 0;
-        ItemEnchantments enchantments = stack.get(DataComponentsAccessor261.la$enchantments());
+        net.minecraft.core.component.DataComponentType<ItemEnchantments> type =
+            componentType(AccessPoint.COMPONENT_TYPE_ENCHANTMENTS);
+        if (type == null) return 0;
+        ItemEnchantments enchantments = stack.get(type);
         if (enchantments == null || enchantments.isEmpty()) return 0;
         Set<Holder<Enchantment>> keys = enchantments.keySet();
         if (keys == null) return 0;
@@ -291,9 +297,11 @@ public final class SaturationModule extends LauncherModule {
             LocalPlayer player = PlayerData.player();
             if (player == null) return;
             FoodData foodData = player.getFoodData();
-            if (!(foodData instanceof FoodDataAccessor261)) return;
-            FoodDataAccessor261 food = (FoodDataAccessor261) foodData;
-            estimator.tick(player, food.la$foodLevel(), food.la$saturationLevel(), food.la$exhaustionLevel());
+            if (!(AccessorRegistry.get(AccessPoint.FOOD_LEVEL, foodData) instanceof Number)) return;
+            estimator.tick(player,
+                AccessorRegistry.getInt(AccessPoint.FOOD_LEVEL, foodData, 0),
+                AccessorRegistry.getFloat(AccessPoint.FOOD_SATURATION, foodData, 0f),
+                AccessorRegistry.getFloat(AccessPoint.FOOD_EXHAUSTION, foodData, 0f));
         } catch (Throwable t) {
             if (!tickErrorLogged) {
                 tickErrorLogged = true;
@@ -482,21 +490,26 @@ public final class SaturationModule extends LauncherModule {
 
             FoodData foodData = player.getFoodData();
             if (foodData == null) { reportOnce("getFoodData() null"); return; }
-            if (!(foodData instanceof FoodDataAccessor261)) {
+            // La VALEUR, pas isBound() : un accès déclaré par la tranche peut
+            // rester sans réponse si son accessor n'a pas été tissé, et
+            // afficher des barres à 0 serait pire que ne rien afficher.
+            Object foodLevelValue = AccessorRegistry.get(AccessPoint.FOOD_LEVEL, foodData);
+            if (!(foodLevelValue instanceof Number)) {
                 // Le cas le plus probable d'un « rien ne s'affiche » muet :
-                // l'accessor n'a pas été tissé. Sans ce log, indiscernable
-                // d'un problème de coordonnées.
-                reportOnce("FoodDataAccessor261 NON TISSÉ sur " + foodData.getClass().getName());
+                // l'accès n'a pas répondu (pas de liaison pour cette version,
+                // ou accessor non tissé). Sans ce log, indiscernable d'un
+                // problème de coordonnées.
+                reportOnce("FOOD_LEVEL sans réponse — reçu " + foodData.getClass().getName());
                 return;
             }
-            FoodDataAccessor261 food = (FoodDataAccessor261) foodData;
 
-            int foodLevel = food.la$foodLevel();
+            int foodLevel = ((Number) foodLevelValue).intValue();
             // L'ESTIMATION, pas la valeur brute — voir Estimator. Elle vaut
             // exactement la valeur serveur au moment où celui-ci parle, et
             // continue de descendre entre deux paquets.
-            float saturation = estimateSaturation ? estimator.saturation() : food.la$saturationLevel();
-            float exhaustion = food.la$exhaustionLevel();
+            float saturation = estimateSaturation ? estimator.saturation()
+                : AccessorRegistry.getFloat(AccessPoint.FOOD_SATURATION, foodData, 0f);
+            float exhaustion = AccessorRegistry.getFloat(AccessPoint.FOOD_EXHAUSTION, foodData, 0f);
 
             float scale = UiVanillaItemRenderer.guiScale(vpWidth);
             if (scale <= 0f) { reportOnce("échelle GUI invalide: " + scale); return; }
@@ -819,10 +832,30 @@ public final class SaturationModule extends LauncherModule {
 
     private static boolean canEatErrorLogged;
 
+    /**
+     * Type de composant d'item servi par la tranche active, ou {@code null}
+     * si l'accès n'est pas lié.
+     *
+     * <p>Le cast non vérifié est inévitable : {@link AccessorRegistry} rend un
+     * {@code Object}, et {@code DataComponentType} est générique. Il est sûr
+     * ici parce que chaque {@link AccessPoint} de cette famille désigne UN
+     * champ précis, dont le paramètre de type est connu à l'écriture de
+     * l'appel — c'est exactement ce que faisait déjà l'accessor, dont la
+     * signature portait le générique.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> net.minecraft.core.component.DataComponentType<T> componentType(AccessPoint point) {
+        Object type = AccessorRegistry.get(point);
+        return type instanceof net.minecraft.core.component.DataComponentType
+            ? (net.minecraft.core.component.DataComponentType<T>) type : null;
+    }
+
     private FoodProperties foodOf(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return null;
         try {
-            return stack.get(DataComponentsAccessor261.la$food());
+            net.minecraft.core.component.DataComponentType<FoodProperties> type =
+                componentType(AccessPoint.COMPONENT_TYPE_FOOD);
+            return type == null ? null : stack.get(type);
         } catch (Throwable t) {
             if (!foodErrorLogged) {
                 foodErrorLogged = true;

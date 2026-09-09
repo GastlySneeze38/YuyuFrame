@@ -2,7 +2,8 @@ package com.yuyuframe.launcheragent.runtime.module.gameplay;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.ChatComponentAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
@@ -218,11 +219,10 @@ public final class ChatEnhancementsModule extends LauncherModule {
 
     /**
      * 26.1.2 sans réflexion (2026-08-26, §22 — audit modules) — {@code
-     * Minecraft.gui}/{@code Gui.getChat()} (publics, via {@link
-     * MinecraftAccessor261#la$gui()} pour rester sur une seule surface
-     * d'accès à {@code Minecraft}) puis {@link ChatComponentAccessor261}
-     * pour {@code allMessages}/{@code addMessage(...)} (privés, voir sa
-     * javadoc). Trois étapes : dédup par IDENTITÉ d'objet, ping de mention
+     * Minecraft.gui}/{@code Gui.getChat()} (publics, via {@code ClientData}
+     * pour rester sur une seule surface d'accès à {@code Minecraft}) puis
+     * {@code AccessPoint.CHAT_ALL_MESSAGES}/{@code CHAT_ADD_MESSAGE}
+     * (privés). Trois étapes : dédup par IDENTITÉ d'objet, ping de mention
      * (voir {@link #consumeOwnEcho} et {@link #mentions}), fusion des
      * répétitions (voir {@link #mergeRepeatedMessageDirect}).
      *
@@ -248,9 +248,9 @@ public final class ChatEnhancementsModule extends LauncherModule {
         Gui gui = ClientData.gui();
         if (gui == null) return false;
         ChatComponent chat = gui.getChat();
-        if (!(chat instanceof ChatComponentAccessor261)) return false;
-        ChatComponentAccessor261 chatAcc = (ChatComponentAccessor261) chat;
-        List<GuiMessage> messages = chatAcc.la$allMessages();
+        if (chat == null) return false;
+        @SuppressWarnings("unchecked")
+        List<GuiMessage> messages = (List<GuiMessage>) AccessorRegistry.get(AccessPoint.CHAT_ALL_MESSAGES, chat);
         if (messages == null || messages.isEmpty()) return false;
 
         GuiMessage headLine = messages.get(0);
@@ -280,7 +280,7 @@ public final class ChatEnhancementsModule extends LauncherModule {
             String base = COUNTER_SUFFIX.matcher(plain).replaceAll("");
             if (base.equals(la$lastDistinctBase) && la$lastDistinctContent != null) {
                 la$repeatCount++;
-                if (mergeRepeatedMessageDirect(chatAcc, chat, messages, headLine, la$repeatCount)) {
+                if (mergeRepeatedMessageDirect(chat, messages, headLine, la$repeatCount)) {
                     if (!messages.isEmpty()) la$lastProcessedMessage = messages.get(0);
                 }
             } else {
@@ -318,14 +318,14 @@ public final class ChatEnhancementsModule extends LauncherModule {
      * remplacée, et {@code rescaleChat()} reconstruit les lignes visibles
      * (retour à la ligne) à partir de la liste modifiée.
      */
-    private boolean mergeRepeatedMessageDirect(ChatComponentAccessor261 chatAcc, ChatComponent chat, List<GuiMessage> messages, GuiMessage headLine, int repeatCount) {
+    private boolean mergeRepeatedMessageDirect(ChatComponent chat, List<GuiMessage> messages, GuiMessage headLine, int repeatCount) {
         try {
             GuiMessageSource sourceValue = headLine.source();
             GuiMessageTag tagValue = headLine.tag();
             if (messages.size() >= 2) { messages.remove(0); messages.remove(0); }
             Component combined = la$lastDistinctContent.copy()
                 .append(Component.literal(" (x" + repeatCount + ")").withColor(COUNTER_COLOR));
-            chatAcc.la$addMessage(combined, null, sourceValue, tagValue);
+            AccessorRegistry.invoke(AccessPoint.CHAT_ADD_MESSAGE, chat, combined, null, sourceValue, tagValue);
             chat.rescaleChat();
             return true;
         } catch (Throwable t) {

@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionInstanceAccessor261;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
+import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -328,7 +327,7 @@ public final class ZoomModule extends LauncherModule {
      * sensitivity} (même famille d'objet sur 26.1.2 : {@code OptionInstance<
      * Double>}, confirmé par javap) — voir applySensitivityScale().
      *
-     * {@code handle} est un {@code OptionInstanceAccessor261} (voir {@link
+     * {@code handle} est une poignée d'option OPAQUE (voir {@link
      * #fovHandle()}/{@link #sensitivityHandle}) — le repli {@code Field}
      * multi-bracket a été supprimé le 2026-08-27. Le champ {@code .value} de
      * {@code OptionInstance} est écrit DIRECTEMENT via l'accessor, jamais via
@@ -336,21 +335,15 @@ public final class ZoomModule extends LauncherModule {
      * clampe fov et sensibilité.
      */
     private double readOptionValue(Object handle, Object options) throws Exception {
-        return ((Number) ((OptionInstanceAccessor261) handle).la$value()).doubleValue();
+        return GameOptions.value(handle, 0d);
     }
 
     private void writeOptionValue(Object handle, Object options, double value) throws Exception {
-        OptionInstanceAccessor261 acc = (OptionInstanceAccessor261) handle;
-        Object current = acc.la$value();
-        // Boxing d'après le type de la valeur COURANTE : fov est un
-        // OptionInstance<Integer>, sensitivity un OptionInstance<Double>
-        // (tous deux vérifiés javap) — écrire le mauvais type compilerait
-        // (le champ est vu comme Object côté accessor) mais planterait au
-        // premier déballage côté vanilla.
-        Object boxed = current instanceof Integer ? (Object) Integer.valueOf((int) Math.round(value))
-            : current instanceof Float ? (Object) Float.valueOf((float) value)
-            : (Object) Double.valueOf(value);
-        acc.la$setValue(boxed);
+        // Le boxing d'après le type de la valeur COURANTE (fov =
+        // OptionInstance<Integer>, sensitivity = OptionInstance<Double>) vit
+        // désormais dans GameOptions — cette règle était recopiée à
+        // l'identique ici, dans FovModule et dans FullbrightModule.
+        GameOptions.setValue(handle, value);
     }
 
     /**
@@ -404,8 +397,8 @@ public final class ZoomModule extends LauncherModule {
     }
 
     /**
-     * 26.1.2 sans réflexion — {@code OptionsAccessor261#la$sensitivity()}
-     * (champ privé). Repli : Yarn "mouseSensitivity" (nom historique 1.8.9)
+     * Sans réflexion — {@code AccessPoint.OPTIONS_SENSITIVITY} via
+     * {@link GameOptions} (champ privé). Repli : Yarn "mouseSensitivity" (nom historique 1.8.9)
      * → réel "sensitivity" (vérifié par javap sur le vrai jar 26.1.2 :
      * {@code OptionInstance<Double> sensitivity}) — si la résolution échoue
      * sur un bracket non testé, {@link #applySensitivityScale} se dégrade
@@ -413,9 +406,7 @@ public final class ZoomModule extends LauncherModule {
      * compensation de sensibilité ne s'applique pas).
      */
     private Object sensitivityHandle(Object options) {
-        if (!(options instanceof OptionsAccessor261)) return null;
-        Object sensOption = ((OptionsAccessor261) options).la$sensitivity();
-        return (sensOption instanceof OptionInstanceAccessor261) ? sensOption : null;
+        return GameOptions.sensitivityHandle();
     }
 
     /**
@@ -448,14 +439,11 @@ public final class ZoomModule extends LauncherModule {
     }
 
     /**
-     * 26.1.2 sans réflexion — {@code OptionsAccessor261#la$fov()} (champ
-     * privé). Repli réflexion sinon — voir {@link #sensitivityHandle}, même
-     * principe.
+     * Poignée d'option de {@code Options.fov} (champ privé) via
+     * {@link GameOptions}, donc l'accessor de la tranche active — voir
+     * {@link #sensitivityHandle}, même principe.
      */
     private Object fovHandle() throws Exception {
-        Object options = optionsInstance();
-        if (!(options instanceof OptionsAccessor261)) return null;
-        Object fovOption = ((OptionsAccessor261) options).la$fov();
-        return (fovOption instanceof OptionInstanceAccessor261) ? fovOption : null;
+        return GameOptions.fovHandle();
     }
 }

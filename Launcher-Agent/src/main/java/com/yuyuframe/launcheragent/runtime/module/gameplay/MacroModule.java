@@ -2,7 +2,8 @@ package com.yuyuframe.launcheragent.runtime.module.gameplay;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.ServerDataAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -488,10 +489,8 @@ public final class MacroModule extends LauncherModule {
     private static String serverAddress(ClientPacketListener connection) {
         try {
             ServerData server = connection.getServerData();
-            if (server instanceof ServerDataAccessor261) {
-                String ip = ((ServerDataAccessor261) server).la$ip();
-                if (ip != null && !ip.isEmpty()) return normalizeAddress(ip);
-            }
+            String ip = AccessorRegistry.as(String.class, AccessPoint.SERVER_IP, server);
+            if (ip != null && !ip.isEmpty()) return normalizeAddress(ip);
 
             // BUG TROUVÉ (retour utilisateur 2026-08-31 : « l'auto-login ne
             // marchait pas quand on se connecte directement au serveur en

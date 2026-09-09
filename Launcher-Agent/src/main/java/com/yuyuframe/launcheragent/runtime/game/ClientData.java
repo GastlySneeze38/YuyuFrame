@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.game;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.User;
@@ -17,8 +18,8 @@ import net.minecraft.client.sounds.SoundManager;
  * 17 modules appelaient {@code McReflect.minecraftClient()} chacun de leur
  * côté, suivis de 17 lectures réflexives d'un champ de {@code Minecraft}
  * ({@code player} ×8, {@code options} ×6, {@code user}, {@code gui},
- * {@code fps}). Toutes ces cibles avaient DÉJÀ un accessor dans
- * {@link MinecraftAccessor261} : la réflexion y était purement historique.
+ * {@code fps}). Toutes ces cibles avaient DÉJÀ un accessor : la réflexion y
+ * était purement historique.
  *
  * <p><b>Champs → accessors Mixin, méthodes → appel direct.</b> Un
  * {@code @Accessor} Sponge synthétise un getter de CHAMP au tissage ; il ne
@@ -29,49 +30,28 @@ import net.minecraft.client.sounds.SoundManager;
  * n'est pas de la réflexion, et ça passe quand même par cette classe pour que
  * la surface d'accès reste unique.
  *
- * <p><b>PORTÉE : bracket 26.1.2 uniquement</b>, comme {@link PlayerData} —
- * hors de ce bracket, tout renvoie une valeur neutre. Voir sa javadoc pour le
- * raisonnement complet sur le portage multiversion.
+ * <p><b>Plus aucun accessor n'est nommé ici</b> (2026-09-09) : les lectures
+ * passent par {@link AccessorRegistry}, qui route chaque {@link AccessPoint}
+ * vers l'accessor de la tranche active. Voir {@link PlayerData} pour le
+ * raisonnement complet et la limite qui subsiste (les TYPES de retour restent
+ * ceux du jeu). Hors tranche liée, tout renvoie une valeur neutre.
  */
 public final class ClientData {
     private ClientData() {}
 
-    /**
-     * Instance de {@code Minecraft} vue comme accessor, ou {@code null} hors
-     * bracket 26.1.2.
-     *
-     * <p>Le try/catch n'est pas décoratif : {@code Minecraft.getInstance()}
-     * référence un nom de classe RÉEL, absent d'un bracket obfusqué — on y
-     * récolte un {@code NoClassDefFoundError}, d'où le {@code Throwable}.
-     */
-    private static MinecraftAccessor261 accessor() {
-        try {
-            Minecraft mc = Minecraft.getInstance();
-            return mc instanceof MinecraftAccessor261 ? (MinecraftAccessor261) mc : null;
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
     /** Instance brute de {@code Minecraft}, ou {@code null} — pour les APPELS DE MÉTHODE publics, jamais pour lire un champ (passer par les getters ci-dessous). */
     public static Minecraft client() {
-        try {
-            return Minecraft.getInstance();
-        } catch (Throwable t) {
-            return null;
-        }
+        return AccessorRegistry.as(Minecraft.class, AccessPoint.CLIENT_INSTANCE, null);
     }
 
     /** Options du jeu, ou {@code null}. */
     public static Options options() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$options();
+        return AccessorRegistry.as(Options.class, AccessPoint.CLIENT_OPTIONS, null);
     }
 
     /** Session utilisateur (pseudo, UUID), ou {@code null}. */
     public static User user() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$user();
+        return AccessorRegistry.as(User.class, AccessPoint.CLIENT_USER, null);
     }
 
     /**
@@ -84,30 +64,25 @@ public final class ClientData {
      * chercher.
      */
     public static Screen screen() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$screen();
+        return AccessorRegistry.as(Screen.class, AccessPoint.CLIENT_SCREEN, null);
     }
 
     /** HUD vanilla, ou {@code null}. */
     public static Gui gui() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$gui();
+        return AccessorRegistry.as(Gui.class, AccessPoint.CLIENT_GUI, null);
     }
 
     /**
      * FPS courant, ou {@code -1} si indisponible.
      *
-     * <p>{@code la$fps()} est {@code static} (le champ l'est), et son corps de
-     * repli lève volontairement si le mixin n'est pas tissé plutôt que de
-     * renvoyer un 0 faux — voir sa javadoc. D'où le catch ici, qui traduit ce
-     * cas en {@code -1} explicitement « inconnu ».
+     * <p>Le champ est {@code static}, donc l'accès n'a pas de receveur. Son
+     * accessor lève volontairement si le mixin n'est pas tissé, plutôt que de
+     * renvoyer un 0 faux ; {@link AccessorRegistry} attrape, le signale une
+     * fois dans le log, et le repli {@code -1} ci-dessous dit explicitement
+     * « inconnu ».
      */
     public static int fps() {
-        try {
-            return MinecraftAccessor261.la$fps();
-        } catch (Throwable t) {
-            return -1;
-        }
+        return AccessorRegistry.getInt(AccessPoint.CLIENT_FPS, null, -1);
     }
 
     /** Gestionnaire de sons, ou {@code null}. Méthode publique, pas un champ — voir la javadoc de classe. */
@@ -130,8 +105,7 @@ public final class ClientData {
      * l'accès au champ {@code window} demandait l'accessor.
      */
     public static com.mojang.blaze3d.platform.Window window() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$window();
+        return AccessorRegistry.as(com.mojang.blaze3d.platform.Window.class, AccessPoint.CLIENT_WINDOW, null);
     }
 
     /**
@@ -144,8 +118,8 @@ public final class ClientData {
      * vanilla de faim/cœur ET l'atlas d'AppleSkin.
      */
     public static net.minecraft.server.packs.resources.ReloadableResourceManager resourceManager() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$resourceManager();
+        return AccessorRegistry.as(net.minecraft.server.packs.resources.ReloadableResourceManager.class,
+            AccessPoint.CLIENT_RESOURCE_MANAGER, null);
     }
 
     public static ClientPacketListener connection() {

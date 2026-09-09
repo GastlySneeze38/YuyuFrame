@@ -6,7 +6,8 @@ import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import net.minecraft.client.renderer.fog.FogData;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.FogRendererAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 
 /**
  * Désactive tout le brouillard (distance de rendu, eau, lave, ténèbres,
@@ -88,7 +89,7 @@ public final class NoFogModule extends LauncherModule {
     @Override
     public void onTick() {
         try {
-            FogRendererAccessor261.la$setFogEnabled(false);
+            AccessorRegistry.invoke(AccessPoint.FOG_SET_ENABLED, null, Boolean.FALSE);
         } catch (Throwable t) {
             if (!errorLogged) {
                 errorLogged = true;
@@ -101,7 +102,7 @@ public final class NoFogModule extends LauncherModule {
     protected void onEnabledChanged(boolean enabled) {
         if (enabled) return;
         try {
-            FogRendererAccessor261.la$setFogEnabled(true);
+            AccessorRegistry.invoke(AccessPoint.FOG_SET_ENABLED, null, Boolean.TRUE);
         } catch (Throwable t) {
             LauncherLog.err("[NoFogModule] restauration du brouillard: " + t);
         }

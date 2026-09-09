@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.game;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.MinecraftAccessor261;
-import net.minecraft.client.Minecraft;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 
@@ -16,25 +16,29 @@ import net.minecraft.client.player.LocalPlayer;
  * chacune avait dû découvrir et corriger SÉPARÉMENT les mêmes pièges de
  * mappings, et un troisième module en aurait fait une troisième.
  *
- * <p><b>Tout passe par les accessors Mixin</b> ({@link MinecraftAccessor261},
- * déclaré via {@code MixinHookPointRegistry}) plutôt que par la
- * réflexion. C'est ce qui rend le portage multiversion mécanique : les getters
- * sont synthétisés au tissage, donc résolus une fois pour toutes au chargement
- * au lieu d'être re-résolus à chaque appel, et surtout un changement de nom ou
- * de visibilité d'un champ sur une autre version ne touche que l'accessor de
- * CE bracket — jamais un appelant.
+ * <p><b>Tout passe par les accessors Mixin</b>, jamais par la réflexion : les
+ * getters sont synthétisés au tissage, donc résolus une fois pour toutes au
+ * chargement au lieu d'être re-résolus à chaque appel.
  *
  * <p>{@code Minecraft.player} et {@code level} sont pourtant PUBLICS sur
  * 26.1.2 : un accès direct compilerait. Ils passent quand même par l'accessor,
  * sur demande explicite — mélanger accès directs et accessors ferait perdre
  * exactement la propriété ci-dessus.
  *
- * <p><b>PORTÉE : bracket 26.1.2 uniquement.</b> Les accessors n'existent que
- * pour ce bracket ({@code *261}) ; sur 1.8.9/1.16.5/1.20.4/1.21.4, où le jeu
- * est obfusqué, ces classes n'existent pas et tout renvoie ici une valeur
- * neutre. Porter un module vers un autre bracket demande d'y écrire son jeu
- * d'accessors et de router cette classe dessus — c'est précisément le travail
- * que cette centralisation rend faisable en un seul endroit.
+ * <p><b>Plus aucun accessor n'est nommé ici</b> (2026-09-09) : cette classe
+ * demande un {@link AccessPoint} au {@link AccessorRegistry}, qui le route
+ * vers l'accessor de la tranche active. Auparavant elle importait
+ * {@code MinecraftAccessor261} en dur — le code de {@code runtime/} ne
+ * contenait aucun nom de classe Minecraft, mais restait cloué à 26.1.2 par cet
+ * import. Ajouter une version ne touche donc plus ce fichier : il suffit
+ * d'écrire les accessors de la tranche et sa classe de liaisons.
+ *
+ * <p><b>Limite restante, à connaître avant un portage</b> : les TYPES de
+ * retour ({@link LocalPlayer}, {@link ClientLevel}) sont ceux du jeu. Stables
+ * sur la ligne 26.x (non obfusquée), ils n'existent pas du tout sur une
+ * tranche obfusquée (1.8-1.21.x, gelées) — servir celles-ci demanderait des
+ * types neutres à nous, ce qui toucherait chaque module appelant. Hors tranche
+ * liée, tout renvoie ici une valeur neutre.
  *
  * <p>Portée VOLONTAIREMENT limitée à ce qui était réellement dupliqué. Faire
  * transiter par ici tout ce que chaque module lit (durabilité d'armure, effets
@@ -45,34 +49,19 @@ public final class PlayerData {
     private PlayerData() {}
 
     /**
-     * Instance de {@code Minecraft} vue comme accessor, ou {@code null} hors
-     * bracket 26.1.2.
+     * Joueur courant, ou {@code null} (hors partie, ou version non liée).
      *
-     * <p>Le try/catch est indispensable et non décoratif : {@code
-     * Minecraft.getInstance()} référence un nom de classe RÉEL, qui n'existe
-     * pas sur un bracket obfusqué — on y récolte un {@code
-     * NoClassDefFoundError}, pas une exception ordinaire, d'où le
-     * {@code Throwable}.
+     * <p>Receveur {@code null} = « le client courant » : c'est la liaison de
+     * la tranche qui va le chercher, pour qu'aucun appelant neutre n'ait à
+     * nommer {@code Minecraft} — voir {@code AccessorBindings261}.
      */
-    private static MinecraftAccessor261 accessor() {
-        try {
-            Minecraft mc = Minecraft.getInstance();
-            return mc instanceof MinecraftAccessor261 ? (MinecraftAccessor261) mc : null;
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
-    /** Joueur courant, ou {@code null} (hors partie, ou bracket non supporté). */
     public static LocalPlayer player() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$player();
+        return AccessorRegistry.as(LocalPlayer.class, AccessPoint.CLIENT_PLAYER, null);
     }
 
     /** Monde client courant, ou {@code null}. */
     public static ClientLevel level() {
-        MinecraftAccessor261 mc = accessor();
-        return mc == null ? null : mc.la$level();
+        return AccessorRegistry.as(ClientLevel.class, AccessPoint.CLIENT_LEVEL, null);
     }
 
     /** {@code true} si un joueur est en partie — raccourci de lisibilité pour les modules. */

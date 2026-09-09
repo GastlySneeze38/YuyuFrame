@@ -8,8 +8,10 @@ import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.OptionsAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
 
 import java.lang.reflect.Field;
@@ -56,18 +58,23 @@ public final class HudOverlayRenderer {
      * persisté).
      */
     public static boolean vanillaHudHidden() {
-        // 26.1.2 : accessor Mixin, zéro réflexion (2026-08-31). C'était le
-        // dernier accès réflexif du chemin de rendu du HUD, appelé à chaque
-        // frame. Repli réflexif conservé pour les autres brackets, où ni
-        // Options ni l'accessor n'existent sous ces noms.
+        // Tranche liée : accessor Mixin via AccessPoint.OPTIONS_HIDE_GUI, zéro
+        // réflexion (2026-08-31). C'était le dernier accès réflexif du chemin
+        // de rendu du HUD, appelé à chaque frame. Repli réflexif conservé pour
+        // les tranches sans liaison, où ni Options ni l'accessor n'existent
+        // sous ces noms.
         try {
-            Object options = ClientData.options();
-            if (options instanceof OptionsAccessor261) {
-                return ((OptionsAccessor261) options).la$hideGui();
-            }
+            // La VALEUR, pas isBound() : un accès peut être déclaré par la
+            // tranche et rester sans réponse si son accessor n'a pas été tissé.
+            // Se contenter de isBound() rendrait le repli réflexif ci-dessous
+            // inatteignable dans ce cas précis, alors que c'est exactement
+            // celui pour lequel il existe.
+            Object hidden = AccessorRegistry.get(AccessPoint.OPTIONS_HIDE_GUI, null);
+            if (hidden instanceof Boolean) return (Boolean) hidden;
         } catch (Throwable ignored) {
-            // NoClassDefFoundError attendu hors 26.1.2 — le repli ci-dessous
-            // prend le relais, inutile de le journaliser à chaque frame.
+            // NoClassDefFoundError attendu hors tranche liée — le repli
+            // ci-dessous prend le relais, inutile de le journaliser à chaque
+            // frame.
         }
         try {
             Object mc = McReflect.minecraftClient();

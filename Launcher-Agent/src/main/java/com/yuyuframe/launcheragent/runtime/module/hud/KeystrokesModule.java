@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.hud;
 
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.KeyMappingAccessor261;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
@@ -182,14 +183,9 @@ public final class KeystrokesModule extends SingleHudModule {
 
 
 
-        /** {@code KeyMappingAccessor261#la$isDown()} (champ privé) — zéro réflexion. Repli supprimé le 2026-08-27 ; renommage à connaître : KeyBinding→KeyMapping, champ "pressed"→"isDown". */
+        /** {@code AccessPoint.KEYBIND_IS_DOWN} (champ privé) — zéro réflexion. Repli supprimé le 2026-08-27 ; renommage à connaître : KeyBinding→KeyMapping, champ "pressed"→"isDown". */
         private boolean isDown(Object keyBinding) {
-            if (!(keyBinding instanceof KeyMappingAccessor261)) return false;
-            try {
-                return ((KeyMappingAccessor261) keyBinding).la$isDown();
-            } catch (Throwable t) {
-                return false;
-            }
+            return AccessorRegistry.getBoolean(AccessPoint.KEYBIND_IS_DOWN, keyBinding, false);
         }
 
         /**
@@ -205,16 +201,15 @@ public final class KeystrokesModule extends SingleHudModule {
          * {@code UiInputPollerModern#nameForKeyCode}.
          */
         private String keyLabel(Object keyBinding) {
-            // KeyMappingAccessor261#la$key() (champ privé) +
+            // AccessPoint.KEYBIND_KEY (champ privé) +
             // InputConstants.Key.getValue() (méthode publique) — zéro
             // réflexion. Le repli multi-bracket a été supprimé le 2026-08-27 ;
             // renommages à connaître : KeyBinding.code (int) disparu en 1.13+,
             // puis champ "boundKey"→"key" (type déplacé vers
             // com.mojang.blaze3d.platform.InputConstants$Key) et méthode
             // "getCode"→"getValue" (InputConstants$Key n'a PLUS de getCode()).
-            if (!(keyBinding instanceof KeyMappingAccessor261)) return "?";
             try {
-                InputConstants.Key key = ((KeyMappingAccessor261) keyBinding).la$key();
+                InputConstants.Key key = AccessorRegistry.as(InputConstants.Key.class, AccessPoint.KEYBIND_KEY, keyBinding);
                 if (key == null) return "?";
                 int code = key.getValue();
                 String name = com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
