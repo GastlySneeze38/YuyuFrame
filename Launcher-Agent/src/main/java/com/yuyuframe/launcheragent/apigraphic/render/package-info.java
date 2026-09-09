@@ -1,20 +1,25 @@
 /**
  * <b>Salle d'attente — ce paquet n'est PAS une destination définitive.</b>
  *
- * <p>Il ne reste ici que les trois fichiers qui ne peuvent pas être RANGÉS,
+ * <p>Il ne reste ici que les fichiers qui ne peuvent pas être RANGÉS,
  * seulement DÉCOUPÉS, parce que chacun empile plusieurs couches :
  *
  * <ul>
- *   <li>{@code UiPrimitiveRenderer} (2033 l.) — deux ères entrelacées méthode
+ *   <li>{@code UiPrimitiveRenderer} (1983 l.) — deux ères entrelacées méthode
  *       par méthode ({@code drawXLegacy}/{@code drawXModern}, six paires
  *       {@code ensureXShaderInit}/{@code …Modern}) + 43 constantes GLSL en dur
  *       + la géométrie pure (coins arrondis, spinner, ripple, shimmer).</li>
- *   <li>{@code UiTextRenderer} (768 l.) — mesure/troncature (calcul pur) mêlées
- *       à la rastérisation de deux ères.</li>
- *   <li>{@code UiVanillaItemRenderer} (1391 l.) — pont vers les renderers DU
+ *   <li>{@code UiVanillaItemRenderer} (1374 l.) — pont vers les renderers DU
  *       JEU (icônes d'items, textures de conteneur), avec deux modèles de
  *       frame (immédiat et différé) et leurs files d'attente.</li>
  * </ul>
+ *
+ * <p><b>{@code UiTextRenderer} est parti (2026-09-09)</b> — premier des trois
+ * découpé, et modèle pour les deux autres. Ses 729 lignes se sont réparties en
+ * {@code text/UiTextLayout} (mesure, calcul pur), {@code
+ * era/glsupport/FontAtlasTextures} (atlas → texture GPU, la moitié du fichier
+ * et rien à voir avec « dessiner du texte »), {@code era/gl2/Gl2TextRenderer},
+ * {@code era/gl3/Gl3TextRenderer}, et le contrat {@code UiBackend.text}.
  *
  * <p>Destination prévue quand ils seront découpés :
  * <ul>

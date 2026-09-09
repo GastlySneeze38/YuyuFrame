@@ -39,4 +39,10 @@ public final class NoopBackend implements UiBackend {
                                UiColor color, int vpWidth, int vpHeight) {
         return false;
     }
+
+    @Override
+    public boolean text(com.yuyuframe.launcheragent.apigraphic.value.UiFont font, String content,
+                        float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
+        return false;
+    }
 }

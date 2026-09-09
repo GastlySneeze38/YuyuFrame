@@ -938,7 +938,7 @@ public final class UiPrimitiveRenderer {
         if (iconProgram != -1 || iconInitFailed) return;
         try {
             int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            gl.glShaderSource(vsh, UiTextRenderer.TEXT_VERTEX_SRC); // générique (ftransform + texcoord passthrough) — pas besoin d'un vertex shader dédié
+            gl.glShaderSource(vsh, com.yuyuframe.launcheragent.apigraphic.era.gl2.Gl2TextRenderer.TEXT_VERTEX_SRC); // générique (ftransform + texcoord passthrough) — pas besoin d'un vertex shader dédié
             gl.glCompileShader(vsh);
             int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
             gl.glShaderSource(fsh, ICON_FRAGMENT_SRC);
@@ -1118,7 +1118,7 @@ public final class UiPrimitiveRenderer {
         }
     }
 
-    /** Upload GL brut (glTexImage2D), mis en cache par cacheKey — voir UiTextRenderer#createFontTextureRaw pour le même motif appliqué aux polices. */
+    /** Upload GL brut (glTexImage2D), mis en cache par cacheKey — voir FontAtlasTextures#createFontTextureRaw pour le même motif appliqué aux polices. */
     private int ensureIconTexture(String cacheKey, java.awt.image.BufferedImage img) {
         Integer cached = iconTextures.get(cacheKey);
         if (cached != null) return cached;

@@ -6,7 +6,8 @@ import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
-import com.yuyuframe.launcheragent.apigraphic.render.UiTextRenderer;
+import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
+import com.yuyuframe.launcheragent.apigraphic.text.UiTextLayout;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.RenderEra;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackendRegistry;
@@ -39,7 +40,7 @@ import java.nio.FloatBuffer;
  *    gl_Color/ftransform), voir ensure*ShaderInitModern / draw*Modern.
  *
  * Découpé en 4 classes (voir {@link GlBridge}, {@link UiPrimitiveRenderer},
- * {@link UiVanillaItemRenderer}, {@link UiTextRenderer}) — cette classe reste
+ * {@link UiVanillaItemRenderer}) — cette classe reste
  * l'orchestrateur : singleton, pipeline moderne partagé (VAO/VBO, projection,
  * compilation de programme), scissor, et façade déléguant à chaque
  * sous-renderer pour garder l'API publique inchangée (~40 appelants externes).
@@ -55,7 +56,6 @@ public final class UiRenderer {
     private final GlBridge glBridge;
     private final UiPrimitiveRenderer primitives;
     private final UiVanillaItemRenderer vanillaItems;
-    private final UiTextRenderer text;
 
     // ══════════════════════════════════════════════════════════════════════
     // ── Pipeline MODERNE (1.21.11+) — voir javadoc de la classe pour le
@@ -103,7 +103,26 @@ public final class UiRenderer {
         this.glBridge = new GlBridge();
         this.primitives = new UiPrimitiveRenderer(this, glBridge);
         this.vanillaItems = new UiVanillaItemRenderer(this, glBridge);
-        this.text = new UiTextRenderer(this, glBridge);
+    }
+
+    /**
+     * Backend de l'ère active, câblé au premier usage.
+     *
+     * <p>Résolu par {@code UiBackendRegistry} (qui le charge par nom), puis
+     * {@code attach()} lui donne la façade et le pont GL — un backend est
+     * instancié par réflexion, il ne peut pas les recevoir par constructeur.
+     * Le câblage est ici plutôt que dans le registre : celui-ci résout, la
+     * façade branche.
+     */
+    private UiBackend backend;
+
+    private UiBackend backend() {
+        UiBackend local = backend;
+        if (local != null) return local;
+        local = UiBackendRegistry.get();
+        local.attach(this, glBridge);
+        backend = local;
+        return local;
     }
 
     public static UiRenderer get(ClassLoader gameClassLoader) {
@@ -376,7 +395,8 @@ public final class UiRenderer {
 
     // ══════════════════════════════════════════════════════════════════════
     // ── Façade — délègue à chaque sous-renderer, API publique 100% inchangée
-    // (voir GlBridge/UiPrimitiveRenderer/UiVanillaItemRenderer/UiTextRenderer).
+    // (voir GlBridge/UiPrimitiveRenderer/UiVanillaItemRenderer, et era/*/ pour
+    // le texte, déjà découpé).
     // ══════════════════════════════════════════════════════════════════════
 
     // ── UiPrimitiveRenderer (rect/vignette/fx/gradient2D/icône) ──────────────
@@ -732,7 +752,7 @@ public final class UiRenderer {
         UiVanillaItemRenderer.flushPendingModernItemIconsFromGuiRenderer(guiRenderer);
     }
 
-    // ── UiTextRenderer (police bitmap UiFont) ─────────────────────────────────
+    // ── Texte (police bitmap UiFont) ──────────────────────────────────────────
 
     /**
      * Ouvre un lot de texte : tous les {@code drawText} suivants sont
@@ -768,30 +788,45 @@ public final class UiRenderer {
         com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
     }
 
-    public float textWidth(String text, float scale) { return this.text.textWidth(text, scale); }
+    // ── Texte ─────────────────────────────────────────────────────────────
+    // La MESURE est du calcul pur (UiTextLayout, testable sans jeu) ; le
+    // DESSIN passe par le backend de l'ère. Avant le découpage du 2026-09-09,
+    // les deux vivaient dans UiTextRenderer, avec les shaders des deux ères
+    // GL et 350 lignes d'upload de texture.
 
-    public float textWidth(UiFont font, String text, float scale) { return this.text.textWidth(font, text, scale); }
+    public float textWidth(String text, float scale) { return UiTextLayout.textWidth(text, scale); }
 
-    public String truncate(String text, float scale, float maxWidth) { return this.text.truncate(text, scale, maxWidth); }
+    public float textWidth(UiFont font, String text, float scale) { return UiTextLayout.textWidth(font, text, scale); }
+
+    public String truncate(String text, float scale, float maxWidth) { return UiTextLayout.truncate(text, scale, maxWidth); }
 
     public void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.text(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight)) return;
-        this.text.drawText(text, x, y, color, scale, vpWidth, vpHeight);
+        drawText(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight);
     }
 
     public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
                           int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.text(font, text, x, y, color, scale, vpWidth, vpHeight)) return;
-        this.text.drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
+        if (text == null || text.isEmpty()) return;
+        backend().text(font, text, x, y, color, scale, vpWidth, vpHeight);
     }
 
+    /**
+     * Variante avec ombre portée — composition pure sur {@link #drawText}
+     * (passe ombre décalée PUIS passe principale) : aucune modification de
+     * shader nécessaire, donc identique sur les trois ères.
+     */
     public void drawTextShadowed(UiFont font, String text, float x, float y, UiColor color, UiColor shadowColor,
                                   float shadowOffsetX, float shadowOffsetY, float scale, int vpWidth, int vpHeight) {
-        this.text.drawTextShadowed(font, text, x, y, color, shadowColor, shadowOffsetX, shadowOffsetY, scale, vpWidth, vpHeight);
+        if (text == null || text.isEmpty()) return;
+        drawText(font, text, x + shadowOffsetX, y + shadowOffsetY, shadowColor, scale, vpWidth, vpHeight);
+        drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
     }
 
     public void drawTextShadowed(String text, float x, float y, UiColor color, UiColor shadowColor,
                                   float scale, int vpWidth, int vpHeight) {
-        this.text.drawTextShadowed(text, x, y, color, shadowColor, scale, vpWidth, vpHeight);
+        // Décalage 1px/1px à l'échelle du texte — convention "drop shadow"
+        // standard (Minecraft vanilla utilise le même décalage relatif pour
+        // son propre texte HUD).
+        drawTextShadowed(UiFont.REGULAR, text, x, y, color, shadowColor, scale, scale, scale, vpWidth, vpHeight);
     }
 }

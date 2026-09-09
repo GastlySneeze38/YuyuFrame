@@ -1,379 +1,48 @@
-package com.yuyuframe.launcheragent.apigraphic.render;
+package com.yuyuframe.launcheragent.apigraphic.era.glsupport;
 
-import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
-import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText;
-import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.lang.reflect.Method;
-import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Rendu de texte (police bitmap SDF {@link UiFont}) — extrait de UiRenderer
- * (voir sa javadoc de classe pour l'architecture générale à 2 pipelines).
- * Shader SDF dédié (voir TEXT_FRAGMENT_SRC) : l'atlas encode une distance
- * signée au bord du glyphe dans son canal alpha, pas une couverture directe.
+ * Atlas de police → texture GPU. Extrait de {@code UiTextRenderer} le
+ * 2026-09-09, où il occupait la MOITIÉ du fichier (353 lignes sur 729) sans
+ * avoir quoi que ce soit à voir avec « dessiner du texte ».
+ *
+ * <h2>Pourquoi ici et pas dans une ère</h2>
+ *
+ * Ce bloc ne dépend d'AUCUNE des deux ères GL : il ne connaît que
+ * {@link GlBridge}, plus la résolution réflexive de l'API de texture du jeu
+ * ({@code NativeImage}/{@code TextureManager}). C'est du support GL partagé,
+ * comme {@code GlBridge} lui-même — d'où {@code era/glsupport/}.
+ *
+ * <h2>Deux chemins, un repli</h2>
+ *
+ * L'upload passe par {@code NativeImage}/{@code TextureManager} du jeu quand
+ * l'API est résolvable (le texture manager connaît alors notre atlas et le
+ * gère comme les siens), et retombe sur un {@code glTexImage2D} brut sinon.
+ * Ce repli n'est pas décoratif : il est le seul chemin quand la résolution
+ * réflexive échoue, et il a servi.
+ *
+ * <p>Le cache est par {@link UiFont} : une valeur {@code -1} mémorisée signifie
+ * « échec déjà constaté », pour ne pas réessayer l'upload à chaque frame.
  */
-public final class UiTextRenderer {
+public final class FontAtlasTextures {
 
-    private final UiRenderer owner;
     private final GlBridge gl;
 
-    public UiTextRenderer(UiRenderer owner, GlBridge gl) {
-        this.owner = owner;
+    public FontAtlasTextures(GlBridge gl) {
         this.gl = gl;
     }
 
-
-
-    // ── Texte (police bitmap UiFont) ──────────────────────────────────────────
-
-    // ── Shader de texte SDF (distance field) — voir UiFont pour le pourquoi :
-    // l'alpha de l'atlas encode une distance signée au bord du glyphe, pas
-    // une couverture directe. dFdx/dFdy/fwidth sont cœur GLSL 1.10+ pour un
-    // fragment shader (aucune extension à déclarer), donc dispo aussi bien en
-    // GL2.1 compat (1.8.9/LWJGL2) qu'en GL3.2+ compat (1.21+/LWJGL3).
-    /** Réutilisé par {@link UiPrimitiveRenderer} pour le vertex shader legacy de l'icône générique (voir ensureIconShaderInit). */
-    static final String TEXT_VERTEX_SRC =
-        "void main() {\n" +
-        "    gl_Position = ftransform();\n" +
-        "    gl_FrontColor = gl_Color;\n" +
-        "    gl_TexCoord[0] = gl_MultiTexCoord0;\n" +
-        "}\n";
-
-    // BIAS : sans lui, les traits fins (barres de "i"/"l"/"j") disparaissent
-    // presque entièrement dans le texte le plus petit de l'UI (descriptions,
-    // ~8px de haut affiché) — leur trait est alors plus étroit que la zone de
-    // transition du champ de distance elle-même, donc quasiment aucun texel
-    // n'atteint franchement "dedans" (dist > 0.5). Décaler la distance vers
-    // "dedans" avant le seuillage épaissit légèrement TOUT le texte (effet
-    // "gras" standard en rendu SDF) pour que ces traits fins restent visibles,
-    // au prix d'un contour à peine plus épais partout ailleurs — imperceptible
-    // sur le texte de taille normale/grande.
-    private static final String TEXT_FRAGMENT_SRC =
-        "uniform sampler2D u_Tex;\n" +
-        "const float BIAS = 0.06;\n" +
-        "void main() {\n" +
-        "    float dist = texture2D(u_Tex, gl_TexCoord[0].xy).a + BIAS;\n" +
-        "    float w = fwidth(dist);\n" +
-        "    float alpha = smoothstep(0.5 - w, 0.5 + w, dist);\n" +
-        "    gl_FragColor = vec4(gl_Color.rgb, gl_Color.a * alpha);\n" +
-        "}\n";
-
-    private int textProgram = -1;
-    private int uTex = -1;
-    private boolean textInitFailed = false;
-
-    private static final String TEXT_FRAGMENT_SRC_MODERN =
-        "#version 150\n" +
-        "uniform sampler2D u_Tex;\n" +
-        "uniform vec4 uColor;\n" +
-        "in vec2 vTexCoord;\n" +
-        "out vec4 fragColor;\n" +
-        "const float BIAS = 0.06;\n" +
-        "void main() {\n" +
-        "    float dist = texture(u_Tex, vTexCoord).a + BIAS;\n" +
-        "    float w = fwidth(dist);\n" +
-        "    float alpha = smoothstep(0.5 - w, 0.5 + w, dist);\n" +
-        "    fragColor = vec4(uColor.rgb, uColor.a * alpha);\n" +
-        "}\n";
-
-    private int textProgramModern = -1;
-    private int uTexModern = -1, uColorTextModern = -1, uProjectionTextModern = -1;
-    private boolean textInitFailedModern = false;
-
     private final Map<UiFont, Integer> fontTextures = new HashMap<>();
 
-    private void ensureTextShaderInit() {
-        if (textProgram != -1 || textInitFailed) return;
-        try {
-            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            gl.glShaderSource(vsh, TEXT_VERTEX_SRC);
-            gl.glCompileShader(vsh);
-
-            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            gl.glShaderSource(fsh, TEXT_FRAGMENT_SRC);
-            gl.glCompileShader(fsh);
-
-            textProgram = gl.glCreateProgram();
-            gl.glAttachShader(textProgram, vsh);
-            gl.glAttachShader(textProgram, fsh);
-            gl.glLinkProgram(textProgram);
-
-            uTex = gl.glGetUniformLocation(textProgram, "u_Tex");
-
-            LauncherLog.ui(1, "[UiRenderer] shader texte (SDF) compilé, program=" + textProgram + " uTex=" + uTex);
-        } catch (Throwable t) {
-            textInitFailed = true;
-            LauncherLog.err("[UiRenderer] échec compilation shader texte SDF — texte non affiché : " + t);
-        }
-    }
-
-    private void ensureTextShaderInitModern() {
-        if (textProgramModern != -1 || textInitFailedModern) return;
-        try {
-            textProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, TEXT_FRAGMENT_SRC_MODERN);
-            uTexModern = gl.glGetUniformLocation(textProgramModern, "u_Tex");
-            uColorTextModern = gl.glGetUniformLocation(textProgramModern, "uColor");
-            uProjectionTextModern = gl.glGetUniformLocation(textProgramModern, "uProjection");
-            LauncherLog.ui(1, "[UiRenderer] shader texte moderne (SDF) compilé, program=" + textProgramModern);
-        } catch (Throwable t) {
-            textInitFailedModern = true;
-            LauncherLog.err("[UiRenderer] échec compilation shader texte SDF moderne — texte non affiché : " + t);
-        }
-    }
-
-    public float textWidth(String text, float scale) { return UiFont.REGULAR.textWidth(text, scale); }
-
-    public float textWidth(UiFont font, String text, float scale) { return font.textWidth(text, scale); }
-
-    /**
-     * Tronque {@code text} (avec "...") pour tenir dans {@code maxWidth}
-     * pixels à l'échelle donnée — sans effet (retourne {@code text} tel
-     * quel) tant qu'il tient déjà dans cette largeur, donc directement
-     * applicable partout SANS condition sur le mode d'échelle : un titre/
-     * sous-titre ne déborde alors que quand il n'y a réellement plus la
-     * place (ex: cartes du menu principal en "Taille de l'interface" =
-     * Grande, voir UiMainMenuScreen.ModCard), jamais de retour à la ligne.
-     * Déplacée ici depuis ModrinthContentScreen (où elle vivait à l'origine,
-     * spécifique à cet écran) — devenue un besoin partagé, pas un utilitaire
-     * propre à Modrinth.
-     */
-    public String truncate(String text, float scale, float maxWidth) {
-        if (text == null) return "";
-        if (maxWidth <= 0 || textWidth(text, scale) <= maxWidth) return text;
-        String ellipsis = "...";
-        int len = text.length();
-        while (len > 0 && textWidth(text.substring(0, len) + ellipsis, scale) > maxWidth) len--;
-        return len <= 0 ? ellipsis : text.substring(0, len) + ellipsis;
-    }
-
-    public void drawText(String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
-        drawText(UiFont.REGULAR, text, x, y, color, scale, vpWidth, vpHeight);
-    }
-
-    /**
-     * Dessine {@code text} avec la ligne de base à {@code y} (espace pixels
-     * framebuffer, origine bas-gauche — comme drawRoundedRect). Shader SDF
-     * dédié (voir TEXT_FRAGMENT_SRC/UiFont) : l'atlas encode une distance
-     * signée au bord du glyphe, pas une couverture directe — un simple
-     * GL_MODULATE fixe ne saurait pas l'interpréter (donnerait un halo flou
-     * au lieu d'un bord net), d'où ce programme séparé de celui de
-     * drawRoundedRect.
-     */
-    public void drawText(UiFont font, String text, float x, float y, UiColor color, float scale,
-                          int vpWidth, int vpHeight) {
-        if (text == null || text.isEmpty()) return;
-        if (owner.isModern()) {
-            drawTextModern(font, text, x, y, color, scale, vpWidth, vpHeight);
-            return;
-        }
-        drawTextLegacy(font, text, x, y, color, scale, vpWidth, vpHeight);
-    }
-
-    /**
-     * Variante avec ombre portée — capacité absente du moteur jusqu'ici
-     * (voir audit runtime/ui/ : {@link #drawText} n'a aucun paramètre
-     * shadow, aucun site n'appelait drawText deux fois avec un offset).
-     * Composition pure sur {@link #drawText} (passe ombre décalée PUIS
-     * passe principale) : aucune modification du shader SDF nécessaire,
-     * fonctionne donc identiquement sur les 3 pipelines, era E Blaze3D
-     * inclus (contrairement à drawGlow/drawSkeletonShimmer, qui eux
-     * dépendent de {@link UiPrimitiveRenderer#drawFx}).
-     */
-    public void drawTextShadowed(UiFont font, String text, float x, float y, UiColor color, UiColor shadowColor,
-                                  float shadowOffsetX, float shadowOffsetY, float scale, int vpWidth, int vpHeight) {
-        if (text == null || text.isEmpty()) return;
-        drawText(font, text, x + shadowOffsetX, y + shadowOffsetY, shadowColor, scale, vpWidth, vpHeight);
-        drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
-    }
-
-    public void drawTextShadowed(String text, float x, float y, UiColor color, UiColor shadowColor,
-                                  float scale, int vpWidth, int vpHeight) {
-        // Décalage 1px/1px à l'échelle du texte — convention "drop shadow"
-        // standard (Minecraft vanilla utilise le même décalage relatif pour
-        // son propre texte HUD).
-        drawTextShadowed(UiFont.REGULAR, text, x, y, color, shadowColor, scale, scale, scale, vpWidth, vpHeight);
-    }
-
-    private void drawTextModern(UiFont font, String text, float x, float y, UiColor color, float scale,
-                                 int vpWidth, int vpHeight) {
-        // Era E (Blaze3D 1.21.6+) : passe EXCLUSIVEMENT par le vrai pipeline du
-        // moteur (RenderPipelines.GUI_TEXT via GpuDevice/RenderPass, voir
-        // Blaze3DText) — jamais de repli sur le pipeline SDF ci-dessous sur
-        // ces brackets, même si Blaze3DText échoue : le SDF y est corrompu
-        // de façon non-déterministe (confirmé sur toute la session, voir
-        // historique) — un texte absent (échec silencieux, loggé côté
-        // Blaze3DText) vaut mieux qu'un texte parfois illisible. Sur les
-        // brackets antérieurs (1.8.9→1.21.4), Blaze3DCore.isAvailable() est
-        // {@code false} (classes Blaze3D absentes) — le pipeline SDF
-        // ci-dessous reste alors le SEUL chemin, INCHANGÉ, exactement comme
-        // avant cette era E.
-        if (Blaze3DCore.isAvailable()) {
-            // queueDraw (pas drawText direct) : voir Blaze3DText pour le
-            // pourquoi (rendu différé d'une frame, nécessaire pour que le
-            // texte atterrisse dans la texture qui sera présentée).
-            Blaze3DText.queueDraw(font, text, x, y, color, scale, vpWidth, vpHeight);
-            return;
-        }
-
-        int texId = ensureFontTexture(font);
-        if (texId < 0) return;
-        ensureTextShaderInitModern();
-        if (textInitFailedModern) return;
-        try {
-            // Voir drawEdgeVignetteModern : GL_TEXTURE_2D en tant que CAPACITÉ
-            // (glEnable/glDisable) retiré — GL_INVALID_ENUM en Core Profile.
-            // glBindTexture(GL_TEXTURE_2D, ...) juste en dessous reste lui
-            // parfaitement valide : c'est une CIBLE de bind, pas une capacité
-            // fixed-function, ces deux usages du même enum sont indépendants.
-            gl.glDisable(0x0B71); // GL_DEPTH_TEST
-            gl.glDisable(0x0B44); // GL_CULL_FACE
-            // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
-            // UiScrollContainer, javadoc de classe) : défaisait le clip actif
-            // d'un scroll container pour CHAQUE texte dessiné à l'intérieur.
-            gl.glEnable(0x0BE2);  // GL_BLEND
-            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
-            // BUG TROUVÉ (era E, 1.21.11 — texte corrompu/glyphes illisibles,
-            // alors que les rects/couleurs unies restent parfaits) : notre
-            // hook de dessin tourne désormais APRÈS Framebuffer.blitToScreen()
-            // (voir GlobalUiPresentMixin), donc APRÈS TOUTE la composition de
-            // frame interne de Blaze3D — qui utilise plusieurs UNITÉS de
-            // texture actives (multi-texturing). glBindTexture() seul bind
-            // sur l'unité COURANTE, pas forcément l'unité 0 — si Blaze3D a
-            // laissé une unité différente active, notre atlas se bind au
-            // mauvais endroit pendant que le shader (uTexModern, fixé à
-            // l'unité 0 juste en dessous) lit une texture parasite laissée là
-            // par le rendu vanilla. Jamais un problème sur les brackets C/D
-            // (1.20.4/1.21.4), dont le hook tourne AVANT ce genre de
-            // composition multi-unité tardive.
-            gl.glActiveTexture(0x84C0); // GL_TEXTURE0
-            gl.glBindTexture(0x0DE1, texId);
-            gl.glUseProgram(textProgramModern);
-            gl.glUniform1i(uTexModern, 0);
-            gl.glUniform4f(uColorTextModern, color.r, color.g, color.b, color.a);
-            owner.uploadProjectionModern(uProjectionTextModern, vpWidth, vpHeight);
-
-            float cs = scale * UiFont.SIZE_CORRECTION;
-            float penX = Math.round(x);
-            float yTop = Math.round(y + font.ascent * cs);
-            float yBottom = Math.round(y - font.descent * cs);
-
-            // 6 sommets/glyphe (2 triangles, GL_TRIANGLES — pas de fan possible,
-            // chaque glyphe est un quad DISJOINT des autres, contrairement au
-            // rect/vignette qui n'ont besoin que d'UN seul quad).
-            FloatBuffer verts = owner.floatBuffer(text.length() * 6 * 4);
-            for (int i = 0; i < text.length(); i++) {
-                UiFont.Glyph g = font.glyph(text.charAt(i));
-                float gw = Math.round(g.width * cs);
-                float x0 = penX, x1 = penX + gw;
-                // v0=haut-gauche, v1=bas-gauche, v2=bas-droite, v3=haut-droite — même ordre que le mode immédiat legacy.
-                owner.putVertex(verts, x0, yTop, g.u0, g.v0);
-                owner.putVertex(verts, x0, yBottom, g.u0, g.v1);
-                owner.putVertex(verts, x1, yBottom, g.u1, g.v1);
-                owner.putVertex(verts, x0, yTop, g.u0, g.v0);
-                owner.putVertex(verts, x1, yBottom, g.u1, g.v1);
-                owner.putVertex(verts, x1, yTop, g.u1, g.v0);
-                penX += Math.round(g.advance * cs);
-            }
-            verts.flip();
-            owner.drawTrianglesModern(verts);
-        } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] drawTextModern: " + t);
-        } finally {
-            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
-            try { gl.glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
-        }
-    }
-
-    private void drawTextLegacy(UiFont font, String text, float x, float y, UiColor color, float scale,
-                          int vpWidth, int vpHeight) {
-        int texId = ensureFontTexture(font);
-        if (texId < 0) return;
-        ensureTextShaderInit();
-        if (textInitFailed) return; // shader cassé : rien à faire de l'alpha-distance brute, mieux vaut ne rien dessiner
-
-        // Legacy (1.8.9) — voir captureLegacyGlState()/drawEdgeVignetteLegacy.
-        GlBridge.LegacyGlState savedGlState = null;
-        boolean projPushed = false, modelPushed = false;
-        try {
-            savedGlState = gl.captureLegacyGlState();
-            gl.glEnable(0x0DE1);  // GL_TEXTURE_2D
-            gl.glDisable(0x0B71); // GL_DEPTH_TEST
-            gl.glDisable(0x0B44); // GL_CULL_FACE
-            gl.glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
-            // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
-            // UiScrollContainer, javadoc de classe) : défaisait le clip actif
-            // d'un scroll container pour CHAQUE texte dessiné à l'intérieur.
-            gl.glEnable(0x0BE2);  // GL_BLEND
-            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
-            gl.glBindTexture(0x0DE1, texId);
-            gl.glUseProgram(textProgram);
-            gl.glUniform1i(uTex, 0); // texture unit 0 (celle qu'on vient de bind)
-
-            gl.matrixMode(0x1701); // GL_PROJECTION
-            gl.pushMatrix();
-            projPushed = true;
-            gl.loadIdentity();
-            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            gl.matrixMode(0x1700); // GL_MODELVIEW
-            gl.pushMatrix();
-            modelPushed = true;
-            gl.loadIdentity();
-
-            gl.glColor4f(color.r, color.g, color.b, color.a);
-
-            // cs ("scale corrigé") compense UiFont.RASTER_PX (résolution de
-            // rasterisation, un curseur de QUALITÉ) pour que la taille
-            // affichée ne dépende que de "scale", calibré une fois pour
-            // toutes sur UiFont.REFERENCE_PX — voir UiFont pour le pourquoi.
-            float cs = scale * UiFont.SIZE_CORRECTION;
-
-            // Alignement pixel entier — LA vraie cause du flou observé (pas la
-            // résolution de l'atlas, déjà testée x8 sans aucun effet visible) :
-            // des coordonnées de quad en sous-pixel (ex: y=412.63) forcent le
-            // GPU à échantillonner la texture ENTRE deux texels, brouillant le
-            // bord des lettres même avec un filtrage parfait. Minecraft aligne
-            // son propre texte sur des pixels entiers pour cette raison. Chaque
-            // avance de plume est elle-même arrondie (pas juste la position de
-            // départ) pour que l'arrondi ne dérive pas caractère après caractère.
-            float penX = Math.round(x);
-            float yTop = Math.round(y + font.ascent * cs);
-            float yBottom = Math.round(y - font.descent * cs);
-            gl.glBegin(7); // GL_QUADS
-            for (int i = 0; i < text.length(); i++) {
-                UiFont.Glyph g = font.glyph(text.charAt(i));
-                float gw = Math.round(g.width * cs);
-                gl.glTexCoord2f(g.u0, g.v0); gl.glVertex2f(penX, yTop);
-                gl.glTexCoord2f(g.u0, g.v1); gl.glVertex2f(penX, yBottom);
-                gl.glTexCoord2f(g.u1, g.v1); gl.glVertex2f(penX + gw, yBottom);
-                gl.glTexCoord2f(g.u1, g.v0); gl.glVertex2f(penX + gw, yTop);
-                penX += Math.round(g.advance * cs);
-            }
-            gl.glEnd();
-        } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] drawText: " + t);
-        } finally {
-            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
-            try { gl.glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
-            try {
-                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
-            } catch (Throwable ignored) {}
-            try {
-                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
-            } catch (Throwable ignored) {}
-            gl.restoreLegacyGlState(savedGlState);
-        }
-    }
-
-    private int ensureFontTexture(UiFont font) {
+    public int ensureFontTexture(UiFont font) {
         Integer cached = fontTextures.get(font);
         if (cached != null) return cached;
 

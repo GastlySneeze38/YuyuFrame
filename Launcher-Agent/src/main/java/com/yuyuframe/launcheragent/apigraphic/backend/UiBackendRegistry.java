@@ -35,8 +35,8 @@ public final class UiBackendRegistry {
     private static String classFor(RenderEra era) {
         switch (era) {
             case BLAZE3D: return "com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBackend";
-            case GL2:     return null;   // à écrire au découpage de UiPrimitiveRenderer
-            case GL3:     return null;   // idem
+            case GL2:     return "com.yuyuframe.launcheragent.apigraphic.era.gl2.Gl2Backend";
+            case GL3:     return "com.yuyuframe.launcheragent.apigraphic.era.gl3.Gl3Backend";
             default:      return null;
         }
     }

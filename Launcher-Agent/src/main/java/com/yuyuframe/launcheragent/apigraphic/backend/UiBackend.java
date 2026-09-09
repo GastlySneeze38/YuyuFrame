@@ -1,6 +1,9 @@
 package com.yuyuframe.launcheragent.apigraphic.backend;
 
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 
 /**
  * Ce que toute ère doit savoir faire — le contrat que {@code era/} implémente
@@ -34,6 +37,27 @@ public interface UiBackend {
 
     /** Identifiant lisible, pour le log. */
     String id();
+
+    /**
+     * Fournit au backend ce qu'il ne peut pas se procurer seul — appelé UNE
+     * fois par {@code UiRenderer} juste après la résolution.
+     *
+     * <p>Les backends sont instanciés par réflexion (constructeur sans
+     * argument, voir {@code UiBackendRegistry}), donc ils ne peuvent pas
+     * recevoir la façade ni le pont GL par constructeur. Les ères GL en ont
+     * besoin ; l'ère Blaze3D, qui passe par des points d'entrée statiques,
+     * l'ignore — d'où un {@code default} vide plutôt qu'une méthode à
+     * implémenter partout.
+     */
+    default void attach(UiRenderer owner, GlBridge gl) {}
+
+    /**
+     * Texte, ligne de base à {@code y}.
+     *
+     * @return {@code true} si l'ère l'a pris en charge
+     */
+    boolean text(UiFont font, String content, float x, float y, UiColor color, float scale,
+                 int vpWidth, int vpHeight);
 
     /**
      * Rectangle à coins arrondis.
