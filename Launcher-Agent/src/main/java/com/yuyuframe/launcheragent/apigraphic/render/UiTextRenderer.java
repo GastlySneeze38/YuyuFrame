@@ -31,47 +31,7 @@ public final class UiTextRenderer {
         this.gl = gl;
     }
 
-    // ── Forwarders GL (voir GlBridge) — gardent les corps de méthode ci-dessous identiques à l'original ──
-    private void glDisable(int cap) throws Exception { gl.glDisable(cap); }
-    private void glEnable(int cap) throws Exception { gl.glEnable(cap); }
-    private void glBlendFunc(int sfactor, int dfactor) throws Exception { gl.glBlendFunc(sfactor, dfactor); }
-    private void glActiveTexture(int texture) throws Exception { gl.glActiveTexture(texture); }
-    private void glBindTexture(int target, int texture) throws Exception { gl.glBindTexture(target, texture); }
-    private void glUseProgram(int program) throws Exception { gl.glUseProgram(program); }
-    private void glUniform1i(int loc, int v) throws Exception { gl.glUniform1i(loc, v); }
-    private void glUniform4f(int loc, float a, float b, float c, float d) throws Exception { gl.glUniform4f(loc, a, b, c, d); }
-    private void matrixMode(int mode) throws Exception { gl.matrixMode(mode); }
-    private void pushMatrix() throws Exception { gl.pushMatrix(); }
-    private void popMatrix() throws Exception { gl.popMatrix(); }
-    private void loadIdentity() throws Exception { gl.loadIdentity(); }
-    private void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception { gl.glOrtho(left, right, bottom, top, near, far); }
-    private void glColor4f(float r, float g, float b, float a) throws Exception { gl.glColor4f(r, g, b, a); }
-    private void glBegin(int mode) throws Exception { gl.glBegin(mode); }
-    private void glTexCoord2f(float u, float v) throws Exception { gl.glTexCoord2f(u, v); }
-    private void glVertex2f(float x, float y) throws Exception { gl.glVertex2f(x, y); }
-    private void glEnd() throws Exception { gl.glEnd(); }
-    private int glGenTextures() throws Exception { return gl.glGenTextures(); }
-    private void glTexImage2D(int target, int level, int internalFormat, int width, int height, int border,
-                               int format, int type, java.nio.ByteBuffer pixels) throws Exception {
-        gl.glTexImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
-    }
-    private void glGenerateMipmap(int target) throws Exception { gl.glGenerateMipmap(target); }
-    private void glTexParameteri(int target, int pname, int param) throws Exception { gl.glTexParameteri(target, pname, param); }
-    private void glFinish() throws Exception { gl.glFinish(); }
-    private int glGetInteger(int pname) throws Exception { return gl.glGetInteger(pname); }
-    private int drainGlErrors() throws Exception { return gl.drainGlErrors(); }
-    private GlBridge.LegacyGlState captureLegacyGlState() throws Exception { return gl.captureLegacyGlState(); }
-    private void restoreLegacyGlState(GlBridge.LegacyGlState state) { gl.restoreLegacyGlState(state); }
-    private static void reachabilityFence(Object ref) { GlBridge.reachabilityFence(ref); }
 
-    // ── Forwarders vers les helpers partagés du pipeline MODERNE (voir UiRenderer) ──
-    private void ensureModernBuffersInit() { owner.ensureModernBuffersInit(); }
-    private FloatBuffer floatBuffer(int capacityFloats) { return owner.floatBuffer(capacityFloats); }
-    private void putVertex(FloatBuffer buf, float x, float y, float u, float v) { owner.putVertex(buf, x, y, u, v); }
-    private void drawTrianglesModern(FloatBuffer verts) { owner.drawTrianglesModern(verts); }
-    private void uploadProjectionModern(int uniformLoc, int vpWidth, int vpHeight) throws Exception { owner.uploadProjectionModern(uniformLoc, vpWidth, vpHeight); }
-    private int compileModernProgram(String vertexSrc, String fragmentSrc) throws Exception { return owner.compileModernProgram(vertexSrc, fragmentSrc); }
-    private int glGetUniformLocation(int program, String name) throws Exception { return gl.glGetUniformLocation(program, name); }
 
     // ── Texte (police bitmap UiFont) ──────────────────────────────────────────
 
@@ -147,7 +107,7 @@ public final class UiTextRenderer {
             gl.glAttachShader(textProgram, fsh);
             gl.glLinkProgram(textProgram);
 
-            uTex = glGetUniformLocation(textProgram, "u_Tex");
+            uTex = gl.glGetUniformLocation(textProgram, "u_Tex");
 
             LauncherLog.ui(1, "[UiRenderer] shader texte (SDF) compilé, program=" + textProgram + " uTex=" + uTex);
         } catch (Throwable t) {
@@ -159,10 +119,10 @@ public final class UiTextRenderer {
     private void ensureTextShaderInitModern() {
         if (textProgramModern != -1 || textInitFailedModern) return;
         try {
-            textProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, TEXT_FRAGMENT_SRC_MODERN);
-            uTexModern = glGetUniformLocation(textProgramModern, "u_Tex");
-            uColorTextModern = glGetUniformLocation(textProgramModern, "uColor");
-            uProjectionTextModern = glGetUniformLocation(textProgramModern, "uProjection");
+            textProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, TEXT_FRAGMENT_SRC_MODERN);
+            uTexModern = gl.glGetUniformLocation(textProgramModern, "u_Tex");
+            uColorTextModern = gl.glGetUniformLocation(textProgramModern, "uColor");
+            uProjectionTextModern = gl.glGetUniformLocation(textProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader texte moderne (SDF) compilé, program=" + textProgramModern);
         } catch (Throwable t) {
             textInitFailedModern = true;
@@ -274,13 +234,13 @@ public final class UiTextRenderer {
             // glBindTexture(GL_TEXTURE_2D, ...) juste en dessous reste lui
             // parfaitement valide : c'est une CIBLE de bind, pas une capacité
             // fixed-function, ces deux usages du même enum sont indépendants.
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
             // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
             // UiScrollContainer, javadoc de classe) : défaisait le clip actif
             // d'un scroll container pour CHAQUE texte dessiné à l'intérieur.
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             // BUG TROUVÉ (era E, 1.21.11 — texte corrompu/glyphes illisibles,
             // alors que les rects/couleurs unies restent parfaits) : notre
             // hook de dessin tourne désormais APRÈS Framebuffer.blitToScreen()
@@ -294,12 +254,12 @@ public final class UiTextRenderer {
             // par le rendu vanilla. Jamais un problème sur les brackets C/D
             // (1.20.4/1.21.4), dont le hook tourne AVANT ce genre de
             // composition multi-unité tardive.
-            glActiveTexture(0x84C0); // GL_TEXTURE0
-            glBindTexture(0x0DE1, texId);
-            glUseProgram(textProgramModern);
-            glUniform1i(uTexModern, 0);
-            glUniform4f(uColorTextModern, color.r, color.g, color.b, color.a);
-            uploadProjectionModern(uProjectionTextModern, vpWidth, vpHeight);
+            gl.glActiveTexture(0x84C0); // GL_TEXTURE0
+            gl.glBindTexture(0x0DE1, texId);
+            gl.glUseProgram(textProgramModern);
+            gl.glUniform1i(uTexModern, 0);
+            gl.glUniform4f(uColorTextModern, color.r, color.g, color.b, color.a);
+            owner.uploadProjectionModern(uProjectionTextModern, vpWidth, vpHeight);
 
             float cs = scale * UiFont.SIZE_CORRECTION;
             float penX = Math.round(x);
@@ -309,27 +269,27 @@ public final class UiTextRenderer {
             // 6 sommets/glyphe (2 triangles, GL_TRIANGLES — pas de fan possible,
             // chaque glyphe est un quad DISJOINT des autres, contrairement au
             // rect/vignette qui n'ont besoin que d'UN seul quad).
-            FloatBuffer verts = floatBuffer(text.length() * 6 * 4);
+            FloatBuffer verts = owner.floatBuffer(text.length() * 6 * 4);
             for (int i = 0; i < text.length(); i++) {
                 UiFont.Glyph g = font.glyph(text.charAt(i));
                 float gw = Math.round(g.width * cs);
                 float x0 = penX, x1 = penX + gw;
                 // v0=haut-gauche, v1=bas-gauche, v2=bas-droite, v3=haut-droite — même ordre que le mode immédiat legacy.
-                putVertex(verts, x0, yTop, g.u0, g.v0);
-                putVertex(verts, x0, yBottom, g.u0, g.v1);
-                putVertex(verts, x1, yBottom, g.u1, g.v1);
-                putVertex(verts, x0, yTop, g.u0, g.v0);
-                putVertex(verts, x1, yBottom, g.u1, g.v1);
-                putVertex(verts, x1, yTop, g.u1, g.v0);
+                owner.putVertex(verts, x0, yTop, g.u0, g.v0);
+                owner.putVertex(verts, x0, yBottom, g.u0, g.v1);
+                owner.putVertex(verts, x1, yBottom, g.u1, g.v1);
+                owner.putVertex(verts, x0, yTop, g.u0, g.v0);
+                owner.putVertex(verts, x1, yBottom, g.u1, g.v1);
+                owner.putVertex(verts, x1, yTop, g.u1, g.v0);
                 penX += Math.round(g.advance * cs);
             }
             verts.flip();
-            drawTrianglesModern(verts);
+            owner.drawTrianglesModern(verts);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawTextModern: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
-            try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
         }
     }
 
@@ -344,31 +304,31 @@ public final class UiTextRenderer {
         GlBridge.LegacyGlState savedGlState = null;
         boolean projPushed = false, modelPushed = false;
         try {
-            savedGlState = captureLegacyGlState();
-            glEnable(0x0DE1);  // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
+            savedGlState = gl.captureLegacyGlState();
+            gl.glEnable(0x0DE1);  // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
             // PAS de glDisable(GL_SCISSOR_TEST) — BUG TROUVÉ (voir
             // UiScrollContainer, javadoc de classe) : défaisait le clip actif
             // d'un scroll container pour CHAQUE texte dessiné à l'intérieur.
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
-            glBindTexture(0x0DE1, texId);
-            glUseProgram(textProgram);
-            glUniform1i(uTex, 0); // texture unit 0 (celle qu'on vient de bind)
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glBindTexture(0x0DE1, texId);
+            gl.glUseProgram(textProgram);
+            gl.glUniform1i(uTex, 0); // texture unit 0 (celle qu'on vient de bind)
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
-            glColor4f(color.r, color.g, color.b, color.a);
+            gl.glColor4f(color.r, color.g, color.b, color.a);
 
             // cs ("scale corrigé") compense UiFont.RASTER_PX (résolution de
             // rasterisation, un curseur de QUALITÉ) pour que la taille
@@ -387,29 +347,29 @@ public final class UiTextRenderer {
             float penX = Math.round(x);
             float yTop = Math.round(y + font.ascent * cs);
             float yBottom = Math.round(y - font.descent * cs);
-            glBegin(7); // GL_QUADS
+            gl.glBegin(7); // GL_QUADS
             for (int i = 0; i < text.length(); i++) {
                 UiFont.Glyph g = font.glyph(text.charAt(i));
                 float gw = Math.round(g.width * cs);
-                glTexCoord2f(g.u0, g.v0); glVertex2f(penX, yTop);
-                glTexCoord2f(g.u0, g.v1); glVertex2f(penX, yBottom);
-                glTexCoord2f(g.u1, g.v1); glVertex2f(penX + gw, yBottom);
-                glTexCoord2f(g.u1, g.v0); glVertex2f(penX + gw, yTop);
+                gl.glTexCoord2f(g.u0, g.v0); gl.glVertex2f(penX, yTop);
+                gl.glTexCoord2f(g.u0, g.v1); gl.glVertex2f(penX, yBottom);
+                gl.glTexCoord2f(g.u1, g.v1); gl.glVertex2f(penX + gw, yBottom);
+                gl.glTexCoord2f(g.u1, g.v0); gl.glVertex2f(penX + gw, yTop);
                 penX += Math.round(g.advance * cs);
             }
-            glEnd();
+            gl.glEnd();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawText: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
-            try { glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {}
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -467,7 +427,7 @@ public final class UiTextRenderer {
     private void syncAfterFontUpload(int texId) {
         if (texId < 0) return;
         try {
-            glFinish();
+            gl.glFinish();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] syncAfterFontUpload (texId=" + texId + "): " + t);
         }
@@ -651,11 +611,11 @@ public final class UiTextRenderer {
             // ces quelques réglages, qui eux restent des appels GL directs
             // mais bien plus anodins qu'une création de texture complète.
             textureBindTextureMethod.invoke(texture);
-            glGenerateMipmap(0x0DE1);
-            glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
-            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
-            glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
-            glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+            gl.glGenerateMipmap(0x0DE1);
+            gl.glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
+            gl.glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+            gl.glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+            gl.glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
 
             Object textureManager = mcGetTextureManagerMethod.invoke(McReflect.minecraftClient());
             Object id = identifierOfMethod.invoke(null, "yuyuframe", "font_" + (fontTextureCounter++));
@@ -699,22 +659,22 @@ public final class UiTextRenderer {
         // seul appel de log ici, aucun risque de perf, même motif que DIAG7
         // (voir historique de session) mais volontairement gardé cette fois
         // (pas par frame).
-        int activeUnitBefore = glGetInteger(0x84E0); // GL_ACTIVE_TEXTURE
-        int boundTexBefore = glGetInteger(0x8069);   // GL_TEXTURE_BINDING_2D
-        int errBefore = drainGlErrors();
+        int activeUnitBefore = gl.glGetInteger(0x84E0); // GL_ACTIVE_TEXTURE
+        int boundTexBefore = gl.glGetInteger(0x8069);   // GL_TEXTURE_BINDING_2D
+        int errBefore = gl.drainGlErrors();
 
-        int texId = glGenTextures();
-        glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
-        int errAfterBind = drainGlErrors();
-        glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
-        int errAfterTexImage = drainGlErrors();
-        glGenerateMipmap(0x0DE1);
-        int errAfterMipmap = drainGlErrors();
-        glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
-        glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
-        glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
-        glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
-        int errAfterParams = drainGlErrors();
+        int texId = gl.glGenTextures();
+        gl.glBindTexture(0x0DE1, texId); // GL_TEXTURE_2D
+        int errAfterBind = gl.drainGlErrors();
+        gl.glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+        int errAfterTexImage = gl.drainGlErrors();
+        gl.glGenerateMipmap(0x0DE1);
+        int errAfterMipmap = gl.drainGlErrors();
+        gl.glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
+        gl.glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+        gl.glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+        gl.glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+        int errAfterParams = gl.drainGlErrors();
 
         // BUG TROUVÉ (era E, texte REGULAR corrompu de façon non-déterministe
         // — confirmé toujours présent MÊME en vanilla sans aucun mod, donc
@@ -744,8 +704,8 @@ public final class UiTextRenderer {
         // reachabilityFence juste après garantit que la JVM n'a PAS pu
         // libérer sa mémoire native PENDANT cette attente, quelle que soit
         // l'agressivité du GC.
-        glFinish();
-        reachabilityFence(buf);
+        gl.glFinish();
+        GlBridge.reachabilityFence(buf);
 
         // BUG TROUVÉ (era E) : le diagnostic glGetTexImage tenté ici en v362
         // a provoqué un CRASH JVM natif (EXCEPTION_ACCESS_VIOLATION, écriture
@@ -756,7 +716,7 @@ public final class UiTextRenderer {
         // pilote (ex: glGetTexLevelParameteriv AVANT de dimensionner le
         // buffer de lecture, jamais en supposant que w/h côté Java
         // correspondent forcément à ce que le pilote a alloué).
-        glBindTexture(0x0DE1, 0);
+        gl.glBindTexture(0x0DE1, 0);
 
         LauncherLog.info("[LauncherAgent] DIAG-FONTCORRUPT: texId=" + texId + " atlasW=" + w + " atlasH=" + h
             + " activeUnitBefore=0x" + Integer.toHexString(activeUnitBefore)

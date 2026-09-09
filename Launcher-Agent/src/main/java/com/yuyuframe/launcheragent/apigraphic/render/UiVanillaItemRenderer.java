@@ -28,24 +28,6 @@ public final class UiVanillaItemRenderer {
         this.gl = gl;
     }
 
-    // ── Forwarders GL (voir GlBridge) — gardent les corps de méthode ci-dessous identiques à l'original ──
-    private void glUseProgram(int program) throws Exception { gl.glUseProgram(program); }
-    private void glEnable(int cap) throws Exception { gl.glEnable(cap); }
-    private void glClear(int mask) throws Exception { gl.glClear(mask); }
-    private void glDisable(int cap) throws Exception { gl.glDisable(cap); }
-    private void glBlendFunc(int sfactor, int dfactor) throws Exception { gl.glBlendFunc(sfactor, dfactor); }
-    private void glActiveTexture(int texture) throws Exception { gl.glActiveTexture(texture); }
-    private void glBindTexture(int target, int texture) throws Exception { gl.glBindTexture(target, texture); }
-    private void matrixMode(int mode) throws Exception { gl.matrixMode(mode); }
-    private void pushMatrix() throws Exception { gl.pushMatrix(); }
-    private void popMatrix() throws Exception { gl.popMatrix(); }
-    private void loadIdentity() throws Exception { gl.loadIdentity(); }
-    private void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception { gl.glOrtho(left, right, bottom, top, near, far); }
-    private void glTranslatef(float x, float y, float z) throws Exception { gl.glTranslatef(x, y, z); }
-    private void glScalef(float x, float y, float z) throws Exception { gl.glScalef(x, y, z); }
-    private int drainGlErrors() throws Exception { return gl.drainGlErrors(); }
-    private GlBridge.LegacyGlState captureLegacyGlState() throws Exception { return gl.captureLegacyGlState(); }
-    private void restoreLegacyGlState(GlBridge.LegacyGlState state) { gl.restoreLegacyGlState(state); }
 
     // ── Icône d'objet vanilla (ItemRenderer, immediate-mode/fixed-function) ──
 
@@ -363,7 +345,7 @@ public final class UiVanillaItemRenderer {
         int diagCall = ++DIAG_CALLS;
         boolean diag = diagCall <= DIAG_CALL_LIMIT;
         if (diag) {
-            try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " stack=" + itemStack + " entryErr=" + drainGlErrors()); } catch (Throwable ignored) {}
+            try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " stack=" + itemStack + " entryErr=" + gl.drainGlErrors()); } catch (Throwable ignored) {}
         }
         try {
             Object mc = McReflect.minecraftClient();
@@ -409,11 +391,11 @@ public final class UiVanillaItemRenderer {
             // notre shader SDF (qui les lit comme un champ de distance signée
             // dans le canal alpha) : exactement le genre de rendu "cassé"
             // observé (formes fragmentées au lieu de la vraie icône).
-            glUseProgram(0);
+            gl.glUseProgram(0);
             // Legacy (1.8.9) — voir captureLegacyGlState()/drawEdgeVignetteLegacy.
-            savedGlState = captureLegacyGlState();
-            glEnable(0x0DE1); // GL_TEXTURE_2D
-            glEnable(0x0B71); // GL_DEPTH_TEST — vanilla s'appuie dessus pour l'ordre icône/overlay
+            savedGlState = gl.captureLegacyGlState();
+            gl.glEnable(0x0DE1); // GL_TEXTURE_2D
+            gl.glEnable(0x0B71); // GL_DEPTH_TEST — vanilla s'appuie dessus pour l'ordre icône/overlay
             // Sans ce clear, le depth buffer garde les valeurs laissées par la
             // scène 3D derrière le HUD (ou par l'icône précédente dessinée
             // cette même frame, voir ArmorDurabilityModule qui appelle cette
@@ -421,32 +403,32 @@ public final class UiVanillaItemRenderer {
             // appel ultérieur pouvait alors échouer au hasard contre ce
             // résidu, rendant certaines icônes invisibles alors que le stack
             // n'était pas null ("seule la première icône s'affiche").
-            glClear(0x00000100); // GL_DEPTH_BUFFER_BIT
-            glDisable(0x0B44); // GL_CULL_FACE
+            gl.glClear(0x00000100); // GL_DEPTH_BUFFER_BIT
+            gl.glDisable(0x0B44); // GL_CULL_FACE
             // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
             // (javadoc de classe).
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
             // Unité de texture 0 explicitement — l'overlay (glint d'enchant,
             // barre de durabilité) d'un appel précédent peut avoir laissé une
             // unité de multitexturing non-0 active, faisant échouer le bind
             // de texture du prochain appel (texture "blanche"/non trouvée).
-            try { glActiveTexture(0x84C0); } catch (Throwable ignored) {} // GL_TEXTURE0
+            try { gl.glActiveTexture(0x84C0); } catch (Throwable ignored) {} // GL_TEXTURE0
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
             // Convention GUI vanilla : origine HAUT-gauche, Y vers le bas (INVERSE de la nôtre) — voir javadoc.
-            glOrtho(0, vpWidth, vpHeight, 0, 1000, 3000);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.glOrtho(0, vpWidth, vpHeight, 0, 1000, 3000);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
-            glTranslatef(0f, 0f, -2000f);
+            gl.loadIdentity();
+            gl.glTranslatef(0f, 0f, -2000f);
 
             float zoom = size / 16f;
-            glScalef(zoom, zoom, 1f);
+            gl.glScalef(zoom, zoom, 1f);
 
             // Position calculée en pixels PHYSIQUES (convention vanilla, coin
             // haut-gauche), puis divisée par zoom car glScalef s'applique à
@@ -461,24 +443,24 @@ public final class UiVanillaItemRenderer {
             // Posée/déposée à CHAQUE appel (pas seulement au début/fin du lot
             // de 5 icônes) — exactement le pattern PvP-Mod/ArmorDurabilityHud.
             if (enableLighting != null) { try { enableLighting.invoke(null); } catch (Throwable ignored) {} }
-            if (diag) { try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " preRenderErr=" + drainGlErrors()); } catch (Throwable ignored) {} }
+            if (diag) { try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " preRenderErr=" + gl.drainGlErrors()); } catch (Throwable ignored) {} }
             try {
                 render.invoke(itemRenderer, itemStack, (int) vanillaX, (int) vanillaY);
             } finally {
                 if (disableLighting != null) { try { disableLighting.invoke(null); } catch (Throwable ignored) {} }
             }
-            if (diag) { try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " postRenderErr=" + drainGlErrors()); } catch (Throwable ignored) {} }
+            if (diag) { try { LauncherLog.info("[UiRenderer] icon#" + diagCall + " postRenderErr=" + gl.drainGlErrors()); } catch (Throwable ignored) {} }
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawVanillaItemIcon: " + t);
         } finally {
-            try { glActiveTexture(0x84C0); glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {} // GL_TEXTURE0, unbind
+            try { gl.glActiveTexture(0x84C0); gl.glBindTexture(0x0DE1, 0); } catch (Throwable ignored) {} // GL_TEXTURE0, unbind
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 

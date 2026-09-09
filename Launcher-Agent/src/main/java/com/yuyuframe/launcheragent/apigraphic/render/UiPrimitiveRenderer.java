@@ -66,58 +66,7 @@ public final class UiPrimitiveRenderer {
         }
     }
 
-    // ── Forwarders GL (voir GlBridge) — gardent les corps de méthode ci-dessous identiques à l'original ──
-    private int glCreateShader(int type) throws Exception { return gl.glCreateShader(type); }
-    private void glShaderSource(int shader, String src) throws Exception { gl.glShaderSource(shader, src); }
-    private void glCompileShader(int shader) throws Exception { gl.glCompileShader(shader); }
-    private int glCreateProgram() throws Exception { return gl.glCreateProgram(); }
-    private void glAttachShader(int program, int shader) throws Exception { gl.glAttachShader(program, shader); }
-    private void glLinkProgram(int program) throws Exception { gl.glLinkProgram(program); }
-    private int glGetUniformLocation(int program, String name) throws Exception { return gl.glGetUniformLocation(program, name); }
-    private void glUseProgram(int program) throws Exception { gl.glUseProgram(program); }
-    private void glUniform1f(int loc, float v) throws Exception { gl.glUniform1f(loc, v); }
-    private void glUniform1i(int loc, int v) throws Exception { gl.glUniform1i(loc, v); }
-    private void glUniform2f(int loc, float a, float b) throws Exception { gl.glUniform2f(loc, a, b); }
-    private void glUniform4f(int loc, float a, float b, float c, float d) throws Exception { gl.glUniform4f(loc, a, b, c, d); }
-    private void glColor4f(float r, float g, float b, float a) throws Exception { gl.glColor4f(r, g, b, a); }
-    private void glBegin(int mode) throws Exception { gl.glBegin(mode); }
-    private void glVertex2f(float x, float y) throws Exception { gl.glVertex2f(x, y); }
-    private void glEnd() throws Exception { gl.glEnd(); }
-    private void glEnable(int cap) throws Exception { gl.glEnable(cap); }
-    private void glDisable(int cap) throws Exception { gl.glDisable(cap); }
-    private void glClear(int mask) throws Exception { gl.glClear(mask); }
-    private void glStencilFunc(int func, int ref, int mask) throws Exception { gl.glStencilFunc(func, ref, mask); }
-    private void glStencilOp(int sfail, int dpfail, int dppass) throws Exception { gl.glStencilOp(sfail, dpfail, dppass); }
-    private void glStencilMask(int mask) throws Exception { gl.glStencilMask(mask); }
-    private void glColorMask(boolean r, boolean g, boolean b, boolean a) throws Exception { gl.glColorMask(r, g, b, a); }
-    private void glBlendFunc(int sfactor, int dfactor) throws Exception { gl.glBlendFunc(sfactor, dfactor); }
-    private void glActiveTexture(int texture) throws Exception { gl.glActiveTexture(texture); }
-    private void glBindTexture(int target, int texture) throws Exception { gl.glBindTexture(target, texture); }
-    private void glTexCoord2f(float u, float v) throws Exception { gl.glTexCoord2f(u, v); }
-    private void glTexParameteri(int target, int pname, int param) throws Exception { gl.glTexParameteri(target, pname, param); }
-    private void glTexImage2D(int target, int level, int internalFormat, int width, int height, int border,
-                               int format, int type, java.nio.ByteBuffer pixels) throws Exception {
-        gl.glTexImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
-    }
-    private int glGenTextures() throws Exception { return gl.glGenTextures(); }
-    private void glFinish() throws Exception { gl.glFinish(); }
-    private void matrixMode(int mode) throws Exception { gl.matrixMode(mode); }
-    private void pushMatrix() throws Exception { gl.pushMatrix(); }
-    private void popMatrix() throws Exception { gl.popMatrix(); }
-    private void loadIdentity() throws Exception { gl.loadIdentity(); }
-    private void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception { gl.glOrtho(left, right, bottom, top, near, far); }
-    private GlBridge.LegacyGlState captureLegacyGlState() throws Exception { return gl.captureLegacyGlState(); }
-    private void restoreLegacyGlState(GlBridge.LegacyGlState state) { gl.restoreLegacyGlState(state); }
-    private static void reachabilityFence(Object ref) { GlBridge.reachabilityFence(ref); }
 
-    // ── Forwarders vers les helpers partagés du pipeline MODERNE (voir UiRenderer) ──
-    private int compileModernProgram(String vertexSrc, String fragmentSrc) throws Exception { return owner.compileModernProgram(vertexSrc, fragmentSrc); }
-    private void ensureModernBuffersInit() { owner.ensureModernBuffersInit(); }
-    private FloatBuffer floatBuffer(int capacityFloats) { return owner.floatBuffer(capacityFloats); }
-    private void putVertex(FloatBuffer buf, float x, float y, float u, float v) { owner.putVertex(buf, x, y, u, v); }
-    private void drawQuadModern(float x1, float y1, float x2, float y2) { owner.drawQuadModern(x1, y1, x2, y2); }
-    private void uploadAndDraw(FloatBuffer verts, int glMode, int vertexCount) throws Exception { owner.uploadAndDraw(verts, glMode, vertexCount); }
-    private void uploadProjectionModern(int uniformLoc, int vpWidth, int vpHeight) throws Exception { owner.uploadProjectionModern(uniformLoc, vpWidth, vpHeight); }
 
     private static final String VERTEX_SRC =
         "void main() {\n" +
@@ -620,21 +569,21 @@ public final class UiPrimitiveRenderer {
     private void ensureRectShaderInit() {
         if (rectProgram != -1 || rectInitFailed) return;
         try {
-            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            glShaderSource(vsh, VERTEX_SRC);
-            glCompileShader(vsh);
+            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            gl.glShaderSource(vsh, VERTEX_SRC);
+            gl.glCompileShader(vsh);
 
-            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            glShaderSource(fsh, FRAGMENT_SRC);
-            glCompileShader(fsh);
+            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            gl.glShaderSource(fsh, FRAGMENT_SRC);
+            gl.glCompileShader(fsh);
 
-            rectProgram = glCreateProgram();
-            glAttachShader(rectProgram, vsh);
-            glAttachShader(rectProgram, fsh);
-            glLinkProgram(rectProgram);
+            rectProgram = gl.glCreateProgram();
+            gl.glAttachShader(rectProgram, vsh);
+            gl.glAttachShader(rectProgram, fsh);
+            gl.glLinkProgram(rectProgram);
 
-            uRect = glGetUniformLocation(rectProgram, "u_Rect");
-            uRadius = glGetUniformLocation(rectProgram, "u_Radius");
+            uRect = gl.glGetUniformLocation(rectProgram, "u_Rect");
+            uRadius = gl.glGetUniformLocation(rectProgram, "u_Radius");
 
             LauncherLog.ui(1, "[UiRenderer] shader rect compilé, program=" + rectProgram
                 + " uRect=" + uRect + " uRadius=" + uRadius);
@@ -647,11 +596,11 @@ public final class UiPrimitiveRenderer {
     private void ensureRectShaderInitModern() {
         if (rectProgramModern != -1 || rectInitFailedModern) return;
         try {
-            rectProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, FRAGMENT_SRC_MODERN);
-            uRectModern = glGetUniformLocation(rectProgramModern, "u_Rect");
-            uRadiusModern = glGetUniformLocation(rectProgramModern, "u_Radius");
-            uColorRectModern = glGetUniformLocation(rectProgramModern, "uColor");
-            uProjectionRectModern = glGetUniformLocation(rectProgramModern, "uProjection");
+            rectProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, FRAGMENT_SRC_MODERN);
+            uRectModern = gl.glGetUniformLocation(rectProgramModern, "u_Rect");
+            uRadiusModern = gl.glGetUniformLocation(rectProgramModern, "u_Radius");
+            uColorRectModern = gl.glGetUniformLocation(rectProgramModern, "uColor");
+            uProjectionRectModern = gl.glGetUniformLocation(rectProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader rect (moderne) compilé, program=" + rectProgramModern
                 + " uRect=" + uRectModern + " uRadius=" + uRadiusModern
                 + " uColor=" + uColorRectModern + " uProjection=" + uProjectionRectModern);
@@ -664,9 +613,9 @@ public final class UiPrimitiveRenderer {
     private void ensureFlatShaderInitModern() {
         if (flatProgramModern != -1 || flatInitFailedModern) return;
         try {
-            flatProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, FLAT_FRAGMENT_SRC_MODERN);
-            uColorFlatModern = glGetUniformLocation(flatProgramModern, "uColor");
-            uProjectionFlatModern = glGetUniformLocation(flatProgramModern, "uProjection");
+            flatProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, FLAT_FRAGMENT_SRC_MODERN);
+            uColorFlatModern = gl.glGetUniformLocation(flatProgramModern, "uColor");
+            uProjectionFlatModern = gl.glGetUniformLocation(flatProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader plat (moderne) compilé, program=" + flatProgramModern
                 + " uColor=" + uColorFlatModern + " uProjection=" + uProjectionFlatModern);
         } catch (Throwable t) {
@@ -678,21 +627,21 @@ public final class UiPrimitiveRenderer {
     private void ensureVignetteShaderInit() {
         if (vignetteProgram != -1 || vignetteInitFailed) return;
         try {
-            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            glShaderSource(vsh, VERTEX_SRC);
-            glCompileShader(vsh);
+            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            gl.glShaderSource(vsh, VERTEX_SRC);
+            gl.glCompileShader(vsh);
 
-            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            glShaderSource(fsh, VIGNETTE_FRAGMENT_SRC);
-            glCompileShader(fsh);
+            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            gl.glShaderSource(fsh, VIGNETTE_FRAGMENT_SRC);
+            gl.glCompileShader(fsh);
 
-            vignetteProgram = glCreateProgram();
-            glAttachShader(vignetteProgram, vsh);
-            glAttachShader(vignetteProgram, fsh);
-            glLinkProgram(vignetteProgram);
+            vignetteProgram = gl.glCreateProgram();
+            gl.glAttachShader(vignetteProgram, vsh);
+            gl.glAttachShader(vignetteProgram, fsh);
+            gl.glLinkProgram(vignetteProgram);
 
-            uViewportSize = glGetUniformLocation(vignetteProgram, "u_ViewportSize");
-            uVSize = glGetUniformLocation(vignetteProgram, "u_VSize");
+            uViewportSize = gl.glGetUniformLocation(vignetteProgram, "u_ViewportSize");
+            uVSize = gl.glGetUniformLocation(vignetteProgram, "u_VSize");
 
             LauncherLog.ui(1, "[UiRenderer] shader vignette compilé, program=" + vignetteProgram
                 + " uViewportSize=" + uViewportSize + " uVSize=" + uVSize);
@@ -705,11 +654,11 @@ public final class UiPrimitiveRenderer {
     private void ensureVignetteShaderInitModern() {
         if (vignetteProgramModern != -1 || vignetteInitFailedModern) return;
         try {
-            vignetteProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, VIGNETTE_FRAGMENT_SRC_MODERN);
-            uViewportSizeModern = glGetUniformLocation(vignetteProgramModern, "u_ViewportSize");
-            uVSizeModern = glGetUniformLocation(vignetteProgramModern, "u_VSize");
-            uColorVignetteModern = glGetUniformLocation(vignetteProgramModern, "uColor");
-            uProjectionVignetteModern = glGetUniformLocation(vignetteProgramModern, "uProjection");
+            vignetteProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, VIGNETTE_FRAGMENT_SRC_MODERN);
+            uViewportSizeModern = gl.glGetUniformLocation(vignetteProgramModern, "u_ViewportSize");
+            uVSizeModern = gl.glGetUniformLocation(vignetteProgramModern, "u_VSize");
+            uColorVignetteModern = gl.glGetUniformLocation(vignetteProgramModern, "uColor");
+            uProjectionVignetteModern = gl.glGetUniformLocation(vignetteProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader vignette (moderne) compilé, program=" + vignetteProgramModern);
         } catch (Throwable t) {
             vignetteInitFailedModern = true;
@@ -720,26 +669,26 @@ public final class UiPrimitiveRenderer {
     private void ensureFxShaderInit() {
         if (fxProgram != -1 || fxInitFailed) return;
         try {
-            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            glShaderSource(vsh, VERTEX_SRC);
-            glCompileShader(vsh);
+            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            gl.glShaderSource(vsh, VERTEX_SRC);
+            gl.glCompileShader(vsh);
 
-            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            glShaderSource(fsh, FX_FRAGMENT_SRC);
-            glCompileShader(fsh);
+            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            gl.glShaderSource(fsh, FX_FRAGMENT_SRC);
+            gl.glCompileShader(fsh);
 
-            fxProgram = glCreateProgram();
-            glAttachShader(fxProgram, vsh);
-            glAttachShader(fxProgram, fsh);
-            glLinkProgram(fxProgram);
+            fxProgram = gl.glCreateProgram();
+            gl.glAttachShader(fxProgram, vsh);
+            gl.glAttachShader(fxProgram, fsh);
+            gl.glLinkProgram(fxProgram);
 
-            uFxRect = glGetUniformLocation(fxProgram, "u_Rect");
-            uFxRadius = glGetUniformLocation(fxProgram, "u_Radius");
-            uFxBlur = glGetUniformLocation(fxProgram, "u_Blur");
-            uFxBorderWidth = glGetUniformLocation(fxProgram, "u_BorderWidth");
-            uFxColorA = glGetUniformLocation(fxProgram, "u_ColorA");
-            uFxColorB = glGetUniformLocation(fxProgram, "u_ColorB");
-            uFxGradient = glGetUniformLocation(fxProgram, "u_Gradient");
+            uFxRect = gl.glGetUniformLocation(fxProgram, "u_Rect");
+            uFxRadius = gl.glGetUniformLocation(fxProgram, "u_Radius");
+            uFxBlur = gl.glGetUniformLocation(fxProgram, "u_Blur");
+            uFxBorderWidth = gl.glGetUniformLocation(fxProgram, "u_BorderWidth");
+            uFxColorA = gl.glGetUniformLocation(fxProgram, "u_ColorA");
+            uFxColorB = gl.glGetUniformLocation(fxProgram, "u_ColorB");
+            uFxGradient = gl.glGetUniformLocation(fxProgram, "u_Gradient");
 
             LauncherLog.ui(1, "[UiRenderer] shader FX compilé, program=" + fxProgram);
         } catch (Throwable t) {
@@ -751,15 +700,15 @@ public final class UiPrimitiveRenderer {
     private void ensureFxShaderInitModern() {
         if (fxProgramModern != -1 || fxInitFailedModern) return;
         try {
-            fxProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, FX_FRAGMENT_SRC_MODERN);
-            uFxRectModern = glGetUniformLocation(fxProgramModern, "u_Rect");
-            uFxRadiusModern = glGetUniformLocation(fxProgramModern, "u_Radius");
-            uFxBlurModern = glGetUniformLocation(fxProgramModern, "u_Blur");
-            uFxBorderWidthModern = glGetUniformLocation(fxProgramModern, "u_BorderWidth");
-            uFxColorAModern = glGetUniformLocation(fxProgramModern, "u_ColorA");
-            uFxColorBModern = glGetUniformLocation(fxProgramModern, "u_ColorB");
-            uFxGradientModern = glGetUniformLocation(fxProgramModern, "u_Gradient");
-            uProjectionFxModern = glGetUniformLocation(fxProgramModern, "uProjection");
+            fxProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, FX_FRAGMENT_SRC_MODERN);
+            uFxRectModern = gl.glGetUniformLocation(fxProgramModern, "u_Rect");
+            uFxRadiusModern = gl.glGetUniformLocation(fxProgramModern, "u_Radius");
+            uFxBlurModern = gl.glGetUniformLocation(fxProgramModern, "u_Blur");
+            uFxBorderWidthModern = gl.glGetUniformLocation(fxProgramModern, "u_BorderWidth");
+            uFxColorAModern = gl.glGetUniformLocation(fxProgramModern, "u_ColorA");
+            uFxColorBModern = gl.glGetUniformLocation(fxProgramModern, "u_ColorB");
+            uFxGradientModern = gl.glGetUniformLocation(fxProgramModern, "u_Gradient");
+            uProjectionFxModern = gl.glGetUniformLocation(fxProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader FX (moderne) compilé, program=" + fxProgramModern);
         } catch (Throwable t) {
             fxInitFailedModern = true;
@@ -770,25 +719,25 @@ public final class UiPrimitiveRenderer {
     private void ensureGradient2DShaderInit() {
         if (gradient2DProgram != -1 || gradient2DInitFailed) return;
         try {
-            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            glShaderSource(vsh, VERTEX_SRC);
-            glCompileShader(vsh);
+            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            gl.glShaderSource(vsh, VERTEX_SRC);
+            gl.glCompileShader(vsh);
 
-            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            glShaderSource(fsh, GRADIENT2D_FRAGMENT_SRC);
-            glCompileShader(fsh);
+            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            gl.glShaderSource(fsh, GRADIENT2D_FRAGMENT_SRC);
+            gl.glCompileShader(fsh);
 
-            gradient2DProgram = glCreateProgram();
-            glAttachShader(gradient2DProgram, vsh);
-            glAttachShader(gradient2DProgram, fsh);
-            glLinkProgram(gradient2DProgram);
+            gradient2DProgram = gl.glCreateProgram();
+            gl.glAttachShader(gradient2DProgram, vsh);
+            gl.glAttachShader(gradient2DProgram, fsh);
+            gl.glLinkProgram(gradient2DProgram);
 
-            uG2dRect = glGetUniformLocation(gradient2DProgram, "u_Rect");
-            uG2dRadius = glGetUniformLocation(gradient2DProgram, "u_Radius");
-            uG2dColorBL = glGetUniformLocation(gradient2DProgram, "u_ColorBL");
-            uG2dColorBR = glGetUniformLocation(gradient2DProgram, "u_ColorBR");
-            uG2dColorTL = glGetUniformLocation(gradient2DProgram, "u_ColorTL");
-            uG2dColorTR = glGetUniformLocation(gradient2DProgram, "u_ColorTR");
+            uG2dRect = gl.glGetUniformLocation(gradient2DProgram, "u_Rect");
+            uG2dRadius = gl.glGetUniformLocation(gradient2DProgram, "u_Radius");
+            uG2dColorBL = gl.glGetUniformLocation(gradient2DProgram, "u_ColorBL");
+            uG2dColorBR = gl.glGetUniformLocation(gradient2DProgram, "u_ColorBR");
+            uG2dColorTL = gl.glGetUniformLocation(gradient2DProgram, "u_ColorTL");
+            uG2dColorTR = gl.glGetUniformLocation(gradient2DProgram, "u_ColorTR");
 
             LauncherLog.ui(1, "[UiRenderer] shader Gradient2D compilé, program=" + gradient2DProgram);
         } catch (Throwable t) {
@@ -800,14 +749,14 @@ public final class UiPrimitiveRenderer {
     private void ensureGradient2DShaderInitModern() {
         if (gradient2DProgramModern != -1 || gradient2DInitFailedModern) return;
         try {
-            gradient2DProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, GRADIENT2D_FRAGMENT_SRC_MODERN);
-            uG2dRectModern = glGetUniformLocation(gradient2DProgramModern, "u_Rect");
-            uG2dRadiusModern = glGetUniformLocation(gradient2DProgramModern, "u_Radius");
-            uG2dColorBLModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorBL");
-            uG2dColorBRModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorBR");
-            uG2dColorTLModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorTL");
-            uG2dColorTRModern = glGetUniformLocation(gradient2DProgramModern, "u_ColorTR");
-            uProjectionGradient2DModern = glGetUniformLocation(gradient2DProgramModern, "uProjection");
+            gradient2DProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, GRADIENT2D_FRAGMENT_SRC_MODERN);
+            uG2dRectModern = gl.glGetUniformLocation(gradient2DProgramModern, "u_Rect");
+            uG2dRadiusModern = gl.glGetUniformLocation(gradient2DProgramModern, "u_Radius");
+            uG2dColorBLModern = gl.glGetUniformLocation(gradient2DProgramModern, "u_ColorBL");
+            uG2dColorBRModern = gl.glGetUniformLocation(gradient2DProgramModern, "u_ColorBR");
+            uG2dColorTLModern = gl.glGetUniformLocation(gradient2DProgramModern, "u_ColorTL");
+            uG2dColorTRModern = gl.glGetUniformLocation(gradient2DProgramModern, "u_ColorTR");
+            uProjectionGradient2DModern = gl.glGetUniformLocation(gradient2DProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader Gradient2D (moderne) compilé, program=" + gradient2DProgramModern);
         } catch (Throwable t) {
             gradient2DInitFailedModern = true;
@@ -818,27 +767,27 @@ public final class UiPrimitiveRenderer {
     private void ensureMultiStopGradientShaderInit() {
         if (multiStopGradientProgram != -1 || multiStopGradientInitFailed) return;
         try {
-            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            glShaderSource(vsh, VERTEX_SRC);
-            glCompileShader(vsh);
+            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            gl.glShaderSource(vsh, VERTEX_SRC);
+            gl.glCompileShader(vsh);
 
-            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            glShaderSource(fsh, MULTISTOP_GRADIENT_FRAGMENT_SRC);
-            glCompileShader(fsh);
+            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            gl.glShaderSource(fsh, MULTISTOP_GRADIENT_FRAGMENT_SRC);
+            gl.glCompileShader(fsh);
 
-            multiStopGradientProgram = glCreateProgram();
-            glAttachShader(multiStopGradientProgram, vsh);
-            glAttachShader(multiStopGradientProgram, fsh);
-            glLinkProgram(multiStopGradientProgram);
+            multiStopGradientProgram = gl.glCreateProgram();
+            gl.glAttachShader(multiStopGradientProgram, vsh);
+            gl.glAttachShader(multiStopGradientProgram, fsh);
+            gl.glLinkProgram(multiStopGradientProgram);
 
-            uMsgRect = glGetUniformLocation(multiStopGradientProgram, "u_Rect");
-            uMsgRadius = glGetUniformLocation(multiStopGradientProgram, "u_Radius");
-            uMsgGradType = glGetUniformLocation(multiStopGradientProgram, "u_GradType");
-            uMsgStart = glGetUniformLocation(multiStopGradientProgram, "u_Start");
-            uMsgEnd = glGetUniformLocation(multiStopGradientProgram, "u_End");
+            uMsgRect = gl.glGetUniformLocation(multiStopGradientProgram, "u_Rect");
+            uMsgRadius = gl.glGetUniformLocation(multiStopGradientProgram, "u_Radius");
+            uMsgGradType = gl.glGetUniformLocation(multiStopGradientProgram, "u_GradType");
+            uMsgStart = gl.glGetUniformLocation(multiStopGradientProgram, "u_Start");
+            uMsgEnd = gl.glGetUniformLocation(multiStopGradientProgram, "u_End");
             for (int i = 0; i < 8; i++) {
-                uMsgStopColor[i] = glGetUniformLocation(multiStopGradientProgram, "u_Stop" + i + "Color");
-                uMsgStopPos[i] = glGetUniformLocation(multiStopGradientProgram, "u_Stop" + i + "Pos");
+                uMsgStopColor[i] = gl.glGetUniformLocation(multiStopGradientProgram, "u_Stop" + i + "Color");
+                uMsgStopPos[i] = gl.glGetUniformLocation(multiStopGradientProgram, "u_Stop" + i + "Pos");
             }
 
             LauncherLog.ui(1, "[UiRenderer] shader MultiStopGradient compilé, program=" + multiStopGradientProgram);
@@ -851,17 +800,17 @@ public final class UiPrimitiveRenderer {
     private void ensureMultiStopGradientShaderInitModern() {
         if (multiStopGradientProgramModern != -1 || multiStopGradientInitFailedModern) return;
         try {
-            multiStopGradientProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, MULTISTOP_GRADIENT_FRAGMENT_SRC_MODERN);
-            uMsgRectModern = glGetUniformLocation(multiStopGradientProgramModern, "u_Rect");
-            uMsgRadiusModern = glGetUniformLocation(multiStopGradientProgramModern, "u_Radius");
-            uMsgGradTypeModern = glGetUniformLocation(multiStopGradientProgramModern, "u_GradType");
-            uMsgStartModern = glGetUniformLocation(multiStopGradientProgramModern, "u_Start");
-            uMsgEndModern = glGetUniformLocation(multiStopGradientProgramModern, "u_End");
+            multiStopGradientProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, MULTISTOP_GRADIENT_FRAGMENT_SRC_MODERN);
+            uMsgRectModern = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_Rect");
+            uMsgRadiusModern = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_Radius");
+            uMsgGradTypeModern = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_GradType");
+            uMsgStartModern = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_Start");
+            uMsgEndModern = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_End");
             for (int i = 0; i < 8; i++) {
-                uMsgStopColorModern[i] = glGetUniformLocation(multiStopGradientProgramModern, "u_Stop" + i + "Color");
-                uMsgStopPosModern[i] = glGetUniformLocation(multiStopGradientProgramModern, "u_Stop" + i + "Pos");
+                uMsgStopColorModern[i] = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_Stop" + i + "Color");
+                uMsgStopPosModern[i] = gl.glGetUniformLocation(multiStopGradientProgramModern, "u_Stop" + i + "Pos");
             }
-            uProjectionMultiStopGradientModern = glGetUniformLocation(multiStopGradientProgramModern, "uProjection");
+            uProjectionMultiStopGradientModern = gl.glGetUniformLocation(multiStopGradientProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader MultiStopGradient (moderne) compilé, program=" + multiStopGradientProgramModern);
         } catch (Throwable t) {
             multiStopGradientInitFailedModern = true;
@@ -905,22 +854,22 @@ public final class UiPrimitiveRenderer {
             // debug log OpenGL en jeu : "Cannot enable <cap> in the current
             // profile"). Contrairement à glPushAttrib/glMatrixMode, ça ne
             // plante pas, mais ça reste une erreur GL inutile à chaque frame.
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0C11); // GL_SCISSOR_TEST
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0C11); // GL_SCISSOR_TEST
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            glUseProgram(vignetteProgramModern);
-            glUniform2f(uViewportSizeModern, vpWidth, vpHeight);
-            glUniform1f(uVSizeModern, vSize);
-            glUniform4f(uColorVignetteModern, edgeColor.r, edgeColor.g, edgeColor.b, edgeColor.a);
-            uploadProjectionModern(uProjectionVignetteModern, vpWidth, vpHeight);
-            drawQuadModern(0, 0, vpWidth, vpHeight);
+            gl.glUseProgram(vignetteProgramModern);
+            gl.glUniform2f(uViewportSizeModern, vpWidth, vpHeight);
+            gl.glUniform1f(uVSizeModern, vSize);
+            gl.glUniform4f(uColorVignetteModern, edgeColor.r, edgeColor.g, edgeColor.b, edgeColor.a);
+            owner.uploadProjectionModern(uProjectionVignetteModern, vpWidth, vpHeight);
+            owner.drawQuadModern(0, 0, vpWidth, vpHeight);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawEdgeVignetteModern: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
         }
     }
 
@@ -936,10 +885,10 @@ public final class UiPrimitiveRenderer {
             // restent appliqués en permanence après ce dessin, cassant le
             // rendu vanilla suivant (régression confirmée : monde/HUD tout
             // blanc + gros lag).
-            savedGlState = captureLegacyGlState();
-            glDisable(0x0DE1); // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
+            savedGlState = gl.captureLegacyGlState();
+            gl.glDisable(0x0DE1); // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
             // GL_ALPHA_TEST : vanilla l'active avec glAlphaFunc(GL_GREATER, 0.1)
             // pour les textures découpées (feuilles, vitres...) — laissé actif
             // depuis le rendu du monde juste avant ce hook, TOUT pixel de notre
@@ -947,59 +896,59 @@ public final class UiPrimitiveRenderer {
             // dessiné du tout) au lieu de fondre vers 0 — un rejet binaire, pas
             // un blend, d'où un "mur" net et invariant à toute courbe/opacité
             // testée jusqu'ici. C'était la vraie cause.
-            glDisable(0x0BC0); // GL_ALPHA_TEST
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST
             // Un GL_SCISSOR_TEST resté actif (ex: UiScrollContainer, si
             // endScissor() a sauté suite à une exception, voir son correctif)
             // découperait ce quad plein écran à un rectangle sans rapport —
             // symptôme observé : dégradé net et INVARIANT à toute retouche
             // d'opacité/courbe (un clip est binaire, pas un blend).
-            glDisable(0x0C11); // GL_SCISSOR_TEST
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glDisable(0x0C11); // GL_SCISSOR_TEST
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
-            glUseProgram(vignetteProgram);
-            glUniform2f(uViewportSize, vpWidth, vpHeight);
-            glUniform1f(uVSize, vSize);
+            gl.glUseProgram(vignetteProgram);
+            gl.glUniform2f(uViewportSize, vpWidth, vpHeight);
+            gl.glUniform1f(uVSize, vSize);
             drawQuad(0, 0, vpWidth, vpHeight, edgeColor);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawEdgeVignette: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 
     private void ensureIconShaderInit() {
         if (iconProgram != -1 || iconInitFailed) return;
         try {
-            int vsh = glCreateShader(0x8B31); // GL_VERTEX_SHADER
-            glShaderSource(vsh, UiTextRenderer.TEXT_VERTEX_SRC); // générique (ftransform + texcoord passthrough) — pas besoin d'un vertex shader dédié
-            glCompileShader(vsh);
-            int fsh = glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
-            glShaderSource(fsh, ICON_FRAGMENT_SRC);
-            glCompileShader(fsh);
-            iconProgram = glCreateProgram();
-            glAttachShader(iconProgram, vsh);
-            glAttachShader(iconProgram, fsh);
-            glLinkProgram(iconProgram);
-            uTexIcon = glGetUniformLocation(iconProgram, "u_Tex");
-            uAlphaIcon = glGetUniformLocation(iconProgram, "u_Alpha");
+            int vsh = gl.glCreateShader(0x8B31); // GL_VERTEX_SHADER
+            gl.glShaderSource(vsh, UiTextRenderer.TEXT_VERTEX_SRC); // générique (ftransform + texcoord passthrough) — pas besoin d'un vertex shader dédié
+            gl.glCompileShader(vsh);
+            int fsh = gl.glCreateShader(0x8B30); // GL_FRAGMENT_SHADER
+            gl.glShaderSource(fsh, ICON_FRAGMENT_SRC);
+            gl.glCompileShader(fsh);
+            iconProgram = gl.glCreateProgram();
+            gl.glAttachShader(iconProgram, vsh);
+            gl.glAttachShader(iconProgram, fsh);
+            gl.glLinkProgram(iconProgram);
+            uTexIcon = gl.glGetUniformLocation(iconProgram, "u_Tex");
+            uAlphaIcon = gl.glGetUniformLocation(iconProgram, "u_Alpha");
             LauncherLog.ui(1, "[UiRenderer] shader icône compilé, program=" + iconProgram);
         } catch (Throwable t) {
             iconInitFailed = true;
@@ -1010,10 +959,10 @@ public final class UiPrimitiveRenderer {
     private void ensureIconShaderInitModern() {
         if (iconProgramModern != -1 || iconInitFailedModern) return;
         try {
-            iconProgramModern = compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, ICON_FRAGMENT_SRC_MODERN);
-            uTexIconModern = glGetUniformLocation(iconProgramModern, "u_Tex");
-            uAlphaIconModern = glGetUniformLocation(iconProgramModern, "u_Alpha");
-            uProjectionIconModern = glGetUniformLocation(iconProgramModern, "uProjection");
+            iconProgramModern = owner.compileModernProgram(UiRenderer.VERTEX_SRC_MODERN, ICON_FRAGMENT_SRC_MODERN);
+            uTexIconModern = gl.glGetUniformLocation(iconProgramModern, "u_Tex");
+            uAlphaIconModern = gl.glGetUniformLocation(iconProgramModern, "u_Alpha");
+            uProjectionIconModern = gl.glGetUniformLocation(iconProgramModern, "uProjection");
             LauncherLog.ui(1, "[UiRenderer] shader icône moderne compilé, program=" + iconProgramModern);
         } catch (Throwable t) {
             iconInitFailedModern = true;
@@ -1081,8 +1030,8 @@ public final class UiPrimitiveRenderer {
             ensureIconShaderInitModern();
             if (iconInitFailedModern) return;
             try {
-                glDisable(0x0B71); // GL_DEPTH_TEST
-                glDisable(0x0B44); // GL_CULL_FACE
+                gl.glDisable(0x0B71); // GL_DEPTH_TEST
+                gl.glDisable(0x0B44); // GL_CULL_FACE
                 // PAS de glDisable(GL_SCISSOR_TEST) ici (contrairement à
                 // drawEdgeVignette*, effet plein écran qui doit légitimement
                 // l'ignorer) — BUG TROUVÉ (utilisateur : "il faut que toute la
@@ -1092,32 +1041,32 @@ public final class UiPrimitiveRenderer {
                 // pour CHAQUE icône dessinée à l'intérieur — un scissor actif
                 // (posé par UiScrollContainer.beginScissor) doit au contraire
                 // continuer à s'appliquer ici.
-                glEnable(0x0BE2);  // GL_BLEND
-                glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
-                glActiveTexture(0x84C0); // GL_TEXTURE0
-                glBindTexture(0x0DE1, texId);
-                glUseProgram(iconProgramModern);
-                glUniform1i(uTexIconModern, 0);
-                glUniform1f(uAlphaIconModern, alpha);
-                uploadProjectionModern(uProjectionIconModern, vpWidth, vpHeight);
+                gl.glEnable(0x0BE2);  // GL_BLEND
+                gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+                gl.glActiveTexture(0x84C0); // GL_TEXTURE0
+                gl.glBindTexture(0x0DE1, texId);
+                gl.glUseProgram(iconProgramModern);
+                gl.glUniform1i(uTexIconModern, 0);
+                gl.glUniform1f(uAlphaIconModern, alpha);
+                owner.uploadProjectionModern(uProjectionIconModern, vpWidth, vpHeight);
 
                 // UV : (x,y+h)=visuel HAUT-gauche (Y-up) ↔ (0,0)=image
                 // haut-gauche (convention image standard) — même
                 // correspondance que Blaze3DRect.drawIcon (voir sa javadoc).
-                ensureModernBuffersInit();
+                owner.ensureModernBuffersInit();
                 if (!owner.modernBuffersInitFailed()) {
-                    FloatBuffer verts = floatBuffer(4 * 4);
-                    putVertex(verts, x, y + h, 0f, 0f);
-                    putVertex(verts, x, y, 0f, 1f);
-                    putVertex(verts, x + w, y, 1f, 1f);
-                    putVertex(verts, x + w, y + h, 1f, 0f);
+                    FloatBuffer verts = owner.floatBuffer(4 * 4);
+                    owner.putVertex(verts, x, y + h, 0f, 0f);
+                    owner.putVertex(verts, x, y, 0f, 1f);
+                    owner.putVertex(verts, x + w, y, 1f, 1f);
+                    owner.putVertex(verts, x + w, y + h, 1f, 0f);
                     verts.flip();
-                    uploadAndDraw(verts, 6, 4); // GL_TRIANGLE_FAN
+                    owner.uploadAndDraw(verts, 6, 4); // GL_TRIANGLE_FAN
                 }
             } catch (Throwable t) {
                 LauncherLog.err("[UiRenderer] drawIcon (moderne): " + t);
             } finally {
-                try { glUseProgram(0); } catch (Throwable ignored) {}
+                try { gl.glUseProgram(0); } catch (Throwable ignored) {}
             }
             return;
         }
@@ -1127,45 +1076,45 @@ public final class UiPrimitiveRenderer {
         GlBridge.LegacyGlState savedGlState = null;
         boolean projPushed = false, modelPushed = false;
         try {
-            savedGlState = captureLegacyGlState();
-            glEnable(0x0DE1);  // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0BC0); // GL_ALPHA_TEST
+            savedGlState = gl.captureLegacyGlState();
+            gl.glEnable(0x0DE1);  // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST
             // PAS de glDisable(GL_SCISSOR_TEST) — voir le commentaire équivalent
             // dans la branche moderne juste au-dessus pour le pourquoi (BUG
             // TROUVÉ, UiScrollContainer).
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303);
-            glBindTexture(0x0DE1, texId);
-            glUseProgram(iconProgram);
-            glUniform1i(uTexIcon, 0);
-            glUniform1f(uAlphaIcon, alpha);
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303);
+            gl.glBindTexture(0x0DE1, texId);
+            gl.glUseProgram(iconProgram);
+            gl.glUniform1i(uTexIcon, 0);
+            gl.glUniform1f(uAlphaIcon, alpha);
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
-            glColor4f(1f, 1f, 1f, 1f);
-            glBegin(7); // GL_QUADS
-            glTexCoord2f(0f, 0f); glVertex2f(x, y + h);
-            glTexCoord2f(0f, 1f); glVertex2f(x, y);
-            glTexCoord2f(1f, 1f); glVertex2f(x + w, y);
-            glTexCoord2f(1f, 0f); glVertex2f(x + w, y + h);
-            glEnd();
+            gl.glColor4f(1f, 1f, 1f, 1f);
+            gl.glBegin(7); // GL_QUADS
+            gl.glTexCoord2f(0f, 0f); gl.glVertex2f(x, y + h);
+            gl.glTexCoord2f(0f, 1f); gl.glVertex2f(x, y);
+            gl.glTexCoord2f(1f, 1f); gl.glVertex2f(x + w, y);
+            gl.glTexCoord2f(1f, 0f); gl.glVertex2f(x + w, y + h);
+            gl.glEnd();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawIcon (legacy): " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
-            if (modelPushed) { try { matrixMode(0x1700); popMatrix(); } catch (Throwable ignored) {} }
-            if (projPushed) { try { matrixMode(0x1701); popMatrix(); } catch (Throwable ignored) {} }
-            if (savedGlState != null) restoreLegacyGlState(savedGlState);
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
+            if (modelPushed) { try { gl.matrixMode(0x1700); gl.popMatrix(); } catch (Throwable ignored) {} }
+            if (projPushed) { try { gl.matrixMode(0x1701); gl.popMatrix(); } catch (Throwable ignored) {} }
+            if (savedGlState != null) gl.restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -1189,18 +1138,18 @@ public final class UiPrimitiveRenderer {
             }
             buf.flip();
 
-            int texId = glGenTextures();
-            glBindTexture(0x0DE1, texId);
-            glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
-            glTexParameteri(0x0DE1, 0x2801, 0x2601); // GL_TEXTURE_MIN_FILTER, GL_LINEAR (pas de mipmap — icônes rarement minifiées fortement)
-            glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
-            glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
-            glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
+            int texId = gl.glGenTextures();
+            gl.glBindTexture(0x0DE1, texId);
+            gl.glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+            gl.glTexParameteri(0x0DE1, 0x2801, 0x2601); // GL_TEXTURE_MIN_FILTER, GL_LINEAR (pas de mipmap — icônes rarement minifiées fortement)
+            gl.glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
+            gl.glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
+            gl.glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
             // Même précaution ZGC que createFontTextureRaw (voir son
             // commentaire pour le pourquoi) — coût négligeable ici (upload
             // UNE SEULE FOIS par icône, jamais par frame).
-            glFinish();
-            reachabilityFence(buf);
+            gl.glFinish();
+            GlBridge.reachabilityFence(buf);
 
             iconTextures.put(cacheKey, texId);
             LauncherLog.ui(1, "[UiRenderer] icône '" + cacheKey + "' uploadée (glTexImage2D), texId=" + texId + " w=" + w + " h=" + h);
@@ -1384,15 +1333,15 @@ public final class UiPrimitiveRenderer {
     public void beginRoundedClip(float x1, float y1, float x2, float y2, float radius, int vpWidth, int vpHeight) {
         if (Blaze3DCore.isAvailable()) return;
         try {
-            glEnable(GL_STENCIL_TEST);
+            gl.glEnable(GL_STENCIL_TEST);
             // Passe 1 : écrit le masque, sans toucher au framebuffer couleur
             // ni au test de profondeur (on ne dessine ici QUE pour peupler le
             // stencil, pas pour afficher quoi que ce soit).
-            glClear(GL_STENCIL_BUFFER_BIT);
-            glColorMask(false, false, false, false);
-            glStencilFunc(GL_ALWAYS, 1, 0xFF);
-            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-            glStencilMask(0xFF);
+            gl.glClear(GL_STENCIL_BUFFER_BIT);
+            gl.glColorMask(false, false, false, false);
+            gl.glStencilFunc(GL_ALWAYS, 1, 0xFF);
+            gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+            gl.glStencilMask(0xFF);
             // Couleur/alpha réels sans importance (glColorMask bloque toute
             // écriture couleur) SAUF l'alpha, qui doit rester >= le seuil de
             // discard du shader (drawRoundedRect) pour que le stencil soit
@@ -1400,10 +1349,10 @@ public final class UiPrimitiveRenderer {
             drawRoundedRect(x1, y1, x2, y2, radius, new UiColor(1f, 1f, 1f, 1f), vpWidth, vpHeight);
             // Passe 2 : réactive l'écriture couleur, seul le stencil déjà
             // posé (==1) laisse désormais passer les dessins suivants.
-            glColorMask(true, true, true, true);
-            glStencilFunc(GL_EQUAL, 1, 0xFF);
-            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-            glStencilMask(0x00);
+            gl.glColorMask(true, true, true, true);
+            gl.glStencilFunc(GL_EQUAL, 1, 0xFF);
+            gl.glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+            gl.glStencilMask(0x00);
             roundedClipActive = true;
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] beginRoundedClip: " + t);
@@ -1416,8 +1365,8 @@ public final class UiPrimitiveRenderer {
         if (!roundedClipActive) return;
         roundedClipActive = false;
         try {
-            glStencilMask(0xFF);
-            glDisable(GL_STENCIL_TEST);
+            gl.glStencilMask(0xFF);
+            gl.glDisable(GL_STENCIL_TEST);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] endRoundedClip: " + t);
         }
@@ -1475,25 +1424,25 @@ public final class UiPrimitiveRenderer {
         ensureGradient2DShaderInitModern();
         if (gradient2DInitFailedModern) return;
         try {
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
             // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer (javadoc de classe).
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            glUseProgram(gradient2DProgramModern);
-            glUniform4f(uG2dRectModern, x1, y1, x2, y2);
-            glUniform1f(uG2dRadiusModern, radius);
-            glUniform4f(uG2dColorBLModern, bl.r, bl.g, bl.b, bl.a);
-            glUniform4f(uG2dColorBRModern, br.r, br.g, br.b, br.a);
-            glUniform4f(uG2dColorTLModern, tl.r, tl.g, tl.b, tl.a);
-            glUniform4f(uG2dColorTRModern, tr.r, tr.g, tr.b, tr.a);
-            uploadProjectionModern(uProjectionGradient2DModern, vpWidth, vpHeight);
-            drawQuadModern(x1, y1, x2, y2);
+            gl.glUseProgram(gradient2DProgramModern);
+            gl.glUniform4f(uG2dRectModern, x1, y1, x2, y2);
+            gl.glUniform1f(uG2dRadiusModern, radius);
+            gl.glUniform4f(uG2dColorBLModern, bl.r, bl.g, bl.b, bl.a);
+            gl.glUniform4f(uG2dColorBRModern, br.r, br.g, br.b, br.a);
+            gl.glUniform4f(uG2dColorTLModern, tl.r, tl.g, tl.b, tl.a);
+            gl.glUniform4f(uG2dColorTRModern, tr.r, tr.g, tr.b, tr.a);
+            owner.uploadProjectionModern(uProjectionGradient2DModern, vpWidth, vpHeight);
+            owner.drawQuadModern(x1, y1, x2, y2);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawGradient2DModern: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
         }
     }
 
@@ -1505,45 +1454,45 @@ public final class UiPrimitiveRenderer {
         GlBridge.LegacyGlState savedGlState = null;
         boolean projPushed = false, modelPushed = false;
         try {
-            savedGlState = captureLegacyGlState();
-            glDisable(0x0DE1); // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0BC0); // GL_ALPHA_TEST
+            savedGlState = gl.captureLegacyGlState();
+            gl.glDisable(0x0DE1); // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST
             // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer (javadoc de classe).
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
-            glUseProgram(gradient2DProgram);
-            glUniform4f(uG2dRect, x1, y1, x2, y2);
-            glUniform1f(uG2dRadius, radius);
-            glUniform4f(uG2dColorBL, bl.r, bl.g, bl.b, bl.a);
-            glUniform4f(uG2dColorBR, br.r, br.g, br.b, br.a);
-            glUniform4f(uG2dColorTL, tl.r, tl.g, tl.b, tl.a);
-            glUniform4f(uG2dColorTR, tr.r, tr.g, tr.b, tr.a);
+            gl.glUseProgram(gradient2DProgram);
+            gl.glUniform4f(uG2dRect, x1, y1, x2, y2);
+            gl.glUniform1f(uG2dRadius, radius);
+            gl.glUniform4f(uG2dColorBL, bl.r, bl.g, bl.b, bl.a);
+            gl.glUniform4f(uG2dColorBR, br.r, br.g, br.b, br.a);
+            gl.glUniform4f(uG2dColorTL, tl.r, tl.g, tl.b, tl.a);
+            gl.glUniform4f(uG2dColorTR, tr.r, tr.g, tr.b, tr.a);
             // gl_Color ignorée par ce shader — appel conservé pour réutiliser drawQuad() tel quel.
             drawQuad(x1, y1, x2, y2, bl);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawGradient2DLegacy: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -1596,28 +1545,28 @@ public final class UiPrimitiveRenderer {
         ensureMultiStopGradientShaderInitModern();
         if (multiStopGradientInitFailedModern) return;
         try {
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            glUseProgram(multiStopGradientProgramModern);
-            glUniform4f(uMsgRectModern, x1, y1, x2, y2);
-            glUniform1f(uMsgRadiusModern, radius);
-            glUniform1f(uMsgGradTypeModern, gradTypeCode(type));
-            glUniform2f(uMsgStartModern, startX, startY);
-            glUniform2f(uMsgEndModern, endX, endY);
+            gl.glUseProgram(multiStopGradientProgramModern);
+            gl.glUniform4f(uMsgRectModern, x1, y1, x2, y2);
+            gl.glUniform1f(uMsgRadiusModern, radius);
+            gl.glUniform1f(uMsgGradTypeModern, gradTypeCode(type));
+            gl.glUniform2f(uMsgStartModern, startX, startY);
+            gl.glUniform2f(uMsgEndModern, endX, endY);
             for (int i = 0; i < 8; i++) {
                 UiColor c = colors[i];
-                glUniform4f(uMsgStopColorModern[i], c.r, c.g, c.b, c.a);
-                glUniform1f(uMsgStopPosModern[i], positions[i]);
+                gl.glUniform4f(uMsgStopColorModern[i], c.r, c.g, c.b, c.a);
+                gl.glUniform1f(uMsgStopPosModern[i], positions[i]);
             }
-            uploadProjectionModern(uProjectionMultiStopGradientModern, vpWidth, vpHeight);
-            drawQuadModern(x1, y1, x2, y2);
+            owner.uploadProjectionModern(uProjectionMultiStopGradientModern, vpWidth, vpHeight);
+            owner.drawQuadModern(x1, y1, x2, y2);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawMultiStopGradientModern: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
         }
     }
 
@@ -1630,48 +1579,48 @@ public final class UiPrimitiveRenderer {
         GlBridge.LegacyGlState savedGlState = null;
         boolean projPushed = false, modelPushed = false;
         try {
-            savedGlState = captureLegacyGlState();
-            glDisable(0x0DE1); // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0BC0); // GL_ALPHA_TEST
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            savedGlState = gl.captureLegacyGlState();
+            gl.glDisable(0x0DE1); // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
-            glUseProgram(multiStopGradientProgram);
-            glUniform4f(uMsgRect, x1, y1, x2, y2);
-            glUniform1f(uMsgRadius, radius);
-            glUniform1f(uMsgGradType, gradTypeCode(type));
-            glUniform2f(uMsgStart, startX, startY);
-            glUniform2f(uMsgEnd, endX, endY);
+            gl.glUseProgram(multiStopGradientProgram);
+            gl.glUniform4f(uMsgRect, x1, y1, x2, y2);
+            gl.glUniform1f(uMsgRadius, radius);
+            gl.glUniform1f(uMsgGradType, gradTypeCode(type));
+            gl.glUniform2f(uMsgStart, startX, startY);
+            gl.glUniform2f(uMsgEnd, endX, endY);
             for (int i = 0; i < 8; i++) {
                 UiColor c = colors[i];
-                glUniform4f(uMsgStopColor[i], c.r, c.g, c.b, c.a);
-                glUniform1f(uMsgStopPos[i], positions[i]);
+                gl.glUniform4f(uMsgStopColor[i], c.r, c.g, c.b, c.a);
+                gl.glUniform1f(uMsgStopPos[i], positions[i]);
             }
             // gl_Color ignorée par ce shader — appel conservé pour réutiliser drawQuad() tel quel.
             drawQuad(x1, y1, x2, y2, colors[0]);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawMultiStopGradientLegacy: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -1809,17 +1758,17 @@ public final class UiPrimitiveRenderer {
             // défaisait silencieusement TOUT clip actif de UiScrollContainer —
             // une carte devait entièrement sortir du viewport pour disparaître
             // au lieu d'être proprement clippée au bord.
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
             if (useShader) {
-                glUseProgram(rectProgramModern);
-                glUniform4f(uRectModern, x1, y1, x2, y2);
-                glUniform1f(uRadiusModern, radius);
-                glUniform4f(uColorRectModern, color.r, color.g, color.b, color.a);
-                uploadProjectionModern(uProjectionRectModern, vpWidth, vpHeight);
+                gl.glUseProgram(rectProgramModern);
+                gl.glUniform4f(uRectModern, x1, y1, x2, y2);
+                gl.glUniform1f(uRadiusModern, radius);
+                gl.glUniform4f(uColorRectModern, color.r, color.g, color.b, color.a);
+                owner.uploadProjectionModern(uProjectionRectModern, vpWidth, vpHeight);
             } else {
                 // radius<=0 (rect plein sans arrondi) OU échec de compilation
                 // du shader rect : besoin quand même d'UN programme actif
@@ -1830,18 +1779,18 @@ public final class UiPrimitiveRenderer {
                 // rendait tout invisible sauf le contour, confirmé en jeu).
                 ensureFlatShaderInitModern();
                 if (!flatInitFailedModern) {
-                    glUseProgram(flatProgramModern);
-                    glUniform4f(uColorFlatModern, color.r, color.g, color.b, color.a);
-                    uploadProjectionModern(uProjectionFlatModern, vpWidth, vpHeight);
+                    gl.glUseProgram(flatProgramModern);
+                    gl.glUniform4f(uColorFlatModern, color.r, color.g, color.b, color.a);
+                    owner.uploadProjectionModern(uProjectionFlatModern, vpWidth, vpHeight);
                 } else {
                     return;
                 }
             }
-            drawQuadModern(x1, y1, x2, y2);
+            owner.drawQuadModern(x1, y1, x2, y2);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawRoundedRectModern: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
         }
     }
 
@@ -1866,18 +1815,18 @@ public final class UiPrimitiveRenderer {
         boolean projPushed = false, modelPushed = false;
         try {
             // Legacy (1.8.9) — voir captureLegacyGlState()/drawEdgeVignetteLegacy.
-            savedGlState = captureLegacyGlState();
-            glDisable(0x0DE1); // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE — sinon un quad mal orienté (winding) par rapport à ce que
+            savedGlState = gl.captureLegacyGlState();
+            gl.glDisable(0x0DE1); // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE — sinon un quad mal orienté (winding) par rapport à ce que
                                 // le rendu 3D du monde a laissé actif peut être silencieusement éliminé,
                                 // sans erreur : dessin "réussi" en apparence, rien de visible en jeu.
-            glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST — voir drawEdgeVignette pour le pourquoi
             // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
             // (javadoc de classe) : ce disable défaisait le clip actif d'un
             // scroll container pour CHAQUE rect dessiné à l'intérieur.
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
             // ftransform() (vertex shader) applique la matrice modelview/projection
             // COURANTE — à ce point précis (TAIL de GameRenderer.render()), rien ne
@@ -1888,35 +1837,35 @@ public final class UiPrimitiveRenderer {
             // NOTRE PROPRE ortho, empilée puis restaurée, indépendante de l'état
             // ambiant. Bas-gauche origine Y-up (glOrtho(0,w,0,h,...)) — cohérent
             // avec gl_FragCoord et le reste du pipeline (mouse/UI), pas de flip.
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
             if (useShader) {
-                glUseProgram(rectProgram);
-                glUniform4f(uRect, x1, y1, x2, y2);
-                glUniform1f(uRadius, radius);
+                gl.glUseProgram(rectProgram);
+                gl.glUniform4f(uRect, x1, y1, x2, y2);
+                gl.glUniform1f(uRadius, radius);
             }
             drawQuad(x1, y1, x2, y2, color);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawRoundedRect: " + t);
         } finally {
             try {
-                if (useShader) glUseProgram(0);
+                if (useShader) gl.glUseProgram(0);
             } catch (Throwable ignored) {}
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 
@@ -1925,23 +1874,23 @@ public final class UiPrimitiveRenderer {
         ensureFxShaderInitModern();
         if (fxInitFailedModern) return;
         try {
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
             // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
             // (javadoc de classe) : défaisait le clip actif d'un scroll
             // container pour chaque ombre/bordure/dégradé dessiné à l'intérieur.
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            glUseProgram(fxProgramModern);
-            glUniform4f(uFxRectModern, x1, y1, x2, y2);
-            glUniform1f(uFxRadiusModern, radius);
-            glUniform1f(uFxBlurModern, blur);
-            glUniform1f(uFxBorderWidthModern, borderWidth);
-            glUniform4f(uFxColorAModern, colorA.r, colorA.g, colorA.b, colorA.a);
-            glUniform4f(uFxColorBModern, colorB.r, colorB.g, colorB.b, colorB.a);
-            glUniform1f(uFxGradientModern, gradient ? 1f : 0f);
-            uploadProjectionModern(uProjectionFxModern, vpWidth, vpHeight);
+            gl.glUseProgram(fxProgramModern);
+            gl.glUniform4f(uFxRectModern, x1, y1, x2, y2);
+            gl.glUniform1f(uFxRadiusModern, radius);
+            gl.glUniform1f(uFxBlurModern, blur);
+            gl.glUniform1f(uFxBorderWidthModern, borderWidth);
+            gl.glUniform4f(uFxColorAModern, colorA.r, colorA.g, colorA.b, colorA.a);
+            gl.glUniform4f(uFxColorBModern, colorB.r, colorB.g, colorB.b, colorB.a);
+            gl.glUniform1f(uFxGradientModern, gradient ? 1f : 0f);
+            owner.uploadProjectionModern(uProjectionFxModern, vpWidth, vpHeight);
             // u_Rect (ci-dessus) garde la boîte LOGIQUE exacte (nécessaire au
             // calcul de distance) mais le quad RASTÉRISÉ doit déborder de
             // "blur" pixels au-delà — sinon aucun pixel n'existe au-delà de
@@ -1951,11 +1900,11 @@ public final class UiPrimitiveRenderer {
             // circulaire — la formule de distance était correcte, seule la
             // géométrie dessinée était trop petite pour la montrer en entier).
             float pad = Math.max(blur, 1f);
-            drawQuadModern(x1 - pad, y1 - pad, x2 + pad, y2 + pad);
+            owner.drawQuadModern(x1 - pad, y1 - pad, x2 + pad, y2 + pad);
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawFxModern: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
         }
     }
 
@@ -1969,34 +1918,34 @@ public final class UiPrimitiveRenderer {
         try {
             // Même garde que drawRoundedRectLegacy — voir son commentaire pour
             // le détail de chaque état désactivé/pourquoi.
-            savedGlState = captureLegacyGlState();
-            glDisable(0x0DE1); // GL_TEXTURE_2D
-            glDisable(0x0B71); // GL_DEPTH_TEST
-            glDisable(0x0B44); // GL_CULL_FACE
-            glDisable(0x0BC0); // GL_ALPHA_TEST
+            savedGlState = gl.captureLegacyGlState();
+            gl.glDisable(0x0DE1); // GL_TEXTURE_2D
+            gl.glDisable(0x0B71); // GL_DEPTH_TEST
+            gl.glDisable(0x0B44); // GL_CULL_FACE
+            gl.glDisable(0x0BC0); // GL_ALPHA_TEST
             // PAS de glDisable(GL_SCISSOR_TEST) — voir UiScrollContainer
             // (javadoc de classe).
-            glEnable(0x0BE2);  // GL_BLEND
-            glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+            gl.glEnable(0x0BE2);  // GL_BLEND
+            gl.glBlendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 
-            matrixMode(0x1701); // GL_PROJECTION
-            pushMatrix();
+            gl.matrixMode(0x1701); // GL_PROJECTION
+            gl.pushMatrix();
             projPushed = true;
-            loadIdentity();
-            glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
-            matrixMode(0x1700); // GL_MODELVIEW
-            pushMatrix();
+            gl.loadIdentity();
+            gl.glOrtho(0, vpWidth, 0, vpHeight, -1, 1);
+            gl.matrixMode(0x1700); // GL_MODELVIEW
+            gl.pushMatrix();
             modelPushed = true;
-            loadIdentity();
+            gl.loadIdentity();
 
-            glUseProgram(fxProgram);
-            glUniform4f(uFxRect, x1, y1, x2, y2);
-            glUniform1f(uFxRadius, radius);
-            glUniform1f(uFxBlur, blur);
-            glUniform1f(uFxBorderWidth, borderWidth);
-            glUniform4f(uFxColorA, colorA.r, colorA.g, colorA.b, colorA.a);
-            glUniform4f(uFxColorB, colorB.r, colorB.g, colorB.b, colorB.a);
-            glUniform1f(uFxGradient, gradient ? 1f : 0f);
+            gl.glUseProgram(fxProgram);
+            gl.glUniform4f(uFxRect, x1, y1, x2, y2);
+            gl.glUniform1f(uFxRadius, radius);
+            gl.glUniform1f(uFxBlur, blur);
+            gl.glUniform1f(uFxBorderWidth, borderWidth);
+            gl.glUniform4f(uFxColorA, colorA.r, colorA.g, colorA.b, colorA.a);
+            gl.glUniform4f(uFxColorB, colorB.r, colorB.g, colorB.b, colorB.a);
+            gl.glUniform1f(uFxGradient, gradient ? 1f : 0f);
             // Couleur "courante" (gl_Color) ignorée par ce shader (les
             // couleurs viennent des uniforms u_ColorA/B ci-dessus) — appel
             // conservé uniquement pour réutiliser drawQuad() tel quel.
@@ -2007,26 +1956,26 @@ public final class UiPrimitiveRenderer {
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawFxLegacy: " + t);
         } finally {
-            try { glUseProgram(0); } catch (Throwable ignored) {}
+            try { gl.glUseProgram(0); } catch (Throwable ignored) {}
             try {
-                if (modelPushed) { matrixMode(0x1700); popMatrix(); }
+                if (modelPushed) { gl.matrixMode(0x1700); gl.popMatrix(); }
             } catch (Throwable ignored) {}
             try {
-                if (projPushed) { matrixMode(0x1701); popMatrix(); }
+                if (projPushed) { gl.matrixMode(0x1701); gl.popMatrix(); }
             } catch (Throwable ignored) {}
-            restoreLegacyGlState(savedGlState);
+            gl.restoreLegacyGlState(savedGlState);
         }
     }
 
     private void drawQuad(float x1, float y1, float x2, float y2, UiColor c) {
         try {
-            glColor4f(c.r, c.g, c.b, c.a);
-            glBegin(7); // GL_QUADS
-            glVertex2f(x1, y1);
-            glVertex2f(x1, y2);
-            glVertex2f(x2, y2);
-            glVertex2f(x2, y1);
-            glEnd();
+            gl.glColor4f(c.r, c.g, c.b, c.a);
+            gl.glBegin(7); // GL_QUADS
+            gl.glVertex2f(x1, y1);
+            gl.glVertex2f(x1, y2);
+            gl.glVertex2f(x2, y2);
+            gl.glVertex2f(x2, y1);
+            gl.glEnd();
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] drawQuad: " + t);
         }
