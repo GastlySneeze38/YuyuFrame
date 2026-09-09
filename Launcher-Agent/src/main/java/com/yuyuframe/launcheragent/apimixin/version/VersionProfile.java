@@ -56,6 +56,25 @@ public final class VersionProfile {
     public final String yarnJarNameHint;
 
     /**
+     * Ère de rendu de cette version — {@code "gl2"}, {@code "gl3"},
+     * {@code "blaze3d"}, ou {@code null} si aucun backend graphique ne la sert.
+     *
+     * <h2>Pourquoi une CHAÎNE et pas un type</h2>
+     *
+     * C'est la seule information de ce fichier destinée à {@code apigraphic}.
+     * Or la règle de couches va {@code apigraphic → apimixin} : un type défini
+     * dans le moteur graphique et référencé ICI créerait un cycle. La chaîne
+     * est le vocabulaire de frontière ; le moteur la traduit dans SON
+     * énumération ({@code apigraphic.backend.RenderEra}).
+     *
+     * <p>C'est aussi ce qui rend la règle vraie dans le bon sens : le moteur
+     * ne DÉDUIT plus son ère d'une version (il ne lit plus
+     * {@code launcheragent.mcVersion}, ne sonde plus la présence de
+     * {@code GpuDevice}), il la REÇOIT de la couche dont c'est le métier.
+     */
+    public final String renderEra;
+
+    /**
      * Config Mixin héritée du système pré-déclaratif ({@code
      * mixins.launcheragent-1.8.json} et consorts, package {@code mixin/}),
      * {@code null} pour une tranche entièrement déclarative.
@@ -81,23 +100,26 @@ public final class VersionProfile {
     public final boolean frozen;
 
     public VersionProfile(String key, String[] versions, String hookTableVersion,
-                          String yarnJarNameHint, String legacyMixinConfigResource) {
-        this(key, versions, hookTableVersion, yarnJarNameHint, legacyMixinConfigResource, false);
+                          String yarnJarNameHint, String legacyMixinConfigResource, String renderEra) {
+        this(key, versions, hookTableVersion, yarnJarNameHint, legacyMixinConfigResource, renderEra, false);
     }
 
     public VersionProfile(String key, String[] versions, String hookTableVersion,
-                          String yarnJarNameHint, String legacyMixinConfigResource, boolean frozen) {
+                          String yarnJarNameHint, String legacyMixinConfigResource, String renderEra,
+                          boolean frozen) {
         this.key = key;
         this.versions = versions;
         this.hookTableVersion = hookTableVersion;
         this.yarnJarNameHint = yarnJarNameHint;
         this.legacyMixinConfigResource = legacyMixinConfigResource;
+        this.renderEra = renderEra;
         this.frozen = frozen;
     }
 
     /** Même tranche, gelée — voir {@link #frozen}. Fluent, pour que la déclaration reste lisible telle quelle. */
     public VersionProfile frozen() {
-        return new VersionProfile(key, versions, hookTableVersion, yarnJarNameHint, legacyMixinConfigResource, true);
+        return new VersionProfile(key, versions, hookTableVersion, yarnJarNameHint,
+            legacyMixinConfigResource, renderEra, true);
     }
 
     /**

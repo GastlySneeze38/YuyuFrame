@@ -77,7 +77,12 @@ public final class IsolatedBootstrap {
             return;
         }
         LauncherLog.agent(1, "[LauncherAgent] Profil de version résolu : " + profile.key
-            + " (table de hooks : " + profile.hookTableVersion + ")");
+            + " (table de hooks : " + profile.hookTableVersion + ", ère de rendu : " + profile.renderEra + ")");
+
+        // Publie le profil AVANT tout ce qui suit : c'est lui qui porte l'ère
+        // de rendu, et le moteur graphique la LIT ici plutôt que de la déduire
+        // d'une version ou d'un sondage de classe (voir RenderEra).
+        VersionProfileRegistry.setActive(profile);
 
         MappingsRegistry.setScheme(intermediary
             ? MappingsRegistry.Scheme.INTERMEDIARY

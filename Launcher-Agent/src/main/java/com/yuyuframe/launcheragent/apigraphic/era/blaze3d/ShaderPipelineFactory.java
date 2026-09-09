@@ -60,9 +60,15 @@ public final class ShaderPipelineFactory {
 
     private static Object fieldRenderPipelineGuiText;
 
-    /** {@code true} seulement si les classes Blaze3D existent sur ce bracket (26.1.2/1.21.6+) — voir {@code UiTextBlaze3D.isAvailable()}, même convention. */
+    /**
+     * {@code true} sur l'ère Blaze3D (1.21.11 / 26.x).
+     *
+     * <p>Était un sondage de {@code GpuDevice} par réflexion, refait à chaque
+     * appel. L'ère est désormais REÇUE — voir {@code RenderEra}.
+     */
     public static boolean isAvailable() {
-        return McReflect.rawClass("com.mojang.blaze3d.systems.GpuDevice") != null;
+        return com.yuyuframe.launcheragent.apigraphic.backend.RenderEra.active()
+            == com.yuyuframe.launcheragent.apigraphic.backend.RenderEra.BLAZE3D;
     }
 
     private static synchronized boolean resolve() {

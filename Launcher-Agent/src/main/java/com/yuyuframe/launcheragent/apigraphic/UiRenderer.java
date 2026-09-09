@@ -8,8 +8,9 @@ import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.render.UiTextRenderer;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
+import com.yuyuframe.launcheragent.apigraphic.backend.RenderEra;
+import com.yuyuframe.launcheragent.apigraphic.backend.UiBackendRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector;
 
 import java.nio.FloatBuffer;
 
@@ -94,8 +95,11 @@ public final class UiRenderer {
      * s'affiche, donc toujours dispo ici.
      */
     private UiRenderer() {
-        String mcVersion = System.getProperty("launcheragent.mcVersion", "");
-        this.modern = !MinecraftVersionDetector.supportsFixedFunctionDrawing(mcVersion);
+        // L'ère est REÇUE (VersionProfile.renderEra, publié au bootstrap), plus
+        // déduite d'une version ici — voir RenderEra. Seule l'ère gl2 dessine
+        // en pipeline fixe ; gl3 et Blaze3D sont toutes deux "modernes" au sens
+        // de ce drapeau, qui ne pilote que le STYLE de dessin.
+        this.modern = RenderEra.active() != RenderEra.GL2;
         this.glBridge = new GlBridge();
         this.primitives = new UiPrimitiveRenderer(this, glBridge);
         this.vanillaItems = new UiVanillaItemRenderer(this, glBridge);
@@ -432,9 +436,20 @@ public final class UiRenderer {
     // les modules HUD écrivent `renderer.drawText(...)`, ils n'ont pas à
     // savoir où ça atterrit.
 
+    /**
+     * PREMIÈRE primitive passée par le contrat {@code UiBackend} (2026-09-09).
+     *
+     * <p>L'appel direct à {@code VanillaGuiTarget} a été remplacé par le
+     * backend de l'ère active — qui, pour Blaze3D, délègue exactement au même
+     * endroit. Comportement identique appel pour appel ; ce qui change, c'est
+     * que la façade ne nomme plus une ère, elle demande à celle qui tourne.
+     *
+     * <p>Les autres primitives suivront au découpage des renderers de
+     * {@code render/} ; en attendant, elles gardent leur chaîne d'essais.
+     */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
+        if (UiBackendRegistry.get().roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 

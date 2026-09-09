@@ -56,7 +56,8 @@ public final class VersionProfileRegistry {
             new String[]{ "1.8.*" },
             "1.8.9",
             "1.8.9",
-            "mixins.launcheragent-1.8.json").frozen());
+            "mixins.launcheragent-1.8.json",
+            "gl2").frozen());
 
         // Resserré à la version exacte (avant : tout ce qui n'était pas
         // 1.8.x tombait implicitement ici) — une version 1.21.x non testée
@@ -67,7 +68,8 @@ public final class VersionProfileRegistry {
             new String[]{ "1.21.11" },
             "1.21.11",
             "1.21.11",
-            "mixins.launcheragent.json").frozen());
+            "mixins.launcheragent.json",
+            "blaze3d").frozen());
 
         // Bracket "B" — 1.13 à 1.16.x : LWJGL3/GLFW comme le pipeline 1.21.11,
         // mais contexte GL encore en dessous du Core Profile 3.2 imposé depuis
@@ -83,7 +85,8 @@ public final class VersionProfileRegistry {
             new String[]{ "1.16.*" },
             "1.16.5",
             "1.16.5",
-            "mixins.launcheragent-1.16.json").frozen());
+            "mixins.launcheragent-1.16.json",
+            "gl2").frozen());
 
         // Bracket "C" — 1.17 à 1.20.4 : Core Profile OpenGL 3.2 obligatoire
         // (pipeline fixe supprimé), mais GameRenderer.render(FJZ)V garde la
@@ -97,7 +100,8 @@ public final class VersionProfileRegistry {
             new String[]{ "1.20.4" },
             "1.20.4",
             "1.20.4",
-            "mixins.launcheragent-1.20.4.json").frozen());
+            "mixins.launcheragent-1.20.4.json",
+            "gl3").frozen());
 
         // Bracket "D" — ~1.21 à 1.21.5 : même profil OpenGL Core que le
         // bracket "C" (1.20.4), mais GameRenderer.render change de signature —
@@ -113,7 +117,8 @@ public final class VersionProfileRegistry {
             new String[]{ "1.21.4" },
             "1.21.4",
             "1.21.4",
-            "mixins.launcheragent-1.21.4.json").frozen());
+            "mixins.launcheragent-1.21.4.json",
+            "gl3").frozen());
 
         // Bracket "E" — 26.1.2 : MC N'EST PLUS OBFUSQUÉ à partir de la ligne
         // 26.1.x (Mojang a arrêté de publier des mappings d'obfuscation,
@@ -133,7 +138,8 @@ public final class VersionProfileRegistry {
             new String[]{ "26.1.2" },
             "26.1.2",
             null,
-            null));
+            null,
+            "blaze3d"));
     }
 
     /**
@@ -165,6 +171,70 @@ public final class VersionProfileRegistry {
             return null;
         }
         return match;
+    }
+
+    // ── Profil actif ───────────────────────────────────────────────────────
+
+    private static volatile VersionProfile active;
+
+    /**
+     * Publie le profil résolu au bootstrap — appelé UNE fois par
+     * {@code IsolatedBootstrap.start()}, jamais ailleurs.
+     *
+     * <p>Explicite plutôt qu'effet de bord de {@link #resolve} : « quelle
+     * tranche correspond à cette version » et « quelle tranche tourne
+     * réellement » sont deux questions différentes, et seule la seconde a une
+     * réponse unique par lancement.
+     */
+    public static void setActive(VersionProfile profile) {
+        active = profile;
+    }
+
+    /** Profil réellement actif, ou {@code null} si le bootstrap Mixin n'a pas eu lieu. */
+    public static VersionProfile active() {
+        return active;
+    }
+
+    /**
+     * Ère de rendu de la version qui tourne — {@code "gl2"}, {@code "gl3"},
+     * {@code "blaze3d"}, ou {@code null}.
+     *
+     * <h2>Le repli, et pourquoi il est ICI</h2>
+     *
+     * Si aucun profil n'a été publié (bootstrap Mixin non passé, test hors
+     * jeu), on retombe sur la DÉTECTION historique : présence de
+     * {@code GpuDevice} → Blaze3D, sinon le profil OpenGL déduit de la version.
+     *
+     * <p>Ce repli lit la version et sonde des classes du jeu — deux choses
+     * parfaitement légitimes dans {@code apimixin}, dont c'est le métier, et
+     * interdites dans {@code apigraphic}, qui doit RECEVOIR son ère. Le mettre
+     * ici est ce qui permet au moteur graphique de n'avoir aucune déduction du
+     * tout, sans pour autant se retrouver aveugle si le bootstrap n'a pas eu
+     * lieu.
+     *
+     * <p>Il se signale dans le log : un lancement en jeu où ce message
+     * apparaît indique que le chemin normal (profil publié) n'a pas fonctionné.
+     */
+    public static String activeRenderEra() {
+        VersionProfile p = active;
+        if (p != null) return p.renderEra;
+
+        String mcVersion = System.getProperty("launcheragent.mcVersion", "");
+        String fallback = probeRenderEra(mcVersion);
+        com.yuyuframe.launcheragent.base.log.LauncherLog.warn(
+            "[VersionProfileRegistry] aucun profil actif publié — ère de rendu DÉDUITE (\""
+            + fallback + "\") pour la version \"" + mcVersion + "\". Chemin de repli : "
+            + "en jeu, ce message ne devrait jamais apparaître.");
+        return fallback;
+    }
+
+    /** Détection historique, conservée uniquement comme repli — voir {@link #activeRenderEra()}. */
+    private static String probeRenderEra(String mcVersion) {
+        if (com.yuyuframe.launcheragent.apimixin.mapping.McReflect
+                .rawClass("com.mojang.blaze3d.systems.GpuDevice") != null) {
+            return "blaze3d";
+        }
+        return MinecraftVersionDetector.supportsFixedFunctionDrawing(mcVersion) ? "gl2" : "gl3";
     }
 
     private static VersionProfile findExact(String mcVersion) {

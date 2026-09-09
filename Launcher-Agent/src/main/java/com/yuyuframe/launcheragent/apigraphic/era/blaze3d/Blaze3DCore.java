@@ -37,8 +37,13 @@ public final class Blaze3DCore {
 
     /** {@code true} seulement si les classes Blaze3D (GpuDevice etc.) existent sur ce bracket — sinon, laisser {@link UiRenderer} retomber sur son pipeline SDF existant. */
     public static boolean isAvailable() {
+        // L'ère est REÇUE (VersionProfile.renderEra) — plus de sondage de
+        // GpuDevice ici. Le sondage existe toujours, mais UNE fois, et dans
+        // apimixin, dont c'est le métier : voir RenderEra et
+        // VersionProfileRegistry.activeRenderEra().
         if (available == null) {
-            available = McReflect.rawClass("com.mojang.blaze3d.systems.GpuDevice") != null;
+            available = com.yuyuframe.launcheragent.apigraphic.backend.RenderEra.active()
+                == com.yuyuframe.launcheragent.apigraphic.backend.RenderEra.BLAZE3D;
         }
         return available;
     }
