@@ -1,9 +1,9 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 
 import java.awt.BasicStroke;
 import java.awt.Graphics2D;
@@ -13,7 +13,7 @@ import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 /** Switch booléen style OneConfig — piste arrondie + bouton rond qui glisse, transition animée (voir UiAnimatedFloat). */
 public class UiToggle extends UiWidget {

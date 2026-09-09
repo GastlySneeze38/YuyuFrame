@@ -1,12 +1,12 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFocusable;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiFocusable;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -18,7 +18,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.image.BufferedImage;
 import java.util.function.Consumer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 /**
  * Champ de texte mono-ligne — curseur positionnable (clic/flèches), sélection

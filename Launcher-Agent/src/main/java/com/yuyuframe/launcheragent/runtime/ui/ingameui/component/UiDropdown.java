@@ -1,14 +1,14 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 
 import java.util.List;
 import java.util.function.IntConsumer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 /**
  * Combobox déroulant — même pattern que UiColorPicker : les lignes d'options

@@ -1,10 +1,10 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
-import com.yuyuframe.launcheragent.apigraphic.shader.UiSolidPipelinePoc;
+import com.yuyuframe.launcheragent.apigraphic.example.UiSolidPipelinePoc;
 import com.yuyuframe.launcheragent.apimixin.AgentBridge;
 import com.yuyuframe.launcheragent.apimixin.loader.FabricKnotExposer;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -83,9 +83,9 @@ public abstract class GlobalUiRenderMixin261 {
             // résolus par l'input poller (même source que ModuleRegistry
             // .renderOverlayAll, voir GlobalUiPresentMixin261), pas besoin de
             // re-résoudre GLFW ici.
-            if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled) {
                 try {
-                    com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.drawTestPanel(
+                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.drawTestPanel(
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DBlur.drawTestPanel() a levé: " + t);
@@ -94,11 +94,11 @@ public abstract class GlobalUiRenderMixin261 {
 
             // Preuve de mécanisme particules (roadmap Phase 5.4) — voir
             // UiParticleSystem, /yf particlepoc pour activer.
-            if (com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.effect.UiParticleSystem.testEnabled) {
                 try {
                     com.yuyuframe.launcheragent.apigraphic.UiRenderer particleRenderer =
                         com.yuyuframe.launcheragent.apigraphic.UiRenderer.get(this.getClass().getClassLoader());
-                    com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.tickAndDrawTest(particleRenderer,
+                    com.yuyuframe.launcheragent.apigraphic.effect.UiParticleSystem.tickAndDrawTest(particleRenderer,
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): UiParticleSystem.tickAndDrawTest() a levé: " + t);
@@ -107,9 +107,9 @@ public abstract class GlobalUiRenderMixin261 {
 
             // Preuve de mécanisme modes de fusion (roadmap Phase 5.4) — voir
             // Blaze3DBlend, /yf blendpoc pour activer.
-            if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled) {
                 try {
-                    com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.drawTestPanels(
+                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.drawTestPanels(
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DBlend.drawTestPanels() a levé: " + t);
@@ -118,9 +118,9 @@ public abstract class GlobalUiRenderMixin261 {
 
             // Preuve de mécanisme rects batchés (roadmap Phase 5.5) — voir
             // Blaze3DRect, /yf batchpoc pour activer.
-            if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled) {
                 try {
-                    com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.drawTestBatch(
+                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.drawTestBatch(
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DRect.drawTestBatch() a levé: " + t);
@@ -129,11 +129,11 @@ public abstract class GlobalUiRenderMixin261 {
 
             // Preuve de mécanisme rich text (roadmap Phase 5.3) — voir
             // UiRichText, /yf richtextpoc pour activer.
-            if (com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.text.UiRichText.testEnabled) {
                 try {
                     com.yuyuframe.launcheragent.apigraphic.UiRenderer richRenderer =
                         com.yuyuframe.launcheragent.apigraphic.UiRenderer.get(this.getClass().getClassLoader());
-                    com.yuyuframe.launcheragent.apigraphic.core.UiRichText.drawTestParagraph(richRenderer,
+                    com.yuyuframe.launcheragent.apigraphic.text.UiRichText.drawTestParagraph(richRenderer,
                         GlobalUiRenderBridge261.inputPoller.mouseX, GlobalUiRenderBridge261.inputPoller.mouseY,
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {

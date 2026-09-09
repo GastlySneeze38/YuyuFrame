@@ -122,7 +122,7 @@ public class HudElement {
      * reste — ex: la valeur numérique — reste TEXT_PRIMARY) ; sinon la ligne
      * entière est peinte dans cette couleur.
      */
-    public com.yuyuframe.launcheragent.apigraphic.core.UiColor textColor;
+    public com.yuyuframe.launcheragent.apigraphic.value.UiColor textColor;
 
     /**
      * Opacité PROPRE à cet élément, multipliée par le réglage global
@@ -307,7 +307,7 @@ public class HudElement {
         }
         float contentW = 0f;
         for (String line : lines) {
-            contentW = Math.max(contentW, com.yuyuframe.launcheragent.apigraphic.core.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
+            contentW = Math.max(contentW, com.yuyuframe.launcheragent.apigraphic.value.UiFont.REGULAR.textWidth(line, HudPanelRenderer.TEXT_SCALE));
         }
         float naturalH = lines.length * HudPanelRenderer.LINE_H + 2 * padY;
         float naturalW = contentW + 2 * padX;
@@ -423,7 +423,7 @@ public class HudElement {
      */
     private boolean defaultsCaptured;
     private float defaultScale = 1f, defaultPaddingX, defaultPaddingY, defaultOpacity = 1f;
-    private com.yuyuframe.launcheragent.apigraphic.core.UiColor defaultTextColor;
+    private com.yuyuframe.launcheragent.apigraphic.value.UiColor defaultTextColor;
 
     /** À appeler une fois que le module a fini de personnaliser cet élément — voir {@code ModuleRegistry.register}. Sans effet aux appels suivants. */
     public void captureDefaults() {

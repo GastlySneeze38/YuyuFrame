@@ -6,7 +6,7 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Options;
 

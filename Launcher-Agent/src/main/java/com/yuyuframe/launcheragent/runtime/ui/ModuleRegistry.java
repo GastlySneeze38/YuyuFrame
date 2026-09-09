@@ -298,9 +298,9 @@ public final class ModuleRegistry {
         // PUIS vide la file d'icônes d'item, le tout dans l'état de GUI de
         // vanilla, entre le HUD vanilla et le chat. Remplace l'ancien dessin
         // après-coup qui faisait passer tout notre contenu par-dessus le chat.
-        com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiLayer.setHudPass(
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiLayer.setHudPass(
             com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer::renderInVanillaGui);
-        com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiLayer.installItemIconFlush();
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiLayer.installItemIconFlush();
 
         // Regroupement demandé — voir ModuleGroup : purement de la
         // présentation, les modules ci-dessus restent enregistrés

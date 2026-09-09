@@ -3,9 +3,9 @@ package com.yuyuframe.launcheragent.runtime.ui;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 /**
  * Réglages GLOBAUX de l'interface — équivalent des préférences OneConfig

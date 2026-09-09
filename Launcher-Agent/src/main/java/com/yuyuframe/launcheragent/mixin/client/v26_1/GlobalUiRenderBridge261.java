@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 
 /**
  * Équivalent de {@code GlobalUiRenderBridge} (bracket 1.21.11) pour le

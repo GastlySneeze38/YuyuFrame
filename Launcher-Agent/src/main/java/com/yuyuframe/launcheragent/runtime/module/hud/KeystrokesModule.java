@@ -6,9 +6,9 @@ import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Options;
 
@@ -212,7 +212,7 @@ public final class KeystrokesModule extends SingleHudModule {
                 InputConstants.Key key = AccessorRegistry.as(InputConstants.Key.class, AccessPoint.KEYBIND_KEY, keyBinding);
                 if (key == null) return "?";
                 int code = key.getValue();
-                String name = com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
+                String name = com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
                 return name == null || name.isEmpty() ? "?" : name;
             } catch (Throwable t) {
                 return "?";
@@ -231,8 +231,8 @@ public final class KeystrokesModule extends SingleHudModule {
          */
         private void trackClicks() {
             try {
-                com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern modern =
-                    com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern.ACTIVE;
+                com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern modern =
+                    com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern.ACTIVE;
                 boolean leftDown, rightDown;
                 if (modern != null) {
                     leftDown = modern.leftDown;

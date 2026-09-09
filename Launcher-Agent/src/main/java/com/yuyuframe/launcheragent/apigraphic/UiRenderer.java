@@ -1,10 +1,10 @@
 package com.yuyuframe.launcheragent.apigraphic;
 
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget;
-import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
-import com.yuyuframe.launcheragent.apigraphic.render.GlBridge;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget;
+import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.render.UiTextRenderer;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
@@ -480,7 +480,7 @@ public final class UiRenderer {
      * backdrop courant flouté + teinté, coins arrondis par coin. Era E
      * (Blaze3D) uniquement pour l'instant — pas d'implémentation legacy/
      * modern GL (no-op silencieux ailleurs, voir {@link
-     * com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur}).
+     * com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur}).
      *
      * @param passes       étages downsample/upsample, {@code [1,5]} — plus haut = flou plus fort et plus coûteux.
      * @param tint         couleur mélangée par-dessus le flou.
@@ -489,7 +489,7 @@ public final class UiRenderer {
     public void drawBlurredPanel(float x1, float y1, float x2, float y2,
                                   float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
                                   int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
-        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueBlurredPanel(
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.queueBlurredPanel(
             x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
             passes, tint, tintStrength, vpWidth, vpHeight);
     }
@@ -503,7 +503,7 @@ public final class UiRenderer {
      * l'instant.
      */
     public boolean isGlassAvailable() {
-        return com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.isGlassAvailable();
+        return com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.isGlassAvailable();
     }
 
     /**
@@ -511,7 +511,7 @@ public final class UiRenderer {
      * flouté que tous les {@link #drawGlassPanel} de ce frame partageront.
      * À appeler AVANT eux (typiquement en toute première ligne du {@code
      * uiDraw} d'un écran), sinon chaque panneau paye sa propre chaîne de flou
-     * — voir {@link com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur#queueFrameChain}
+     * — voir {@link com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur#queueFrameChain}
      * pour le détail du coût (9 passes plein écran pour TOUT le frame ici, vs
      * 9 PAR PANNEAU sans ça) et la conséquence visuelle assumée (le verre
      * floute le monde du jeu, jamais l'UI dessinée avant lui).
@@ -526,7 +526,7 @@ public final class UiRenderer {
         // file — sinon elle arriverait après la soumission de la GUI, et les
         // panneaux échantillonneraient le flou de la frame précédente.
         if (VanillaGuiTarget.beginGlassFrame(passes, vpWidth, vpHeight)) return;
-        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
     }
 
     /**
@@ -563,7 +563,7 @@ public final class UiRenderer {
                 radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
                 tint, fallback, vpWidth, vpHeight)) return;
         if (isGlassAvailable() && !VanillaGuiTarget.isArmed()) {
-            com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.queueGlassPanel(
+            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.queueGlassPanel(
                 x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
                 tint, tintStrength, fallback.a, vpWidth, vpHeight);
         } else {
@@ -744,13 +744,13 @@ public final class UiRenderer {
         // regrouper tout le texte pour n'ouvrir qu'un maillage au lieu d'un par
         // chaîne.
         if (VanillaGuiTarget.beginTextBatch()) return;
-        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.beginBatch();
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText.beginBatch();
     }
 
     /** Ferme le lot ouvert par {@link #beginTextBatch} et empile son rendu (une passe par police). */
     public void endTextBatch(int vpWidth, int vpHeight) {
         if (VanillaGuiTarget.endTextBatch()) return;
-        com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
     }
 
     public float textWidth(String text, float scale) { return this.text.textWidth(text, scale); }

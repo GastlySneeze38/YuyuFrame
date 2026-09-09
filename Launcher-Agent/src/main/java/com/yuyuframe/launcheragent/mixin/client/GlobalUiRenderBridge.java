@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.mixin.client;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 
 /**
  * Bridge partagé entre {@link GlobalUiRenderMixin} (hook GameRenderer.render,

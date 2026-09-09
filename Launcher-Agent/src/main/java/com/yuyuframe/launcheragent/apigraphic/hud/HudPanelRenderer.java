@@ -1,9 +1,9 @@
 package com.yuyuframe.launcheragent.apigraphic.hud;
 
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 /**
  * Dessin du panneau HUD — PARTAGÉ entre l'éditeur (UiHudBox, qui ajoute par
@@ -71,11 +71,11 @@ public final class HudPanelRenderer {
         // laisserait CHAQUE panneau recalculer sa chaîne). C'est
         // VanillaGuiTarget.beginGlassFrame qui est idempotent sur la durée de
         // la passe — voir sa javadoc.
-        if (com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget.isArmed()) {
+        if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget.isArmed()) {
             renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
             return;
         }
-        if (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore.queuedCount() > 0) return;
+        if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.queuedCount() > 0) return;
         renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
     }
     // Ombre légère ajoutée (voir audit runtime/ui/ : le HUD était le seul

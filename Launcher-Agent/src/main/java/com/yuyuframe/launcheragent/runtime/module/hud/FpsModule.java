@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;

@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.gameplay;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;

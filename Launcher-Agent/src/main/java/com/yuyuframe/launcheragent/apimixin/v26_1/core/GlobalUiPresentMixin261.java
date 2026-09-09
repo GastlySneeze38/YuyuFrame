@@ -2,10 +2,10 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.AgentBridge;
-import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

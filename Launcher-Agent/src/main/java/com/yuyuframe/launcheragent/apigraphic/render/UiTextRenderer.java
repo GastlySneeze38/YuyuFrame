@@ -1,10 +1,11 @@
 package com.yuyuframe.launcheragent.apigraphic.render;
 
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore;
-import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DText;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;

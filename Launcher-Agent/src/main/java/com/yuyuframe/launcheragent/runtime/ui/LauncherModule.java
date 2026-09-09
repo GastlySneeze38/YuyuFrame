@@ -45,7 +45,7 @@ public abstract class LauncherModule {
      * URL HTTPS d'icône distante pour la carte de ce module (demandé
      * explicitement : "ajoute des icônes pour tous les modules", même
      * système de fetch HTTPS-en-mémoire que la galerie Modrinth — voir
-     * {@link com.yuyuframe.launcheragent.apigraphic.core.UiRemoteImage}).
+     * {@link com.yuyuframe.launcheragent.apigraphic.asset.UiRemoteImage}).
      * {@code null} (défaut) = pas d'icône dédiée, {@code ModCard} retombe
      * sur la pastille-lettre existante. Mutable et assigné APRÈS le
      * {@code super(...)} (dans le corps du constructeur de chaque module,

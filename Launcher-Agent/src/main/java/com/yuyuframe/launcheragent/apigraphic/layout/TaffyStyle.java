@@ -9,7 +9,7 @@ package com.yuyuframe.launcheragent.apigraphic.layout;
  * deux côtés du pont JNI, aucune ambiguïté nombre/chaîne à désambiguïser
  * côté Rust.
  *
- * Champs publics mutables façon {@link com.yuyuframe.launcheragent.apigraphic.core.UiColor}/
+ * Champs publics mutables façon {@link com.yuyuframe.launcheragent.apigraphic.value.UiColor}/
  * {@code UiTheme} (pas de vrai encapsulement dans ce moteur) — quelques
  * méthodes fluentes en plus pour les cas les plus fréquents (évite un mur de
  * {@code new TaffyStyle(); s.foo = ...; s.bar = ...;} à chaque site d'appel).

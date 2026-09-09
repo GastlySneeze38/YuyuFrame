@@ -5,11 +5,11 @@ import com.yuyuframe.launcheragent.runtime.ui.ConfigScreenBuilder;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiPanel;
 import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyLayoutResult;
@@ -18,7 +18,7 @@ import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiModalForm;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -174,7 +174,7 @@ public class UiModConfigScreen extends UiScreenBase {
     }
 
     @Override
-    protected java.util.List<com.yuyuframe.launcheragent.apigraphic.core.UiWidget> modalWidgets() {
+    protected java.util.List<com.yuyuframe.launcheragent.apigraphic.widget.UiWidget> modalWidgets() {
         return modal == null ? null : modal.widgets();
     }
 

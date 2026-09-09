@@ -4,13 +4,13 @@ import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudPanelRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 
 import java.util.List;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
 /**
  * Représente un {@link HudElement} dans l'éditeur (UiHudEditorScreen) — MÊME

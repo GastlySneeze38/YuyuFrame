@@ -148,7 +148,7 @@ public final class HudConfigStore {
             if (packedColor != null) {
                 try {
                     int argb = Integer.parseInt(packedColor.trim());
-                    element.textColor = new com.yuyuframe.launcheragent.apigraphic.core.UiColor(
+                    element.textColor = new com.yuyuframe.launcheragent.apigraphic.value.UiColor(
                         (argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, (argb >>> 24) & 0xFF);
                 } catch (NumberFormatException ignored) {}
             }
@@ -300,7 +300,7 @@ public final class HudConfigStore {
             DATA.setProperty(id + ".hud.locked", String.valueOf(element.locked));
             DATA.setProperty(id + ".hud.opacity", String.valueOf(element.opacity));
             if (element.textColor != null) {
-                com.yuyuframe.launcheragent.apigraphic.core.UiColor c = element.textColor;
+                com.yuyuframe.launcheragent.apigraphic.value.UiColor c = element.textColor;
                 int argb = (Math.round(c.a * 255f) << 24) | (Math.round(c.r * 255f) << 16)
                     | (Math.round(c.g * 255f) << 8) | Math.round(c.b * 255f);
                 DATA.setProperty(id + ".hud.textColor", String.valueOf(argb));

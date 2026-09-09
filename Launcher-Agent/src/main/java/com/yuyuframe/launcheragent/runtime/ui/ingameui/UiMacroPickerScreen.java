@@ -1,11 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.MacroModule;

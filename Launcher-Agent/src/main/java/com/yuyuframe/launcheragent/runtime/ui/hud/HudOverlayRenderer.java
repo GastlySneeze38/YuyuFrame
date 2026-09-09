@@ -3,8 +3,8 @@ package com.yuyuframe.launcheragent.runtime.ui.hud;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudRenderer;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
-import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
@@ -12,7 +12,7 @@ import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.game.GameOptions;
-import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 
 import java.lang.reflect.Field;
 

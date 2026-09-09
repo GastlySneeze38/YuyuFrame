@@ -6,9 +6,9 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,7 +22,7 @@ import java.lang.reflect.Modifier;
  * Équivalent 1.13-1.16.x de {@code GlobalUiRenderMixin} (package client,
  * 1.21+) — bracket "B" (voir docs/LauncherAgent, historique de session) :
  * LWJGL3/GLFW comme le pipeline moderne (donc {@link UiInputPollerModern},
- * PAS {@link com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerLegacy}),
+ * PAS {@link com.yuyuframe.launcheragent.apigraphic.platform.lwjgl2.UiInputPollerLegacy}),
  * mais contexte OpenGL encore en dessous de 3.2 Core Profile — le dessin
  * immédiat (glBegin/glMatrixMode, voir {@code UiRenderer.drawXxxLegacy})
  * fonctionne donc ENCORE ici, contrairement à 1.17+ (voir

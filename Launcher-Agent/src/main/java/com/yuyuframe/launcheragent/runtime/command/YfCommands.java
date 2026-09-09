@@ -3,7 +3,7 @@ package com.yuyuframe.launcheragent.runtime.command;
 import com.yuyuframe.launcheragent.agent.LauncherAgent;
 import com.yuyuframe.launcheragent.apigraphic.debug.DebugOverlayState;
 import com.yuyuframe.launcheragent.apigraphic.debug.DevShaderLoader;
-import com.yuyuframe.launcheragent.apigraphic.shader.UiSolidPipelinePoc;
+import com.yuyuframe.launcheragent.apigraphic.example.UiSolidPipelinePoc;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.GlobalUiRenderBridge261;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
@@ -229,9 +229,9 @@ final class YfCommands {
             public String name() { return "yf blurpoc"; }
             public String description() { return "Toggle un panneau de test flouté (dual-Kawase, roadmap Phase 5.1) centré à l'écran — voir Blaze3DBlur"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled;
-                LauncherLog.info("[YfCommands] Test panneau flouté : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlur.testEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled;
+                LauncherLog.info("[YfCommands] Test panneau flouté : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled ? "activé" : "désactivé")
                     + " (panneau violet translucide centré si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
@@ -291,9 +291,9 @@ final class YfCommands {
             public String name() { return "yf richtextpoc"; }
             public String description() { return "Toggle un paragraphe de test rich text (gras/couleur/lien mélangés, word-wrap automatique — roadmap Phase 5.3) — voir UiRichText"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled;
-                LauncherLog.info("[YfCommands] Test rich text : " + (com.yuyuframe.launcheragent.apigraphic.core.UiRichText.testEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.text.UiRichText.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.text.UiRichText.testEnabled;
+                LauncherLog.info("[YfCommands] Test rich text : " + (com.yuyuframe.launcheragent.apigraphic.text.UiRichText.testEnabled ? "activé" : "désactivé")
                     + " (paragraphe en bas à gauche si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
@@ -304,9 +304,9 @@ final class YfCommands {
             public String name() { return "yf batchpoc"; }
             public String description() { return "Toggle une grille de test de 40 rects (couleurs/tailles variées, même rayon) dessinés en UN SEUL draw call — roadmap Phase 5.5, voir Blaze3DRect#drawRectBatch"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled;
-                LauncherLog.info("[YfCommands] Test rects batchés : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect.batchTestEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled;
+                LauncherLog.info("[YfCommands] Test rects batchés : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled ? "activé" : "désactivé")
                     + " (grille 10x4 dégradée si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
@@ -317,9 +317,9 @@ final class YfCommands {
             public String name() { return "yf blendpoc"; }
             public String description() { return "Toggle 3 panneaux de test (multiply/screen/overlay, roadmap Phase 5.4) mélangés avec le fond actuel — voir Blaze3DBlend"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled;
-                LauncherLog.info("[YfCommands] Test modes de fusion : " + (com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DBlend.testEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled;
+                LauncherLog.info("[YfCommands] Test modes de fusion : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled ? "activé" : "désactivé")
                     + " (3 panneaux orange multiply/screen/overlay si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
@@ -330,9 +330,9 @@ final class YfCommands {
             public String name() { return "yf particlepoc"; }
             public String description() { return "Toggle un burst de confettis répété (roadmap Phase 5.4) — voir UiParticleSystem"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled;
-                LauncherLog.info("[YfCommands] Test particules : " + (com.yuyuframe.launcheragent.apigraphic.core.UiParticleSystem.testEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.effect.UiParticleSystem.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.effect.UiParticleSystem.testEnabled;
+                LauncherLog.info("[YfCommands] Test particules : " + (com.yuyuframe.launcheragent.apigraphic.effect.UiParticleSystem.testEnabled ? "activé" : "désactivé")
                     + " (confettis en bas au centre, toutes les ~1.5s, si le mécanisme fonctionne)");
             }
         };

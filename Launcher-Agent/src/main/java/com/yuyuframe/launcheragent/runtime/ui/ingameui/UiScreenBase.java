@@ -1,18 +1,18 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
-import com.yuyuframe.launcheragent.apigraphic.core.UiFocusable;
-import com.yuyuframe.launcheragent.apigraphic.core.UiHitTest;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiFocusable;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiHitTest;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
-import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTooltip;
 import net.minecraft.client.gui.screens.Screen;
 

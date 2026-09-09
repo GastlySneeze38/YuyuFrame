@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apigraphic.layout;
 
-import com.yuyuframe.launcheragent.apigraphic.core.UiWidget;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.util.Map;

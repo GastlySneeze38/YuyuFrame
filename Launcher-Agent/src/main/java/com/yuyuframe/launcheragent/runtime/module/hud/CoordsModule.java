@@ -2,9 +2,9 @@ package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
+import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.core.UiTheme;
+import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
