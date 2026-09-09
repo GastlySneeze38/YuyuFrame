@@ -3,6 +3,7 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
 
 /**
  * Backend de l'ère Blaze3D (1.21.11 – 26.x) — première implémentation du
@@ -179,6 +180,74 @@ public final class Blaze3DBackend implements UiBackend {
     public boolean endTextBatch(int vpWidth, int vpHeight) {
         if (VanillaGuiTarget.endTextBatch()) return true;
         Blaze3DText.endBatch(vpWidth, vpHeight);
+        return true;
+    }
+
+    // ── Primitives dont le test d'ère vivait DANS UiPrimitiveRenderer ─────
+    // Chaque corps est repris du « if (Blaze3DCore.isAvailable()) » de la
+    // méthode correspondante. Deux d'entre elles ne dessinent RIEN sur cette
+    // ère, et c'est délibéré : voir ci-dessous.
+
+    /**
+     * Ne dessine rien, et répond quand même « pris en charge ».
+     *
+     * <p>Repris du {@code if (Blaze3DCore.isAvailable()) return;} d'origine :
+     * une vraie ombre demanderait un flou gaussien, impossible sur ce chemin.
+     * Le {@code true} évite simplement à l'appelant de descendre dans un
+     * chemin qui, lui, se contentait de sortir aussitôt.
+     */
+    @Override
+    public boolean shadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
+                          UiColor color, int vpWidth, int vpHeight) {
+        return true;
+    }
+
+    /** Ne dessine rien sur cette ère — même raison que {@link #shadow}. */
+    @Override
+    public boolean roundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
+                                     UiColor color, int vpWidth, int vpHeight) {
+        return true;
+    }
+
+    @Override
+    public boolean gradientRect(float x1, float y1, float x2, float y2, float radius,
+                                UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
+        Blaze3DGradient.queueGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean gradientRect2D(float x1, float y1, float x2, float y2, float radius,
+                                  UiColor colorBottomLeft, UiColor colorBottomRight,
+                                  UiColor colorTopLeft, UiColor colorTopRight,
+                                  int vpWidth, int vpHeight) {
+        Blaze3DGradient.queueGradientRect2D(x1, y1, x2, y2, radius,
+            colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean multiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
+                                         UiGradientType type, float startX, float startY, float endX, float endY,
+                                         UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
+        Blaze3DGradient.queueMultiStopGradientRect(x1, y1, x2, y2, radius, type,
+            startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
+        return true;
+    }
+
+    /**
+     * Pas de clip stencil sur cette ère — repris du {@code return} d'origine.
+     * Le {@code true} des deux méthodes garde la paire cohérente : ouvrir sans
+     * fermer, ou l'inverse, laisserait un stencil dans un état imprévisible.
+     */
+    @Override
+    public boolean beginRoundedClip(float x1, float y1, float x2, float y2, float radius,
+                                    int vpWidth, int vpHeight) {
+        return true;
+    }
+
+    @Override
+    public boolean endRoundedClip() {
         return true;
     }
 }

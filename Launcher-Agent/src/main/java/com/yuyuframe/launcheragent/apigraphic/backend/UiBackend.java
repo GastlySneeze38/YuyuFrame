@@ -125,6 +125,51 @@ public interface UiBackend {
     /** La vignette est-elle dessinable en l'état ? */
     default boolean vignetteAvailable() { return false; }
 
+    // ── Primitives dont le test d'ère vivait DANS UiPrimitiveRenderer ─────
+    //
+    // Contrairement aux précédentes, celles-ci n'avaient aucun test dans la
+    // façade : elle appelait directement les primitives, qui branchaient en
+    // interne. D'où des comportements par ère qu'on ne voyait qu'en ouvrant le
+    // fichier — l'ombre et la bordure, par exemple, ne dessinent RIEN sur
+    // Blaze3D (pas de vrai flou gaussien disponible sur ce chemin).
+
+    /** Ombre portée (flou + écartement). */
+    default boolean shadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
+                           UiColor color, int vpWidth, int vpHeight) { return false; }
+
+    /** Contour de rectangle arrondi. */
+    default boolean roundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
+                                      UiColor color, int vpWidth, int vpHeight) { return false; }
+
+    /** Dégradé vertical bas→haut. */
+    default boolean gradientRect(float x1, float y1, float x2, float y2, float radius,
+                                 UiColor colorBottom, UiColor colorTop,
+                                 int vpWidth, int vpHeight) { return false; }
+
+    /** Dégradé bilinéaire (une couleur par coin). */
+    default boolean gradientRect2D(float x1, float y1, float x2, float y2, float radius,
+                                   UiColor colorBottomLeft, UiColor colorBottomRight,
+                                   UiColor colorTopLeft, UiColor colorTopRight,
+                                   int vpWidth, int vpHeight) { return false; }
+
+    /**
+     * Dégradé multi-paliers. Les tableaux reçus sont DÉJÀ normalisés à huit
+     * entrées — voir {@code draw/geometry/GradientStops}, la validation est
+     * faite une seule fois, en amont, pour toutes les ères.
+     */
+    default boolean multiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
+                                          com.yuyuframe.launcheragent.apigraphic.value.UiGradientType type,
+                                          float startX, float startY, float endX, float endY,
+                                          UiColor[] colors, float[] positions,
+                                          int vpWidth, int vpHeight) { return false; }
+
+    /** Ouvre un clip à coins arrondis (stencil). */
+    default boolean beginRoundedClip(float x1, float y1, float x2, float y2, float radius,
+                                     int vpWidth, int vpHeight) { return false; }
+
+    /** Ferme le clip ouvert par {@link #beginRoundedClip}. */
+    default boolean endRoundedClip() { return false; }
+
     /**
      * Rectangle à coins arrondis.
      *

@@ -6,6 +6,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
+import com.yuyuframe.launcheragent.apigraphic.draw.geometry.GradientStops;
 import com.yuyuframe.launcheragent.apigraphic.text.UiTextLayout;
 import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.RenderEra;
@@ -365,10 +366,12 @@ public final class UiRenderer {
      * E, voir {@link UiPrimitiveRenderer#beginRoundedClip}).
      */
     public void beginRoundedClip(float x1, float y1, float x2, float y2, float radius, int vpWidth, int vpHeight) {
+        if (backend().beginRoundedClip(x1, y1, x2, y2, radius, vpWidth, vpHeight)) return;
         primitives.beginRoundedClip(x1, y1, x2, y2, radius, vpWidth, vpHeight);
     }
 
     public void endRoundedClip() {
+        if (backend().endRoundedClip()) return;
         primitives.endRoundedClip();
     }
 
@@ -506,6 +509,7 @@ public final class UiRenderer {
 
     public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
                             UiColor color, int vpWidth, int vpHeight) {
+        if (backend().shadow(x1, y1, x2, y2, radius, blur, spread, color, vpWidth, vpHeight)) return;
         primitives.drawShadow(x1, y1, x2, y2, radius, blur, spread, color, vpWidth, vpHeight);
     }
 
@@ -657,17 +661,20 @@ public final class UiRenderer {
 
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
                                        UiColor color, int vpWidth, int vpHeight) {
+        if (backend().roundedRectBorder(x1, y1, x2, y2, radius, borderWidth, color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRectBorder(x1, y1, x2, y2, radius, borderWidth, color, vpWidth, vpHeight);
     }
 
     public void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
                                   UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
+        if (backend().gradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight)) return;
         primitives.drawGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
     }
 
     public void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
                                     UiColor colorBottomLeft, UiColor colorBottomRight,
                                     UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
+        if (backend().gradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight)) return;
         primitives.drawGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
     }
 
@@ -680,6 +687,12 @@ public final class UiRenderer {
     public void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
                                            UiGradientType type, float startX, float startY, float endX, float endY,
                                            UiColor[] stopColors, float[] stopPositions, int vpWidth, int vpHeight) {
+        // Validation/normalisation UNE fois, en amont, pour toutes les ères
+        // — voir draw/geometry/GradientStops.
+        GradientStops.Normalized stops = GradientStops.normalize(stopColors, stopPositions);
+        if (stops == null) return;
+        if (backend().multiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY,
+                stops.colors, stops.positions, vpWidth, vpHeight)) return;
         primitives.drawMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, stopColors, stopPositions, vpWidth, vpHeight);
     }
 
