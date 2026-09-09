@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.render;
 
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.IconTextures;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
@@ -25,9 +26,13 @@ public final class UiPrimitiveRenderer {
     private final UiRenderer owner;
     private final GlBridge gl;
 
+    /** Cache image → texture GL, extrait le 2026-09-09 — voir {@link IconTextures}. */
+    private final IconTextures icons;
+
     public UiPrimitiveRenderer(UiRenderer owner, GlBridge gl) {
         this.owner = owner;
         this.gl = gl;
+        this.icons = new IconTextures(gl);
     }
 
     // ── Diagnostic gamma/espace colorimétrique (roadmap Phase 5.4) ──────────
@@ -564,7 +569,6 @@ public final class UiPrimitiveRenderer {
     private int uTexIconModern = -1, uAlphaIconModern = -1, uProjectionIconModern = -1;
     private boolean iconInitFailedModern = false;
 
-    private final Map<String, Integer> iconTextures = new HashMap<>();
 
     private void ensureRectShaderInit() {
         if (rectProgram != -1 || rectInitFailed) return;
@@ -1023,7 +1027,7 @@ public final class UiPrimitiveRenderer {
             Blaze3DRect.queueIcon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
             return;
         }
-        int texId = ensureIconTexture(cacheKey, img);
+        int texId = icons.ensureIconTexture(cacheKey, img);
         if (texId < 0) return;
 
         if (owner.isModern()) {
@@ -1115,49 +1119,6 @@ public final class UiPrimitiveRenderer {
             if (modelPushed) { try { gl.matrixMode(0x1700); gl.popMatrix(); } catch (Throwable ignored) {} }
             if (projPushed) { try { gl.matrixMode(0x1701); gl.popMatrix(); } catch (Throwable ignored) {} }
             if (savedGlState != null) gl.restoreLegacyGlState(savedGlState);
-        }
-    }
-
-    /** Upload GL brut (glTexImage2D), mis en cache par cacheKey — voir FontAtlasTextures#createFontTextureRaw pour le même motif appliqué aux polices. */
-    private int ensureIconTexture(String cacheKey, java.awt.image.BufferedImage img) {
-        Integer cached = iconTextures.get(cacheKey);
-        if (cached != null) return cached;
-        try {
-            int w = img.getWidth(), h = img.getHeight();
-            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
-            int[] row = new int[w];
-            for (int y = 0; y < h; y++) {
-                img.getRGB(0, y, w, 1, row, 0, w);
-                for (int x = 0; x < w; x++) {
-                    int argb = row[x];
-                    buf.put((byte) ((argb >> 16) & 0xFF)); // R
-                    buf.put((byte) ((argb >> 8) & 0xFF));  // G
-                    buf.put((byte) (argb & 0xFF));         // B
-                    buf.put((byte) ((argb >> 24) & 0xFF)); // A
-                }
-            }
-            buf.flip();
-
-            int texId = gl.glGenTextures();
-            gl.glBindTexture(0x0DE1, texId);
-            gl.glTexImage2D(0x0DE1, 0, 0x1908, w, h, 0, 0x1908, 0x1401, buf); // GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
-            gl.glTexParameteri(0x0DE1, 0x2801, 0x2601); // GL_TEXTURE_MIN_FILTER, GL_LINEAR (pas de mipmap — icônes rarement minifiées fortement)
-            gl.glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
-            gl.glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
-            gl.glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
-            // Même précaution ZGC que createFontTextureRaw (voir son
-            // commentaire pour le pourquoi) — coût négligeable ici (upload
-            // UNE SEULE FOIS par icône, jamais par frame).
-            gl.glFinish();
-            GlBridge.reachabilityFence(buf);
-
-            iconTextures.put(cacheKey, texId);
-            LauncherLog.ui(1, "[UiRenderer] icône '" + cacheKey + "' uploadée (glTexImage2D), texId=" + texId + " w=" + w + " h=" + h);
-            return texId;
-        } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] ensureIconTexture(" + cacheKey + "): " + t);
-            iconTextures.put(cacheKey, -1);
-            return -1;
         }
     }
 
