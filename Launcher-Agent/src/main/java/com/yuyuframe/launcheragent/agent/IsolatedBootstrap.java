@@ -4,8 +4,8 @@ import com.yuyuframe.launcheragent.apimixin.service.LauncherMixinService;
 import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
-import com.yuyuframe.launcheragent.apimixin.version.VersionBracket;
-import com.yuyuframe.launcheragent.apimixin.version.VersionBracketRegistry;
+import com.yuyuframe.launcheragent.apimixin.version.VersionProfile;
+import com.yuyuframe.launcheragent.apimixin.version.VersionProfileRegistry;
 import org.spongepowered.asm.launch.MixinBootstrap;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 import org.spongepowered.asm.mixin.Mixins;
@@ -68,15 +68,16 @@ public final class IsolatedBootstrap {
         LauncherLog.agent(1, "[LauncherAgent] IsolatedBootstrap.start (classloader=" + IsolatedBootstrap.class.getClassLoader()
             + ", intermediary=" + intermediary + ", isolated=" + isolated + ", version=" + mcVersion + ")");
 
-        VersionBracket bracket = VersionBracketRegistry.resolve(mcVersion);
-        if (bracket == null) {
-            LauncherLog.err("[LauncherAgent] Version MC \"" + mcVersion + "\" non supportée — aucun bracket "
-                + "ne correspond dans VersionBracketRegistry, bootstrap Mixin ABANDONNÉ (pas de Mixin appliqué, "
-                + "mais l'agent continue de tourner). Voir VersionBracketRegistry pour la liste des versions "
+        VersionProfile profile = VersionProfileRegistry.resolve(mcVersion);
+        if (profile == null) {
+            LauncherLog.err("[LauncherAgent] Version MC \"" + mcVersion + "\" non supportée — aucun profil "
+                + "ne correspond dans VersionProfileRegistry, bootstrap Mixin ABANDONNÉ (pas de Mixin appliqué, "
+                + "mais l'agent continue de tourner). Voir VersionProfileRegistry pour la liste des versions "
                 + "supportées et la convention pour en ajouter une.");
             return;
         }
-        LauncherLog.agent(1, "[LauncherAgent] Bracket de version résolu : " + bracket.key);
+        LauncherLog.agent(1, "[LauncherAgent] Profil de version résolu : " + profile.key
+            + " (table de hooks : " + profile.hookTableVersion + ")");
 
         MappingsRegistry.setScheme(intermediary
             ? MappingsRegistry.Scheme.INTERMEDIARY
@@ -84,7 +85,7 @@ public final class IsolatedBootstrap {
 
         LauncherMixinService.setInstrumentation(inst);
 
-        loadYarnMappings(yarnPath, bracket);
+        loadYarnMappings(yarnPath, profile);
 
         // Log de sanité : vérifie que la classe principale de la version est bien mappée.
         // Même nom Yarn named "TitleScreen" sur les deux branches — Legacy Fabric
@@ -108,18 +109,16 @@ public final class IsolatedBootstrap {
         // fichier brut vs jar), jamais de "intermediary" — voir sa javadoc.
         writeRefmapFile(inst, isolated);
 
-        // Sélection du/des fichier(s) de config Mixin selon la version MC —
-        // mixinConfig (legacy) est NULLABLE : un bracket entièrement basculé
-        // vers apimixin/ (voir VersionBracketRegistry, 26.1.2) n'en a plus.
-        String mixinConfig = bracket.mixinConfigResource;
-        String apiMixinConfig = bracket.apiMixinConfigResource;
+        // Config Mixin héritée du système pré-déclaratif — NULLABLE : une
+        // tranche entièrement basculée vers apimixin/ (voir
+        // VersionProfileRegistry, 26.1.2) n'en a plus.
+        String mixinConfig = profile.legacyMixinConfigResource;
 
-        // Filtrage déclaratif HookPoint — remplace l'ancienne gate du plugin de
-        // config Mixin (voir filterConfigByHookPoints). Fait ICI, avant tout
-        // enregistrement, pour que Mixin n'ouvre même pas les mixins écartés.
-        if (apiMixinConfig != null) {
-            apiMixinConfig = filterConfigByHookPoints(apiMixinConfig);
-        }
+        // Config apimixin GÉNÉRÉE depuis la table déclarative
+        // (MixinHookPointRegistry) — plus aucun JSON par version en ressource,
+        // plus de filtrage par regex. Fait ICI, avant tout enregistrement,
+        // pour que Mixin n'ouvre même pas les mixins écartés.
+        String apiMixinConfig = publishApiMixinConfig(inst, isolated, profile);
 
         Set<String> mixinTargets = new LinkedHashSet<>();
         if (mixinConfig != null) {
@@ -152,34 +151,61 @@ public final class IsolatedBootstrap {
      *     petit jar dédié, ajouté au classloader système via cette API.
      */
     private static void writeRefmapFile(Instrumentation inst, boolean isolated) {
+        String json = LauncherMixinService.buildRefmapJson();
+        boolean ok = publishGeneratedResource(inst, isolated,
+            "mixins.launcheragent.refmap.json", "refmap.jar", json, "refmap");
+        if (ok) LauncherLog.agent(1, "[LauncherAgent] refmap contenu : " + json);
+    }
+
+    /**
+     * Dépose une ressource FABRIQUÉE au démarrage (refmap, config Mixin
+     * générée) là où le classloader qui fait tourner Mixin saura la résoudre
+     * par son nom — voir {@link #writeRefmapFile} pour le détail des deux
+     * mécanismes (fichier brut dans {@code <agentDir>/generated/} en isolé,
+     * jar ajouté au classloader système sinon).
+     *
+     * <p>Factorisé le 2026-09-09 : la config apimixin est désormais générée
+     * elle aussi, et l'ancien {@code filterConfigByHookPoints} n'écrivait QUE
+     * le fichier brut — donc introuvable en mode non isolé (vanilla), où
+     * {@code generated/} n'est pas sur le classpath système. Le bug ne s'est
+     * jamais manifesté parce que 26.1.2 se lance en pratique sous Fabric
+     * (chemin isolé) ; il aurait été fatal dès le premier lancement vanilla,
+     * la config générée étant maintenant la SEULE source des mixins apimixin.
+     *
+     * @return vrai si la ressource est publiée et résolvable
+     */
+    private static boolean publishGeneratedResource(Instrumentation inst, boolean isolated,
+                                                    String resourceName, String jarName,
+                                                    String content, String label) {
         try {
             java.io.File agentDir = agentDir();
             if (agentDir == null) {
-                LauncherLog.err("[LauncherAgent] writeRefmapFile: dossier agent introuvable");
-                return;
+                LauncherLog.err("[LauncherAgent] publish " + label + ": dossier agent introuvable");
+                return false;
             }
             java.io.File dir = new java.io.File(agentDir, "generated");
             dir.mkdirs();
-            String json = LauncherMixinService.buildRefmapJson();
+            byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
             if (isolated) {
-                java.io.File file = new java.io.File(dir, "mixins.launcheragent.refmap.json");
-                java.nio.file.Files.write(file.toPath(), json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                LauncherLog.agent(1, "[LauncherAgent] refmap écrit (fichier brut, classloader isolé) : " + file);
+                java.io.File file = new java.io.File(dir, resourceName);
+                java.nio.file.Files.write(file.toPath(), bytes);
+                LauncherLog.agent(1, "[LauncherAgent] " + label + " écrit (fichier brut, classloader isolé) : " + file);
             } else {
-                java.io.File jarFile = new java.io.File(dir, "refmap.jar");
+                java.io.File jarFile = new java.io.File(dir, jarName);
                 try (java.util.jar.JarOutputStream jos =
                         new java.util.jar.JarOutputStream(new java.io.FileOutputStream(jarFile))) {
-                    jos.putNextEntry(new java.util.zip.ZipEntry("mixins.launcheragent.refmap.json"));
-                    jos.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    jos.putNextEntry(new java.util.zip.ZipEntry(resourceName));
+                    jos.write(bytes);
                     jos.closeEntry();
                 }
                 inst.appendToSystemClassLoaderSearch(new java.util.jar.JarFile(jarFile));
-                LauncherLog.agent(1, "[LauncherAgent] refmap écrit (jar ajouté au classloader système) : " + jarFile);
+                LauncherLog.agent(1, "[LauncherAgent] " + label + " écrit (jar ajouté au classloader système) : " + jarFile);
             }
-            LauncherLog.agent(1, "[LauncherAgent] refmap contenu : " + json);
+            return true;
         } catch (Throwable t) {
-            LauncherLog.err("[LauncherAgent] writeRefmapFile: " + t);
+            LauncherLog.err("[LauncherAgent] publish " + label + ": " + t);
+            return false;
         }
     }
 
@@ -316,7 +342,7 @@ public final class IsolatedBootstrap {
         }
     }
 
-    private static void loadYarnMappings(String explicitPath, VersionBracket bracket) {
+    private static void loadYarnMappings(String explicitPath, VersionProfile profile) {
         if (explicitPath != null && !explicitPath.isEmpty()) {
             try {
                 if (explicitPath.endsWith(".jar") || explicitPath.endsWith(".zip")) {
@@ -331,9 +357,19 @@ public final class IsolatedBootstrap {
             }
         }
 
-        // Cherche d'abord un JAR Yarn dont le nom contient l'indice du bracket
+        // Indice absent = version NON OBFUSQUÉE (26.1+) : il n'existe aucun
+        // jar Yarn pour elle, et la deuxième passe de findYarnJar accepte
+        // n'importe quel jar Yarn du disque — on chargerait donc les mappings
+        // d'une AUTRE version. Rien à auto-détecter ici.
+        if (profile.yarnJarNameHint == null) {
+            LauncherLog.agent(3, "[LauncherAgent] Profil " + profile.key + " sans indice Yarn "
+                + "(version non obfusquée) — auto-détection ignorée");
+            return;
+        }
+
+        // Cherche d'abord un JAR Yarn dont le nom contient l'indice du profil
         // résolu (ex: "1.8.9" pour la tranche legacy189, "1.21.11" pour la
-        // tranche moderne actuelle) — voir VersionBracket.yarnJarNameHint.
+        // tranche moderne actuelle) — voir VersionProfile.yarnJarNameHint.
         String[] searchRoots = {
             System.getProperty("user.home") + "\\.gradle\\caches\\fabric-loom",
             System.getProperty("user.home") + "\\.gradle\\caches",
@@ -341,7 +377,7 @@ public final class IsolatedBootstrap {
         };
         for (String root : searchRoots) {
             if (root == null) continue;
-            java.io.File found = findYarnJar(new java.io.File(root), bracket.yarnJarNameHint, 0);
+            java.io.File found = findYarnJar(new java.io.File(root), profile.yarnJarNameHint, 0);
             if (found != null) {
                 try {
                     YarnMappings.loadFromJar(found.getAbsolutePath());
@@ -363,14 +399,14 @@ public final class IsolatedBootstrap {
             LauncherLog.agent(1, "[LauncherAgent] Yarn resource JAR non chargée : " + e.getMessage());
         }
 
-        LauncherLog.warn("[LauncherAgent] Yarn non disponible pour le bracket \"" + bracket.key + "\" — "
-            + "passez yarn=<chemin vers un jar Yarn mergedv2 contenant \"" + bracket.yarnJarNameHint
+        LauncherLog.warn("[LauncherAgent] Yarn non disponible pour le profil \"" + profile.key + "\" — "
+            + "passez yarn=<chemin vers un jar Yarn mergedv2 contenant \"" + profile.yarnJarNameHint
             + "\"> en argument de l'agent (legacy189 : maven.legacyfabric.net).");
     }
 
     /**
      * Cherche un JAR Yarn dans {@code dir}. Priorité aux JARs dont le nom
-     * contient {@code yarnJarNameHint} (voir VersionBracket.yarnJarNameHint).
+     * contient {@code yarnJarNameHint} (voir VersionProfile.yarnJarNameHint).
      */
     private static java.io.File findYarnJar(java.io.File dir, String yarnJarNameHint, int depth) {
         if (depth > 6 || !dir.isDirectory()) return null;
@@ -402,9 +438,26 @@ public final class IsolatedBootstrap {
         return buf.toByteArray();
     }
 
-    // ── Filtrage déclaratif HookPoint (2026-08-25, §12) ────────────────────
+    // ── Config apimixin générée depuis la table déclarative (2026-09-09) ───
     //
-    // Remplace la gate qui vivait dans LauncherMixinConfigPlugin.
+    // Le JSON de config Mixin d'apimixin/ n'existe plus en ressource par
+    // version : il est CONSTRUIT ici à partir de MixinHookPointRegistry (la
+    // liste des mixins, avec la version MC en colonne explicite) et du
+    // template partagé mixins.launcheragent-apimixin.template.json (l'en-tête :
+    // package, plugin, refmap, injectors).
+    //
+    // Ce que ça remplace : un JSON par bracket + filterConfigByHookPoints(),
+    // qui RETIRAIT du JSON par regex les entrées non réclamées. Deux listes à
+    // tenir synchronisées, dont la divergence était silencieuse, et une version
+    // implicite dans le suffixe du nom de classe (...Mixin261) — donc deux
+    // versions MC ne pouvaient pas cohabiter. Voir la javadoc de
+    // MixinHookPointRegistry pour le raisonnement complet.
+    //
+    // Le gating lui-même n'a pas changé : un mixin déclaré via gate() dont le
+    // HookPoint n'est réclamé par AUCUN module ni par l'infrastructure n'entre
+    // pas dans le JSON généré — Mixin ne sait même pas qu'il existe.
+    //
+    // Hérité de la gate qui vivait dans LauncherMixinConfigPlugin.
     // shouldApplyMixin() — voir LauncherMixinService.findClass pour l'histoire
     // complète. Deux raisons de l'avoir déplacée ici :
     //
@@ -429,111 +482,182 @@ public final class IsolatedBootstrap {
     // depuis premain reviendrait à toucher apimixin depuis le classloader
     // système — exactement le LinkageError du §10 (bug A).
     //
-    // En cas d'échec quelconque, on renvoie la config d'origine : le filtrage
-    // est une optimisation, jamais un point de rupture.
+    // ⚠️ La génération, elle, n'est PAS optionnelle : c'est désormais la seule
+    // source des mixins apimixin. Le repli en cas d'échec n'est donc plus « la
+    // config d'origine » (elle n'existe plus) mais la DÉGRADATION DU GATING :
+    // si le catalogue des HookPoint réclamés est vide/illisible, on écrit TOUS
+    // les mixins de la version. Un mixin tissé pour rien coûte du temps de
+    // démarrage ; un mixin écarté à tort casse une fonctionnalité.
 
     private static final String HOOKPOINT_OWNER = "com/yuyuframe/launcheragent/apimixin/HookPoint";
+    private static final String HOOKTABLE_OWNER = "com/yuyuframe/launcheragent/apimixin/MixinHookPointRegistry";
+    private static final String APIMIXIN_TEMPLATE = "mixins.launcheragent-apimixin.template.json";
+    /** Nom de la config générée — résolu par nom de ressource, voir publishGeneratedResource(). */
+    private static final String APIMIXIN_GENERATED = "mixins.launcheragent-apimixin.generated.json";
     private static final boolean FILTER_ENABLED =
         !"false".equalsIgnoreCase(System.getProperty("launcheragent.hookpointFilter", "true"));
 
     /**
-     * Réécrit {@code configName} en ne gardant que les mixins dont le HookPoint
-     * est réellement réclamé, et renvoie le nom de ressource à enregistrer.
+     * Construit la config Mixin d'{@code apimixin/} pour cette version et la
+     * dépose là où Mixin saura la résoudre.
      *
-     * @return le nom du fichier filtré, ou {@code configName} inchangé si le
-     *         filtrage est désactivé, inapplicable ou en échec
+     * @return le nom de ressource à enregistrer, ou {@code null} si cette
+     *         version n'a aucun mixin apimixin déclaré (tranche encore sur
+     *         l'ancien système, ou version sans support) — l'appelant se
+     *         contente alors de la config héritée, comme avant.
      */
-    private static String filterConfigByHookPoints(String configName) {
-        if (!FILTER_ENABLED) {
-            LauncherLog.agent(3, "[HookPointFilter] désactivé (-Dlauncheragent.hookpointFilter=false)");
-            return configName;
-        }
+    private static String publishApiMixinConfig(Instrumentation inst, boolean isolated, VersionProfile profile) {
         try {
-            ClassLoader agentCL = IsolatedBootstrap.class.getClassLoader();
-            String json;
-            try (java.io.InputStream is = agentCL.getResourceAsStream(configName)) {
-                if (is == null) return configName;
-                json = new String(readAllBytes(is), java.nio.charset.StandardCharsets.UTF_8);
+            List<String[]> table = scanHookPointTable(profile.hookTableVersion);
+            if (table.isEmpty()) {
+                LauncherLog.agent(3, "[HookPointTable] aucune entrée déclarée pour la version \""
+                    + profile.hookTableVersion + "\" — pas de config apimixin générée");
+                return null;
             }
 
-            Map<String, String> mixinToPoint = scanMixinHookPointMap();
             Set<String> claimed = scanClaimedHookPoints();
-            if (mixinToPoint.isEmpty() || claimed.isEmpty()) {
-                LauncherLog.warn("[HookPointFilter] catalogue vide (map=" + mixinToPoint.size()
-                    + ", réclamés=" + claimed.size() + ") — config inchangée");
-                return configName;
+            // Gating dégradé plutôt qu'absent — voir l'avertissement du bloc
+            // ci-dessus : sans catalogue lisible, on tisse tout.
+            boolean gating = FILTER_ENABLED && !claimed.isEmpty();
+            if (!FILTER_ENABLED) {
+                LauncherLog.agent(3, "[HookPointTable] gating désactivé (-Dlauncheragent.hookpointFilter=false)"
+                    + " — tous les mixins déclarés seront tissés");
+            } else if (claimed.isEmpty()) {
+                LauncherLog.warn("[HookPointTable] aucun HookPoint réclamé trouvé dans runtime/ —"
+                    + " gating abandonné, tous les mixins déclarés seront tissés");
             }
 
+            List<String> kept = new ArrayList<>();
             List<String> dropped = new ArrayList<>();
-            String filtered = json;
-            for (Map.Entry<String, String> e : mixinToPoint.entrySet()) {
-                if (claimed.contains(e.getValue())) continue;
-                // L'entrée JSON se termine par le nom simple du mixin ; on la
-                // retire avec sa virgule pour garder un tableau valide.
-                Matcher m = Pattern.compile("\\s*\"[A-Za-z0-9$._]*" + Pattern.quote(e.getKey()) + "\",?")
-                        .matcher(filtered);
-                if (m.find()) {
-                    filtered = m.replaceFirst("");
-                    dropped.add(e.getKey() + " (" + e.getValue() + ")");
+            for (String[] row : table) {
+                String entry = row[0];
+                String point = row[1];   // null = entrée always(), jamais gatée
+                if (gating && point != null && !claimed.contains(point)) {
+                    dropped.add(entry.substring(entry.lastIndexOf('.') + 1) + " (" + point + ")");
+                } else {
+                    kept.add(entry);
                 }
             }
-            if (dropped.isEmpty()) {
-                LauncherLog.agent(3, "[HookPointFilter] aucun mixin à écarter — config inchangée");
-                return configName;
+
+            String json = buildApiMixinConfig(kept);
+            if (json == null) return null;
+
+            if (!publishGeneratedResource(inst, isolated, APIMIXIN_GENERATED,
+                    "apimixin-config.jar", json, "config apimixin")) {
+                return null;
             }
-            // Une entrée retirée en fin de tableau peut laisser une virgule
-            // orpheline avant le ']'.
-            filtered = filtered.replaceAll(",(\\s*])", "$1");
 
-            java.io.File agentDir = agentDir();
-            if (agentDir == null) return configName;
-            java.io.File dir = new java.io.File(agentDir, "generated");
-            dir.mkdirs();
-            String outName = configName.replace(".json", "-filtered.json");
-            java.nio.file.Files.write(new java.io.File(dir, outName).toPath(),
-                filtered.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-
-            LauncherLog.agent(3, "[HookPointFilter] " + dropped.size() + " mixin(s) écarté(s) sur "
-                + mixinToPoint.size() + " gaté(s) — " + claimed.size() + " HookPoint réclamé(s) → " + outName);
-            LauncherLog.agent(1, "[HookPointFilter] écartés : " + dropped);
-            return outName;
+            LauncherLog.agent(3, "[HookPointTable] " + kept.size() + " mixin(s) retenu(s), "
+                + dropped.size() + " écarté(s) sur " + table.size() + " déclaré(s) — "
+                + claimed.size() + " HookPoint réclamé(s)");
+            if (!dropped.isEmpty()) LauncherLog.agent(1, "[HookPointTable] écartés : " + dropped);
+            return APIMIXIN_GENERATED;
         } catch (Throwable t) {
-            LauncherLog.err("[HookPointFilter] échec, config d'origine conservée : " + t);
-            return configName;
+            LauncherLog.err("[HookPointTable] génération de la config apimixin échouée : " + t);
+            return null;
         }
     }
 
     /**
-     * Lit le {@code <clinit>} de {@code MixinHookPointRegistry} et en extrait
-     * les paires {@code put("NomDuMixin", HookPoint.X)} — sans charger la
-     * classe (voir l'avertissement du bloc ci-dessus).
+     * Injecte la liste des mixins dans le template partagé
+     * ({@link #APIMIXIN_TEMPLATE}), qui fournit l'en-tête commun à toutes les
+     * versions (package, plugin, refmap, injectors) et dont le tableau
+     * {@code "client"} est vide exprès.
+     *
+     * <p>Remplacement d'un marqueur littéral, pas une regex : le template est
+     * NOTRE fichier, sa forme est connue, et une substitution exacte échoue
+     * bruyamment si quelqu'un le reformate — au lieu de produire silencieusement
+     * une config à moitié correcte.
+     *
+     * @return le JSON complet, ou {@code null} si le template est introuvable
+     *         ou ne contient pas le marqueur attendu
      */
-    private static Map<String, String> scanMixinHookPointMap() {
-        Map<String, String> map = new LinkedHashMap<>();
+    private static String buildApiMixinConfig(List<String> mixinEntries) throws java.io.IOException {
+        ClassLoader agentCL = IsolatedBootstrap.class.getClassLoader();
+        String template;
+        try (java.io.InputStream is = agentCL.getResourceAsStream(APIMIXIN_TEMPLATE)) {
+            if (is == null) {
+                LauncherLog.err("[HookPointTable] " + APIMIXIN_TEMPLATE + " introuvable dans le JAR");
+                return null;
+            }
+            template = new String(readAllBytes(is), java.nio.charset.StandardCharsets.UTF_8);
+        }
+
+        final String marker = "\"client\": []";
+        if (!template.contains(marker)) {
+            LauncherLog.err("[HookPointTable] marqueur " + marker + " absent de " + APIMIXIN_TEMPLATE
+                + " — le template a été reformaté, config non générée");
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder("\"client\": [\n");
+        for (int i = 0; i < mixinEntries.size(); i++) {
+            sb.append("    \"").append(mixinEntries.get(i)).append('"');
+            if (i < mixinEntries.size() - 1) sb.append(',');
+            sb.append('\n');
+        }
+        sb.append("  ]");
+        return template.replace(marker, sb.toString());
+    }
+
+    /**
+     * Lit le {@code <clinit>} de {@code MixinHookPointRegistry} et en extrait
+     * les entrées déclarées pour {@code mcVersion} — sans charger la classe
+     * (voir l'avertissement du bloc ci-dessus).
+     *
+     * <p>L'ancrage est l'APPEL ({@code INVOKESTATIC gate}/{@code always}), pas
+     * le {@code GETSTATIC} du HookPoint comme avant : depuis que la version est
+     * une colonne, une ligne pousse DEUX chaînes avant l'éventuel HookPoint, et
+     * une heuristique « dernière chaîne vue » ne saurait plus les distinguer.
+     * Ancrer sur l'appel rend la lecture exacte plutôt que positionnelle — et
+     * couvre du même coup {@code always()}, qui n'a aucun {@code GETSTATIC}.
+     *
+     * @return des paires {@code {entrée de mixin, nom du HookPoint ou null}},
+     *         dans l'ordre de déclaration (l'ordre du tableau généré en dépend)
+     */
+    private static List<String[]> scanHookPointTable(String mcVersion) {
+        List<String[]> rows = new ArrayList<>();
         try (java.io.InputStream is = IsolatedBootstrap.class.getClassLoader()
-                .getResourceAsStream("com/yuyuframe/launcheragent/apimixin/MixinHookPointRegistry.class")) {
-            if (is == null) return map;
+                .getResourceAsStream(HOOKTABLE_OWNER + ".class")) {
+            if (is == null) {
+                LauncherLog.warn("[HookPointTable] " + HOOKTABLE_OWNER + ".class introuvable dans le JAR");
+                return rows;
+            }
             new ClassReader(readAllBytes(is)).accept(new ClassVisitor(Opcodes.ASM9) {
                 @Override
                 public org.objectweb.asm.MethodVisitor visitMethod(int a, String name, String d, String s, String[] ex) {
                     return new org.objectweb.asm.MethodVisitor(Opcodes.ASM9) {
-                        private String lastString;
+                        private final List<String> pending = new ArrayList<>();
+                        private String lastPoint;
+
                         @Override public void visitLdcInsn(Object value) {
-                            if (value instanceof String) lastString = (String) value;
+                            if (value instanceof String) pending.add((String) value);
                         }
                         @Override public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
-                            if (op == Opcodes.GETSTATIC && HOOKPOINT_OWNER.equals(owner) && lastString != null) {
-                                map.put(lastString, fname);
-                                lastString = null;
+                            if (op == Opcodes.GETSTATIC && HOOKPOINT_OWNER.equals(owner)) lastPoint = fname;
+                        }
+                        @Override public void visitMethodInsn(int op, String owner, String mname,
+                                                              String mdesc, boolean itf) {
+                            if (op != Opcodes.INVOKESTATIC || !HOOKTABLE_OWNER.equals(owner)) return;
+                            boolean gated = "gate".equals(mname);
+                            if (!gated && !"always".equals(mname)) return;
+                            if (pending.size() >= 2) {
+                                String version = pending.get(pending.size() - 2);
+                                String entry = pending.get(pending.size() - 1);
+                                if (mcVersion.equals(version)) {
+                                    rows.add(new String[]{ entry, gated ? lastPoint : null });
+                                }
                             }
+                            pending.clear();
+                            lastPoint = null;
                         }
                     };
                 }
             }, ClassReader.SKIP_FRAMES);
         } catch (Throwable t) {
-            LauncherLog.warn("[HookPointFilter] scanMixinHookPointMap: " + t);
+            LauncherLog.warn("[HookPointTable] scanHookPointTable: " + t);
         }
-        return map;
+        return rows;
     }
 
     /**

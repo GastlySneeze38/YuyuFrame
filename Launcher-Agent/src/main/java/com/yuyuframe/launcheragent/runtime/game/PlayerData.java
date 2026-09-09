@@ -17,7 +17,7 @@ import net.minecraft.client.player.LocalPlayer;
  * mappings, et un troisième module en aurait fait une troisième.
  *
  * <p><b>Tout passe par les accessors Mixin</b> ({@link MinecraftAccessor261},
- * tissé via {@code mixins.launcheragent-apimixin-26.1.json}) plutôt que par la
+ * déclaré via {@code MixinHookPointRegistry}) plutôt que par la
  * réflexion. C'est ce qui rend le portage multiversion mécanique : les getters
  * sont synthétisés au tissage, donc résolus une fois pour toutes au chargement
  * au lieu d'être re-résolus à chaque appel, et surtout un changement de nom ou

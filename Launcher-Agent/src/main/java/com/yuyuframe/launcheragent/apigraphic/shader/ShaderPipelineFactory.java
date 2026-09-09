@@ -77,7 +77,7 @@ public final class ShaderPipelineFactory {
             // risque de remapping ici puisque isAvailable() garantit qu'on est
             // sur un bracket où Yarn n'est JAMAIS chargé (GpuDevice n'existe
             // qu'à partir de 1.21.6, bien après l'abandon de l'obfuscation
-            // Yarn — voir VersionBracketRegistry) — même raisonnement que
+            // Yarn — voir VersionProfileRegistry) — même raisonnement que
             // UiTextBlaze3D pour son propre usage de RenderSystem$a.
             clsBuilder = McReflect.rawClass("com.mojang.blaze3d.pipeline.RenderPipeline$Builder");
             clsSnippet = McReflect.rawClass("com.mojang.blaze3d.pipeline.RenderPipeline$Snippet");

@@ -13,7 +13,8 @@ package com.yuyuframe.launcheragent.apimixin;
  * (pas de suffixe {@code 261}/{@code 1214} dans leur nom) — un seul
  * {@code HookPoint} logique (ex: {@link #HUD_EXTRACT_CROSSHAIR}) peut être
  * dispatché par un mixin différent selon le bracket (voir
- * {@code VersionBracketRegistry}), une fois que d'autres brackets auront
+ * {@code MixinHookPointRegistry}, où la version est une colonne explicite de
+ * la table), une fois que d'autres tranches auront
  * aussi leur propre pull Fabric API adapté (voir ROADMAP-agent.md §3.1/§5 —
  * pour l'instant, seul le bracket 26.1.2 a des mixins réellement écrits
  * derrière ces entrées).

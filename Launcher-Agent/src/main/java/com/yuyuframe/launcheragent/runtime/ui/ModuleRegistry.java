@@ -81,7 +81,7 @@ public final class ModuleRegistry {
     private static final java.util.Map<String, LauncherModule> BY_ID = new java.util.HashMap<>();
 
     /**
-     * 1.16.5 (et plus largement le bracket "B", voir VersionBracketRegistry —
+     * 1.16.5 (et plus largement le bracket "B", voir VersionProfileRegistry —
      * même prédicat {@code startsWith("1.16")}) exclut certains modules dont
      * la logique ne vit QUE dans des Mixins {@code *189} (1.8.9), jamais
      * portée ici : les afficher comme des cartes cliquables qui ne font rien
@@ -101,7 +101,7 @@ public final class ModuleRegistry {
      * partout, y compris en 1.16.5.
      *
      * Élargi aux brackets "C" (1.20.4), "D" (1.21.4), et maintenant "1.21.11"
-     * et "E" (26.1.2, voir VersionBracketRegistry) : mêmes réglages vanilla
+     * et "E" (26.1.2, voir VersionProfileRegistry) : mêmes réglages vanilla
      * natifs (FOV/Sprint/Sneak, hurt cam) présents depuis la "Flattening"
      * (~1.13) et toujours là sur ces brackets, et les mêmes 7 Mixins
      * "animations 1.7" restent 1.8.9-only — donc les mêmes exclusions
@@ -161,7 +161,7 @@ public final class ModuleRegistry {
     private static final boolean IS_1_21_11 = "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     /**
-     * Portage 1.21.4 (bracket "D", ~1.21-1.21.5, voir VersionBracketRegistry)
+     * Portage 1.21.4 (bracket "D", ~1.21-1.21.5, voir VersionProfileRegistry)
      * — architecture Camera/Mouse/InGameHud.renderOverlay VÉRIFIÉE IDENTIQUE
      * à 1.21.11 par désassemblage complet (javap sur le vrai jar 1.21.4 :
      * mêmes IDs intermediary EXACTS pour Camera.update/moveBy/setRotation,
@@ -269,7 +269,7 @@ public final class ModuleRegistry {
         // ci-dessus, déjà protégés par IS_1_16) — cartes cliquables qui ne
         // faisaient RIEN sur 1.16.5+/1.20.4/1.21.4/1.21.11/26.1.2 (aucune
         // classe Mixin *189 ne se charge en dehors du bracket 1.8.9, voir
-        // VersionBracketRegistry). Gaté sur demande explicite de l'utilisateur
+        // VersionProfileRegistry). Gaté sur demande explicite de l'utilisateur
         // (audit avant publication) avec le MÊME flag IS_1_16 — pas un nouveau
         // flag séparé, il n'y a aucune raison que le critère diffère de celui
         // déjà établi pour les autres modules 1.8.9-only.

@@ -232,7 +232,7 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // ── Branche 1.17-1.20.4 (mixin.client.v1_20_4.*) — bracket "C" : Core
         // Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé), mais
         // render(FJZ)V/tick()V gardent la même signature que le bracket "B"
-        // (1.16.5) — voir VersionBracketRegistry.
+        // (1.16.5) — voir VersionProfileRegistry.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_20_4/GlobalUiRenderMixin1204",
             "net/minecraft/client/render/GameRenderer",
             "render", "(FJZ)V", null),
@@ -249,7 +249,7 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // ── Branche ~1.21-1.21.5 (mixin.client.v1_21_4.*) — bracket "D" :
         // même profil GL Core que "C", mais render(RenderTickCounter,Z)V
         // (RenderTickCounter introduit entre la 1.20.4 et la 1.21) — voir
-        // VersionBracketRegistry.
+        // VersionProfileRegistry.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_21_4/GlobalUiRenderMixin1214",
             "net/minecraft/client/render/GameRenderer",
             "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),

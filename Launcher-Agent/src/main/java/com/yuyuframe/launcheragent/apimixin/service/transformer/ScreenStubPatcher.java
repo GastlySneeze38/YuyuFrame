@@ -59,7 +59,7 @@ public final class ScreenStubPatcher {
      * Résout le vrai nom d'une classe stubbée — via Yarn si chargé
      * (obfuscation classique : map() traduit le nom Yarn "named" vers le
      * nom "official"/runtime réel), SINON (bracket 26.1+, jeu non obfusqué,
-     * YarnMappings JAMAIS chargé — voir VersionBracketRegistry) directement
+     * YarnMappings JAMAIS chargé — voir VersionProfileRegistry) directement
      * par réflexion sur les deux conventions de nommage possibles (ancienne
      * "yarnStub" singulier, ex: "net/minecraft/client/gui/screen/Screen",
      * vs nouvelle "altStub" pluriel, ex: ".../screens/Screen").

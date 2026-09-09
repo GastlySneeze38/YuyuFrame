@@ -355,7 +355,7 @@ public final class Blaze3DCore {
     /**
      * Résout une classe via Yarn si chargé (obfuscation classique,
      * comportement INCHANGÉ), SINON (bracket 26.1+, jeu non obfusqué, Yarn
-     * jamais chargé — voir VersionBracketRegistry) directement par le nom
+     * jamais chargé — voir VersionProfileRegistry) directement par le nom
      * réel fourni — chaque nom ici vérifié par {@code javap} sur le jar
      * client 26.1.2 réel (jamais deviné par simple renommage de convention,
      * voir le commentaire de classe pour la même exigence appliquée au

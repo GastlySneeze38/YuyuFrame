@@ -8,13 +8,13 @@ import java.lang.reflect.Method;
 
 /**
  * Copie de {@link com.yuyuframe.launcheragent.mixin.client.v1_16.ScreenBridge116}
- * pour le bracket "C" (1.17-1.20.4, voir VersionBracketRegistry) — même
+ * pour le bracket "C" (1.17-1.20.4, voir VersionProfileRegistry) — même
  * mécanique de résolution dynamique (aucun nom obfusqué figé), donc aucune
  * logique à réécrire ici, seulement le package/nom de classe qui change (deux
  * Mixins fusionnés dans des cibles obfusquées DIFFÉRENTES par version ne
  * peuvent pas partager une seule classe utilitaire compilée avec le mauvais
  * nom de package sans risquer une confusion de classloader/mapping entre
- * brackets — voir la mise en garde de VersionBracketRegistry sur les
+ * brackets — voir la mise en garde de VersionProfileRegistry sur les
  * régressions silencieuses).
  *
  * Vérifié via mappings/yarn-1.20.4-mergedv2.jar (mappings.tiny) : {@code

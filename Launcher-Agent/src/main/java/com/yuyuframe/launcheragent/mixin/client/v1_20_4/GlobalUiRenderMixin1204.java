@@ -20,7 +20,7 @@ import java.lang.reflect.Modifier;
 
 /**
  * Équivalent 1.17-1.20.4 de {@code GlobalUiRenderMixin116} (bracket "B") —
- * bracket "C" (voir VersionBracketRegistry, docs/LauncherAgent) : Core
+ * bracket "C" (voir VersionProfileRegistry, docs/LauncherAgent) : Core
  * Profile OpenGL 3.2 obligatoire (pipeline fixe supprimé), donc {@code
  * UiRenderer.modern} vaut {@code true} ici (voir
  * {@link com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector#supportsFixedFunctionDrawing}),

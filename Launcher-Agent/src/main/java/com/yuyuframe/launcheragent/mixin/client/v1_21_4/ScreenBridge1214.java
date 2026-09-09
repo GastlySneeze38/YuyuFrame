@@ -8,7 +8,7 @@ import java.lang.reflect.Method;
 
 /**
  * Copie de {@link com.yuyuframe.launcheragent.mixin.client.v1_20_4.ScreenBridge1204}
- * pour le bracket "D" (~1.21-1.21.5, voir VersionBracketRegistry) — même
+ * pour le bracket "D" (~1.21-1.21.5, voir VersionProfileRegistry) — même
  * mécanique de résolution dynamique (aucun nom obfusqué figé), donc aucune
  * logique à réécrire ici, seulement le package/nom de classe qui change.
  *

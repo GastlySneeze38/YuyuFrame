@@ -37,7 +37,7 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         // propre instance Mixin isolée — pas de partage de singleton avec
         // Fabric (même raisonnement que l'isolation de Mixin lui-même, voir
         // docs/LauncherAgent/index.md). Appelé une seule fois par lancement
-        // (un seul bracket résolu, voir VersionBracketRegistry), pas besoin
+        // (un seul profil résolu, voir VersionProfileRegistry), pas besoin
         // de garde d'idempotence.
         initMixinExtrasIfHostDidNot();
         cfg = LauncherLog.loadPropertiesFromDefaultLocations(getClass().getClassLoader());

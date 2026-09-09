@@ -20,7 +20,7 @@ import java.lang.reflect.Modifier;
 
 /**
  * Équivalent ~1.21-1.21.5 de {@code GlobalUiRenderMixin1204} — bracket "D"
- * (voir VersionBracketRegistry, docs/LauncherAgent) : MÊME profil OpenGL Core
+ * (voir VersionProfileRegistry, docs/LauncherAgent) : MÊME profil OpenGL Core
  * que le bracket "C" (1.20.4) — {@code UiRenderer.modern} vaut {@code true}
  * ici aussi — mais {@code GameRenderer.render} change de signature :
  * {@code render(RenderTickCounter, boolean)} au lieu de {@code render(float,

@@ -6,7 +6,7 @@ import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 /**
  * Équivalent de {@code GlobalUiRenderBridge} (bracket 1.21.11) pour le
  * bracket 26.1+ — Minecraft N'EST PLUS OBFUSQUÉ depuis cette version (voir
- * javadoc de tête de {@code VersionBracketRegistry}/{@code LauncherMixinService}) :
+ * javadoc de tête de {@code VersionProfileRegistry}/{@code LauncherMixinService}) :
  * contrairement à l'original, PAS de résolution via
  * {@code MappingsRegistry.runtimeXxx()} (inutile : il n'y a plus
  * d'obfuscation à traduire, "official" et "runtime" sont désormais le MÊME
