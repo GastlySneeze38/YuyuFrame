@@ -3,8 +3,8 @@ package com.yuyuframe.launcheragent.apigraphic.render.blaze3d;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.shader.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Constructor;

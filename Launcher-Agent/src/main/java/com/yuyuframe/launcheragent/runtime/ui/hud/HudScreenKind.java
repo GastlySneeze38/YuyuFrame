@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.hud;
 
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 /**
  * Classification d'un écran vanilla/mod ouvert, pour décider — module HUD

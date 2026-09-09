@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.fabric;
+package com.yuyuframe.launcheragent.apimixin.loader;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 

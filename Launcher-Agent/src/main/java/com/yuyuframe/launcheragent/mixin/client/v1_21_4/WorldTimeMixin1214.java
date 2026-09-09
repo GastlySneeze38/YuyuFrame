@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_21_4;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.module.visual.WorldTimeModule;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;

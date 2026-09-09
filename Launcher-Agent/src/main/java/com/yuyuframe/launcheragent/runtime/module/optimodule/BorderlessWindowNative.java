@@ -6,7 +6,7 @@ import com.sun.jna.platform.win32.WinDef.HWND;
 import com.sun.jna.platform.win32.WinDef.RECT;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

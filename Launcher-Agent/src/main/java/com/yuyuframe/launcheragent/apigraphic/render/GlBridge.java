@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apigraphic.render;
 
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import java.lang.reflect.Method;
 import java.nio.FloatBuffer;

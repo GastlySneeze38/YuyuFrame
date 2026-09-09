@@ -6,7 +6,7 @@ import com.yuyuframe.launcheragent.apigraphic.hud.HudRenderer;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.render.vanillagui.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;

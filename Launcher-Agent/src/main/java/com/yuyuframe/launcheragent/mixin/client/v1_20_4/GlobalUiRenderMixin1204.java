@@ -1,9 +1,9 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_20_4;
 
-import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
+import com.yuyuframe.launcheragent.apimixin.loader.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;

@@ -2,8 +2,8 @@ package com.yuyuframe.launcheragent.apigraphic.render;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.mojang.blaze3d.platform.Window;
 

@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_21_4;
 
-import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
+import com.yuyuframe.launcheragent.apimixin.loader.FabricKnotExposer;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import org.spongepowered.asm.mixin.Mixin;

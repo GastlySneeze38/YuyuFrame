@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.apimixin;
 
 import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;

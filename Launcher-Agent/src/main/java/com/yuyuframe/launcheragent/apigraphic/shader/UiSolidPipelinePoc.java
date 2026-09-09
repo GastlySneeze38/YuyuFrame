@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.apigraphic.shader;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;

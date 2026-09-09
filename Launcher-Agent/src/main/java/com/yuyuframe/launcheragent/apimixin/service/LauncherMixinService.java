@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.apimixin.service;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnMappings;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.launch.platform.container.IContainerHandle;

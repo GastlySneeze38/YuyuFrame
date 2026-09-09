@@ -1,9 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
+import com.yuyuframe.launcheragent.apimixin.AgentBridge;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
@@ -61,9 +59,11 @@ public abstract class GlobalUiPresentMixin261 {
             // Restent ici les rendus PAS ENCORE portés, qui gardent donc
             // l'ancien comportement : l'overlay plein écran des modules
             // (teinte vie basse) et l'aperçu shulker.
+            AgentBridge agent = AgentBridge.get(this.getClass().getClassLoader());
+
             if (currentScreen == null) {
-                if (!HudOverlayRenderer.vanillaHudHidden()) {
-                    ModuleRegistry.renderOverlayAll(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+                if (!agent.hudHidden()) {
+                    agent.renderOverlay(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
                 }
                 return;
             }
@@ -77,13 +77,14 @@ public abstract class GlobalUiPresentMixin261 {
             ui.uiPollInput(inputPoller);
             ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
 
-            if (currentScreen instanceof UiScreenBase) {
-                UiScreenBase uiScreen = (UiScreenBase) currentScreen;
-                if (uiScreen.hasPendingNavigation()) {
-                    Object target = uiScreen.consumePendingNavigation();
-                    if (target != null) GlobalUiRenderBridge261.setScreen(mc, target);
-                    else GlobalUiRenderBridge261.closeScreen(mc, currentScreen.getClass());
-                }
+            // « Cet écran est-il un écran de l'agent, et demande-t-il à
+            // naviguer ? » — la question est posée à la couche du dessus, qui
+            // seule connaît UiScreenBase. Le setScreen/closeScreen, lui, reste
+            // ici : c'est de la mécanique vanilla propre à ce bracket.
+            if (agent.hasPendingNavigation(currentScreen)) {
+                Object target = agent.consumePendingNavigation(currentScreen);
+                if (target != null) GlobalUiRenderBridge261.setScreen(mc, target);
+                else GlobalUiRenderBridge261.closeScreen(mc, currentScreen.getClass());
             }
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin261 (apimixin): " + t);

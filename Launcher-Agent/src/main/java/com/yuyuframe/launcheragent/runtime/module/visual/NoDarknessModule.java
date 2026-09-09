@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;

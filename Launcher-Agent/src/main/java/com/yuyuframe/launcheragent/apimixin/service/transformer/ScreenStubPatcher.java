@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.apimixin.service.transformer;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnMappings;
 import org.objectweb.asm.*;
 
 import java.util.Map;

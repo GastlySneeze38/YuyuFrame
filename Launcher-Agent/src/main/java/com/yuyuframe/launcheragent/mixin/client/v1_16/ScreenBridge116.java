@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_16;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

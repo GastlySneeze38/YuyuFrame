@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.mapping;
+package com.yuyuframe.launcheragent.apimixin.mapping;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 

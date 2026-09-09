@@ -199,9 +199,9 @@ public final class UiInputPollerModern extends UiInputPoller {
      */
     private static boolean isVanillaScreenOpen() {
         try {
-            Object mc = com.yuyuframe.launcheragent.runtime.mapping.McReflect.minecraftClient();
+            Object mc = com.yuyuframe.launcheragent.apimixin.mapping.McReflect.minecraftClient();
             if (mc == null) return false;
-            java.lang.reflect.Field f = com.yuyuframe.launcheragent.runtime.mapping.McReflect.field(
+            java.lang.reflect.Field f = com.yuyuframe.launcheragent.apimixin.mapping.McReflect.field(
                 mc.getClass(), "net/minecraft/client/MinecraftClient", "currentScreen", "screen");
             if (f == null) return false;
             return f.get(mc) != null;

@@ -1,13 +1,9 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.apigraphic.shader.UiSolidPipelinePoc;
-import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry;
-import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
+import com.yuyuframe.launcheragent.apimixin.AgentBridge;
+import com.yuyuframe.launcheragent.apimixin.loader.FabricKnotExposer;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
-import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPollerModern;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -40,46 +36,33 @@ public abstract class GlobalUiRenderMixin261 {
                 long handle = GlobalUiRenderBridge261.getWindowHandle(mc);
                 if (handle == 0L) return;
                 GlobalUiRenderBridge261.inputPoller = new UiInputPollerModern(handle, this.getClass().getClassLoader());
-                ModuleRegistry.all();
-                GlobalUiSettings.INSTANCE.onConfigChanged();
-                // Phase 4.5 — déplacé depuis LauncherAgent.premain0() (voir sa
-                // javadoc et [[project_mc_261_port]] §10) : DOIT être touché
-                // depuis ICI (classloader du jeu, comme ModuleRegistry juste
-                // au-dessus), jamais depuis premain0() (classloader système),
-                // sous peine de LinkageError sur VanillaHookRegistry.
+                // Tout ce bloc vivait ICI en dur (registre de modules, réglages
+                // globaux, commandes client, audit des HookPoint) — huit
+                // imports de runtime/ depuis apimixin/, donc un cycle de
+                // couches. Passé derrière AgentBridge, résolu PAR NOM depuis
+                // le classloader du code tissé : la propriété qui justifiait
+                // ces appels ici (charger runtime/ depuis le classloader du
+                // jeu, jamais celui du système — LinkageError sinon) est
+                // conservée à l'identique, la référence de compilation
+                // disparaît. Voir AgentBridge.
                 try {
-                    ClientCommandRegistry.bootstrap();
+                    AgentBridge.get(this.getClass().getClassLoader()).bootstrap();
                 } catch (Throwable t) {
-                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): ClientCommandRegistry.bootstrap() a levé: " + t);
-                }
-                // Audit du catalogue statique — placé ICI parce que c'est le
-                // premier instant où TOUS les enregistrements ont eu lieu
-                // (modules ci-dessus + ClientCommandRegistry juste avant).
-                // Voir VanillaHookRegistry.auditDeclarations : sans lui, les
-                // déclarations LauncherModule.hookPoints dérivent en silence,
-                // et une gate qui s'appuierait dessus écarterait des mixins
-                // pourtant nécessaires.
-                try {
-                    VanillaHookRegistry.auditDeclarations(ModuleRegistry.declaredHookPoints());
-                } catch (Throwable t) {
-                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): audit HookPoint a levé: " + t);
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): bootstrap() a levé: " + t);
                 }
             }
             GlobalUiRenderBridge261.inputPoller.poll();
 
-            try {
-                ModuleRegistry.tickAll();
-            } catch (Throwable t) {
-                LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): ModuleRegistry.tickAll() a levé: " + t);
-            }
+            AgentBridge.get(this.getClass().getClassLoader()).tick();
 
             Object currentScreen = GlobalUiRenderBridge261.getCurrentScreen(mc);
             if (currentScreen == null && GlobalUiRenderBridge261.inputPoller.menuKeyPressed
                     && GlobalUiRenderBridge261.isMouseGrabbed(mc)) {
                 try {
-                    GlobalUiRenderBridge261.setScreen(mc, new UiMainMenuScreen(null));
+                    Object menu = AgentBridge.get(this.getClass().getClassLoader()).mainMenuScreen();
+                    if (menu != null) GlobalUiRenderBridge261.setScreen(mc, menu);
                 } catch (Throwable t) {
-                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): setScreen(UiMainMenuScreen) a levé: " + t);
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): setScreen(écran principal) a levé: " + t);
                 }
             }
 

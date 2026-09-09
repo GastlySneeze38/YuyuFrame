@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.fabric;
+package com.yuyuframe.launcheragent.runtime.content;
 
 /**
  * Détecte la présence d'Iris (ou d'un autre loader de shaders connu) sur le

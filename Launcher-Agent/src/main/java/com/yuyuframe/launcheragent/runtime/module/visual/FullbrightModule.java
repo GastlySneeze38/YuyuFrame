@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
-import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
+import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 
 import java.lang.reflect.Field;

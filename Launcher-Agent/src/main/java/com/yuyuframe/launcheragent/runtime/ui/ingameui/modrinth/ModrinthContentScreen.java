@@ -312,7 +312,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
             .flexDirection("column"));
         screen.style.padding = new String[]{ "0", TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN), TaffyStyle.px(MARGIN) };
 
-        boolean shadersTab = com.yuyuframe.launcheragent.runtime.fabric.ShaderLoaderDetector.isPresent(getClass().getClassLoader());
+        boolean shadersTab = com.yuyuframe.launcheragent.runtime.content.ShaderLoaderDetector.isPresent(getClass().getClassLoader());
 
         TaffyNode tabsRow = LayoutSolver.row("tabsRow", 10f);
         tabsRow.style.height = TaffyStyle.px(TAB_H);

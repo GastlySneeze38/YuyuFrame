@@ -55,7 +55,7 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         }
 
         String obfDot = className.replace('/', '.');
-        String yarnNamed = com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry.INSTANCE.unmap(className);
+        String yarnNamed = com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry.INSTANCE.unmap(className);
 
         byte[] result;
         try {
@@ -210,7 +210,7 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         // NeoForge (ModLauncher, pas de notion de "Knot" à exposer ainsi).
         if (!loader.getClass().getName().contains(".launch.knot.")) return;
         knotExposeTriggered = true;
-        new Thread(() -> com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer.ensureExposed(loader),
+        new Thread(() -> com.yuyuframe.launcheragent.apimixin.loader.FabricKnotExposer.ensureExposed(loader),
             "LauncherAgent-EarlyKnotExpose").start();
     }
 }

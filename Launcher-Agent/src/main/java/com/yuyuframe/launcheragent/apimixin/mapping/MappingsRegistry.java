@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.runtime.mapping;
+package com.yuyuframe.launcheragent.apimixin.mapping;
 
 import org.spongepowered.asm.mixin.extensibility.IRemapper;
 
@@ -39,7 +39,7 @@ public final class MappingsRegistry implements IRemapper {
     /**
      * Sous Fabric, le code tissé par Mixin (les corps de méthode @Inject) est
      * résolu par KnotClassLoader — qui charge
-     * "com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry" comme une
+     * "com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry" comme une
      * classe SÉPARÉE de celle utilisée par IsolatedBootstrap (chargée, elle,
      * via le classloader isolé dédié à Mixin/ASM). Deux classloaders
      * différents chargeant "la même" classe produisent deux objets Class
