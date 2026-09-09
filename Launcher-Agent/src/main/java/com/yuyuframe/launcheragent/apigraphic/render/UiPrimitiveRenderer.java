@@ -6,7 +6,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DGradient;
 import com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DRect;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.lang.reflect.Method;
 import java.nio.FloatBuffer;

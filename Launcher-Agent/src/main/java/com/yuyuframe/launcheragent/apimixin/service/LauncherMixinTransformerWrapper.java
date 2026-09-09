@@ -79,11 +79,11 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             // JSON. Sans intérêt à hurler dessus à chaque chargement : warn.
             boolean expected = t.getClass().getName().endsWith("IllegalClassLoadError");
             if (expected) {
-                com.yuyuframe.launcheragent.runtime.log.LauncherLog.warn(
+                com.yuyuframe.launcheragent.base.log.LauncherLog.warn(
                     "[LauncherAgent] " + obfDot + " est dans le package mixin déclaré sans être un mixin"
                     + " — non transformée (attendu pour les classes d'API d'apimixin/)");
             } else {
-                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[LauncherAgent] Tissage Mixin ÉCHOUÉ pour " + obfDot
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err("[LauncherAgent] Tissage Mixin ÉCHOUÉ pour " + obfDot
                     + " — classe chargée NON transformée (la JVM ignore silencieusement"
                     + " toute exception d'un ClassFileTransformer) : " + t);
                 t.printStackTrace(System.err);

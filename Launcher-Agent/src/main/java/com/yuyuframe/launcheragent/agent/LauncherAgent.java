@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.agent;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.version.MinecraftVersionDetector;
 
 import java.lang.instrument.Instrumentation;
@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-09-09-v1009";
+    private static final String BUILD_VERSION = "2026-09-09-v1010";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }

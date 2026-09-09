@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apigraphic.debug;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

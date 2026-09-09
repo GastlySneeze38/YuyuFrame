@@ -297,7 +297,7 @@ public final class KeystrokesModule extends SingleHudModule {
             String reason = String.valueOf(t);
             if (reason.equals(lastReport)) return;
             lastReport = reason;
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[KeystrokesModule] " + reason);
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[KeystrokesModule] " + reason);
         }
     }
 }

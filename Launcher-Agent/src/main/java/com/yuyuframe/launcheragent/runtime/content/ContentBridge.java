@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.content;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 /**
  * Pont Java → Rust via JNI dédié à LauncherAgent.

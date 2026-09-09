@@ -59,7 +59,7 @@ public class LauncherLogger implements ILogger {
         // LauncherLog, indépendant de la capture stdout du launcher Rust,
         // jugée peu fiable).
         if (lvl.ordinal() <= Level.WARN.ordinal()) {
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[Mixin/" + lvl + "] [" + id + "] " + formatted);
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[Mixin/" + lvl + "] [" + id + "] " + formatted);
         }
     }
 
@@ -69,10 +69,10 @@ public class LauncherLogger implements ILogger {
         t.printStackTrace(System.err);
         // La stack trace ne partait que sur System.err, donc absente du
         // fichier : c'est justement la cause d'un échec qu'on veut lire.
-        com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+        com.yuyuframe.launcheragent.base.log.LauncherLog.err(
             "[Mixin/" + lvl + "] [" + id + "] cause : " + t);
         for (StackTraceElement el : t.getStackTrace()) {
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("    at " + el);
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("    at " + el);
         }
     }
 

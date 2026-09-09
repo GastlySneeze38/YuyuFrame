@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.runtime.command;
 
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;

@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.ui.ingameui;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiDrawable;
 import com.yuyuframe.launcheragent.apigraphic.core.UiFocusable;

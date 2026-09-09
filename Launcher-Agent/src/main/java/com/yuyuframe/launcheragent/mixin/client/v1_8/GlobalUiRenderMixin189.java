@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_8;
 
 import com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;

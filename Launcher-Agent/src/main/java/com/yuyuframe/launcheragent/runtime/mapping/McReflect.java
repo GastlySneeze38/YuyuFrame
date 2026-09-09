@@ -83,7 +83,7 @@ public final class McReflect {
                 minecraftClientErrorLogged = true;
                 Throwable cause = t;
                 while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
-                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err(
                     "[LauncherAgent] McReflect.minecraftClient(): échec : " + t + " | cause réelle : " + cause);
             }
         }

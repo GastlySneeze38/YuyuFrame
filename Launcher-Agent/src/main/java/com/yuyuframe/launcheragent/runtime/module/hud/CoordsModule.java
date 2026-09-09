@@ -153,7 +153,7 @@ public final class CoordsModule extends SingleHudModule {
         private void drawExceptionDiag(Throwable t) {
             if (DRAW_EXC_LOGGED) return;
             DRAW_EXC_LOGGED = true;
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[CoordsModule] draw() exception: " + t);
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err("[CoordsModule] draw() exception: " + t);
         }
 
 
@@ -205,7 +205,7 @@ public final class CoordsModule extends SingleHudModule {
                 // doit plus jamais se cacher derrière un biome vide.
                 if (!BIOME_EXC_LOGGED) {
                     BIOME_EXC_LOGGED = true;
-                    com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[CoordsModule] biomeDirect: " + t);
+                    com.yuyuframe.launcheragent.base.log.LauncherLog.err("[CoordsModule] biomeDirect: " + t);
                 }
                 return null;
             }

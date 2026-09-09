@@ -158,7 +158,7 @@ public final class VersionProfileRegistry {
         if (match == null) match = findByFamily(mcVersion);
         if (match == null) return null;
         if (match.frozen) {
-            com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err(
                 "[LauncherAgent] Version MC \"" + mcVersion + "\" reconnue (profil " + match.key
                 + ") mais GELÉE — voir VersionProfileRegistry, en attente du rework de cette version. "
                 + "Aucun mixin ne sera appliqué.");

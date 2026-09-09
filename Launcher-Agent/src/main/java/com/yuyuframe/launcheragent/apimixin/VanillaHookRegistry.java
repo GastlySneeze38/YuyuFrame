@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.util.ArrayList;
 import java.util.EnumMap;

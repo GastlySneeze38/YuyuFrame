@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.runtime.ui.ingameui.component;
 
 import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
 import com.yuyuframe.launcheragent.runtime.content.ModrinthJson;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAnimatedFloat;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiAsyncFade;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;

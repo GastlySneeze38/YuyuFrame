@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
 import com.yuyuframe.launcheragent.runtime.ipc.ReadyEventSignal;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

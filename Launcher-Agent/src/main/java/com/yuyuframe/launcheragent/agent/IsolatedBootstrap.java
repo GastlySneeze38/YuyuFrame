@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.agent;
 
 import com.yuyuframe.launcheragent.apimixin.service.LauncherMixinService;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.runtime.mapping.YarnMappings;
 import com.yuyuframe.launcheragent.apimixin.version.VersionProfile;

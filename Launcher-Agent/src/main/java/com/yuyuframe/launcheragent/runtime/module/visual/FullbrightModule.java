@@ -127,6 +127,6 @@ public final class FullbrightModule extends LauncherModule {
     private static void reportOnce(String reason) {
         if (reason.equals(lastReport)) return;
         lastReport = reason;
-        com.yuyuframe.launcheragent.runtime.log.LauncherLog.err("[FullbrightModule] " + reason);
+        com.yuyuframe.launcheragent.base.log.LauncherLog.err("[FullbrightModule] " + reason);
     }
 }

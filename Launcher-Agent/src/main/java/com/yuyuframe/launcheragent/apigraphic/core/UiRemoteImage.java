@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.core;
 
 import com.yuyuframe.launcheragent.runtime.content.ContentBridge;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.awt.image.BufferedImage;
 import java.util.Map;

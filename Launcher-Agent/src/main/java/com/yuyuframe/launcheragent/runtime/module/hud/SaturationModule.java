@@ -20,7 +20,7 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import java.util.Optional;
 import java.util.Set;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import net.minecraft.client.player.LocalPlayer;

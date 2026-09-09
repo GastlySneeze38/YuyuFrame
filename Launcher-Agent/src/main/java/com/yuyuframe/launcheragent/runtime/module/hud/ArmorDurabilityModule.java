@@ -17,7 +17,7 @@ import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.sounds.SoundEvents;

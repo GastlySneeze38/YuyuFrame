@@ -56,7 +56,7 @@ public final class FovModule extends LauncherModule {
     private void diag(String msg) {
         if (DIAG_LOGGED) return;
         DIAG_LOGGED = true;
-        com.yuyuframe.launcheragent.runtime.log.LauncherLog.info("[FovModule] diag: " + msg);
+        com.yuyuframe.launcheragent.base.log.LauncherLog.info("[FovModule] diag: " + msg);
     }
 
     @Override

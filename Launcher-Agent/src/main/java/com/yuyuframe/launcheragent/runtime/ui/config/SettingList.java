@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui.config;
 
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.util.ArrayList;
 import java.util.Arrays;

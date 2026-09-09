@@ -7,7 +7,7 @@ import com.yuyuframe.launcheragent.apigraphic.core.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.shader.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.apimixin.v26_1.render.RenderPipelinesAccessor261;
 import com.yuyuframe.launcheragent.apimixin.v26_1.render.VertexFormatElementAccessor261;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import net.minecraft.client.gui.render.TextureSetup;
 
 /**

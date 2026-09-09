@@ -3,7 +3,7 @@ package com.yuyuframe.launcheragent.apigraphic.render.blaze3d;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.core.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.shader.ShaderPipelineFactory;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 
 import static com.yuyuframe.launcheragent.apigraphic.render.blaze3d.Blaze3DCore.*;

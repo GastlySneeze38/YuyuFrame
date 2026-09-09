@@ -3,7 +3,7 @@ package com.yuyuframe.launcheragent.runtime.ui;
 import com.yuyuframe.launcheragent.runtime.ui.config.Setting;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.io.File;
 import java.io.FileInputStream;

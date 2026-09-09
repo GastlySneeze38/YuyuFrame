@@ -4,7 +4,7 @@ import com.yuyuframe.launcheragent.apigraphic.shader.UiSolidPipelinePoc;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry;
 import com.yuyuframe.launcheragent.runtime.fabric.FabricKnotExposer;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMainMenuScreen;

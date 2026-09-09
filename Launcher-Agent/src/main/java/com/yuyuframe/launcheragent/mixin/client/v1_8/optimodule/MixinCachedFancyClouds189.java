@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client.v1_8.optimodule;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.module.optimodule.CachedFancyCloudsModule;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;

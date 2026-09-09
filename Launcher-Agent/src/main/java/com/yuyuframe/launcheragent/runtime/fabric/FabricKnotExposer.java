@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.fabric;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 /**
  * Enregistre launcher-agent.jar comme "code source" propre à KnotClassLoader

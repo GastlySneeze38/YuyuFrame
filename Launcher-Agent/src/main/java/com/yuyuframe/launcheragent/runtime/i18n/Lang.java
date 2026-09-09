@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.runtime.i18n;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;

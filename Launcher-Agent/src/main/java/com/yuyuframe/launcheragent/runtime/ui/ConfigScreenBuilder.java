@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.ui;
 
 import com.yuyuframe.launcheragent.runtime.i18n.Lang;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.config.Setting;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.core.UiColor;

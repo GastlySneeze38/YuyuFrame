@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client.v26_1;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.ChatEnhancementsModule;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

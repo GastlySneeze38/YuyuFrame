@@ -585,7 +585,7 @@ public final class ModuleRegistry {
     private static void reportModuleFailure(String phase, LauncherModule module, Throwable t) {
         String key = phase + ":" + module.id;
         if (!REPORTED_FAILURES.add(key)) return;
-        com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+        com.yuyuframe.launcheragent.base.log.LauncherLog.err(
             "[ModuleRegistry] " + phase + "(" + module.id + ") a levé : " + t);
     }
 
@@ -637,7 +637,7 @@ public final class ModuleRegistry {
             try {
                 m.onRenderInVanillaGui(renderer, vpWidth, vpHeight);
             } catch (Throwable t) {
-                com.yuyuframe.launcheragent.runtime.log.LauncherLog.err(
+                com.yuyuframe.launcheragent.base.log.LauncherLog.err(
                     "[ModuleRegistry] onRenderInVanillaGui(" + m.id + "): " + t);
             }
         }

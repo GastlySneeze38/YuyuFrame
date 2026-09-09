@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.mixin.client;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.apigraphic.input.UiInputPoller;
 

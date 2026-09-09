@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apigraphic.input;
 
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;

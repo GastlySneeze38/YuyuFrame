@@ -1,7 +1,19 @@
-package com.yuyuframe.launcheragent.runtime.log;
+package com.yuyuframe.launcheragent.base.log;
 
 /**
  * Gestion centralisée des logs LauncherAgent avec niveaux de priorité par catégorie.
+ *
+ * <h2>Pourquoi cette classe vit dans {@code base/} (2026-09-09)</h2>
+ *
+ * Elle était dans {@code runtime/log/}, et importée par 153 fichiers — dont 24
+ * d'{@code apigraphic} et 13 d'{@code apimixin}. Or {@code runtime/} est la
+ * couche du DESSUS : ces 37 imports étaient des dépendances montantes, et
+ * empêchaient à eux seuls le moteur graphique et la couche d'injection de
+ * respecter la règle de couches (module → apigraphic → apimixin → base).
+ *
+ * <p>{@code base/} est le socle : il ne dépend de RIEN (ce fichier n'a aucun
+ * import), et tout le monde a le droit d'en dépendre. C'est la seule position
+ * possible pour un service transverse comme le log.
  *
  * Niveau d'un appel   : 1=verbose  2=info  3=critique
  * Seuil d'une catégorie : 0=désactivé  1=tout  2=info+critique  3=critique seul

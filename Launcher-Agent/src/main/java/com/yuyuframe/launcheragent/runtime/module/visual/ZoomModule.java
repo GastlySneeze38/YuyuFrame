@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.runtime.game.GameOptions;
-import com.yuyuframe.launcheragent.runtime.log.LauncherLog;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
