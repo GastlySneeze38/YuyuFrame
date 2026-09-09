@@ -59,6 +59,72 @@ public interface UiBackend {
     boolean text(UiFont font, String content, float x, float y, UiColor color, float scale,
                  int vpWidth, int vpHeight);
 
+    /** Rectangle arrondi à RAYON PAR COIN. */
+    boolean roundedRect(float x1, float y1, float x2, float y2,
+                        float radiusBottomLeft, float radiusBottomRight,
+                        float radiusTopLeft, float radiusTopRight,
+                        UiColor color, int vpWidth, int vpHeight);
+
+    /**
+     * Rectangle arrondi destiné au HUD — même géométrie, mais l'ère peut le
+     * router vers un autre point de la frame (sur Blaze3D, l'état GUI plutôt
+     * qu'une passe propre), d'où une entrée distincte plutôt qu'un drapeau.
+     */
+    boolean roundedRectHud(float x1, float y1, float x2, float y2, float radius,
+                           UiColor color, int vpWidth, int vpHeight);
+
+    /** Vignette de bord (assombrissement périphérique plein écran). */
+    boolean vignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight);
+
+    /** Image arbitraire (icône Modrinth, bannière…), {@code alpha} 0..1. */
+    boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
+                 float alpha, int vpWidth, int vpHeight);
+
+    // ── Capacités que toutes les ères n'ont pas ───────────────────────────
+    //
+    // Verre dépoli, lot de texte, vignette : une ère qui ne sait pas les faire
+    // n'a RIEN à écrire — le défaut décline, et l'appelant prend son repli
+    // (un aplat pour le verre, un dessin non groupé pour le texte).
+    //
+    // C'est le patron « objet nul » appliqué à la capacité plutôt qu'au
+    // backend entier : plus de « if (isGlassAvailable()) » chez l'appelant,
+    // c'est la réponse du backend qui porte l'information.
+
+    /** Le verre dépoli est-il réalisable sur cette ère et dans cette frame ? */
+    default boolean glassAvailable() { return false; }
+
+    /** Ouvre la chaîne de flou partagée de la frame. */
+    default boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) { return false; }
+
+    /**
+     * Panneau de verre.
+     *
+     * @return {@code false} pour que l'appelant dessine l'aplat de repli —
+     *         c'est le cas normal quand la chaîne de flou n'a pas pu être
+     *         calculée pour cette frame, pas une erreur
+     */
+    default boolean glassPanel(float x1, float y1, float x2, float y2,
+                               float radiusTopLeft, float radiusTopRight,
+                               float radiusBottomLeft, float radiusBottomRight,
+                               UiColor tint, float tintStrength, UiColor fallback,
+                               int vpWidth, int vpHeight) { return false; }
+
+    /** Panneau flouté autonome (sans la chaîne partagée de la frame). */
+    default boolean blurredPanel(float x1, float y1, float x2, float y2,
+                                 float radiusTopLeft, float radiusTopRight,
+                                 float radiusBottomLeft, float radiusBottomRight,
+                                 int passes, UiColor tint, float tintStrength,
+                                 int vpWidth, int vpHeight) { return false; }
+
+    /** Ouvre un lot de texte (un seul maillage pour toutes les chaînes qui suivent). */
+    default boolean beginTextBatch() { return false; }
+
+    /** Ferme le lot ouvert par {@link #beginTextBatch}. */
+    default boolean endTextBatch(int vpWidth, int vpHeight) { return false; }
+
+    /** La vignette est-elle dessinable en l'état ? */
+    default boolean vignetteAvailable() { return false; }
+
     /**
      * Rectangle à coins arrondis.
      *

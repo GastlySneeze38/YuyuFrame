@@ -2,7 +2,6 @@ package com.yuyuframe.launcheragent.apigraphic;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
 import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
@@ -412,12 +411,12 @@ public final class UiRenderer {
      * {@link VanillaGuiTarget#vignette}.
      */
     public boolean isVignetteAvailable() {
-        if (VanillaGuiTarget.isArmed()) return true;
+        if (backend().vignetteAvailable()) return true;
         return primitives.isVignetteAvailable();
     }
 
     public void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.vignette(edgeColor, vSize, vpWidth, vpHeight)) return;
+        if (backend().vignette(edgeColor, vSize, vpWidth, vpHeight)) return;
         primitives.drawEdgeVignette(edgeColor, vSize, vpWidth, vpHeight);
     }
 
@@ -440,7 +439,7 @@ public final class UiRenderer {
      */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                           float alpha, int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.icon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight)) return;
+        if (backend().icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight)) return;
         primitives.drawIcon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
     }
 
@@ -491,7 +490,7 @@ public final class UiRenderer {
     public void drawRoundedRect(float x1, float y1, float x2, float y2,
                                  float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
                                  UiColor color, int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2,
+        if (backend().roundedRect(x1, y1, x2, y2,
                 radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
                 color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight, color, vpWidth, vpHeight);
@@ -501,7 +500,7 @@ public final class UiRenderer {
     @Deprecated
     public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                     int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
+        if (backend().roundedRectHud(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
         primitives.drawRoundedRectHud(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
@@ -524,8 +523,7 @@ public final class UiRenderer {
     public void drawBlurredPanel(float x1, float y1, float x2, float y2,
                                   float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight,
                                   int passes, UiColor tint, float tintStrength, int vpWidth, int vpHeight) {
-        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.queueBlurredPanel(
-            x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+        backend().blurredPanel(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
             passes, tint, tintStrength, vpWidth, vpHeight);
     }
 
@@ -538,7 +536,7 @@ public final class UiRenderer {
      * l'instant.
      */
     public boolean isGlassAvailable() {
-        return com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.isGlassAvailable();
+        return backend().glassAvailable();
     }
 
     /**
@@ -560,8 +558,7 @@ public final class UiRenderer {
         // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
         // file — sinon elle arriverait après la soumission de la GUI, et les
         // panneaux échantillonneraient le flou de la frame précédente.
-        if (VanillaGuiTarget.beginGlassFrame(passes, vpWidth, vpHeight)) return;
-        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
+        backend().beginGlassFrame(passes, vpWidth, vpHeight);
     }
 
     /**
@@ -594,17 +591,12 @@ public final class UiRenderer {
         // Voie vanilla : un GuiElementRenderState qui échantillonne la chaîne
         // de flou. Retombe sur l'aplat ci-dessous si la chaîne n'a pas pu être
         // calculée pour cette frame.
-        if (VanillaGuiTarget.glassPanel(x1, y1, x2, y2,
-                radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
-                tint, fallback, vpWidth, vpHeight)) return;
-        if (isGlassAvailable() && !VanillaGuiTarget.isArmed()) {
-            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.queueGlassPanel(
-                x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
-                tint, tintStrength, fallback.a, vpWidth, vpHeight);
-        } else {
-            drawRoundedRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
-                fallback, vpWidth, vpHeight);
-        }
+        if (backend().glassPanel(x1, y1, x2, y2,
+                radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+                tint, tintStrength, fallback, vpWidth, vpHeight)) return;
+        // Repli : l'ère n'a pas pu calculer la chaîne de flou pour cette frame.
+        drawRoundedRect(x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            fallback, vpWidth, vpHeight);
     }
 
     /** Raccourci rayon uniforme — voir {@link #drawGlassPanel(float, float, float, float, float, float, float, float, UiColor, float, UiColor, int, int)}. */
@@ -778,14 +770,12 @@ public final class UiRenderer {
         // La voie vanilla a SON lot (voir VanillaGuiTarget) : même rôle qu'ici,
         // regrouper tout le texte pour n'ouvrir qu'un maillage au lieu d'un par
         // chaîne.
-        if (VanillaGuiTarget.beginTextBatch()) return;
-        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText.beginBatch();
+        backend().beginTextBatch();
     }
 
     /** Ferme le lot ouvert par {@link #beginTextBatch} et empile son rendu (une passe par police). */
     public void endTextBatch(int vpWidth, int vpHeight) {
-        if (VanillaGuiTarget.endTextBatch()) return;
-        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText.endBatch(vpWidth, vpHeight);
+        backend().endTextBatch(vpWidth, vpHeight);
     }
 
     // ── Texte ─────────────────────────────────────────────────────────────

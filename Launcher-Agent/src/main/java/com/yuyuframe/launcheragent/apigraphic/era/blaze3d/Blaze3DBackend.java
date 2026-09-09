@@ -69,4 +69,116 @@ public final class Blaze3DBackend implements UiBackend {
         Blaze3DText.queueDraw(font, content, x, y, color, scale, vpWidth, vpHeight);
         return true;
     }
+
+    // ── Primitives reprises de la façade (2026-09-09) ─────────────────────
+    // Chacune était un « if (VanillaGuiTarget.x(...)) return; » en tête de la
+    // méthode correspondante d'UiRenderer. Déplacées ici TELLES QUELLES, y
+    // compris l'ordre des rayons par coin, qui diffère entre les deux API
+    // (le moteur dit bas-gauche/bas-droit/haut-gauche/haut-droit, la GUI
+    // vanilla attend l'ordre inverse en Y — voir VanillaGuiTarget).
+
+    @Override
+    public boolean roundedRect(float x1, float y1, float x2, float y2,
+                               float radiusBottomLeft, float radiusBottomRight,
+                               float radiusTopLeft, float radiusTopRight,
+                               UiColor color, int vpWidth, int vpHeight) {
+        return VanillaGuiTarget.roundedRect(x1, y1, x2, y2,
+            radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+            color, vpWidth, vpHeight);
+    }
+
+    @Override
+    public boolean roundedRectHud(float x1, float y1, float x2, float y2, float radius,
+                                  UiColor color, int vpWidth, int vpHeight) {
+        return VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+    }
+
+    @Override
+    public boolean vignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        return VanillaGuiTarget.vignette(edgeColor, vSize, vpWidth, vpHeight);
+    }
+
+    @Override
+    public boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
+                        float alpha, int vpWidth, int vpHeight) {
+        return VanillaGuiTarget.icon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
+    }
+
+    // ── Capacités propres à cette ère ─────────────────────────────────────
+    // Verre dépoli et lot de texte n'existent que sur Blaze3D. Les autres ères
+    // héritent du défaut qui décline — plus besoin d'un test chez l'appelant.
+
+    @Override
+    public boolean vignetteAvailable() {
+        return VanillaGuiTarget.isArmed();
+    }
+
+    @Override
+    public boolean glassAvailable() {
+        return Blaze3DBlur.isGlassAvailable();
+    }
+
+    @Override
+    public boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
+        // Voie vanilla : la chaîne est calculée TOUT DE SUITE et non mise en
+        // file — sinon elle arriverait après la soumission de la GUI, et les
+        // panneaux échantillonneraient le flou de la frame précédente.
+        if (VanillaGuiTarget.beginGlassFrame(passes, vpWidth, vpHeight)) return true;
+        Blaze3DBlur.queueFrameChain(passes, vpWidth, vpHeight);
+        return true;
+    }
+
+    /**
+     * {@code false} quand la chaîne de flou n'a pas pu être calculée pour
+     * cette frame : l'appelant dessine alors son aplat de repli. Ce n'est pas
+     * un échec, c'est le comportement prévu — repris tel quel de la façade.
+     */
+    @Override
+    public boolean glassPanel(float x1, float y1, float x2, float y2,
+                              float radiusTopLeft, float radiusTopRight,
+                              float radiusBottomLeft, float radiusBottomRight,
+                              UiColor tint, float tintStrength, UiColor fallback,
+                              int vpWidth, int vpHeight) {
+        // Voie vanilla : un GuiElementRenderState qui échantillonne la chaîne
+        // de flou.
+        if (VanillaGuiTarget.glassPanel(x1, y1, x2, y2,
+                radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                tint, fallback, vpWidth, vpHeight)) return true;
+        if (Blaze3DBlur.isGlassAvailable() && !VanillaGuiTarget.isArmed()) {
+            Blaze3DBlur.queueGlassPanel(
+                x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+                tint, tintStrength, fallback.a, vpWidth, vpHeight);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean blurredPanel(float x1, float y1, float x2, float y2,
+                                float radiusTopLeft, float radiusTopRight,
+                                float radiusBottomLeft, float radiusBottomRight,
+                                int passes, UiColor tint, float tintStrength,
+                                int vpWidth, int vpHeight) {
+        Blaze3DBlur.queueBlurredPanel(
+            x1, y1, x2, y2, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight,
+            passes, tint, tintStrength, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean beginTextBatch() {
+        // La voie vanilla a SON lot (voir VanillaGuiTarget) : même rôle,
+        // regrouper tout le texte pour n'ouvrir qu'un maillage au lieu d'un
+        // par chaîne.
+        if (VanillaGuiTarget.beginTextBatch()) return true;
+        Blaze3DText.beginBatch();
+        return true;
+    }
+
+    @Override
+    public boolean endTextBatch(int vpWidth, int vpHeight) {
+        if (VanillaGuiTarget.endTextBatch()) return true;
+        Blaze3DText.endBatch(vpWidth, vpHeight);
+        return true;
+    }
 }

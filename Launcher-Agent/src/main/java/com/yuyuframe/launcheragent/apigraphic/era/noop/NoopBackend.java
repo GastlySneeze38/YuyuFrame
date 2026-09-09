@@ -45,4 +45,33 @@ public final class NoopBackend implements UiBackend {
                         float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         return false;
     }
+
+    // ── Primitives pas encore découpées ───────────────────────────────────
+    // Elles déclinent : l'appelant retombe sur UiPrimitiveRenderer, où le code
+    // de cette ère vit encore. Voir render/package-info.java.
+
+    @Override
+    public boolean roundedRect(float x1, float y1, float x2, float y2,
+                               float radiusBottomLeft, float radiusBottomRight,
+                               float radiusTopLeft, float radiusTopRight,
+                               UiColor color, int vpWidth, int vpHeight) {
+        return false;
+    }
+
+    @Override
+    public boolean roundedRectHud(float x1, float y1, float x2, float y2, float radius,
+                                  UiColor color, int vpWidth, int vpHeight) {
+        return false;
+    }
+
+    @Override
+    public boolean vignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
+        return false;
+    }
+
+    @Override
+    public boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
+                        float alpha, int vpWidth, int vpHeight) {
+        return false;
+    }
 }
