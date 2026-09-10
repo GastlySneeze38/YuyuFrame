@@ -415,13 +415,15 @@ public final class UiRenderer {
      * {@link VanillaGuiTarget#vignette}.
      */
     public boolean isVignetteAvailable() {
-        if (backend().vignetteAvailable()) return true;
-        return primitives.isVignetteAvailable();
+        return backend().vignetteAvailable();
     }
 
+    // Plus de repli sur UiPrimitiveRenderer depuis le 2026-09-10 : les TROIS
+    // ères servent la vignette elles-mêmes (era/gl2, era/gl3, era/blaze3d).
+    // Seul le backend inerte décline, et pour lui « rien à l'écran » est la
+    // réponse juste.
     public void drawEdgeVignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
-        if (backend().vignette(edgeColor, vSize, vpWidth, vpHeight)) return;
-        primitives.drawEdgeVignette(edgeColor, vSize, vpWidth, vpHeight);
+        backend().vignette(edgeColor, vSize, vpWidth, vpHeight);
     }
 
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float size, int vpWidth, int vpHeight) {
@@ -443,8 +445,10 @@ public final class UiRenderer {
      */
     public void drawIcon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                           float alpha, int vpWidth, int vpHeight) {
-        if (backend().icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight)) return;
-        primitives.drawIcon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
+        // Plus de repli sur UiPrimitiveRenderer depuis le 2026-09-10 : les
+        // TROIS ères servent l'icône elles-mêmes (era/gl2, era/gl3,
+        // era/blaze3d).
+        backend().icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
     }
 
     // ── Cible « état de GUI vanilla » ────────────────────────────────────────
@@ -511,7 +515,12 @@ public final class UiRenderer {
     public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
                             UiColor color, int vpWidth, int vpHeight) {
         if (backend().shadow(x1, y1, x2, y2, radius, blur, spread, color, vpWidth, vpHeight)) return;
-        primitives.drawShadow(x1, y1, x2, y2, radius, blur, spread, color, vpWidth, vpHeight);
+        // Composition sur le FX, identique pour toute ère qui ne sert pas
+        // l'ombre elle-même : le "spread" agrandit la boîte AVANT flou, sans
+        // contour et sans dégradé. Vivait dans UiPrimitiveRenderer jusqu'au
+        // 2026-09-10 ; elle ne nomme aucune ère, elle appartient ici.
+        backend().fx(x1 - spread, y1 - spread, x2 + spread, y2 + spread, radius + spread, blur, 0f,
+            color, color, false, vpWidth, vpHeight);
     }
 
     /**
@@ -663,20 +672,23 @@ public final class UiRenderer {
     public void drawRoundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
                                        UiColor color, int vpWidth, int vpHeight) {
         if (backend().roundedRectBorder(x1, y1, x2, y2, radius, borderWidth, color, vpWidth, vpHeight)) return;
-        primitives.drawRoundedRectBorder(x1, y1, x2, y2, radius, borderWidth, color, vpWidth, vpHeight);
+        // Composition sur le FX : contour creux (flou nul, épaisseur non nulle).
+        backend().fx(x1, y1, x2, y2, radius, 0f, borderWidth, color, color, false, vpWidth, vpHeight);
     }
 
     public void drawGradientRect(float x1, float y1, float x2, float y2, float radius,
                                   UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
         if (backend().gradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight)) return;
-        primitives.drawGradientRect(x1, y1, x2, y2, radius, colorBottom, colorTop, vpWidth, vpHeight);
+        // Composition sur le FX : ni flou ni contour, mode dégradé vertical.
+        backend().fx(x1, y1, x2, y2, radius, 0f, 0f, colorBottom, colorTop, true, vpWidth, vpHeight);
     }
 
     public void drawGradientRect2D(float x1, float y1, float x2, float y2, float radius,
                                     UiColor colorBottomLeft, UiColor colorBottomRight,
                                     UiColor colorTopLeft, UiColor colorTopRight, int vpWidth, int vpHeight) {
-        if (backend().gradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight)) return;
-        primitives.drawGradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+        // Plus de repli sur UiPrimitiveRenderer depuis le 2026-09-10 : les
+        // TROIS ères servent ce dégradé elles-mêmes.
+        backend().gradientRect2D(x1, y1, x2, y2, radius, colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
     }
 
     /**
@@ -692,9 +704,10 @@ public final class UiRenderer {
         // — voir draw/geometry/GradientStops.
         GradientStops.Normalized stops = GradientStops.normalize(stopColors, stopPositions);
         if (stops == null) return;
-        if (backend().multiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY,
-                stops.colors, stops.positions, vpWidth, vpHeight)) return;
-        primitives.drawMultiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY, stopColors, stopPositions, vpWidth, vpHeight);
+        // Plus de repli sur UiPrimitiveRenderer depuis le 2026-09-10 : les
+        // TROIS ères servent ce dégradé elles-mêmes.
+        backend().multiStopGradientRect(x1, y1, x2, y2, radius, type, startX, startY, endX, endY,
+                stops.colors, stops.positions, vpWidth, vpHeight);
     }
 
     /**
@@ -704,8 +717,10 @@ public final class UiRenderer {
      */
     public void drawFx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
                         UiColor colorA, UiColor colorB, boolean gradient, int vpWidth, int vpHeight) {
-        if (backend().fx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight)) return;
-        primitives.drawFx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
+        // Plus de repli sur UiPrimitiveRenderer depuis le 2026-09-10 : les
+        // TROIS ères servent le FX elles-mêmes (blaze3d en le déclarant traité
+        // sans rien dessiner — voir Blaze3DBackend).
+        backend().fx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
     }
 
     public void drawGlow(float x1, float y1, float x2, float y2, float radius, float intensity, UiColor color,

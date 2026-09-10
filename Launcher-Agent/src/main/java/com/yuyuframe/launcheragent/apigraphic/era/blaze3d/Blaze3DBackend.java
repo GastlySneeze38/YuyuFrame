@@ -42,10 +42,26 @@ public final class Blaze3DBackend implements UiBackend {
         return "blaze3d";
     }
 
+    /**
+     * Deux chemins, comme {@link #text} — et pour la même raison.
+     *
+     * <p>Pendant la passe GUI de vanilla, l'élément part dans le
+     * {@code GuiRenderState}. En dehors (les écrans de l'agent, dessinés après
+     * la présentation de la frame), {@link Blaze3DRect#queueRect} met en file
+     * pour la frame suivante.
+     *
+     * <p>Ce second chemin vivait dans {@code UiPrimitiveRenderer}, derrière un
+     * {@code if (Blaze3DCore.isAvailable())} — c'est-à-dire un test d'ère à
+     * l'intérieur de ce qui devait devenir le code gl2/gl3. Remonté ici le
+     * 2026-09-10 : sans ça, découper ce fichier en deux ères aurait fait
+     * disparaître le rendu des écrans de l'agent.
+     */
     @Override
     public boolean roundedRect(float x1, float y1, float x2, float y2, float radius,
                                UiColor color, int vpWidth, int vpHeight) {
-        return VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return true;
+        Blaze3DRect.queueRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        return true;
     }
 
     /**
@@ -83,9 +99,17 @@ public final class Blaze3DBackend implements UiBackend {
                                float radiusBottomLeft, float radiusBottomRight,
                                float radiusTopLeft, float radiusTopRight,
                                UiColor color, int vpWidth, int vpHeight) {
-        return VanillaGuiTarget.roundedRect(x1, y1, x2, y2,
+        if (VanillaGuiTarget.roundedRect(x1, y1, x2, y2,
+                radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                color, vpWidth, vpHeight)) return true;
+        // ORDRE POSITIONNEL, pas nominal : la façade passe son rayon
+        // bas-gauche dans le PREMIER emplacement, que UiPrimitiveRenderer
+        // nommait « haut-gauche ». Les quatre rayons sont donc transmis dans
+        // leur ordre d'arrivée, exactement comme le faisait le code d'origine.
+        Blaze3DRect.queueRect(x1, y1, x2, y2,
             radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
             color, vpWidth, vpHeight);
+        return true;
     }
 
     @Override
@@ -102,7 +126,10 @@ public final class Blaze3DBackend implements UiBackend {
     @Override
     public boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                         float alpha, int vpWidth, int vpHeight) {
-        return VanillaGuiTarget.icon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
+        if (img == null) return true;
+        if (VanillaGuiTarget.icon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight)) return true;
+        Blaze3DRect.queueIcon(cacheKey, img, x, y, x + w, y + h, alpha, vpWidth, vpHeight);
+        return true;
     }
 
     // ── Capacités propres à cette ère ─────────────────────────────────────

@@ -10,8 +10,12 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 /**
  * Backend de l'ère gl3 — Core Profile 3.2 (1.17 – 1.21.x).
  *
- * <p>Ne sert pour l'instant que le TEXTE, comme {@code Gl2Backend} : c'est la
- * seule primitive découpée. Le reste retombe sur {@code UiPrimitiveRenderer}.
+ * <p>Sert le texte ({@code Gl3TextRenderer}) et les six primitives de
+ * {@code Gl3PrimitiveRenderer}. Ce qui reste à {@code false} n'est pas « pas
+ * encore découpé » mais bel et bien absent de cette ère : le rayon PAR COIN
+ * (le shader n'a qu'un {@code u_Radius} uniforme — la façade compose alors
+ * l'ancien empilement « rect arrondi + rect plat »), et le rect arrondi
+ * spécial HUD, qui n'a de sens que sur Blaze3D.
  */
 public final class Gl3Backend implements UiBackend {
 
@@ -19,6 +23,7 @@ public final class Gl3Backend implements UiBackend {
     public Gl3Backend() {}
 
     private Gl3TextRenderer textRenderer;
+    private Gl3PrimitiveRenderer primitives;
 
     @Override
     public String id() {
@@ -28,12 +33,15 @@ public final class Gl3Backend implements UiBackend {
     @Override
     public void attach(UiRenderer owner, GlBridge gl) {
         this.textRenderer = new Gl3TextRenderer(owner, gl, new FontAtlasTextures(gl));
+        this.primitives = new Gl3PrimitiveRenderer(owner, gl);
     }
 
     @Override
     public boolean roundedRect(float x1, float y1, float x2, float y2, float radius,
                                UiColor color, int vpWidth, int vpHeight) {
-        return false;   // pas encore découpé — voir render/package-info.java
+        if (primitives == null) return false;
+        primitives.roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        return true;
     }
 
     @Override
@@ -63,13 +71,54 @@ public final class Gl3Backend implements UiBackend {
     }
 
     @Override
+    public boolean fx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
+                      UiColor colorA, UiColor colorB, boolean gradient,
+                      int vpWidth, int vpHeight) {
+        if (primitives == null) return false;
+        primitives.fx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean multiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
+                                         com.yuyuframe.launcheragent.apigraphic.value.UiGradientType type,
+                                         float startX, float startY, float endX, float endY,
+                                         UiColor[] colors, float[] positions,
+                                         int vpWidth, int vpHeight) {
+        if (primitives == null) return false;
+        primitives.multiStopGradientRect(x1, y1, x2, y2, radius, type,
+            startX, startY, endX, endY, colors, positions, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean gradientRect2D(float x1, float y1, float x2, float y2, float radius,
+                                  UiColor colorBottomLeft, UiColor colorBottomRight,
+                                  UiColor colorTopLeft, UiColor colorTopRight,
+                                  int vpWidth, int vpHeight) {
+        if (primitives == null) return false;
+        primitives.gradientRect2D(x1, y1, x2, y2, radius,
+            colorBottomLeft, colorBottomRight, colorTopLeft, colorTopRight, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean vignetteAvailable() {
+        return primitives != null && primitives.vignetteAvailable();
+    }
+
+    @Override
     public boolean vignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
-        return false;
+        if (primitives == null) return false;
+        primitives.vignette(edgeColor, vSize, vpWidth, vpHeight);
+        return true;
     }
 
     @Override
     public boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                         float alpha, int vpWidth, int vpHeight) {
-        return false;
+        if (primitives == null) return false;
+        primitives.icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
+        return true;
     }
 }
