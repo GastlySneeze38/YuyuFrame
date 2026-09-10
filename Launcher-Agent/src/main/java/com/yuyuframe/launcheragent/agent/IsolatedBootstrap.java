@@ -84,13 +84,23 @@ public final class IsolatedBootstrap {
         // d'une version ou d'un sondage de classe (voir RenderEra).
         VersionProfileRegistry.setActive(profile);
 
-        MappingsRegistry.setScheme(intermediary
-            ? MappingsRegistry.Scheme.INTERMEDIARY
-            : MappingsRegistry.Scheme.OFFICIAL);
+        // Le schéma vient des System properties, pas du paramètre "intermediary"
+        // — celui-ci est un booléen, il ne sait pas dire "srg". Sa signature
+        // reste inchangée parce qu'elle est liée par un getMethod() réflexif
+        // côté LauncherAgent.startIsolated ; il sert encore de repli si la
+        // propriété est absente (schemeFromProperties le lit lui-même).
+        MappingsRegistry.Scheme scheme = MappingsRegistry.schemeFromProperties();
+        MappingsRegistry.setScheme(scheme);
+        LauncherLog.agent(1, "[LauncherAgent] Schéma de mappings : " + scheme
+            + (intermediary && scheme != MappingsRegistry.Scheme.INTERMEDIARY
+                ? " (⚠️ le drapeau hérité \"intermediary\" disait le contraire)" : ""));
 
         LauncherMixinService.setInstrumentation(inst);
 
         loadYarnMappings(yarnPath, profile);
+        if (scheme == MappingsRegistry.Scheme.SRG) {
+            loadSrgMappings(profile);
+        }
 
         // Log de sanité : vérifie que la classe principale de la version est bien mappée.
         // Même nom Yarn named "TitleScreen" sur les deux branches — Legacy Fabric
@@ -375,14 +385,11 @@ public final class IsolatedBootstrap {
         // Cherche d'abord un JAR Yarn dont le nom contient l'indice du profil
         // résolu (ex: "1.8.9" pour la tranche legacy189, "1.21.11" pour la
         // tranche moderne actuelle) — voir VersionProfile.yarnJarNameHint.
-        String[] searchRoots = {
-            System.getProperty("user.home") + "\\.gradle\\caches\\fabric-loom",
-            System.getProperty("user.home") + "\\.gradle\\caches",
-            System.getenv("APPDATA") != null ? System.getenv("APPDATA") + "\\.minecraft\\libraries" : null,
-        };
-        for (String root : searchRoots) {
-            if (root == null) continue;
-            java.io.File found = findYarnJar(new java.io.File(root), profile.yarnJarNameHint, 0);
+        // Racines communes avec la recherche SRG (2026-09-10) : elles étaient
+        // écrites ici en chemins Windows concaténés à la main, donc sans effet
+        // hors Windows — voir mappingSearchRoots().
+        for (java.io.File root : mappingSearchRoots()) {
+            java.io.File found = findYarnJar(root, profile.yarnJarNameHint, 0);
             if (found != null) {
                 try {
                     YarnMappings.loadFromJar(found.getAbsolutePath());
@@ -428,6 +435,135 @@ public final class IsolatedBootstrap {
         for (java.io.File f : children) {
             if (f.isDirectory()) {
                 java.io.File r = findYarnJar(f, yarnJarNameHint, depth + 1);
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Charge l'index SRG (Forge/NeoForge) — appelé UNIQUEMENT quand le schéma
+     * actif est {@code SRG}, jamais autrement.
+     *
+     * <p>Même forme que {@link #loadYarnMappings} : chemin explicite d'abord
+     * (arg {@code srg=...} de l'agent), auto-détection ensuite.
+     *
+     * <p><b>Le chemin explicite est le cas NORMAL, pas une optimisation.</b>
+     * Le launcher résout le chemin lui-même (voir {@code
+     * agents.rs:resolve_srg_mappings}) : il a installé le loader, connaît la
+     * version avec certitude et possède le dossier {@code .minecraft}. La
+     * fouille de disque ci-dessous ne sert qu'à un lancement manuel
+     * {@code -javaagent:} hors launcher — elle ne peut qu'inférer, là où le
+     * launcher sait.
+     *
+     * <p>Une différence de fond avec Yarn : <b>pas de deuxième passe
+     * permissive</b>. Yarn accepte en dernier recours n'importe quel jar de
+     * mappings trouvé ; ici, charger le {@code joined.tsrg} d'une AUTRE
+     * version produirait des noms syntaxiquement valides et sémantiquement
+     * faux — bien pire qu'une absence de mappings, qui elle se voit tout de
+     * suite.
+     *
+     * <p>Sans index SRG, chaque traduction retombe sur le nom officiel : le
+     * seul qui n'existe PAS dans le jar chargé sous ces loaders. D'où le
+     * message d'échec explicite plutôt qu'une dégradation muette.
+     */
+    private static void loadSrgMappings(VersionProfile profile) {
+        String explicitPath = System.getProperty("launcheragent.srgPath");
+        if (explicitPath != null && !explicitPath.isEmpty()) {
+            try {
+                MappingsRegistry.loadSrg(explicitPath);
+                LauncherLog.agent(3, "[LauncherAgent] SRG chargé depuis : " + explicitPath);
+                return;
+            } catch (Exception e) {
+                LauncherLog.warn("[LauncherAgent] SRG explicite non chargé (" + explicitPath + "): " + e.getMessage());
+            }
+        }
+
+        // Version non obfusquée (26.1+) : SRG n'a pas d'objet, Forge/NeoForge
+        // y voient les mêmes noms réels que tout le monde. Même raisonnement
+        // que l'indice Yarn absent.
+        if (profile.yarnJarNameHint == null) {
+            LauncherLog.agent(3, "[LauncherAgent] Profil " + profile.key + " non obfusqué — SRG sans objet");
+            return;
+        }
+
+        LauncherLog.warn("[LauncherAgent] SRG non fourni par le launcher (arg srg=) — repli sur une"
+            + " fouille du disque, moins fiable. Voir agents.rs:resolve_srg_mappings.");
+        for (java.io.File root : mappingSearchRoots()) {
+            java.io.File found = findSrgFile(root, profile.yarnJarNameHint, 0);
+            if (found != null) {
+                try {
+                    MappingsRegistry.loadSrg(found.getAbsolutePath());
+                    LauncherLog.agent(3, "[LauncherAgent] SRG auto-détecté : " + found.getAbsolutePath());
+                    return;
+                } catch (Exception e) {
+                    LauncherLog.agent(1, "[LauncherAgent] SRG auto-detect échec (" + found + "): " + e.getMessage());
+                }
+            }
+        }
+
+        LauncherLog.err("[LauncherAgent] SRG INTROUVABLE pour \"" + profile.yarnJarNameHint + "\" alors que le"
+            + " schéma actif est SRG — aucun nom du jeu ne pourra être résolu sous ce loader. Passez"
+            + " srg=<chemin vers mcp_config-" + profile.yarnJarNameHint + ".zip ou joined.tsrg> en argument"
+            + " de l'agent, ou forcez un autre schéma avec -Dlauncheragent.mappingScheme=official.");
+    }
+
+    /**
+     * Racines où chercher des mappings sur le disque.
+     *
+     * <p>Remplace les trois chaînes Windows concaténées à la main qui vivaient
+     * dans {@link #loadYarnMappings} — séparateurs {@code \\} en dur et
+     * {@code %APPDATA%} comme seule notion de « dossier Minecraft », donc rien
+     * de trouvable hors Windows. Ici les chemins sont composés par
+     * {@link java.io.File}, et le dossier du jeu est cherché aux trois
+     * emplacements standard des trois systèmes.
+     *
+     * <p>Les caches Gradle restent en tête : ils portent les mappings les plus
+     * complets quand ils existent. Mais ils n'existent que sur une machine de
+     * développement — chez un utilisateur, seuls les {@code libraries/} du
+     * dossier de jeu répondent.
+     */
+    private static java.util.List<java.io.File> mappingSearchRoots() {
+        java.util.List<java.io.File> roots = new java.util.ArrayList<>();
+        String home = System.getProperty("user.home");
+        if (home != null) {
+            java.io.File gradle = new java.io.File(new java.io.File(home, ".gradle"), "caches");
+            roots.add(new java.io.File(gradle, "fabric-loom"));
+            roots.add(gradle);
+        }
+
+        String appData = System.getenv("APPDATA");
+        if (appData != null) roots.add(new java.io.File(new java.io.File(appData, ".minecraft"), "libraries"));
+        if (home != null) {
+            // macOS
+            roots.add(new java.io.File(home, "Library/Application Support/minecraft/libraries"));
+            // Linux
+            roots.add(new java.io.File(home, ".minecraft/libraries"));
+        }
+
+        java.util.List<java.io.File> existing = new java.util.ArrayList<>();
+        for (java.io.File f : roots) if (f.isDirectory()) existing.add(f);
+        return existing;
+    }
+
+    /**
+     * Cherche un {@code joined.tsrg} ou un {@code mcp_config-<version>.zip}
+     * portant {@code versionHint}. Contrairement à {@link #findYarnJar}, aucun
+     * repli sur « n'importe quelle version » — voir {@link #loadSrgMappings}.
+     */
+    private static java.io.File findSrgFile(java.io.File dir, String versionHint, int depth) {
+        if (depth > 6 || !dir.isDirectory()) return null;
+        java.io.File[] children = dir.listFiles();
+        if (children == null) return null;
+        for (java.io.File f : children) {
+            if (!f.isFile()) continue;
+            String name = f.getName();
+            if (name.equals("joined.tsrg")) return f;
+            if (name.startsWith("mcp_config") && name.endsWith(".zip") && name.contains(versionHint)) return f;
+        }
+        for (java.io.File f : children) {
+            if (f.isDirectory()) {
+                java.io.File r = findSrgFile(f, versionHint, depth + 1);
                 if (r != null) return r;
             }
         }

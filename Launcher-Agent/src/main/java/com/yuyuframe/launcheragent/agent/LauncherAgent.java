@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-09-10-v1045";
+    private static final String BUILD_VERSION = "2026-09-10-v1049";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -150,7 +150,12 @@ public class LauncherAgent {
         // Rust, ou ancien build du launcher qui ne le fournit pas encore).
         String loaderName = resolveLoaderName(config.loader);
         boolean needsIsolation = needsIsolation(loaderName);
-        boolean intermediary = usesIntermediaryMappings(loaderName);
+        String schemeName = resolveSchemeName(loaderName);
+        // Conservé pour la propriété héritée "launcheragent.intermediary" et
+        // pour le paramètre de IsolatedBootstrap.start, dont la signature est
+        // liée par un getMethod() réflexif (voir startIsolated) — la changer
+        // demanderait de modifier les deux côtés en même temps, sans gain.
+        boolean intermediary = "intermediary".equals(schemeName);
 
         // Sous Fabric/Quilt/Forge/NeoForge, le code tissé par Mixin dans les
         // classes du jeu (la$onInit de TitleScreenMixin) est résolu par LEUR
@@ -168,7 +173,22 @@ public class LauncherAgent {
         // notions distinctes (P0-3) : "faut-il isoler le classloader Mixin ?"
         // (needsIsolation, ci-dessous) et "le jeu tourne-t-il en mappings
         // intermediary ?" (intermediary, seule celle-ci lue par MappingsRegistry).
+        //
+        // ⚠️ Ce booléen ne suffit plus depuis l'ajout du schéma SRG
+        // (2026-09-10) : il ne sait dire que "intermediary ou pas", donc il
+        // range Forge/NeoForge avec vanilla. Il reste écrit parce qu'un
+        // launcher Rust plus ancien peut encore le lire, mais la source de
+        // vérité est "launcheragent.mappingScheme" juste en dessous —
+        // MappingsRegistry.schemeFromProperties() lit celle-ci EN PREMIER et
+        // ne retombe sur le booléen que si elle est absente.
         System.setProperty("launcheragent.intermediary", String.valueOf(intermediary));
+        if (System.getProperty("launcheragent.mappingScheme") == null) {
+            System.setProperty("launcheragent.mappingScheme", schemeName);
+        } else {
+            LauncherLog.agent(1, "[LauncherAgent] mappingScheme forcé en ligne de commande : \""
+                + System.getProperty("launcheragent.mappingScheme") + "\" (déduction \"" + schemeName + "\" ignorée)");
+        }
+        if (config.srgPath != null) System.setProperty("launcheragent.srgPath", config.srgPath);
 
         // Chemin du jar — lu par FabricKnotExposer pour enregistrer
         // launcher-agent.jar comme "code source" PROPRE à KnotClassLoader (pas
@@ -212,17 +232,49 @@ public class LauncherAgent {
      * Loader tel que fourni par le Rust (arg "loader=..." — voir AgentConfig,
      * Backend/src/minecraft/launcher/agents.rs), ou repli par introspection de
      * classe si absent (lancement manuel, ou build du launcher antérieur à ce
-     * plumbing). Retourne "vanilla"/"fabric"/"quilt"/"forge"/"neoforge" —
-     * "forge" par défaut si ModLauncher est détecté (NeoForge indiscernable de
-     * Forge par cette seule classe, mais {@link #needsIsolation}/{@link
-     * #usesIntermediaryMappings} traitent les deux identiquement de toute
-     * façon — voir docs/launcher/audit/README-bugs-a-fix.md P0-2/P0-3/P0-5).
+     * plumbing). Retourne "vanilla"/"fabric"/"quilt"/"forge"/"neoforge".
+     *
+     * <h2>Le launcher fait autorité, l'introspection n'est qu'un filet</h2>
+     *
+     * {@code loader=} est TOUJOURS envoyé par le Rust (voir agents.rs :
+     * {@code loader.unwrap_or("vanilla")}), qui a lui-même installé le loader
+     * et connaît donc le paramètre avec certitude — là où l'introspection ne
+     * peut qu'inférer d'une présence de classe. La valeur de configuration
+     * gagne donc AVANT tout test, et le repli ne sert qu'à un lancement
+     * manuel {@code -javaagent:} hors launcher (ou à un build du launcher
+     * antérieur à ce plumbing).
+     *
+     * <p>La source retenue est journalisée : lire ce fichier ne doit pas être
+     * nécessaire pour savoir laquelle a décidé.
+     *
+     * <p>Forge et NeoForge sont distingués dans ce repli (2026-09-10) : ils
+     * partagent {@code cpw.mods.modlauncher.Launcher}, mais leur classe FML
+     * porte un paquet différent — {@code net.neoforged} contre
+     * {@code net.minecraftforge}. La distinction ne changeait rien tant que
+     * les deux retombaient sur OFFICIAL ; elle compte maintenant, parce que
+     * {@link #resolveSchemeName} peut avoir à les traiter différemment (voir
+     * sa javadoc sur le passage de NeoForge aux noms Mojang).
      */
     private static String resolveLoaderName(String configLoader) {
-        if (configLoader != null && !configLoader.isEmpty()) return configLoader;
+        if (configLoader != null && !configLoader.isEmpty()) {
+            LauncherLog.agent(1, "[LauncherAgent] loader=\"" + configLoader + "\" (fourni par le launcher)");
+            return configLoader;
+        }
+        String detected = detectLoaderFromClasspath();
+        LauncherLog.warn("[LauncherAgent] loader non fourni par le launcher — déduit du classpath : \""
+            + detected + "\". Lancement manuel ? Passez loader=<vanilla|fabric|quilt|forge|neoforge>"
+            + " en argument de l'agent pour ne pas dépendre de cette déduction.");
+        return detected;
+    }
+
+    private static String detectLoaderFromClasspath() {
         ClassLoader cl = LauncherAgent.class.getClassLoader();
         if (classPresent("net.fabricmc.loader.impl.launch.knot.Knot", cl)) return "fabric";
         if (classPresent("org.quiltmc.loader.impl.launch.knot.Knot", cl)) return "quilt";
+        // Testé AVANT ModLauncher : NeoForge l'embarque aussi, donc l'ordre
+        // inverse classerait tout NeoForge en "forge".
+        if (classPresent("net.neoforged.fml.loading.FMLLoader", cl)) return "neoforge";
+        if (classPresent("net.minecraftforge.fml.loading.FMLLoader", cl)) return "forge";
         if (classPresent("cpw.mods.modlauncher.Launcher", cl)) return "forge";
         return "vanilla";
     }
@@ -251,16 +303,44 @@ public class LauncherAgent {
     }
 
     /**
-     * Le jeu tourne-t-il en mappings intermediary (Fabric/Quilt) ? DÉCOUPLÉ
-     * de {@link #needsIsolation} (P0-3) : Forge/NeoForge ont AUSSI besoin de
-     * l'isolation classloader mais tournent en mappings SRG, ni intermediary
-     * ni official — pas encore supportés par {@code MappingsRegistry.Scheme}
-     * (troisième cas à prévoir si le support Forge/NeoForge est visé un jour,
-     * voir README-bugs-a-fix.md) — repli sur OFFICIAL pour eux en attendant
-     * (comme vanilla), pas de régression, juste pas encore de vrai support.
+     * Sous quel nommage le jeu tourne-t-il avec ce loader ? DÉCOUPLÉ de
+     * {@link #needsIsolation} (P0-3) : le besoin d'isolation classloader et le
+     * schéma de mappings sont deux questions indépendantes — Forge/NeoForge
+     * répondent « oui » à la première et « ni official ni intermediary » à la
+     * seconde.
+     *
+     * <p>Remplace {@code usesIntermediaryMappings()} (booléen), qui ne savait
+     * répondre que « intermediary ou pas » et rangeait donc Forge/NeoForge
+     * avec vanilla, en OFFICIAL — c'est-à-dire sur des noms absents du jar
+     * réellement chargé. Le commentaire d'origine l'annonçait déjà comme
+     * « pas encore de vrai support » ; c'est ce trou que {@code Scheme.SRG}
+     * comble.
+     *
+     * <h2>⚠️ NeoForge : choix assumé, non vérifié</h2>
+     *
+     * NeoForge a basculé son exécution sur les noms Mojang lisibles
+     * (« Mojmap ») aux alentours de la 1.20.2 — ses membres s'appelleraient
+     * alors {@code getInstance}, pas {@code m_91087_}, ce qui ne serait AUCUN
+     * des trois schémas actuels. Impossible à vérifier depuis cet
+     * environnement, faute d'instance NeoForge.
+     *
+     * <p>Il est donc classé en SRG comme Forge, ce qui est le comportement
+     * juste sur les NeoForge antérieurs et, sur les récents, échoue de la même
+     * façon qu'aujourd'hui — pas de régression. Le diagnostic en jeu tranchera
+     * ; {@code -Dlauncheragent.mappingScheme=official} permet de forcer l'autre
+     * hypothèse sans rebuild, et un quatrième schéma {@code MOJMAP} s'ajoutera
+     * comme celui-ci s'il s'avère nécessaire.
+     *
+     * @return {@code "official"}, {@code "intermediary"} ou {@code "srg"} —
+     *         volontairement des chaînes et pas l'énumération
+     *         {@code MappingsRegistry.Scheme} : cette classe tourne sur le
+     *         classloader système, où toucher à {@code apimixin/} déclenche le
+     *         {@code LinkageError} documenté dans {@code LauncherMixinService}.
      */
-    private static boolean usesIntermediaryMappings(String loader) {
-        return "fabric".equals(loader) || "quilt".equals(loader);
+    private static String resolveSchemeName(String loader) {
+        if ("fabric".equals(loader) || "quilt".equals(loader)) return "intermediary";
+        if ("forge".equals(loader) || "neoforge".equals(loader)) return "srg";
+        return "official";
     }
 
     /**

@@ -26,6 +26,23 @@ public class AgentConfig {
     public String yarnPath;
 
     /**
+     * Chemin vers les mappings SRG (arg {@code srg=...}) — Forge/NeoForge
+     * uniquement. Accepte un {@code joined.tsrg} direct (TSRG v1 ou TSRG2) OU
+     * un zip MCPConfig ({@code mcp_config-<version>.zip}), dont l'entrée
+     * {@code config/joined.tsrg} est alors lue.
+     *
+     * <p>Null si non fourni : l'agent tente une auto-détection dans
+     * {@code libraries/de/oceanlabs/mcp/mcp_config/}, où Forge/NeoForge le
+     * déposent. Sans mappings SRG sur ces loaders, toute traduction retombe
+     * sur les noms officiels — c'est-à-dire les seuls qui n'existent PAS dans
+     * le jar réellement chargé, voir {@code SrgMappings}.
+     *
+     * <p>Ignoré hors schéma SRG : sur une version non obfusquée (26.1.x) ou
+     * sous Fabric/Quilt, il ne servirait à rien.
+     */
+    public String srgPath;
+
+    /**
      * Version MC forcée par l'arg "version=..." — null = auto-détection au runtime
      * via MinecraftVersionDetector (recommandé, plus fiable).
      */
@@ -44,7 +61,8 @@ public class AgentConfig {
      * "fabric", "quilt", "forge" ou "neoforge". Le Rust le connaît avec
      * certitude (voir launcher/agents.rs, setup_launcher_agent) — consommé
      * par {@code LauncherAgent.resolveLoaderName()}/{@code needsIsolation()}/
-     * {@code usesIntermediaryMappings()} pour la décision d'isolation Mixin
+     * {@code resolveSchemeName()} pour DEUX décisions indépendantes :
+     * l'isolation du classloader Mixin, et le schéma de mappings
      * (P0-2/P0-3/P0-5, voir docs/launcher/audit/README-bugs-a-fix.md — fait,
      * ce n'est plus le "devinage" que ce commentaire décrivait).
      */
@@ -61,6 +79,7 @@ public class AgentConfig {
                 if (kv.length != 2) continue;
                 switch (kv[0].trim()) {
                     case "yarn":       cfg.yarnPath      = kv[1].trim(); break;
+                    case "srg":        cfg.srgPath       = kv[1].trim(); break;
                     case "version":    cfg.forcedVersion = kv[1].trim(); break;
                     case "readyEvent": cfg.readyEvent    = kv[1].trim(); break;
                     case "loader":     cfg.loader        = kv[1].trim(); break;

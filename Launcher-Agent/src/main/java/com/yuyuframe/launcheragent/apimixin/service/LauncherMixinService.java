@@ -463,8 +463,18 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
     }
 
     /**
-     * official → intermediary pour la valeur du refmap JSON.
+     * official → nom du schéma ACTIF, pour la valeur du refmap JSON.
      * Cherche d'abord dans la classe cible, puis dans fallbackNamedOwner (converti en official).
+     *
+     * <p>Passe par {@code MappingsRegistry.runtimeMethod} plutôt que
+     * d'interroger un index en direct (2026-09-10) : la version précédente
+     * appelait {@code YarnMappings.getIntermediaryMethod} en dur, donc tout
+     * schéma autre qu'{@code OFFICIAL} était traité comme
+     * {@code INTERMEDIARY}. Sous SRG, la recherche échouait et le refmap
+     * pointait sur le nom officiel — un refmap syntaxiquement valide qui vise
+     * des méthodes absentes du jar : exactement l'échec
+     * « could not find any targets matching » que le refmap existe pour
+     * éviter.
      */
     private static String refmapMethodReplacement(String yarnClass, String officialMethod,
                                                    String officialDesc, String fallbackNamedOwner) {
@@ -478,18 +488,32 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             return officialMethod + MappingsRegistry.runtimeDesc(officialDesc);
         }
 
-        String officialClass = YarnMappings.getOfficialClass(yarnClass);
-        String inter = officialClass != null
-            ? YarnMappings.getIntermediaryMethod(officialClass, officialMethod, officialDesc)
-            : null;
-        if (inter == null && fallbackNamedOwner != null) {
-            String fallbackOfficial = YarnMappings.getOfficialClass(fallbackNamedOwner);
-            if (fallbackOfficial != null)
-                inter = YarnMappings.getIntermediaryMethod(fallbackOfficial, officialMethod, officialDesc);
+        String runtime = resolveRuntimeMethod(YarnMappings.getOfficialClass(yarnClass),
+            officialMethod, officialDesc);
+        if (runtime == null && fallbackNamedOwner != null) {
+            runtime = resolveRuntimeMethod(YarnMappings.getOfficialClass(fallbackNamedOwner),
+                officialMethod, officialDesc);
         }
-        LauncherLog.asm(1, "[LauncherAgent] refmap official→inter: " + officialMethod + officialDesc
-            + " → " + inter);
-        return (inter != null ? inter : officialMethod) + MappingsRegistry.runtimeDesc(officialDesc);
+        LauncherLog.asm(1, "[LauncherAgent] refmap official→" + MappingsRegistry.getScheme() + ": "
+            + officialMethod + officialDesc + " → " + runtime);
+        return (runtime != null ? runtime : officialMethod) + MappingsRegistry.runtimeDesc(officialDesc);
+    }
+
+    /**
+     * @return le nom runtime, ou {@code null} si l'index n'a pas su traduire.
+     *
+     * <p>L'échec se lit sur l'ÉGALITÉ avec le nom officiel, pas sur un
+     * {@code null} : {@code runtimeMethod} retombe par contrat sur son entrée
+     * quand il ne trouve rien. Distinguer les deux compte ici, parce que c'est
+     * ce qui décide s'il faut essayer {@code fallbackNamedOwner} (le cas d'une
+     * méthode héritée, déclarée sur la classe parente et absente de la table
+     * de la sous-classe).
+     */
+    private static String resolveRuntimeMethod(String officialClass, String officialMethod,
+                                                String officialDesc) {
+        if (officialClass == null) return null;
+        String runtime = MappingsRegistry.runtimeMethod(officialClass, officialMethod, officialDesc);
+        return runtime.equals(officialMethod) ? null : runtime;
     }
 
     @Override public String getSideName() { return "CLIENT"; }

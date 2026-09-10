@@ -113,6 +113,61 @@ pub(super) async fn setup_p2p(
     Ok(AgentSetup { jvm_args: vec![mixin_arg, agent_arg], extra_classpath: extra_cp })
 }
 
+/// Résout le chemin des mappings SRG (Forge/NeoForge) à passer à l'agent via
+/// `srg=...` — pendant exact de `yarn=...`.
+///
+/// Le lanceur est la bonne place pour ça : c'est lui qui a installé le loader,
+/// qui connaît `version_id` avec certitude et qui possède le dossier
+/// `.minecraft`. Côté Java, l'agent ne peut que FOUILLER le disque (plusieurs
+/// racines candidates, récursion en profondeur) — moins fiable et
+/// non déterministe. Sa recherche reste en place mais comme dernier recours,
+/// pour un lancement manuel `-javaagent:` hors launcher.
+///
+/// Renvoie `None` sans bruit quand SRG n'a pas lieu d'être : loader non
+/// Forge/NeoForge, ou version non obfusquée (≥ 26.1 — tous les loaders y
+/// voient les mêmes vrais noms, voir `is_unobfuscated_version`).
+///
+/// Best-effort assumé : les installeurs Forge déposent MCPConfig dans
+/// `libraries/de/oceanlabs/mcp/mcp_config/`, mais NeoForge a sa propre chaîne
+/// de mappings et pourrait n'y rien mettre. Un `None` n'est jamais bloquant —
+/// l'agent journalise alors une erreur explicite nommant l'argument à passer
+/// à la main (voir `IsolatedBootstrap.loadSrgMappings`).
+fn resolve_srg_mappings(version_id: &str, loader: Option<&str>) -> Option<PathBuf> {
+    if !matches!(loader, Some("forge") | Some("neoforge")) {
+        return None;
+    }
+    if p2p::is_unobfuscated_version(version_id) {
+        return None;
+    }
+
+    // Le dossier de version porte un suffixe d'horodatage propre à la build
+    // MCPConfig (ex: "1.20.1-20230612.114412") — d'où la recherche par préfixe
+    // plutôt qu'un chemin construit en dur.
+    let root = super::orchestrator::minecraft_dir()
+        .join("libraries/de/oceanlabs/mcp/mcp_config");
+    let entries = std::fs::read_dir(&root).ok()?;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !(name == version_id || name.starts_with(&format!("{}-", version_id))) {
+            continue;
+        }
+        let inner = match std::fs::read_dir(entry.path()) {
+            Ok(it) => it,
+            Err(_) => continue,
+        };
+        for f in inner.flatten() {
+            let fname = f.file_name();
+            let fname = fname.to_string_lossy();
+            if fname.ends_with(".zip") && fname.contains("mcp_config") {
+                return Some(f.path());
+            }
+        }
+    }
+    None
+}
+
 /// Prépare le javaagent LauncherAgent (resource packs Modrinth in-game, voir
 /// docs/LauncherAgent/index.md) — totalement indépendant du p2p-agent, actif
 /// que P2P soit activé ou non. Contrairement à `setup_p2p`, ne fait jamais
@@ -251,6 +306,30 @@ pub(super) async fn setup_launcher_agent(
             agent_jar.display(), version_id, loader_name,
         ),
     };
+    // srg=... — mappings Forge/NeoForge, pendant de yarn=... : c'est le
+    // launcher qui résout le chemin (il a installé le loader et possède le
+    // dossier .minecraft), pas l'agent qui fouille le disque. Omis hors
+    // Forge/NeoForge et sur une version non obfusquée — voir
+    // resolve_srg_mappings.
+    match resolve_srg_mappings(version_id, loader) {
+        Some(srg_path) => {
+            log_to_console(app, console_label, &format!(
+                "[LauncherAgent] SRG : {}", srg_path.display()), "out");
+            agent_arg.push_str(&format!(",srg={}", srg_path.display()));
+        }
+        None if matches!(loader, Some("forge") | Some("neoforge"))
+            && !p2p::is_unobfuscated_version(version_id) => {
+            // Le seul cas qui mérite un avertissement : on ATTENDAIT des
+            // mappings SRG et on n'en a pas trouvé. L'agent retombera sur sa
+            // propre recherche, puis échouera avec un message explicite.
+            tracing::warn!(
+                "[LauncherAgent] mappings SRG introuvables pour MC {} ({}) — \
+                 l'agent tentera une auto-détection, sinon aucun nom du jeu ne sera résolu",
+                version_id, loader.unwrap_or("?"));
+        }
+        None => {}
+    }
+
     // readyEvent=... — Named Event Win32 (voir ready_event.rs) signalé par le
     // hook TitleScreen.init() de l'agent (ReadyEventSignal.java, JNA) une fois
     // le menu principal atteint. Absent (None) sur non-Windows ou si la

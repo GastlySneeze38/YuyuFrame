@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.mapping;
 
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.spongepowered.asm.mixin.extensibility.IRemapper;
 
 import java.util.Set;
@@ -12,26 +13,54 @@ import java.util.Set;
  *   map(yarnNamed)       → classe runtime  (résolution de @Mixin(targets = "..."))
  *   unmap(classe runtime) → yarnNamed      (pour getClassNode())
  *
- * Scheme : sous Fabric, les classes/méthodes/champs du jeu sont nommés
- * "intermediary" à l'exécution (ex: method_25426), pas "official" (les noms
- * obfusqués bruts de Mojang, ex: bg_) comme en vanilla. {@link #setScheme}
- * doit être appelé une fois (selon que Fabric est détecté ou non) avant tout
- * usage — voir IsolatedBootstrap. Tout le reste de ce registre (et donc tout
- * code qui passe par lui : Mixin, ScreenHelper, IconWidgets) devient alors
- * automatiquement cohérent avec le schéma actif.
+ * Scheme : le jeu ne porte pas les mêmes noms à l'exécution selon le loader.
+ * {@link #setScheme} doit être appelé une fois avant tout usage — voir
+ * IsolatedBootstrap. Tout le reste de ce registre (et donc tout code qui passe
+ * par lui : Mixin, ScreenHelper, IconWidgets) devient alors automatiquement
+ * cohérent avec le schéma actif.
+ *
+ * <h2>Les trois schémas</h2>
+ *
+ * <table border="1">
+ *   <tr><th>Schéma</th><th>Loader</th><th>Classes</th><th>Membres</th></tr>
+ *   <tr><td>{@code OFFICIAL}</td><td>vanilla</td><td>{@code gfj}</td><td>{@code a}</td></tr>
+ *   <tr><td>{@code INTERMEDIARY}</td><td>Fabric, Quilt</td><td>{@code class_310}</td><td>{@code method_25426}</td></tr>
+ *   <tr><td>{@code SRG}</td><td>Forge 1.13+, NeoForge</td><td>{@code net/minecraft/client/Minecraft}</td><td>{@code m_91087_}</td></tr>
+ * </table>
+ *
+ * <p><b>Le pivot est toujours « official »</b> — les noms obfusqués bruts de
+ * Mojang. C'est ce que le code de réflexion du projet écrit en dur, et c'est
+ * la clé des deux index de traduction ({@link YarnMappings} pour intermediary,
+ * {@link SrgMappings} pour srg). Ajouter un schéma revient donc à ajouter un
+ * index vers ce pivot, plus une branche dans les CINQ méthodes d'aiguillage
+ * privées ci-dessous — et nulle part ailleurs : les méthodes publiques
+ * n'aiguillent pas, elles délèguent.
+ *
+ * <p>Cette factorisation date de l'ajout de {@code SRG} (2026-09-10). Avant,
+ * chaque méthode publique portait son propre {@code if (scheme ==
+ * INTERMEDIARY)} — quatorze en tout. Ajouter un troisième schéma aurait voulu
+ * dire quatorze endroits à modifier ensemble, dont l'oubli d'un seul aurait
+ * produit une traduction partielle, c'est-à-dire des noms qui résolvent à
+ * moitié : le pire mode de défaillance possible ici, silencieux et localisé.
  */
 public final class MappingsRegistry implements IRemapper {
 
     public static final MappingsRegistry INSTANCE = new MappingsRegistry();
     private MappingsRegistry() {}
 
-    public enum Scheme { OFFICIAL, INTERMEDIARY }
+    public enum Scheme { OFFICIAL, INTERMEDIARY, SRG }
 
     private static volatile Scheme scheme = Scheme.OFFICIAL;
 
     public static void setScheme(Scheme s) { scheme = s; }
     public static Scheme getScheme() { return scheme; }
 
+    /**
+     * Le pivot Yarn est-il chargé ? C'est lui qui porte {@code named →
+     * official}, indispensable dans TOUS les schémas — y compris SRG, dont la
+     * chaîne complète est {@code named → official → srg} (l'index SRG ne
+     * connaît que sa seconde moitié).
+     */
     public static boolean isLoaded() { return YarnMappings.isLoaded(); }
 
     private static volatile boolean autoInitAttempted = false;
@@ -55,12 +84,21 @@ public final class MappingsRegistry implements IRemapper {
         if (YarnMappings.isLoaded() || autoInitAttempted) return;
         autoInitAttempted = true;
         try {
-            // "launcheragent.intermediary" (ex "launcheragent.fabric", renommé
-            // P0-3 — voir docs/launcher/audit/README-bugs-a-fix.md) : découplé
-            // de la décision d'isolation classloader, Quilt inclus désormais
-            // (Fabric ET Quilt tournent en mappings intermediary).
-            boolean intermediary = "true".equals(System.getProperty("launcheragent.intermediary"));
-            scheme = intermediary ? Scheme.INTERMEDIARY : Scheme.OFFICIAL;
+            scheme = schemeFromProperties();
+
+            // L'index SRG doit être rechargé de ce côté de la frontière pour
+            // la même raison que le pivot Yarn juste après : cette copie de
+            // classe a son propre état statique, vide. Sans ça, tout code
+            // tissé (donc résolu par Knot/ModLauncher) verrait scheme==SRG
+            // mais un SrgMappings vide — chaque traduction retomberait
+            // silencieusement sur le nom officiel, c'est-à-dire sur le seul
+            // nom qui n'existe PAS à l'exécution sous Forge.
+            String srgPath = System.getProperty("launcheragent.srgPath");
+            if (scheme == Scheme.SRG && srgPath != null && !srgPath.isEmpty()
+                    && !SrgMappings.isLoaded()) {
+                loadSrg(srgPath);
+            }
+
             String yarnPath = System.getProperty("launcheragent.yarnPath");
             if (yarnPath == null || yarnPath.isEmpty()) return;
             if (yarnPath.endsWith(".jar") || yarnPath.endsWith(".zip")) {
@@ -73,15 +111,120 @@ public final class MappingsRegistry implements IRemapper {
         } catch (Exception ignored) {}
     }
 
-    // ── Official → runtime (officiel en vanilla, intermediary sous Fabric) ──────
+    /**
+     * Schéma déduit des System properties — la seule table qui traverse la
+     * frontière de classloader décrite ci-dessus.
+     *
+     * <p>{@code launcheragent.mappingScheme} est la source explicite, posée
+     * par {@code LauncherAgent.premain()}. {@code launcheragent.intermediary}
+     * (booléen, antérieur) est conservé comme repli : il reste écrit par les
+     * builds du launcher Rust qui ne connaissent pas encore la nouvelle
+     * propriété, et le retirer ferait retomber Fabric en {@code OFFICIAL} —
+     * une régression silencieuse sur le seul loader réellement testé.
+     */
+    public static Scheme schemeFromProperties() {
+        String explicit = System.getProperty("launcheragent.mappingScheme");
+        if (explicit != null && !explicit.isEmpty()) {
+            try {
+                return Scheme.valueOf(explicit.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                LauncherLog.warn("[Mappings] launcheragent.mappingScheme=\"" + explicit
+                    + "\" inconnu — valeurs admises : official, intermediary, srg. Repli sur la détection héritée.");
+            }
+        }
+        // "launcheragent.intermediary" (ex "launcheragent.fabric", renommé
+        // P0-3 — voir docs/launcher/audit/README-bugs-a-fix.md) : découplé
+        // de la décision d'isolation classloader, Quilt inclus désormais
+        // (Fabric ET Quilt tournent en mappings intermediary).
+        return "true".equals(System.getProperty("launcheragent.intermediary"))
+            ? Scheme.INTERMEDIARY : Scheme.OFFICIAL;
+    }
+
+    /** Charge l'index SRG depuis un zip MCPConfig ou un {@code joined.tsrg} brut. */
+    public static void loadSrg(String path) throws java.io.IOException {
+        if (path.endsWith(".zip") || path.endsWith(".jar")) {
+            SrgMappings.loadFromZip(path);
+        } else {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(path)) {
+                SrgMappings.load(fis);
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ── AIGUILLAGE PAR SCHÉMA — les cinq seules méthodes qui testent
+    //    "scheme". Tout le reste du fichier délègue ici.
+    //
+    // Chacune suit la même règle : tenter la traduction propre au schéma
+    // actif, et retomber sur l'entrée OFFICIELLE si l'index ne connaît pas
+    // cette entrée. Ce repli n'est pas une commodité — en OFFICIAL il EST la
+    // réponse juste, et dans les deux autres il vaut mieux qu'une exception :
+    // une entrée manquante isolée (classe interne récente, synthétique) ne
+    // doit pas faire tomber tout le chemin de résolution.
+    // ══════════════════════════════════════════════════════════════════════
 
     private static String officialToRuntimeClass(String officialClass) {
         ensureInitialized();
         if (scheme == Scheme.INTERMEDIARY) {
             String inter = YarnMappings.getIntermediaryClass(officialClass);
             if (inter != null) return inter;
+        } else if (scheme == Scheme.SRG) {
+            String srg = SrgMappings.getSrgClass(officialClass);
+            if (srg != null) return srg;
         }
         return officialClass;
+    }
+
+    private static String officialToRuntimeField(String officialClass, String officialField) {
+        ensureInitialized();
+        if (scheme == Scheme.INTERMEDIARY && isLoaded()) {
+            String inter = YarnMappings.getIntermediaryField(officialClass, officialField);
+            if (inter != null) return inter;
+        } else if (scheme == Scheme.SRG) {
+            String srg = SrgMappings.getSrgField(officialClass, officialField);
+            if (srg != null) return srg;
+        }
+        return officialField;
+    }
+
+    private static String officialToRuntimeMethod(String officialClass, String officialMethod,
+                                                   String officialDesc) {
+        ensureInitialized();
+        if (scheme == Scheme.INTERMEDIARY && isLoaded()) {
+            String inter = YarnMappings.getIntermediaryMethod(officialClass, officialMethod, officialDesc);
+            if (inter != null) return inter;
+        } else if (scheme == Scheme.SRG) {
+            String srg = SrgMappings.getSrgMethod(officialClass, officialMethod, officialDesc);
+            if (srg != null) return srg;
+        }
+        return officialMethod;
+    }
+
+    private static Set<String> officialToRuntimeMethodNames(String officialClass, String officialMethod) {
+        ensureInitialized();
+        if (scheme == Scheme.INTERMEDIARY && isLoaded()) {
+            Set<String> names = YarnMappings.getIntermediaryMethodNames(officialClass, officialMethod);
+            if (!names.isEmpty()) return names;
+        } else if (scheme == Scheme.SRG) {
+            Set<String> names = SrgMappings.getSrgMethodNames(officialClass, officialMethod);
+            if (!names.isEmpty()) return names;
+        }
+        return java.util.Collections.singleton(officialMethod);
+    }
+
+    /**
+     * Chemin RETOUR : nom de classe tel que vu à l'exécution → nom officiel.
+     *
+     * <p>Sert au dé-mapping ({@code unmap}, {@code runtimeToNamed}), là où on
+     * part d'une classe réellement chargée pour remonter vers le vocabulaire
+     * Yarn. En {@code OFFICIAL} c'est l'identité.
+     */
+    private static String runtimeToOfficialClass(String runtimeClass) {
+        if (scheme == Scheme.SRG) {
+            String official = SrgMappings.getOfficialClassFromSrg(runtimeClass);
+            if (official != null) return official;
+        }
+        return runtimeClass;
     }
 
     /**
@@ -114,22 +257,12 @@ public final class MappingsRegistry implements IRemapper {
 
     /** Champ : nom officiel littéral écrit en dur dans le code de réflexion → nom runtime. */
     public static String runtimeField(String officialClass, String officialField) {
-        ensureInitialized();
-        if (scheme == Scheme.INTERMEDIARY && isLoaded()) {
-            String inter = YarnMappings.getIntermediaryField(officialClass, officialField);
-            if (inter != null) return inter;
-        }
-        return officialField;
+        return officialToRuntimeField(officialClass, officialField);
     }
 
     /** Méthode (avec descripteur officiel exact) : nom officiel → nom runtime. */
     public static String runtimeMethod(String officialClass, String officialMethod, String officialDesc) {
-        ensureInitialized();
-        if (scheme == Scheme.INTERMEDIARY && isLoaded()) {
-            String inter = YarnMappings.getIntermediaryMethod(officialClass, officialMethod, officialDesc);
-            if (inter != null) return inter;
-        }
-        return officialMethod;
+        return officialToRuntimeMethod(officialClass, officialMethod, officialDesc);
     }
 
     /**
@@ -140,12 +273,7 @@ public final class MappingsRegistry implements IRemapper {
      * par {@code runtimeMethodNames("Class","x").contains(m.getName())}.
      */
     public static Set<String> runtimeMethodNames(String officialClass, String officialMethod) {
-        ensureInitialized();
-        if (scheme == Scheme.INTERMEDIARY && isLoaded()) {
-            Set<String> names = YarnMappings.getIntermediaryMethodNames(officialClass, officialMethod);
-            if (!names.isEmpty()) return names;
-        }
-        return java.util.Collections.singleton(officialMethod);
+        return officialToRuntimeMethodNames(officialClass, officialMethod);
     }
 
     /**
@@ -227,14 +355,9 @@ public final class MappingsRegistry implements IRemapper {
         if (!isLoaded()) return yarnMethod;
         YarnMappings.MethodEntry entry = YarnMappings.getOfficialMethod(yarnClass, yarnMethod);
         if (entry == null) return yarnMethod;
-        if (scheme == Scheme.INTERMEDIARY) {
-            String officialOwner = YarnMappings.getOfficialClass(yarnClass);
-            if (officialOwner != null) {
-                String inter = YarnMappings.getIntermediaryMethod(officialOwner, entry.officialName, entry.officialDesc);
-                if (inter != null) return inter;
-            }
-        }
-        return entry.officialName;
+        String officialOwner = YarnMappings.getOfficialClass(yarnClass);
+        if (officialOwner == null) return entry.officialName;
+        return officialToRuntimeMethod(officialOwner, entry.officialName, entry.officialDesc);
     }
 
     /**
@@ -261,14 +384,9 @@ public final class MappingsRegistry implements IRemapper {
         if (!isLoaded()) return yarnMethod;
         YarnMappings.MethodEntry entry = YarnMappings.getOfficialMethod(yarnClass, yarnMethod, officialDesc);
         if (entry == null) return yarnMethod;
-        if (scheme == Scheme.INTERMEDIARY) {
-            String officialOwner = YarnMappings.getOfficialClass(yarnClass);
-            if (officialOwner != null) {
-                String inter = YarnMappings.getIntermediaryMethod(officialOwner, entry.officialName, entry.officialDesc);
-                if (inter != null) return inter;
-            }
-        }
-        return entry.officialName;
+        String officialOwner = YarnMappings.getOfficialClass(yarnClass);
+        if (officialOwner == null) return entry.officialName;
+        return officialToRuntimeMethod(officialOwner, entry.officialName, entry.officialDesc);
     }
 
     /**
@@ -291,23 +409,25 @@ public final class MappingsRegistry implements IRemapper {
         if (!isLoaded()) return yarnField;
         YarnMappings.FieldEntry entry = YarnMappings.getOfficialField(yarnClass, yarnField);
         if (entry == null) return yarnField;
-        if (scheme == Scheme.INTERMEDIARY) {
-            String officialOwner = YarnMappings.getOfficialClass(yarnClass);
-            if (officialOwner != null) {
-                String inter = YarnMappings.getIntermediaryField(officialOwner, entry.officialName);
-                if (inter != null) return inter;
-            }
-        }
-        return entry.officialName;
+        String officialOwner = YarnMappings.getOfficialClass(yarnClass);
+        if (officialOwner == null) return entry.officialName;
+        return officialToRuntimeField(officialOwner, entry.officialName);
     }
 
-    /** Runtime (official ou intermediary selon le schéma actif) → named (Yarn). */
+    /**
+     * Runtime (selon le schéma actif) → named (Yarn).
+     *
+     * <p>{@code INTERMEDIARY} a son propre index direct dans {@link
+     * YarnMappings} ; {@code SRG} passe par le pivot officiel, puis par la
+     * table {@code official → named} commune. Deux chemins, une seule
+     * destination.
+     */
     private static String runtimeToNamed(String runtimeClass) {
         if (scheme == Scheme.INTERMEDIARY) {
             String named = YarnMappings.getNamedClassFromIntermediary(runtimeClass);
             return named != null ? named : runtimeClass;
         }
-        String named = YarnMappings.getNamedClass(runtimeClass);
+        String named = YarnMappings.getNamedClass(runtimeToOfficialClass(runtimeClass));
         return named != null ? named : runtimeClass;
     }
 
@@ -333,14 +453,9 @@ public final class MappingsRegistry implements IRemapper {
         String namedOwner = runtimeToNamed(owner);
         YarnMappings.MethodEntry entry = YarnMappings.getOfficialMethod(namedOwner, name);
         if (entry == null) return name;
-        if (scheme == Scheme.INTERMEDIARY) {
-            String officialOwner = YarnMappings.getOfficialClass(namedOwner);
-            if (officialOwner != null) {
-                String inter = YarnMappings.getIntermediaryMethod(officialOwner, entry.officialName, entry.officialDesc);
-                if (inter != null) return inter;
-            }
-        }
-        return entry.officialName;
+        String officialOwner = YarnMappings.getOfficialClass(namedOwner);
+        if (officialOwner == null) return entry.officialName;
+        return officialToRuntimeMethod(officialOwner, entry.officialName, entry.officialDesc);
     }
 
     @Override
@@ -349,14 +464,9 @@ public final class MappingsRegistry implements IRemapper {
         String namedOwner = runtimeToNamed(owner);
         YarnMappings.FieldEntry entry = YarnMappings.getOfficialField(namedOwner, name);
         if (entry == null) return name;
-        if (scheme == Scheme.INTERMEDIARY) {
-            String officialOwner = YarnMappings.getOfficialClass(namedOwner);
-            if (officialOwner != null) {
-                String inter = YarnMappings.getIntermediaryField(officialOwner, entry.officialName);
-                if (inter != null) return inter;
-            }
-        }
-        return entry.officialName;
+        String officialOwner = YarnMappings.getOfficialClass(namedOwner);
+        if (officialOwner == null) return entry.officialName;
+        return officialToRuntimeField(officialOwner, entry.officialName);
     }
 
     @Override
