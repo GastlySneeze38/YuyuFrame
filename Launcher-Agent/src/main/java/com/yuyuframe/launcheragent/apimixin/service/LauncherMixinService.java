@@ -350,6 +350,34 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         // javadoc de classe de CameraFreelookMixin.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/CameraFreelookMixin",
             "net/minecraft/client/render/Camera", "clipToSpace", "(F)F", null),
+
+        // ── apimixin 1.21.11 (v1_21_11.*) — dégel de la tranche, étape 1 ──
+        // Mêmes cibles et mêmes descripteurs que les mixins mixin/client/*
+        // qu'ils remplacent (entrées conservées ci-dessus, avec leur
+        // historique) — seul le nom interne du mixin change, et c'est lui qui
+        // indexe le refmap (byMixin). Premiers mixins apimixin/ à AVOIR une
+        // entrée ici : ceux de 26.1.2 visent des noms réels et n'en ont jamais
+        // eu besoin.
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/TitleScreenMixin1211",
+            "net/minecraft/client/gui/screen/TitleScreen",
+            "init", "()V", "net/minecraft/client/gui/screen/Screen"),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/GlobalUiRenderMixin1211",
+            "net/minecraft/client/render/GameRenderer",
+            "render", "(Lnet/minecraft/client/render/RenderTickCounter;Z)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/GlobalUiPresentMixin1211",
+            "net/minecraft/client/gl/Framebuffer",
+            "blitToScreen", "()V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/GuiFlushMixin1211",
+            "net/minecraft/client/gui/render/GuiRenderer",
+            "render", "(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/hud/HudExtractCrosshairMixin1211",
+            "net/minecraft/client/gui/hud/InGameHud",
+            "renderCrosshair", "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/hud/HudExtractTextureOverlayMixin1211",
+            "net/minecraft/client/gui/hud/InGameHud", "renderOverlay",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/clock/ClockTotalTicksMixin1211",
+            "net/minecraft/world/World", "getTimeOfDay", "()J", null),
     };
 
     /**

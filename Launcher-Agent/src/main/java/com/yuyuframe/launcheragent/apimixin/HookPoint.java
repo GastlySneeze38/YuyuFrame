@@ -118,10 +118,16 @@ public enum HookPoint {
     HUD_EXTRACT_TAB_LIST,
     /**
      * Voir {@code Gui.extractTextureOverlay(GuiGraphicsExtractor, Identifier, float)}
-     * — PAS de mixin Fabric API d'origine (bespoke, voir audit ROADMAP-agent.md §3.3) :
-     * point de passage COMMUN à deux overlays plein-écran distincts, discriminés par
-     * {@code ctx} (l'{@code Identifier} de la texture demandée) — "pumpkin" pour
+     * (26.1.2) / {@code InGameHud.renderOverlay(DrawContext, Identifier, float)}
+     * (1.21.11) — PAS de mixin Fabric API d'origine (bespoke, voir audit
+     * ROADMAP-agent.md §3.3) : point de passage COMMUN à deux overlays plein-écran
+     * distincts, discriminés par le chemin de texture — "pumpkin" pour
      * NoPumpkinOverlayModule, "powder_snow" pour ClearVisionModule#clearPowderSnow.
+     *
+     * <p>{@code ctx} = le CHEMIN de la texture, une {@code String} (2026-09-11).
+     * C'était l'{@code Identifier} lui-même, que les modules testaient par
+     * {@code instanceof} — un type propre à 26.1.2, faux sur toute version
+     * obfusquée. Une chaîne ne dépend d'aucune version.
      */
     HUD_EXTRACT_TEXTURE_OVERLAY,
 
@@ -236,12 +242,17 @@ public enum HookPoint {
     // ── Horloge (pas de mixin Fabric API — bespoke, voir audit ROADMAP-agent.md
     // §3.3) ─────────────────────────────────────────────────────────────────
     /**
-     * Voir {@code ClientClockManager.getTotalTicks(Holder)} (Inject HEAD,
-     * cancellable) — LA source unique dont dérive tout le rendu temporel
-     * (soleil/lune/couleur du ciel/éclairage ambiant), voir WorldTimeModule.
-     * Dispatché via {@link VanillaHookRegistry#dispatchValue} (remplacement
-     * de valeur de retour), PAS {@link VanillaHookRegistry#dispatch} — ctx =
-     * {@code Holder}, valeur de remplacement = {@code Long} ou {@code null}.
+     * LA source unique dont dérive tout le rendu temporel (soleil/lune/couleur
+     * du ciel/éclairage ambiant), voir WorldTimeModule. Dispatché via
+     * {@link VanillaHookRegistry#dispatchValue} (remplacement de valeur de
+     * retour), PAS {@link VanillaHookRegistry#dispatch} — valeur de
+     * remplacement = {@code Long} ou {@code null}.
+     *
+     * <p>Point d'accroche PROPRE À CHAQUE VERSION, le sens restant le même :
+     * {@code ClientClockManager.getTotalTicks(Holder)} en 26.1.2,
+     * {@code World.getTimeOfDay()} (côté client seulement) en 1.21.11.
+     * {@code ctx} est donc OPAQUE — {@code Holder} ici, {@code World} là — et
+     * un handler ne doit pas le lire.
      */
     CLOCK_TOTAL_TICKS,
 

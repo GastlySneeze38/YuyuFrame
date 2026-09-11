@@ -63,13 +63,20 @@ public final class VersionProfileRegistry {
         // 1.8.x tombait implicitement ici) — une version 1.21.x non testée
         // ne doit PAS hériter silencieusement des Mixins vérifiés seulement
         // pour 1.21.11.
+        //
+        // DÉGELÉE le 2026-09-11 — deuxième tranche entièrement déclarative
+        // après 26.1.2 : plus de config Mixin en ressource
+        // (mixins.launcheragent.json reste sur le disque, avec les mixins
+        // mixin/client/* qu'elle liste, comme référence), la liste vit dans
+        // MixinHookPointRegistry sous "1.21.11". Contrairement à 26.1.2, la
+        // version est obfusquée : l'indice Yarn reste indispensable.
         PROFILES.add(new VersionProfile(
             "1_21_11",
             new String[]{ "1.21.11" },
             "1.21.11",
             "1.21.11",
-            "mixins.launcheragent.json",
-            "blaze3d").frozen());
+            null,
+            "blaze3d"));
 
         // Bracket "B" — 1.13 à 1.16.x : LWJGL3/GLFW comme le pipeline 1.21.11,
         // mais contexte GL encore en dessous du Core Profile 3.2 imposé depuis

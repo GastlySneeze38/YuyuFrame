@@ -230,6 +230,27 @@ public final class MixinHookPointRegistry {
 
         // ── Horloge ────────────────────────────────────────────────────────
         gate("26.1.2", "v26_1.clock.ClockTotalTicksMixin261", HookPoint.CLOCK_TOTAL_TICKS);
+
+        // ══════════════════════════════════════════════════════════════════
+        // 1.21.11 — MC OBFUSQUÉ : cibles en noms Yarn, méthodes traduites par
+        // le refmap (voir LauncherMixinService.REFMAP_ENTRIES). Dégel de la
+        // tranche, étape 1 (2026-09-11) : le noyau seulement.
+        // Encore absents, et c'est prévu : le HUD (HUD_EXTRACT_CHAT, via le
+        // même état de GUI que 26.1.2), le freelook, les accessors.
+        // ══════════════════════════════════════════════════════════════════
+
+        // ── Infrastructure : hub de rendu, écran-titre ─────────────────────
+        always("1.21.11", "v1_21_11.core.TitleScreenMixin1211");
+        always("1.21.11", "v1_21_11.core.GlobalUiRenderMixin1211");
+        always("1.21.11", "v1_21_11.core.GlobalUiPresentMixin1211");
+        always("1.21.11", "v1_21_11.core.GuiFlushMixin1211");
+
+        // ── HUD ────────────────────────────────────────────────────────────
+        gate("1.21.11", "v1_21_11.hud.HudExtractCrosshairMixin1211", HookPoint.HUD_EXTRACT_CROSSHAIR);
+        gate("1.21.11", "v1_21_11.hud.HudExtractTextureOverlayMixin1211", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+
+        // ── Horloge — même HookPoint qu'en 26.1.2, sur World.getTimeOfDay ──
+        gate("1.21.11", "v1_21_11.clock.ClockTotalTicksMixin1211", HookPoint.CLOCK_TOTAL_TICKS);
     }
 
     /**

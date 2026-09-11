@@ -298,9 +298,22 @@ public final class ModuleRegistry {
         // PUIS vide la file d'icônes d'item, le tout dans l'état de GUI de
         // vanilla, entre le HUD vanilla et le chat. Remplace l'ancien dessin
         // après-coup qui faisait passer tout notre contenu par-dessus le chat.
-        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiLayer.setHudPass(
-            com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer::renderInVanillaGui);
-        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiLayer.installItemIconFlush();
+        //
+        // Isolé dans un try/catch (2026-09-11, dégel 1.21.11) : VanillaGuiLayer
+        // est compilée contre les noms 26.1.2 de l'état de GUI. Tant que le
+        // remappeur au chargement n'est pas en place, rien ne garantit que sa
+        // liaison réussisse sur une autre version — et un échec ICI, dans le
+        // bloc static, rendrait ModuleRegistry définitivement inutilisable
+        // (NoClassDefFoundError à chaque accès), donc AUCUN module. Perdre le
+        // HUD vaut mieux que perdre tous les modules.
+        try {
+            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiLayer.setHudPass(
+                com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer::renderInVanillaGui);
+            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiLayer.installItemIconFlush();
+        } catch (Throwable t) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err(
+                "[ModuleRegistry] installation du HUD dans la passe GUI vanilla impossible sur cette version : " + t);
+        }
 
         // Regroupement demandé — voir ModuleGroup : purement de la
         // présentation, les modules ci-dessus restent enregistrés

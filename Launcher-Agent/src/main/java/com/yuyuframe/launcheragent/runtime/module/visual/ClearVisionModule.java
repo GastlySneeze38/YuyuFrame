@@ -5,7 +5,6 @@ import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import net.minecraft.client.renderer.fog.FogData;
-import net.minecraft.resources.Identifier;
 
 /**
  * Équivalent "Clear Water/Lava/Powder Snow" — supprime le brouillard
@@ -80,8 +79,9 @@ public final class ClearVisionModule extends LauncherModule {
         return true;
     }
 
+    /** {@code ctx} = chemin de texture ({@code String}) — voir {@link HookPoint#HUD_EXTRACT_TEXTURE_OVERLAY}. */
     private boolean cancelPowderSnowOverlay(Object ctx) {
-        if (!isEnabled() || !clearPowderSnow || !(ctx instanceof Identifier)) return false;
-        return ((Identifier) ctx).getPath().contains("powder_snow");
+        if (!isEnabled() || !clearPowderSnow || !(ctx instanceof String)) return false;
+        return ((String) ctx).contains("powder_snow");
     }
 }
