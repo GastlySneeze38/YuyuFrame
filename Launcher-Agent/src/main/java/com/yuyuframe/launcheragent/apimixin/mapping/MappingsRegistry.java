@@ -447,12 +447,31 @@ public final class MappingsRegistry implements IRemapper {
         return runtimeToNamed(typeName);
     }
 
+    /**
+     * Sensible au DESCRIPTEUR depuis le 2026-09-11. Auparavant la recherche se
+     * faisait par nom seul, ce qui retombait sur UNE des surcharges, pas
+     * forcément la bonne — le bug déjà documenté dans
+     * {@code LauncherMixinService.resolveOfficialMethodName} ({@code
+     * Screen.init()} reciblé vers {@code init(int,int)}). Tant que ce chemin ne
+     * servait presque jamais, ça passait inaperçu ; depuis {@code REFMAP_REMAP}
+     * il traduit toutes les cibles {@code @At(target=…)} et tous les
+     * {@code @Invoker} d'une version obfusquée, surcharges comprises.
+     *
+     * <p>Le descripteur reçu est dans l'espace SOURCE (noms Yarn) quand la
+     * référence vient directement d'une annotation. S'il est déjà en noms
+     * runtime (sortie du refmap), sa traduction ne trouve rien et la recherche
+     * retombe sur le nom seul — puis sur le nom inchangé : c'est ce qui rend
+     * ce chemin idempotent.
+     */
     @Override
     public String mapMethodName(String owner, String name, String desc) {
         if (!isLoaded() || name == null) return name;
         String namedOwner = runtimeToNamed(owner);
-        YarnMappings.MethodEntry entry = YarnMappings.getOfficialMethod(namedOwner, name);
-        if (entry == null) return name;
+        YarnMappings.MethodEntry entry = desc != null
+            ? YarnMappings.getOfficialMethod(namedOwner, name, namedDescToOfficial(desc))
+            : null;
+        if (entry == null) entry = YarnMappings.getOfficialMethod(namedOwner, name);
+        if (entry == null) return inheritedMethodName(namedOwner, name, desc);
         String officialOwner = YarnMappings.getOfficialClass(namedOwner);
         if (officialOwner == null) return entry.officialName;
         return officialToRuntimeMethod(officialOwner, entry.officialName, entry.officialDesc);
@@ -479,6 +498,83 @@ public final class MappingsRegistry implements IRemapper {
     public String unmapDesc(String desc) {
         if (!isLoaded() || desc == null) return desc;
         return remapDesc(desc, false);
+    }
+
+    /**
+     * Repli « méthode HÉRITÉE » (2026-09-11) : un site d'appel nomme la classe
+     * STATIQUE du receveur, Yarn range la méthode sous sa classe DÉCLARANTE.
+     * Cas réel : {@code Mouse.updateMouse} fait {@code invokevirtual
+     * ClientPlayerEntity.changeLookDirection(DD)V} (vérifié au désassemblage du
+     * jar 1.21.11), méthode déclarée sur {@code Entity} — la recherche directe
+     * échoue et le nom Yarn ressortait tel quel, donc aucune correspondance.
+     *
+     * <p>Le repli cherche la méthode par nom + descripteur dans TOUTES les
+     * classes, et n'accepte le résultat que si toutes les candidates donnent
+     * le MÊME nom runtime. C'est vrai d'une méthode redéfinie le long d'une
+     * hiérarchie (un obfuscateur garde le nom à travers les redéfinitions, et
+     * intermediary donne un seul {@code method_XXXX} par famille), et faux de
+     * deux méthodes sans rapport qui se trouveraient porter le même nom Yarn —
+     * cas où l'on refuse de deviner et où le nom ressort inchangé, comme avant.
+     */
+    private static String inheritedMethodName(String namedOwner, String name, String desc) {
+        if (desc == null) return name;
+        java.util.Map<String, YarnMappings.MethodEntry> candidates =
+            YarnMappings.findMethodsByNamedNameAndDesc(name, namedDescToOfficial(desc));
+        String result = null;
+        for (java.util.Map.Entry<String, YarnMappings.MethodEntry> c : candidates.entrySet()) {
+            String officialOwner = YarnMappings.getOfficialClass(c.getKey());
+            if (officialOwner == null) continue;
+            String runtime = officialToRuntimeMethod(officialOwner, c.getValue().officialName, c.getValue().officialDesc);
+            if (result == null) {
+                result = runtime;
+            } else if (!result.equals(runtime)) {
+                LauncherLog.warn("[Mappings] " + namedOwner + "." + name + desc
+                    + " : plusieurs classes candidates aux noms runtime différents — non traduit");
+                return name;
+            }
+        }
+        if (result == null) return name;
+        LauncherLog.agent(1, "[Mappings] " + namedOwner + "." + name + desc
+            + " résolue comme méthode héritée → " + result);
+        return result;
+    }
+
+    /**
+     * Référence de champ pour une entrée de refmap d'{@code @Accessor} :
+     * {@code nomRuntime:descripteurRuntime}, ou {@code null} si Yarn ne
+     * connaît pas ce champ. Le descripteur est indispensable — voir
+     * {@link YarnMappings.FieldEntry#officialDesc}.
+     */
+    public static String runtimeFieldReference(String yarnClass, String yarnField) {
+        if (!isLoaded()) return null;
+        YarnMappings.FieldEntry entry = YarnMappings.getOfficialField(yarnClass, yarnField);
+        String officialOwner = YarnMappings.getOfficialClass(yarnClass);
+        if (entry == null || officialOwner == null) return null;
+        return officialToRuntimeField(officialOwner, entry.officialName) + ":" + runtimeDesc(entry.officialDesc);
+    }
+
+    /**
+     * Descripteur en noms Yarn → descripteur en noms OFFICIELS (la clé des
+     * index de {@link YarnMappings}). Un type introuvable reste tel quel :
+     * type Java, bibliothèque non obfusquée, ou nom déjà runtime.
+     */
+    private static String namedDescToOfficial(String namedDesc) {
+        StringBuilder sb = new StringBuilder(namedDesc.length());
+        int i = 0;
+        while (i < namedDesc.length()) {
+            char c = namedDesc.charAt(i++);
+            if (c == 'L') {
+                int semi = namedDesc.indexOf(';', i);
+                if (semi < 0) { sb.append('L').append(namedDesc.substring(i)); break; }
+                String cls = namedDesc.substring(i, semi);
+                String official = YarnMappings.getOfficialClass(cls);
+                sb.append('L').append(official != null ? official : cls).append(';');
+                i = semi + 1;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     private static String remapDesc(String desc, boolean namedToRuntime) {

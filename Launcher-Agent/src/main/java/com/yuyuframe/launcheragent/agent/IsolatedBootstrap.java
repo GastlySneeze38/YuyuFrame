@@ -306,6 +306,36 @@ public final class IsolatedBootstrap {
             if (MappingsRegistry.isLoaded()) {
                 MixinEnvironment.getDefaultEnvironment().getRemappers().add(MappingsRegistry.INSTANCE);
                 LauncherLog.agent(1, "[LauncherAgent] Remappeur Mojang → obfusqué enregistré dans Mixin");
+
+                // REFMAP_REMAP (2026-09-11) — sans cette option, le remappeur
+                // ci-dessus n'était consulté pour AUCUNE référence absente de
+                // notre refmap : cibles @At(target=…) (donc tout @WrapOperation
+                // / @WrapWithCondition sur un site d'appel), noms d'@Accessor /
+                // @Invoker. Sur une version obfusquée, ces références restaient
+                // en noms Yarn et ne correspondaient à rien. Vérifié dans le
+                // bytecode de mixin.jar : AnnotatedMethodInfo.remap (base de
+                // tous les injecteurs ET des accessors) passe chaque chaîne par
+                // le refmap, et MixinConfig.onSelect n'enveloppe ce refmap dans
+                // un RemappingReferenceMapper — qui retraduit par nos remappers
+                // — que si cette option est vraie.
+                //
+                // Posée sur NOTRE environnement (setOption), pas en propriété
+                // système : mixin.env.remapRefMap est lue par TOUT Mixin de la
+                // JVM, donc aussi par celui de Fabric/NeoForge, dont les
+                // refmaps de mods n'ont rien à faire de notre remappeur.
+                //
+                // Et seulement quand Yarn est chargé, donc sur une version
+                // obfusquée : la 26.1.2 ne voit aucun changement.
+                //
+                // Sans effet sur les entrées déjà écrites dans notre refmap :
+                // RemappingReferenceMapper retraduit le RÉSULTAT du refmap, et
+                // un nom déjà runtime (class_310, gfj, method_1234) n'est pas
+                // un nom Yarn — la recherche échoue et il ressort inchangé.
+                //
+                // Doit précéder Mixins.addConfiguration : l'option est lue à la
+                // sélection des configs.
+                MixinEnvironment.getDefaultEnvironment().setOption(MixinEnvironment.Option.REFMAP_REMAP, true);
+                LauncherLog.agent(1, "[LauncherAgent] REFMAP_REMAP activé — références hors refmap traduites par MappingsRegistry");
             }
 
             try {

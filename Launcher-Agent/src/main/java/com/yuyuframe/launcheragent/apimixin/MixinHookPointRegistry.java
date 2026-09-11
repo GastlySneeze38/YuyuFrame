@@ -245,9 +245,24 @@ public final class MixinHookPointRegistry {
         always("1.21.11", "v1_21_11.core.GlobalUiPresentMixin1211");
         always("1.21.11", "v1_21_11.core.GuiFlushMixin1211");
 
+        // ── Freelook : non gaté, même raison qu'en 26.1.2 (voir plus haut) —
+        // Camera/Mouse se chargent avant l'enregistrement de FreelookModule.
+        always("1.21.11", "v1_21_11.freelook.CameraAccessor1211");
+        always("1.21.11", "v1_21_11.freelook.CameraFreelookMixin1211");
+        always("1.21.11", "v1_21_11.freelook.MouseHandlerFreelookMixin1211");
+
         // ── HUD ────────────────────────────────────────────────────────────
         gate("1.21.11", "v1_21_11.hud.HudExtractCrosshairMixin1211", HookPoint.HUD_EXTRACT_CROSSHAIR);
+        gate("1.21.11", "v1_21_11.hud.HudExtractEffectsMixin1211", HookPoint.HUD_EXTRACT_EFFECTS);
         gate("1.21.11", "v1_21_11.hud.HudExtractTextureOverlayMixin1211", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+
+        // ── Chat / combat ──────────────────────────────────────────────────
+        gate("1.21.11", "v1_21_11.chat.ChatReceiveMixin1211", HookPoint.CHAT_RECEIVE);
+        gate("1.21.11", "v1_21_11.chat.ChatSendMixin1211", HookPoint.CHAT_SEND);
+        gate("1.21.11", "v1_21_11.combat.PiercingAttackMixin1211", HookPoint.PIERCING_ATTACK);
+
+        // ── Cycle de vie ───────────────────────────────────────────────────
+        gate("1.21.11", "v1_21_11.lifecycle.ClientTickMixin1211", HookPoint.CLIENT_TICK);
 
         // ── Horloge — même HookPoint qu'en 26.1.2, sur World.getTimeOfDay ──
         gate("1.21.11", "v1_21_11.clock.ClockTotalTicksMixin1211", HookPoint.CLOCK_TOTAL_TICKS);

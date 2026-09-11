@@ -134,14 +134,52 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
      * official puis intermediary par runtimeDesc() au moment de la génération.
      */
     private static final class RefmapEntry {
+        /**
+         * Nature de la référence (2026-09-11). Seule METHOD existait : le
+         * générateur ne savait écrire que des sélecteurs {@code method=}.
+         * Or Mixin fait passer AUSSI les noms d'{@code @Accessor} et
+         * d'{@code @Invoker} par le refmap (vérifié dans mixin.jar :
+         * {@code AnnotatedMethodInfo.remap}), et ces références n'ont PAS de
+         * propriétaire — {@code RemappingReferenceMapper} ne peut donc pas les
+         * traduire par nos remappers. Sans entrée ici, un accessor sur une
+         * version obfusquée visait un nom Yarn qui n'existe pas.
+         *
+         * <ul>
+         *   <li>METHOD — clé {@code nom+descripteur}, sélecteur {@code method=} ;</li>
+         *   <li>INVOKER — clé {@code nom} seul (c'est ce qu'on écrit dans
+         *       {@code @Invoker("x")}), valeur avec descripteur ;</li>
+         *   <li>FIELD — clé {@code nom} seul ({@code @Accessor("x")}), valeur
+         *       {@code nomRuntime:descripteurRuntime} — le descripteur désigne
+         *       le vrai type du champ, quand l'accessor renvoie {@code Object}.</li>
+         * </ul>
+         */
+        enum Kind { METHOD, INVOKER, FIELD }
+
+        final Kind kind;
         final String mixinInternalName, yarnTargetClass, namedMethod, namedDesc, fallbackNamedOwner;
         RefmapEntry(String mixinInternalName, String yarnTargetClass,
                     String namedMethod, String namedDesc, String fallbackNamedOwner) {
+            this(Kind.METHOD, mixinInternalName, yarnTargetClass, namedMethod, namedDesc, fallbackNamedOwner);
+        }
+        private RefmapEntry(Kind kind, String mixinInternalName, String yarnTargetClass,
+                            String namedMethod, String namedDesc, String fallbackNamedOwner) {
+            this.kind = kind;
             this.mixinInternalName = mixinInternalName;
             this.yarnTargetClass = yarnTargetClass;
             this.namedMethod = namedMethod;
             this.namedDesc = namedDesc;
             this.fallbackNamedOwner = fallbackNamedOwner;
+        }
+
+        /** {@code @Accessor("namedField")} sur {@code yarnTargetClass}. */
+        static RefmapEntry field(String mixinInternalName, String yarnTargetClass, String namedField) {
+            return new RefmapEntry(Kind.FIELD, mixinInternalName, yarnTargetClass, namedField, null, null);
+        }
+
+        /** {@code @Invoker("namedMethod")} — le descripteur désambiguïse les surcharges. */
+        static RefmapEntry invoker(String mixinInternalName, String yarnTargetClass,
+                                   String namedMethod, String namedDesc) {
+            return new RefmapEntry(Kind.INVOKER, mixinInternalName, yarnTargetClass, namedMethod, namedDesc, null);
         }
     }
 
@@ -378,6 +416,43 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
         new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/clock/ClockTotalTicksMixin1211",
             "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        // ── apimixin 1.21.11, lot 2 : HookPoints réclamés par des modules
+        // enregistrés sur cette version (effets, chat, lance, tick client).
+        // Pendants des mixins 26.1.2 du même nom, cibles résolues dans les
+        // mappings officiels 1.21.11 puis dans Yarn.
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/hud/HudExtractEffectsMixin1211",
+            "net/minecraft/client/gui/hud/InGameHud", "renderStatusEffectOverlay",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/chat/ChatReceiveMixin1211",
+            "net/minecraft/client/network/message/MessageHandler", "onGameMessage",
+            "(Lnet/minecraft/text/Text;Z)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/chat/ChatReceiveMixin1211",
+            "net/minecraft/client/network/message/MessageHandler", "onChatMessage",
+            "(Lnet/minecraft/network/message/SignedMessage;Lcom/mojang/authlib/GameProfile;Lnet/minecraft/network/message/MessageType$Parameters;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/chat/ChatSendMixin1211",
+            "net/minecraft/client/network/ClientPlayNetworkHandler", "sendChatMessage",
+            "(Ljava/lang/String;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/combat/PiercingAttackMixin1211",
+            "net/minecraft/client/network/ClientPlayerInteractionManager", "attackWithPiercingWeapon",
+            "(Lnet/minecraft/component/type/PiercingWeaponComponent;)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/lifecycle/ClientTickMixin1211",
+            "net/minecraft/client/MinecraftClient", "tick", "()V", null),
+
+        // ── apimixin 1.21.11, freelook — premières entrées FIELD/INVOKER.
+        // Seuls les sélecteurs method= et les noms d'accessor sont ici : les
+        // cibles @At(INVOKE) nomment leur propriétaire et sont traduites par
+        // REFMAP_REMAP (voir IsolatedBootstrap.bootstrapMixin).
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/CameraFreelookMixin1211",
+            "net/minecraft/client/render/Camera", "update",
+            "(Lnet/minecraft/world/World;Lnet/minecraft/entity/Entity;ZZF)V", null),
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/MouseHandlerFreelookMixin1211",
+            "net/minecraft/client/Mouse", "updateMouse", "(D)V", null),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/CameraAccessor1211",
+            "net/minecraft/client/render/Camera", "yaw"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/CameraAccessor1211",
+            "net/minecraft/client/render/Camera", "pitch"),
+        RefmapEntry.invoker("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/CameraAccessor1211",
+            "net/minecraft/client/render/Camera", "setRotation", "(FF)V"),
     };
 
     /**
@@ -392,11 +467,25 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
     public static String buildRefmapJson() {
         java.util.Map<String, java.util.Map<String, String>> byMixin = new java.util.LinkedHashMap<>();
         for (RefmapEntry e : REFMAP_ENTRIES) {
+            if (e.kind == RefmapEntry.Kind.FIELD) {
+                // @Accessor : clé = nom du champ tel qu'écrit dans l'annotation.
+                String fieldRef = MappingsRegistry.runtimeFieldReference(e.yarnTargetClass, e.namedMethod);
+                if (fieldRef == null) {
+                    LauncherLog.warn("[LauncherAgent] refmap: champ Yarn inconnu " + e.yarnTargetClass + "#"
+                        + e.namedMethod + " — accessor de " + e.mixinInternalName + " non traduit");
+                    continue;
+                }
+                byMixin.computeIfAbsent(e.mixinInternalName, k -> new java.util.LinkedHashMap<>())
+                       .put(e.namedMethod, fieldRef);
+                continue;
+            }
+
             // La CLÉ JSON = ce qui est écrit dans @Inject(method = "...") = nom named + desc named.
             // Mixin cherche cette clé dans le refmap pour obtenir le nom intermediary (Fabric).
             // Sur vanilla, le remapper (MappingsRegistry) traduit le nom named → official directement,
             // sans passer par le refmap — les deux chemins sont indépendants.
-            String refmapKey = e.namedMethod + e.namedDesc;
+            // @Invoker : clé = nom seul, c'est ce qu'on écrit dans l'annotation.
+            String refmapKey = e.kind == RefmapEntry.Kind.INVOKER ? e.namedMethod : e.namedMethod + e.namedDesc;
 
             // La VALEUR = nom intermediary + desc intermediary, pour que Fabric trouve la méthode.
             String officialMethod = resolveOfficialMethodName(e.yarnTargetClass, e.namedMethod,

@@ -33,8 +33,16 @@ public final class YarnMappings {
 
     public static final class FieldEntry {
         public final String officialName;
-        FieldEntry(String name) { this.officialName = name; }
-        @Override public String toString() { return officialName; }
+        /**
+         * Descripteur du champ en noms OFFICIELS (ex. {@code Lgqg;}) — conservé
+         * depuis le 2026-09-11 : une entrée de refmap d'{@code @Accessor} doit
+         * porter le type réel du champ ({@code nom:descripteur}), sinon Mixin
+         * cherche un champ du type déclaré par l'accessor — {@code Object} dès
+         * que le vrai type est obfusqué — et n'en trouve aucun.
+         */
+        public final String officialDesc;
+        FieldEntry(String name, String desc) { this.officialName = name; this.officialDesc = desc; }
+        @Override public String toString() { return officialName + ":" + officialDesc; }
     }
 
     private static volatile boolean loaded = false;
@@ -156,11 +164,12 @@ public final class YarnMappings {
                         String[] p = line.substring(3).split("\t");
                         int nameColMax = 1 + Math.max(colOfficial, Math.max(colIntermediary, colNamed));
                         if (p.length > nameColMax) {
+                            String desc         = p[0];
                             String officialName = p[1 + colOfficial];
                             String interName    = p[1 + colIntermediary];
                             String namedName    = p[1 + colNamed];
                             fields.putIfAbsent(currentNamedClass + "\0" + namedName,
-                                               new FieldEntry(officialName));
+                                               new FieldEntry(officialName, desc));
                             fieldOffToInter.put(currentOfficialClass + "\0" + officialName, interName);
                         }
                     }
@@ -204,6 +213,31 @@ public final class YarnMappings {
                                                 String officialDesc) {
         if (!loaded) return null;
         return methodsByNamedAndDesc.get(namedClass + "\0" + namedMethod + "\0" + officialDesc);
+    }
+
+    /**
+     * Toutes les méthodes portant ce nom Yarn ET ce descripteur officiel, quelle
+     * que soit leur classe — clé = classe Yarn déclarante.
+     *
+     * <p>Sert au repli « méthode héritée » de {@code MappingsRegistry} : Yarn
+     * range chaque méthode sous sa classe DÉCLARANTE, alors qu'un site d'appel
+     * nomme la classe STATIQUE du receveur. {@code MouseHandler.turnPlayer}
+     * appelle {@code ClientPlayerEntity.changeLookDirection}, déclarée sur
+     * {@code Entity} : la recherche directe sur {@code ClientPlayerEntity}
+     * échoue.
+     *
+     * <p>Parcours complet de l'index — appelé seulement sur un échec de la
+     * recherche directe, au démarrage, et mis en cache en amont par Mixin.
+     */
+    public static Map<String, MethodEntry> findMethodsByNamedNameAndDesc(String namedMethod, String officialDesc) {
+        if (!loaded) return Collections.emptyMap();
+        String suffix = "\0" + namedMethod + "\0" + officialDesc;
+        Map<String, MethodEntry> found = new LinkedHashMap<>();
+        for (Map.Entry<String, MethodEntry> e : methodsByNamedAndDesc.entrySet()) {
+            String key = e.getKey();
+            if (key.endsWith(suffix)) found.put(key.substring(0, key.length() - suffix.length()), e.getValue());
+        }
+        return found;
     }
 
     public static FieldEntry getOfficialField(String namedClass, String namedField) {
