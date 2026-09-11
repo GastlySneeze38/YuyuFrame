@@ -10,6 +10,11 @@ set "RES=%AGENT_DIR%src\main\resources"
 set "LIB=%AGENT_DIR%lib"
 set "OUT_MAIN=%AGENT_DIR%build\main"
 set "OUT_STUBS=%AGENT_DIR%build\stubs"
+:: Unite 1.21.11 (API Blaze3D differente de la 26.1.2, meme noms de classes) —
+:: voir la passe "Unite 1.21.11" plus bas.
+set "SRC_STUBS_1211=%AGENT_DIR%src\stubs_1_21_11"
+set "SRC_MAIN_1211=%AGENT_DIR%src\main_1_21_11\java"
+set "OUT_STUBS_1211=%AGENT_DIR%build\stubs_1_21_11"
 set "OUT_ASM=%AGENT_DIR%build\_asm_tmp"
 set "JAR=%AGENT_DIR%build\launcher-agent.jar"
 set "VER_TMP=%TEMP%\launcheragent_ver.txt"
@@ -240,6 +245,62 @@ if errorlevel 1 (
     goto :error
 )
 echo [Build] Compilation OK
+
+:: --- Unite 1.21.11 : stubs + code type, compiles A PART ---------------------
+:: La 1.21.11 et la 26.1.2 exposent des classes com.mojang.blaze3d.* de MEME
+:: NOM mais d'API differente (ColorTargetState/DepthStencilState absents en
+:: 1.21.11, etc.) : impossible de les avoir toutes deux sur un meme classpath.
+:: Cette unite est donc compilee contre SES stubs (src\stubs_1_21_11)
+:: UNIQUEMENT — surtout pas contre %OUT_STUBS% (26.1.2) — avec %OUT_MAIN% sur
+:: le -cp pour voir les interfaces du moteur, et emise DANS %OUT_MAIN% pour
+:: finir dans le meme jar. Comme pour les stubs 26.1.2 : les stubs 1.21.11
+:: ne sont JAMAIS emis dans %OUT_MAIN% (ils ne doivent pas finir dans le jar).
+:: Voir src\main_1_21_11\java\...\era\blaze3d\v1_21_11\package-info.java.
+
+if exist "%OUT_STUBS_1211%" rmdir /s /q "%OUT_STUBS_1211%"
+mkdir "%OUT_STUBS_1211%"
+echo [Stubs 1.21.11] Compilation des stubs Blaze3D 1.21.11...
+
+set "STUBLIST_1211=%TEMP%\launcheragent_stubs_1211.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_STUBS_1211%' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST_1211%', $files)"
+
+:: Meme garde-fou que pour STUBLIST — voir plus haut.
+for %%A in ("%STUBLIST_1211%") do if %%~zA==0 (
+    echo [ERREUR] Aucun fichier .java trouve dans src\stubs_1_21_11 — chemin/checkout incorrect ?
+    del "%STUBLIST_1211%" 2>nul
+    goto :error
+)
+
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS_1211%" "@%STUBLIST_1211%"
+del "%STUBLIST_1211%" 2>nul
+if errorlevel 1 (
+    echo [ERREUR] Compilation stubs 1.21.11 echouee.
+    goto :error
+)
+echo [Stubs 1.21.11] OK
+
+echo [Build 1.21.11] Compilation du code type 1.21.11...
+set "SRCLIST_1211=%TEMP%\launcheragent_sources_1211.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN_1211%' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_1211%', $files)"
+
+:: Meme garde-fou — voir plus haut.
+for %%A in ("%SRCLIST_1211%") do if %%~zA==0 (
+    echo [ERREUR] Aucun fichier .java trouve dans src\main_1_21_11\java — chemin/checkout incorrect ?
+    del "%SRCLIST_1211%" 2>nul
+    goto :error
+)
+
+:: -proc:none : meme raison que la compilation principale (voir plus haut).
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
+  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_1211%" ^
+  -d "%OUT_MAIN%" ^
+  "@%SRCLIST_1211%"
+del "%SRCLIST_1211%" 2>nul
+if errorlevel 1 (
+    echo [ERREUR] Compilation du code type 1.21.11 echouee.
+    goto :error
+)
+echo [Build 1.21.11] Compilation OK
 
 :: --- Copier les ressources (mixins.launcheragent.json + META-INF) ------------
 
