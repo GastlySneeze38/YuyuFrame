@@ -24,7 +24,7 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
  * normal) — celui-ci ne vise QUE les 3 environnements liquide/poudre,
  * laisse le brouillard normal intact.
  *
- * 26.1.2 UNIQUEMENT pour l'instant (voir mémoire du portage).
+ * 26.1.2 et 1.21.11 (depuis 2026-09-11 — voir {@code apimixin/v1_21_11/fog/}).
  */
 public final class ClearVisionModule extends LauncherModule {
 

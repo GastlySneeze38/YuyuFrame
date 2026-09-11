@@ -147,15 +147,15 @@ public final class ModuleRegistry {
      * CameraFreelookMixin}, architecture Camera.update() vérifiée par javap,
      * distincte de 26.1.2). {@code ShulkerPreviewModule} l'avait été aussi,
      * mais il a été SUPPRIMÉ le 2026-08-31 (voir plus bas).
-     * {@code ClearVisionModule} reste 26.1.2-only pour l'instant : son
-     * portage vers 1.21.11 s'est heurté à une architecture de brouillard
-     * {@code FogModifier} (1.21.11) totalement différente de {@code
-     * FogEnvironment} (26.1.2, {@code setupFog(FogData,...)}) — {@code
-     * getFogColor}/{@code shouldApply} au lieu de distances mutables, ET en
-     * grande partie NON MAPPÉE par Yarn à ce jour (méthodes présentes
-     * seulement sous leur ID intermédiaire brut, ex. {@code method_76304}) —
-     * nécessite une recherche bytecode séparée, pas un simple portage de
-     * noms. 1.16.5/1.20.4/1.21.4/1.8.9 pas encore commencés du tout pour ces
+     * {@code ClearVisionModule} activé sur 1.21.11 le 2026-09-11. L'ancienne
+     * raison de l'exclure (« architecture {@code FogModifier} totalement
+     * différente, sans distances mutables ») était FAUSSE : les mappings
+     * Mojang officiels 1.21.11 montrent la même classe {@code FogEnvironment}
+     * et le même {@code setupFog(FogData, …)} qu'en 26.1.2 — seul Yarn les
+     * nomme autrement ({@code FogModifier.applyStartEndModifier}). Passe par
+     * {@code apimixin/v1_21_11/fog/} (contrat neutre, voir {@code FogOverride})
+     * et {@code HudExtractTextureOverlayMixin1211} pour le givre.
+     * 1.16.5/1.20.4/1.21.4/1.8.9 pas encore commencés du tout pour ces
      * 4 modules.
      */
     private static final boolean IS_1_21_11 = "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""));
@@ -225,7 +225,7 @@ public final class ModuleRegistry {
         if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
             register(new NoPumpkinOverlayModule());
         }
-        if (IS_26_1) {
+        if (IS_26_1 || IS_1_21_11) {
             register(new ClearVisionModule());
         }
         // ShulkerPreviewModule SUPPRIMÉ le 2026-08-31 (décision utilisateur :
