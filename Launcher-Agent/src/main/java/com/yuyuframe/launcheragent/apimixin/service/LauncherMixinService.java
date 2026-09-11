@@ -967,6 +967,11 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         if (gameClassLoader == null && cl != null) gameClassLoader = cl;
     }
 
+    /** Voir {@code LauncherMixinTransformerWrapper#transform} : Mixin n'est pas sollicité avant. */
+    static boolean hasGameClassLoader() {
+        return gameClassLoader != null;
+    }
+
     /** Ouvre une ressource .class : contexte, puis ce service, puis le loader du jeu, puis le système. */
     private static InputStream openResource(String resource) {
         InputStream is = getContextClassLoader().getResourceAsStream(resource);

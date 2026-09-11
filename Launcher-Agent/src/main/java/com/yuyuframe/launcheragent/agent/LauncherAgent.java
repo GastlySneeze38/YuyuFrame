@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-09-11-v1055";
+    private static final String BUILD_VERSION = "2026-09-11-v1056";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -151,6 +151,25 @@ public class LauncherAgent {
         String loaderName = resolveLoaderName(config.loader);
         boolean needsIsolation = needsIsolation(loaderName);
         String schemeName = resolveSchemeName(loaderName);
+
+        // mixin.jar (-javaagent AVANT nous) pose mixin.hotSwap=true dans
+        // MixinAgent.premain — vérifié javap. Propriété SYSTÈME, donc lue aussi
+        // par la Mixin DU LOADER (Fabric/Quilt/Forge), qui charge alors son
+        // agent hot-swap (« Attempting to load Hot-Swap agent » dans latest.log).
+        // Cet agent réapplique les mixins de TOUS les mods pendant chacun de nos
+        // retransforms : « cannot overwrite method … @Overwrite is required »
+        // puis ClassFormatError, retransform perdu (constaté 2026-09-11, Fabric
+        // 1.21.11, 74 mods : MinecraftClient, World, Mouse, GameRenderer…).
+        // Notre rattrapage passe par notre propre transformer, pas par cet agent.
+        if (needsIsolation) {
+            String hotSwap = System.getProperty("mixin.hotSwap");
+            if (hotSwap != null) {
+                System.clearProperty("mixin.hotSwap");
+                LauncherLog.agent(3, "[LauncherAgent] mixin.hotSwap=" + hotSwap
+                    + " (posé par mixin.jar) retiré — sinon la Mixin de " + loaderName
+                    + " réapplique ses mixins pendant nos retransforms");
+            }
+        }
         // Conservé pour la propriété héritée "launcheragent.intermediary" et
         // pour le paramètre de IsolatedBootstrap.start, dont la signature est
         // liée par un getMethod() réflexif (voir startIsolated) — la changer

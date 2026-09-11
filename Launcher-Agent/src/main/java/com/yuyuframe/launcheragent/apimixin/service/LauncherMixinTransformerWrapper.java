@@ -54,6 +54,20 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             if (patched != null) return patched;
         }
 
+        // ── Mixin retenu tant que le classloader du jeu n'est pas connu ──────
+        // (2026-09-11). Mixin sélectionne et PRÉPARE ses configs à la première
+        // classe qu'on lui passe — y compris la lecture des classes cibles
+        // (getClassNode). Avant la première classe net/minecraft/**, seuls
+        // l'isolatedCl et le loader système sont connus : sous Fabric 1.21.11,
+        // aucun ne contient net/minecraft/class_*.class (le jar intermédiaire
+        // n'est visible que de Knot). Résultat constaté : « @Mixin target
+        // net/minecraft/class_… was not found » pour les 23 cibles, donc AUCUN
+        // mixin 1.21.11 tissé, en silence. 26.1.2 y échappait par hasard :
+        // déobfusqué, son jar est lisible depuis le classpath système.
+        // Aucune de nos cibles n'est chargée avant la première classe du jeu
+        // (Main), rien n'est donc perdu à attendre.
+        if (!LauncherMixinService.hasGameClassLoader()) return null;
+
         String obfDot = className.replace('/', '.');
         String yarnNamed = com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry.INSTANCE.unmap(className);
 
