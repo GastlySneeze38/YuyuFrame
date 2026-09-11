@@ -114,10 +114,22 @@ public final class Blaze3DText {
 
     private static final Map<UiFont, Object[]> TEXTURES = new HashMap<>(); // [GpuTexture, GpuTextureView, GpuSampler]
 
-    /** Package-private : Blaze3DGuiText en a besoin pour bâtir son TextureSetup. */
+    /**
+     * Package-private : Blaze3DGuiText en a besoin pour bâtir son TextureSetup.
+     *
+     * <p>{@code null} si le moteur n'est pas résolu (l'appelant se rabat alors
+     * proprement). POINT D'ENTRÉE PUBLIC de la voie « état de GUI vanilla » :
+     * contrairement aux dessins de la file, personne n'a appelé {@link
+     * Blaze3DCore#resolve()} avant nous sur ce chemin — d'où la résolution ici
+     * (idempotente). Régression v1064 : {@code Blaze3DGui*.ensureCompiled}
+     * appelait {@code resolve()} pour obtenir l'appareil ; en passant par
+     * {@code ShaderPipelineFactory.device()}, ce seul déclencheur a disparu et
+     * {@code Blaze3DCore.gpu} restait nul (NPE à chaque chaîne de texte).
+     */
     static Object[] ensureTexture(UiFont font) throws Exception {
         Object[] cached = TEXTURES.get(font);
         if (cached != null) return cached;
+        if (!isAvailable() || !resolve()) return null;
 
         // Depuis le pipeline texte dédié (voir TEXT_FRAGMENT_SRC, SDF réel
         // avec BIAS+fwidth+smoothstep — même algèbre que legacy/modern GL) :
