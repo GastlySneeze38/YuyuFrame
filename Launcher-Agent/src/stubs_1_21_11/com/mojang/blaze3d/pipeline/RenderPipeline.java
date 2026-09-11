@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.platform.LogicOp;
 import com.mojang.blaze3d.platform.PolygonMode;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.gl.UniformType;
+import net.minecraft.util.Identifier;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,12 +22,10 @@ import java.util.Optional;
  * {@code withDepthBias}. Et elle offre des surcharges {@code String} pour la
  * localisation et les shaders, qui évitent le type obfusqué {@code Identifier}.
  *
- * <p>Omis car obfusqués : {@code getLocation()/getVertexShader()/getFragmentShader()}
- * ({@code amo}), {@code getShaderDefines()} ({@code hpg}),
- * {@code getVertexFormatMode()} ({@code VertexFormat$b}), et côté
- * {@link Builder} : {@code withLocation(amo)}, {@code withVertexShader(amo)},
- * {@code withFragmentShader(amo)}, {@code withUniform(String, fyz[, …])},
- * {@code withVertexFormat(VertexFormat, VertexFormat$b)}.
+ * <p>Les membres à types obfusqués ({@code Identifier}, {@code UniformType},
+ * {@code VertexFormat$DrawMode}) sont stubés sous leurs noms Yarn, traduits au
+ * chargement. Omis car inutiles ici : {@code getLocation()/getVertexShader()/
+ * getFragmentShader()}, {@code getShaderDefines()}.
  */
 public class RenderPipeline {
 
@@ -81,6 +81,10 @@ public class RenderPipeline {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    public VertexFormat.DrawMode getVertexFormatMode() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public List<String> getSamplers() {
         throw new UnsupportedOperationException("stub compile-only");
     }
@@ -96,11 +100,31 @@ public class RenderPipeline {
             throw new UnsupportedOperationException("stub compile-only");
         }
 
+        public Builder withLocation(Identifier location) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
         public Builder withVertexShader(String location) {
             throw new UnsupportedOperationException("stub compile-only");
         }
 
+        public Builder withVertexShader(Identifier location) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
         public Builder withFragmentShader(String location) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        public Builder withFragmentShader(Identifier location) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        public Builder withUniform(String name, UniformType type) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        public Builder withVertexFormat(VertexFormat format, VertexFormat.DrawMode mode) {
             throw new UnsupportedOperationException("stub compile-only");
         }
 

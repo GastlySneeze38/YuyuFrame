@@ -12,15 +12,21 @@
  * dans une passe SÉPARÉE, contre {@code src/stubs_1_21_11} seulement — jamais
  * contre {@code src/stubs} (26.1.2) — puis l'embarque dans le même jar.
  *
- * <h2>Ce que ce paquet peut et ne peut pas nommer</h2>
+ * <h2>Noms utilisés, et traduction au chargement</h2>
  *
  * <ul>
- *   <li>Peut : les classes {@code com.mojang.blaze3d.*} de premier niveau et
- *       leurs imbriquées non obfusquées — identiques quel que soit le loader.</li>
- *   <li>Ne peut pas : {@code net.minecraft.*} et les imbriquées obfusquées
- *       ({@code Identifier}, {@code UniformType}, {@code GpuSampler},
- *       {@code VertexFormat$a/$b}…), dont le nom dépend du loader. Ceux-là
- *       passent par des invokers Mixin de {@code apimixin/v1_21_11}.</li>
+ *   <li>Classes {@code com.mojang.blaze3d.*} de premier niveau (et leurs
+ *       imbriquées non obfusquées) : sous leur vrai nom, identique quel que
+ *       soit le loader.</li>
+ *   <li>{@code net.minecraft.*} et imbriquées obfusquées ({@code Identifier},
+ *       {@code UniformType}, {@code GpuSampler}, {@code VertexFormat$DrawMode}…) :
+ *       sous leur NOM YARN. Toute classe de CE paquet est réécrite au chargement
+ *       par {@code YarnNamedRemapper} vers les noms du loader actif
+ *       (intermédiaire sous Fabric, officiel en vanilla). Ne jamais déplacer ce
+ *       code hors du paquet : non traduit, il chercherait des classes Yarn
+ *       inexistantes en jeu.</li>
+ *   <li>Une interface du jeu s'implémente par une CLASSE, jamais par une lambda
+ *       (le remappeur ne traduit pas la méthode fonctionnelle d'une lambda).</li>
  * </ul>
  *
  * <p>Chargé uniquement sur 1.21.11 : sur une autre version, aucune classe de

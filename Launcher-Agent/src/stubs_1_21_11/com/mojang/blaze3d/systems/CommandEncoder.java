@@ -4,6 +4,7 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import net.minecraft.client.texture.NativeImage;
 
 import java.nio.ByteBuffer;
 import java.util.OptionalInt;
@@ -11,11 +12,15 @@ import java.util.function.Supplier;
 
 /**
  * Stub compile-only 1.21.11 — règles de l'unité : voir {@link RenderSystem}.
- *
- * <p>Omis car obfusqués : les {@code writeToTexture(...)} (paramètre
- * {@code fyh} = NativeImage).
+ * {@code writeToTexture} prend un {@code NativeImage} (obfusqué {@code fyh},
+ * stubé sous son nom Yarn).
  */
 public interface CommandEncoder {
+
+    void writeToTexture(GpuTexture target, NativeImage source);
+
+    void writeToTexture(GpuTexture target, NativeImage source, int mipLevel, int depth,
+                        int destX, int destY, int width, int height, int skipPixels, int skipRows);
 
     RenderPass createRenderPass(Supplier<String> label, GpuTextureView colorTexture, OptionalInt clearColor);
 

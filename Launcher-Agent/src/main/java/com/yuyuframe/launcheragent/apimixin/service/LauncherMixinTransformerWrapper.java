@@ -54,6 +54,13 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             if (patched != null) return patched;
         }
 
+        // ── Code typé par version : traduit Yarn → runtime, jamais passé à Mixin ─
+        // Voir YarnNamedRemapper (2026-09-11) : ces classes sont compilées contre
+        // des stubs aux noms Yarn et ne contiennent aucun mixin.
+        if (com.yuyuframe.launcheragent.apimixin.service.transformer.YarnNamedRemapper.applies(className)) {
+            return com.yuyuframe.launcheragent.apimixin.service.transformer.YarnNamedRemapper.remap(classfileBuffer);
+        }
+
         // ── Mixin retenu tant que le classloader du jeu n'est pas connu ──────
         // (2026-09-11). Mixin sélectionne et PRÉPARE ses configs à la première
         // classe qu'on lui passe — y compris la lecture des classes cibles

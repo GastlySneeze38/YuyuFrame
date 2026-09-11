@@ -540,6 +540,46 @@ public final class MappingsRegistry implements IRemapper {
     }
 
     /**
+     * Méthode Yarn « named » (propriétaire, nom, descripteur en noms Yarn) →
+     * nom RUNTIME du schéma actif. Pour {@code YarnNamedRemapper}, qui traduit
+     * au chargement le code typé compilé contre des stubs aux noms Yarn.
+     *
+     * <p>Garde-fou volontaire : un propriétaire INCONNU de Yarn (nos propres
+     * classes, {@code java.*}, JOML…) garde son nom tel quel, sans jamais
+     * passer par le repli « méthode héritée » — ce repli cherche dans TOUTES
+     * les classes et pourrait renommer une de nos méthodes qui porterait par
+     * hasard le même nom et descripteur qu'une méthode du jeu.
+     *
+     * @param allowInherited autorise le repli « méthode héritée » (appel via
+     *        une sous-classe d'une méthode déclarée plus haut) ; {@code false}
+     *        pour décider du renommage d'une DÉCLARATION qui redéfinit.
+     */
+    public static String namedToRuntimeMethod(String namedOwner, String namedName, String namedDesc,
+                                              boolean allowInherited) {
+        if (!isLoaded() || namedName == null || namedName.startsWith("<")) return namedName;
+        String officialOwner = YarnMappings.getOfficialClass(namedOwner);
+        if (officialOwner == null) return namedName;
+        YarnMappings.MethodEntry entry = namedDesc != null
+            ? YarnMappings.getOfficialMethod(namedOwner, namedName, namedDescToOfficial(namedDesc))
+            : null;
+        if (entry == null) {
+            return allowInherited ? inheritedMethodName(namedOwner, namedName, namedDesc) : namedName;
+        }
+        return officialToRuntimeMethod(officialOwner, entry.officialName, entry.officialDesc);
+    }
+
+    /** Champ Yarn « named » → nom RUNTIME. Même garde-fou que {@link #namedToRuntimeMethod}. */
+    public static String namedToRuntimeField(String namedOwner, String namedField) {
+        if (!isLoaded() || namedField == null || YarnMappings.getOfficialClass(namedOwner) == null) return namedField;
+        return getObfFieldName(namedOwner, namedField);
+    }
+
+    /** {@code true} si Yarn connaît cette classe (nom « named ») — voir {@code YarnNamedRemapper}. */
+    public static boolean isNamedClass(String namedClass) {
+        return isLoaded() && namedClass != null && YarnMappings.getOfficialClass(namedClass) != null;
+    }
+
+    /**
      * Référence de champ pour une entrée de refmap d'{@code @Accessor} :
      * {@code nomRuntime:descripteurRuntime}, ou {@code null} si Yarn ne
      * connaît pas ce champ. Le descripteur est indispensable — voir

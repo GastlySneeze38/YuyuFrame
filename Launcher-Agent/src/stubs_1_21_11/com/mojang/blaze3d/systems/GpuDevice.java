@@ -6,6 +6,7 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.textures.TextureFormat;
+import net.minecraft.client.gl.ShaderSourceGetter;
 
 import java.nio.ByteBuffer;
 import java.util.function.Supplier;
@@ -13,10 +14,10 @@ import java.util.function.Supplier;
 /**
  * Stub compile-only 1.21.11 — règles de l'unité : voir {@link RenderSystem}.
  *
- * <p>Omis car obfusqués : {@code createSampler(...)} (renvoie {@code fzf}) et
- * {@code precompilePipeline(RenderPipeline, fyy)} — la surcharge qui prend le
- * {@code ShaderSource} maison. Celle à un argument (ci-dessous) utilise le
- * {@code ShaderSource} du jeu, qui ne connaît pas nos GLSL.
+ * <p>{@code precompilePipeline(RenderPipeline, ShaderSourceGetter)} : la
+ * surcharge qui prend NOTRE source GLSL (type obfusqué {@code fyy}, stubé sous
+ * son nom Yarn). Celle à un argument utilise la source du jeu, qui ne connaît
+ * pas nos shaders. Omis : {@code createSampler(...)}, inutile ici.
  */
 public interface GpuDevice {
 
@@ -41,4 +42,6 @@ public interface GpuDevice {
     int getUniformOffsetAlignment();
 
     CompiledRenderPipeline precompilePipeline(RenderPipeline pipeline);
+
+    CompiledRenderPipeline precompilePipeline(RenderPipeline pipeline, ShaderSourceGetter source);
 }
