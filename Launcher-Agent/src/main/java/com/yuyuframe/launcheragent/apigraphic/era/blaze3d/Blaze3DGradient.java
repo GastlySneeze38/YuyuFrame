@@ -2,14 +2,11 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import static com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.*;
 
 import java.nio.ByteBuffer;
-import java.util.OptionalInt;
 
 /**
  * Dégradés era E (Blaze3D) — 2-couleurs ({@code drawGradientRect}) et
@@ -165,11 +162,11 @@ public final class Blaze3DGradient {
      * fait échouer TOUT resolve(), pas seulement le dégradé).
      */
     static boolean resolveGradientPipeline() throws Exception {
-        Object gradVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_gradient.vsh");
-        Object gradFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_gradient.fsh");
-        gradientPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_gradient", gradVertexId, gradFragmentId,
-            new String[0], new String[]{ "DynamicTransforms", "Projection", "GradientParams" });
-        gradientShaderSource = ShaderPipelineFactory.shaderSource(gradVertexId, GRADIENT_VERTEX_SRC, gradFragmentId, GRADIENT_FRAGMENT_SRC);
+        Object gradVertexId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_gradient.vsh");
+        Object gradFragmentId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_gradient.fsh");
+        gradientPipeline = gpu.buildPipeline("ui_blaze3d_gradient", gradVertexId, gradFragmentId,
+            new String[0], new String[]{ "DynamicTransforms", "Projection", "GradientParams" }, null, null);
+        gradientShaderSource = gpu.shaderSource(gradVertexId, GRADIENT_VERTEX_SRC, gradFragmentId, GRADIENT_FRAGMENT_SRC);
         return gradientPipeline != null;
     }
 
@@ -177,8 +174,8 @@ public final class Blaze3DGradient {
 
     private static Object ensureGradientParamsBuffer(Object device) throws Exception {
         if (gradientParamsBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_gradient_params";
-            gradientParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 208L);
+            gradientParamsBuffer = gpu.createBuffer(device, "yuyuframe_gradient_params",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 208L);
         }
         return gradientParamsBuffer;
     }
@@ -208,8 +205,8 @@ public final class Blaze3DGradient {
         }
         data.putFloat(rectX0).putFloat(rectY0).putFloat(rectX1).putFloat(rectY1);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 208L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(buffer, 0L, 208L);
+        gpu.write(encoder, slice, data);
         return slice;
     }
 
@@ -272,22 +269,16 @@ public final class Blaze3DGradient {
                                              UiColor colorBottom, UiColor colorTop, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient(gradrect)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(gradrect)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(gradrect)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(gradrect)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
 
-            currentStage = "getDevice(gradrect)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(gradrect)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(gradrect)";
+            Object device = gpu.device();
+            currentStage = "encoder(gradrect)";
+            Object encoder = gpu.encoder(device);
             short light0 = 0, light1 = 0;
 
             ByteBuffer verts = ensureStagingBuffer(4 * 28);
@@ -297,21 +288,16 @@ public final class Blaze3DGradient {
 
             currentStage = "ensureVertexBuffer(gradrect)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            currentStage = "bufferSlice(gradrect)";
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
             currentStage = "writeToBuffer(gradrect)";
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(gradrect)";
-            Object identity4 = identityMatrix4f();
-            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+            // Couleur déjà dans les sommets : ColorModulator neutre.
+            currentStage = "dynamicTransforms(gradrect)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(gradrect)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             // Formule à rayon par coin (voir Blaze3DCore.RECT_FRAGMENT_SRC) —
             // radius=0 fonctionne nativement, plus besoin de contourner vers
@@ -319,41 +305,33 @@ public final class Blaze3DGradient {
             currentStage = "writeRectParams(gradrect)";
             Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
 
-            currentStage = "createRenderPass(gradrect)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_gradrect";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(gradrect)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_gradrect", colorView);
             try {
                 currentStage = "setPipeline(gradrect)";
                 // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, rectPipeline, rectShaderSource);
-                mSetPipeline.invoke(pass, rectPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(gradrect)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, rectPipeline, rectShaderSource);
+                gpu.setPipeline(pass, rectPipeline);
+                currentStage = "disableScissor(gradrect)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(gradrect)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(gradrect)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(gradrect)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(RectParams)(gradrect)";
-                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
+                gpu.setUniform(pass, "RectParams", rectParamsSlice);
                 currentStage = "setVertexBuffer(gradrect)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                currentStage = "shapeIndexBuffer(gradrect)";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = (vertexCount / 4) * 6;
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer(gradrect)";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                currentStage = "drawIndexed(gradrect)";
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(gradrect)";
+                gpu.drawQuads(pass, vertexCount / 4);
             } finally {
                 currentStage = "closePass(gradrect)";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {
@@ -371,22 +349,16 @@ public final class Blaze3DGradient {
                                                UiColor bl, UiColor br, UiColor tl, UiColor tr, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient(gradrect2d)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(gradrect2d)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(gradrect2d)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(gradrect2d)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
 
-            currentStage = "getDevice(gradrect2d)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(gradrect2d)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(gradrect2d)";
+            Object device = gpu.device();
+            currentStage = "encoder(gradrect2d)";
+            Object encoder = gpu.encoder(device);
             short light0 = 0, light1 = 0;
 
             ByteBuffer verts = ensureStagingBuffer(4 * 28);
@@ -396,60 +368,47 @@ public final class Blaze3DGradient {
 
             currentStage = "ensureVertexBuffer(gradrect2d)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            currentStage = "bufferSlice(gradrect2d)";
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
             currentStage = "writeToBuffer(gradrect2d)";
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(gradrect2d)";
-            Object identity4 = identityMatrix4f();
-            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà dans les sommets
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+            // Couleur déjà dans les sommets : ColorModulator neutre.
+            currentStage = "dynamicTransforms(gradrect2d)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(gradrect2d)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             currentStage = "writeRectParams(gradrect2d)";
             Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, r);
 
-            currentStage = "createRenderPass(gradrect2d)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_gradrect2d";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(gradrect2d)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_gradrect2d", colorView);
             try {
                 currentStage = "setPipeline(gradrect2d)";
                 // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, rectPipeline, rectShaderSource);
-                mSetPipeline.invoke(pass, rectPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(gradrect2d)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, rectPipeline, rectShaderSource);
+                gpu.setPipeline(pass, rectPipeline);
+                currentStage = "disableScissor(gradrect2d)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(gradrect2d)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(gradrect2d)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(gradrect2d)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(RectParams)(gradrect2d)";
-                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
+                gpu.setUniform(pass, "RectParams", rectParamsSlice);
                 currentStage = "setVertexBuffer(gradrect2d)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                currentStage = "shapeIndexBuffer(gradrect2d)";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = (vertexCount / 4) * 6;
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer(gradrect2d)";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                currentStage = "drawIndexed(gradrect2d)";
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(gradrect2d)";
+                gpu.drawQuads(pass, vertexCount / 4);
             } finally {
                 currentStage = "closePass(gradrect2d)";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {
@@ -478,22 +437,16 @@ public final class Blaze3DGradient {
                                                        UiColor[] colors, float[] positions, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient(msgrad)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(msgrad)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(msgrad)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(msgrad)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             float r = Math.max(0f, Math.min(radius, Math.min((x1 - x0) / 2f, (y1 - y0) / 2f)));
 
-            currentStage = "getDevice(msgrad)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(msgrad)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(msgrad)";
+            Object device = gpu.device();
+            currentStage = "encoder(msgrad)";
+            Object encoder = gpu.encoder(device);
 
             int rgba = 0xFFFFFFFF; // couleur réelle calculée par pixel dans le fragment shader
             short light0 = 0, light1 = 0;
@@ -505,60 +458,48 @@ public final class Blaze3DGradient {
 
             currentStage = "ensureVertexBuffer(msgrad)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            currentStage = "bufferSlice(msgrad)";
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
             currentStage = "writeToBuffer(msgrad)";
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(msgrad)";
-            Object identity4 = identityMatrix4f();
-            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur réelle vient de GradientParams, pas de ColorModulator
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+            // Couleur réelle calculée par pixel depuis GradientParams, pas par
+            // ColorModulator : neutre ici.
+            currentStage = "dynamicTransforms(msgrad)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(msgrad)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             currentStage = "writeGradientParams(msgrad)";
             Object gradientSlice = writeGradientParams(device, encoder, type, startX, startY, endX, endY, colors, positions, r, x0, y0, x1, y1);
 
-            currentStage = "createRenderPass(msgrad)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_msgradrect";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(msgrad)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_msgradrect", colorView);
             try {
                 currentStage = "setPipeline(msgrad)";
                 // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, gradientPipeline, gradientShaderSource);
-                mSetPipeline.invoke(pass, gradientPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(msgrad)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, gradientPipeline, gradientShaderSource);
+                gpu.setPipeline(pass, gradientPipeline);
+                currentStage = "disableScissor(msgrad)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(msgrad)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(msgrad)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(msgrad)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(GradientParams)(msgrad)";
-                mSetUniformSlice.invoke(pass, "GradientParams", gradientSlice);
+                gpu.setUniform(pass, "GradientParams", gradientSlice);
                 currentStage = "setVertexBuffer(msgrad)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                currentStage = "shapeIndexBuffer(msgrad)";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = (vertexCount / 4) * 6;
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer(msgrad)";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                currentStage = "drawIndexed(msgrad)";
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(msgrad)";
+                gpu.drawQuads(pass, vertexCount / 4);
             } finally {
                 currentStage = "closePass(msgrad)";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {

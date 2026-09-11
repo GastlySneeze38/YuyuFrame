@@ -1,9 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import static com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.*;
 
@@ -11,7 +9,6 @@ import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.OptionalInt;
 
 /**
  * Rects/coins arrondis + icônes RGBA era E (Blaze3D) — même pipeline "maison"
@@ -52,10 +49,10 @@ public final class Blaze3DRect {
 
     private static void ensureAtlasTexture(Object device) throws Exception {
         if (atlasTexture != null) return;
-        java.util.function.Supplier<String> label = () -> "yuyuframe_icon_atlas";
-        atlasTexture = mCreateTexture.invoke(device, label, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, ATLAS_SIZE, ATLAS_SIZE, 1, 1);
-        atlasView = mCreateTextureView.invoke(device, atlasTexture);
-        atlasSampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+        atlasTexture = gpu.createTexture(device, "yuyuframe_icon_atlas",
+            gpu.usageTextureBinding() | gpu.usageTextureCopyDst(), ATLAS_SIZE, ATLAS_SIZE, 1);
+        atlasView = gpu.createTextureView(device, atlasTexture);
+        atlasSampler = gpu.linearSampler();
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: atlas d'icônes créé (" + ATLAS_SIZE + "x" + ATLAS_SIZE + ")");
     }
 
@@ -106,13 +103,13 @@ public final class Blaze3DRect {
         shelfX += w + ATLAS_PADDING;
         shelfRowH = Math.max(shelfRowH, h);
 
-        Object device = mGetDevice.invoke(null);
+        Object device = gpu.device();
         ensureAtlasTexture(device);
         Object nativeImage = bufferedImageToNativeImage(img, w, h);
-        Object encoder = mCreateCommandEncoder.invoke(device);
-        // writeToTexture(target, source, mipLevel, depth, offsetX, offsetY, width, height, skipPixels, skipRows)
+        Object encoder = gpu.encoder(device);
+        // uploadImageRegion(mipLevel, depth, destX, destY, width, height, skipPixels, skipRows)
         // — écrit SEULEMENT le sous-rect de cette icône, pas l'atlas entier.
-        mWriteToTextureMip.invoke(encoder, atlasTexture, nativeImage, 0, 0, px, py, w, h, 0, 0);
+        gpu.uploadImageRegion(encoder, atlasTexture, nativeImage, 0, 0, px, py, w, h, 0, 0);
 
         float[] uv = {
             px / (float) ATLAS_SIZE, py / (float) ATLAS_SIZE,
@@ -190,14 +187,8 @@ public final class Blaze3DRect {
                                      UiColor color, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient(rect)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(rect)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(rect)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(rect)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             float maxR = Math.min((x1 - x0) / 2f, (y1 - y0) / 2f);
@@ -206,10 +197,10 @@ public final class Blaze3DRect {
             float rBL = Math.max(0f, Math.min(radiusBottomLeft, maxR));
             float rBR = Math.max(0f, Math.min(radiusBottomRight, maxR));
 
-            currentStage = "getDevice(rect)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(rect)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(rect)";
+            Object device = gpu.device();
+            currentStage = "encoder(rect)";
+            Object encoder = gpu.encoder(device);
 
             int rgba = 0xFFFFFFFF; // couleur réelle appliquée via DynamicTransforms/ColorModulator
             short light0 = 0, light1 = 0;
@@ -221,60 +212,46 @@ public final class Blaze3DRect {
 
             currentStage = "ensureVertexBuffer(rect)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            currentStage = "bufferSlice(rect)";
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
             currentStage = "writeToBuffer(rect)";
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(rect)";
-            Object identity4 = identityMatrix4f();
-            Object colorMod = ctorVector4f.newInstance(color.r, color.g, color.b, color.a);
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
+            currentStage = "dynamicTransforms(rect)";
+            Object dynSlice = gpu.dynamicTransforms(color.r, color.g, color.b, color.a);
 
             currentStage = "ensureProjectionBuffer(rect)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             currentStage = "writeRectParams(rect)";
             Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, rTL, rTR, rBL, rBR);
 
-            currentStage = "createRenderPass(rect)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_rect";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(rect)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_rect", colorView);
             try {
                 currentStage = "setPipeline(rect)";
                 // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, rectPipeline, rectShaderSource);
-                mSetPipeline.invoke(pass, rectPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(rect)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, rectPipeline, rectShaderSource);
+                gpu.setPipeline(pass, rectPipeline);
+                currentStage = "disableScissor(rect)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(rect)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(rect)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(rect)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(RectParams)(rect)";
-                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
+                gpu.setUniform(pass, "RectParams", rectParamsSlice);
                 currentStage = "setVertexBuffer(rect)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                currentStage = "shapeIndexBuffer(rect)";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = (vertexCount / 4) * 6;
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer(rect)";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                currentStage = "drawIndexed(rect)";
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(rect)";
+                gpu.drawQuads(pass, vertexCount / 4);
             } finally {
                 currentStage = "closePass(rect)";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {
@@ -299,14 +276,8 @@ public final class Blaze3DRect {
     private static boolean drawIcon(String cacheKey, BufferedImage img, float x0, float y0, float x1, float y1, float alpha, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient(icon)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(icon)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(icon)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(icon)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             currentStage = "ensureIconInAtlas";
@@ -315,10 +286,10 @@ public final class Blaze3DRect {
             currentStage = "ensureWhiteTexture(icon)";
             Object[] white = ensureWhiteTexture();
 
-            currentStage = "getDevice(icon)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(icon)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(icon)";
+            Object device = gpu.device();
+            currentStage = "encoder(icon)";
+            Object encoder = gpu.encoder(device);
 
             int rgba = 0xFFFFFFFF;
             short light0 = 0, light1 = 0;
@@ -337,60 +308,47 @@ public final class Blaze3DRect {
 
             currentStage = "ensureVertexBuffer(icon)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            currentStage = "bufferSlice(icon)";
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
             currentStage = "writeToBuffer(icon)";
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(icon)";
-            Object identity4 = identityMatrix4f();
             // RGB pass-through (vraies couleurs de l'image) — seul le composant
             // alpha varie (voir queueIcon(..., alpha, ...) / UiRenderer#drawIcon).
-            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, alpha);
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
+            currentStage = "dynamicTransforms(icon)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, alpha);
 
             currentStage = "ensureProjectionBuffer(icon)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
-            currentStage = "createRenderPass(icon)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_icon";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(icon)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_icon", colorView);
             try {
                 currentStage = "setPipeline(icon)";
                 // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-                mSetPipeline.invoke(pass, homePipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(icon)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, homePipeline, homeShaderSource);
+                gpu.setPipeline(pass, homePipeline);
+                currentStage = "disableScissor(icon)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(icon)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(icon)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(icon)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "bindTexture(Sampler0)(icon)";
-                mBindTexture.invoke(pass, "Sampler0", atlasView, atlasSampler);
+                gpu.bindTexture(pass, "Sampler0", atlasView, atlasSampler);
                 currentStage = "bindTexture(Sampler2)(icon)";
-                mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
+                gpu.bindTexture(pass, "Sampler2", white[1], white[2]);
                 currentStage = "setVertexBuffer(icon)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                currentStage = "shapeIndexBuffer(icon)";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer(icon)";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                currentStage = "drawIndexed(icon)";
-                mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(icon)";
+                gpu.drawQuads(pass, 1);
             } finally {
                 currentStage = "closePass(icon)";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {
@@ -454,20 +412,14 @@ public final class Blaze3DRect {
         if (!isAvailable() || !resolve()) return false;
         if (bounds.length == 0) return true;
         try {
-            currentStage = "minecraftClient(rectbatch)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(rectbatch)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(rectbatch)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(rectbatch)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
-            currentStage = "getDevice(rectbatch)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(rectbatch)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(rectbatch)";
+            Object device = gpu.device();
+            currentStage = "encoder(rectbatch)";
+            Object encoder = gpu.encoder(device);
 
             int n = bounds.length;
             short light0 = 0, light1 = 0;
@@ -487,54 +439,42 @@ public final class Blaze3DRect {
 
             currentStage = "ensureVertexBuffer(rectbatch)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(rectbatch)";
-            Object identity4 = identityMatrix4f();
-            Object neutralColor = ctorVector4f.newInstance(1f, 1f, 1f, 1f); // couleur déjà portée par sommet
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, neutralColor, zero3, identity4);
+            // Couleur déjà portée par sommet : ColorModulator neutre.
+            currentStage = "dynamicTransforms(rectbatch)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(rectbatch)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             currentStage = "writeBatchParams(rectbatch)";
             Object batchParamsSlice = writeBatchParams(device, encoder, radius);
 
-            currentStage = "createRenderPass(rectbatch)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_rectbatch";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(rectbatch)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_rectbatch", colorView);
             try {
                 currentStage = "setPipeline(rectbatch)";
-                ShaderPipelineFactory.precompile(device, batchPipeline, batchShaderSource);
-                mSetPipeline.invoke(pass, batchPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(rectbatch)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, batchPipeline, batchShaderSource);
+                gpu.setPipeline(pass, batchPipeline);
+                currentStage = "disableScissor(rectbatch)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(rectbatch)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(rectbatch)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(rectbatch)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(BatchParams)(rectbatch)";
-                mSetUniformSlice.invoke(pass, "BatchParams", batchParamsSlice);
+                gpu.setUniform(pass, "BatchParams", batchParamsSlice);
                 currentStage = "setVertexBuffer(rectbatch)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                currentStage = "shapeIndexBuffer(rectbatch)";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = n * 6;
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer(rectbatch)";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                currentStage = "drawIndexed(rectbatch)";
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(rectbatch)";
+                gpu.drawQuads(pass, n);
             } finally {
                 currentStage = "closePass(rectbatch)";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {

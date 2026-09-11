@@ -1,14 +1,11 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import static com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.*;
 
 import java.nio.ByteBuffer;
-import java.util.OptionalInt;
 
 /**
  * Flou dual-Kawase (roadmap Phase 5.1) — panneau "verre dépoli" : le fond
@@ -188,24 +185,24 @@ public final class Blaze3DBlur {
 
     static boolean resolveBlurPipeline() {
         try {
-            Object downVId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_down.vsh");
-            Object downFId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_down.fsh");
-            downPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blur_down", downVId, downFId,
-                new String[]{ "Sampler0" }, new String[]{ "Projection", "BlurParams" });
-            downShaderSource = ShaderPipelineFactory.shaderSource(downVId, BLUR_VERTEX_SRC, downFId, BLUR_DOWN_FRAGMENT_SRC);
+            Object downVId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blur_down.vsh");
+            Object downFId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blur_down.fsh");
+            downPipeline = gpu.buildPipeline("ui_blaze3d_blur_down", downVId, downFId,
+                new String[]{ "Sampler0" }, new String[]{ "Projection", "BlurParams" }, null, null);
+            downShaderSource = gpu.shaderSource(downVId, BLUR_VERTEX_SRC, downFId, BLUR_DOWN_FRAGMENT_SRC);
 
-            Object upVId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_up.vsh");
-            Object upFId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_up.fsh");
-            upPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blur_up", upVId, upFId,
-                new String[]{ "Sampler0" }, new String[]{ "Projection", "BlurParams" });
-            upShaderSource = ShaderPipelineFactory.shaderSource(upVId, BLUR_VERTEX_SRC, upFId, BLUR_UP_FRAGMENT_SRC);
+            Object upVId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blur_up.vsh");
+            Object upFId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blur_up.fsh");
+            upPipeline = gpu.buildPipeline("ui_blaze3d_blur_up", upVId, upFId,
+                new String[]{ "Sampler0" }, new String[]{ "Projection", "BlurParams" }, null, null);
+            upShaderSource = gpu.shaderSource(upVId, BLUR_VERTEX_SRC, upFId, BLUR_UP_FRAGMENT_SRC);
 
             // Vertex identique à RECT_VERTEX_SRC (Position+Color -> fragPos+vertexColor) — même source réutilisée, nouvel identifiant dédié.
-            Object compositeVId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_composite.vsh");
-            Object compositeFId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blur_composite.fsh");
-            compositePipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blur_composite", compositeVId, compositeFId,
-                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "RectParams", "BlurCompositeParams" });
-            compositeShaderSource = ShaderPipelineFactory.shaderSource(compositeVId, RECT_VERTEX_SRC, compositeFId, BLUR_COMPOSITE_FRAGMENT_SRC);
+            Object compositeVId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blur_composite.vsh");
+            Object compositeFId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blur_composite.fsh");
+            compositePipeline = gpu.buildPipeline("ui_blaze3d_blur_composite", compositeVId, compositeFId,
+                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "RectParams", "BlurCompositeParams" }, null, null);
+            compositeShaderSource = gpu.shaderSource(compositeVId, RECT_VERTEX_SRC, compositeFId, BLUR_COMPOSITE_FRAGMENT_SRC);
 
             return downPipeline != null && upPipeline != null && compositePipeline != null;
         } catch (Throwable t) {
@@ -218,8 +215,8 @@ public final class Blaze3DBlur {
 
     static Object ensureBlurParamsBuffer(Object device) throws Exception {
         if (blurParamsBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_blur_params";
-            blurParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 16L);
+            blurParamsBuffer = gpu.createBuffer(device, "yuyuframe_blur_params",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 16L);
         }
         return blurParamsBuffer;
     }
@@ -229,15 +226,15 @@ public final class Blaze3DBlur {
         ByteBuffer data = scratch(16);
         data.putFloat(texelW).putFloat(texelH).putFloat(0f).putFloat(0f);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 16L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(buffer, 0L, 16L);
+        gpu.write(encoder, slice, data);
         return slice;
     }
 
     static Object ensureCompositeParamsBuffer(Object device) throws Exception {
         if (compositeParamsBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_blur_composite_params";
-            compositeParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 32L);
+            compositeParamsBuffer = gpu.createBuffer(device, "yuyuframe_blur_composite_params",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 32L);
         }
         return compositeParamsBuffer;
     }
@@ -249,8 +246,8 @@ public final class Blaze3DBlur {
         data.putFloat(screenW).putFloat(screenH).putFloat(0f).putFloat(0f);
         data.putFloat(tintR).putFloat(tintG).putFloat(tintB).putFloat(tintStrength);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 32L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(buffer, 0L, 32L);
+        gpu.write(encoder, slice, data);
         return slice;
     }
 
@@ -286,25 +283,29 @@ public final class Blaze3DBlur {
         if (chainVpWidth == vpWidth && chainVpHeight == vpHeight && levelTexture[0] != null) return;
         for (int i = 0; i < LEVELS; i++) {
             if (levelTexture[i] != null) {
-                try { mCloseTexture.invoke(levelTexture[i]); } catch (Throwable ignored) {}
+                // Journalisé, jamais avalé : une fermeture qui échoue n'empêche
+                // pas de recréer la chaîne, mais doit rester visible.
+                try {
+                    gpu.closeTexture(levelTexture[i]);
+                } catch (Throwable t) {
+                    LauncherLog.err("[UiRenderer] Blaze3DBlur: fermeture du niveau " + i + " échouée : " + t);
+                }
                 levelTexture[i] = null;
                 levelView[i] = null;
             }
         }
         int w = vpWidth, h = vpHeight;
-        int usage = usageTextureBinding | usageTextureRenderAttachment;
+        int usage = gpu.usageTextureBinding() | gpu.usageTextureRenderAttachment();
         for (int i = 0; i < LEVELS; i++) {
             w = Math.max(1, w / 2);
             h = Math.max(1, h / 2);
             levelW[i] = w;
             levelH[i] = h;
-            final int idx = i;
-            java.util.function.Supplier<String> label = () -> "yuyuframe_blur_level_" + idx;
-            levelTexture[i] = mCreateTexture.invoke(device, label, usage, fieldTextureFormatRgba8, w, h, 1, 1);
-            levelView[i] = mCreateTextureView.invoke(device, levelTexture[i]);
+            levelTexture[i] = gpu.createTexture(device, "yuyuframe_blur_level_" + i, usage, w, h, 1);
+            levelView[i] = gpu.createTextureView(device, levelTexture[i]);
         }
         if (linearSampler == null) {
-            linearSampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+            linearSampler = gpu.linearSampler();
         }
         chainVpWidth = vpWidth;
         chainVpHeight = vpHeight;
@@ -327,36 +328,29 @@ public final class Blaze3DBlur {
 
         currentStage = "drawBlurPass(" + debugLabel + ")/vertexBuffer";
         Object vbo = ensureVertexBuffer(device, verts.remaining());
-        Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
-        mWriteToBuffer.invoke(encoder, slice, verts);
+        gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
         currentStage = "drawBlurPass(" + debugLabel + ")/projection";
         Object projectionBuf = ensureProjectionBuffer(device, encoder, dstW, dstH);
-        Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+        Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
         currentStage = "drawBlurPass(" + debugLabel + ")/params";
         Object blurParamsSlice = writeBlurParams(device, encoder, 1f / srcW, 1f / srcH);
 
         currentStage = "drawBlurPass(" + debugLabel + ")/renderPass";
-        java.util.function.Supplier<String> passLabel = () -> "yuyuframe_blur_" + debugLabel;
-        Object pass = mCreateRenderPass.invoke(encoder, passLabel, dstView, OptionalInt.empty());
+        Object pass = gpu.openPass(encoder, "yuyuframe_blur_" + debugLabel, dstView);
         try {
-            ShaderPipelineFactory.precompile(device, pipeline, shaderSource);
-            mSetPipeline.invoke(pass, pipeline);
-            if (mDisableScissor != null) mDisableScissor.invoke(pass);
-            mBindDefaultUniforms.invoke(null, pass);
-            mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
-            mSetUniformSlice.invoke(pass, "BlurParams", blurParamsSlice);
-            mBindTexture.invoke(pass, "Sampler0", srcView, srcSampler);
-            mSetVertexBuffer.invoke(pass, 0, vbo);
-
-            if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-            Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
-            Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-            mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-            mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+            gpu.precompile(device, pipeline, shaderSource);
+            gpu.setPipeline(pass, pipeline);
+            gpu.disableScissor(pass);
+            gpu.bindDefaultUniforms(pass);
+            gpu.setUniform(pass, "Projection", projectionSlice);
+            gpu.setUniform(pass, "BlurParams", blurParamsSlice);
+            gpu.bindTexture(pass, "Sampler0", srcView, srcSampler);
+            gpu.setVertexBuffer(pass, 0, vbo);
+            gpu.drawQuads(pass, 1);
         } finally {
-            mClosePass.invoke(pass);
+            gpu.closePass(pass);
         }
     }
 
@@ -370,17 +364,14 @@ public final class Blaze3DBlur {
     private static boolean renderBlurChain(int vpWidth, int vpHeight, int passes) {
         try {
             currentStage = "renderBlurChain/device";
-            Object device = mGetDevice.invoke(null);
+            Object device = gpu.device();
             currentStage = "renderBlurChain/encoder";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            Object encoder = gpu.encoder(device);
             currentStage = "renderBlurChain/ensureChain";
             ensureChain(device, vpWidth, vpHeight);
 
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            Object sourceView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "renderBlurChain/mainColorView";
+            Object sourceView = gpu.mainColorView();
             if (sourceView == null) return false;
 
             int p = Math.max(1, Math.min(passes, LEVELS));
@@ -590,14 +581,8 @@ public final class Blaze3DBlur {
             // viewport recréé entre-temps) — voir javadoc de queueGlassPanel.
             if (levelView[COMPOSITE_LEVEL] == null && !renderBlurChain(vpWidth, vpHeight, DEFAULT_PASSES)) return false;
 
-            currentStage = "minecraftClient(blurpanel)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(blurpanel)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(blurpanel)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(blurpanel)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             float maxR = Math.min((x1 - x0) / 2f, (y1 - y0) / 2f);
@@ -606,10 +591,10 @@ public final class Blaze3DBlur {
             float rBL = Math.max(0f, Math.min(radiusBottomLeft, maxR));
             float rBR = Math.max(0f, Math.min(radiusBottomRight, maxR));
 
-            currentStage = "getDevice(blurpanel)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(blurpanel)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(blurpanel)";
+            Object device = gpu.device();
+            currentStage = "encoder(blurpanel)";
+            Object encoder = gpu.encoder(device);
 
             // Blanc × opacité — même empaquetage ABGR que Blaze3DRect
             // (a<<24 | b<<16 | g<<8 | r) ; seul l'alpha varie, la couleur du
@@ -623,19 +608,14 @@ public final class Blaze3DBlur {
 
             currentStage = "ensureVertexBuffer(blurpanel)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(blurpanel)";
-            Object identity4 = identityMatrix4f();
-            Object colorMod = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
+            currentStage = "dynamicTransforms(blurpanel)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(blurpanel)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             currentStage = "writeRectParams(blurpanel)";
             Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, rTL, rTR, rBL, rBR);
@@ -644,36 +624,30 @@ public final class Blaze3DBlur {
             Object compositeParamsSlice = writeCompositeParams(device, encoder, (float) vpWidth, (float) vpHeight,
                 tint.r, tint.g, tint.b, tintStrength);
 
-            currentStage = "createRenderPass(blurpanel)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_blurpanel";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(blurpanel)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_blurpanel", colorView);
             try {
                 currentStage = "setPipeline(blurpanel)";
-                ShaderPipelineFactory.precompile(device, compositePipeline, compositeShaderSource);
-                mSetPipeline.invoke(pass, compositePipeline);
-                if (mDisableScissor != null) mDisableScissor.invoke(pass);
-                mBindDefaultUniforms.invoke(null, pass);
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
-                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
-                mSetUniformSlice.invoke(pass, "BlurCompositeParams", compositeParamsSlice);
+                gpu.precompile(device, compositePipeline, compositeShaderSource);
+                gpu.setPipeline(pass, compositePipeline);
+                gpu.disableScissor(pass);
+                gpu.bindDefaultUniforms(pass);
+                gpu.setUniform(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "RectParams", rectParamsSlice);
+                gpu.setUniform(pass, "BlurCompositeParams", compositeParamsSlice);
                 // Résultat final de la chaîne = levelView[0] (demi-résolution du
                 // dernier niveau upsamplé) — pas de passe supplémentaire pour
                 // remonter à la résolution native : l'échantillonnage linéaire
                 // au composite lisse déjà cet écart, gain négligeable pour un
                 // coût de passe en plus (même compromis que la plupart des
                 // implémentations dual-Kawase de blur Minecraft référencées).
-                mBindTexture.invoke(pass, "Sampler0", levelView[COMPOSITE_LEVEL], linearSampler);
+                gpu.bindTexture(pass, "Sampler0", levelView[COMPOSITE_LEVEL], linearSampler);
                 currentStage = "setVertexBuffer(blurpanel)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                gpu.drawQuads(pass, 1);
             } finally {
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {

@@ -2,9 +2,7 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import static com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.*;
 
@@ -14,7 +12,6 @@ import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.OptionalInt;
 
 /**
  * Texte era E (Blaze3D) — VRAI rendu SDF (champ de distance signée, bord
@@ -105,11 +102,11 @@ public final class Blaze3DText {
 
     /** Construit le pipeline texte — voir {@link Blaze3DGradient#resolveGradientPipeline()} pour le même principe (ce fichier possède son GLSL, donc son code de compilation). */
     static boolean resolveTextPipeline() throws Exception {
-        Object vertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_text.vsh");
-        Object fragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_text.fsh");
-        textPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_text", vertexId, fragmentId,
-            new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection" });
-        textShaderSource = ShaderPipelineFactory.shaderSource(vertexId, TEXT_VERTEX_SRC, fragmentId, TEXT_FRAGMENT_SRC);
+        Object vertexId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_text.vsh");
+        Object fragmentId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_text.fsh");
+        textPipeline = gpu.buildPipeline("ui_blaze3d_text", vertexId, fragmentId,
+            new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection" }, null, null);
+        textShaderSource = gpu.shaderSource(vertexId, TEXT_VERTEX_SRC, fragmentId, TEXT_FRAGMENT_SRC);
         return textPipeline != null;
     }
 
@@ -186,13 +183,13 @@ public final class Blaze3DText {
             }
         }
 
-        Object device = mGetDevice.invoke(null);
+        Object device = gpu.device();
         final String label = "yuyuframe_font_" + System.identityHashCode(font);
-        java.util.function.Supplier<String> labelSupplier = () -> label;
-        Object texture = mCreateTexture.invoke(device, labelSupplier, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, w, h, 1, mipLevels);
+        Object texture = gpu.createTexture(device, label,
+            gpu.usageTextureBinding() | gpu.usageTextureCopyDst(), w, h, mipLevels);
 
-        Object encoder = mCreateCommandEncoder.invoke(device);
-        mWriteToTexture.invoke(encoder, texture, nativeImage); // mip 0 (résolution native)
+        Object encoder = gpu.encoder(device);
+        gpu.uploadImage(encoder, texture, nativeImage); // mip 0 (résolution native)
 
         for (int level = 1; level < mipLevels; level++) {
             int mw = Math.max(1, w >> level), mh = Math.max(1, h >> level);
@@ -203,11 +200,11 @@ public final class Blaze3DText {
             g2.drawImage(img, 0, 0, mw, mh, null);
             g2.dispose();
             Object mipImage = bufferedImageToNativeImage(scaled, mw, mh);
-            mWriteToTextureMip.invoke(encoder, texture, mipImage, level, 0, 0, 0, mw, mh, 0, 0);
+            gpu.uploadImageRegion(encoder, texture, mipImage, level, 0, 0, 0, mw, mh, 0, 0);
         }
 
-        Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+        Object textureView = gpu.createTextureView(device, texture);
+        Object sampler = gpu.linearSampler();
 
         Object[] result = {texture, textureView, sampler};
         TEXTURES.put(font, result);
@@ -386,24 +383,18 @@ public final class Blaze3DText {
     private static boolean drawTextBatch(UiFont font, java.util.List<BatchEntry> entries, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve() || entries.isEmpty()) return false;
         try {
-            currentStage = "minecraftClient(textbatch)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(textbatch)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(textbatch)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(textbatch)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             currentStage = "ensureTexture(textbatch)";
             Object[] tex = ensureTexture(font);
             Object textureView = tex[1], sampler = tex[2];
 
-            currentStage = "getDevice(textbatch)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(textbatch)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(textbatch)";
+            Object device = gpu.device();
+            currentStage = "encoder(textbatch)";
+            Object encoder = gpu.encoder(device);
 
             int totalChars = 0;
             for (BatchEntry e : entries) totalChars += e.text.length();
@@ -418,42 +409,30 @@ public final class Blaze3DText {
 
             currentStage = "ensureVertexBuffer(textbatch)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(textbatch)";
-            Object identity4 = identityMatrix4f();
             // BLANC : la couleur réelle est déjà dans les sommets.
-            Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
+            currentStage = "dynamicTransforms(textbatch)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(textbatch)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
-            currentStage = "createRenderPass(textbatch)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_text_batch";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(textbatch)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_text_batch", colorView);
             try {
-                ShaderPipelineFactory.precompile(device, textPipeline, textShaderSource);
-                mSetPipeline.invoke(pass, textPipeline);
-                if (mDisableScissor != null) mDisableScissor.invoke(pass);
-                mBindDefaultUniforms.invoke(null, pass);
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
-                mBindTexture.invoke(pass, "Sampler0", textureView, sampler);
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = (vertexCount / 4) * 6;
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                gpu.precompile(device, textPipeline, textShaderSource);
+                gpu.setPipeline(pass, textPipeline);
+                gpu.disableScissor(pass);
+                gpu.bindDefaultUniforms(pass);
+                gpu.setUniform(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
+                gpu.bindTexture(pass, "Sampler0", textureView, sampler);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                gpu.drawQuads(pass, vertexCount / 4);
             } finally {
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {
@@ -471,24 +450,18 @@ public final class Blaze3DText {
     private static boolean drawText(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             currentStage = "ensureTexture";
             Object[] tex = ensureTexture(font);
             Object textureView = tex[1], sampler = tex[2];
 
-            currentStage = "getDevice";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device";
+            Object device = gpu.device();
+            currentStage = "encoder";
+            Object encoder = gpu.encoder(device);
 
             ByteBuffer verts = ensureStagingBuffer(text.length() * 4 * 28);
             // Sommets BLANCS : la couleur passe par ColorModulator sur ce
@@ -510,10 +483,8 @@ public final class Blaze3DText {
             // trouvée dans l'API que ces deux opérations puissent s'entrelacer.
             currentStage = "ensureVertexBuffer";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            currentStage = "bufferSlice";
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
             currentStage = "writeToBuffer";
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
             // BUG TROUVÉ (bissection par paliers depuis GlobalUiHudTestMixin —
             // testPass(2) réussit, testPass(3) échoue à closePass) :
@@ -526,81 +497,62 @@ public final class Blaze3DText {
             // le conflit détecté (trop tard) par close(). setUniform lui-même
             // (juste BINDER un slice déjà écrit) reste, lui, à l'intérieur de
             // la pass — seule l'ÉCRITURE doit sortir.
-            currentStage = "dynamicUniformsWrite";
-            Object identity4 = identityMatrix4f();
-            Object white4 = ctorVector4f.newInstance(color.r, color.g, color.b, color.a);
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
+            currentStage = "dynamicTransforms";
+            Object dynSlice = gpu.dynamicTransforms(color.r, color.g, color.b, color.a);
 
             // Notre propre "Projection" (voir resolve() pour le pourquoi) — même
             // règle que les deux écritures ci-dessus : AVANT createRenderPass.
             currentStage = "ensureProjectionBuffer";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
-            currentStage = "createRenderPass";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_text";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass";
+            Object pass = gpu.openPass(encoder, "yuyuframe_text", colorView);
             try {
                 currentStage = "setPipeline";
                 // Vérifié contre UniversalCraft (URenderPipeline.kt) : re-précompiler
                 // À CHAQUE draw, pas une seule fois — no-op si déjà en cache, mais
                 // nécessaire après un rechargement de ressources (F3+T, resource
                 // pack) qui vide le cache de pipelines du device.
-                ShaderPipelineFactory.precompile(device, textPipeline, textShaderSource);
-                mSetPipeline.invoke(pass, textPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, textPipeline, textShaderSource);
+                gpu.setPipeline(pass, textPipeline);
+                currentStage = "disableScissor";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
 
                 // Écrase le "Projection" ambiant repris par bindDefaultUniforms
                 // avec le nôtre (voir resolve() + ensureProjectionBuffer) — un
                 // setUniform() APRÈS un autre sur le même nom remplace le
                 // binding précédent (juste une liaison, pas une accumulation).
                 currentStage = "setUniform(Projection)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
 
                 currentStage = "setUniform(DynamicTransforms)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
 
                 currentStage = "bindTexture(Sampler0)";
-                mBindTexture.invoke(pass, "Sampler0", textureView, sampler);
+                gpu.bindTexture(pass, "Sampler0", textureView, sampler);
                 // Plus de Sampler2/lightmap sur ce pipeline dédié (voir
                 // TEXT_FRAGMENT_SRC, ne le déclare même pas) — inutile
                 // maintenant que texte/rect ne partagent plus le même shader.
 
                 currentStage = "setVertexBuffer";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
+                gpu.setVertexBuffer(pass, 0, vbo);
 
                 // BUG TROUVÉ (draw() "réussissait" sans exception mais AUCUN
                 // texte jamais visible) : le pipeline GUI_TEXT utilise le mode
                 // QUADS (voir VertexFormats.POSITION_COLOR_TEXTURE_LIGHT) —
                 // draw(int,int) non-indexé ne convertit PAS les quads en
-                // triangles tout seul. Il faut passer par drawIndexed() avec
+                // triangles tout seul. Il faut passer par un draw INDEXÉ avec
                 // le buffer d'indices de triangulation PARTAGÉ que Minecraft
-                // utilise lui-même pour ça (RenderSystem.sharedSequentialQuad).
-                currentStage = "shapeIndexBuffer";
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                int indexCount = (vertexCount / 4) * 6; // 6 indices (2 triangles) par quad de 4 sommets
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, indexCount);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                currentStage = "setIndexBuffer";
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                // BUG TROUVÉ (aucune exception, cull=true/false testés tous
-                // les deux sans différence — LA vraie cause) : signature
-                // RÉELLE de drawIndexed vérifiée dans les mappings Yarn
-                // officiels eux-mêmes (noms de paramètres embarqués dans
-                // mappings.tiny, jamais devinés) — (int baseVertex, int
-                // firstIndex, int count, int instanceCount), PAS (count,
-                // instanceCount, firstIndex, baseVertex) comme supposé à tort
-                // (convention Vulkan/D3D typique, mais fausse ici). On
-                // envoyait donc baseVertex=indexCount, firstIndex=1,
-                // count=0, instanceCount=0 — ZÉRO géométrie soumise à
-                // chaque appel, sans la moindre exception (des int valides,
-                // juste sémantiquement absurdes).
-                currentStage = "drawIndexed";
-                mDrawIndexed.invoke(pass, 0, 0, indexCount, 1);
+                // utilise lui-même pour ça (RenderSystem.sharedSequentialQuad)
+                // — c'est ce que fait drawQuads (6 indices par quad, et l'ordre
+                // de paramètres réel baseVertex/firstIndex/count/instanceCount,
+                // autre bug historique : une inversion ne soumettait ZÉRO
+                // géométrie, sans la moindre exception).
+                currentStage = "drawQuads";
+                gpu.drawQuads(pass, vertexCount / 4);
             } finally {
                 // DIAGNOSTIC (v382) : sauter close() entièrement (fuite GPU
                 // assumée) n'a PAS rendu le texte visible — donc close() est
@@ -611,7 +563,7 @@ public final class Blaze3DText {
                 // systématique (plus de fuite volontaire), le vrai problème
                 // reste entier.
                 currentStage = "closePass";
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {

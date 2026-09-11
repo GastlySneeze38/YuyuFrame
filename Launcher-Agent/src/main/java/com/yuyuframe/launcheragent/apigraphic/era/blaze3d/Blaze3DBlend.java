@@ -1,14 +1,11 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import static com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.*;
 
 import java.nio.ByteBuffer;
-import java.util.OptionalInt;
 
 /**
  * Modes de fusion multiply/screen/overlay (roadmap Phase 5.4, différenciateur
@@ -92,11 +89,11 @@ public final class Blaze3DBlend {
 
     static boolean resolveBlendPipeline() {
         try {
-            Object vId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blend.vsh");
-            Object fId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_blend.fsh");
-            blendPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_blend", vId, fId,
-                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "RectParams", "BlendParams" });
-            blendShaderSource = ShaderPipelineFactory.shaderSource(vId, RECT_VERTEX_SRC, fId, BLEND_FRAGMENT_SRC);
+            Object vId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blend.vsh");
+            Object fId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_blend.fsh");
+            blendPipeline = gpu.buildPipeline("ui_blaze3d_blend", vId, fId,
+                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection", "RectParams", "BlendParams" }, null, null);
+            blendShaderSource = gpu.shaderSource(vId, RECT_VERTEX_SRC, fId, BLEND_FRAGMENT_SRC);
             return blendPipeline != null;
         } catch (Throwable t) {
             Throwable cause = t;
@@ -124,12 +121,16 @@ public final class Blaze3DBlend {
     private static void ensureSnapshotTexture(Object device, int vpWidth, int vpHeight) throws Exception {
         if (snapshotVpWidth == vpWidth && snapshotVpHeight == vpHeight && snapshotTexture != null) return;
         if (snapshotTexture != null) {
-            try { mCloseTexture.invoke(snapshotTexture); } catch (Throwable ignored) {}
+            // Journalisé, jamais avalé (voir Blaze3DBlur.ensureChain).
+            try {
+                gpu.closeTexture(snapshotTexture);
+            } catch (Throwable t) {
+                LauncherLog.err("[UiRenderer] Blaze3DBlend: fermeture de l'instantané échouée : " + t);
+            }
         }
-        java.util.function.Supplier<String> label = () -> "yuyuframe_blend_snapshot";
-        int usage = usageTextureBinding | usageTextureRenderAttachment;
-        snapshotTexture = mCreateTexture.invoke(device, label, usage, fieldTextureFormatRgba8, vpWidth, vpHeight, 1, 1);
-        snapshotView = mCreateTextureView.invoke(device, snapshotTexture);
+        int usage = gpu.usageTextureBinding() | gpu.usageTextureRenderAttachment();
+        snapshotTexture = gpu.createTexture(device, "yuyuframe_blend_snapshot", usage, vpWidth, vpHeight, 1);
+        snapshotView = gpu.createTextureView(device, snapshotTexture);
         snapshotVpWidth = vpWidth;
         snapshotVpHeight = vpHeight;
     }
@@ -150,44 +151,34 @@ public final class Blaze3DBlend {
         verts.flip();
 
         Object vbo = ensureVertexBuffer(device, verts.remaining());
-        Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
-        mWriteToBuffer.invoke(encoder, slice, verts);
+        gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-        Object identity4 = identityMatrix4f();
-        Object white4 = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-        Object zero3 = zeroVector3f();
-        Object dynUniforms = mGetDynamicUniforms.invoke(null);
-        Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, white4, zero3, identity4);
+        Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
         Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-        Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+        Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
-        java.util.function.Supplier<String> passLabel = () -> "yuyuframe_blend_snapshot_copy";
-        Object pass = mCreateRenderPass.invoke(encoder, passLabel, snapshotView, OptionalInt.empty());
+        Object pass = gpu.openPass(encoder, "yuyuframe_blend_snapshot_copy", snapshotView);
         try {
-            ShaderPipelineFactory.precompile(device, homePipeline, homeShaderSource);
-            mSetPipeline.invoke(pass, homePipeline);
-            if (mDisableScissor != null) mDisableScissor.invoke(pass);
-            mBindDefaultUniforms.invoke(null, pass);
-            mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
-            mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
-            mBindTexture.invoke(pass, "Sampler0", sourceColorView, sampler);
-            mBindTexture.invoke(pass, "Sampler2", white[1], white[2]);
-            mSetVertexBuffer.invoke(pass, 0, vbo);
-            if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-            Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
-            Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-            mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-            mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+            gpu.precompile(device, homePipeline, homeShaderSource);
+            gpu.setPipeline(pass, homePipeline);
+            gpu.disableScissor(pass);
+            gpu.bindDefaultUniforms(pass);
+            gpu.setUniform(pass, "Projection", projectionSlice);
+            gpu.setUniform(pass, "DynamicTransforms", dynSlice);
+            gpu.bindTexture(pass, "Sampler0", sourceColorView, sampler);
+            gpu.bindTexture(pass, "Sampler2", white[1], white[2]);
+            gpu.setVertexBuffer(pass, 0, vbo);
+            gpu.drawQuads(pass, 1);
         } finally {
-            mClosePass.invoke(pass);
+            gpu.closePass(pass);
         }
     }
 
     static Object ensureBlendParamsBuffer(Object device) throws Exception {
         if (blendParamsBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_blend_params";
-            blendParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 32L);
+            blendParamsBuffer = gpu.createBuffer(device, "yuyuframe_blend_params",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 32L);
         }
         return blendParamsBuffer;
     }
@@ -198,8 +189,8 @@ public final class Blaze3DBlend {
         data.putFloat(top.r).putFloat(top.g).putFloat(top.b).putFloat(top.a);
         data.putFloat((float) mode).putFloat(screenW).putFloat(screenH).putFloat(0f);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 32L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(buffer, 0L, 32L);
+        gpu.write(encoder, slice, data);
         return slice;
     }
 
@@ -218,14 +209,8 @@ public final class Blaze3DBlend {
                                           UiColor topColor, int mode, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         try {
-            currentStage = "minecraftClient(blendrect)";
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            currentStage = "getFramebuffer(blendrect)";
-            Object fb = getFramebuffer(mc);
-            if (fb == null || mGetColorAttachmentView == null) return false;
-            currentStage = "getColorAttachmentView(blendrect)";
-            Object colorView = mGetColorAttachmentView.invoke(fb);
+            currentStage = "mainColorView(blendrect)";
+            Object colorView = gpu.mainColorView();
             if (colorView == null) return false;
 
             float maxR = Math.min((x1 - x0) / 2f, (y1 - y0) / 2f);
@@ -234,10 +219,10 @@ public final class Blaze3DBlend {
             float rBL = Math.max(0f, Math.min(radiusBottomLeft, maxR));
             float rBR = Math.max(0f, Math.min(radiusBottomRight, maxR));
 
-            currentStage = "getDevice(blendrect)";
-            Object device = mGetDevice.invoke(null);
-            currentStage = "createCommandEncoder(blendrect)";
-            Object encoder = mCreateCommandEncoder.invoke(device);
+            currentStage = "device(blendrect)";
+            Object device = gpu.device();
+            currentStage = "encoder(blendrect)";
+            Object encoder = gpu.encoder(device);
 
             int rgba = 0xFFFFFFFF;
             short light0 = 0, light1 = 0;
@@ -247,19 +232,14 @@ public final class Blaze3DBlend {
 
             currentStage = "ensureVertexBuffer(blendrect)";
             Object vbo = ensureVertexBuffer(device, verts.remaining());
-            Object slice = mBufferSlice.invoke(vbo, 0L, (long) verts.remaining());
-            mWriteToBuffer.invoke(encoder, slice, verts);
+            gpu.write(encoder, gpu.slice(vbo, 0L, verts.remaining()), verts);
 
-            currentStage = "dynamicUniformsWrite(blendrect)";
-            Object identity4 = identityMatrix4f();
-            Object colorMod = ctorVector4f.newInstance(1f, 1f, 1f, 1f);
-            Object zero3 = zeroVector3f();
-            Object dynUniforms = mGetDynamicUniforms.invoke(null);
-            Object dynSlice = mDynamicUniformsWrite.invoke(dynUniforms, identity4, colorMod, zero3, identity4);
+            currentStage = "dynamicTransforms(blendrect)";
+            Object dynSlice = gpu.dynamicTransforms(1f, 1f, 1f, 1f);
 
             currentStage = "ensureProjectionBuffer(blendrect)";
             Object projectionBuf = ensureProjectionBuffer(device, encoder, vpWidth, vpHeight);
-            Object projectionSlice = mBufferSlice.invoke(projectionBuf, 0L, 64L);
+            Object projectionSlice = gpu.slice(projectionBuf, 0L, 64L);
 
             currentStage = "writeRectParams(blendrect)";
             Object rectParamsSlice = writeRectParams(device, encoder, x0, y0, x1, y1, rTL, rTR, rBL, rBR);
@@ -270,36 +250,32 @@ public final class Blaze3DBlend {
             currentStage = "captureSnapshot(blendrect)";
             captureSnapshot(device, encoder, colorView, vpWidth, vpHeight);
 
-            currentStage = "createRenderPass(blendrect)";
-            java.util.function.Supplier<String> passLabel = () -> "yuyuframe_blendrect";
-            Object pass = mCreateRenderPass.invoke(encoder, passLabel, colorView, OptionalInt.empty());
+            currentStage = "openPass(blendrect)";
+            Object pass = gpu.openPass(encoder, "yuyuframe_blendrect", colorView);
             try {
                 currentStage = "setPipeline(blendrect)";
-                ShaderPipelineFactory.precompile(device, blendPipeline, blendShaderSource);
-                mSetPipeline.invoke(pass, blendPipeline);
-                if (mDisableScissor != null) { currentStage = "disableScissor(blendrect)"; mDisableScissor.invoke(pass); }
+                gpu.precompile(device, blendPipeline, blendShaderSource);
+                gpu.setPipeline(pass, blendPipeline);
+                currentStage = "disableScissor(blendrect)";
+                gpu.disableScissor(pass);
                 currentStage = "bindDefaultUniforms(blendrect)";
-                mBindDefaultUniforms.invoke(null, pass);
+                gpu.bindDefaultUniforms(pass);
                 currentStage = "setUniform(Projection)(blendrect)";
-                mSetUniformSlice.invoke(pass, "Projection", projectionSlice);
+                gpu.setUniform(pass, "Projection", projectionSlice);
                 currentStage = "setUniform(DynamicTransforms)(blendrect)";
-                mSetUniformSlice.invoke(pass, "DynamicTransforms", dynSlice);
+                gpu.setUniform(pass, "DynamicTransforms", dynSlice);
                 currentStage = "setUniform(RectParams)(blendrect)";
-                mSetUniformSlice.invoke(pass, "RectParams", rectParamsSlice);
+                gpu.setUniform(pass, "RectParams", rectParamsSlice);
                 currentStage = "setUniform(BlendParams)(blendrect)";
-                mSetUniformSlice.invoke(pass, "BlendParams", blendParamsSlice);
+                gpu.setUniform(pass, "BlendParams", blendParamsSlice);
                 currentStage = "bindTexture(Sampler0)(blendrect)";
-                mBindTexture.invoke(pass, "Sampler0", snapshotView, ensureBackdropSampler(device));
+                gpu.bindTexture(pass, "Sampler0", snapshotView, ensureBackdropSampler(device));
                 currentStage = "setVertexBuffer(blendrect)";
-                mSetVertexBuffer.invoke(pass, 0, vbo);
-
-                if (sharedSequentialQuad == null) sharedSequentialQuad = fieldSharedSequentialQuad.get(null);
-                Object indexBuffer = mShapeIndexBufferGetBuffer.invoke(sharedSequentialQuad, 6);
-                Object indexType = mShapeIndexBufferGetType.invoke(sharedSequentialQuad);
-                mSetIndexBuffer.invoke(pass, indexBuffer, indexType);
-                mDrawIndexed.invoke(pass, 0, 0, 6, 1);
+                gpu.setVertexBuffer(pass, 0, vbo);
+                currentStage = "drawQuads(blendrect)";
+                gpu.drawQuads(pass, 1);
             } finally {
-                mClosePass.invoke(pass);
+                gpu.closePass(pass);
             }
             return true;
         } catch (Throwable t) {
@@ -316,7 +292,7 @@ public final class Blaze3DBlend {
     private static Object backdropSampler;
     private static Object ensureBackdropSampler(Object device) throws Exception {
         if (backdropSampler == null) {
-            backdropSampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
+            backdropSampler = gpu.linearSampler();
         }
         return backdropSampler;
     }

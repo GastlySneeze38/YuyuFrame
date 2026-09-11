@@ -142,8 +142,7 @@ public final class Blaze3DGuiGlass {
         Object p = pipeline();
         if (p == null) return false;
         try {
-            if (!Blaze3DCore.resolve() || Blaze3DCore.mGetDevice == null) return false;
-            ShaderPipelineFactory.precompile(Blaze3DCore.mGetDevice.invoke(null), p, shaderSource);
+            ShaderPipelineFactory.precompile(ShaderPipelineFactory.device(), p, shaderSource);
             return true;
         } catch (Throwable t) {
             LauncherLog.err("[Blaze3DGuiGlass] précompilation: " + t);

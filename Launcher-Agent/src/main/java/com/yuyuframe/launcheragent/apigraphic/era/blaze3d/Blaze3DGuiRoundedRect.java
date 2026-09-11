@@ -155,13 +155,7 @@ public final class Blaze3DGuiRoundedRect {
         Object p = pipeline();
         if (p == null) return false;
         try {
-            // isAvailable() ne déclenche PAS la résolution des méthodes (voir
-            // Blaze3DVanillaProbe) — resolve() est idempotent.
-            if (!Blaze3DCore.resolve() || Blaze3DCore.mGetDevice == null) {
-                LauncherLog.err("[Blaze3DGuiRoundedRect] Blaze3DCore non résolu");
-                return false;
-            }
-            ShaderPipelineFactory.precompile(Blaze3DCore.mGetDevice.invoke(null), p, shaderSource);
+            ShaderPipelineFactory.precompile(ShaderPipelineFactory.device(), p, shaderSource);
             return true;
         } catch (Throwable t) {
             LauncherLog.err("[Blaze3DGuiRoundedRect] précompilation: " + t);

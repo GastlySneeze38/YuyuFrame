@@ -12,9 +12,10 @@ import java.util.ServiceLoader;
  * version est compilée APRÈS le moteur (unité séparée, voir {@code build.bat}),
  * le moteur ne peut donc pas la référencer statiquement.
  *
- * <p>Résolue une fois. {@code null} tant qu'aucune version n'a d'implémentation
- * typée — l'appelant garde alors son chemin actuel (transition, étape 2 du
- * retrait de la réflexion).
+ * <p>Résolue une fois. Sans implémentation typée pour la version (26.1.2
+ * aujourd'hui), repli sur {@link Blaze3DGpuReflective261} — adaptateur
+ * TRANSITOIRE, seul fichier réflexif du moteur Blaze3D, à supprimer à l'étape 3
+ * du retrait de la réflexion. {@code null} (journalisé) si même lui échoue.
  */
 public final class Blaze3DGpus {
 
@@ -42,7 +43,9 @@ public final class Blaze3DGpus {
         } catch (Throwable t) {
             LauncherLog.err("[Blaze3DGpus] découverte des implémentations échouée : " + t);
         }
-        LauncherLog.agent(1, "[Blaze3DGpus] aucune implémentation typée pour la version \"" + version + "\"");
-        return null;
+        LauncherLog.agent(1, "[Blaze3DGpus] aucune implémentation typée pour la version \"" + version
+            + "\" — repli sur l'adaptateur réflexif transitoire");
+        active = Blaze3DGpuReflective261.createOrNull();
+        return active;
     }
 }

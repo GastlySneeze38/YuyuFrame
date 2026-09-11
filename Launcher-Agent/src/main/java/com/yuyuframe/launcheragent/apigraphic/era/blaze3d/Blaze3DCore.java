@@ -1,34 +1,26 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
-import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 
 import java.awt.image.BufferedImage;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.OptionalInt;
 
 /**
- * Infrastructure partagée du rendu Blaze3D era E (26.1.2/1.21.6+) — résolution
- * réflexion (~80 handles Class/Method/Field/Constructor mis en cache une
- * seule fois dans {@link #resolve()}), pipeline "maison" texte/rect/icône
- * ({@code HOME_VERTEX_SRC}/{@code HOME_FRAGMENT_SRC}), helpers de géométrie
- * (masque de coin arrondi, buffers persistants), et la file de dessin différé
- * PARTAGÉE ({@link #enqueue}/{@link #flushQueued()}) qui garantit l'ordre Z
- * entre {@link Blaze3DText}/{@link Blaze3DRect}/{@link Blaze3DGradient} —
- * scindé depuis l'ancien {@code UiTextBlaze3D.java} (2208 lignes, tout dans
- * un seul fichier), même granularité que {@code GlBridge} pour les backends
- * GL legacy/moderne (voir {@code UiPrimitiveRenderer}/{@code UiTextRenderer}).
+ * Infrastructure partagée du rendu Blaze3D era E (26.1.2/1.21.6+) — pipelines
+ * "maison" ({@code HOME_VERTEX_SRC}/{@code RECT_*}/{@code RECT_BATCH_*}),
+ * helpers de géométrie (quads, tampons persistants, projection orthographique)
+ * et la file de dessin différé PARTAGÉE ({@link #enqueue}/{@link #flushQueued()})
+ * qui garantit l'ordre Z entre {@link Blaze3DText}/{@link Blaze3DRect}/{@link
+ * Blaze3DGradient} — scindé depuis l'ancien {@code UiTextBlaze3D.java} (2208
+ * lignes, tout dans un seul fichier), même granularité que {@code GlBridge}
+ * pour les backends GL legacy/moderne.
  *
- * Compile en pure réflexion (pas d'import direct {@code com.mojang.blaze3d.*})
- * — voir la javadoc d'origine de {@code UiTextBlaze3D} (historique complet du
- * choix de ce pipeline vs appels GL bruts) pour le contexte, toujours valable.
+ * <p>PLUS AUCUNE RÉFLEXION (retrait de la réflexion du moteur, étape 2c) : tous
+ * les appels GPU passent par {@link Blaze3DGpu}, dont l'implémentation est celle
+ * de la version en cours ({@link Blaze3DGpus#active()}) — typée en 1.21.11,
+ * encore réflexive et transitoire en 26.1.2 ({@link Blaze3DGpuReflective261},
+ * à supprimer à l'étape 3). Ce fichier ne connaît donc plus aucun nom de classe
+ * du jeu : il ne manipule que des poignées opaques rendues par l'interface.
  */
 public final class Blaze3DCore {
     private Blaze3DCore() {}
@@ -48,36 +40,15 @@ public final class Blaze3DCore {
         return available;
     }
 
-    // ── Classes/méthodes résolues paresseusement, mises en cache ────────────
+    // ── Implémentation GPU de la version en cours ───────────────────────────
 
-    static Class<?> clsRenderSystem, clsGpuDevice, clsCommandEncoder, clsRenderPass,
-        clsGpuTexture, clsGpuTextureView, clsTextureFormat, clsGpuBuffer, clsGpuBufferSlice,
-        clsFilterMode, clsRenderPipeline, clsSamplerCache, clsGpuSampler,
-        clsRenderPipelines, clsDynamicUniforms, clsFramebuffer, clsNativeImage, clsNativeImageFormat,
-        clsMatrix4f, clsVector4f, clsVector3f;
-
-    static Method mGetDevice, mGetSamplerCache, mSamplerCacheGet,
-        mCreateTexture, mCreateTextureView, mCreateBuffer, mCreateBufferSized, mCreateCommandEncoder,
-        mWriteToTexture, mWriteToTextureMip, mWriteToBuffer, mBufferSlice, mCreateRenderPass, mSetPipeline, mBindTexture, mSetUniformSlice,
-        mSetVertexBuffer, mDraw, mClosePass, mBindDefaultUniforms, mGetDynamicUniforms,
-        mDynamicUniformsWrite, mGetColorAttachmentView, mNativeImageSetColor,
-        mShapeIndexBufferGetBuffer, mShapeIndexBufferGetType, mSetIndexBuffer, mDrawIndexed,
-        mGetProjectionMatrixBuffer, mDisableScissor;
-
-    static java.lang.reflect.Field fieldSharedSequentialQuad;
-    static Object sharedSequentialQuad;
-
-    static Constructor<?> ctorNativeImage, ctorVector4f, ctorVector3f;
-
-    static Object fieldFilterModeLinear, fieldTextureFormatRgba8,
-        fieldNativeImageFormatRgba;
-
-    static int usageTextureBinding, usageTextureCopyDst, usageTextureRenderAttachment, usageBufferVertex, usageBufferCopyDst, usageBufferUniform;
-
-    /** Fermeture d'une {@code GpuTexture} (AutoCloseable, vérifié par javap) — utilisée par {@code Blaze3DBlur} pour libérer sa chaîne de cibles de rendu hors-écran quand le viewport change de taille. */
-    static Method mCloseTexture;
-
-    static Method mMatrixSetOrtho, mMatrixGetFloatArray;
+    /**
+     * Posée par {@link #resolve()} (jamais nulle une fois {@code resolveOk}) et
+     * partagée par import statique avec les satellites {@link Blaze3DRect}/
+     * {@link Blaze3DText}/{@link Blaze3DGradient}/{@link Blaze3DBlur}/{@link
+     * Blaze3DBlend} — leur unique accès au GPU.
+     */
+    static Blaze3DGpu gpu;
 
     static boolean resolveAttempted, resolveOk;
 
@@ -315,8 +286,8 @@ public final class Blaze3DCore {
 
     static Object ensureBatchParamsBuffer(Object device) throws Exception {
         if (batchParamsBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_rect_batch_params";
-            batchParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 16L);
+            batchParamsBuffer = gpu.createBuffer(device, "yuyuframe_rect_batch_params",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 16L);
         }
         return batchParamsBuffer;
     }
@@ -326,15 +297,15 @@ public final class Blaze3DCore {
         ByteBuffer data = scratch(16);
         data.putFloat(radius).putFloat(0f).putFloat(0f).putFloat(0f);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 16L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(buffer, 0L, 16L);
+        gpu.write(encoder, slice, data);
         return slice;
     }
 
     static Object ensureRectParamsBuffer(Object device) throws Exception {
         if (rectParamsBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_rect_params";
-            rectParamsBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 32L);
+            rectParamsBuffer = gpu.createBuffer(device, "yuyuframe_rect_params",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 32L);
         }
         return rectParamsBuffer;
     }
@@ -352,265 +323,23 @@ public final class Blaze3DCore {
         data.putFloat(x0).putFloat(y0).putFloat(x1).putFloat(y1);
         data.putFloat(radiusTopLeft).putFloat(radiusTopRight).putFloat(radiusBottomLeft).putFloat(radiusBottomRight);
         data.flip();
-        Object slice = mBufferSlice.invoke(buffer, 0L, 32L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(buffer, 0L, 32L);
+        gpu.write(encoder, slice, data);
         return slice;
     }
 
     /**
-     * Résout une classe via Yarn si chargé (obfuscation classique,
-     * comportement INCHANGÉ), SINON (bracket 26.1+, jeu non obfusqué, Yarn
-     * jamais chargé — voir VersionProfileRegistry) directement par le nom
-     * réel fourni — chaque nom ici vérifié par {@code javap} sur le jar
-     * client 26.1.2 réel (jamais deviné par simple renommage de convention,
-     * voir le commentaire de classe pour la même exigence appliquée au
-     * pipeline lui-même).
+     * Récupère l'implémentation GPU de la version et construit les pipelines
+     * maison. Idempotent (mis en cache) — appelé au début de chaque dessin.
      */
-    static Class<?> resolveYarnOrReal(String yarnName, String realBinaryName) {
-        Class<?> c = McReflect.yarnClass(yarnName);
-        if (c != null) return c;
-        return McReflect.rawClass(realBinaryName);
-    }
     static synchronized boolean resolve() {
         if (resolveAttempted) return resolveOk;
         resolveAttempted = true;
         try {
-            clsRenderSystem = McReflect.rawClass("com.mojang.blaze3d.systems.RenderSystem");
-            clsGpuDevice = McReflect.rawClass("com.mojang.blaze3d.systems.GpuDevice");
-            clsCommandEncoder = McReflect.rawClass("com.mojang.blaze3d.systems.CommandEncoder");
-            clsRenderPass = McReflect.rawClass("com.mojang.blaze3d.systems.RenderPass");
-            clsGpuTexture = McReflect.rawClass("com.mojang.blaze3d.textures.GpuTexture");
-            clsGpuTextureView = McReflect.rawClass("com.mojang.blaze3d.textures.GpuTextureView");
-            clsTextureFormat = McReflect.rawClass("com.mojang.blaze3d.textures.TextureFormat");
-            clsGpuBuffer = McReflect.rawClass("com.mojang.blaze3d.buffers.GpuBuffer");
-            clsGpuBufferSlice = McReflect.rawClass("com.mojang.blaze3d.buffers.GpuBufferSlice");
-            clsFilterMode = McReflect.rawClass("com.mojang.blaze3d.textures.FilterMode");
-            clsRenderPipeline = McReflect.rawClass("com.mojang.blaze3d.pipeline.RenderPipeline");
-            clsMatrix4f = McReflect.rawClass("org.joml.Matrix4f");
-            clsVector4f = McReflect.rawClass("org.joml.Vector4f");
-            clsVector3f = McReflect.rawClass("org.joml.Vector3f");
-
-            // Classes obfusquées (net.minecraft) — résolution Yarn dynamique, jamais de nom obf codé en dur.
-            // McReflect.yarnClass (pas MappingsRegistry.loadClass directement) : même
-            // convention que le chemin NativeImage déjà éprouvé dans UiRenderer
-            // (ensureNativeTextureApiResolved) — évite toute divergence de comportement.
-            // resolveYarnOrReal (pas McReflect.yarnClass seul) : sur le bracket
-            // 26.1+ (Yarn jamais chargé), ces classes ont TOUTES changé de
-            // package par rapport à la convention Yarn "net/minecraft/client/gl/*"
-            // — confirmé par javap sur le jar client 26.1.2 réel :
-            //   SamplerCache/GpuSampler  → com.mojang.blaze3d.{systems,textures}
-            //   RenderPipelines/DynamicUniforms → net.minecraft.client.renderer
-            //   Framebuffer → com.mojang.blaze3d.pipeline.RenderTarget (renommée aussi)
-            //   NativeImage(.Format) → com.mojang.blaze3d.platform
-            clsSamplerCache = resolveYarnOrReal("net/minecraft/client/gl/SamplerCache", "com.mojang.blaze3d.systems.SamplerCache");
-            clsGpuSampler = resolveYarnOrReal("net/minecraft/client/gl/GpuSampler", "com.mojang.blaze3d.textures.GpuSampler");
-            clsRenderPipelines = resolveYarnOrReal("net/minecraft/client/gl/RenderPipelines", "net.minecraft.client.renderer.RenderPipelines");
-            clsDynamicUniforms = resolveYarnOrReal("net/minecraft/client/gl/DynamicUniforms", "net.minecraft.client.renderer.DynamicUniforms");
-            clsFramebuffer = resolveYarnOrReal("net/minecraft/client/gl/Framebuffer", "com.mojang.blaze3d.pipeline.RenderTarget");
-            clsNativeImage = resolveYarnOrReal("net/minecraft/client/texture/NativeImage", "com.mojang.blaze3d.platform.NativeImage");
-            clsNativeImageFormat = resolveYarnOrReal("net/minecraft/client/texture/NativeImage$Format", "com.mojang.blaze3d.platform.NativeImage$Format");
-            if (clsSamplerCache == null || clsGpuSampler == null || clsRenderPipelines == null
-                    || clsDynamicUniforms == null || clsFramebuffer == null || clsNativeImage == null
-                    || clsNativeImageFormat == null) {
-                throw new ClassNotFoundException("une classe net.minecraft requise est introuvable (voir logs Yarn)");
+            gpu = Blaze3DGpus.active();
+            if (gpu == null) {
+                throw new IllegalStateException("aucune implémentation Blaze3DGpu pour cette version");
             }
-
-            mGetDevice = clsRenderSystem.getMethod("getDevice");
-            mGetSamplerCache = clsRenderSystem.getMethod("getSamplerCache");
-            mBindDefaultUniforms = clsRenderSystem.getMethod("bindDefaultUniforms", clsRenderPass);
-            mGetDynamicUniforms = clsRenderSystem.getMethod("getDynamicUniforms");
-
-            // BUG TROUVÉ (utilisateur : mipmaps générés — voir ensureTexture —
-            // mais texte "toujours pixelisé", quasi aucun effet visible) :
-            // désassemblage de SamplerCache.init() (pas deviné) — le
-            // paramètre booléen "defaultLineOfDetail" de la surcharge
-            // get(FilterMode,boolean) décide, à la construction du VRAI
-            // GpuSampler (GpuDevice.createSampler(...,maxAniso,lodOption)) :
-            // false → OptionalDouble.of(0.0) = LOD FIGÉ à 0 (ignore TOUS les
-            // niveaux de mip, quels qu'ils soient) ; true →
-            // OptionalDouble.empty() = plage de LOD dynamique COMPLÈTE
-            // (sélection automatique du mip selon l'empreinte écran — ce
-            // qu'on veut). La surcharge à 1 argument get(FilterMode), qu'on
-            // utilisait, appelle EN INTERNE get(FilterMode, false) (confirmé
-            // par désassemblage direct de son bytecode) — notre sampler
-            // était donc VERROUILLÉ sur le mip 0, rendant TOUTE la chaîne de
-            // mips générée totalement inutilisée par le GPU. Fix : résoudre
-            // ET utiliser la surcharge à 2 arguments avec `true`.
-            // 26.1+ (Yarn non chargé) : SamplerCache.get(FilterMode,boolean)
-            // N'EXISTE PLUS DU TOUT — API redessinée (vérifié par javap sur
-            // le jar client 26.1.2 réel) : getSampler(AddressMode,AddressMode,
-            // FilterMode,FilterMode,boolean), getClampToEdge(FilterMode[,boolean]),
-            // getRepeat(FilterMode[,boolean]). getClampToEdge(FilterMode,boolean)
-            // est l'équivalent le plus proche pour une texture d'atlas non
-            // répétée (même forme FilterMode+boolean, sémantique "clamp"
-            // cohérente avec un atlas 2D) — INFÉRÉ par correspondance de
-            // forme/nom, PAS vérifié comportementalement (le booléen
-            // active-t-il bien la même plage de LOD dynamique complète que
-            // sur l'ancienne API ? à confirmer en jeu, voir le BUG TROUVÉ
-            // juste au-dessus pour l'enjeu si jamais ce n'était pas le cas).
-            if (MappingsRegistry.isLoaded()) {
-                String getSamplerName = MappingsRegistry.getObfMethodName(
-                    "net/minecraft/client/gl/SamplerCache", "get", "(Lcom/mojang/blaze3d/textures/FilterMode;Z)Lfzf;");
-                mSamplerCacheGet = clsSamplerCache.getMethod(getSamplerName, clsFilterMode, boolean.class);
-            } else {
-                mSamplerCacheGet = clsSamplerCache.getMethod("getClampToEdge", clsFilterMode, boolean.class);
-            }
-
-            mGetProjectionMatrixBuffer = clsRenderSystem.getMethod("getProjectionMatrixBuffer");
-
-            mCreateCommandEncoder = clsGpuDevice.getMethod("createCommandEncoder");
-            mCreateTexture = clsGpuDevice.getMethod("createTexture",
-                java.util.function.Supplier.class, int.class, clsTextureFormat, int.class, int.class, int.class, int.class);
-            mCreateTextureView = clsGpuDevice.getMethod("createTextureView", clsGpuTexture);
-            mCreateBuffer = clsGpuDevice.getMethod("createBuffer", java.util.function.Supplier.class, int.class, ByteBuffer.class);
-            mCreateBufferSized = clsGpuDevice.getMethod("createBuffer", java.util.function.Supplier.class, int.class, long.class);
-            mBufferSlice = clsGpuBuffer.getMethod("slice", long.class, long.class);
-
-            mWriteToTexture = clsCommandEncoder.getMethod("writeToTexture", clsGpuTexture, clsNativeImage);
-            // Variante détaillée (mipLevel explicite) — vérifiée dans les
-            // mappings Yarn officiels (pas devinée) : writeToTexture(target,
-            // source, mipLevel, depth, offsetX, offsetY, width, height,
-            // skipPixels, skipRows). Nécessaire pour uploader les niveaux de
-            // mipmap de l'atlas de police (voir BUG TROUVÉ dans ensureTexture).
-            mWriteToTextureMip = clsCommandEncoder.getMethod("writeToTexture", clsGpuTexture, clsNativeImage,
-                int.class, int.class, int.class, int.class, int.class, int.class, int.class, int.class);
-            mWriteToBuffer = clsCommandEncoder.getMethod("writeToBuffer", clsGpuBufferSlice, ByteBuffer.class);
-            mCreateRenderPass = clsCommandEncoder.getMethod("createRenderPass",
-                java.util.function.Supplier.class, clsGpuTextureView, OptionalInt.class);
-
-            mSetPipeline = clsRenderPass.getMethod("setPipeline", clsRenderPipeline);
-            mBindTexture = clsRenderPass.getMethod("bindTexture", String.class, clsGpuTextureView, clsGpuSampler);
-            mSetUniformSlice = clsRenderPass.getMethod("setUniform", String.class, clsGpuBufferSlice);
-            mSetVertexBuffer = clsRenderPass.getMethod("setVertexBuffer", int.class, clsGpuBuffer);
-            mDraw = clsRenderPass.getMethod("draw", int.class, int.class);
-            mClosePass = clsRenderPass.getMethod("close");
-            // DIAGNOSTIC (26.1+, tout le reste — pipeline/format/coords/couleur —
-            // vérifié sain sans expliquer l'invisibilité totale) : RenderPass
-            // expose désormais enableScissor(IIII)/disableScissor() (absents de
-            // l'ancien bracket) — si le scissor par défaut d'une passe fraîche
-            // n'est plus "plein cadre" sur ce backend, tout serait découpé à
-            // zéro sans la moindre exception. Appelé explicitement (optionnel :
-            // null si absent, degrade proprement) juste après setPipeline.
-            try {
-                mDisableScissor = clsRenderPass.getMethod("disableScissor");
-            } catch (NoSuchMethodException noScissorApi) {
-                mDisableScissor = null;
-            }
-
-            // BUG TROUVÉ (texte invisible malgré draw() qui "réussit" sans
-            // exception) : RenderPipelines.GUI_TEXT utilise le mode
-            // VertexFormat.DrawMode.QUADS (vérifié par désassemblage,
-            // VertexFormats.POSITION_COLOR_TEXTURE_LIGHT + mode "h"=QUADS) —
-            // RenderPass.draw(int,int) (non indexé) ne fait PAS la conversion
-            // QUADS→triangles automatiquement ; il faut passer par
-            // drawIndexed() avec un buffer d'indices de triangulation, fourni
-            // par l'utilitaire PARTAGÉ que Minecraft utilise lui-même pour ça
-            // (RenderSystem.sharedSequentialQuad, champ STATIC PRIVATE — pas
-            // d'accesseur public, d'où la réflexion sur le champ directement).
-            // BUG TROUVÉ (NoSuchMethodException malgré une signature identique
-            // caractère pour caractère à celle désassemblée) : contrairement
-            // aux classes Blaze3D de PREMIER NIVEAU (com.mojang.blaze3d.*,
-            // stables/identiques dans les 3 espaces de noms official/
-            // intermediary/named — jamais remappées par Fabric), leurs classes
-            // IMBRIQUÉES (VertexFormat$a, RenderSystem$a...) restent, elles,
-            // remappées comme le reste du jeu obfusqué : confirmé par
-            // introspection directe (getMethods() sur RenderPass réellement
-            // chargé) que le VRAI paramètre runtime est nommé
-            // "VertexFormat$class_5595" (intermediary), PAS "VertexFormat$a"
-            // (official) — le classloader n'était PAS le problème (déjà
-            // KnotClassLoader des deux côtés), c'était le NOM utilisé qui
-            // était faux sous Fabric. Fix : passer par
-            // MappingsRegistry.runtimeClass() (même mécanisme official→
-            // runtime déjà utilisé PARTOUT ailleurs dans ce projet pour les
-            // classes net.minecraft.* obfusquées) au lieu de supposer ces
-            // classes imbriquées stables comme leurs classes conteneuses.
-            // Champ déclaré directement sur RenderSystem (classe de PREMIER
-            // NIVEAU, stable/inchangée dans les 3 espaces de noms — voir
-            // commentaire ci-dessus) : nom littéral direct, pas de remapping
-            // nécessaire ici (contrairement aux classes imbriquées).
-            fieldSharedSequentialQuad = clsRenderSystem.getDeclaredField("sharedSequentialQuad");
-            fieldSharedSequentialQuad.setAccessible(true);
-
-            Class<?> clsShapeIndexBuffer;
-            Class<?> clsIndexType;
-            if (MappingsRegistry.isLoaded()) {
-                // Mêmes méthodes que désassemblées ("b(int)"/"a()", noms OFFICIELS
-                // bruts) — mais ce sont des méthodes DÉCLARÉES SUR une classe
-                // imbriquée elle-même remappée : leurs noms le sont probablement
-                // AUSSI sous Fabric (pas juste le nom de la classe conteneuse).
-                // Résolus via runtimeMethod() (official→runtime), même mécanisme
-                // que runtimeClass() ci-dessus.
-                clsShapeIndexBuffer = Class.forName(
-                    MappingsRegistry.runtimeClass("com/mojang/blaze3d/systems/RenderSystem$a"), false, clsRenderPass.getClassLoader());
-                String getBufferRuntime = MappingsRegistry.runtimeMethod(
-                    "com/mojang/blaze3d/systems/RenderSystem$a", "b", "(I)Lcom/mojang/blaze3d/buffers/GpuBuffer;");
-                String getTypeRuntime = MappingsRegistry.runtimeMethod(
-                    "com/mojang/blaze3d/systems/RenderSystem$a", "a", "()Lcom/mojang/blaze3d/vertex/VertexFormat$a;");
-                mShapeIndexBufferGetBuffer = clsShapeIndexBuffer.getMethod(getBufferRuntime, int.class); // getIndexBuffer(int) — assure la capacité et renvoie le GpuBuffer
-                mShapeIndexBufferGetType = clsShapeIndexBuffer.getMethod(getTypeRuntime); // getIndexType() -> VertexFormat.IndexType
-                clsIndexType = Class.forName(
-                    MappingsRegistry.runtimeClass("com/mojang/blaze3d/vertex/VertexFormat$a"), false, clsRenderPass.getClassLoader());
-            } else {
-                // 26.1+ : "RenderSystem$a"/"VertexFormat$a" sont des noms
-                // OBFUSQUÉS 1.21.11, sans aucun sens pour un jeu non obfusqué
-                // (aucune classe de ce nom n'existe). Plutôt que deviner le
-                // VRAI nom de la classe imbriquée (confirmé par javap :
-                // "RenderSystem$AutoStorageIndexBuffer", mais ce nom n'est en
-                // rien garanti stable version à version), on le DÉRIVE
-                // directement du champ déjà résolu ci-dessus par son nom
-                // littéral stable "sharedSequentialQuad" — fonctionne quel
-                // que soit le nom réel de la classe imbriquée, aujourd'hui ET
-                // sur une future version. Méthodes "getBuffer(int)"/"type()"
-                // confirmées par javap (noms réels stables, pas obfusqués).
-                clsShapeIndexBuffer = fieldSharedSequentialQuad.getType();
-                mShapeIndexBufferGetBuffer = clsShapeIndexBuffer.getMethod("getBuffer", int.class);
-                mShapeIndexBufferGetType = clsShapeIndexBuffer.getMethod("type");
-                clsIndexType = mShapeIndexBufferGetType.getReturnType();
-            }
-            mSetIndexBuffer = clsRenderPass.getMethod("setIndexBuffer", clsGpuBuffer, clsIndexType);
-            mDrawIndexed = clsRenderPass.getMethod("drawIndexed", int.class, int.class, int.class, int.class);
-
-            // DynamicUniforms.write(Matrix4fc, Vector4fc, Vector3fc, Matrix4fc) — nom Yarn
-            // "write" (obf "a") — un seul candidat 4-arg, sûr par nom seul ici.
-            for (Method m : clsDynamicUniforms.getMethods()) {
-                if (m.getParameterCount() == 4 && clsGpuBufferSlice.isAssignableFrom(m.getReturnType())) {
-                    mDynamicUniformsWrite = m;
-                    break;
-                }
-            }
-
-            // 26.1+ : Framebuffer.getColorAttachmentView() renommée
-            // getColorTextureView() sur RenderTarget (vérifié par javap sur
-            // le jar client 26.1.2 réel — même méthode, no-arg, retourne
-            // GpuTextureView).
-            mGetColorAttachmentView = MappingsRegistry.isLoaded()
-                ? clsFramebuffer.getMethod(MappingsRegistry.getObfMethodName("net/minecraft/client/gl/Framebuffer", "getColorAttachmentView"))
-                : clsFramebuffer.getMethod("getColorTextureView");
-
-            // Même chemin, déjà éprouvé, que UiRenderer.ensureNativeTextureApiResolved()
-            // (createFontTextureViaNativeImage) — constructeur (Format,int,int,boolean)
-            // et méthode "setColor" (nom Yarn stable, PAS "setColorArgb").
-            ctorNativeImage = clsNativeImage.getDeclaredConstructor(clsNativeImageFormat, int.class, int.class, boolean.class);
-            ctorNativeImage.setAccessible(true);
-            // 26.1+ : NativeImage.setColor(int,int,int) N'EXISTE PLUS (vérifié
-            // par javap — absent de la classe entière) — remplacée par
-            // setPixel(int,int,int) ET setPixelABGR(int,int,int), deux
-            // conventions d'octets différentes. PAS une supposition : le
-            // format ABGR packé construit plus bas
-            // (bufferedImageToNativeImage : "(a<<24)|(b<<16)|(g<<8)|r") est
-            // EXACTEMENT ce que le nom "setPixelABGR" décrit — confirmé par
-            // le nom de la méthode elle-même, pas deviné par élimination.
-            mNativeImageSetColor = MappingsRegistry.isLoaded()
-                ? McReflect.method(clsNativeImage, "net/minecraft/client/texture/NativeImage", "setColor", int.class, int.class, int.class)
-                : clsNativeImage.getMethod("setPixelABGR", int.class, int.class, int.class);
-
-            String rgbaObf = MappingsRegistry.getObfFieldName("net/minecraft/client/texture/NativeImage$Format", "RGBA");
-            java.lang.reflect.Field rgbaField = clsNativeImageFormat.getDeclaredField(rgbaObf);
-            rgbaField.setAccessible(true);
-            fieldNativeImageFormatRgba = rgbaField.get(null);
-
-            fieldFilterModeLinear = clsFilterMode.getField("LINEAR").get(null);
-            fieldTextureFormatRgba8 = clsTextureFormat.getField("RGBA8").get(null);
 
             // Pipeline shader maison (roadmap Phase 5) — REMPLACE
             // RenderPipelines.GUI_TEXT pour le rendu réel, voir
@@ -622,28 +351,28 @@ public final class Blaze3DCore {
             // explicitement (Sampler0/Sampler2/DynamicTransforms/Projection)
             // : exactement les 4 bindings que ce fichier alimente déjà plus
             // bas (mBindTexture/mSetUniformSlice, code inchangé).
-            Object vertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d.vsh");
-            Object fragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d.fsh");
-            homePipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d", vertexId, fragmentId,
-                new String[]{ "Sampler0", "Sampler2" }, new String[]{ "DynamicTransforms", "Projection" });
-            homeShaderSource = ShaderPipelineFactory.shaderSource(vertexId, HOME_VERTEX_SRC, fragmentId, HOME_FRAGMENT_SRC);
+            Object vertexId = gpu.identifier("yuyuframe", "shader/ui_blaze3d.vsh");
+            Object fragmentId = gpu.identifier("yuyuframe", "shader/ui_blaze3d.fsh");
+            homePipeline = gpu.buildPipeline("ui_blaze3d", vertexId, fragmentId,
+                new String[]{ "Sampler0", "Sampler2" }, new String[]{ "DynamicTransforms", "Projection" }, null, null);
+            homeShaderSource = gpu.shaderSource(vertexId, HOME_VERTEX_SRC, fragmentId, HOME_FRAGMENT_SRC);
 
             // Pipeline rect/dégradé-simple à coins arrondis analytiques (voir
             // RECT_VERTEX_SRC/RECT_FRAGMENT_SRC) — remplace homePipeline pour
             // drawRect/drawGradientRect/drawGradientRect2D. Aucun sampler
             // (pas de masque-texture, tout est calculé par pixel).
-            Object rectVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect.vsh");
-            Object rectFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect.fsh");
-            rectPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_rect", rectVertexId, rectFragmentId,
-                new String[0], new String[]{ "DynamicTransforms", "Projection", "RectParams" });
-            rectShaderSource = ShaderPipelineFactory.shaderSource(rectVertexId, RECT_VERTEX_SRC, rectFragmentId, RECT_FRAGMENT_SRC);
+            Object rectVertexId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_rect.vsh");
+            Object rectFragmentId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_rect.fsh");
+            rectPipeline = gpu.buildPipeline("ui_blaze3d_rect", rectVertexId, rectFragmentId,
+                new String[0], new String[]{ "DynamicTransforms", "Projection", "RectParams" }, null, null);
+            rectShaderSource = gpu.shaderSource(rectVertexId, RECT_VERTEX_SRC, rectFragmentId, RECT_FRAGMENT_SRC);
 
             // Pipeline rects BATCHÉS (voir RECT_BATCH_VERTEX_SRC/RECT_BATCH_FRAGMENT_SRC) — roadmap Phase 5.5.
-            Object batchVertexId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect_batch.vsh");
-            Object batchFragmentId = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_blaze3d_rect_batch.fsh");
-            batchPipeline = ShaderPipelineFactory.buildPipeline("ui_blaze3d_rect_batch", batchVertexId, batchFragmentId,
-                new String[0], new String[]{ "DynamicTransforms", "Projection", "BatchParams" });
-            batchShaderSource = ShaderPipelineFactory.shaderSource(batchVertexId, RECT_BATCH_VERTEX_SRC, batchFragmentId, RECT_BATCH_FRAGMENT_SRC);
+            Object batchVertexId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_rect_batch.vsh");
+            Object batchFragmentId = gpu.identifier("yuyuframe", "shader/ui_blaze3d_rect_batch.fsh");
+            batchPipeline = gpu.buildPipeline("ui_blaze3d_rect_batch", batchVertexId, batchFragmentId,
+                new String[0], new String[]{ "DynamicTransforms", "Projection", "BatchParams" }, null, null);
+            batchShaderSource = gpu.shaderSource(batchVertexId, RECT_BATCH_VERTEX_SRC, batchFragmentId, RECT_BATCH_FRAGMENT_SRC);
 
             // Pipeline dégradé multi-stop / texte SDF — construits par
             // Blaze3DGradient/Blaze3DText eux-mêmes (le fichier qui possède
@@ -654,60 +383,10 @@ public final class Blaze3DCore {
             boolean blurPipelineOk = Blaze3DBlur.resolveBlurPipeline();
             boolean blendPipelineOk = Blaze3DBlend.resolveBlendPipeline();
 
-            if (mNativeImageSetColor == null || fieldNativeImageFormatRgba == null || homePipeline == null || rectPipeline == null || batchPipeline == null || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk || !blendPipelineOk
-                    || fieldSharedSequentialQuad == null || mShapeIndexBufferGetBuffer == null
-                    || mShapeIndexBufferGetType == null || mSetIndexBuffer == null || mDrawIndexed == null
-                    || mWriteToTextureMip == null) {
-                throw new NoSuchMethodException("setColor/RGBA/homePipeline/sharedSequentialQuad/writeToTextureMip introuvable (voir logs)");
+            if (homePipeline == null || rectPipeline == null || batchPipeline == null
+                    || !gradientPipelineOk || !textPipelineOk || !blurPipelineOk || !blendPipelineOk) {
+                throw new IllegalStateException("un pipeline maison n'a pas pu être construit (voir logs)");
             }
-
-            // BUG TROUVÉ (premier test v373/v374, IllegalStateException) : notre
-            // texture d'atlas était créée avec USAGE_TEXTURE_BINDING seul —
-            // CommandEncoder.writeToTexture() exige AUSSI USAGE_COPY_DST sur la
-            // texture cible ("Color texture must have USAGE_COPY_DST to be a
-            // destination for a write"). GpuTexture.USAGE_COPY_DST est une
-            // constante DISTINCTE de GpuBuffer.USAGE_COPY_DST (classes
-            // différentes, même nom de champ) — bien résoudre celle de GpuTexture ici.
-            usageTextureBinding = clsGpuTexture.getField("USAGE_TEXTURE_BINDING").getInt(null);
-            usageTextureCopyDst = clsGpuTexture.getField("USAGE_COPY_DST").getInt(null);
-            // Vérifié par javap sur GpuTexture.class (jar client 26.1.2 réel) :
-            // USAGE_RENDER_ATTACHMENT existe bien, et MainTarget.allocateColorAttachment
-            // crée SA PROPRE texture couleur avec usage=15 (COPY_DST|COPY_SRC|
-            // TEXTURE_BINDING|RENDER_ATTACHMENT combinés) — confirme que le
-            // framebuffer principal du jeu est directement échantillonnable
-            // comme Sampler0 (TEXTURE_BINDING inclus), pas besoin d'une copie
-            // préalable pour alimenter la 1ère passe de downsample du flou.
-            usageTextureRenderAttachment = clsGpuTexture.getField("USAGE_RENDER_ATTACHMENT").getInt(null);
-            mCloseTexture = clsGpuTexture.getMethod("close");
-            usageBufferVertex = clsGpuBuffer.getField("USAGE_VERTEX").getInt(null);
-            usageBufferCopyDst = clsGpuBuffer.getField("USAGE_COPY_DST").getInt(null);
-            usageBufferUniform = clsGpuBuffer.getField("USAGE_UNIFORM").getInt(null);
-
-            ctorVector4f = clsVector4f.getConstructor(float.class, float.class, float.class, float.class);
-            ctorVector3f = clsVector3f.getConstructor(float.class, float.class, float.class);
-
-            // BUG SUSPECTÉ (aucune exception nulle part dans TOUTE la chaîne —
-            // texture/buffer/pass/uniforms/draw indexé tous OK, DIAG-PROJ non-
-            // null — mais 0 pixel dessiné, confirmé par capture d'écran) : le
-            // "Projection" repris par bindDefaultUniforms(pass) est celui de
-            // l'état AMBIANT de Minecraft à notre point d'accroche (fin de
-            // frame) — calibré pour SES propres appels (avec un modelView qui
-            // inclut probablement un décalage Z que nous ne reproduisons pas,
-            // nos sommets utilisant systématiquement z=0 avec un modelView
-            // identité). Si le near/far de ce projection ambiant ne couvre pas
-            // z=0 (rien ne garantit qu'il le fasse), nos sommets sont
-            // silencieusement clippés par le GPU — AUCUNE exception Java ne
-            // peut jamais détecter un clipping géométrique, c'est un
-            // comportement GPU normal, pas une erreur. Fix : ne plus dépendre
-            // de cet état ambiant emprunté pour "Projection" — construire NOTRE
-            // PROPRE matrice orthographique 2D (via JOML Matrix4f.setOrtho,
-            // near=-1000/far=1000 SYMÉTRIQUE autour de 0 : garantit
-            // mathématiquement que z=0 → z_ndc=0, toujours dans [-1,1]) et
-            // l'imposer nous-mêmes après bindDefaultUniforms (qui reste utile
-            // pour Fog/Globals/Lighting, non touchés ici).
-            mMatrixSetOrtho = clsMatrix4f.getMethod("setOrtho",
-                float.class, float.class, float.class, float.class, float.class, float.class);
-            mMatrixGetFloatArray = clsMatrix4f.getMethod("get", float[].class);
 
             resolveOk = true;
         } catch (Throwable t) {
@@ -725,13 +404,13 @@ public final class Blaze3DCore {
     }
 
     static Object bufferedImageToNativeImage(BufferedImage img, int w, int h) throws Exception {
-        Object nativeImage = ctorNativeImage.newInstance(fieldNativeImageFormatRgba, w, h, false);
+        Object nativeImage = gpu.newRgbaImage(w, h);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int argb = img.getRGB(x, y);
                 int a = (argb >>> 24) & 0xFF, r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
                 int nativeColor = (a << 24) | (b << 16) | (g << 8) | r;
-                mNativeImageSetColor.invoke(nativeImage, x, y, nativeColor);
+                gpu.setPixelAbgr(nativeImage, x, y, nativeColor);
             }
         }
         return nativeImage;
@@ -767,16 +446,15 @@ public final class Blaze3DCore {
     // Color * blanc = Color`, inchangé, exactement le comportement voulu.
     static Object[] ensureWhiteTexture() throws Exception {
         if (whiteTexture != null) return whiteTexture;
-        Object nativeImage = ctorNativeImage.newInstance(fieldNativeImageFormatRgba, 1, 1, false);
-        mNativeImageSetColor.invoke(nativeImage, 0, 0, 0xFFFFFFFF); // petit-boutiste RGBA — blanc opaque quel que soit l'ordre des octets
-        Object device = mGetDevice.invoke(null);
-        java.util.function.Supplier<String> label = () -> "yuyuframe_text_white1x1";
-        Object texture = mCreateTexture.invoke(device, label, usageTextureBinding | usageTextureCopyDst, fieldTextureFormatRgba8, 1, 1, 1, 1);
-        Object encoder = mCreateCommandEncoder.invoke(device);
-        mWriteToTexture.invoke(encoder, texture, nativeImage);
-        Object textureView = mCreateTextureView.invoke(device, texture);
-        Object sampler = mSamplerCacheGet.invoke(mGetSamplerCache.invoke(null), fieldFilterModeLinear, true);
-        whiteTexture = new Object[]{texture, textureView, sampler};
+        Object nativeImage = gpu.newRgbaImage(1, 1);
+        gpu.setPixelAbgr(nativeImage, 0, 0, 0xFFFFFFFF); // petit-boutiste RGBA — blanc opaque quel que soit l'ordre des octets
+        Object device = gpu.device();
+        Object texture = gpu.createTexture(device, "yuyuframe_text_white1x1",
+            gpu.usageTextureBinding() | gpu.usageTextureCopyDst(), 1, 1, 1);
+        Object encoder = gpu.encoder(device);
+        gpu.uploadImage(encoder, texture, nativeImage);
+        Object textureView = gpu.createTextureView(device, texture);
+        whiteTexture = new Object[]{texture, textureView, gpu.linearSampler()};
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: texture blanche 1x1 (Sampler2) créée");
         return whiteTexture;
     }
@@ -834,28 +512,10 @@ public final class Blaze3DCore {
         return b;
     }
 
-    /**
-     * Matrice identité et vecteur nul PARTAGÉS — ces deux valeurs sont
-     * strictement constantes et ne sont que LUES par {@code
-     * DynamicUniforms.write} (recopiées dans un tampon d'uniformes).
-     *
-     * <p>AUDIT PERF : chaque draw faisait {@code clsMatrix4f.getConstructor()}
-     * — une RECHERCHE réflexive de constructeur, jamais mise en cache (elle
-     * refait un contrôle d'accès et une copie défensive du tableau de
-     * constructeurs à chaque appel) — puis un {@code newInstance}, pour
-     * reconstruire à l'identique un objet qui ne change jamais.
-     */
-    private static Object identity4Cached, zero3Cached;
-
-    static Object identityMatrix4f() throws Exception {
-        if (identity4Cached == null) identity4Cached = clsMatrix4f.getConstructor().newInstance();
-        return identity4Cached;
-    }
-
-    static Object zeroVector3f() throws Exception {
-        if (zero3Cached == null) zero3Cached = ctorVector3f.newInstance(0f, 0f, 0f);
-        return zero3Cached;
-    }
+    // Matrice identité et vecteur nul PARTAGÉS (modelView/offset de
+    // DynamicTransforms, constants) : désormais détenus par l'implémentation
+    // Blaze3DGpu, derrière dynamicTransforms(r,g,b,a) — plus rien à
+    // reconstruire ici à chaque draw.
 
     static ByteBuffer ensureStagingBuffer(int neededBytes) {
         if (stagingBuffer != null && neededBytes <= stagingBufferCapacity) {
@@ -873,14 +533,21 @@ public final class Blaze3DCore {
     static Object ensureVertexBuffer(Object device, int neededBytes) throws Exception {
         if (vertexBuffer != null && neededBytes <= vertexBufferCapacity) return vertexBuffer;
         if (vertexBuffer != null) {
-            try { ((AutoCloseable) vertexBuffer).close(); } catch (Throwable ignored) {}
+            // GpuBuffer est AutoCloseable — simple transtypage, pas de réflexion.
+            // Un échec ici ne doit pas empêcher la recréation du tampon, mais
+            // il est journalisé (jamais avalé en silence).
+            try {
+                ((AutoCloseable) vertexBuffer).close();
+            } catch (Throwable t) {
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D: fermeture de l'ancien buffer de sommets échouée : " + t);
+            }
         }
         // Arrondi généreux (x2 + marge) pour éviter de réallouer à chaque légère
         // variation de longueur de texte — même logique qu'une croissance
         // classique de liste/buffer dynamique (jamais un agrandissement pile-poil).
         long newCapacity = Math.max(4096L, Math.max(neededBytes, vertexBufferCapacity * 2));
-        java.util.function.Supplier<String> label = () -> "yuyuframe_text_vbo";
-        vertexBuffer = mCreateBufferSized.invoke(device, label, usageBufferVertex | usageBufferCopyDst, newCapacity);
+        vertexBuffer = gpu.createBuffer(device, "yuyuframe_text_vbo",
+            gpu.usageBufferVertex() | gpu.usageBufferCopyDst(), newCapacity);
         vertexBufferCapacity = newCapacity;
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: buffer de sommets (re)créé, capacité=" + newCapacity + " octets");
         return vertexBuffer;
@@ -899,10 +566,9 @@ public final class Blaze3DCore {
             return projectionBuffer;
         }
         if (projectionBuffer == null) {
-            java.util.function.Supplier<String> label = () -> "yuyuframe_text_projection";
-            projectionBuffer = mCreateBufferSized.invoke(device, label, usageBufferUniform | usageBufferCopyDst, 64L);
+            projectionBuffer = gpu.createBuffer(device, "yuyuframe_text_projection",
+                gpu.usageBufferUniform() | gpu.usageBufferCopyDst(), 64L);
         }
-        Object ortho = clsMatrix4f.getConstructor().newInstance();
         // BUG TROUVÉ (utilisateur : glisser le module bouge le texte en
         // miroir, même après synchronisation du timing rects/texte — la
         // vraie cause n'était donc PAS le timing) : drawRoundedRect
@@ -916,13 +582,21 @@ public final class Blaze3DCore {
         // bottom=0, top=vpHeight — MÊME convention que le reste du moteur.
         // near=-1000/far=1000 toujours symétrique autour de 0 (évite tout
         // clipping GPU silencieux sur z=0, inchangé).
-        mMatrixSetOrtho.invoke(ortho, 0f, (float) vpWidth, 0f, (float) vpHeight, -1000f, 1000f);
-        float[] cols = (float[]) mMatrixGetFloatArray.invoke(ortho, (Object) new float[16]);
+        //
+        // Écrite À LA MAIN (plus de JOML Matrix4f.setOrtho par réflexion) —
+        // même matrice, colonne par colonne, ordre de Matrix4f.get(float[])
+        // (column-major, ce qu'attend un mat4 std140) :
+        //   m00 = 2/(right-left), m11 = 2/(top-bottom), m22 = 2/(near-far),
+        //   m30 = (right+left)/(left-right) = -1, m31 = -1,
+        //   m32 = (far+near)/(near-far) = 0 (near/far symétriques), m33 = 1.
         ByteBuffer data = scratch(64);
-        for (float v : cols) data.putFloat(v);
+        data.putFloat(2f / vpWidth).putFloat(0f).putFloat(0f).putFloat(0f);
+        data.putFloat(0f).putFloat(2f / vpHeight).putFloat(0f).putFloat(0f);
+        data.putFloat(0f).putFloat(0f).putFloat(2f / (-1000f - 1000f)).putFloat(0f);
+        data.putFloat(-1f).putFloat(-1f).putFloat(0f).putFloat(1f);
         data.flip();
-        Object slice = mBufferSlice.invoke(projectionBuffer, 0L, 64L);
-        mWriteToBuffer.invoke(encoder, slice, data);
+        Object slice = gpu.slice(projectionBuffer, 0L, 64L);
+        gpu.write(encoder, slice, data);
         projectionVpWidth = vpWidth;
         projectionVpHeight = vpHeight;
         LauncherLog.ui(1, "[UiRenderer] UiTextBlaze3D: projection orthographique (re)écrite, " + vpWidth + "x" + vpHeight);
@@ -1022,36 +696,6 @@ public final class Blaze3DCore {
         buf.putShort(light0).putShort(light1);
     }
 
-    static Method mGetFramebuffer;
-    static boolean getFramebufferErrorLogged;
-    static Object getFramebuffer(Object mc) {
-        try {
-            if (mGetFramebuffer == null) {
-                // 26.1+ : MinecraftClient.getFramebuffer() renommée
-                // Minecraft.getMainRenderTarget() (vérifié par javap — voir
-                // aussi GlobalUiRenderBridge261, même correspondance déjà
-                // établie pour le portage des Mixins).
-                String name = MappingsRegistry.isLoaded()
-                    ? MappingsRegistry.getObfMethodName("net/minecraft/client/MinecraftClient", "getFramebuffer")
-                    : "getMainRenderTarget";
-                mGetFramebuffer = mc.getClass().getMethod(name);
-            }
-            return mGetFramebuffer.invoke(mc);
-        } catch (Throwable t) {
-            // BUG TROUVÉ (26.1+) : ce catch avalait l'exception SANS LOGGER,
-            // retournant null silencieusement — drawText/drawRect/drawIcon
-            // font alors juste "if (fb == null) return false;" et abandonnent
-            // sans la moindre trace. Explique un dessin qui "démarre" (log de
-            // géométrie déjà émis) mais n'atteint jamais la moindre commande
-            // GPU, sans exception ni flash visible nulle part.
-            if (!getFramebufferErrorLogged) {
-                getFramebufferErrorLogged = true;
-                Throwable cause = t;
-                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
-                LauncherLog.err("[LauncherAgent] getFramebuffer: échec (mc.getClass()=" + mc.getClass()
-                    + ") : " + t + " | cause réelle : " + cause);
-            }
-            return null;
-        }
-    }
+    // La cible de rendu principale (ex-getFramebuffer + getColorAttachmentView
+    // par réflexion) est rendue directement par gpu.mainColorView().
 }
