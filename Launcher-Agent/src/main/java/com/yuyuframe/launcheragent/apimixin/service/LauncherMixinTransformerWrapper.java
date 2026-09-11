@@ -69,11 +69,18 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         if (!LauncherMixinService.hasGameClassLoader()) return null;
 
         String obfDot = className.replace('/', '.');
-        String yarnNamed = com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry.INSTANCE.unmap(className);
 
         byte[] result;
         try {
-            result = transformer.transformClassBytes(obfDot, yarnNamed.replace('/', '.'), classfileBuffer);
+            // Nom RUNTIME pour les deux arguments (2026-09-11). Mixin associe une
+            // classe à ses mixins par le 2e (transformedName, vérifié javap :
+            // transformClass(env, transformedName, bytes)). Depuis REFMAP_REMAP
+            // (v1052), les cibles @Mixin(targets=…) sont traduites en noms
+            // runtime (class_442) ; on passait encore le nom Yarn
+            // (…screen.TitleScreen) → aucune correspondance, AUCUN mixin tissé
+            // sur les versions obfusquées, sans la moindre erreur. Sans effet
+            // sur 26.1.2 (noms runtime = noms Yarn).
+            result = transformer.transformClassBytes(obfDot, obfDot, classfileBuffer);
         } catch (Throwable t) {
             // ⚠️ NE JAMAIS avaler ça en silence (2026-08-25, §14) : une exception
             // qui sort d'un ClassFileTransformer est SILENCIEUSEMENT ignorée par

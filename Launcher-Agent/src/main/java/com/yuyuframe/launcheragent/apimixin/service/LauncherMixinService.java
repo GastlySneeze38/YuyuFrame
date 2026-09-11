@@ -458,6 +458,8 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/render/Camera", "pitch"),
         RefmapEntry.invoker("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/CameraAccessor1211",
             "net/minecraft/client/render/Camera", "setRotation", "(FF)V"),
+        RefmapEntry.invoker("com/yuyuframe/launcheragent/apimixin/v1_21_11/freelook/EntityInvoker1211",
+            "net/minecraft/entity/Entity", "changeLookDirection", "(DD)V"),
 
         // ── apimixin 1.21.11, lot 4 : reste du catalogue 26.1.2 ────────────
         // HUD (InGameHud) — sélecteurs seulement ; les cibles @At(INVOKE) des

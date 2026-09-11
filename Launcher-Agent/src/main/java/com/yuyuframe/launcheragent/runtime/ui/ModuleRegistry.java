@@ -196,37 +196,40 @@ public final class ModuleRegistry {
     private static final boolean IS_1_21_4 = "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     static {
-        register(new FpsModule());
-        register(new PingModule());
-        register(new CoordsModule());
-        register(new KeystrokesModule());
-        register(new PotionEffectsModule());
-        register(new ArmorDurabilityModule());
-        register(new LowHealthTintModule());
-        if (!IS_1_16) register(new FovModule());
+        // Chaque module passe par safeRegister (2026-09-11) — voir sa javadoc :
+        // un seul module lié à un type absent de la version (ex. SimpleSoundInstance
+        // 26.1.2 sur 1.21.11) tuait tout le bloc static, donc TOUS les modules.
+        safeRegister(() -> new FpsModule());
+        safeRegister(() -> new PingModule());
+        safeRegister(() -> new CoordsModule());
+        safeRegister(() -> new KeystrokesModule());
+        safeRegister(() -> new PotionEffectsModule());
+        safeRegister(() -> new ArmorDurabilityModule());
+        safeRegister(() -> new LowHealthTintModule());
+        if (!IS_1_16) safeRegister(() -> new FovModule());
         // Enregistré JUSTE APRÈS FovModule — tickAll() itère MODULES dans
         // l'ordre d'enregistrement, donc si les deux sont actifs, le zoom
         // s'applique EN DERNIER chaque frame et n'est jamais écrasé par le
         // FOV permanent de FovModule (voir ZoomModule pour le détail).
-        register(new ZoomModule());
+        safeRegister(() -> new ZoomModule());
         // Saturation (équivalent AppleSkin) / Sans Ténèbres / Sans brouillard —
         // aucun équivalent vanilla, aucune restriction 1.8.9 (contrairement aux
         // modules ci-dessous) : enregistrés inconditionnellement, comme Zoom.
         // Chacun dégrade proprement (no-op) sur les brackets où sa mécanique
         // sous-jacente n'existe pas encore (Ténèbres = 1.19+, voir leurs javadoc).
-        register(new SaturationModule());
-        register(new NoDarknessModule());
-        register(new NoFogModule());
+        safeRegister(() -> new SaturationModule());
+        safeRegister(() -> new NoDarknessModule());
+        safeRegister(() -> new NoFogModule());
         // 26.1.2/1.21.11/1.21.4 pour l'instant (voir IS_26_1/IS_1_21_11/
         // IS_1_21_4 plus haut + javadoc de ces 3 modules) — implémentés via
         // des Mixins qui n'existent pas encore pour 1.8.9/1.16.5/1.20.4,
         // contrairement aux 3 modules ci-dessus qui fonctionnent partout via
         // McReflect seul.
         if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
-            register(new NoPumpkinOverlayModule());
+            safeRegister(() -> new NoPumpkinOverlayModule());
         }
         if (IS_26_1 || IS_1_21_11) {
-            register(new ClearVisionModule());
+            safeRegister(() -> new ClearVisionModule());
         }
         // ShulkerPreviewModule SUPPRIMÉ le 2026-08-31 (décision utilisateur :
         // « il y a trop de boulot à faire pour ce qu'un mod peut faire de
@@ -237,30 +240,30 @@ public final class ModuleRegistry {
         // 1.21.4) + rappelle Camera.setRotation (voir sa javadoc) — aucun
         // équivalent 1.8.9/1.16.5/1.20.4 pour l'instant.
         if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
-            register(new FreelookModule());
+            safeRegister(() -> new FreelookModule());
         }
         // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
         // désormais natif en vanilla à partir de ce bracket — carte redondante sinon.
-        if (!IS_1_16) register(new HurtCamModule());
-        if (!IS_1_16) register(new ToggleSprintModule());
-        if (!IS_1_16) register(new ToggleSneakModule());
-        if (!IS_1_16) register(new SwingSpeedModule());
-        if (!IS_1_16) register(new DiagonalSwordModule());
-        if (!IS_1_16) register(new OldItemRotationsModule());
-        if (!IS_1_16) register(new SwingWhileBlockingModule());
-        if (!IS_1_16) register(new OldBowModule());
-        if (!IS_1_16) register(new OldConsumeModule());
+        if (!IS_1_16) safeRegister(() -> new HurtCamModule());
+        if (!IS_1_16) safeRegister(() -> new ToggleSprintModule());
+        if (!IS_1_16) safeRegister(() -> new ToggleSneakModule());
+        if (!IS_1_16) safeRegister(() -> new SwingSpeedModule());
+        if (!IS_1_16) safeRegister(() -> new DiagonalSwordModule());
+        if (!IS_1_16) safeRegister(() -> new OldItemRotationsModule());
+        if (!IS_1_16) safeRegister(() -> new SwingWhileBlockingModule());
+        if (!IS_1_16) safeRegister(() -> new OldBowModule());
+        if (!IS_1_16) safeRegister(() -> new OldConsumeModule());
         // Ajouté à la liste d'exclusion 1.16.5 sur demande explicite de
         // l'utilisateur ("enlève-les TOUS") — initialement laissé de côté
         // lors de l'audit (recrée juste une sensation, pas un vrai portage
         // 1.7), mais reste visuellement groupé sous "Animations 1.7" dans
         // l'UI, donc traité pareil que les 6 autres.
-        if (!IS_1_16) register(new SneakRampModule());
-        register(new CrosshairModule());
-        register(new FullbrightModule());
-        register(new WorldTimeModule());
-        register(new ChatEnhancementsModule());
+        if (!IS_1_16) safeRegister(() -> new SneakRampModule());
+        safeRegister(() -> new CrosshairModule());
+        safeRegister(() -> new FullbrightModule());
+        safeRegister(() -> new WorldTimeModule());
+        safeRegister(() -> new ChatEnhancementsModule());
         // Modules "Optimisations" — leur implémentation réelle vit
         // ENTIÈREMENT dans des Mixins *189 (1.8.9 uniquement, voir
         // mixin/client/v1_8/optimodule et le mémo project-optimodule-fps-status) :
@@ -274,24 +277,24 @@ public final class ModuleRegistry {
         // flag séparé, il n'y a aucune raison que le critère diffère de celui
         // déjà établi pour les autres modules 1.8.9-only.
         if (!IS_1_16) {
-            register(new UnstackedItemsModule());
-            register(new PlayerBackfaceCullingModule());
-            register(new EntityBackfaceCullingModule());
-            register(new LowAnimationTickModule());
-            register(new TileEntityRenderDistanceModule());
-            register(new ChunkBuilderThreadsModule());
-            register(new CachedFancyCloudsModule());
-            register(new LabelRenderDistanceModule());
-            register(new ParticleRenderDistanceModule());
-            register(new BorderlessWindowModule());
+            safeRegister(() -> new UnstackedItemsModule());
+            safeRegister(() -> new PlayerBackfaceCullingModule());
+            safeRegister(() -> new EntityBackfaceCullingModule());
+            safeRegister(() -> new LowAnimationTickModule());
+            safeRegister(() -> new TileEntityRenderDistanceModule());
+            safeRegister(() -> new ChunkBuilderThreadsModule());
+            safeRegister(() -> new CachedFancyCloudsModule());
+            safeRegister(() -> new LabelRenderDistanceModule());
+            safeRegister(() -> new ParticleRenderDistanceModule());
+            safeRegister(() -> new BorderlessWindowModule());
         }
-        register(new MumbleLinkModule());
+        safeRegister(() -> new MumbleLinkModule());
         // Macros + connexion automatique — 26.1.2 seulement : la détection du
         // login lit l'arbre de commandes via des accessors qui n'existent que
         // sur ce bracket, et la lecture de touche par NOM demande le poller
         // moderne (GLFW), absent en 1.8.9.
         if (IS_26_1) {
-            register(new MacroModule());
+            safeRegister(() -> new MacroModule());
         }
 
         // Infra de rendu (pas un module) — voir INFRA_HOOK_POINTS. Émet le HUD
@@ -397,6 +400,35 @@ public final class ModuleRegistry {
         // simplement pas couvert par cette boucle).
         for (ModuleGroup group : GROUPS) {
             HudConfigStore.applyFavoriteTo(group);
+        }
+    }
+
+    /**
+     * Construit ET enregistre un module, en isolant tout échec (2026-09-11).
+     *
+     * <p>Pourquoi : les modules référencent encore des types Mojang 26.1.2
+     * (ex. {@code SimpleSoundInstance} dans {@code ArmorDurabilityModule} /
+     * {@code ChatEnhancementsModule}). Sur une autre version, la JVM ne peut
+     * pas lier la classe du module : {@code new X()} lève
+     * {@code NoClassDefFoundError}. Dans le bloc {@code static}, cette erreur
+     * rendait {@code ModuleRegistry} DÉFINITIVEMENT inutilisable
+     * (« Could not initialize class » à chaque accès) — aucun module, menu
+     * vide, constaté sur Fabric 1.21.11. Probable cause du vieux symptôme
+     * « sur certaines instances l'interface ne se lance pas ».
+     *
+     * <p>⚠️ Lambda EXPLICITE ({@code () -> new X()}), JAMAIS {@code X::new}
+     * (testé en jeu, v1058) : une référence de constructeur est un
+     * {@code invokedynamic} dont la JVM LIE la classe cible dès l'exécution de
+     * la ligne — avant {@code get()}, donc hors du try, et l'erreur tuait
+     * encore tout le bloc static. Dans une lambda, le {@code new} est dans le
+     * corps : la classe n'est initialisée qu'à l'appel, dans le try.
+     */
+    private static void safeRegister(java.util.function.Supplier<LauncherModule> factory) {
+        try {
+            register(factory.get());
+        } catch (Throwable t) {
+            com.yuyuframe.launcheragent.base.log.LauncherLog.err(
+                "[ModuleRegistry] module non chargé sur cette version (les autres continuent) : " + t);
         }
     }
 

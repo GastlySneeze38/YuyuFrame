@@ -249,6 +249,7 @@ public final class MixinHookPointRegistry {
         // Camera/Mouse se chargent avant l'enregistrement de FreelookModule.
         always("1.21.11", "v1_21_11.freelook.CameraAccessor1211");
         always("1.21.11", "v1_21_11.freelook.CameraFreelookMixin1211");
+        always("1.21.11", "v1_21_11.freelook.EntityInvoker1211");
         always("1.21.11", "v1_21_11.freelook.MouseHandlerFreelookMixin1211");
 
         // ── HUD ────────────────────────────────────────────────────────────
