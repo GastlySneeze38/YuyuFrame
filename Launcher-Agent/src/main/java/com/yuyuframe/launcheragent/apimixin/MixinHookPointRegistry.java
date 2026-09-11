@@ -234,9 +234,9 @@ public final class MixinHookPointRegistry {
         // ══════════════════════════════════════════════════════════════════
         // 1.21.11 — MC OBFUSQUÉ : cibles en noms Yarn, méthodes traduites par
         // le refmap (voir LauncherMixinService.REFMAP_ENTRIES). Dégel de la
-        // tranche, étape 1 (2026-09-11) : le noyau seulement.
-        // Encore absents, et c'est prévu : le HUD (HUD_EXTRACT_CHAT, via le
-        // même état de GUI que 26.1.2), le freelook, les accessors.
+        // tranche (2026-09-11). Tout le catalogue 26.1.2 y est, SAUF :
+        // HUD_EXTRACT_CHAT (HUD dans la passe GUI, étape dédiée) et les
+        // accessors d'AccessPoint.
         // ══════════════════════════════════════════════════════════════════
 
         // ── Infrastructure : hub de rendu, écran-titre ─────────────────────
@@ -255,14 +255,72 @@ public final class MixinHookPointRegistry {
         gate("1.21.11", "v1_21_11.hud.HudExtractCrosshairMixin1211", HookPoint.HUD_EXTRACT_CROSSHAIR);
         gate("1.21.11", "v1_21_11.hud.HudExtractEffectsMixin1211", HookPoint.HUD_EXTRACT_EFFECTS);
         gate("1.21.11", "v1_21_11.hud.HudExtractTextureOverlayMixin1211", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+        gate("1.21.11", "v1_21_11.hud.HudExtractCameraOverlayMixin1211", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
+        gate("1.21.11", "v1_21_11.hud.HudExtractSpectatorHotbarMixin1211", HookPoint.HUD_EXTRACT_HOTBAR);
+        gate("1.21.11", "v1_21_11.hud.HudExtractItemHotbarMixin1211", HookPoint.HUD_EXTRACT_ITEM_HOTBAR);
+        gate("1.21.11", "v1_21_11.hud.HudExtractArmorMixin1211", HookPoint.HUD_EXTRACT_ARMOR);
+        gate("1.21.11", "v1_21_11.hud.HudExtractHeartsMixin1211", HookPoint.HUD_EXTRACT_HEARTS);
+        gate("1.21.11", "v1_21_11.hud.HudExtractFoodMixin1211", HookPoint.HUD_EXTRACT_FOOD);
+        gate("1.21.11", "v1_21_11.hud.HudExtractAirBubblesMixin1211", HookPoint.HUD_EXTRACT_AIR_BUBBLES);
+        gate("1.21.11", "v1_21_11.hud.HudExtractVehicleHealthMixin1211", HookPoint.HUD_EXTRACT_VEHICLE_HEALTH);
+        gate("1.21.11", "v1_21_11.hud.HudExtractContextualBarBackgroundMixin1211", HookPoint.HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND);
+        gate("1.21.11", "v1_21_11.hud.HudExtractExperienceLevelMixin1211", HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL);
+        gate("1.21.11", "v1_21_11.hud.HudExtractSelectedItemNameMixin1211", HookPoint.HUD_EXTRACT_SELECTED_ITEM_NAME);
+        gate("1.21.11", "v1_21_11.hud.HudExtractSpectatorActionMixin1211", HookPoint.HUD_EXTRACT_SPECTATOR_ACTION);
+        gate("1.21.11", "v1_21_11.hud.HudExtractBossOverlayMixin1211", HookPoint.HUD_EXTRACT_BOSS_OVERLAY);
+        gate("1.21.11", "v1_21_11.hud.HudExtractSleepOverlayMixin1211", HookPoint.HUD_EXTRACT_SLEEP_OVERLAY);
+        gate("1.21.11", "v1_21_11.hud.HudExtractDemoOverlayMixin1211", HookPoint.HUD_EXTRACT_DEMO_OVERLAY);
+        gate("1.21.11", "v1_21_11.hud.HudExtractScoreboardSidebarMixin1211", HookPoint.HUD_EXTRACT_SCOREBOARD_SIDEBAR);
+        gate("1.21.11", "v1_21_11.hud.HudExtractOverlayMessageMixin1211", HookPoint.HUD_EXTRACT_OVERLAY_MESSAGE);
+        gate("1.21.11", "v1_21_11.hud.HudExtractTitleMixin1211", HookPoint.HUD_EXTRACT_TITLE);
+        gate("1.21.11", "v1_21_11.hud.HudExtractTabListMixin1211", HookPoint.HUD_EXTRACT_TAB_LIST);
+        // HUD_EXTRACT_CHAT volontairement absent : il est déclaré par l'infra
+        // (ModuleRegistry.INFRA_HOOK_POINTS), donc serait tissé, et son handler
+        // (VanillaGuiLayer) attend l'état GUI 26.1.2 — arrive avec le HUD dans
+        // la passe GUI.
 
-        // ── Chat / combat ──────────────────────────────────────────────────
+        // ── Brouillard — contrat neutre, voir FogOverride ──────────────────
+        always("1.21.11", "v1_21_11.fog.FogDataAccessor1211");
+        gate("1.21.11", "v1_21_11.fog.FogSetupAtmosphericMixin1211", HookPoint.FOG_SETUP_ATMOSPHERIC);
+        gate("1.21.11", "v1_21_11.fog.FogSetupWaterMixin1211", HookPoint.FOG_SETUP_WATER);
+        gate("1.21.11", "v1_21_11.fog.FogSetupLavaMixin1211", HookPoint.FOG_SETUP_LAVA);
+        gate("1.21.11", "v1_21_11.fog.FogSetupPowderedSnowMixin1211", HookPoint.FOG_SETUP_POWDERED_SNOW);
+        gate("1.21.11", "v1_21_11.fog.FogSetupBlindnessMixin1211", HookPoint.FOG_SETUP_BLINDNESS);
+        gate("1.21.11", "v1_21_11.fog.FogSetupDarknessMixin1211", HookPoint.FOG_SETUP_DARKNESS);
+
+        // ── Rendu de texte/décorations, toasts, sous-titres ────────────────
+        gate("1.21.11", "v1_21_11.render.ItemDecorationsExtractMixin1211", HookPoint.ITEM_DECORATIONS_EXTRACT);
+        gate("1.21.11", "v1_21_11.render.AdvancementToastExtractMixin1211", HookPoint.ADVANCEMENT_TOAST_EXTRACT);
+        gate("1.21.11", "v1_21_11.render.SubtitleOverlayExtractMixin1211", HookPoint.SUBTITLE_OVERLAY_EXTRACT);
+
+        // ── Monde / frame ──────────────────────────────────────────────────
+        gate("1.21.11", "v1_21_11.level.LevelBlockOutlineExtractMixin1211", HookPoint.LEVEL_BLOCK_OUTLINE_EXTRACT);
+        gate("1.21.11", "v1_21_11.level.LevelExtractMixin1211", HookPoint.LEVEL_EXTRACT);
+        gate("1.21.11", "v1_21_11.level.GuiRenderStateResetMixin1211", HookPoint.GUI_RENDER_STATE_RESET);
+        gate("1.21.11", "v1_21_11.level.GameRenderExtractMixin1211", HookPoint.GAME_RENDER_EXTRACT);
+
+        // ── Écrans / entrées ───────────────────────────────────────────────
+        gate("1.21.11", "v1_21_11.screen.ScreenInitMixin1211", HookPoint.SCREEN_INIT);
+        gate("1.21.11", "v1_21_11.screen.MouseScrollMixin1211", HookPoint.MOUSE_SCROLL);
+        gate("1.21.11", "v1_21_11.screen.KeyboardKeyMixin1211", HookPoint.KEYBOARD_KEY);
+        gate("1.21.11", "v1_21_11.screen.ScreenSetMixin1211", HookPoint.SCREEN_SET);
+        gate("1.21.11", "v1_21_11.screen.ScreenAfterBackgroundExtractMixin1211", HookPoint.CONTAINER_SCREEN_EXTRACT_TOOLTIP);
+
+        // ── Touches ────────────────────────────────────────────────────────
+        gate("1.21.11", "v1_21_11.keybind.KeybindRegisterMixin1211", HookPoint.KEYBIND_REGISTER);
+        gate("1.21.11", "v1_21_11.keybind.KeybindCategoryRegisterMixin1211", HookPoint.KEYBIND_CATEGORY_REGISTER);
+
+        // ── Chat / combat / objets ─────────────────────────────────────────
         gate("1.21.11", "v1_21_11.chat.ChatReceiveMixin1211", HookPoint.CHAT_RECEIVE);
         gate("1.21.11", "v1_21_11.chat.ChatSendMixin1211", HookPoint.CHAT_SEND);
         gate("1.21.11", "v1_21_11.combat.PiercingAttackMixin1211", HookPoint.PIERCING_ATTACK);
+        gate("1.21.11", "v1_21_11.item.ItemTooltipMixin1211", HookPoint.ITEM_TOOLTIP);
 
         // ── Cycle de vie ───────────────────────────────────────────────────
         gate("1.21.11", "v1_21_11.lifecycle.ClientTickMixin1211", HookPoint.CLIENT_TICK);
+        gate("1.21.11", "v1_21_11.lifecycle.EntityLoadMixin1211", HookPoint.ENTITY_LOAD);
+        gate("1.21.11", "v1_21_11.lifecycle.EntityUnloadMixin1211", HookPoint.ENTITY_UNLOAD);
+        gate("1.21.11", "v1_21_11.lifecycle.ClientLevelLoadMixin1211", HookPoint.CLIENT_LEVEL_LOAD);
 
         // ── Horloge — même HookPoint qu'en 26.1.2, sur World.getTimeOfDay ──
         gate("1.21.11", "v1_21_11.clock.ClockTotalTicksMixin1211", HookPoint.CLOCK_TOTAL_TICKS);

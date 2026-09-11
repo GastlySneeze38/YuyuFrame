@@ -134,6 +134,11 @@ public enum HookPoint {
     // ── Brouillard par environnement (pas de mixin Fabric API — bespoke, voir audit
     // ROADMAP-agent.md §3.3 : Fabric API ne couvre aucune des 6 classes FogEnvironment,
     // voir NoFogModule/ClearVisionModule pour les modules qui s'enregistrent ici) ──────
+    //
+    // Contrat commun aux six (2026-09-11) : ctx = null ; un handler qui renvoie
+    // true demande de REPOUSSER le brouillard, et c'est le mixin qui écrit les
+    // distances dans le FogData de sa version (voir FogOverride). Avant, ctx
+    // était le FogData 26.1.2 lui-même — type faux sur toute autre version.
     /** Voir {@code AtmosphericFogEnvironment.setupFog} (Inject TAIL) — brouillard de distance normal. */
     FOG_SETUP_ATMOSPHERIC,
     /** Voir {@code WaterFogEnvironment.setupFog} (Inject TAIL). */

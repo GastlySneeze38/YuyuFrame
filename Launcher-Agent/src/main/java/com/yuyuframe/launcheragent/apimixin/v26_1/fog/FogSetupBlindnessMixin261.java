@@ -18,8 +18,8 @@ public abstract class FogSetupBlindnessMixin261 {
     @Inject(method = "setupFog(Lnet/minecraft/client/renderer/fog/FogData;Lnet/minecraft/client/Camera;Lnet/minecraft/client/multiplayer/ClientLevel;FLnet/minecraft/client/DeltaTracker;)V",
             at = @At("TAIL"), require = 0)
     private void la$dispatchFogSetup(FogData fogData, Camera camera, ClientLevel level, float partialTick, DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (fogData != null) {
-            VanillaHookRegistry.dispatch(HookPoint.FOG_SETUP_BLINDNESS, fogData);
+        if (fogData != null && VanillaHookRegistry.dispatch(HookPoint.FOG_SETUP_BLINDNESS, null)) {
+            FogPush261.pushFar(fogData);
         }
     }
 }

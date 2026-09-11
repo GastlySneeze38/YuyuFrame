@@ -4,7 +4,6 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import net.minecraft.client.renderer.fog.FogData;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
@@ -57,8 +56,6 @@ import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
  */
 public final class NoFogModule extends LauncherModule {
 
-    private static final float FAR = 1_000_000f;
-
     private static boolean errorLogged;
 
     public NoFogModule() {
@@ -76,14 +73,9 @@ public final class NoFogModule extends LauncherModule {
         VanillaHookRegistry.register(HookPoint.FOG_SETUP_DARKNESS, this::pushFogFar);
     }
 
+    /** {@code true} = « repousse le brouillard » ; l'écriture est faite par le mixin (voir {@code FogOverride}). */
     private boolean pushFogFar(Object ctx) {
-        if (!isEnabled() || !(ctx instanceof FogData)) return false;
-        FogData fogData = (FogData) ctx;
-        fogData.environmentalStart = FAR;
-        fogData.environmentalEnd = FAR * 2f;
-        fogData.renderDistanceStart = FAR;
-        fogData.renderDistanceEnd = FAR * 2f;
-        return true;
+        return isEnabled();
     }
 
     @Override

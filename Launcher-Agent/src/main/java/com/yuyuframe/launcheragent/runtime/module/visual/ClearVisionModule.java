@@ -4,7 +4,6 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import net.minecraft.client.renderer.fog.FogData;
 
 /**
  * Équivalent "Clear Water/Lava/Powder Snow" — supprime le brouillard
@@ -28,8 +27,6 @@ import net.minecraft.client.renderer.fog.FogData;
  * 26.1.2 UNIQUEMENT pour l'instant (voir mémoire du portage).
  */
 public final class ClearVisionModule extends LauncherModule {
-
-    private static final float FAR = 1_000_000f;
 
     // Réglages ajoutés explicitement à la demande — activer/désactiver
     // CHAQUE liquide indépendamment (avant : tout ou rien via le seul
@@ -69,14 +66,9 @@ public final class ClearVisionModule extends LauncherModule {
         VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY, this::cancelPowderSnowOverlay);
     }
 
+    /** {@code true} = « repousse le brouillard » ; l'écriture est faite par le mixin (voir {@code FogOverride}). */
     private boolean pushFogFarIf(boolean flag, Object ctx) {
-        if (!isEnabled() || !flag || !(ctx instanceof FogData)) return false;
-        FogData fogData = (FogData) ctx;
-        fogData.environmentalStart = FAR;
-        fogData.environmentalEnd = FAR * 2f;
-        fogData.renderDistanceStart = FAR;
-        fogData.renderDistanceEnd = FAR * 2f;
-        return true;
+        return isEnabled() && flag;
     }
 
     /** {@code ctx} = chemin de texture ({@code String}) — voir {@link HookPoint#HUD_EXTRACT_TEXTURE_OVERLAY}. */
