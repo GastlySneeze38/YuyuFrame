@@ -25,7 +25,6 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.food.FoodData;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 
@@ -170,12 +169,13 @@ public final class SaturationModule extends LauncherModule {
         try {
             LocalPlayer player = PlayerData.player();
             if (player == null) return;
-            if (player.isPassenger() || player.isFallFlying() || player.isInWater()) return;
+            boolean[] flags = PlayerData.movementFlags();
+            if (flags[PlayerData.FLAG_PASSENGER] || flags[PlayerData.FLAG_GLIDING]
+                || flags[PlayerData.FLAG_IN_WATER]) return;
 
-            FoodData foodData = player.getFoodData();
-            Object foodLevelValue = AccessorRegistry.get(AccessPoint.FOOD_LEVEL, foodData);
-            if (!(foodLevelValue instanceof Number)) return;
-            if (((Number) foodLevelValue).intValue() < LUNGE_MIN_FOOD) return;
+            float[] food = PlayerData.food();
+            if (food == null) return;
+            if (food[PlayerData.FOOD_LEVEL] < LUNGE_MIN_FOOD) return;
 
             int level = lungeLevel(player.getItemInHand(InteractionHand.MAIN_HAND));
             if (level <= 0) return;
@@ -294,14 +294,12 @@ public final class SaturationModule extends LauncherModule {
         // dépendrait du nombre d'images par seconde.
         if (!estimateSaturation) return;
         try {
-            LocalPlayer player = PlayerData.player();
-            if (player == null) return;
-            FoodData foodData = player.getFoodData();
-            if (!(AccessorRegistry.get(AccessPoint.FOOD_LEVEL, foodData) instanceof Number)) return;
-            estimator.tick(player,
-                AccessorRegistry.getInt(AccessPoint.FOOD_LEVEL, foodData, 0),
-                AccessorRegistry.getFloat(AccessPoint.FOOD_SATURATION, foodData, 0f),
-                AccessorRegistry.getFloat(AccessPoint.FOOD_EXHAUSTION, foodData, 0f));
+            float[] food = PlayerData.food();
+            if (food == null) return;
+            estimator.tick(PlayerData.movementFlags(),
+                (int) food[PlayerData.FOOD_LEVEL],
+                food[PlayerData.FOOD_SATURATION],
+                food[PlayerData.FOOD_EXHAUSTION]);
         } catch (Throwable t) {
             if (!tickErrorLogged) {
                 tickErrorLogged = true;
@@ -371,7 +369,13 @@ public final class SaturationModule extends LauncherModule {
 
         float saturation() { return saturation; }
 
-        void tick(LocalPlayer player, int serverFood, float serverSaturation, float serverExhaustion) {
+        /**
+         * @param flags drapeaux de déplacement du joueur, tels que les rend
+         *              {@link PlayerData#movementFlags()} — passés en paramètre
+         *              et non relus ici pour que l'estimateur voie EXACTEMENT
+         *              l'état du tick que l'appelant a observé.
+         */
+        void tick(boolean[] flags, int serverFood, float serverSaturation, float serverExhaustion) {
             // ── 1. Recalage ───────────────────────────────────────────────
             // Comparaison EXACTE et non à epsilon près : ces deux valeurs ne
             // changent côté client que par désérialisation d'un paquet, jamais
@@ -384,9 +388,10 @@ public final class SaturationModule extends LauncherModule {
                 exhaustion = serverExhaustion;
             }
 
-            double x = player.getX(), y = player.getY(), z = player.getZ();
-            float health = player.getHealth();
-            boolean onGround = player.onGround();
+            double[] pos = PlayerData.position();
+            double x = pos[0], y = pos[1], z = pos[2];
+            float health = PlayerData.health();
+            boolean onGround = flags[PlayerData.FLAG_ON_GROUND];
 
             if (hasPosition) {
                 // ── 2. Accumulation ───────────────────────────────────────
@@ -394,12 +399,12 @@ public final class SaturationModule extends LauncherModule {
 
                 // En monture, c'est elle qui se déplace : le joueur ne dépense
                 // rien, alors que la distance parcourue, elle, est bien réelle.
-                if (!player.isPassenger()) {
-                    exhaustion += movementExhaustion(player, dx, dy, dz);
+                if (!flags[PlayerData.FLAG_PASSENGER]) {
+                    exhaustion += movementExhaustion(flags, dx, dy, dz);
                     // Saut : quitter le sol en montant. Le test sur dy évite de
                     // compter une chute ou un pas dans le vide comme un saut.
                     if (wasOnGround && !onGround && dy > 0.0) {
-                        exhaustion += player.isSprinting() ? SPRINT_JUMP : JUMP;
+                        exhaustion += flags[PlayerData.FLAG_SPRINTING] ? SPRINT_JUMP : JUMP;
                     }
                 }
 
@@ -446,14 +451,14 @@ public final class SaturationModule extends LauncherModule {
             exhaustion += amount;
         }
 
-        private float movementExhaustion(LocalPlayer player, double dx, double dy, double dz) {
-            if (player.isSwimming()) {
+        private float movementExhaustion(boolean[] flags, double dx, double dy, double dz) {
+            if (flags[PlayerData.FLAG_SWIMMING]) {
                 double d = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 return (float) (d * SWIM_PER_BLOCK);
             }
             double horizontal = Math.sqrt(dx * dx + dz * dz);
-            if (player.isInWater()) return (float) (horizontal * SWIM_PER_BLOCK);
-            if (player.isSprinting()) return (float) (horizontal * SPRINT_PER_BLOCK);
+            if (flags[PlayerData.FLAG_IN_WATER]) return (float) (horizontal * SWIM_PER_BLOCK);
+            if (flags[PlayerData.FLAG_SPRINTING]) return (float) (horizontal * SPRINT_PER_BLOCK);
             return 0f;
         }
     }
@@ -485,31 +490,25 @@ public final class SaturationModule extends LauncherModule {
             if (player == null) { reportOnce("joueur null"); return; }
             // Ni faim ni vie affichées dans ces modes : nos overlays se
             // dessineraient dans le vide, sous la hotbar.
-            if (player.isCreative()) { reportOnce("mode créatif — barres vanilla absentes"); return; }
-            if (player.isSpectator()) { reportOnce("mode spectateur — barres vanilla absentes"); return; }
+            boolean[] mode = PlayerData.modeFlags();
+            if (mode[PlayerData.MODE_CREATIVE]) { reportOnce("mode créatif — barres vanilla absentes"); return; }
+            if (mode[PlayerData.MODE_SPECTATOR]) { reportOnce("mode spectateur — barres vanilla absentes"); return; }
 
-            FoodData foodData = player.getFoodData();
-            if (foodData == null) { reportOnce("getFoodData() null"); return; }
-            // La VALEUR, pas isBound() : un accès déclaré par la tranche peut
+            // null et NON des zéros : un accès déclaré par la tranche peut
             // rester sans réponse si son accessor n'a pas été tissé, et
-            // afficher des barres à 0 serait pire que ne rien afficher.
-            Object foodLevelValue = AccessorRegistry.get(AccessPoint.FOOD_LEVEL, foodData);
-            if (!(foodLevelValue instanceof Number)) {
-                // Le cas le plus probable d'un « rien ne s'affiche » muet :
-                // l'accès n'a pas répondu (pas de liaison pour cette version,
-                // ou accessor non tissé). Sans ce log, indiscernable d'un
-                // problème de coordonnées.
-                reportOnce("FOOD_LEVEL sans réponse — reçu " + foodData.getClass().getName());
-                return;
-            }
+            // afficher des barres à 0 serait pire que ne rien afficher. C'est
+            // le cas le plus probable d'un « rien ne s'affiche » muet — sans ce
+            // log, indiscernable d'un problème de coordonnées.
+            float[] food = PlayerData.food();
+            if (food == null) { reportOnce("PLAYER_FOOD sans réponse"); return; }
 
-            int foodLevel = ((Number) foodLevelValue).intValue();
+            int foodLevel = (int) food[PlayerData.FOOD_LEVEL];
             // L'ESTIMATION, pas la valeur brute — voir Estimator. Elle vaut
             // exactement la valeur serveur au moment où celui-ci parle, et
             // continue de descendre entre deux paquets.
             float saturation = estimateSaturation ? estimator.saturation()
-                : AccessorRegistry.getFloat(AccessPoint.FOOD_SATURATION, foodData, 0f);
-            float exhaustion = AccessorRegistry.getFloat(AccessPoint.FOOD_EXHAUSTION, foodData, 0f);
+                : food[PlayerData.FOOD_SATURATION];
+            float exhaustion = food[PlayerData.FOOD_EXHAUSTION];
 
             float scale = UiVanillaItemRenderer.guiScale(vpWidth);
             if (scale <= 0f) { reportOnce("échelle GUI invalide: " + scale); return; }

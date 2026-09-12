@@ -39,4 +39,32 @@ public class LivingEntity extends Entity {
     public java.util.Collection getStatusEffects() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /**
+     * Pièce portée à cet emplacement — {@code getItemBySlot(EquipmentSlot)} en
+     * 26.1.2. Déclarée ICI et non sur {@code PlayerEntity} : c'est la classe
+     * déclarante réelle (mappings), et javac écrit le type STATIQUE du receveur
+     * comme propriétaire de l'appel.
+     */
+    public net.minecraft.item.ItemStack getEquippedStack(net.minecraft.entity.EquipmentSlot slot) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Pile tenue dans cette main — {@code getItemInHand(InteractionHand)} en 26.1.2. */
+    public net.minecraft.item.ItemStack getStackInHand(net.minecraft.util.Hand hand) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Main principale (droitier/gaucher) — même nom qu'en 26.1.2, type {@code Arm} au lieu de {@code HumanoidArm}. */
+    public net.minecraft.util.Arm getMainArm() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /**
+     * Vol à l'élytre — {@code isFallFlying()} en 26.1.2. Renommée en
+     * {@code isGliding} sur cette ligne de versions.
+     */
+    public boolean isGliding() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

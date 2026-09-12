@@ -8,7 +8,6 @@ import net.minecraft.client.User;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.client.sounds.SoundManager;
 
 /**
  * Accès PARTAGÉ à l'état du client Minecraft — <b>zéro réflexion</b>.
@@ -23,12 +22,16 @@ import net.minecraft.client.sounds.SoundManager;
  *
  * <p><b>Champs → accessors Mixin, méthodes → appel direct.</b> Un
  * {@code @Accessor} Sponge synthétise un getter de CHAMP au tissage ; il ne
- * s'applique pas à une méthode déjà publique. {@link #soundManager()} et
- * {@link #connection()} appellent donc directement {@code getSoundManager()}/
- * {@code getConnection()} — méthodes publiques au descripteur vérifié par
- * javap sur le jar client 26.1.2 réel (voir le stub {@code Minecraft}). Ce
- * n'est pas de la réflexion, et ça passe quand même par cette classe pour que
- * la surface d'accès reste unique.
+ * s'applique pas à une méthode déjà publique. {@link #connection()} appelle
+ * donc directement {@code getConnection()} — méthode publique au descripteur
+ * vérifié par javap sur le jar client 26.1.2 réel (voir le stub
+ * {@code Minecraft}). Ce n'est pas de la réflexion, et ça passe quand même par
+ * cette classe pour que la surface d'accès reste unique.
+ *
+ * <p>Ce chemin direct a toutefois un COÛT que {@code connection()} paie encore
+ * et que {@link #playUiSound} ne paie plus : il nomme des types 26.1.2 dans sa
+ * signature, donc il ne sert que cette version. Toute méthode d'ici qui doit
+ * fonctionner sur les deux tranches passe par un {@link AccessPoint}.
  *
  * <p><b>Plus aucun accessor n'est nommé ici</b> (2026-09-09) : les lectures
  * passent par {@link AccessorRegistry}, qui route chaque {@link AccessPoint}
@@ -134,17 +137,27 @@ public final class ClientData {
         return AccessorRegistry.getInt(AccessPoint.CLIENT_FPS, null, -1);
     }
 
-    /** Gestionnaire de sons, ou {@code null}. Méthode publique, pas un champ — voir la javadoc de classe. */
-    public static SoundManager soundManager() {
-        Minecraft mc = client();
-        try {
-            return mc == null ? null : mc.getSoundManager();
-        } catch (Throwable t) {
-            return null;
-        }
+    /**
+     * Joue un son d'interface — {@code true} s'il est effectivement parti.
+     *
+     * <p>Remplace l'ancien {@code soundManager()} (retiré le 2026-09-12), qui
+     * rendait le gestionnaire de sons 26.1.2 : chaque appelant devait ensuite
+     * nommer {@code SimpleSoundInstance} et {@code SoundEvents} lui-même, donc
+     * ne tournait que sur cette version. Toute la chaîne est désormais faite
+     * par la liaison de la tranche active.
+     *
+     * @param soundId identifiant de registre, ex.
+     *                {@code "minecraft:block.amethyst_block.chime"} — voir
+     *                {@link AccessPoint#SOUND_PLAY_UI} pour pourquoi une chaîne.
+     * @param pitch   hauteur, 1 = normale.
+     * @param volume  volume, 1 = plein.
+     */
+    public static boolean playUiSound(String soundId, float pitch, float volume) {
+        Object v = AccessorRegistry.invoke(AccessPoint.SOUND_PLAY_UI, null,
+            soundId, Float.valueOf(pitch), Float.valueOf(volume));
+        return v instanceof Boolean && (Boolean) v;
     }
 
-    /** Connexion réseau au serveur, ou {@code null} hors partie. Méthode publique, pas un champ. */
     /**
      * Fenêtre du jeu — {@code null} hors bracket 26.1.2.
      *

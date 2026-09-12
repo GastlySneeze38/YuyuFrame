@@ -158,6 +158,71 @@ public enum AccessPoint {
      * même opération, deux noms, d'où l'intérêt de la nommer ici une seule fois.
      */
     PLAYER_ATTACK_STRENGTH,
+    /**
+     * Équipement complet, rendu en {@code ItemInfo[6]} et dans CET ordre :
+     * tête, torse, jambes, pieds, main principale, main secondaire (voir
+     * {@link ItemInfo}). Jamais {@code null}, jamais de case nulle —
+     * {@link ItemInfo#EMPTY} pour un emplacement vide.
+     *
+     * <p>Les six emplacements d'un coup plutôt qu'un point par pièce : le seul
+     * appelant les veut tous ensemble, une fois par tick, et six allers-retours
+     * coûteraient six recherches de joueur pour une donnée qui ne peut pas
+     * changer entre-temps.
+     *
+     * <p>Piège historique valable sur toute la ligne : l'armure se lisait par
+     * {@code getArmorSlot(int)} avant la refonte « Flattening » (~1.13), depuis
+     * remplacé par {@code getEquippedStack}/{@code getItemBySlot(EquipmentSlot)} ;
+     * et la main est un ARGUMENT ({@code Hand}/{@code InteractionHand}, absent
+     * avant la 1.9), jamais un appel sans paramètre.
+     */
+    PLAYER_EQUIPMENT,
+    /**
+     * Le joueur est-il droitier ? — {@code getMainArm() == RIGHT}.
+     *
+     * <p>Rendu en booléen et non en constante du jeu : {@code HumanoidArm}
+     * (26.1.2) et {@code Arm} (Yarn) sont le même enum sous deux noms, qu'un
+     * appelant neutre ne peut nommer ni l'un ni l'autre.
+     */
+    PLAYER_MAIN_ARM_RIGHT,
+    /**
+     * Drapeaux de déplacement, rendus en {@code boolean[6]} et dans CET ordre :
+     * monté sur une entité, en vol à l'élytre, dans l'eau, en sprint, au sol,
+     * en nage.
+     *
+     * <p>Les quatre d'un coup, pour la même raison que
+     * {@link #PLAYER_EQUIPMENT} : leur seul appelant les lit ensemble, une fois
+     * par tick, pour décider d'une même chose.
+     *
+     * <p>Renommages, tous les quatre différents d'une version à l'autre :
+     * {@code isPassenger}/{@code hasVehicle},
+     * {@code isFallFlying}/{@code isGliding},
+     * {@code isInWater}/{@code isTouchingWater},
+     * {@code onGround}/{@code isOnGround} ; seuls {@code isSprinting} et
+     * {@code isSwimming} sont communs.
+     */
+    PLAYER_MOVEMENT_FLAGS,
+    /**
+     * Mode de jeu, rendu en {@code boolean[2]} : créatif, spectateur.
+     *
+     * <p>Séparé de {@link #PLAYER_MOVEMENT_FLAGS} bien que de même forme : ce
+     * n'est pas la même donnée ni la même fréquence de lecture, et les
+     * regrouper ferait une table fourre-tout dont l'ordre des cases
+     * n'apprendrait plus rien.
+     */
+    PLAYER_MODE_FLAGS,
+    /**
+     * Faim, saturation et épuisement du joueur, rendus en
+     * {@code float[]{niveau, saturation, épuisement}} — {@code null} si
+     * indisponible, ce que l'appelant DOIT distinguer de zéros (un joueur à
+     * jeun et un joueur absent ne se dessinent pas pareil).
+     *
+     * <p>L'objet porteur n'est JAMAIS rendu : {@code FoodData} (26.1.2) et
+     * {@code HungerManager} (Yarn) sont deux types du jeu, et le recevoir
+     * obligerait l'appelant à en nommer un. Les points {@link #FOOD_LEVEL},
+     * {@link #FOOD_SATURATION} et {@link #FOOD_EXHAUSTION}, qui prennent cet
+     * objet en receveur, restent utiles aux liaisons elles-mêmes.
+     */
+    PLAYER_FOOD,
 
     // ── Faim/saturation (net.minecraft.world.food.FoodData) ────────────────
     /** Niveau de faim — champ {@code foodLevel}. */
@@ -189,6 +254,21 @@ public enum AccessPoint {
      * {@link AccessorRegistry#invoke}.
      */
     CHAT_ADD_MESSAGE,
+
+    // ── Sons d'interface (net.minecraft.client.sounds.SoundManager) ────────
+    /**
+     * Joue un son d'interface. Arguments : identifiant de registre
+     * ({@code "minecraft:block.amethyst_block.chime"}), hauteur, volume.
+     *
+     * <p>Le son est désigné par une CHAÎNE, même convention et même raison que
+     * {@link #PLAYER_HAS_EFFECT} : {@code SoundEvents} est une classe du jeu.
+     * La liaison fait toute la chaîne — gestionnaire de sons, construction de
+     * l'instance ({@code SimpleSoundInstance.forUI} en 26.1.2,
+     * {@code PositionedSoundInstance.ui} en Yarn), lecture — pour qu'aucun
+     * appelant n'ait à connaître ces trois noms, qui diffèrent tous les trois
+     * d'une version à l'autre.
+     */
+    SOUND_PLAY_UI,
 
     // ── Brouillard (net.minecraft.client.renderer.fog.FogRenderer) ─────────
     /** Activation globale du brouillard — champ STATIQUE {@code fogEnabled} en écriture (pas de receveur). */

@@ -48,4 +48,33 @@ public class Entity {
     public float getStandingEyeHeight() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Pendant d'{@code isPassenger()} en 26.1.2. */
+    public boolean hasVehicle() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Pendant d'{@code isInWater()} en 26.1.2. */
+    public boolean isTouchingWater() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Seul des quatre drapeaux de déplacement à porter le même nom qu'en 26.1.2. */
+    public boolean isSprinting() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Pendant d'{@code onGround()} en 26.1.2. */
+    public boolean isOnGround() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Nage active (pose horizontale), distincte d'{@link #isTouchingWater()} — même nom qu'en 26.1.2. */
+    public boolean isSwimming() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    public boolean isSpectator() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

@@ -20,4 +20,13 @@ public class PlayerEntity extends LivingEntity {
     public float getAttackCooldownProgress(float partialTick) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Pendant de {@code getFoodData()} en 26.1.2. */
+    public HungerManager getHungerManager() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    public boolean isCreative() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

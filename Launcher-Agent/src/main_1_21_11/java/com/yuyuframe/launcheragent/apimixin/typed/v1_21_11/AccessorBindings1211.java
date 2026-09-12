@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.typed.v1_21_11;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
+import com.yuyuframe.launcheragent.apimixin.ItemInfo;
 import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.HungerManagerAccessor1211;
@@ -16,8 +17,16 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.SimpleOption;
 import net.minecraft.client.session.Session;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.client.sound.SoundManager;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.Arm;
+import net.minecraft.util.Hand;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
@@ -190,6 +199,62 @@ public final class AccessorBindings1211 {
             if (p == null || a.length < 1 || !(a[0] instanceof Number)) return null;
             return Float.valueOf(p.getAttackCooldownProgress(((Number) a[0]).floatValue()));
         });
+        AccessorRegistry.bind(AccessPoint.PLAYER_EQUIPMENT, (r, a) -> {
+            LivingEntity p = player(r);
+            if (p == null) return null;
+            return new ItemInfo[]{
+                item(p.getEquippedStack(EquipmentSlot.HEAD)),
+                item(p.getEquippedStack(EquipmentSlot.CHEST)),
+                item(p.getEquippedStack(EquipmentSlot.LEGS)),
+                item(p.getEquippedStack(EquipmentSlot.FEET)),
+                item(p.getStackInHand(Hand.MAIN_HAND)),
+                item(p.getStackInHand(Hand.OFF_HAND)),
+            };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MOVEMENT_FLAGS, (r, a) -> {
+            // Trois noms sur quatre diffèrent de la 26.1.2 — et le receveur est
+            // typé avec la classe DÉCLARANTE : isGliding est sur LivingEntity,
+            // les trois autres sur Entity (voir le commentaire ci-dessus).
+            LivingEntity p = player(r);
+            if (p == null) return null;
+            Entity e = p;
+            return new boolean[]{ e.hasVehicle(), p.isGliding(), e.isTouchingWater(),
+                e.isSprinting(), e.isOnGround(), e.isSwimming() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MODE_FLAGS, (r, a) -> {
+            // isCreative est sur PlayerEntity, isSpectator sur Entity : deux
+            // classes déclarantes, donc deux variables typées différemment.
+            PlayerEntity p = player(r);
+            if (p == null) return null;
+            Entity e = p;
+            return new boolean[]{ p.isCreative(), e.isSpectator() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_FOOD, (r, a) -> {
+            PlayerEntity p = player(r);
+            HungerManager food = p == null ? null : p.getHungerManager();
+            if (food == null) return null;
+            // L'épuisement est le seul des trois à être privé : accessor Mixin,
+            // comme en 26.1.2 (voir FOOD_EXHAUSTION).
+            float exhaustion = food instanceof HungerManagerAccessor1211
+                ? ((HungerManagerAccessor1211) food).la$exhaustion() : 0f;
+            return new float[]{ food.getFoodLevel(), food.getSaturationLevel(), exhaustion };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MAIN_ARM_RIGHT, (r, a) -> {
+            LivingEntity p = player(r);
+            return p == null ? null : Boolean.valueOf(p.getMainArm() == Arm.RIGHT);
+        });
+
+        // ── Sons d'interface ───────────────────────────────────────────────
+        AccessorRegistry.bind(AccessPoint.SOUND_PLAY_UI, (r, a) -> {
+            if (a.length < 3 || !(a[1] instanceof Number) || !(a[2] instanceof Number)) return null;
+            SoundEvent sound = soundById(a[0]);
+            MinecraftClient c = mc(null);
+            SoundManager manager = c == null ? null : c.getSoundManager();
+            if (sound == null || manager == null) return null;
+            manager.play(PositionedSoundInstance.ui(sound,
+                ((Number) a[1]).floatValue(), ((Number) a[2]).floatValue()));
+            return Boolean.TRUE;
+        });
 
         // ── Types de composants d'item (champs STATIQUES publics) ──────────
         AccessorRegistry.bind(AccessPoint.COMPONENT_TYPE_FOOD, (r, a) -> DataComponentTypes.FOOD);
@@ -226,6 +291,38 @@ public final class AccessorBindings1211 {
             }
             return null;
         }
+    }
+
+    /**
+     * Pile du jeu → porteur neutre, {@link ItemInfo#EMPTY} pour une case vide.
+     *
+     * <p>Renommages de CETTE version : {@code isDamageable()} (et non
+     * {@code isDamageableItem()}), {@code getDamage()} (et non
+     * {@code getDamageValue()}) ; {@code getMaxDamage()} et {@code getCount()}
+     * sont communs aux deux.
+     */
+    private static ItemInfo item(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return ItemInfo.EMPTY;
+        boolean damageable = stack.isDamageable();
+        return new ItemInfo(stack, false, stack.getCount(), damageable,
+            damageable ? stack.getDamage() : 0,
+            damageable ? stack.getMaxDamage() : 0);
+    }
+
+    /**
+     * Identifiant de registre → constante de son de CETTE version.
+     *
+     * <p>Même table explicite qu'en 26.1.2, avec un piège propre à Yarn : ses
+     * champs portent la catégorie de registre en préfixe
+     * ({@code BLOCK_AMETHYST_BLOCK_CHIME}) là où 26.1.2 l'omet
+     * ({@code AMETHYST_BLOCK_CHIME}). Deviner l'un depuis l'autre ne marche
+     * pas — chaque nom est vérifié dans les mappings.
+     */
+    private static SoundEvent soundById(Object id) {
+        if (!(id instanceof String)) return null;
+        if ("minecraft:block.amethyst_block.chime".equals(id)) return SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME;
+        if ("minecraft:entity.experience_orb.pickup".equals(id)) return SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP;
+        return null;
     }
 
     /**

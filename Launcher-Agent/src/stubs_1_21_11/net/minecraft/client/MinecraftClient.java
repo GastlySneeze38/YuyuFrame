@@ -62,4 +62,9 @@ public class MinecraftClient {
     public ResourceManager getResourceManager() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Même nom qu'en 26.1.2 — seul le type rendu change ({@code net.minecraft.client.sound} au lieu de {@code net.minecraft.client.sounds}). */
+    public net.minecraft.client.sound.SoundManager getSoundManager() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

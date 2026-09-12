@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
+import com.yuyuframe.launcheragent.apimixin.ItemInfo;
 import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
@@ -10,6 +11,14 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.sounds.SoundManager;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
@@ -157,6 +166,53 @@ public final class AccessorBindings261 {
             if (p == null || a.length < 1 || !(a[0] instanceof Number)) return null;
             return Float.valueOf(p.getAttackStrengthScale(((Number) a[0]).floatValue()));
         });
+        AccessorRegistry.bind(AccessPoint.PLAYER_EQUIPMENT, (r, a) -> {
+            LocalPlayer p = player(r);
+            if (p == null) return null;
+            return new ItemInfo[]{
+                item(p.getItemBySlot(EquipmentSlot.HEAD)),
+                item(p.getItemBySlot(EquipmentSlot.CHEST)),
+                item(p.getItemBySlot(EquipmentSlot.LEGS)),
+                item(p.getItemBySlot(EquipmentSlot.FEET)),
+                item(p.getItemInHand(InteractionHand.MAIN_HAND)),
+                item(p.getItemInHand(InteractionHand.OFF_HAND)),
+            };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MOVEMENT_FLAGS, (r, a) -> {
+            LocalPlayer p = player(r);
+            if (p == null) return null;
+            return new boolean[]{ p.isPassenger(), p.isFallFlying(), p.isInWater(),
+                p.isSprinting(), p.onGround(), p.isSwimming() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MODE_FLAGS, (r, a) -> {
+            LocalPlayer p = player(r);
+            return p == null ? null : new boolean[]{ p.isCreative(), p.isSpectator() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_FOOD, (r, a) -> {
+            LocalPlayer p = player(r);
+            Object food = p == null ? null : p.getFoodData();
+            if (!(food instanceof FoodDataAccessor261)) return null;
+            FoodDataAccessor261 f = (FoodDataAccessor261) food;
+            return new float[]{ f.la$foodLevel(), f.la$saturationLevel(), f.la$exhaustionLevel() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MAIN_ARM_RIGHT, (r, a) -> {
+            LocalPlayer p = player(r);
+            // "HumanoidArm" est le VRAI nom 26.1.2 de ce que Yarn appelle "Arm"
+            // (confirmé par désassemblage de Gui.extractItemHotbar).
+            return p == null ? null : Boolean.valueOf(p.getMainArm() == HumanoidArm.RIGHT);
+        });
+
+        // ── Sons d'interface ───────────────────────────────────────────────
+        AccessorRegistry.bind(AccessPoint.SOUND_PLAY_UI, (r, a) -> {
+            if (a.length < 3 || !(a[1] instanceof Number) || !(a[2] instanceof Number)) return null;
+            SoundEvent sound = soundById(a[0]);
+            Minecraft c = client();
+            SoundManager manager = c == null ? null : c.getSoundManager();
+            if (sound == null || manager == null) return null;
+            manager.play(SimpleSoundInstance.forUI(sound,
+                ((Number) a[1]).floatValue(), ((Number) a[2]).floatValue()));
+            return Boolean.TRUE;
+        });
 
         // ── Faim/saturation ────────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.FOOD_LEVEL, (r, a) ->
@@ -224,6 +280,38 @@ public final class AccessorBindings261 {
             }
             return null;
         }
+    }
+
+    /**
+     * Pile du jeu → porteur neutre, {@link ItemInfo#EMPTY} pour une case vide.
+     *
+     * <p>Renommages 26.1.2 à connaître pour un portage :
+     * {@code isDamageable}→{@code isDamageableItem},
+     * {@code getDamage}→{@code getDamageValue} ({@code getMaxDamage} et
+     * {@code getCount} inchangés).
+     */
+    private static ItemInfo item(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return ItemInfo.EMPTY;
+        boolean damageable = stack.isDamageableItem();
+        return new ItemInfo(stack, false, stack.getCount(), damageable,
+            damageable ? stack.getDamageValue() : 0,
+            damageable ? stack.getMaxDamage() : 0);
+    }
+
+    /**
+     * Identifiant de registre → constante de son de CETTE version.
+     *
+     * <p>Même table explicite que {@link #effectById} : on ne sert que des sons
+     * dont le nom a été vérifié, et ajouter un son demande une ligne des DEUX
+     * côtés. {@code SoundEvents} range d'ailleurs une partie de ses entrées en
+     * {@code Holder$Reference} plutôt qu'en {@code SoundEvent} — raison de plus
+     * pour vérifier chacune plutôt que de les résoudre à l'aveugle.
+     */
+    private static SoundEvent soundById(Object id) {
+        if (!(id instanceof String)) return null;
+        if ("minecraft:block.amethyst_block.chime".equals(id)) return SoundEvents.AMETHYST_BLOCK_CHIME;
+        if ("minecraft:entity.experience_orb.pickup".equals(id)) return SoundEvents.EXPERIENCE_ORB_PICKUP;
+        return null;
     }
 
     /**

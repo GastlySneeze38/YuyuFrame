@@ -167,6 +167,112 @@ public final class PlayerData {
             : java.util.Collections.emptyList();
     }
 
+    /**
+     * Équipement complet, en données neutres — six cases dans l'ordre tête,
+     * torse, jambes, pieds, main principale, main secondaire.
+     *
+     * <p>Jamais {@code null} et jamais de case nulle : hors partie ou sur une
+     * version non liée, six {@link com.yuyuframe.launcheragent.apimixin.ItemInfo#EMPTY}.
+     * L'appelant peut donc indexer sans test.
+     */
+    public static com.yuyuframe.launcheragent.apimixin.ItemInfo[] equipment() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_EQUIPMENT, null);
+        if (v instanceof com.yuyuframe.launcheragent.apimixin.ItemInfo[]) {
+            com.yuyuframe.launcheragent.apimixin.ItemInfo[] slots =
+                (com.yuyuframe.launcheragent.apimixin.ItemInfo[]) v;
+            if (slots.length == EQUIPMENT_SLOTS) return slots;
+        }
+        com.yuyuframe.launcheragent.apimixin.ItemInfo[] empty =
+            new com.yuyuframe.launcheragent.apimixin.ItemInfo[EQUIPMENT_SLOTS];
+        java.util.Arrays.fill(empty, com.yuyuframe.launcheragent.apimixin.ItemInfo.EMPTY);
+        return empty;
+    }
+
+    /** Nombre de cases rendues par {@link #equipment()} — voir {@link AccessPoint#PLAYER_EQUIPMENT} pour leur ordre. */
+    public static final int EQUIPMENT_SLOTS = 6;
+    /** Index de la case « tête » dans {@link #equipment()}. */
+    public static final int SLOT_HEAD = 0;
+    public static final int SLOT_CHEST = 1;
+    public static final int SLOT_LEGS = 2;
+    public static final int SLOT_FEET = 3;
+    public static final int SLOT_MAIN_HAND = 4;
+    public static final int SLOT_OFF_HAND = 5;
+
+    /**
+     * Le joueur est-il droitier ? {@code true} par défaut hors partie — c'est
+     * le réglage vanilla par défaut, et le seul repli qui ne fasse pas sauter
+     * la mise en page d'un HUD au moment où le joueur n'est pas encore là.
+     */
+    public static boolean mainArmRight() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_MAIN_ARM_RIGHT, null);
+        return !(v instanceof Boolean) || (Boolean) v;
+    }
+
+    /**
+     * Drapeaux de déplacement — quatre {@code false} hors partie.
+     *
+     * <p>Indexer avec {@link #FLAG_PASSENGER} &amp; co, jamais avec des
+     * entiers en dur.
+     */
+    public static boolean[] movementFlags() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_MOVEMENT_FLAGS, null);
+        return v instanceof boolean[] && ((boolean[]) v).length == MOVEMENT_FLAGS
+            ? (boolean[]) v : new boolean[MOVEMENT_FLAGS];
+    }
+
+    /** Nombre de drapeaux rendus par {@link #movementFlags()}. */
+    public static final int MOVEMENT_FLAGS = 6;
+
+    /** Index de {@link #movementFlags()} : le joueur est monté sur une entité. */
+    public static final int FLAG_PASSENGER = 0;
+    /** Index de {@link #movementFlags()} : vol à l'élytre. */
+    public static final int FLAG_GLIDING = 1;
+    /** Index de {@link #movementFlags()} : dans l'eau. */
+    public static final int FLAG_IN_WATER = 2;
+    /** Index de {@link #movementFlags()} : en sprint. */
+    public static final int FLAG_SPRINTING = 3;
+    /** Index de {@link #movementFlags()} : au sol. */
+    public static final int FLAG_ON_GROUND = 4;
+    /** Index de {@link #movementFlags()} : en nage (pose horizontale), distinct de {@link #FLAG_IN_WATER}. */
+    public static final int FLAG_SWIMMING = 5;
+
+    /**
+     * Mode de jeu — {@code {créatif, spectateur}}, deux {@code false} hors
+     * partie (soit « mode survie », le seul repli où nos overlays de barres
+     * ont un sens).
+     */
+    public static boolean[] modeFlags() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_MODE_FLAGS, null);
+        return v instanceof boolean[] && ((boolean[]) v).length == 2
+            ? (boolean[]) v : new boolean[2];
+    }
+
+    /** Index de {@link #modeFlags()} : mode créatif. */
+    public static final int MODE_CREATIVE = 0;
+    /** Index de {@link #modeFlags()} : mode spectateur. */
+    public static final int MODE_SPECTATOR = 1;
+
+    /**
+     * Faim, saturation et épuisement — {@code {niveau, saturation,
+     * épuisement}}, ou {@code null} si indisponible.
+     *
+     * <p>{@code null} et NON des zéros, contrairement au reste de cette
+     * classe : l'appelant ({@code SaturationModule}) estime une valeur au
+     * tick, et prendre un « 0 de faim » pour une lecture réelle ferait diverger
+     * son estimation au lieu de la suspendre.
+     */
+    public static float[] food() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_FOOD, null);
+        return v instanceof float[] && ((float[]) v).length == 3 ? (float[]) v : null;
+    }
+
+    /** Index de {@link #food()} : niveau de faim (0-20). */
+    public static final int FOOD_LEVEL = 0;
+    /** Index de {@link #food()} : saturation. */
+    public static final int FOOD_SATURATION = 1;
+    /** Index de {@link #food()} : épuisement. */
+    public static final int FOOD_EXHAUSTION = 2;
+
     /** Points de vie courants — 0 hors partie. */
     public static float health() {
         return AccessorRegistry.getFloat(AccessPoint.PLAYER_HEALTH, null, 0f);

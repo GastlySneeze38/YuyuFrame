@@ -7,20 +7,13 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.world.item.ItemStack;
+import com.yuyuframe.launcheragent.apimixin.ItemInfo;
 
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.client.sounds.SoundManager;
-import net.minecraft.sounds.SoundEvents;
 
 /**
  * Port de PvP-Mod ArmorDurabilityConfig/ArmorDurabilityHud — sa propre carte,
@@ -178,14 +171,13 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             // elle lirait indéfiniment la dernière armure vue avant le
             // masquage. Un recalcul par tick (20/s) au lieu d'un par frame :
             // moins cher que le chemin de rendu, pas plus.
-            Object[] stacks = RENDERER.computeStacks();
+            ItemInfo[] stacks = RENDERER.computeStacks();
             boolean ring = false;
             for (int i = 0; i < lastDamage.length && i < stacks.length; i++) {
-                if (!(stacks[i] instanceof ItemStack)) { lastDamage[i] = -1; continue; }
-                ItemStack stack = (ItemStack) stacks[i];
-                if (!stack.isDamageableItem()) { lastDamage[i] = -1; continue; }
+                ItemInfo stack = stacks[i];
+                if (stack == null || !stack.damageable) { lastDamage[i] = -1; continue; }
 
-                int damage = stack.getDamageValue();
+                int damage = stack.damage;
                 int previous = lastDamage[i];
                 lastDamage[i] = damage;
                 // Première observation : on mémorise sans sonner, sinon
@@ -204,10 +196,10 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         }
     }
 
-    private boolean isLowDurability(ItemStack stack) {
-        int max = stack.getMaxDamage();
+    private boolean isLowDurability(ItemInfo stack) {
+        int max = stack.maxDamage;
         if (max <= 0) return false;
-        int remaining = max - stack.getDamageValue();
+        int remaining = stack.remaining();
         return (remaining * 100f / max) <= lowDurabilityPercent
             || remaining <= lowDurabilityPoints;
     }
@@ -215,11 +207,13 @@ public final class ArmorDurabilityModule extends SingleHudModule {
     private static boolean alertErrorLogged;
 
     private void playAlert() {
-        SoundManager soundManager = ClientData.soundManager();
-        if (soundManager == null) return;
+        // Carillon net et bref, choisi parce qu'il est directement un
+        // SoundEvent des deux côtés (beaucoup d'entrées de SoundEvents sont
+        // des Holder$Reference, qui demanderaient une autre surcharge).
+        //
         // Volume réduit : une alerte permanente à pleine puissance devient
         // vite pénible en combat, moment où elle se déclenche le plus.
-        soundManager.play(SimpleSoundInstance.forUI(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0f, 0.5f));
+        ClientData.playUiSound("minecraft:block.amethyst_block.chime", 1.0f, 0.5f);
     }
 
     @Override
@@ -265,12 +259,12 @@ public final class ArmorDurabilityModule extends SingleHudModule {
         // javadoc respectives. naturalSize() (premier appel du cycle,
         // TOUJOURS déclenché) rafraîchit ce cache ; hasContent()/draw()
         // réutilisent la MÊME valeur au lieu de recalculer.
-        private Object[] cachedStacks;
+        private ItemInfo[] cachedStacks;
         private long cachedStacksAtMs;
         /** Un tick de jeu — voir naturalSize(). */
         private static final long STACKS_REFRESH_MS = 50L;
 
-        Object[] currentStacks() {
+        ItemInfo[] currentStacks() {
             if (cachedStacks == null) cachedStacks = computeStacks();
             return cachedStacks;
         }
@@ -344,10 +338,10 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          */
         @Override
         public boolean hasContent() {
-            Object[] stacks = currentStacks();
+            ItemInfo[] stacks = currentStacks();
             int count = vanillaStyle ? VANILLA_SLOT_OFFSETS_GUI.length : stacks.length;
             for (int i = 0; i < count && i < stacks.length; i++) {
-                if (stacks[i] != null) return true;
+                if (stacks[i] != null && !stacks[i].empty) return true;
             }
             return false;
         }
@@ -383,9 +377,9 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             return new float[]{ itemW, 5 * ROW_H };
         }
 
-        private float itemWidth(Object[] stacks) {
+        private float itemWidth(ItemInfo[] stacks) {
             float maxTextW = 0f;
-            for (Object stack : stacks) {
+            for (ItemInfo stack : stacks) {
                 // rowText et NON durabilityText : depuis que la taille de pile
                 // s'affiche aussi (2026-08-31), mesurer la seule durabilité
                 // laissait le panneau trop étroit pour un "×64", qui débordait
@@ -411,27 +405,30 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * {@link #currentStacks()} (cache), jamais ailleurs — voir sa
          * javadoc pour le pourquoi.
          */
-        Object[] computeStacks() {
-            // Joueur par l'accessor Mixin (PlayerData) + getItemInHand/
-            // getItemBySlot (méthodes publiques, voir stub LocalPlayer) —
-            // zéro réflexion.
+        ItemInfo[] computeStacks() {
+            // Plus une seule classe du jeu ici (2026-09-12) : les six
+            // emplacements arrivent en ItemInfo par un point d'accès, et ce
+            // module n'en garde que cinq — les quatre pièces d'armure plus LA
+            // main qu'il affiche (réglage « hand »).
             //
-            // Le repli réflexif multi-bracket a été supprimé le 2026-08-27.
-            // À savoir avant tout portage : getStackInHand() n'est PAS no-arg
-            // (il prend un Hand — une recherche no-arg ne le trouve jamais, et
-            // la « première main » restait vide) ; Hand→InteractionHand et
-            // getStackInHand→getItemInHand en 26.1 ; Hand n'existe pas du tout
-            // avant la 1.9 ; l'armure se lisait par getArmorSlot(int) avant
-            // que getEquippedStack/getItemBySlot(EquipmentSlot) ne le remplace.
-            LocalPlayer player = PlayerData.player();
-            if (player == null) return new Object[]{ null, null, null, null, null };
+            // Les pièges de mappings sont désormais absorbés par la liaison de
+            // chaque tranche, mais restent bons à connaître : getStackInHand()
+            // n'est PAS sans argument (il prend un Hand — une recherche sans
+            // argument ne le trouve jamais, et la « première main » restait
+            // vide) ; Hand→InteractionHand et getStackInHand→getItemInHand en
+            // 26.1 ; Hand n'existe pas du tout avant la 1.9 ; l'armure se
+            // lisait par getArmorSlot(int) avant que getEquippedStack/
+            // getItemBySlot(EquipmentSlot) ne le remplace.
             try {
-                Object held = player.getItemInHand(mainHand ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND);
-                Object helmet = player.getItemBySlot(EquipmentSlot.HEAD);
-                Object chest = player.getItemBySlot(EquipmentSlot.CHEST);
-                Object legs = player.getItemBySlot(EquipmentSlot.LEGS);
-                Object boots = player.getItemBySlot(EquipmentSlot.FEET);
-                return new Object[]{ helmet, chest, legs, boots, held };
+                ItemInfo[] slots = PlayerData.equipment();
+                ItemInfo held = slots[mainHand ? PlayerData.SLOT_MAIN_HAND : PlayerData.SLOT_OFF_HAND];
+                return new ItemInfo[]{
+                    slots[PlayerData.SLOT_HEAD],
+                    slots[PlayerData.SLOT_CHEST],
+                    slots[PlayerData.SLOT_LEGS],
+                    slots[PlayerData.SLOT_FEET],
+                    held,
+                };
             } catch (Throwable t) {
                 // Journalisé UNE fois : appelé à chaque frame, un log par
                 // frame noierait la console — mais un échec silencieux ici
@@ -440,16 +437,20 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                     stacksErrorLogged = true;
                     LauncherLog.err("[ArmorDurabilityModule] computeStacks: " + t);
                 }
-                return new Object[]{ null, null, null, null, null };
+                return EMPTY_STACKS;
             }
-
         }
+
+        /** Cinq emplacements vides — partagé, {@link ItemInfo} étant immuable. */
+        private static final ItemInfo[] EMPTY_STACKS = {
+            ItemInfo.EMPTY, ItemInfo.EMPTY, ItemInfo.EMPTY, ItemInfo.EMPTY, ItemInfo.EMPTY
+        };
 
         private static boolean stacksErrorLogged;
 
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
-            Object[] stacks = currentStacks();
+            ItemInfo[] stacks = currentStacks();
 
             if (vanillaStyle) {
                 drawVanillaHotbarRow(renderer, stacks, vpWidth, vpHeight);
@@ -462,7 +463,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
                 float itemW = itemWidth(stacks) * scale, itemGap = ITEM_GAP * scale;
                 float rowY = y + h - icon;
                 float colX = x;
-                for (Object stack : stacks) {
+                for (ItemInfo stack : stacks) {
                     drawRow(renderer, colX, rowY, icon, stack, scale, vpWidth, vpHeight);
                     colX += itemW + itemGap;
                 }
@@ -471,7 +472,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
 
             float rowH = ROW_H * scale;
             float rowY = y + h - icon;
-            for (Object stack : stacks) {
+            for (ItemInfo stack : stacks) {
                 drawRow(renderer, x, rowY, icon, stack, scale, vpWidth, vpHeight);
                 rowY -= rowH;
             }
@@ -488,7 +489,7 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * javadoc de VANILLA_SLOT_OFFSETS_GUI) ; {@code stacks[4]} (held) est
          * donc ignoré ici (boucle bornée par VANILLA_SLOT_OFFSETS_GUI.length).
          */
-        private void drawVanillaHotbarRow(UiRenderer renderer, Object[] stacks, int vpWidth, int vpHeight) {
+        private void drawVanillaHotbarRow(UiRenderer renderer, ItemInfo[] stacks, int vpWidth, int vpHeight) {
             float guiScale = UiRenderer.guiScale(vpWidth);
             float guiWidth = vpWidth / guiScale;
 
@@ -511,11 +512,11 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             float iconBottomFb = (HOTBAR_H_GUI - iconTopGui - VANILLA_ICON_GUI) * guiScale;
 
             for (int i = 0; i < stacks.length && i < VANILLA_SLOT_OFFSETS_GUI.length; i++) {
-                Object stack = stacks[i];
-                if (stack == null) continue;
+                ItemInfo stack = stacks[i];
+                if (stack == null || stack.empty) continue;
                 float iconLeftGui = rowLeftGui + VANILLA_SLOT_OFFSETS_GUI[i] + VANILLA_ICON_OFFSET_X_GUI;
                 float iconLeftFb = iconLeftGui * guiScale;
-                renderer.drawVanillaItemIcon(stack, iconLeftFb, iconBottomFb, VANILLA_ICON_GUI * guiScale, vpWidth, vpHeight, true);
+                renderer.drawVanillaItemIcon(stack.handle, iconLeftFb, iconBottomFb, VANILLA_ICON_GUI * guiScale, vpWidth, vpHeight, true);
             }
         }
 
@@ -535,24 +536,18 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * réellement affichée, pas systématiquement.
          */
         private boolean vanillaOffhandVisibleOnLeft() {
-            // Joueur par l'accessor Mixin — voir computeStacks() pour le
-            // principe et pour l'historique des renommages de mappings.
-            LocalPlayer player = PlayerData.player();
-            if (player == null) return false;
-            try {
-                Object offHandStackObj = player.getItemInHand(InteractionHand.OFF_HAND);
-                if (!(offHandStackObj instanceof ItemStack) || ((ItemStack) offHandStackObj).isEmpty()) return false;
-                // "Arm" (Yarn) == "HumanoidArm" (vrai nom 26.1.2, confirmé par
-                // désassemblage de Gui.extractItemHotbar réel).
-                return player.getMainArm() == HumanoidArm.RIGHT;
-            } catch (Throwable t) {
-                return false;
-            }
+            // Deux points d'accès, aucune classe du jeu : l'enum de la main
+            // principale ("Arm" en Yarn, "HumanoidArm" en 26.1.2) est rendu en
+            // booléen pour cette raison précise.
+            if (PlayerData.equipment()[PlayerData.SLOT_OFF_HAND].empty) return false;
+            return PlayerData.mainArmRight();
         }
 
-        private void drawRow(UiRenderer renderer, float x, float y, float iconSize, Object stack, float scale, int vpWidth, int vpHeight) {
-            if (stack == null) return;
-            renderer.drawVanillaItemIcon(stack, x, y, iconSize, vpWidth, vpHeight);
+        private void drawRow(UiRenderer renderer, float x, float y, float iconSize, ItemInfo stack, float scale, int vpWidth, int vpHeight) {
+            if (stack == null || stack.empty) return;
+            // La POIGNÉE, pas le porteur : le rendu d'icône a besoin de la pile
+            // réelle du jeu (voir ItemInfo.handle).
+            renderer.drawVanillaItemIcon(stack.handle, x, y, iconSize, vpWidth, vpHeight);
             String text = rowText(stack);
             if (text != null) {
                 float textScale = TEXT_SCALE * scale;
@@ -565,24 +560,12 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * thème si le réglage est coupé / si la ligne n'affiche pas une
          * durabilité (taille de pile, voir rowText()).
          */
-        private UiColor rowColor(Object stack) {
-            if (!durabilityColor || !(stack instanceof ItemStack)) return UiTheme.TEXT_PRIMARY;
-            try {
-                ItemStack is = (ItemStack) stack;
-                if (!is.isDamageableItem()) return UiTheme.TEXT_PRIMARY;
-                int max = is.getMaxDamage();
-                if (max <= 0) return UiTheme.TEXT_PRIMARY;
-                return durabilityColor((float) (max - is.getDamageValue()) / max);
-            } catch (Throwable t) {
-                if (!colorErrorLogged) {
-                    colorErrorLogged = true;
-                    LauncherLog.err("[ArmorDurabilityModule] rowColor: " + t);
-                }
+        private UiColor rowColor(ItemInfo stack) {
+            if (!durabilityColor || stack == null || !stack.damageable || stack.maxDamage <= 0) {
                 return UiTheme.TEXT_PRIMARY;
             }
+            return durabilityColor((float) stack.remaining() / stack.maxDamage);
         }
-
-        private static boolean colorErrorLogged;
 
         /**
          * Vert → jaune → rouge selon la durabilité restante — la FORMULE
@@ -624,37 +607,24 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          * <p>Rien pour une pile de 1 : afficher « ×1 » sur chaque objet à
          * l'unité alourdirait le HUD sans rien apprendre.
          */
-        private String rowText(Object stack) {
+        private String rowText(ItemInfo stack) {
             String durability = durabilityText(stack);
             if (durability != null) return durability;
-            if (!(stack instanceof ItemStack)) return null;
-            try {
-                int count = ((ItemStack) stack).getCount();
-                // "×" (U+00D7) et non "x" : dans la plage 160-255 couverte par
-                // UiFont (voir sa javadoc), donc un vrai glyphe et pas le
-                // caractère de repli.
-                return count > 1 ? "×" + count : null;
-            } catch (Throwable t) {
-                return null;
-            }
+            if (stack == null || stack.empty) return null;
+            // "×" (U+00D7) et non "x" : dans la plage 160-255 couverte par
+            // UiFont (voir sa javadoc), donc un vrai glyphe et pas le
+            // caractère de repli.
+            return stack.count > 1 ? "×" + stack.count : null;
         }
 
-        private String durabilityText(Object stack) {
-            if (stack == null) return null;
-            // Méthodes publiques d'ItemStack — zéro réflexion. Repli
-            // multi-bracket supprimé le 2026-08-27 ; renommages 26.1 à
-            // connaître pour un portage : isDamageable→isDamageableItem,
-            // getDamage→getDamageValue (getMaxDamage inchangé).
-            if (!(stack instanceof ItemStack)) return null;
-            try {
-                ItemStack is = (ItemStack) stack;
-                if (!is.isDamageableItem()) return null;
-                int max = is.getMaxDamage();
-                int dmg = is.getDamageValue();
-                return (max - dmg) + "/" + max;
-            } catch (Throwable t) {
-                return null;
-            }
+        private String durabilityText(ItemInfo stack) {
+            // Plus aucune méthode du jeu ici : les trois valeurs viennent du
+            // porteur neutre. Renommages absorbés par les liaisons, à connaître
+            // quand même pour un portage : isDamageable (Yarn) →
+            // isDamageableItem (26.1.2), getDamage → getDamageValue
+            // (getMaxDamage et getCount inchangés).
+            if (stack == null || !stack.damageable || stack.maxDamage <= 0) return null;
+            return stack.remaining() + "/" + stack.maxDamage;
         }
     }
 }

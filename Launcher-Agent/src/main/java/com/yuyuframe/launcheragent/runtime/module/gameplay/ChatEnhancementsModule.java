@@ -14,9 +14,7 @@ import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
-import net.minecraft.sounds.SoundEvents;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -354,17 +352,17 @@ public final class ChatEnhancementsModule extends LauncherModule {
      * "random.orb" (1.8.9) visé à l'origine.
      */
     private void playPingSound() {
-        // SoundManager par ClientData (getSoundManager(), méthode publique) —
-        // zéro réflexion. Le repli réflexif multi-bracket (résolution de
-        // SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, de PositionedSoundInstance
-        // .ui/forUI et de SoundManager.play) a été supprimé le 2026-08-27.
-        // Piège à retenir pour un portage : le paramètre déclaré de play() est
-        // l'INTERFACE SoundInstance, pas la classe concrète renvoyée par
-        // forUI() — une recherche réflexive sur le type de retour échoue.
+        // Toute la chaîne (gestionnaire de sons, instance, lecture) est faite
+        // par la liaison de la tranche active depuis le 2026-09-12 — ce module
+        // ne nomme plus ni SoundEvents ni SimpleSoundInstance, et le ping
+        // fonctionne donc aussi en 1.21.11.
+        //
+        // Volume 0,25 explicite : c'est la valeur que mettait la surcharge à
+        // deux arguments utilisée jusqu'ici (forUI(sound, pitch)), et le point
+        // d'accès, lui, demande les trois. Ne pas la rétablir aurait monté le
+        // ping à plein volume sans que personne ne l'ait demandé.
         try {
-            net.minecraft.client.sounds.SoundManager soundManager = ClientData.soundManager();
-            if (soundManager == null) return;
-            soundManager.play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.0f));
+            ClientData.playUiSound("minecraft:entity.experience_orb.pickup", 1.0f, 0.25f);
         } catch (Throwable t) {
             if (!pingErrorLogged) {
                 pingErrorLogged = true;
