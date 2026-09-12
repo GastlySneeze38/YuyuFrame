@@ -616,6 +616,25 @@ public final class UiVanillaItemRenderer {
     private static boolean slotSpriteResolveFailed = false;
     private static boolean modernItemIconResolveFailed = false;
 
+    /**
+     * Trace ponctuelle de la PREMIÈRE icône mise en file.
+     *
+     * <p>Couplée aux traces de {@code flushIntoGuiState}, elle tranche le seul
+     * doute qui restait sur les icônes d'armure absentes en 1.21.11 : « l'appel
+     * a-t-il lieu ? ». Une ligne ici + « file VIDE » au vidage = l'ajout est
+     * perdu entre les deux ; aucune ligne ici = l'appelant ne dessine pas. Elle
+     * porte aussi l'échelle et les coordonnées GUI calculées, ce qui rend
+     * visible un placement hors écran (le symptôme du repli d'échelle à 1).
+     */
+    private static boolean firstEnqueueReported;
+
+    private static void reportFirstEnqueue(String chemin, float guiScale, int guiX, int guiY) {
+        if (firstEnqueueReported) return;
+        firstEnqueueReported = true;
+        LauncherLog.info("[UiRenderer] itemIconModern: première icône en file (chemin "
+            + chemin + ") — echelleGUI=" + guiScale + " guiX=" + guiX + " guiY=" + guiY);
+    }
+
     // Diagnostics one-shot du vidage d'icônes — voir flushIntoGuiState.
     private static boolean emptyBatchReported, firstBatchReported, resolveFailedReported;
 
@@ -675,6 +694,7 @@ public final class UiVanillaItemRenderer {
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - size) / guiScale);
+            reportFirstEnqueue("differe", guiScale, guiX, guiY);
 
             synchronized (pendingModernItemIcons) {
                 pendingModernItemIcons.add(new PendingItemIcon(itemStack, guiX, guiY, withDurabilityBar));
@@ -744,6 +764,7 @@ public final class UiVanillaItemRenderer {
             float guiScale = guiScale(vpWidth);
             int guiX = Math.round(x / guiScale);
             int guiY = Math.round((vpHeight - y - size) / guiScale);
+            reportFirstEnqueue("immediat", guiScale, guiX, guiY);
 
             synchronized (pendingModernItemIcons) {
                 pendingModernItemIcons.add(new PendingItemIcon(itemStack, guiX, guiY, withDurabilityBar));
@@ -1115,7 +1136,8 @@ public final class UiVanillaItemRenderer {
                 // "drawItem" (Yarn 1.21.11) == "item" (vrai nom Mojang
                 // 26.1.2, confirmé par javap).
                 drawItemMethodModern = findMethodByNameInHierarchy(drawContextClass,
-                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext", "drawItem", "item");
+                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext",
+                    "(Lnet/minecraft/item/ItemStack;II)V", "drawItem", "item");
                 if (drawItemMethodModern == null) {
                     modernItemIconResolveFailed = true;
                     LauncherLog.err("[UiRenderer] itemIconModern: méthode drawItem/item introuvable sur " + drawContextClass);
@@ -1125,7 +1147,8 @@ public final class UiVanillaItemRenderer {
                 // 26.1.2, confirmé par javap) — best-effort, jamais fatal si
                 // introuvable (reste null, barre juste pas dessinée).
                 drawItemBarMethodModern = findMethodByNameInHierarchy(drawContextClass,
-                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext", "drawItemBar", "itemBar");
+                    batch.get(0).itemStack.getClass(), "net/minecraft/client/gui/DrawContext",
+                    "(Lnet/minecraft/item/ItemStack;II)V", "drawItemBar", "itemBar");
 
                 // Fond de case vanilla (voir javadoc du champ) — best-effort,
                 // ne fait jamais échouer la résolution du reste (icône/barre
@@ -1384,10 +1407,29 @@ public final class UiVanillaItemRenderer {
      * ce projet — cette copie locale avait simplement été écrite sans cette
      * étape.
      */
-    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String yarnClass, String... candidateNames) {
+    /**
+     * @param namedDesc descripteur Yarn « named » de la surcharge visée, ex.
+     *     {@code "(Lnet/minecraft/item/ItemStack;II)V"} — ou {@code null} pour
+     *     une résolution par nom seul, acceptable UNIQUEMENT quand le nom est
+     *     unique dans la classe.
+     *
+     *     <p>Il n'est pas optionnel en pratique : {@code DrawContext.drawItem}
+     *     a QUATRE surcharges en 1.21.11, chacune avec un nom d'exécution
+     *     DIFFÉRENT ({@code method_51423/51425/51427/51428}). Résolue par nom
+     *     seul, la table ne peut pas trancher et rend le nom Yarn INCHANGÉ —
+     *     donc introuvable, donc « méthode drawItem/item introuvable », donc
+     *     plus aucune icône d'item de toute la session (le drapeau d'échec est
+     *     définitif). C'est ce qui a fait disparaître les icônes d'armure en
+     *     1.21.11 ; {@code drawItemBar}, lui, n'a qu'une surcharge et
+     *     fonctionnait. Même famille de piège que {@code Text.getString}.
+     */
+    private static Method findMethodByNameInHierarchy(Class<?> owner, Class<?> argType, String yarnClass,
+                                                      String namedDesc, String... candidateNames) {
         for (String name : candidateNames) {
             if (name == null) continue;
-            String runtimeName = MappingsRegistry.getObfMethodName(yarnClass, name);
+            String runtimeName = namedDesc != null
+                ? MappingsRegistry.namedToRuntimeMethod(yarnClass, name, namedDesc, false)
+                : MappingsRegistry.getObfMethodName(yarnClass, name);
             Class<?> c = owner;
             while (c != null) {
                 for (Method m : c.getDeclaredMethods()) {
