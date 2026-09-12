@@ -24,4 +24,34 @@ public final class VertexFormat {
 
         public VertexFormat build() { return null; }
     }
+
+    /**
+     * {@code VertexFormat$Mode} — une {@code enum} en jeu, déclarée ici en
+     * classe à champs « blancs » pour la même raison que les constantes
+     * entières : une valeur écrite dans le stub serait figée à la compilation.
+     * Seul {@code QUADS} nous sert (quads → triangles par le tampon d'indices
+     * séquentiel partagé).
+     */
+    public static final class Mode {
+
+        public static final Mode QUADS;
+
+        static {
+            QUADS = stub();
+        }
+
+        private Mode() {
+        }
+
+        private static Mode stub() {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+    }
+
+    /** {@code VertexFormat$IndexType} — opaque : lu sur le tampon partagé et reposé sur {@code setIndexBuffer}. */
+    public static final class IndexType {
+
+        private IndexType() {
+        }
+    }
 }

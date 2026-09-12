@@ -14,4 +14,11 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
  */
 public abstract class RenderPipelines {
     public static final RenderPipeline GUI_TEXTURED = null;
+
+    /**
+     * Pipeline de TEXTE de la GUI — référence par défaut des pipelines maison
+     * de {@code Blaze3DGpu261} : format de sommet, état couleur et cull en sont
+     * recopiés. Champ public vérifié sur le jar client 26.1.2.
+     */
+    public static final RenderPipeline GUI_TEXT = null;
 }
