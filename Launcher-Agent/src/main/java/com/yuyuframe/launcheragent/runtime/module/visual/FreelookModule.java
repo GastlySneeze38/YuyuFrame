@@ -7,10 +7,9 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.ModuleRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
-import net.minecraft.client.CameraType;
-import net.minecraft.client.Options;
 
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 
 /**
  * Freelook façon OptiFine : maintenir une touche découple la CAMÉRA de la
@@ -161,6 +160,7 @@ public final class FreelookModule extends LauncherModule {
     // singleton enregistrée dans ModuleRegistry, pas besoin de partage
     // inter-Mixin ici (contrairement à active/yawOffset/pitchOffset).
     private boolean wasEngaged;
+    /** Nom NEUTRE du point de vue d'AVANT l'engagement, ou {@code null} si rien n'a été sauvegardé. */
     private Object savedCameraType;
 
     public FreelookModule() {
@@ -345,9 +345,13 @@ public final class FreelookModule extends LauncherModule {
         return module.sensitivityMode == 1 ? module.customSensitivity / 100.0 : gameSensitivity;
     }
 
-    /** @return {@code CameraType.THIRD_PERSON_FRONT} ou {@code THIRD_PERSON_BACK} selon {@link #thirdPersonView} — les deux sont des constantes statiques publiques (vérifiées par javap du vrai jar 26.1.2). */
-    private CameraType targetCameraType() {
-        return thirdPersonView == 1 ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK;
+    /**
+     * Nom NEUTRE du point de vue visé selon {@link #thirdPersonView} — voir
+     * {@code AccessPoint.OPTIONS_PERSPECTIVE} pour pourquoi une chaîne : l'enum
+     * s'appelle {@code CameraType} en 26.1.2 et {@code Perspective} en Yarn.
+     */
+    private String targetPerspective() {
+        return thirdPersonView == 1 ? "third_person_front" : "third_person_back";
     }
 
 
@@ -394,16 +398,16 @@ public final class FreelookModule extends LauncherModule {
      */
     private boolean applyCameraTypeViaAccessor(boolean engaged) {
         try {
-            Options options = ClientData.options();
-            if (options == null) return false;
             if (engaged) {
-                savedCameraType = options.getCameraType();
-                options.setCameraType(targetCameraType());
-            } else if (savedCameraType != null) {
-                options.setCameraType((CameraType) savedCameraType);
-                savedCameraType = null;
+                // Lu AVANT d'écrire : c'est la vue d'origine qu'on restaurera,
+                // même si le joueur en change lui-même pendant le freelook.
+                savedCameraType = GameOptions.perspective();
+                return GameOptions.setPerspective(targetPerspective());
             }
-            return true;
+            if (savedCameraType == null) return true;
+            boolean restored = GameOptions.setPerspective((String) savedCameraType);
+            savedCameraType = null;
+            return restored;
         } catch (Throwable t) {
             return false;
         }
@@ -449,10 +453,7 @@ public final class FreelookModule extends LauncherModule {
     /** Chemin SANS réflexion pour la restauration — voir {@link #applyCameraTypeViaAccessor}, même principe (y compris le try/catch dédié). */
     private boolean restoreCameraTypeViaAccessor() {
         try {
-            Options options = ClientData.options();
-            if (options == null) return false;
-            options.setCameraType((CameraType) savedCameraType);
-            return true;
+            return GameOptions.setPerspective((String) savedCameraType);
         } catch (Throwable t) {
             return false;
         }

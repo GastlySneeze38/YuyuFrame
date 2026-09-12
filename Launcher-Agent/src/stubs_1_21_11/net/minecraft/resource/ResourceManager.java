@@ -9,7 +9,7 @@ package net.minecraft.resource;
  * {@code AccessorBindings1211} et les règles de l'unité dans
  * {@code com.mojang.blaze3d.systems.RenderSystem}.
  */
-public class ResourceManager {
+public class ResourceManager extends ResourceFactory {
 
     private ResourceManager() {
     }

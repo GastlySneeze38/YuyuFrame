@@ -1,16 +1,14 @@
 package com.yuyuframe.launcheragent.runtime.module.gameplay;
 
-import com.mojang.brigadier.CommandDispatcher;
 import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
+import com.yuyuframe.launcheragent.runtime.game.NetworkData;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingModal;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.client.multiplayer.ServerData;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -305,7 +303,7 @@ public final class MacroModule extends LauncherModule {
         // texte (tchat, renommage d'enclume, champ de recherche). Sans cette
         // garde, écrire un message contenant la lettre d'une macro enverrait
         // la commande au milieu de la frappe.
-        if (ClientData.screen() != null) {
+        if (ClientData.screenObject() != null) {
             heldLastTick.clear();
             return;
         }
@@ -347,9 +345,7 @@ public final class MacroModule extends LauncherModule {
                 "com.yuyuframe.launcheragent.runtime.ui.ingameui.UiMacroPickerScreen",
                 true, getClass().getClassLoader());
             Object screen = screenClass.getConstructor(MacroModule.class).newInstance(this);
-            net.minecraft.client.Minecraft client = ClientData.client();
-            if (client == null) return;
-            client.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+            ClientData.setScreen(screen);
         } catch (Throwable t) {
             if (!pickerErrorLogged) {
                 pickerErrorLogged = true;
@@ -372,12 +368,10 @@ public final class MacroModule extends LauncherModule {
      * quand il tape dans le tchat.
      */
     private void run(String text) {
-        ClientPacketListener connection = ClientData.connection();
-        if (connection == null) return;
         String trimmed = text.trim();
         try {
-            if (trimmed.startsWith("/")) connection.sendCommand(trimmed.substring(1));
-            else connection.sendChat(trimmed);
+            if (trimmed.startsWith("/")) NetworkData.sendCommand(trimmed.substring(1));
+            else NetworkData.sendChat(trimmed);
         } catch (Throwable t) {
             if (!runErrorLogged) {
                 runErrorLogged = true;
@@ -403,14 +397,16 @@ public final class MacroModule extends LauncherModule {
 
     private void tickAutoLogin() {
         if (!autoLogin) return;
-        ClientPacketListener connection = ClientData.connection();
+        // Poignée OPAQUE, comparée par identité seulement — voir
+        // AccessPoint.NETWORK_CONNECTION.
+        Object connection = NetworkData.connection();
         if (connection == null) {
             lastAttemptedConnection = null;
             return;
         }
         if (connection == lastAttemptedConnection) return;
 
-        String address = serverAddress(connection);
+        String address = currentServerAddress();
         if (address == null) return;                 // solo, ou serveur pas encore connu
         String password = passwordFor(address);
         if (password == null || password.isEmpty()) {
@@ -421,7 +417,7 @@ public final class MacroModule extends LauncherModule {
             return;
         }
 
-        String command = declaredLoginCommand(connection);
+        String command = declaredLoginCommand();
         if (command == null) {
             reportOnce(address + " ne déclare aucune commande de connexion — rien à envoyer");
             return;
@@ -431,7 +427,7 @@ public final class MacroModule extends LauncherModule {
         // réessayer à chaque tick avec un mot de passe.
         lastAttemptedConnection = connection;
         try {
-            connection.sendCommand(command + " " + password);
+            NetworkData.sendCommand(command + " " + password);
             LauncherLog.info("[MacroModule] connexion automatique envoyée à " + address
                 + " (commande /" + command + ")");
         } catch (Throwable t) {
@@ -444,12 +440,13 @@ public final class MacroModule extends LauncherModule {
      * {@code null} s'il n'en déclare aucune — voir la javadoc de classe pour
      * pourquoi ce signal vaut mieux que la lecture du chat.
      */
-    private String declaredLoginCommand(ClientPacketListener connection) {
+    private String declaredLoginCommand() {
         try {
-            CommandDispatcher<?> commands = connection.getCommands();
-            if (commands == null || commands.getRoot() == null) return null;
+            // La BOUCLE reste ici (c'est notre liste de candidates, donc de la
+            // politique) ; seule l'interrogation de l'arbre part dans la
+            // liaison, qui doit partir de la connexion pour y accéder.
             for (String name : LOGIN_COMMANDS) {
-                if (commands.getRoot().getChild(name) != null) return name;
+                if (NetworkData.hasCommand(name)) return name;
             }
         } catch (Throwable t) {
             if (!commandsErrorLogged) {
@@ -477,8 +474,7 @@ public final class MacroModule extends LauncherModule {
      * {@code null} en solo.
      */
     public static String currentServerAddress() {
-        ClientPacketListener connection = ClientData.connection();
-        return connection == null ? null : serverAddress(connection);
+        return serverAddress();
     }
 
     /**
@@ -486,10 +482,11 @@ public final class MacroModule extends LauncherModule {
      * en listant ses champs) — {@code getCurrentServer()} le dérive de la
      * connexion. On part donc directement de celle-ci, qu'on a déjà en main.
      */
-    private static String serverAddress(ClientPacketListener connection) {
+    private static String serverAddress() {
         try {
-            ServerData server = connection.getServerData();
-            String ip = AccessorRegistry.as(String.class, AccessPoint.SERVER_IP, server);
+            Object[] sources = NetworkData.serverAddressSources();
+            if (sources == null) return null;
+            String ip = sources[0] instanceof String ? (String) sources[0] : null;
             if (ip != null && !ip.isEmpty()) return normalizeAddress(ip);
 
             // BUG TROUVÉ (retour utilisateur 2026-08-31 : « l'auto-login ne
@@ -502,13 +499,9 @@ public final class MacroModule extends LauncherModule {
             // La CONNEXION, elle, existe toujours : c'est par définition ce
             // qui nous relie au serveur. Son adresse distante est donc le
             // repli qui ne peut pas manquer.
-            net.minecraft.network.Connection raw = connection.getConnection();
-            if (raw != null) {
-                java.net.SocketAddress remote = raw.getRemoteAddress();
-                if (remote != null) {
-                    String address = hostOf(remote);
-                    if (address != null && !address.isEmpty()) return normalizeAddress(address);
-                }
+            if (sources[1] instanceof java.net.SocketAddress) {
+                String address = hostOf((java.net.SocketAddress) sources[1]);
+                if (address != null && !address.isEmpty()) return normalizeAddress(address);
             }
             return null;
         } catch (Throwable t) {

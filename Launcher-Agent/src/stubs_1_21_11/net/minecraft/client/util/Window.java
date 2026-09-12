@@ -13,4 +13,14 @@ public class Window {
 
     private Window() {
     }
+
+    /** Largeur en pixels GUI (échelle vanilla appliquée) — {@code getGuiScaledWidth()} en 26.1.2. */
+    public int getScaledWidth() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** Hauteur en pixels GUI — {@code getGuiScaledHeight()} en 26.1.2. */
+    public int getScaledHeight() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

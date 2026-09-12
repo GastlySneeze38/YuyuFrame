@@ -9,7 +9,7 @@ package net.minecraft.item;
  * {@code getDamageValue()} ; {@code getMaxDamage()} et {@code getCount()} sont
  * communs.
  */
-public class ItemStack {
+public class ItemStack extends net.minecraft.component.ComponentsAccess {
 
     protected ItemStack() {
     }

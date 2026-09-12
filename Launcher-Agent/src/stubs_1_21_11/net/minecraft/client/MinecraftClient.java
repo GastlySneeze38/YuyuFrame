@@ -67,4 +67,9 @@ public class MinecraftClient {
     public net.minecraft.client.sound.SoundManager getSoundManager() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Ouvre un écran ({@code null} pour revenir au jeu) — même nom qu'en 26.1.2. */
+    public void setScreen(net.minecraft.client.gui.screen.Screen screen) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

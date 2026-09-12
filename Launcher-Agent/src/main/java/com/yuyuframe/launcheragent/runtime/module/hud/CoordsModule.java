@@ -5,17 +5,11 @@ import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
-import net.minecraft.resources.Identifier;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.biome.BiomeManager;
 
 import java.lang.reflect.Constructor;
 import java.util.Optional;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
+import com.yuyuframe.launcheragent.runtime.game.LevelData;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
 /**
@@ -189,16 +183,14 @@ public final class CoordsModule extends SingleHudModule {
          */
         private String biomeDirect(int bx, int by, int bz) {
             try {
-                ClientLevel level = PlayerData.level();
-                if (level == null) return null;
-                BiomeManager biomeManager = level.getBiomeManager();
-                if (biomeManager == null) return null;
-                Holder<Biome> holder = biomeManager.getBiome(new BlockPos(bx, by, bz));
-                if (holder == null) return null;
-                Optional<ResourceKey<Biome>> keyOpt = holder.unwrapKey();
-                if (keyOpt == null || !keyOpt.isPresent()) return null;
-                Identifier id = keyOpt.get().identifier();
-                return id != null ? prettifyBiomePath(id.getPath()) : null;
+                // Identifiant COMPLET ("minecraft:plains") par le point
+                // d'accès : les deux versions n'ont aucune étape commune pour
+                // l'obtenir (voir AccessPoint.LEVEL_BIOME_ID). Ne reste ici que
+                // la mise en forme, qui ne dépend d'aucune version.
+                String id = LevelData.biomeId(bx, by, bz);
+                if (id == null) return null;
+                int sep = id.indexOf(':');
+                return prettifyBiomePath(sep < 0 ? id : id.substring(sep + 1));
             } catch (Throwable t) {
                 // Ce catch était MUET, d'où le bug ci-dessus resté invisible.
                 // Une fois par session : une erreur de signature de stub ne

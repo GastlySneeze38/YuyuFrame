@@ -48,6 +48,57 @@ public final class GameOptions {
         return AccessorRegistry.get(AccessPoint.OPTIONS_GAMMA, null);
     }
 
+    /**
+     * Les cinq raccourcis de déplacement, en poignées opaques — avancer,
+     * gauche, reculer, droite, sauter — ou {@code null} si l'accès n'est pas
+     * disponible.
+     *
+     * <p>{@code null} plutôt qu'un tableau vide : l'appelant dessine un clavier,
+     * et cinq touches manquantes ne se dessinent pas comme cinq touches
+     * relâchées. À repasser tel quel à {@link #keyDown} et {@link #keyCode}.
+     */
+    public static Object[] movementKeys() {
+        Object v = AccessorRegistry.get(AccessPoint.OPTIONS_MOVEMENT_KEYS, null);
+        return v instanceof Object[] && ((Object[]) v).length == 5 ? (Object[]) v : null;
+    }
+
+    /** Ce raccourci est-il enfoncé ? {@code false} si la poignée est absente. */
+    public static boolean keyDown(Object handle) {
+        if (handle == null) return false;
+        return AccessorRegistry.getBoolean(AccessPoint.KEYBIND_IS_DOWN, handle, false);
+    }
+
+    /**
+     * Code GLFW de la touche liée à ce raccourci, ou {@code -1} si inconnu —
+     * l'appelant DOIT distinguer ce {@code -1} d'un vrai code.
+     */
+    public static int keyCode(Object handle) {
+        if (handle == null) return -1;
+        return AccessorRegistry.getInt(AccessPoint.KEYBIND_KEY_CODE, handle, -1);
+    }
+
+    /**
+     * Point de vue courant — {@code "first_person"},
+     * {@code "third_person_back"}, {@code "third_person_front"}, ou
+     * {@code null} si l'accès n'est pas disponible.
+     *
+     * <p>{@code null} et non {@code "first_person"} : un appelant qui SAUVEGARDE
+     * puis restaure (le freelook) doit pouvoir distinguer « je n'ai rien lu » de
+     * « le joueur était en vue subjective », sans quoi il forcerait la vue
+     * subjective en sortant.
+     */
+    public static String perspective() {
+        Object v = AccessorRegistry.get(AccessPoint.OPTIONS_PERSPECTIVE, null);
+        return v instanceof String ? (String) v : null;
+    }
+
+    /** Écrit le point de vue — {@code true} si l'écriture a eu lieu. Un nom inconnu est ignoré. */
+    public static boolean setPerspective(String perspective) {
+        if (perspective == null) return false;
+        Object v = AccessorRegistry.invoke(AccessPoint.OPTIONS_PERSPECTIVE_SET, null, perspective);
+        return v instanceof Boolean && (Boolean) v;
+    }
+
     /** HUD masqué par le joueur (F1) — {@code false} si l'accès n'est pas disponible. */
     public static boolean hideGui() {
         return AccessorRegistry.getBoolean(AccessPoint.OPTIONS_HIDE_GUI, null, false);

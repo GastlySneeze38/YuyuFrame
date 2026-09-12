@@ -22,4 +22,17 @@ package net.minecraft.text;
 public interface Text {
 
     String getString();
+
+    /**
+     * Copie MODIFIABLE de ce texte — {@code copy()} des deux côtés.
+     *
+     * <p>Copier plutôt que modifier en place n'est pas un scrupule : le jeu
+     * garde peut-être ce composant ailleurs (historique, infobulle).
+     */
+    MutableText copy();
+
+    /** Texte brut — méthode STATIQUE, {@code Component.literal} en 26.1.2. */
+    static MutableText literal(String content) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

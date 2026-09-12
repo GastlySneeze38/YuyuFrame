@@ -119,6 +119,19 @@ public final class ClientData {
         return AccessorRegistry.as(Object.class, AccessPoint.CLIENT_SCREEN, null);
     }
 
+    /**
+     * Ouvre un écran, ou le ferme si {@code screen} est {@code null} —
+     * {@code true} si l'ouverture a eu lieu.
+     *
+     * <p>Prend un {@link Object} : nos écrans deviennent des écrans valides du
+     * jeu au CHARGEMENT ({@code ScreenStubPatcher}), pas à la compilation. Voir
+     * {@link AccessPoint#CLIENT_SET_SCREEN}.
+     */
+    public static boolean setScreen(Object screen) {
+        Object v = AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, screen);
+        return v instanceof Boolean && (Boolean) v;
+    }
+
     /** HUD vanilla, ou {@code null}. */
     public static Gui gui() {
         return AccessorRegistry.as(Gui.class, AccessPoint.CLIENT_GUI, null);
@@ -156,6 +169,32 @@ public final class ClientData {
         Object v = AccessorRegistry.invoke(AccessPoint.SOUND_PLAY_UI, null,
             soundId, Float.valueOf(pitch), Float.valueOf(volume));
         return v instanceof Boolean && (Boolean) v;
+    }
+
+    /**
+     * Taille de l'écran en PIXELS GUI — {@code {largeur, hauteur}}, ou
+     * {@code null} si la fenêtre n'est pas lisible.
+     *
+     * <p>Les VRAIES dimensions, pas une reconstruction par division : l'arrondi
+     * de vanilla ne se redérive pas exactement, et un pixel d'écart décale tout
+     * un alignement sur ses barres.
+     */
+    public static int[] guiSize() {
+        Object v = AccessorRegistry.get(AccessPoint.CLIENT_GUI_SIZE, null);
+        return v instanceof int[] && ((int[]) v).length == 2 ? (int[]) v : null;
+    }
+
+    /**
+     * Contenu BRUT d'une ressource du jeu, ou {@code null} si elle est absente.
+     *
+     * <p>Passe par le gestionnaire de ressources, donc SUIT LES RESOURCE PACKS
+     * — un chargement par le classloader sert la version du jar et les ignore.
+     * L'appelant décode lui-même les octets.
+     */
+    public static byte[] resourceBytes(String namespace, String path) {
+        if (namespace == null || path == null) return null;
+        Object v = AccessorRegistry.invoke(AccessPoint.RESOURCE_BYTES, null, namespace, path);
+        return v instanceof byte[] ? (byte[]) v : null;
     }
 
     /**

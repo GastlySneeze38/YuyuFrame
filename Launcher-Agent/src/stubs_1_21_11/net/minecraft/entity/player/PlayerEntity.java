@@ -29,4 +29,14 @@ public class PlayerEntity extends LivingEntity {
     public boolean isCreative() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /**
+     * Le joueur peut-il manger ? — {@code canEat(boolean)} en 26.1.2.
+     *
+     * @param ignoreHunger vrai pour un aliment marqué {@code canAlwaysEat},
+     *                     qui se mange même barre pleine.
+     */
+    public boolean canConsume(boolean ignoreHunger) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

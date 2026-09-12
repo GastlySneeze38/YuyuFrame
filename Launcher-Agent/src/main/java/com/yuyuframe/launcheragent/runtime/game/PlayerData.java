@@ -273,6 +273,38 @@ public final class PlayerData {
     /** Index de {@link #food()} : épuisement. */
     public static final int FOOD_EXHAUSTION = 2;
 
+    /**
+     * Niveau de cet enchantement sur l'objet en main principale, 0 s'il ne
+     * l'a pas (ou hors partie).
+     *
+     * @param enchantPath chemin de registre SANS espace de noms
+     *                    ({@code "lunge"}) — voir
+     *                    {@link AccessPoint#PLAYER_HELD_ENCHANT_LEVEL}.
+     */
+    public static int heldEnchantLevel(String enchantPath) {
+        if (enchantPath == null || enchantPath.isEmpty()) return 0;
+        Object v = AccessorRegistry.invoke(AccessPoint.PLAYER_HELD_ENCHANT_LEVEL, null, enchantPath);
+        return v instanceof Number ? ((Number) v).intValue() : 0;
+    }
+
+    /**
+     * Aliment tenu et RÉELLEMENT consommable — {@code {faim rendue, saturation
+     * rendue}}, ou {@code null} si rien de mangeable n'est en main.
+     *
+     * <p>La condition « consommable » est appliquée par la liaison, pas ici :
+     * un aliment tenu barre pleine ne compte pas, sauf s'il est marqué
+     * {@code canAlwaysEat}. Voir {@link AccessPoint#PLAYER_HELD_FOOD}.
+     */
+    public static float[] heldFood() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_HELD_FOOD, null);
+        return v instanceof float[] && ((float[]) v).length == 2 ? (float[]) v : null;
+    }
+
+    /** Index de {@link #heldFood()} : points de faim rendus. */
+    public static final int FOOD_NUTRITION = 0;
+    /** Index de {@link #heldFood()} : saturation rendue (ABSOLUE depuis la 1.20.5). */
+    public static final int FOOD_RESTORED_SATURATION = 1;
+
     /** Points de vie courants — 0 hors partie. */
     public static float health() {
         return AccessorRegistry.getFloat(AccessPoint.PLAYER_HEALTH, null, 0f);

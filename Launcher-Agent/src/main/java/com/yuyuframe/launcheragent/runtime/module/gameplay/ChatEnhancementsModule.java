@@ -7,19 +7,10 @@ import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.User;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.components.ChatComponent;
-import net.minecraft.client.multiplayer.chat.GuiMessage;
-import net.minecraft.client.multiplayer.chat.GuiMessageSource;
-import net.minecraft.client.multiplayer.chat.GuiMessageTag;
-import net.minecraft.network.chat.Component;
-
-import java.util.List;
 import java.util.regex.Pattern;
 import com.yuyuframe.launcheragent.runtime.module.visual.FovModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.FullbrightModule;
+import com.yuyuframe.launcheragent.runtime.game.ChatData;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
 /**
@@ -82,17 +73,15 @@ public final class ChatEnhancementsModule extends LauncherModule {
     }
 
     private static final Pattern COUNTER_SUFFIX = Pattern.compile("\\s*\\(x\\d+\\)$");
-    /** Gris du compteur "(xN)" — la même valeur que le gris vanilla ({@code ChatFormatting.GRAY}), en RGB pour éviter un stub d'énumération. */
-    private static final int COUNTER_COLOR = 0xAAAAAA;
-
     private Object la$lastProcessedMessage;
     private String la$lastDistinctBase;
     /**
-     * Le composant D'ORIGINE de la première occurrence — conservé pour
-     * reconstruire la ligne fusionnée SANS perdre sa mise en forme, voir
-     * {@link #mergeRepeatedMessageDirect}.
+     * Poignée OPAQUE du contenu de la PREMIÈRE occurrence — conservée pour
+     * reconstruire la ligne fusionnée SANS perdre sa mise en forme (voir
+     * {@code AccessPoint.CHAT_MERGE_REPEATED}). Jamais transtypée ici : c'est
+     * un objet du jeu, dont ce module n'a pas à connaître le type.
      */
-    private Component la$lastDistinctContent;
+    private Object la$lastDistinctContent;
     private int la$repeatCount = 1;
 
     public ChatEnhancementsModule() {
@@ -243,19 +232,15 @@ public final class ChatEnhancementsModule extends LauncherModule {
     }
 
     private boolean checkChatStateDirect() {
-        Gui gui = ClientData.gui();
-        if (gui == null) return false;
-        ChatComponent chat = gui.getChat();
-        if (chat == null) return false;
-        @SuppressWarnings("unchecked")
-        List<GuiMessage> messages = (List<GuiMessage>) AccessorRegistry.get(AccessPoint.CHAT_ALL_MESSAGES, chat);
-        if (messages == null || messages.isEmpty()) return false;
-
-        GuiMessage headLine = messages.get(0);
-        Component content = headLine.content();
-        if (content == null) return false;
-        String plain = content.getString();
-        if (plain == null) return false;
+        // {ligne, contenu, texte} — les deux premiers sont des poignées
+        // OPAQUES : ce module les compare par identité et les repasse, il ne
+        // les transtype jamais. C'est ce qui lui permet de ne nommer ni
+        // ChatComponent, ni GuiMessage, ni Component.
+        Object[] head = ChatData.headMessage();
+        if (head == null) return false;
+        Object headLine = head[0];
+        Object content = head[1];
+        String plain = (String) head[2];
 
         if (headLine == la$lastProcessedMessage) return true;
         la$lastProcessedMessage = headLine;
@@ -266,21 +251,16 @@ public final class ChatEnhancementsModule extends LauncherModule {
         boolean ownEcho = consumeOwnEcho(plain);
 
         if (pingOnMention && !ownEcho) {
-            String username = null;
-            try {
-                User user = ClientData.user();
-                if (user != null) username = user.getName();
-            } catch (Throwable ignored) {}
-            if (username != null && !username.isEmpty() && mentions(plain, username)) playPingSound();
+            String username = ClientData.username();
+            if (!username.isEmpty() && mentions(plain, username)) playPingSound();
         }
 
         if (stackRepeats) {
             String base = COUNTER_SUFFIX.matcher(plain).replaceAll("");
             if (base.equals(la$lastDistinctBase) && la$lastDistinctContent != null) {
                 la$repeatCount++;
-                if (mergeRepeatedMessageDirect(chat, messages, headLine, la$repeatCount)) {
-                    if (!messages.isEmpty()) la$lastProcessedMessage = messages.get(0);
-                }
+                Object newHead = ChatData.mergeRepeated(la$lastDistinctContent, la$repeatCount);
+                if (newHead != null) la$lastProcessedMessage = newHead;
             } else {
                 la$repeatCount = 1;
                 la$lastDistinctBase = base;
@@ -292,47 +272,6 @@ public final class ChatEnhancementsModule extends LauncherModule {
             }
         }
         return true;
-    }
-
-    /**
-     * Remplace les deux dernières lignes (la répétition + la ligne déjà
-     * affichée) par une seule, comptée.
-     *
-     * <p>BUG TROUVÉ (retour utilisateur 2026-08-31 : « ça stack les messages
-     * mais sans garder la typo d'origine ») — la ligne fusionnée était
-     * reconstruite par {@code Component.literal(texteBrut + " (xN)")}, donc à
-     * partir du texte APLATI : couleurs, gras, grades, survols et clics du
-     * message d'origine disparaissaient. Invisible sur un serveur vanilla
-     * (chat blanc), flagrant dès qu'un serveur met en forme ses messages.
-     *
-     * <p>Fix : on repart du COMPOSANT d'origine ({@link #la$lastDistinctContent},
-     * celui de la première occurrence) et on lui ajoute le compteur comme
-     * enfant — {@code copy()} pour ne pas modifier un composant que le jeu
-     * garde peut-être ailleurs. Le compteur est teinté en gris pour rester
-     * lisible par-dessus n'importe quelle mise en forme, sans imiter celle du
-     * message.
-     *
-     * <p>{@code source}/{@code tag} sont repris tels quels de la ligne
-     * remplacée, et {@code rescaleChat()} reconstruit les lignes visibles
-     * (retour à la ligne) à partir de la liste modifiée.
-     */
-    private boolean mergeRepeatedMessageDirect(ChatComponent chat, List<GuiMessage> messages, GuiMessage headLine, int repeatCount) {
-        try {
-            GuiMessageSource sourceValue = headLine.source();
-            GuiMessageTag tagValue = headLine.tag();
-            if (messages.size() >= 2) { messages.remove(0); messages.remove(0); }
-            Component combined = la$lastDistinctContent.copy()
-                .append(Component.literal(" (x" + repeatCount + ")").withColor(COUNTER_COLOR));
-            AccessorRegistry.invoke(AccessPoint.CHAT_ADD_MESSAGE, chat, combined, null, sourceValue, tagValue);
-            chat.rescaleChat();
-            return true;
-        } catch (Throwable t) {
-            if (!mergeErrorLogged) {
-                mergeErrorLogged = true;
-                LauncherLog.err("[ChatEnhancementsModule] mergeRepeatedMessageDirect: " + t);
-            }
-            return false;
-        }
     }
 
     /**
@@ -373,6 +312,4 @@ public final class ChatEnhancementsModule extends LauncherModule {
 
     private static boolean pingErrorLogged;
     /** Toujours utilisé par mergeRepeatedMessageDirect — le pendant réflexif a disparu, pas celui-ci. */
-    private static boolean mergeErrorLogged;
-
 }

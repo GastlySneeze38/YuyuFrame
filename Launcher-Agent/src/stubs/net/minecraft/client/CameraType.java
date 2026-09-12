@@ -10,6 +10,7 @@ package net.minecraft.client;
  * stubs de ce projet).
  */
 public abstract class CameraType {
+    public static final CameraType FIRST_PERSON = null;
     public static final CameraType THIRD_PERSON_BACK = null;
     public static final CameraType THIRD_PERSON_FRONT = null;
 }

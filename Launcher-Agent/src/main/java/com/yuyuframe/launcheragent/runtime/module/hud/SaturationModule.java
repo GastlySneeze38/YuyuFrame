@@ -7,15 +7,7 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
-import com.mojang.blaze3d.platform.Window;
-import net.minecraft.core.Holder;
-import net.minecraft.resources.Identifier;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.packs.resources.Resource;
-import net.minecraft.server.packs.resources.ResourceManager;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 import java.util.Optional;
 import java.util.Set;
@@ -23,10 +15,6 @@ import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.food.FoodProperties;
-import net.minecraft.world.item.ItemStack;
 
 /**
  * Équivalent AppleSkin — REFONTE COMPLÈTE du 2026-08-31.
@@ -167,8 +155,6 @@ public final class SaturationModule extends LauncherModule {
     private void onPiercingAttack() {
         if (!estimateSaturation) return;
         try {
-            LocalPlayer player = PlayerData.player();
-            if (player == null) return;
             boolean[] flags = PlayerData.movementFlags();
             if (flags[PlayerData.FLAG_PASSENGER] || flags[PlayerData.FLAG_GLIDING]
                 || flags[PlayerData.FLAG_IN_WATER]) return;
@@ -177,7 +163,10 @@ public final class SaturationModule extends LauncherModule {
             if (food == null) return;
             if (food[PlayerData.FOOD_LEVEL] < LUNGE_MIN_FOOD) return;
 
-            int level = lungeLevel(player.getItemInHand(InteractionHand.MAIN_HAND));
+            // « lunge » est le SEUL enchantement du jeu à toucher à la faim
+            // (apply_exhaustion n'apparaît dans aucun autre fichier de
+            // données) : pas besoin d'un mécanisme générique.
+            int level = PlayerData.heldEnchantLevel("lunge");
             if (level <= 0) return;
             estimator.addExhaustion(LUNGE_EXHAUSTION_PER_LEVEL * level);
         } catch (Throwable t) {
@@ -205,24 +194,6 @@ public final class SaturationModule extends LauncherModule {
      * demanderait un {@code HolderLookup.Provider}, donc l'accès au monde,
      * depuis un chemin appelé en plein combat.
      */
-    private int lungeLevel(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return 0;
-        net.minecraft.core.component.DataComponentType<ItemEnchantments> type =
-            componentType(AccessPoint.COMPONENT_TYPE_ENCHANTMENTS);
-        if (type == null) return 0;
-        ItemEnchantments enchantments = stack.get(type);
-        if (enchantments == null || enchantments.isEmpty()) return 0;
-        Set<Holder<Enchantment>> keys = enchantments.keySet();
-        if (keys == null) return 0;
-        for (Holder<Enchantment> holder : keys) {
-            if (holder == null) continue;
-            Optional<ResourceKey<Enchantment>> key = holder.unwrapKey();
-            if (key == null || !key.isPresent()) continue;
-            Identifier id = key.get().identifier();
-            if (id != null && "lunge".equals(id.getPath())) return enchantments.getLevel(holder);
-        }
-        return 0;
-    }
 
     // ── Géométrie des barres vanilla ──────────────────────────────────────
     //
@@ -486,8 +457,7 @@ public final class SaturationModule extends LauncherModule {
     @Override
     public void onRenderInVanillaGui(UiRenderer renderer, int vpWidth, int vpHeight) {
         try {
-            LocalPlayer player = PlayerData.player();
-            if (player == null) { reportOnce("joueur null"); return; }
+            if (!PlayerData.inGame()) { reportOnce("joueur null"); return; }
             // Ni faim ni vie affichées dans ces modes : nos overlays se
             // dessineraient dans le vide, sous la hotbar.
             boolean[] mode = PlayerData.modeFlags();
@@ -517,9 +487,13 @@ public final class SaturationModule extends LauncherModule {
             // division — voir barRight ci-dessous pour ce que ça corrige.
             // Repli sur la reconstruction si la fenêtre n'est pas résolvable
             // (bracket sans accessor) : c'est l'ancien comportement.
-            Window window = ClientData.window();
-            int guiW = window != null ? window.getGuiScaledWidth() : Math.round(vpWidth / scale);
-            int guiH = window != null ? window.getGuiScaledHeight() : Math.round(vpHeight / scale);
+            // Les VRAIES dimensions GUI, pas une reconstruction par division :
+            // l'arrondi de vanilla ne se redérive pas exactement, et un pixel
+            // d'écart décale tout l'alignement sur ses barres. Repli sur la
+            // division quand la fenêtre n'est pas lisible.
+            int[] gui = ClientData.guiSize();
+            int guiW = gui != null ? gui[0] : Math.round(vpWidth / scale);
+            int guiH = gui != null ? gui[1] : Math.round(vpHeight / scale);
             if (guiW <= 0 || guiH <= 0) { reportOnce("dimensions GUI invalides: " + guiW + "x" + guiH); return; }
             float guiWidth = guiW;
 
@@ -554,7 +528,9 @@ public final class SaturationModule extends LauncherModule {
                 + " barRight=" + barRight + " barBottom=" + barBottom
                 + " faim=" + foodLevel + " sat=" + saturation + " épuis=" + exhaustion);
 
-            FoodProperties held = heldFood(player);
+            // {faim rendue, saturation rendue}, déjà filtré « réellement
+            // consommable » par la liaison — voir AccessPoint.PLAYER_HELD_FOOD.
+            float[] held = PlayerData.heldFood();
 
             if (showSaturation) {
                 drawSaturation(renderer, saturation, barRight, barBottom, scale, vpWidth, vpHeight);
@@ -566,7 +542,7 @@ public final class SaturationModule extends LauncherModule {
                 drawFoodPreview(renderer, held, foodLevel, saturation, barRight, barBottom, scale, vpWidth, vpHeight);
             }
             if (showHealthPreview && held != null) {
-                drawHealthPreview(renderer, player, held, foodLevel, saturation,
+                drawHealthPreview(renderer, held, foodLevel, saturation,
                     guiWidth, barBottom, scale, vpWidth, vpHeight);
             }
         } catch (Throwable t) {
@@ -622,15 +598,11 @@ public final class SaturationModule extends LauncherModule {
      */
     private static java.awt.image.BufferedImage load(String namespace, String path, String fallbackResource) {
         try {
-            ResourceManager manager = ClientData.resourceManager();
-            if (manager != null) {
-                Optional<Resource> res = manager.getResource(Identifier.fromNamespaceAndPath(namespace, path));
-                if (res != null && res.isPresent()) {
-                    java.io.InputStream in = res.get().open();
-                    if (in != null) {
-                        try { return javax.imageio.ImageIO.read(in); } finally { in.close(); }
-                    }
-                }
+            // Par le gestionnaire de ressources (donc en suivant les resource
+            // packs) et non par le classloader, qui sert la version du jar.
+            byte[] bytes = ClientData.resourceBytes(namespace, path);
+            if (bytes != null) {
+                return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
             }
         } catch (Throwable t) {
             reportOnce("ressource " + namespace + ":" + path + " : " + t);
@@ -810,61 +782,9 @@ public final class SaturationModule extends LauncherModule {
      * chaque appelant éteint d'un coup les trois aperçus (faim, saturation,
      * cœurs), qui n'ont aucune raison de diverger sur ce point.
      */
-    private FoodProperties heldFood(LocalPlayer player) {
-        FoodProperties main = edible(player, foodOf(player.getItemInHand(InteractionHand.MAIN_HAND)));
-        if (main != null) return main;
-        return edible(player, foodOf(player.getItemInHand(InteractionHand.OFF_HAND)));
-    }
 
-    private FoodProperties edible(LocalPlayer player, FoodProperties food) {
-        if (food == null) return null;
-        try {
-            return player.canEat(food.canAlwaysEat()) ? food : null;
-        } catch (Throwable t) {
-            if (!canEatErrorLogged) {
-                canEatErrorLogged = true;
-                LauncherLog.err("[SaturationModule] canEat: " + t);
-            }
-            return null;
-        }
-    }
 
     private static boolean canEatErrorLogged;
-
-    /**
-     * Type de composant d'item servi par la tranche active, ou {@code null}
-     * si l'accès n'est pas lié.
-     *
-     * <p>Le cast non vérifié est inévitable : {@link AccessorRegistry} rend un
-     * {@code Object}, et {@code DataComponentType} est générique. Il est sûr
-     * ici parce que chaque {@link AccessPoint} de cette famille désigne UN
-     * champ précis, dont le paramètre de type est connu à l'écriture de
-     * l'appel — c'est exactement ce que faisait déjà l'accessor, dont la
-     * signature portait le générique.
-     */
-    @SuppressWarnings("unchecked")
-    private static <T> net.minecraft.core.component.DataComponentType<T> componentType(AccessPoint point) {
-        Object type = AccessorRegistry.get(point);
-        return type instanceof net.minecraft.core.component.DataComponentType
-            ? (net.minecraft.core.component.DataComponentType<T>) type : null;
-    }
-
-    private FoodProperties foodOf(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return null;
-        try {
-            net.minecraft.core.component.DataComponentType<FoodProperties> type =
-                componentType(AccessPoint.COMPONENT_TYPE_FOOD);
-            return type == null ? null : stack.get(type);
-        } catch (Throwable t) {
-            if (!foodErrorLogged) {
-                foodErrorLogged = true;
-                LauncherLog.err("[SaturationModule] foodOf: " + t);
-            }
-            return null;
-        }
-    }
-
-    private static boolean foodErrorLogged;
 
     /**
      * Saturation en liseré SOUS le bord haut des icônes de faim, un segment
@@ -1013,12 +933,12 @@ public final class SaturationModule extends LauncherModule {
      * comme {@code FoodData.add} : au-delà, le jeu la jette, et l'aperçu
      * mentirait.
      */
-    private void drawFoodPreview(UiRenderer renderer, FoodProperties food, int foodLevel, float saturation,
+    private void drawFoodPreview(UiRenderer renderer, float[] food, int foodLevel, float saturation,
                                  float barRight, float barBottom, float scale, int vpWidth, int vpHeight) {
         float alpha = flashAlpha();
         if (alpha <= 0.01f) return;
 
-        int restoredFood = Math.min(20, foodLevel + food.nutrition());
+        int restoredFood = Math.min(20, foodLevel + (int) food[PlayerData.FOOD_NUTRITION]);
         if (restoredFood > foodLevel) {
             // VRAIES icônes de jambon vanilla, comme AppleSkin — le rectangle
             // translucide de la première version ne ressemblait à rien une
@@ -1031,7 +951,7 @@ public final class SaturationModule extends LauncherModule {
             // saturation() est ABSOLUE depuis la 1.20.5 — voir le stub
             // FoodProperties. La traiter comme l'ancien modificateur donnerait
             // un aperçu faux d'un facteur ~10 sur les aliments riches.
-            float restoredSat = Math.min(saturation + food.saturation(), restoredFood);
+            float restoredSat = Math.min(saturation + food[PlayerData.FOOD_RESTORED_SATURATION], restoredFood);
             if (restoredSat > saturation) {
                 // Mêmes cellules que l'indicateur réel, simplement translucides
                 // et clignotantes — reprises là où la saturation courante
@@ -1057,18 +977,18 @@ public final class SaturationModule extends LauncherModule {
      * serveur, et l'épuisement déjà accumulé est ignoré (il ne décale le
      * résultat que d'une fraction de cœur).
      */
-    private void drawHealthPreview(UiRenderer renderer, LocalPlayer player, FoodProperties food,
+    private void drawHealthPreview(UiRenderer renderer, float[] food,
                                    int foodLevel, float saturation, float guiWidth, float barBottom,
                                    float scale, int vpWidth, int vpHeight) {
         float alpha = flashAlpha();
         if (alpha <= 0.01f) return;
 
-        int restoredFood = Math.min(20, foodLevel + food.nutrition());
+        int restoredFood = Math.min(20, foodLevel + (int) food[PlayerData.FOOD_NUTRITION]);
         if (restoredFood < 18) return; // sous ce seuil, aucune régénération
 
-        float restoredSat = Math.min(saturation + food.saturation(), restoredFood);
-        float health = player.getHealth();
-        float missing = Math.max(0f, player.getMaxHealth() - health);
+        float restoredSat = Math.min(saturation + food[PlayerData.FOOD_RESTORED_SATURATION], restoredFood);
+        float health = PlayerData.health();
+        float missing = Math.max(0f, PlayerData.maxHealth() - health);
         float healed = Math.min(missing, restoredSat / 1.5f);
         if (healed <= 0f) return;
 

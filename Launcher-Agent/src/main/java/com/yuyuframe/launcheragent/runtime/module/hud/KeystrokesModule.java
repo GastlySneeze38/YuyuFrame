@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
@@ -9,8 +10,6 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
-import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.client.Options;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -107,25 +106,15 @@ public final class KeystrokesModule extends SingleHudModule {
         @Override
         public void draw(UiRenderer renderer, float x, float y, float w, float h, float scale, int vpWidth, int vpHeight) {
             try {
-                Object forward, left, back, right, jump;
-
-                // Options par l'accessor Mixin (ClientData) puis champs
-                // publics keyUp/keyDown/keyLeft/keyRight/keyJump (voir stub
-                // Options) — zéro réflexion.
-                //
-                // Le repli réflexif multi-bracket a été supprimé le
-                // 2026-08-27. Renommages à connaître pour un portage :
-                // "forwardKey"/"leftKey"/… (1.8.9) → "keyForward"/"keyLeft"/…
-                // (1.16.5), puis "keyForward"/"keyBack" → "keyUp"/"keyDown"
-                // côté Mojang réel en 26.1 ("keyLeft"/"keyRight"/"keyJump"
-                // coïncidant déjà).
-                Options directOptions = ClientData.options();
-                if (directOptions == null) return;
-                forward = directOptions.keyUp;
-                left    = directOptions.keyLeft;
-                back    = directOptions.keyDown;
-                right   = directOptions.keyRight;
-                jump    = directOptions.keyJump;
+                // Les cinq raccourcis arrivent en poignées OPAQUES par un point
+                // d'accès : ce module ne nomme plus Options, dont les champs
+                // ont changé de nom à CHAQUE palier — "forwardKey"/"leftKey"/…
+                // (1.8.9) → "keyForward"/"keyLeft"/… (1.16.5) → "keyUp"/
+                // "keyDown"/… (26.1) → "forwardKey"/"backKey"/… de nouveau en
+                // Yarn 1.21.11. C'est la liaison de chaque tranche qui sait.
+                Object[] keys = GameOptions.movementKeys();
+                if (keys == null) return;
+                Object forward = keys[0], left = keys[1], back = keys[2], right = keys[3], jump = keys[4];
 
                 trackClicks();
 
@@ -189,35 +178,29 @@ public final class KeystrokesModule extends SingleHudModule {
         }
 
         /**
-         * BUG TROUVÉ (audit modules, voir historique de session) : {@code
-         * KeyBinding.code} (int direct) n'existe plus en 1.13+ — remplacé par
-         * {@code KeyBinding.boundKey} (objet {@code InputUtil.Key}, voir
-         * mappings 1.16.5 : champ {@code c I field_1665 code} appartient en
-         * fait à {@code InputUtil.Key}, PAS à {@code KeyBinding} lui-même,
-         * qui n'a que {@code Ldeo$a; f field_1654 boundKey}). Essaie d'abord
-         * l'ancien champ direct (1.8.9, inchangé), sinon lit {@code
-         * boundKey.getCode()}. Nommage : {@code org.lwjgl.input.Keyboard}
-         * (LWJGL2) n'existe pas sous LWJGL3/GLFW — voir
+         * Libellé lisible de la touche liée à ce raccourci.
+         *
+         * <p>Le CODE arrive par un point d'accès, chaque version le résolvant
+         * à sa façon ({@code AccessPoint.KEYBIND_KEY_CODE}) ; seule la
+         * traduction code → nom reste ici, elle ne dépend pas de la version.
+         *
+         * <p>HISTORIQUE à connaître avant tout portage : {@code KeyBinding.code}
+         * (int direct) n'existe plus depuis la 1.13 — remplacé par
+         * {@code boundKey}, un OBJET touche (mappings 1.16.5 : le champ
+         * {@code c I field_1665 code} appartient à {@code InputUtil.Key}, PAS à
+         * {@code KeyBinding}, qui n'a que {@code Ldeo$a; f field_1654
+         * boundKey}). Nommage : {@code org.lwjgl.input.Keyboard} (LWJGL2)
+         * n'existe pas sous LWJGL3/GLFW — voir
          * {@code UiInputPollerModern#nameForKeyCode}.
          */
         private String keyLabel(Object keyBinding) {
-            // AccessPoint.KEYBIND_KEY (champ privé) +
-            // InputConstants.Key.getValue() (méthode publique) — zéro
-            // réflexion. Le repli multi-bracket a été supprimé le 2026-08-27 ;
-            // renommages à connaître : KeyBinding.code (int) disparu en 1.13+,
-            // puis champ "boundKey"→"key" (type déplacé vers
-            // com.mojang.blaze3d.platform.InputConstants$Key) et méthode
-            // "getCode"→"getValue" (InputConstants$Key n'a PLUS de getCode()).
-            try {
-                InputConstants.Key key = AccessorRegistry.as(InputConstants.Key.class, AccessPoint.KEYBIND_KEY, keyBinding);
-                if (key == null) return "?";
-                int code = key.getValue();
-                String name = com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern.nameForKeyCode(code, keyBinding.getClass().getClassLoader());
-                return name == null || name.isEmpty() ? "?" : name;
-            } catch (Throwable t) {
-                return "?";
-            }
+            int code = GameOptions.keyCode(keyBinding);
+            if (code < 0) return "?";
+            String name = com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern
+                .nameForKeyCode(code, keyBinding.getClass().getClassLoader());
+            return name == null || name.isEmpty() ? "?" : name;
         }
+
 
 
         /**
