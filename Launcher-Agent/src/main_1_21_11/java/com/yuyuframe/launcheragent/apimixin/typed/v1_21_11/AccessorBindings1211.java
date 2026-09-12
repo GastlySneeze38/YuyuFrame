@@ -439,8 +439,12 @@ public final class AccessorBindings1211 {
                     .withColor(CHAT_COUNTER_COLOR));
             // PUBLIQUES sur cette version, contrairement à la 26.1.2 : ni
             // Invoker ni accessor pour ces deux appels.
+            //
+            // reset() et NON refresh() : c'est reset() l'équivalent public de
+            // rescaleChat(). La refresh() de Yarn est PRIVÉE — voir le piège
+            // de nommage détaillé dans le stub ChatHud.
             chat.addMessage(combined, signature, indicator);
-            chat.refresh();
+            chat.reset();
             return messages.isEmpty() ? null : messages.get(0);
         });
 

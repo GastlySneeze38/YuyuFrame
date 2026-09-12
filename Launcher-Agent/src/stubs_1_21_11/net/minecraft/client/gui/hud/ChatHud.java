@@ -13,8 +13,21 @@ import net.minecraft.text.Text;
  * Seul le champ {@code messages} est privé — voir
  * {@code ChatHudAccessor1211}.
  *
- * <p>Renommage à connaître : {@code rescaleChat()} en 26.1.2 s'appelle
- * {@code refresh()} ici.
+ * <h2>PIÈGE DE NOMMAGE — lire avant de toucher à {@link #reset()}</h2>
+ *
+ * L'équivalent de {@code rescaleChat()} (26.1.2) s'appelle ici
+ * {@code reset()} ({@code method_1817}, PUBLIQUE) : elle remet le défilement à
+ * zéro puis reconstruit les lignes affichées. Yarn a bien une
+ * {@code refresh()}, mais c'est {@code method_44813}, **PRIVÉE** — elle ne
+ * fait que la reconstruction.
+ *
+ * <p>Le nom trompe dans les deux sens, et l'erreur ne se voit pas : appeler
+ * {@code refresh()} compile, se traduit correctement, et lève un
+ * {@code IllegalAccessError} à l'exécution — attrapé par
+ * {@code AccessorRegistry}, donc la fusion des messages répétés échouait à
+ * mi-chemin (ligne ajoutée, anciennes jamais retirées de l'affichage), ce qui
+ * relançait la fusion à chaque passe : compteurs jusqu'à x5 pour deux envois,
+ * et auto-ping en prime (v1095, corrigé v1099).
  */
 public class ChatHud {
 
@@ -30,8 +43,12 @@ public class ChatHud {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
-    /** Reconstruit les lignes visibles (retour à la ligne) — {@code rescaleChat()} en 26.1.2. */
-    public void refresh() {
+    /**
+     * Remet le défilement à zéro et reconstruit les lignes affichées —
+     * {@code rescaleChat()} en 26.1.2. Voir le PIÈGE DE NOMMAGE ci-dessus :
+     * ce n'est PAS {@code refresh()}, qui est privée.
+     */
+    public void reset() {
         throw new UnsupportedOperationException("stub compile-only");
     }
 }
