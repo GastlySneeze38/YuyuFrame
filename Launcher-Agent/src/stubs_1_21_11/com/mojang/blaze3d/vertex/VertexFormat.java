@@ -9,6 +9,10 @@ import java.nio.ByteBuffer;
  * {@code com.mojang.blaze3d.systems.RenderSystem}. Ses classes imbriquées sont
  * obfusquées ({@code VertexFormat$a} = IndexType, {@code VertexFormat$b} =
  * DrawMode) : stubées sous leur nom Yarn, traduites au chargement.
+ *
+ * <p>EXCEPTION vérifiée par {@code javap} sur le jar réel : {@code
+ * VertexFormat$Builder} n'est PAS obfusquée — elle garde son nom, comme sa
+ * classe conteneuse.
  */
 public class VertexFormat {
 
@@ -34,6 +38,25 @@ public class VertexFormat {
 
         private IndexType() {
         }
+    }
+
+    /** {@code VertexFormat$Builder} — nom réel, non obfusqué (voir la javadoc de classe). */
+    public static final class Builder {
+
+        public Builder add(String name, VertexFormatElement element) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        public VertexFormat build() {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        private Builder() {
+        }
+    }
+
+    public static Builder builder() {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 
     /** Privé : aucun constructeur public en jeu — un format se construit par son {@code Builder}. */

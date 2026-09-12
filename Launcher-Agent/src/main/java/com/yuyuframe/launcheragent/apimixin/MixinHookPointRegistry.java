@@ -275,10 +275,15 @@ public final class MixinHookPointRegistry {
         gate("1.21.11", "v1_21_11.hud.HudExtractOverlayMessageMixin1211", HookPoint.HUD_EXTRACT_OVERLAY_MESSAGE);
         gate("1.21.11", "v1_21_11.hud.HudExtractTitleMixin1211", HookPoint.HUD_EXTRACT_TITLE);
         gate("1.21.11", "v1_21_11.hud.HudExtractTabListMixin1211", HookPoint.HUD_EXTRACT_TAB_LIST);
-        // HUD_EXTRACT_CHAT volontairement absent : il est déclaré par l'infra
-        // (ModuleRegistry.INFRA_HOOK_POINTS), donc serait tissé, et son handler
-        // (VanillaGuiLayer) attend l'état GUI 26.1.2 — arrive avec le HUD dans
-        // la passe GUI.
+        // HUD_EXTRACT_CHAT : le HUD de l'agent passe désormais par la passe GUI
+        // de vanilla sur cette version aussi. Son handler est indépendant de la
+        // version — c'est VanillaGuiSink1211 qui parle à l'état de GUI 1.21.11
+        // (voir VanillaGuiSinks).
+        gate("1.21.11", "v1_21_11.hud.HudExtractChatMixin1211", HookPoint.HUD_EXTRACT_CHAT);
+        // Capte le GuiRenderState porté par chaque DrawContext — infrastructure
+        // du chemin ci-dessus, donc jamais gatée (voir sa javadoc : champ privé,
+        // ni réflexion ni @Accessor possibles).
+        always("1.21.11", "v1_21_11.render.DrawContextStateMixin1211");
 
         // ── Brouillard — contrat neutre, voir FogOverride ──────────────────
         always("1.21.11", "v1_21_11.fog.FogDataAccessor1211");

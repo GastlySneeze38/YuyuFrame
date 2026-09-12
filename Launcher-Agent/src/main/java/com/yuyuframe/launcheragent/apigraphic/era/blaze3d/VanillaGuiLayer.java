@@ -340,69 +340,16 @@ public final class VanillaGuiLayer {
     }
 
     /**
-     * Fait vider la file d'icônes d'item vanilla JUSTE AVANT que le chat ne
-     * soit ajouté à l'état de GUI — correctif du z-order signalé sur le style
-     * « Vanilla » d'{@code ArmorDurabilityModule} (2026-08-30).
+     * Vide la file d'icônes d'item vanilla dans l'état de GUI.
      *
-     * <h3>Le bug</h3>
-     *
-     * {@code GuiFlushMixin261} vide cette file depuis {@code GameRenderer.render},
-     * après {@code Lighting.setupFor} — un point situé APRÈS que toute la GUI
-     * (chat compris) a été extraite. L'état de GUI étant en ordre du peintre,
-     * nos icônes, ajoutées en dernier, passaient donc PAR-DESSUS le chat.
-     *
-     * <h3>Le correctif</h3>
-     *
-     * S'accrocher à {@code HUD_EXTRACT_CHAT}, dispatché en HEAD de
-     * {@code Gui.extractChat} : à cet instant tout le HUD vanilla est déjà
-     * dans l'état, le chat pas encore. Nos icônes atterrissent exactement
-     * entre les deux.
-     *
-     * <p>Le handler renvoie TOUJOURS {@code false} : il ne doit jamais annuler
-     * le rendu du chat, il ne fait que s'insérer dans la frame.
-     *
-     * <p>{@code GuiFlushMixin261} est CONSERVÉ comme filet de sécurité : si
-     * {@code extractChat} n'était pas appelé dans un état donné, les icônes
-     * seraient tout de même dessinées (au mauvais z, mais dessinées). Une file
-     * déjà vidée rend ce second flush inoffensif — c'est un no-op.
+     * <p>L'ENREGISTREMENT du hook qui appelle ceci (et le rendu du HUD qui le
+     * précède) a déménagé dans {@link VanillaGuiPass} : il ne dépend d'aucun
+     * type du jeu et sert donc toutes les versions, alors que cette classe-ci
+     * est compilée contre les noms 26.1.2. Voir sa javadoc pour le pourquoi du
+     * point d'accroche (entre le HUD vanilla et le chat).
      */
-    /**
-     * Rendu du HUD à exécuter depuis la passe GUI, injecté par l'appelant.
-     *
-     * <p>Découplage volontaire : {@code apigraphic} ne doit pas dépendre de
-     * {@code runtime.ui.hud}, qui porte la POLITIQUE d'affichage (quels
-     * éléments, visibles quand). C'est {@code ModuleRegistry} qui fournit
-     * l'implémentation au moment de l'installation.
-     */
-    public interface HudPass {
-        void run(Object hookContext);
-    }
 
-    private static HudPass hudRenderer = ctx -> {};
-
-    /** Voir {@link HudPass}. À appeler AVANT {@link #installItemIconFlush()}. */
-    public static void setHudPass(HudPass pass) {
-        if (pass != null) hudRenderer = pass;
-    }
-
-    public static void installItemIconFlush() {
-        if (itemFlushInstalled) return;
-        itemFlushInstalled = true;
-        VanillaHookRegistry.register(HookPoint.HUD_EXTRACT_CHAT, ctx -> {
-            // ORDRE VOLONTAIRE, c'est lui qui règle le second bug d'armure :
-            // le HUD d'abord (ses panneaux atterrissent dans l'état, et ses
-            // icônes d'item vont dans la file), le flush ENSUITE — les icônes
-            // se retrouvent donc au-dessus des panneaux, et l'ensemble sous le
-            // chat qui n'est pas encore extrait.
-            hudRenderer.run(ctx);
-            flushItemIcons(ctx);
-            return false;
-        });
-    }
-
-    private static boolean itemFlushInstalled;
-
-    private static void flushItemIcons(Object hookContext) {
+    public static void flushItemIcons(Object hookContext) {
         GuiRenderState state = renderState(hookContext);
         if (state == null) return;
         try {

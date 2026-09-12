@@ -47,6 +47,8 @@ public final class VanillaGuiTarget {
     private VanillaGuiTarget() {}
 
     private static Object context;
+    /** Implémentation de l'état de GUI pour la version en cours — posée par {@link #begin}. */
+    private static VanillaGuiSink sink;
     private static float guiScale = 1f;
     private static int fbHeight;
 
@@ -60,7 +62,13 @@ public final class VanillaGuiTarget {
      *         alors rendre le HUD par le chemin habituel.
      */
     public static boolean begin(Object hookContext, int fbWidth, int fbHeightPx) {
-        int guiWidth = VanillaGuiLayer.guiWidth(hookContext);
+        VanillaGuiSink target = VanillaGuiSinks.active();
+        if (target == null) return false;
+        // accepts() AVANT tout : sur une version où l'état de GUI n'est pas
+        // atteignable, mieux vaut renoncer ici (l'appelant garde son chemin)
+        // que dessiner tout le HUD dans le vide, primitive par primitive.
+        if (!target.accepts(hookContext)) return false;
+        int guiWidth = target.guiWidth(hookContext);
         if (guiWidth <= 0 || fbWidth <= 0 || fbHeightPx <= 0) return false;
         // Précompilation des deux pipelines UNE FOIS PAR PASSE, pas une fois
         // par primitive (2026-08-30). Chaque appel traverse une invocation
@@ -69,12 +77,11 @@ public final class VanillaGuiTarget {
         // nouveau chemin. Reste appelé à chaque frame et non une seule fois :
         // un rechargement de ressources (F3+T) vide le cache de pipelines du
         // device, et l'appel est un no-op quand le pipeline y est déjà.
-        if (!Blaze3DGuiRoundedRect.ensureCompiled() | !Blaze3DGuiText.ensureCompiled()) {
-            // `|` et non `||` : les DEUX doivent être tentés, sinon un échec du
-            // premier empêcherait le second de se compiler pour toujours.
+        if (!target.ensureCompiled()) {
             return false;
         }
         context = hookContext;
+        sink = target;
         guiScale = (float) fbWidth / (float) guiWidth;
         fbHeight = fbHeightPx;
         glassChainDone = false;
@@ -121,7 +128,7 @@ public final class VanillaGuiTarget {
         // plus PETIT une fois converti.
         float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
         float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
-        return VanillaGuiLayer.roundedRect(context,
+        return sink.roundedRect(context,
             Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom,
             rTopLeft / guiScale, rTopRight / guiScale,
             rBottomLeft / guiScale, rBottomRight / guiScale,
@@ -141,7 +148,7 @@ public final class VanillaGuiTarget {
         if (context == null) return false;
         float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
         float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
-        return VanillaGuiLayer.icon(context, cacheKey, img,
+        return sink.icon(context, cacheKey, img,
             Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom, alpha);
     }
 
@@ -161,7 +168,7 @@ public final class VanillaGuiTarget {
      */
     public static boolean vignette(UiColor edgeColor, float vSize, int vpWidth, int vpHeight) {
         if (context == null) return false;
-        VanillaGuiLayer.vignette(context, 0f, 0f, vpWidth / guiScale, fbHeight / guiScale,
+        sink.vignette(context, 0f, 0f, vpWidth / guiScale, fbHeight / guiScale,
             vSize / guiScale, edgeColor);
         return true;
     }
@@ -180,7 +187,7 @@ public final class VanillaGuiTarget {
             pending.add(new PendingText(font, content, guiX, guiBaseline, guiScaleText, color));
             return true;
         }
-        return VanillaGuiLayer.text(context, font, content, guiX, guiBaseline, guiScaleText, color);
+        return sink.text(context, font, content, guiX, guiBaseline, guiScaleText, color);
     }
 
     /**
@@ -195,6 +202,9 @@ public final class VanillaGuiTarget {
      */
     public static boolean beginGlassFrame(int passes, int vpWidth, int vpHeight) {
         if (context == null) return false;
+        // Pas de composite de verre sur cette version : ne pas payer la chaîne
+        // de flou (plusieurs passes plein écran) pour un résultat jamais dessiné.
+        if (sink == null || !sink.supportsGlassPanel()) return false;
         // IDEMPOTENT sur la durée d'une passe : chaque panneau appelle
         // ensureGlassChain avant de se dessiner, mais UNE chaîne suffit pour
         // tous. Sans ce garde, six panneaux HUD = six chaînes par frame.
@@ -220,7 +230,7 @@ public final class VanillaGuiTarget {
         if (context == null) return false;
         float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
         float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
-        return VanillaGuiLayer.glassPanel(context,
+        return sink.glassPanel(context,
             Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom,
             rTopLeft / guiScale, rTopRight / guiScale,
             rBottomLeft / guiScale, rBottomRight / guiScale,
@@ -274,7 +284,7 @@ public final class VanillaGuiTarget {
     private static void flushPending() {
         if (pending.isEmpty()) return;
         for (PendingText t : pending) {
-            VanillaGuiLayer.text(context, t.font, t.content, t.x, t.baseline, t.scale, t.color);
+            sink.text(context, t.font, t.content, t.x, t.baseline, t.scale, t.color);
         }
         pending.clear();
     }

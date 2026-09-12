@@ -421,6 +421,19 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
         new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/clock/ClockTotalTicksMixin1211",
             "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        // ── apimixin 1.21.11, lot 3 : HUD dans la passe GUI de vanilla ────
+        // renderChat = le point d'insertion du HUD de l'agent (tout le HUD
+        // vanilla déjà extrait, chat pas encore) ; le constructeur de
+        // DrawContext livre le GuiRenderState, inaccessible autrement.
+        // Signatures vérifiées dans yarn-1.21.11-mergedv2.jar.
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/hud/HudExtractChatMixin1211",
+            "net/minecraft/client/gui/hud/InGameHud", "renderChat",
+            "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", null),
+        // Constructeur PRIVÉ à 5 paramètres — le public lui délègue (bytecode
+        // vérifié). Le nom "<init>" n'est pas traduit, seul le descripteur l'est.
+        new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/render/DrawContextStateMixin1211",
+            "net/minecraft/client/gui/DrawContext", "<init>",
+            "(Lnet/minecraft/client/MinecraftClient;Lorg/joml/Matrix3x2fStack;Lnet/minecraft/client/gui/render/state/GuiRenderState;II)V", null),
         // ── apimixin 1.21.11, lot 2 : HookPoints réclamés par des modules
         // enregistrés sur cette version (effets, chat, lance, tick client).
         // Pendants des mixins 26.1.2 du même nom, cibles résolues dans les

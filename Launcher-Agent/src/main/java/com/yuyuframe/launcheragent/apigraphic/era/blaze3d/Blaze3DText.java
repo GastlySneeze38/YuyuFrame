@@ -225,6 +225,25 @@ public final class Blaze3DText {
     }
 
 
+    /**
+     * Atlas de police pour un chemin de rendu HORS de ce paquet — renvoie
+     * {@code [GpuTexture, GpuTextureView, GpuSampler]}, ou {@code null} si le
+     * moteur n'est pas résolu (l'appelant se rabat alors proprement).
+     *
+     * <p>Existe pour l'unité de compilation 1.21.11 ({@code VanillaGuiSink1211}),
+     * qui bâtit son propre {@code TextureSetup} à partir de la vue et de
+     * l'échantillonneur : {@code ensureTexture} est package-private, et le
+     * reste — c'est un détail d'implémentation du chemin Blaze3D.
+     */
+    public static Object[] fontAtlasEntry(UiFont font) {
+        try {
+            return ensureTexture(font);
+        } catch (Throwable t) {
+            LauncherLog.err("[Blaze3DText] fontAtlasEntry: " + t);
+            return null;
+        }
+    }
+
     /** Appelé depuis {@code UiRenderer.drawTextModern} — empile au lieu de dessiner immédiatement, voir commentaire ci-dessus. */
     public static void queueDraw(UiFont font, String text, float x, float y, UiColor color, float scale, int vpWidth, int vpHeight) {
         if (!isAvailable() || text == null || text.isEmpty()) return;
