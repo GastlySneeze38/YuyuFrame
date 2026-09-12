@@ -10,6 +10,7 @@ import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGpus;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.GuiElementShaders;
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiSink;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
@@ -53,9 +54,6 @@ import java.util.Map;
  * trois autres sont construites à part et peuvent manquer individuellement
  * sans emporter le HUD (voir {@code buildExtras}) — c'est la même garantie que
  * la 26.1.2 obtient en les compilant à la demande.
- *
- * <p>Seules les icônes d'ITEM vanilla restent hors de l'état de GUI sur cette
- * version : elles passent par la file Blaze3D (voir {@link #flushItemIcons}).
  *
  * <p>Ce qui est PARTAGÉ avec la 26.1.2 plutôt que recopié : tout le GLSL
  * ({@code GuiElementShaders}), l'atlas d'icônes ({@code Blaze3DRect}) et la
@@ -431,12 +429,32 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
     }
 
     /**
-     * Les icônes d'item vanilla ne sont pas portées dans l'état de GUI sur cette
-     * version — elles passent par la file Blaze3D, vidée par
-     * {@code GuiFlushMixin1211}. Rien à faire ici.
+     * Vide la file d'icônes d'item DANS l'état de GUI de cette passe —
+     * désormais identique à la 26.1.2 (2026-09-12).
+     *
+     * <p>C'était un no-op jusqu'ici : les icônes attendaient
+     * {@code GuiFlushMixin1211}, accroché plus tard sur
+     * {@code GuiRenderer.render}. Tout y est pourtant en place (hook tissé,
+     * entrée de refmap, constructeur public de {@code DrawContext},
+     * {@code drawItem}/{@code drawItemBar} présentes, champ {@code state}
+     * lisible, injection AVANT la préparation de l'atlas d'items) — et
+     * pourtant les icônes d'armure ne s'affichaient pas.
+     *
+     * <p>Plutôt que de continuer à chercher une différence invisible, on
+     * reprend le chemin qui MARCHE en 26.1.2 : vider la file ici, dans la même
+     * passe et avec le même état que le reste du HUD. Les deux chemins ne se
+     * marchent pas dessus — la file se vide, donc le second flush ne trouve
+     * plus rien.
      */
     @Override
     public void flushItemIcons(Object hookContext) {
+        GuiRenderState state = stateOf(hookContext);
+        if (state == null) return;
+        try {
+            UiRenderer.flushPendingModernItemIconsFromState(state);
+        } catch (Throwable t) {
+            reportOnce("vidage des icônes d'item : " + t);
+        }
     }
 
     private static int argb(UiColor c) {

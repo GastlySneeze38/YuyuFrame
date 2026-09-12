@@ -24,8 +24,11 @@ import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
  * appeler suffisait à lier cette classe, donc à tomber en
  * {@code NoClassDefFoundError} sur une autre version.
  *
- * <p>Seule exception, {@link #window()} : son unique appelant,
- * {@code UiVanillaItemRenderer}, est de toute façon propre à la 26.1.2.
+ * <p>Il n'y a plus AUCUNE exception depuis le 2026-09-12 : {@code window()}
+ * était la dernière, et son unique appelant ({@code UiVanillaItemRenderer},
+ * qui sert les deux versions) est passé au point d'accès neutre
+ * {@link AccessPoint#CLIENT_GUI_SIZE}. Cette façade ne nomme donc plus un seul
+ * type du jeu.
  *
  * <p><b>Plus aucun accessor n'est nommé ici</b> (2026-09-09) : les lectures
  * passent par {@link AccessorRegistry}, qui route chaque {@link AccessPoint}
@@ -157,17 +160,4 @@ public final class ClientData {
         Object v = AccessorRegistry.invoke(AccessPoint.RESOURCE_BYTES, null, namespace, path);
         return v instanceof byte[] ? (byte[]) v : null;
     }
-
-    /**
-     * Fenêtre du jeu — {@code null} hors bracket 26.1.2.
-     *
-     * <p>Ajouté pour {@code UiVanillaItemRenderer.guiScale()}, qui positionne
-     * tout le rendu relatif au HUD vanilla et était appelé à chaque frame par
-     * réflexion. {@code getGuiScaledWidth()} est une méthode publique, seul
-     * l'accès au champ {@code window} demandait l'accessor.
-     */
-    public static com.mojang.blaze3d.platform.Window window() {
-        return AccessorRegistry.as(com.mojang.blaze3d.platform.Window.class, AccessPoint.CLIENT_WINDOW, null);
-    }
-
 }

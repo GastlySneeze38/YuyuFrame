@@ -78,8 +78,25 @@ public final class NoFogModule extends LauncherModule {
         return isEnabled();
     }
 
+    /**
+     * Le drapeau global de brouillard n'existe QUE sur la 26.1.2. Ailleurs
+     * (1.21.11), tout passe par les six hooks {@code FOG_SETUP_*} enregistrés
+     * ci-dessus, et ce point d'accès reste non lié — c'est PRÉVU.
+     *
+     * <p>Le tester avant d'appeler n'est pas cosmétique : sans ça, le registre
+     * signalait « FOG_SET_ENABLED : non lié pour cette version » au premier
+     * tick. Un avertissement exact, mais qui se lit comme une panne alors que
+     * le module fonctionne parfaitement par l'autre chemin — et un
+     * avertissement qu'on apprend à ignorer est pire que pas d'avertissement
+     * du tout.
+     */
+    private static boolean globalFogFlagAvailable() {
+        return AccessorRegistry.isBound(AccessPoint.FOG_SET_ENABLED);
+    }
+
     @Override
     public void onTick() {
+        if (!globalFogFlagAvailable()) return;
         try {
             AccessorRegistry.invoke(AccessPoint.FOG_SET_ENABLED, null, Boolean.FALSE);
         } catch (Throwable t) {
@@ -92,7 +109,7 @@ public final class NoFogModule extends LauncherModule {
 
     @Override
     protected void onEnabledChanged(boolean enabled) {
-        if (enabled) return;
+        if (enabled || !globalFogFlagAvailable()) return;
         try {
             AccessorRegistry.invoke(AccessPoint.FOG_SET_ENABLED, null, Boolean.TRUE);
         } catch (Throwable t) {

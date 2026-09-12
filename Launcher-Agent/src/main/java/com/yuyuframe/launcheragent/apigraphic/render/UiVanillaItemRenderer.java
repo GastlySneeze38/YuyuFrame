@@ -6,7 +6,6 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
-import com.mojang.blaze3d.platform.Window;
 
 import java.lang.reflect.Method;
 
@@ -87,45 +86,61 @@ public final class UiVanillaItemRenderer {
      * {@code framebufferPx / guiScale(vpWidth)}.
      */
     public static float guiScale(int vpWidth) {
-        // 26.1.2 : accessor Mixin, ZÉRO réflexion — et pas de cache non plus.
+        // MÊME CHEMIN sur 26.1.2 ET 1.21.11 depuis le 2026-09-12 : le point
+        // d'accès CLIENT_GUI_SIZE est lié des deux côtés et rend les VRAIES
+        // dimensions GUI, sans qu'on nomme ici le moindre type de version.
         //
-        // AUDIT (2026-08-31) : c'était le dernier accès réflexif réellement
-        // emprunté à chaque frame sur ce bracket (ArmorDurabilityModule et
-        // SaturationModule positionnent tout leur rendu dessus). Le cache de
-        // 200 ms qui l'entourait n'avait de sens que pour amortir cette
-        // réflexion ; deux appels de méthode ne le justifient plus, et le
-        // retirer supprime au passage un défaut discret — pendant un
-        // redimensionnement de fenêtre, l'échelle restait périmée jusqu'à 200 ms,
-        // donc le HUD se posait brièvement au mauvais endroit.
-        try {
-            Window window = ClientData.window();
-            if (window != null) {
-                int scaled = window.getGuiScaledWidth();
-                if (scaled > 0) return (float) vpWidth / scaled;
-            }
-        } catch (Throwable ignored) {
-            // NoClassDefFoundError attendu hors 26.1.2 (Window/accessor
-            // inexistants sur un bracket obfusqué) — le repli réflexif
-            // ci-dessous prend le relais, inutile de journaliser par frame.
-        }
+        // Avant, ce code appelait ClientData.window(), dont la signature nomme
+        // com.mojang.blaze3d.platform.Window — la fenêtre de la 26.1.2. Sur
+        // 1.21.11 c'est net.minecraft.client.util.Window : l'appel échouait,
+        // on tombait dans le repli réflexif ci-dessous, et si CELUI-CI échouait
+        // à son tour la méthode rendait 1f EN SILENCE. Or 1f n'est pas une
+        // échelle neutre pour l'appelant : il divise ses pixels framebuffer
+        // par cette valeur pour obtenir des pixels GUI, donc chaque icône
+        // d'item se retrouvait placée 2 à 3 fois trop loin — hors de l'écran,
+        // sans un mot dans le log.
+        int[] gui = ClientData.guiSize();
+        if (gui != null && gui[0] > 0) return (float) vpWidth / gui[0];
 
-        // Autres brackets : chemin réflexif inchangé, cache compris.
+        // Brackets GELÉS (1.8.9/1.20.4/1.21.4) : le point d'accès n'y est pas
+        // lié, le chemin réflexif reste leur seul recours — cache compris.
         long now = System.nanoTime();
         if (vpWidth == cachedGuiScaleVpWidth && (now - cachedGuiScaleAtNanos) < GUI_SCALE_CACHE_NANOS) {
             return cachedGuiScale;
         }
         try {
             Object mc = McReflect.minecraftClient();
-            if (mc == null) return 1f;
+            if (mc == null) return fallbackGuiScale();
             Object window = McReflect.method(mc.getClass(), "net/minecraft/client/MinecraftClient", "getWindow", "getWindow").invoke(mc);
             int scaledW = (int) McReflect.method(window.getClass(), "net/minecraft/client/util/Window", "getScaledWidth", "getGuiScaledWidth").invoke(window);
-            cachedGuiScale = scaledW > 0 ? (float) vpWidth / scaledW : 1f;
+            if (scaledW <= 0) return fallbackGuiScale();
+            cachedGuiScale = (float) vpWidth / scaledW;
             cachedGuiScaleVpWidth = vpWidth;
             cachedGuiScaleAtNanos = now;
             return cachedGuiScale;
         } catch (Throwable t) {
-            return 1f;
+            return fallbackGuiScale();
         }
+    }
+
+    /**
+     * Échelle de repli, 1 — et JAMAIS muette.
+     *
+     * <p>Rendre 1 revient à dire « pixels framebuffer = pixels GUI », ce qui
+     * est faux dès que le joueur n'est pas en échelle 1 : tout ce qui se
+     * positionne dessus part hors écran. Le symptôme est une DISPARITION, pas
+     * un décalage visible — donc parfaitement indiagnosticable sans cette
+     * ligne. Une fois par session suffit.
+     */
+    private static boolean guiScaleFallbackReported;
+
+    private static float fallbackGuiScale() {
+        if (!guiScaleFallbackReported) {
+            guiScaleFallbackReported = true;
+            LauncherLog.err("[UiRenderer] guiScale: échelle GUI introuvable, repli sur 1"
+                + " — tout ce qui se positionne dessus (icônes d'item) sera hors écran");
+        }
+        return 1f;
     }
 
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
@@ -601,6 +616,9 @@ public final class UiVanillaItemRenderer {
     private static boolean slotSpriteResolveFailed = false;
     private static boolean modernItemIconResolveFailed = false;
 
+    // Diagnostics one-shot du vidage d'icônes — voir flushIntoGuiState.
+    private static boolean emptyBatchReported, firstBatchReported, resolveFailedReported;
+
     // GuiRenderer/GuiRenderState (voir ci-dessus) N'EXISTENT PAS en 1.20.4 ni
     // 1.21.4 (confirmé absent des deux mappings Yarn correspondants,
     // grep -c ==0 sur les deux) — architecture introduite entre la 1.21.4 et
@@ -1029,8 +1047,33 @@ public final class UiVanillaItemRenderer {
                 : new java.util.ArrayList<>(pendingModernGuiBlits);
             pendingModernGuiBlits.clear();
         }
-        if (batch.isEmpty() && batchBlits.isEmpty()) return;
-        if (modernItemIconResolveFailed) return;
+        // DIAGNOSTIC (2026-09-12) : les deux sorties ci-dessous étaient MUETTES,
+        // et c'est exactement ce qui a empêché de diagnostiquer les icônes
+        // d'armure absentes en 1.21.11 — impossible de distinguer « la file
+        // n'a jamais été remplie » de « la file est pleine mais le dessin
+        // échoue ». Une ligne CHACUNE, une seule fois par session.
+        if (batch.isEmpty() && batchBlits.isEmpty()) {
+            if (!emptyBatchReported) {
+                emptyBatchReported = true;
+                LauncherLog.info("[UiRenderer] itemIconModern: file VIDE au vidage —"
+                    + " aucune icône n'a été mise en file (l'appelant ne dessine pas,"
+                    + " ou son chemin d'ajout a échoué plus tôt)");
+            }
+            return;
+        }
+        if (!firstBatchReported) {
+            firstBatchReported = true;
+            LauncherLog.info("[UiRenderer] itemIconModern: premier vidage — "
+                + batch.size() + " icône(s), " + batchBlits.size() + " blit(s)");
+        }
+        if (modernItemIconResolveFailed) {
+            if (!resolveFailedReported) {
+                resolveFailedReported = true;
+                LauncherLog.err("[UiRenderer] itemIconModern: vidage ABANDONNÉ —"
+                    + " une résolution a échoué plus tôt (voir l'erreur précédente)");
+            }
+            return;
+        }
         try {
             Object mc = McReflect.minecraftClient();
             if (mc == null) return;
