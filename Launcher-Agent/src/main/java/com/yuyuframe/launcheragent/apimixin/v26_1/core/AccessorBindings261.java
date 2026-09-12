@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
@@ -83,6 +84,26 @@ public final class AccessorBindings261 {
         AccessorRegistry.bind(AccessPoint.KEYBIND_KEY, (r, a) ->
             r instanceof KeyMappingAccessor261 ? ((KeyMappingAccessor261) r).la$key() : null);
 
+        // ── Joueur local : OPÉRATIONS ──────────────────────────────────────
+        // Reprises TELLES QUELLES de ce que les modules faisaient en ligne sur
+        // l'objet joueur : rien ne change ici pour la 26.1.2, l'appel a juste
+        // déménagé du module vers la liaison — c'est ce qui rend le module
+        // portable (voir PlayerData).
+        AccessorRegistry.bind(AccessPoint.PLAYER_POSITION, (r, a) -> {
+            LocalPlayer p = player(r);
+            return p == null ? null : new double[]{ p.getX(), p.getY(), p.getZ() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_YAW, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getYRot()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_PITCH, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getXRot()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_EYE_HEIGHT, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getEyeHeight()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_HEALTH, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getHealth()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MAX_HEALTH, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getMaxHealth()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_ATTACK_STRENGTH, (r, a) -> {
+            LocalPlayer p = player(r);
+            if (p == null || a.length < 1 || !(a[0] instanceof Number)) return null;
+            return Float.valueOf(p.getAttackStrengthScale(((Number) a[0]).floatValue()));
+        });
+
         // ── Faim/saturation ────────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.FOOD_LEVEL, (r, a) ->
             r instanceof FoodDataAccessor261 ? Integer.valueOf(((FoodDataAccessor261) r).la$foodLevel()) : null);
@@ -128,6 +149,17 @@ public final class AccessorBindings261 {
      * fabriquer le receveur eux-mêmes, ce qui les obligerait à nommer
      * {@code Minecraft}.
      */
+    /**
+     * Receveur → joueur local. Receveur {@code null} = celui du client courant,
+     * même convention que {@link #mc(Object)} : aucun appelant neutre n'a ainsi
+     * à fabriquer le receveur, ce qui l'obligerait à nommer {@code LocalPlayer}.
+     */
+    private static LocalPlayer player(Object receiver) {
+        if (receiver instanceof LocalPlayer) return (LocalPlayer) receiver;
+        MinecraftAccessor261 client = mc(null);
+        return client == null ? null : client.la$player();
+    }
+
     private static MinecraftAccessor261 mc(Object receiver) {
         Object target = receiver != null ? receiver : client();
         return target instanceof MinecraftAccessor261 ? (MinecraftAccessor261) target : null;

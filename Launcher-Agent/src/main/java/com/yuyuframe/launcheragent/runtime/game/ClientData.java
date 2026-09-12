@@ -49,6 +49,25 @@ public final class ClientData {
         return AccessorRegistry.as(Options.class, AccessPoint.CLIENT_OPTIONS, null);
     }
 
+    /**
+     * Les mêmes options, mais en poignée OPAQUE — pour les chemins PARTAGÉS
+     * entre versions.
+     *
+     * <p>{@link #options()} nomme le type 26.1.2 dans SA SIGNATURE : l'appeler
+     * suffit à lier cette classe, donc {@code NoClassDefFoundError} ailleurs —
+     * c'est ce qui tuait {@code ZoomModule} et {@code FullbrightModule} à chaque
+     * tick sur 1.21.11, alors même que le point d'accès {@code CLIENT_OPTIONS}
+     * est lié des DEUX côtés.
+     *
+     * <p>L'aiguillage par version, lui, fonctionne déjà : {@link AccessorRegistry}
+     * choisit les liaisons de la version détectée. Seul le type de retour faisait
+     * obstacle. Les appelants qui ne font que repasser la poignée à
+     * {@link GameOptions} n'ont de toute façon aucun usage du type.
+     */
+    public static Object optionsObject() {
+        return AccessorRegistry.as(Object.class, AccessPoint.CLIENT_OPTIONS, null);
+    }
+
     /** Session utilisateur (pseudo, UUID), ou {@code null}. */
     public static User user() {
         return AccessorRegistry.as(User.class, AccessPoint.CLIENT_USER, null);

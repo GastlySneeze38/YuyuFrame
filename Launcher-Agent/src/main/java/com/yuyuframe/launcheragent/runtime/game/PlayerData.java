@@ -64,9 +64,17 @@ public final class PlayerData {
         return AccessorRegistry.as(ClientLevel.class, AccessPoint.CLIENT_LEVEL, null);
     }
 
-    /** {@code true} si un joueur est en partie — raccourci de lisibilité pour les modules. */
+    /**
+     * {@code true} si un joueur est en partie — raccourci de lisibilité pour
+     * les modules.
+     *
+     * <p>Passe par le point d'accès et NON par {@link #player()} : la variante
+     * typée nomme le type 26.1.2 dans sa signature, donc l'appeler suffirait à
+     * lier cette classe et à tomber en {@code NoClassDefFoundError} sur une
+     * autre version — même piège que {@code ClientData.screen()} (v1067).
+     */
     public static boolean inGame() {
-        return player() != null;
+        return AccessorRegistry.get(AccessPoint.CLIENT_PLAYER, null) != null;
     }
 
     /**
@@ -81,9 +89,8 @@ public final class PlayerData {
      * bracket récent ne peut donc pas fonctionner.
      */
     public static double[] position() {
-        LocalPlayer p = player();
-        if (p == null) return new double[]{ 0, 0, 0 };
-        return new double[]{ p.getX(), p.getY(), p.getZ() };
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_POSITION, null);
+        return v instanceof double[] ? (double[]) v : new double[]{ 0, 0, 0 };
     }
 
     /**
@@ -101,19 +108,40 @@ public final class PlayerData {
      * hiérarchie. Même piège pour le champ {@code world}/{@code level}.
      */
     public static float yaw() {
-        LocalPlayer p = player();
-        return p == null ? 0f : p.getYRot();
+        return AccessorRegistry.getFloat(AccessPoint.PLAYER_YAW, null, 0f);
     }
 
     /** Rotation verticale (pitch), en degrés — 0 hors partie. */
     public static float pitch() {
-        LocalPlayer p = player();
-        return p == null ? 0f : p.getXRot();
+        return AccessorRegistry.getFloat(AccessPoint.PLAYER_PITCH, null, 0f);
     }
 
     /** Hauteur des yeux au-dessus des pieds — 0 hors partie. */
     public static float eyeHeight() {
-        LocalPlayer p = player();
-        return p == null ? 0f : p.getEyeHeight();
+        return AccessorRegistry.getFloat(AccessPoint.PLAYER_EYE_HEIGHT, null, 0f);
+    }
+
+    /** Points de vie courants — 0 hors partie. */
+    public static float health() {
+        return AccessorRegistry.getFloat(AccessPoint.PLAYER_HEALTH, null, 0f);
+    }
+
+    /** Points de vie maximum — 0 hors partie. */
+    public static float maxHealth() {
+        return AccessorRegistry.getFloat(AccessPoint.PLAYER_MAX_HEALTH, null, 0f);
+    }
+
+    /**
+     * Charge de l'attaque, de 0 (vient de frapper) à 1 (prête).
+     *
+     * @param partialTick avancement dans le tick courant, comme le passe vanilla.
+     * @param fallback    valeur rendue hors partie ou sur une version non liée —
+     *                    {@code CrosshairModule} y met {@code -1} pour distinguer
+     *                    « indisponible » de « prête », deux cas qui ne se
+     *                    dessinent pas pareil.
+     */
+    public static float attackStrengthScale(float partialTick, float fallback) {
+        Object v = AccessorRegistry.invoke(AccessPoint.PLAYER_ATTACK_STRENGTH, null, Float.valueOf(partialTick));
+        return v instanceof Number ? ((Number) v).floatValue() : fallback;
     }
 }

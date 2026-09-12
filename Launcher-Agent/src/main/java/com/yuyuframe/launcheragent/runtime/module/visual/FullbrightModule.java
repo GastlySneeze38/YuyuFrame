@@ -108,7 +108,9 @@ public final class FullbrightModule extends LauncherModule {
 
     /** Options par l'accessor Mixin, via {@code ClientData} — zéro réflexion (repli multi-bracket supprimé le 2026-08-27). */
     private Object optionsInstance() throws Exception {
-        return ClientData.options();
+        // optionsObject() et NON options() : ce module tourne sur toutes les
+        // versions, et la variante typée lierait le type 26.1.2 (voir sa javadoc).
+        return ClientData.optionsObject();
     }
 
     /**

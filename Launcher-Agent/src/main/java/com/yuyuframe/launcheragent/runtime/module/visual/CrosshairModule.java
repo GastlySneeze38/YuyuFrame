@@ -8,7 +8,6 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
-import net.minecraft.client.player.LocalPlayer;
 
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
@@ -266,13 +265,12 @@ public final class CrosshairModule extends LauncherModule {
      * du tout, pas juste replier sur "toujours prêt" (voir javadoc de tête).
      */
     private float attackCooldownProgress() {
-        // Joueur par l'accessor Mixin (PlayerData), cooldown par la méthode
-        // publique getAttackStrengthScale (voir stub LocalPlayer) — zéro
-        // réflexion. Repli réflexif multi-bracket supprimé le 2026-08-27.
-        LocalPlayer player = PlayerData.player();
-        if (player == null) return -1f;
+        // Par le POINT D'ACCÈS, pas par l'objet joueur : c'est la liaison de la
+        // version qui nomme la méthode (getAttackStrengthScale en 26.1.2,
+        // getAttackCooldownProgress en 1.21.11). Tenir un LocalPlayer ici liait
+        // le type 26.1.2 et faisait tomber tout le module ailleurs.
         try {
-            return player.getAttackStrengthScale(0f);
+            return PlayerData.attackStrengthScale(0f, -1f);
         } catch (Throwable t) {
             if (!cooldownErrorLogged) {
                 cooldownErrorLogged = true;

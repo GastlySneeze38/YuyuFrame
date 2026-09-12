@@ -5,12 +5,16 @@ import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.HungerManagerAccessor1211;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.MinecraftClientAccessor1211;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.SimpleOption;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.HungerManager;
+import net.minecraft.entity.player.PlayerEntity;
 
 /**
  * Liaisons {@link AccessPoint} → données du jeu pour la tranche 1.21.11 —
@@ -98,6 +102,32 @@ public final class AccessorBindings1211 {
         AccessorRegistry.bind(AccessPoint.FOOD_EXHAUSTION, (r, a) ->
             r instanceof HungerManagerAccessor1211 ? Float.valueOf(((HungerManagerAccessor1211) r).la$exhaustion()) : null);
 
+        // ── Joueur local : OPÉRATIONS ──────────────────────────────────────
+        // Mêmes opérations qu'en 26.1.2, noms Yarn : getYaw/getPitch (et non
+        // getYRot/getXRot), getStandingEyeHeight (et non getEyeHeight),
+        // getAttackCooldownProgress (et non getAttackStrengthScale). C'est
+        // exactement ce que ces points d'accès existent pour absorber.
+        // VARIABLES TYPÉES AVEC LA CLASSE DÉCLARANTE (Entity, LivingEntity,
+        // PlayerEntity) et non ClientPlayerEntity : javac écrit le type STATIQUE
+        // du receveur comme propriétaire de l'appel, or Yarn range chaque
+        // méthode sous sa déclarante. Typer en ClientPlayerEntity produisait
+        // `ClientPlayerEntity.getX()D`, introuvable après traduction — 6
+        // références cassées, vues au banc RemapCheck avant toute mise en jeu.
+        AccessorRegistry.bind(AccessPoint.PLAYER_POSITION, (r, a) -> {
+            Entity p = player(r);
+            return p == null ? null : new double[]{ p.getX(), p.getY(), p.getZ() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_YAW, (r, a) -> { Entity p = player(r); return p == null ? null : Float.valueOf(p.getYaw()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_PITCH, (r, a) -> { Entity p = player(r); return p == null ? null : Float.valueOf(p.getPitch()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_EYE_HEIGHT, (r, a) -> { Entity p = player(r); return p == null ? null : Float.valueOf(p.getStandingEyeHeight()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_HEALTH, (r, a) -> { LivingEntity p = player(r); return p == null ? null : Float.valueOf(p.getHealth()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MAX_HEALTH, (r, a) -> { LivingEntity p = player(r); return p == null ? null : Float.valueOf(p.getMaxHealth()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_ATTACK_STRENGTH, (r, a) -> {
+            PlayerEntity p = player(r);
+            if (p == null || a.length < 1 || !(a[0] instanceof Number)) return null;
+            return Float.valueOf(p.getAttackCooldownProgress(((Number) a[0]).floatValue()));
+        });
+
         // ── Types de composants d'item (champs STATIQUES publics) ──────────
         AccessorRegistry.bind(AccessPoint.COMPONENT_TYPE_FOOD, (r, a) -> DataComponentTypes.FOOD);
         AccessorRegistry.bind(AccessPoint.COMPONENT_TYPE_ENCHANTMENTS, (r, a) -> DataComponentTypes.ENCHANTMENTS);
@@ -107,6 +137,16 @@ public final class AccessorBindings1211 {
             r instanceof ServerInfo ? ((ServerInfo) r).address : null);
         AccessorRegistry.bind(AccessPoint.SERVER_NAME, (r, a) ->
             r instanceof ServerInfo ? ((ServerInfo) r).name : null);
+    }
+
+    /**
+     * Receveur → joueur local. Receveur {@code null} = celui du client courant,
+     * même convention que {@link #mc(Object)}.
+     */
+    private static ClientPlayerEntity player(Object receiver) {
+        if (receiver instanceof ClientPlayerEntity) return (ClientPlayerEntity) receiver;
+        MinecraftClient c = mc(null);
+        return c == null ? null : c.player;
     }
 
     /**

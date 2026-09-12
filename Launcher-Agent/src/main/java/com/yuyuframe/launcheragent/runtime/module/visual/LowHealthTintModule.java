@@ -5,7 +5,6 @@ import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import net.minecraft.client.player.LocalPlayer;
 
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
@@ -135,17 +134,23 @@ public final class LowHealthTintModule extends LauncherModule {
     private static boolean la$drawErrorLogged;
 
     /**
-     * Joueur par l'accessor Mixin ({@code PlayerData}), santé par les méthodes
-     * publiques {@code getHealth()}/{@code getMaxHealth()} de
-     * {@code LivingEntity} — zéro réflexion. Le repli réflexif multi-bracket a
-     * été supprimé le 2026-08-27 avec le reste de l'accès aux données du jeu.
+     * Santé par les POINTS D'ACCÈS ({@code PLAYER_HEALTH}/{@code
+     * PLAYER_MAX_HEALTH}), jamais par l'objet joueur : c'est la liaison de la
+     * version qui appelle {@code getHealth()}/{@code getMaxHealth()}. Tenir un
+     * {@code LocalPlayer} ici liait le type 26.1.2 et rendait le module
+     * inutilisable sur toute autre version.
+     *
      * @return {@code float[]{health, maxHealth}} ou {@code null} si indisponible.
      */
     private float[] healthAndMax() {
-        LocalPlayer player = PlayerData.player();
-        if (player == null) return null;
+        if (!PlayerData.inGame()) return null;
         try {
-            return new float[]{ player.getHealth(), player.getMaxHealth() };
+            float max = PlayerData.maxHealth();
+            // Un maximum nul signifie « pas encore lisible » (monde en cours de
+            // chargement, ou version non liée) : mieux vaut ne rien teinter que
+            // de diviser par zéro et afficher un écran rouge.
+            if (max <= 0f) return null;
+            return new float[]{ PlayerData.health(), max };
         } catch (Throwable t) {
             return null;
         }

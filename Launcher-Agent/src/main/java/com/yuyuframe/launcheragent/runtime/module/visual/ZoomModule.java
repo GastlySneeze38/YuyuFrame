@@ -435,7 +435,9 @@ public final class ZoomModule extends LauncherModule {
      * (repli multi-bracket supprimé le 2026-08-27).
      */
     private Object optionsInstance() throws Exception {
-        return ClientData.options();
+        // optionsObject() et NON options() : ce module tourne sur toutes les
+        // versions, et la variante typée lierait le type 26.1.2 (voir sa javadoc).
+        return ClientData.optionsObject();
     }
 
     /**

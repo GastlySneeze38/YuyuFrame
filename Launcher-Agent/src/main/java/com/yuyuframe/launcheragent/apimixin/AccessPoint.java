@@ -89,6 +89,32 @@ public enum AccessPoint {
     /** Touche liée — champ {@code key}. */
     KEYBIND_KEY,
 
+    // ── Joueur local : OPÉRATIONS, pas poignées ────────────────────────────
+    //
+    // Ces points-ci ne rendent PAS le joueur : ils font l'appel à sa place.
+    // C'est la différence qui rend un module portable — recevoir l'objet
+    // obligerait l'appelant à nommer son type pour en tirer quoi que ce soit
+    // (et donc à tomber en NoClassDefFoundError sur l'autre version), alors
+    // que l'appel, lui, est nommé UNE fois par version dans les liaisons.
+    /** Position, rendue en {@code double[]{x, y, z}} — {@code getX()/getY()/getZ()}. */
+    PLAYER_POSITION,
+    /** Rotation horizontale en degrés — {@code getYRot()} en 26.1.2, {@code getYaw()} en Yarn. */
+    PLAYER_YAW,
+    /** Rotation verticale en degrés — {@code getXRot()} en 26.1.2, {@code getPitch()} en Yarn. */
+    PLAYER_PITCH,
+    /** Hauteur des yeux — {@code getEyeHeight()} en 26.1.2, {@code getStandingEyeHeight()} en Yarn. */
+    PLAYER_EYE_HEIGHT,
+    /** Points de vie courants — {@code getHealth()}. */
+    PLAYER_HEALTH,
+    /** Points de vie maximum — {@code getMaxHealth()}. */
+    PLAYER_MAX_HEALTH,
+    /**
+     * Charge de l'attaque, de 0 à 1 — {@code getAttackStrengthScale(partial)}
+     * en 26.1.2, {@code getAttackCooldownProgress(partial)} en Yarn 1.21.11 :
+     * même opération, deux noms, d'où l'intérêt de la nommer ici une seule fois.
+     */
+    PLAYER_ATTACK_STRENGTH,
+
     // ── Faim/saturation (net.minecraft.world.food.FoodData) ────────────────
     /** Niveau de faim — champ {@code foodLevel}. */
     FOOD_LEVEL,
