@@ -4,8 +4,6 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiRoundedRect;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiText;
 
 /**
  * Commutateur « émettre dans l'état de GUI de vanilla » — armé le temps de la

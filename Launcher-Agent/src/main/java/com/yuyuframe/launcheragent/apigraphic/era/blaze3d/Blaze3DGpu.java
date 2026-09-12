@@ -121,13 +121,10 @@ public interface Blaze3DGpu {
 
     Object identifier(String namespace, String path);
 
-    /** {@code RenderPipelines.GUI_TEXT} — référence par défaut de {@link #buildPipeline}. */
-    Object guiTextPipeline();
-
     /**
      * Pipeline maison : GLSL désigné par {@code vertexShaderId}/{@code
      * fragmentShaderId}, format de sommet et état couleur/profondeur/cull
-     * COPIÉS depuis {@code reference} ({@code null} = {@link #guiTextPipeline}).
+     * COPIÉS depuis {@code reference} ({@code null} = le pipeline de texte de la GUI vanilla).
      *
      * @param vertexFormatOverride format à utiliser à la place de celui de la
      *        référence, {@code null} pour le copier.

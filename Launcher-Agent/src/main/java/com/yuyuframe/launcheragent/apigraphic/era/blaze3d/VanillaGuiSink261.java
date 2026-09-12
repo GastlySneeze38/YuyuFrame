@@ -36,11 +36,6 @@ final class VanillaGuiSink261 implements VanillaGuiSink {
     }
 
     @Override
-    public int guiHeight(Object hookContext) {
-        return VanillaGuiLayer.guiHeight(hookContext);
-    }
-
-    @Override
     public boolean ensureCompiled() {
         // `|` et non `||` : les DEUX doivent être tentés, sinon un échec du
         // premier empêcherait le second de se compiler pour toujours.
@@ -86,11 +81,6 @@ final class VanillaGuiSink261 implements VanillaGuiSink {
                               UiColor tint, UiColor background) {
         return VanillaGuiLayer.glassPanel(hookContext, x0, y0, x1, y1,
             rTopLeft, rTopRight, rBottomLeft, rBottomRight, tint, background);
-    }
-
-    @Override
-    public void nextStratum(Object hookContext) {
-        VanillaGuiLayer.nextStratum(hookContext);
     }
 
     @Override

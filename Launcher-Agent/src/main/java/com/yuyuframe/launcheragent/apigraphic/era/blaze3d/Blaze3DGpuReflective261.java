@@ -412,11 +412,6 @@ final class Blaze3DGpuReflective261 implements Blaze3DGpu {
     }
 
     @Override
-    public Object guiTextPipeline() {
-        return guiText;
-    }
-
-    @Override
     public Object buildPipeline(String location, Object vertexShaderId, Object fragmentShaderId,
                                 String[] samplerNames, String[] uniformBufferNames,
                                 Object reference, Object vertexFormatOverride) {

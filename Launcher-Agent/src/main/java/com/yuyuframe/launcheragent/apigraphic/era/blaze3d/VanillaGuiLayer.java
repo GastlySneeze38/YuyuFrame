@@ -2,14 +2,11 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiGlass;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiRoundedRect;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiText;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiIcon;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGuiVignette;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apimixin.HookPoint;
-import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.v26_1.core.GuiGraphicsExtractorAccessor261;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -96,62 +93,6 @@ public final class VanillaGuiLayer {
     public static int guiWidth(Object hookContext) {
         GuiGraphicsExtractor g = extractor(hookContext);
         return g == null ? -1 : g.guiWidth();
-    }
-
-    /** Hauteur de l'écran en pixels GUI, ou {@code -1}. */
-    public static int guiHeight(Object hookContext) {
-        GuiGraphicsExtractor g = extractor(hookContext);
-        return g == null ? -1 : g.guiHeight();
-    }
-
-    /**
-     * Quad de couleur pleine avec le pipeline VANILLA, à la position Z du hook.
-     *
-     * <p>Coordonnées en pixels GUI, origine en HAUT à gauche, {@code y} vers le
-     * BAS — convention vanilla, l'inverse de notre moteur (origine en bas,
-     * {@code y} vers le haut). La conversion reste à la charge de l'appelant
-     * tant qu'on n'a pas de couche d'adaptation : la faire ici en devinant
-     * l'échelle d'interface introduirait un arrondi de plus.
-     *
-     * @return {@code false} si indisponible — l'appelant garde alors son chemin habituel.
-     */
-    public static boolean fill(Object hookContext, int x0, int y0, int x1, int y1, UiColor color) {
-        GuiGraphicsExtractor g = extractor(hookContext);
-        if (g == null) return false;
-        try {
-            g.fill(x0, y0, x1, y1, argb(color));
-            return true;
-        } catch (Throwable t) {
-            LauncherLog.err("[VanillaGuiLayer] fill: " + t);
-            return false;
-        }
-    }
-
-    /**
-     * Quad rendu avec UN DE NOS PIPELINES, à la position Z du hook — c'est
-     * l'appel qui valide (ou invalide) toute la refonte.
-     *
-     * <p>Le pipeline doit ne déclarer QUE des uniformes que vanilla lie
-     * lui-même ({@code DynamicTransforms}, {@code Projection}) : la soumission
-     * est faite par {@code GuiRenderer}, qui ne connaît pas nos blocs
-     * personnalisés (un {@code BatchParams} ne serait jamais lié). Il doit
-     * aussi se contenter des attributs que vanilla écrit — {@code Position} et
-     * {@code Color}. Voir {@code VanillaGuiProbePipeline}.
-     *
-     * @param pipeline objet {@code RenderPipeline} (typé {@code Object} : il est
-     *                 construit par réflexion, voir {@code ShaderPipelineFactory}).
-     * @return {@code false} si indisponible ou si le pipeline n'est pas fourni.
-     */
-    public static boolean fillWithPipeline(Object hookContext, Object pipeline, int x0, int y0, int x1, int y1) {
-        GuiGraphicsExtractor g = extractor(hookContext);
-        if (g == null || pipeline == null) return false;
-        try {
-            g.fill((com.mojang.blaze3d.pipeline.RenderPipeline) pipeline, TextureSetup.noTexture(), x0, y0, x1, y1);
-            return true;
-        } catch (Throwable t) {
-            LauncherLog.err("[VanillaGuiLayer] fillWithPipeline: " + t);
-            return false;
-        }
     }
 
     /**
@@ -366,21 +307,6 @@ public final class VanillaGuiLayer {
         if (message.equals(lastReport)) return;
         lastReport = message;
         LauncherLog.err("[VanillaGuiLayer] " + message);
-    }
-
-    /**
-     * Ouvre une nouvelle strate : tout ce qui est émis ensuite passe au-dessus.
-     * Mécanisme NATIF de vanilla, exposé ici parce qu'il remplacera à terme nos
-     * propres bricolages d'ordre.
-     */
-    public static void nextStratum(Object hookContext) {
-        GuiGraphicsExtractor g = extractor(hookContext);
-        if (g == null) return;
-        try {
-            g.nextStratum();
-        } catch (Throwable t) {
-            LauncherLog.err("[VanillaGuiLayer] nextStratum: " + t);
-        }
     }
 
     private static int argb(UiColor c) {

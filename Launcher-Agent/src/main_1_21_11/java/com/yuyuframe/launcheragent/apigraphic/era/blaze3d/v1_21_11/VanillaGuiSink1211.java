@@ -92,11 +92,6 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
         return hookContext instanceof DrawContext ? ((DrawContext) hookContext).getScaledWindowWidth() : -1;
     }
 
-    @Override
-    public int guiHeight(Object hookContext) {
-        return hookContext instanceof DrawContext ? ((DrawContext) hookContext).getScaledWindowHeight() : -1;
-    }
-
     /**
      * Pipelines construits UNE FOIS. Format de sommet MAISON dans les deux cas :
      * celui de {@code RenderPipelines.GUI} ne porte que Position + Color, sans
@@ -246,17 +241,6 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
                               float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,
                               UiColor tint, UiColor background) {
         return false;
-    }
-
-    @Override
-    public void nextStratum(Object hookContext) {
-        GuiRenderState state = stateOf(hookContext);
-        if (state == null) return;
-        try {
-            state.createNewRootLayer();
-        } catch (Throwable t) {
-            reportOnce("nextStratum : " + t);
-        }
     }
 
     /**

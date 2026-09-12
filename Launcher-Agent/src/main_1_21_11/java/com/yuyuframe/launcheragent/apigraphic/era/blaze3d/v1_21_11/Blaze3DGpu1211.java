@@ -216,11 +216,6 @@ public final class Blaze3DGpu1211 implements Blaze3DGpu {
         return Identifier.of(namespace, path);
     }
 
-    @Override
-    public Object guiTextPipeline() {
-        return RenderPipelines.GUI_TEXT;
-    }
-
     /**
      * En 1.21.11, l'état couleur/profondeur n'est pas un objet unique à
      * recopier ({@code ColorTargetState}/{@code DepthStencilState} en 26.1.2) :

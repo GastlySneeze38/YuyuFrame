@@ -55,9 +55,6 @@ public interface VanillaGuiSink {
     /** Largeur de l'écran en PIXELS GUI, ou {@code -1}. */
     int guiWidth(Object hookContext);
 
-    /** Hauteur de l'écran en PIXELS GUI, ou {@code -1}. */
-    int guiHeight(Object hookContext);
-
     /**
      * Précompile les pipelines nécessaires à une passe de HUD (fond arrondi et
      * texte). Appelé UNE FOIS par passe, pas par primitive.
@@ -94,9 +91,6 @@ public interface VanillaGuiSink {
     boolean glassPanel(Object hookContext, float x0, float y0, float x1, float y1,
                        float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,
                        UiColor tint, UiColor background);
-
-    /** Ouvre une nouvelle strate : tout ce qui suit passe au-dessus. */
-    void nextStratum(Object hookContext);
 
     /** Vide la file d'icônes d'item vanilla dans l'état de GUI (no-op si non porté). */
     void flushItemIcons(Object hookContext);
