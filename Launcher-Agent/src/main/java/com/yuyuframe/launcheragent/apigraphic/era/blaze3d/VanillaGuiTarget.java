@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur;
@@ -128,11 +129,12 @@ public final class VanillaGuiTarget {
         // plus PETIT une fois converti.
         float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
         float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
-        return sink.roundedRect(context,
+        if (sink.roundedRect(context,
             Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom,
             rTopLeft / guiScale, rTopRight / guiScale,
             rBottomLeft / guiScale, rBottomRight / guiScale,
-            color);
+            color)) return true;
+        return consumedAfterFailure("rect arrondi");
     }
 
     /**
@@ -148,8 +150,9 @@ public final class VanillaGuiTarget {
         if (context == null) return false;
         float guiTop = (fbHeight - Math.max(y1, y2)) / guiScale;
         float guiBottom = (fbHeight - Math.min(y1, y2)) / guiScale;
-        return sink.icon(context, cacheKey, img,
-            Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom, alpha);
+        if (sink.icon(context, cacheKey, img,
+            Math.min(x1, x2) / guiScale, guiTop, Math.max(x1, x2) / guiScale, guiBottom, alpha)) return true;
+        return consumedAfterFailure("icone");
     }
 
     /**
@@ -187,7 +190,8 @@ public final class VanillaGuiTarget {
             pending.add(new PendingText(font, content, guiX, guiBaseline, guiScaleText, color));
             return true;
         }
-        return sink.text(context, font, content, guiX, guiBaseline, guiScaleText, color);
+        if (sink.text(context, font, content, guiX, guiBaseline, guiScaleText, color)) return true;
+        return consumedAfterFailure("texte");
     }
 
     /**
@@ -255,6 +259,34 @@ public final class VanillaGuiTarget {
     // tous les fonds, ce que le HUD veut de toute façon (les éléments HUD ne se
     // chevauchent pas entre eux).
 
+    /**
+     * La sink a REFUSÉ un dessin alors que la passe GUI est armée.
+     *
+     * <p>On renvoie {@code true} — « consommé » — pour que l'appelant ne se
+     * rabatte SURTOUT PAS sur la file Blaze3D. Ce repli-là ne réparait rien :
+     * il redessinait après la présentation de la frame, donc PAR-DESSUS le chat
+     * et toute la GUI vanilla, en donnant l'illusion que ça marchait. Vécu en
+     * v1068 : HUD bien visible, mais au mauvais z-order, et la vraie erreur
+     * noyée dans le journal.
+     *
+     * <p>Ne rien dessiner et le dire vaut mieux que dessiner au mauvais endroit.
+     */
+    private static boolean consumedAfterFailure(String what) {
+        reportOnce(what + " refusé par la sink « " + (sink != null ? sink.id() : "?")
+            + " » alors que la passe GUI est armée — rien dessiné, et AUCUN repli sur la file"
+            + " (il masquerait l'erreur)");
+        return true;
+    }
+
+    private static String lastReport;
+
+    /** Une raison distincte n'est journalisée qu'une fois — sinon c'est un message par primitive et par frame. */
+    private static void reportOnce(String message) {
+        if (message.equals(lastReport)) return;
+        lastReport = message;
+        LauncherLog.err("[VanillaGuiTarget] " + message);
+    }
+
     private static final java.util.List<PendingText> pending = new java.util.ArrayList<>();
     private static boolean batching;
 
@@ -284,7 +316,9 @@ public final class VanillaGuiTarget {
     private static void flushPending() {
         if (pending.isEmpty()) return;
         for (PendingText t : pending) {
-            sink.text(context, t.font, t.content, t.x, t.baseline, t.scale, t.color);
+            if (!sink.text(context, t.font, t.content, t.x, t.baseline, t.scale, t.color)) {
+                consumedAfterFailure("texte (lot)");
+            }
         }
         pending.clear();
     }

@@ -234,7 +234,15 @@ public final class YarnNamedRemapper {
                     // Même règle que method() : un supertype non renommé garde
                     // les noms de ses méthodes, donc nos redéfinitions aussi.
                     if (s == null || !MappingsRegistry.isNamedClass(s) || !ownerRenamed(s)) continue;
-                    String r = MappingsRegistry.namedToRuntimeMethod(s, name, descriptor, false);
+                    // allowInherited = TRUE : la méthode redéfinie peut être déclarée
+                    // PLUS HAUT que le supertype direct. Vécu en 1.21.11 (v1069) :
+                    // nos éléments de GUI implémentent SimpleGuiElementRenderState,
+                    // mais bounds() vient de sa parente GuiElementRenderState — la
+                    // recherche directe échouait, la déclaration gardait son nom Yarn,
+                    // et la JVM levait AbstractMethodError sur comp_4274() au premier
+                    // dessin. Le repli ne tranche que si TOUTES les candidates donnent
+                    // le même nom runtime (voir MappingsRegistry.inheritedMethodName).
+                    String r = MappingsRegistry.namedToRuntimeMethod(s, name, descriptor, true);
                     if (!r.equals(name)) { declared = r; break; }
                 }
             }

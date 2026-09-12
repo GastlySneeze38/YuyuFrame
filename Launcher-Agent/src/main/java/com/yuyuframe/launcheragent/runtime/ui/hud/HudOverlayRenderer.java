@@ -135,7 +135,9 @@ public final class HudOverlayRenderer {
         //   - écran vanilla/mod      → seulement ceux autorisés pour ce TYPE
         //                              d'écran (voir shouldShowPersistent)
         //   - un de NOS écrans       → aucun HUD, le menu occupe l'écran
-        Object screen = ClientData.screen();
+        // screenObject() et NON screen() : cette méthode tourne sur toutes les
+        // versions, et la variante typée lierait le Screen 26.1.2 (voir sa javadoc).
+        Object screen = ClientData.screenObject();
         if (screen instanceof UiDrawable) return;
 
         int w = poller.fbWidth, h = poller.fbHeight;

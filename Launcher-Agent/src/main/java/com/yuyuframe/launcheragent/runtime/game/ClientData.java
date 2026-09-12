@@ -67,6 +67,24 @@ public final class ClientData {
         return AccessorRegistry.as(Screen.class, AccessPoint.CLIENT_SCREEN, null);
     }
 
+    /**
+     * Le même écran, mais en poignée OPAQUE — pour les chemins PARTAGÉS entre
+     * versions.
+     *
+     * <p>{@link #screen()} nomme le type 26.1.2 dans SA SIGNATURE : l'appeler
+     * suffit à faire lier cette classe, donc {@code NoClassDefFoundError} sur
+     * une autre version. C'est exactement ce qui empêchait le HUD de s'afficher
+     * en 1.21.11 (v1067) : le handler de {@code HUD_EXTRACT_CHAT} mourait ici,
+     * avant d'avoir rien dessiné. Un chemin commun aux versions ne doit donc
+     * jamais passer par la variante typée.
+     *
+     * <p>Les appelants n'en font de toute façon qu'un {@code != null} ou une
+     * classification par nom ({@code HudScreenKind}) — le type ne leur sert pas.
+     */
+    public static Object screenObject() {
+        return AccessorRegistry.as(Object.class, AccessPoint.CLIENT_SCREEN, null);
+    }
+
     /** HUD vanilla, ou {@code null}. */
     public static Gui gui() {
         return AccessorRegistry.as(Gui.class, AccessPoint.CLIENT_GUI, null);
