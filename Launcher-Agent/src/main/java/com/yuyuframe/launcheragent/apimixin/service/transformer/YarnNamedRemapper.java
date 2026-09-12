@@ -59,6 +59,11 @@ public final class YarnNamedRemapper {
     /** Paquets (noms internes, avec « / » final) dont les classes sont traduites. */
     private static final String[] PACKAGES = {
         "com/yuyuframe/launcheragent/apigraphic/era/blaze3d/v1_21_11/",
+        // Accès aux données du jeu en 1.21.11 (AccessorBindings1211) : même
+        // unité de compilation typée, mêmes règles. L essentiel de ce que
+        // les 26.1.2 atteignent par accessor Mixin est PUBLIC sur cette
+        // version — du code typé suffit, sans mixin ni réflexion.
+        "com/yuyuframe/launcheragent/apimixin/typed/v1_21_11/",
     };
 
     /** Membres net.minecraft introuvables dans Yarn — journalisés une fois chacun. */

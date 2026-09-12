@@ -421,6 +421,14 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/util/Identifier;F)V", null),
         new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/clock/ClockTotalTicksMixin1211",
             "net/minecraft/world/World", "getTimeOfDay", "()J", null),
+        // ── apimixin 1.21.11, lot 5 : accès aux données du jeu ────────────
+        // Deux champs PRIVÉS seulement : tout le reste de ce que la 26.1.2
+        // atteint par accessor est public en 1.21.11 et passe par du code
+        // typé (AccessorBindings1211).
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/MinecraftClientAccessor1211",
+            "net/minecraft/client/MinecraftClient", "currentFps"),
+        RefmapEntry.field("com/yuyuframe/launcheragent/apimixin/v1_21_11/core/HungerManagerAccessor1211",
+            "net/minecraft/entity/player/HungerManager", "exhaustion"),
         // ── apimixin 1.21.11, lot 3 : HUD dans la passe GUI de vanilla ────
         // renderChat = le point d'insertion du HUD de l'agent (tout le HUD
         // vanilla déjà extrait, chat pas encore) ; le constructeur de

@@ -83,6 +83,11 @@ public final class AccessorRegistry {
         if ("26.1.2".equals(mcVersion)) {
             return "com.yuyuframe.launcheragent.apimixin.v26_1.core.AccessorBindings261";
         }
+        if ("1.21.11".equals(mcVersion)) {
+            // Unité de compilation TYPÉE (src/main_1_21_11) : sur cette version,
+            // l essentiel des données est public, donc atteint sans accessor.
+            return "com.yuyuframe.launcheragent.apimixin.typed.v1_21_11.AccessorBindings1211";
+        }
         return null;
     }
 
