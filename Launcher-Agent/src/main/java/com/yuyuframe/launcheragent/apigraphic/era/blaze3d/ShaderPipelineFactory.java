@@ -10,9 +10,8 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
  * L'ancien mécanisme — {@code GpuDevice.precompilePipeline(RenderPipeline,
  * ShaderSource)} avec un {@code ShaderSource} répondant notre GLSL embarqué,
  * format de sommet et état GPU copiés d'un pipeline de référence (technique
- * d'UniversalCraft, {@code URenderPipeline.kt}) — vit désormais dans ces
- * implémentations : {@code Blaze3DGpu1211} (typé) et {@link
- * Blaze3DGpuReflective261} (transitoire, étape 3 du retrait de la réflexion).
+ * d'UniversalCraft, {@code URenderPipeline.kt}) — vit désormais dans les
+ * implémentations typées {@code Blaze3DGpu1211} et {@code Blaze3DGpu261}.
  */
 public final class ShaderPipelineFactory {
     private ShaderPipelineFactory() {}

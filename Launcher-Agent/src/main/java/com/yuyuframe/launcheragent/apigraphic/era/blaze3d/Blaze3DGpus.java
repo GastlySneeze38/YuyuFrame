@@ -12,10 +12,12 @@ import java.util.ServiceLoader;
  * version est compilée APRÈS le moteur (unité séparée, voir {@code build.bat}),
  * le moteur ne peut donc pas la référencer statiquement.
  *
- * <p>Résolue une fois. Sans implémentation typée pour la version (26.1.2
- * aujourd'hui), repli sur {@link Blaze3DGpuReflective261} — adaptateur
- * TRANSITOIRE, seul fichier réflexif du moteur Blaze3D, à supprimer à l'étape 3
- * du retrait de la réflexion. {@code null} (journalisé) si même lui échoue.
+ * <p>Résolue une fois. Sans implémentation typée pour la version : {@code null}
+ * (journalisé), et {@code Blaze3DCore.resolve()} échoue franchement. Il y avait
+ * ici, jusqu'à la v1106, un repli sur un adaptateur réflexif écrit pour la
+ * 26.1.2 ; cette version ayant désormais son implémentation typée
+ * ({@code Blaze3DGpu261}), le repli n'avait plus d'autre effet que de masquer
+ * l'absence d'un fournisseur derrière un moteur qui semble démarrer.
  */
 public final class Blaze3DGpus {
 
@@ -43,9 +45,9 @@ public final class Blaze3DGpus {
         } catch (Throwable t) {
             LauncherLog.err("[Blaze3DGpus] découverte des implémentations échouée : " + t);
         }
-        LauncherLog.agent(1, "[Blaze3DGpus] aucune implémentation typée pour la version \"" + version
-            + "\" — repli sur l'adaptateur réflexif transitoire");
-        active = Blaze3DGpuReflective261.createOrNull();
-        return active;
+        LauncherLog.err("[Blaze3DGpus] aucune implémentation Blaze3DGpu pour la version \"" + version
+            + "\" — le moteur graphique ne peut pas démarrer. Une version supportée doit déclarer"
+            + " son fournisseur dans META-INF/services (voir Blaze3DGpuProvider261/1211).");
+        return null;
     }
 }

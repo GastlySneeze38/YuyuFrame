@@ -15,12 +15,12 @@ import java.nio.ByteBuffer;
  * lignes, tout dans un seul fichier), même granularité que {@code GlBridge}
  * pour les backends GL legacy/moderne.
  *
- * <p>PLUS AUCUNE RÉFLEXION (retrait de la réflexion du moteur, étape 2c) : tous
- * les appels GPU passent par {@link Blaze3DGpu}, dont l'implémentation est celle
- * de la version en cours ({@link Blaze3DGpus#active()}) — typée en 1.21.11,
- * encore réflexive et transitoire en 26.1.2 ({@link Blaze3DGpuReflective261},
- * à supprimer à l'étape 3). Ce fichier ne connaît donc plus aucun nom de classe
- * du jeu : il ne manipule que des poignées opaques rendues par l'interface.
+ * <p>PLUS AUCUNE RÉFLEXION, des DEUX côtés depuis la v1106 (étape 3 close) :
+ * tous les appels GPU passent par {@link Blaze3DGpu}, dont l'implémentation est
+ * celle de la version en cours ({@link Blaze3DGpus#active()}) — {@code
+ * Blaze3DGpu1211} et {@code Blaze3DGpu261}, toutes deux typées. Ce fichier ne
+ * connaît donc plus aucun nom de classe du jeu : il ne manipule que des
+ * poignées opaques rendues par l'interface.
  */
 public final class Blaze3DCore {
     private Blaze3DCore() {}
