@@ -46,34 +46,8 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
 public final class Blaze3DGuiVignette {
     private Blaze3DGuiVignette() {}
 
-    private static final String VERTEX_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "layout(std140) uniform Projection {\n" +
-        "    mat4 ProjMat;\n" +
-        "};\n" +
-        "in vec3 Position;\n" +
-        "in vec4 Color;\n" +
-        "in vec2 UV0;\n" +
-        "in ivec2 UV1;\n" +
-        "in ivec2 UV2;\n" +
-        "out vec4 vertexColor;\n" +
-        "out vec2 localPos;\n" +
-        // flat : constants par primitive — seule localPos doit varier.
-        "flat out vec2 halfSize;\n" +
-        "flat out float vSize;\n" +
-        "void main() {\n" +
-        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
-        "    vertexColor = Color;\n" +
-        "    localPos = UV0;\n" +
-        "    halfSize = vec2(UV1);\n" +
-        "    vSize = float(UV2.x);\n" +
-        "}\n";
+    // GLSL PARTAGÉ avec la 1.21.11 (voir GuiElementShaders) : le rendu diffère, le shader non.
+    private static final String VERTEX_SRC = GuiElementShaders.VIGNETTE_VERTEX;
 
     /**
      * Reprend TRAIT POUR TRAIT la courbe de l'ancien shader GL brut — même
@@ -81,45 +55,7 @@ public final class Blaze3DGuiVignette {
      * l'apparence. Les deux commentaires d'origine valent toujours et sont
      * conservés ici, ce sont des conclusions durement acquises.
      */
-    private static final String FRAGMENT_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "in vec4 vertexColor;\n" +
-        "in vec2 localPos;\n" +
-        "flat in vec2 halfSize;\n" +
-        "flat in float vSize;\n" +
-        "out vec4 fragColor;\n" +
-        "void main() {\n" +
-        // Distance au bord le plus proche : halfSize - |localPos| donne la
-        // distance à chaque paire de bords, le min() des deux axes donne le
-        // bord le plus proche des quatre. Le chevauchement des dégradés
-        // opposés quand la largeur dépasse 50% de l'écran est géré nativement
-        // par ce min(), sans double comptage.
-        "    vec2 d = halfSize - abs(localPos);\n" +
-        "    float distEdge = min(d.x, d.y);\n" +
-        // smootherstep (Ken Perlin, 6t^5-15t^4+10t^3) : dérivée première ET
-        // seconde nulles aux deux bornes, la référence pour ce type de
-        // dégradé. Une tentative d'"ease-out" (1-t)^3 avait été essayée à
-        // l'époque du chemin GL brut ; elle ne servait à rien, le bord net
-        // venait d'un GL_ALPHA_TEST resté actif — problème qui ne peut plus
-        // se poser ici, le pipeline déclarant lui-même son état.
-        "    float t = clamp(distEdge / max(vSize, 1.0), 0.0, 1.0);\n" +
-        "    float eased = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
-        "    float alpha = 1.0 - eased;\n" +
-        // Le framebuffer ne code que 256 niveaux par canal — même une courbe
-        // parfaitement lisse en maths QUANTIFIE en paliers visibles sur une
-        // zone large. Un bruit d'environ 1 LSB les casse (technique standard
-        // contre le banding des dégradés plein écran).
-        "    float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;\n" +
-        "    alpha = clamp(alpha + dither / 128.0, 0.0, 1.0);\n" +
-        "    if (alpha <= 0.001) discard;\n" +
-        "    fragColor = vec4(vertexColor.rgb, vertexColor.a * alpha) * ColorModulator;\n" +
-        "}\n";
+    private static final String FRAGMENT_SRC = GuiElementShaders.VIGNETTE_FRAGMENT;
 
     private static Object pipeline, shaderSource;
     private static boolean buildAttempted, buildFailed;

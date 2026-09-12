@@ -47,67 +47,12 @@ public final class Blaze3DGuiGlass {
      * {@code UiTheme.GLASS_STRENGTH_FIELD}, la seule valeur que le HUD
      * utilisait ({@code HudPanelRenderer} n'en passe pas d'autre).
      */
-    public static final float TINT_STRENGTH = 0.35f;
+    public static final float TINT_STRENGTH = GuiElementShaders.GLASS_TINT_STRENGTH;
 
-    private static final String VERTEX_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "layout(std140) uniform Projection {\n" +
-        "    mat4 ProjMat;\n" +
-        "};\n" +
-        "in vec3 Position;\n" +
-        "in vec4 Color;\n" +
-        "in vec2 UV0;\n" +
-        "in ivec2 UV1;\n" +
-        "in ivec2 UV2;\n" +
-        "out vec4 vertexColor;\n" +
-        "out vec2 localPos;\n" +
-        "flat out vec2 halfSize;\n" +
-        "flat out vec4 radii;\n" +
-        "void main() {\n" +
-        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
-        "    vertexColor = Color;\n" +
-        "    localPos = UV0;\n" +
-        "    halfSize = vec2(UV1);\n" +
-        "    radii = vec4(float((UV2.x >> 8) & 255), float(UV2.x & 255),\n" +
-        "                 float((UV2.y >> 8) & 255), float(UV2.y & 255));\n" +
-        "}\n";
+    // GLSL PARTAGÉ avec la 1.21.11 (voir GuiElementShaders) : le rendu diffère, le shader non.
+    private static final String VERTEX_SRC = GuiElementShaders.GLASS_VERTEX;
 
-    private static final String FRAGMENT_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "uniform sampler2D Sampler0;\n" +
-        "in vec4 vertexColor;\n" +
-        "in vec2 localPos;\n" +
-        "flat in vec2 halfSize;\n" +
-        "flat in vec4 radii;\n" +
-        "out vec4 fragColor;\n" +
-        "void main() {\n" +
-        // Coordonnée d'échantillonnage déduite du fragment : gl_FragCoord est
-        // en pixels de fenêtre, textureSize donne la taille de la texture
-        // floutée. Pas d'attribut ni d'uniforme à ajouter pour ça.
-        "    vec2 uv = gl_FragCoord.xy / vec2(textureSize(Sampler0, 0));\n" +
-        "    vec3 blurred = texture(Sampler0, uv).rgb;\n" +
-        "    float radius = (localPos.y < 0.0)\n" +
-        "        ? ((localPos.x < 0.0) ? radii.x : radii.y)\n" +
-        "        : ((localPos.x < 0.0) ? radii.z : radii.w);\n" +
-        "    vec2 q = abs(localPos) - halfSize + radius;\n" +
-        "    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;\n" +
-        "    float mask = 1.0 - smoothstep(-0.5, 0.5, d);\n" +
-        "    if (mask <= 0.001) discard;\n" +
-        "    vec3 rgb = mix(blurred, vertexColor.rgb, " + TINT_STRENGTH + ");\n" +
-        "    fragColor = vec4(rgb, vertexColor.a * mask) * ColorModulator;\n" +
-        "}\n";
+    private static final String FRAGMENT_SRC = GuiElementShaders.GLASS_FRAGMENT;
 
     private static Object pipeline, shaderSource;
     private static boolean buildAttempted, buildFailed;

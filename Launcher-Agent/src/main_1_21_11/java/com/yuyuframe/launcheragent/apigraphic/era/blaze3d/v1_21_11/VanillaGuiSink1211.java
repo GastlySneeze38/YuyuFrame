@@ -4,8 +4,10 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGpu;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGpus;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DText;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.GuiElementShaders;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiSink;
@@ -42,12 +44,24 @@ import java.util.Map;
  *       (contrairement à {@code VertexFormatElementAccessor261}).</li>
  * </ul>
  *
- * <h2>Portée de cette étape</h2>
+ * <h2>Primitives couvertes</h2>
  *
- * Fond arrondi et texte — c'est tout ce que le HUD pose réellement dans l'état
- * de GUI. Icône, vignette et verre dépoli répondent {@code false} : l'appelant
- * garde alors son chemin habituel (file Blaze3D pour les icônes, aplat pour le
- * verre), au lieu d'un HUD absent. Ils viendront avec leurs pipelines dédiés.
+ * Fond arrondi, texte, icône, vignette et verre dépoli — parité avec la
+ * 26.1.2 depuis le 2026-09-12.
+ *
+ * <p>Fond et texte sont CRITIQUES : leur échec éteint la sink entière. Les
+ * trois autres sont construites à part et peuvent manquer individuellement
+ * sans emporter le HUD (voir {@code buildExtras}) — c'est la même garantie que
+ * la 26.1.2 obtient en les compilant à la demande.
+ *
+ * <p>Seules les icônes d'ITEM vanilla restent hors de l'état de GUI sur cette
+ * version : elles passent par la file Blaze3D (voir {@link #flushItemIcons}).
+ *
+ * <p>Ce qui est PARTAGÉ avec la 26.1.2 plutôt que recopié : tout le GLSL
+ * ({@code GuiElementShaders}), l'atlas d'icônes ({@code Blaze3DRect}) et la
+ * chaîne de flou ({@code Blaze3DBlur}) — ces trois-là passent déjà par
+ * {@link Blaze3DGpu}, donc par l'implémentation de la version active. Seule la
+ * soumission à l'état de GUI est propre à cette tranche.
  */
 public final class VanillaGuiSink1211 implements VanillaGuiSink {
 
@@ -55,6 +69,12 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
     private Object rectShaderSource;
     private RenderPipeline textPipeline;
     private Object textShaderSource;
+    private RenderPipeline iconPipeline;
+    private Object iconShaderSource;
+    private RenderPipeline vignettePipeline;
+    private Object vignetteShaderSource;
+    private RenderPipeline glassPipeline;
+    private Object glassShaderSource;
     private boolean buildAttempted, buildFailed;
 
     /** Un {@code TextureSetup} par police — l'atlas ne change jamais de la session. */
@@ -138,14 +158,83 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
                 textFsh, GuiElementShaders.TEXT_FRAGMENT);
 
             buildFailed = rectPipeline == null || textPipeline == null;
-            if (buildFailed) LauncherLog.err("[VanillaGuiSink1211] pipeline nul après construction");
+            if (buildFailed) {
+                LauncherLog.err("[VanillaGuiSink1211] pipeline nul après construction");
+                return false;
+            }
         } catch (Throwable t) {
             buildFailed = true;
             Throwable cause = t;
             while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
             LauncherLog.err("[VanillaGuiSink1211] construction des pipelines : " + t + " | cause réelle : " + cause);
+            return false;
         }
-        return !buildFailed;
+        buildExtras();
+        return true;
+    }
+
+    /**
+     * Icône, vignette et verre — construits dans la MÊME passe que le fond et
+     * le texte, mais dans un try/catch à part et SANS toucher
+     * {@code buildFailed}.
+     *
+     * <p>C'est la règle que la 26.1.2 obtenait en les compilant à la demande :
+     * un échec sur l'une de ces trois primitives ne doit pas faire disparaître
+     * le HUD ENTIER. Chacune vérifie son propre pipeline avant de s'en servir
+     * et répond {@code false} toute seule, ce qui rend à l'appelant son chemin
+     * de repli.
+     */
+    private void buildExtras() {
+        try {
+            Blaze3DGpu gpu = Blaze3DGpus.active();
+            if (gpu == null) return;
+
+            // Icône : MÊME format que le texte — seul le fragment change (voir
+            // GuiElementShaders). Le pipeline, lui, doit être distinct : c'est
+            // lui, avec la texture, qui décide du regroupement en maillages.
+            VertexFormat iconFormat = VertexFormat.builder()
+                .add("Position", VertexFormatElement.POSITION)
+                .add("Color", VertexFormatElement.COLOR)
+                .add("UV0", VertexFormatElement.UV0)
+                .build();
+            Object iconVsh = gpu.identifier("yuyuframe", "shader/ui_gui_icon.vsh");
+            Object iconFsh = gpu.identifier("yuyuframe", "shader/ui_gui_icon.fsh");
+            iconPipeline = (RenderPipeline) gpu.buildPipeline("ui_gui_icon", iconVsh, iconFsh,
+                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection" },
+                RenderPipelines.GUI, iconFormat);
+            iconShaderSource = gpu.shaderSource(iconVsh, GuiElementShaders.ICON_VERTEX,
+                iconFsh, GuiElementShaders.ICON_FRAGMENT);
+
+            // Vignette et verre : même format que le rect arrondi (position
+            // locale, demi-taille, deux entiers libres), deux lectures
+            // différentes de ces entiers côté fragment.
+            VertexFormat shapeFormat = VertexFormat.builder()
+                .add("Position", VertexFormatElement.POSITION)
+                .add("Color", VertexFormatElement.COLOR)
+                .add("UV0", VertexFormatElement.UV0)
+                .add("UV1", VertexFormatElement.UV1)
+                .add("UV2", VertexFormatElement.UV2)
+                .build();
+
+            Object vignetteVsh = gpu.identifier("yuyuframe", "shader/ui_gui_vignette.vsh");
+            Object vignetteFsh = gpu.identifier("yuyuframe", "shader/ui_gui_vignette.fsh");
+            vignettePipeline = (RenderPipeline) gpu.buildPipeline("ui_gui_vignette", vignetteVsh, vignetteFsh,
+                new String[0], new String[]{ "DynamicTransforms", "Projection" },
+                RenderPipelines.GUI, shapeFormat);
+            vignetteShaderSource = gpu.shaderSource(vignetteVsh, GuiElementShaders.VIGNETTE_VERTEX,
+                vignetteFsh, GuiElementShaders.VIGNETTE_FRAGMENT);
+
+            Object glassVsh = gpu.identifier("yuyuframe", "shader/ui_gui_glass.vsh");
+            Object glassFsh = gpu.identifier("yuyuframe", "shader/ui_gui_glass.fsh");
+            glassPipeline = (RenderPipeline) gpu.buildPipeline("ui_gui_glass", glassVsh, glassFsh,
+                new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection" },
+                RenderPipelines.GUI, shapeFormat);
+            glassShaderSource = gpu.shaderSource(glassVsh, GuiElementShaders.GLASS_VERTEX,
+                glassFsh, GuiElementShaders.GLASS_FRAGMENT);
+        } catch (Throwable t) {
+            // Jamais muet, mais jamais fatal non plus — voir la javadoc.
+            LauncherLog.err("[VanillaGuiSink1211] construction des pipelines secondaires : " + t);
+        }
     }
 
     /**
@@ -162,6 +251,11 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
             Object device = gpu.device();
             gpu.precompile(device, rectPipeline, rectShaderSource);
             gpu.precompile(device, textPipeline, textShaderSource);
+            // Les trois secondaires peuvent manquer sans que le HUD tombe
+            // (voir buildExtras) : on ne précompile que ce qui existe.
+            if (iconPipeline != null) gpu.precompile(device, iconPipeline, iconShaderSource);
+            if (vignettePipeline != null) gpu.precompile(device, vignettePipeline, vignetteShaderSource);
+            if (glassPipeline != null) gpu.precompile(device, glassPipeline, glassShaderSource);
             return true;
         } catch (Throwable t) {
             reportOnce("précompilation : " + t);
@@ -217,30 +311,123 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
         return setup;
     }
 
+    /**
+     * L'atlas d'icônes 2048² PARTAGÉ avec la file Blaze3D : une icône déjà
+     * packée pour celle-ci est utilisable ici sans seconde copie GPU, et toutes
+     * portent le même {@code TextureSetup}, donc se regroupent en un maillage
+     * unique quand elles se suivent.
+     */
+    private TextureSetup atlasSetup;
+
     @Override
     public boolean icon(Object hookContext, String cacheKey, BufferedImage img,
                         float x0, float y0, float x1, float y1, float alpha) {
-        reportOnce("icône : pas encore portée sur 1.21.11 (repli sur la file Blaze3D)");
-        return false;
+        if (img == null) return false;
+        GuiRenderState state = stateOf(hookContext);
+        if (state == null || !buildPipelines()) return false;
+        if (iconPipeline == null) {
+            reportOnce("icône : pipeline indisponible");
+            return false;
+        }
+        try {
+            Object[] entry = Blaze3DRect.guiAtlasEntry(cacheKey, img);
+            if (entry == null) {
+                // Atlas plein ou Blaze3D indisponible — déjà journalisé là-bas.
+                return false;
+            }
+            if (atlasSetup == null) {
+                atlasSetup = TextureSetup.of((GpuTextureView) entry[1], (GpuSampler) entry[2]);
+            }
+            // Blanc modulé par l'opacité demandée : le fragment multiplie la
+            // couleur de sommet par le texel, donc blanc = image telle quelle.
+            int argb = (Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f) << 24) | 0x00FFFFFF;
+            state.addSimpleElement(new IconElement1211(x0, y0, x1, y1,
+                (float[]) entry[0], argb, iconPipeline, atlasSetup));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("icon : " + t);
+            return false;
+        }
     }
 
     @Override
     public boolean vignette(Object hookContext, float x0, float y0, float x1, float y1,
                             float vSize, UiColor color) {
-        reportOnce("vignette : pas encore portée sur 1.21.11");
-        return false;
+        GuiRenderState state = stateOf(hookContext);
+        if (state == null || !buildPipelines()) return false;
+        if (vignettePipeline == null) {
+            reportOnce("vignette : pipeline indisponible");
+            return false;
+        }
+        try {
+            state.addSimpleElement(new VignetteElement1211(x0, y0, x1, y1, vSize,
+                argb(color), vignettePipeline));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("vignette : " + t);
+            return false;
+        }
     }
 
+    /**
+     * {@code true} depuis le portage du verre (2026-09-12).
+     *
+     * <p>Ce drapeau commande la chaîne de flou : le répondre à tort ferait
+     * payer plusieurs passes plein écran par frame pour un résultat jamais
+     * dessiné — c'est pour ça que {@code VanillaGuiTarget.beginGlassFrame} le
+     * consulte AVANT de lancer la chaîne.
+     */
     @Override
     public boolean supportsGlassPanel() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean glassPanel(Object hookContext, float x0, float y0, float x1, float y1,
                               float rTopLeft, float rTopRight, float rBottomLeft, float rBottomRight,
                               UiColor tint, UiColor background) {
-        return false;
+        GuiRenderState state = stateOf(hookContext);
+        if (state == null || !buildPipelines()) return false;
+        if (glassPipeline == null) {
+            reportOnce("verre : pipeline indisponible");
+            return false;
+        }
+        try {
+            TextureSetup blurred = blurSetup();
+            if (blurred == null) {
+                // Aucune chaîne de flou pour cette frame : l'appelant retombe
+                // sur son fond plein plutôt que d'échantillonner n'importe quoi.
+                reportOnce("verre : chaîne de flou indisponible pour cette frame");
+                return false;
+            }
+            // rgb = TEINTE, a = opacité du FOND : le fragment mélange le flou
+            // avec la teinte puis applique l'alpha. Prendre l'alpha de la
+            // teinte à la place (l'erreur naturelle ici) donnerait un panneau
+            // d'une opacité sans rapport — même composition qu'en 26.1.2.
+            int argb = (Math.round(background.a * 255f) << 24)
+                     | (Math.round(tint.r * 255f) << 16)
+                     | (Math.round(tint.g * 255f) << 8)
+                     |  Math.round(tint.b * 255f);
+            state.addSimpleElement(new GlassPanelElement1211(x0, y0, x1, y1,
+                rTopLeft, rTopRight, rBottomLeft, rBottomRight,
+                argb, glassPipeline, blurred));
+            return true;
+        } catch (Throwable t) {
+            reportOnce("glassPanel : " + t);
+            return false;
+        }
+    }
+
+    /**
+     * {@code TextureSetup} sur le résultat de la chaîne de flou — JAMAIS mis en
+     * cache, contrairement à l'atlas : la chaîne est recréée à chaque
+     * changement de résolution, et sa vue avec.
+     */
+    private TextureSetup blurSetup() {
+        Object view = Blaze3DBlur.blurredView();
+        Object sampler = Blaze3DBlur.blurSampler();
+        if (view == null || sampler == null) return null;
+        return TextureSetup.of((GpuTextureView) view, (GpuSampler) sampler);
     }
 
     /**

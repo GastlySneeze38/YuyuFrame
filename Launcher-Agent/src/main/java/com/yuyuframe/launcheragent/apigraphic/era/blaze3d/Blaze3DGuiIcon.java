@@ -45,49 +45,10 @@ import java.awt.image.BufferedImage;
 public final class Blaze3DGuiIcon {
     private Blaze3DGuiIcon() {}
 
-    private static final String VERTEX_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "layout(std140) uniform Projection {\n" +
-        "    mat4 ProjMat;\n" +
-        "};\n" +
-        "in vec3 Position;\n" +
-        "in vec4 Color;\n" +
-        "in vec2 UV0;\n" +
-        "out vec4 vertexColor;\n" +
-        "out vec2 texCoord;\n" +
-        "void main() {\n" +
-        "    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);\n" +
-        "    vertexColor = Color;\n" +
-        "    texCoord = UV0;\n" +
-        "}\n";
+    // GLSL PARTAGÉ avec la 1.21.11 (voir GuiElementShaders) : le rendu diffère, le shader non.
+    private static final String VERTEX_SRC = GuiElementShaders.ICON_VERTEX;
 
-    private static final String FRAGMENT_SRC =
-        "#version 330\n" +
-        "layout(std140) uniform DynamicTransforms {\n" +
-        "    mat4 ModelViewMat;\n" +
-        "    vec4 ColorModulator;\n" +
-        "    vec3 ModelOffset;\n" +
-        "    mat4 TextureMat;\n" +
-        "};\n" +
-        "uniform sampler2D Sampler0;\n" +
-        "in vec4 vertexColor;\n" +
-        "in vec2 texCoord;\n" +
-        "out vec4 fragColor;\n" +
-        "void main() {\n" +
-        "    vec4 texel = texture(Sampler0, texCoord);\n" +
-        // Les textures d'effets vanilla sont largement transparentes ; jeter
-        // les fragments vides évite de les blender pour rien.
-        "    if (texel.a < 0.01) discard;\n" +
-        // Couleur RÉELLE de l'image, modulée par la couleur de sommet — qui
-        // sert d'opacité (blanc opaque = image telle quelle).
-        "    fragColor = texel * vertexColor * ColorModulator;\n" +
-        "}\n";
+    private static final String FRAGMENT_SRC = GuiElementShaders.ICON_FRAGMENT;
 
     private static Object pipeline, shaderSource;
     private static boolean buildAttempted, buildFailed;
