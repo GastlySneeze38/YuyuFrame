@@ -1,16 +1,16 @@
 package net.minecraft.resource;
 
 /**
- * Stub compile-only 1.21.11, nom Yarn — poignée OPAQUE : le gestionnaire de ressources.
+ * Stub compile-only 1.21.11, nom Yarn ({@code baz}) — le gestionnaire de
+ * ressources du jeu.
  *
- * <p>Aucun membre : ce type ne sert qu'à donner au bytecode le bon descripteur
- * (un champ ou un retour de méthode se résout par son TYPE autant que par son
- * nom). Les liaisons le repassent tel quel en {@code Object} — voir
- * {@code AccessorBindings1211} et les règles de l'unité dans
- * {@code com.mojang.blaze3d.systems.RenderSystem}.
+ * <p>INTERFACE dans le jeu, comme {@link ResourceFactory} dont elle hérite —
+ * déclarer l'un ou l'autre en classe produit un {@code invokevirtual} fautif
+ * (voir {@link net.minecraft.registry.entry.RegistryEntry}).
+ *
+ * <p>Aucun membre propre : tout ce qu'on lui demande ({@code getResource}) est
+ * déclaré par {@code ResourceFactory}, et c'est ce nom-là que doit porter
+ * l'appel.
  */
-public class ResourceManager extends ResourceFactory {
-
-    private ResourceManager() {
-    }
+public interface ResourceManager extends ResourceFactory {
 }

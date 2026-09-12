@@ -10,7 +10,7 @@ import net.minecraft.sound.SoundEvent;
  * <p>Ordre des paramètres, à ne pas intervertir : HAUTEUR puis VOLUME, comme
  * en 26.1.2 (vérifié dans les mappings : {@code ui(Lbcz;FF)Liph;}).
  */
-public class PositionedSoundInstance extends SoundInstance {
+public class PositionedSoundInstance implements SoundInstance {
 
     protected PositionedSoundInstance() {
     }

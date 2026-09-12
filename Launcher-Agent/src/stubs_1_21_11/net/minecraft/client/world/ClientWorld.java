@@ -13,8 +13,13 @@ package net.minecraft.client.world;
  * {@code getBiome} est DÉCLARÉE : sans cette relation, un appel typé ici
  * porterait le mauvais propriétaire et serait introuvable après traduction.
  */
-public class ClientWorld extends net.minecraft.world.WorldView {
+public class ClientWorld implements net.minecraft.world.WorldView {
 
     private ClientWorld() {
+    }
+
+    @Override
+    public net.minecraft.registry.entry.RegistryEntry getBiome(net.minecraft.util.math.BlockPos pos) {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 }

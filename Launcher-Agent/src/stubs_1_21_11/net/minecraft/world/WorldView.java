@@ -7,22 +7,17 @@ import net.minecraft.util.math.BlockPos;
  * Stub compile-only 1.21.11, nom Yarn ({@code dwr}) — classe DÉCLARANTE de
  * {@code getBiome}.
  *
- * <p>C'est ICI qu'elle est déclarée, pas sur {@code ClientWorld} : javac écrit
- * le type STATIQUE du receveur comme propriétaire de l'appel, et Yarn range
- * chaque méthode sous sa déclarante. Typer le receveur en {@code ClientWorld}
- * produirait {@code ClientWorld.getBiome}, introuvable après traduction —
- * exactement le piège payé en v1076 sur {@code getX}/{@code getHealth}.
+ * <p>INTERFACE dans le jeu. La déclarer en classe faisait émettre un
+ * {@code invokevirtual} : le biome ne se lisait jamais en 1.21.11, avec un
+ * {@code IncompatibleClassChangeError} à chaque frame — voir
+ * {@link net.minecraft.registry.entry.RegistryEntry}.
  *
- * <p>Interface en jeu ; déclarée en classe ici, ce qui suffit pour porter le
- * bon propriétaire d'appel.
+ * <p>Déclarée ici et pas sur {@code ClientWorld} : javac écrit le type STATIQUE
+ * du receveur comme propriétaire de l'appel, et Yarn range chaque méthode sous
+ * sa déclarante (leçon v1076).
  */
-public class WorldView {
-
-    protected WorldView() {
-    }
+public interface WorldView {
 
     /** Biome à cette position — {@code RegistryEntry<Biome>} en jeu. */
-    public RegistryEntry getBiome(BlockPos pos) {
-        throw new UnsupportedOperationException("stub compile-only");
-    }
+    RegistryEntry getBiome(BlockPos pos);
 }

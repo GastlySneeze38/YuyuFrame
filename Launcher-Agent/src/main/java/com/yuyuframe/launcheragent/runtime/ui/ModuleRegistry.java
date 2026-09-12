@@ -289,11 +289,14 @@ public final class ModuleRegistry {
             safeRegister(() -> new BorderlessWindowModule());
         }
         safeRegister(() -> new MumbleLinkModule());
-        // Macros + connexion automatique — 26.1.2 seulement : la détection du
-        // login lit l'arbre de commandes via des accessors qui n'existent que
-        // sur ce bracket, et la lecture de touche par NOM demande le poller
-        // moderne (GLFW), absent en 1.8.9.
-        if (IS_26_1) {
+        // Macros + connexion automatique — 26.1.2 ET 1.21.11 depuis le
+        // 2026-09-12. La restriction d'origine disait « la détection du login
+        // lit l'arbre de commandes via des accessors qui n'existent que sur ce
+        // bracket » : ce n'est plus vrai, tout passe désormais par
+        // NetworkData/les points d'accès, liés des deux côtés. Reste exclue la
+        // 1.8.9, dont la lecture de touche par NOM demande le poller moderne
+        // (GLFW), absent de ce bracket.
+        if (IS_26_1 || IS_1_21_11) {
             safeRegister(() -> new MacroModule());
         }
 

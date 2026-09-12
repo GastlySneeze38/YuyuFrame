@@ -2,8 +2,6 @@ package com.yuyuframe.launcheragent.runtime.game;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.player.LocalPlayer;
 
 /**
  * Accès PARTAGÉ aux données du joueur et du monde — <b>zéro réflexion</b>.
@@ -33,12 +31,11 @@ import net.minecraft.client.player.LocalPlayer;
  * import. Ajouter une version ne touche donc plus ce fichier : il suffit
  * d'écrire les accessors de la tranche et sa classe de liaisons.
  *
- * <p><b>Limite restante, à connaître avant un portage</b> : les TYPES de
- * retour ({@link LocalPlayer}, {@link ClientLevel}) sont ceux du jeu. Stables
- * sur la ligne 26.x (non obfusquée), ils n'existent pas du tout sur une
- * tranche obfusquée (1.8-1.21.x, gelées) — servir celles-ci demanderait des
- * types neutres à nous, ce qui toucherait chaque module appelant. Hors tranche
- * liée, tout renvoie ici une valeur neutre.
+ * <p><b>Cette limite est LEVÉE</b> (2026-09-12) : {@code player()} et
+ * {@code level()} rendaient des types du jeu, ce qui clouait tout appelant à
+ * la 26.1.2. Portés, les modules n'en avaient plus besoin — ils sont
+ * supprimés. Tout ce qui suit ne rend que des primitifs, des tableaux ou des
+ * porteurs à nous, et fonctionne donc sur les deux tranches.
  *
  * <p>Portée VOLONTAIREMENT limitée à ce qui était réellement dupliqué. Faire
  * transiter par ici tout ce que chaque module lit (durabilité d'armure, effets
@@ -47,22 +44,6 @@ import net.minecraft.client.player.LocalPlayer;
  */
 public final class PlayerData {
     private PlayerData() {}
-
-    /**
-     * Joueur courant, ou {@code null} (hors partie, ou version non liée).
-     *
-     * <p>Receveur {@code null} = « le client courant » : c'est la liaison de
-     * la tranche qui va le chercher, pour qu'aucun appelant neutre n'ait à
-     * nommer {@code Minecraft} — voir {@code AccessorBindings261}.
-     */
-    public static LocalPlayer player() {
-        return AccessorRegistry.as(LocalPlayer.class, AccessPoint.CLIENT_PLAYER, null);
-    }
-
-    /** Monde client courant, ou {@code null}. */
-    public static ClientLevel level() {
-        return AccessorRegistry.as(ClientLevel.class, AccessPoint.CLIENT_LEVEL, null);
-    }
 
     /**
      * {@code true} si un joueur est en partie — raccourci de lisibilité pour

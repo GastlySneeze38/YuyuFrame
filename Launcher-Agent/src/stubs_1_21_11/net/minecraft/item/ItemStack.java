@@ -9,9 +9,14 @@ package net.minecraft.item;
  * {@code getDamageValue()} ; {@code getMaxDamage()} et {@code getCount()} sont
  * communs.
  */
-public class ItemStack extends net.minecraft.component.ComponentsAccess {
+public class ItemStack implements net.minecraft.component.ComponentsAccess {
 
     protected ItemStack() {
+    }
+
+    @Override
+    public Object get(net.minecraft.component.ComponentType type) {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 
     public boolean isEmpty() {

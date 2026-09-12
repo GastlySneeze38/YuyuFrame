@@ -280,12 +280,13 @@ public final class MixinHookPointRegistry {
         // version — c'est VanillaGuiSink1211 qui parle à l'état de GUI 1.21.11
         // (voir VanillaGuiSinks).
         gate("1.21.11", "v1_21_11.hud.HudExtractChatMixin1211", HookPoint.HUD_EXTRACT_CHAT);
-        // Accès aux données du jeu : trois champs privés (le reste est public
+        // Accès aux données du jeu : quatre champs privés (le reste est public
         // sur cette version, voir AccessorBindings1211). Jamais gatés — un
         // accessor non tissé laisse l'objet sans notre interface.
         always("1.21.11", "v1_21_11.core.MinecraftClientAccessor1211");
         always("1.21.11", "v1_21_11.core.HungerManagerAccessor1211");
         always("1.21.11", "v1_21_11.chat.ChatHudAccessor1211");
+        always("1.21.11", "v1_21_11.option.SimpleOptionAccessor1211");
 
         // Capte le GuiRenderState porté par chaque DrawContext — infrastructure
         // du chemin ci-dessus, donc jamais gatée (voir sa javadoc : champ privé,

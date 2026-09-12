@@ -8,6 +8,7 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.chat.ChatHudAccessor1211;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.HungerManagerAccessor1211;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.MinecraftClientAccessor1211;
+import com.yuyuframe.launcheragent.apimixin.v1_21_11.option.SimpleOptionAccessor1211;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.client.gui.hud.ChatHudLine;
@@ -190,11 +191,15 @@ public final class AccessorBindings1211 {
         });
 
         // ── Poignée d'option ───────────────────────────────────────────────
+        // Par le CHAMP et non par setValue(), pourtant publique : le setter
+        // déclenche la validation vanilla, qui CLAMPE — exactement ce que ce
+        // point d'accès existe pour éviter. Voir SimpleOptionAccessor1211 pour
+        // les deux modules que le clamp cassait.
         AccessorRegistry.bind(AccessPoint.OPTION_VALUE, (r, a) ->
-            r instanceof SimpleOption ? ((SimpleOption) r).getValue() : null);
+            r instanceof SimpleOptionAccessor1211 ? ((SimpleOptionAccessor1211) r).la$value() : null);
         AccessorRegistry.bind(AccessPoint.OPTION_VALUE_SET, (r, a) -> {
-            if (!(r instanceof SimpleOption) || a.length < 1) return null;
-            ((SimpleOption) r).setValue(a[0]);
+            if (!(r instanceof SimpleOptionAccessor1211) || a.length < 1) return null;
+            ((SimpleOptionAccessor1211) r).la$setValue(a[0]);
             return null;
         });
 

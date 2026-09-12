@@ -2,12 +2,6 @@ package com.yuyuframe.launcheragent.runtime.game;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.Options;
-import net.minecraft.client.User;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.multiplayer.ClientPacketListener;
 
 /**
  * Accès PARTAGÉ à l'état du client Minecraft — <b>zéro réflexion</b>.
@@ -20,18 +14,18 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
  * {@code fps}). Toutes ces cibles avaient DÉJÀ un accessor : la réflexion y
  * était purement historique.
  *
- * <p><b>Champs → accessors Mixin, méthodes → appel direct.</b> Un
- * {@code @Accessor} Sponge synthétise un getter de CHAMP au tissage ; il ne
- * s'applique pas à une méthode déjà publique. {@link #connection()} appelle
- * donc directement {@code getConnection()} — méthode publique au descripteur
- * vérifié par javap sur le jar client 26.1.2 réel (voir le stub
- * {@code Minecraft}). Ce n'est pas de la réflexion, et ça passe quand même par
- * cette classe pour que la surface d'accès reste unique.
+ * <p><b>Il ne reste plus AUCUNE méthode typée ici</b> (2026-09-12) : les neuf
+ * qui nommaient un type 26.1.2 dans leur signature ({@code client()},
+ * {@code options()}, {@code user()}, {@code gui()}, {@code screen()},
+ * {@code connection()}, {@code resourceManager()}…) n'avaient plus un seul
+ * appelant une fois tous les modules portés — chacune a été remplacée par une
+ * poignée opaque ou par une OPÉRATION nommée côté {@link AccessPoint}. Les
+ * garder aurait entretenu le piège qu'elles ont causé à répétition : les
+ * appeler suffisait à lier cette classe, donc à tomber en
+ * {@code NoClassDefFoundError} sur une autre version.
  *
- * <p>Ce chemin direct a toutefois un COÛT que {@code connection()} paie encore
- * et que {@link #playUiSound} ne paie plus : il nomme des types 26.1.2 dans sa
- * signature, donc il ne sert que cette version. Toute méthode d'ici qui doit
- * fonctionner sur les deux tranches passe par un {@link AccessPoint}.
+ * <p>Seule exception, {@link #window()} : son unique appelant,
+ * {@code UiVanillaItemRenderer}, est de toute façon propre à la 26.1.2.
  *
  * <p><b>Plus aucun accessor n'est nommé ici</b> (2026-09-09) : les lectures
  * passent par {@link AccessorRegistry}, qui route chaque {@link AccessPoint}
@@ -41,16 +35,6 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
  */
 public final class ClientData {
     private ClientData() {}
-
-    /** Instance brute de {@code Minecraft}, ou {@code null} — pour les APPELS DE MÉTHODE publics, jamais pour lire un champ (passer par les getters ci-dessous). */
-    public static Minecraft client() {
-        return AccessorRegistry.as(Minecraft.class, AccessPoint.CLIENT_INSTANCE, null);
-    }
-
-    /** Options du jeu, ou {@code null}. */
-    public static Options options() {
-        return AccessorRegistry.as(Options.class, AccessPoint.CLIENT_OPTIONS, null);
-    }
 
     /**
      * Pseudo du joueur connecté, ou {@code ""} si indisponible.
@@ -83,24 +67,6 @@ public final class ClientData {
         return AccessorRegistry.as(Object.class, AccessPoint.CLIENT_OPTIONS, null);
     }
 
-    /** Session utilisateur (pseudo, UUID), ou {@code null}. */
-    public static User user() {
-        return AccessorRegistry.as(User.class, AccessPoint.CLIENT_USER, null);
-    }
-
-    /**
-     * Écran actuellement ouvert, ou {@code null} si le joueur est en jeu.
-     *
-     * <p>Ajouté le 2026-08-30 pour le rendu du HUD depuis la passe GUI : c'est
-     * le TYPE d'écran ouvert qui décide de la visibilité de chaque élément
-     * (voir {@code HudOverlayRenderer}). L'ancien chemin recevait cet écran du
-     * mixin ; en émettant depuis un hook d'extraction, il faut aller le
-     * chercher.
-     */
-    public static Screen screen() {
-        return AccessorRegistry.as(Screen.class, AccessPoint.CLIENT_SCREEN, null);
-    }
-
     /**
      * Le même écran, mais en poignée OPAQUE — pour les chemins PARTAGÉS entre
      * versions.
@@ -130,11 +96,6 @@ public final class ClientData {
     public static boolean setScreen(Object screen) {
         Object v = AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, screen);
         return v instanceof Boolean && (Boolean) v;
-    }
-
-    /** HUD vanilla, ou {@code null}. */
-    public static Gui gui() {
-        return AccessorRegistry.as(Gui.class, AccessPoint.CLIENT_GUI, null);
     }
 
     /**
@@ -209,26 +170,4 @@ public final class ClientData {
         return AccessorRegistry.as(com.mojang.blaze3d.platform.Window.class, AccessPoint.CLIENT_WINDOW, null);
     }
 
-    /**
-     * Gestionnaire de ressources du jeu — {@code null} hors bracket 26.1.2.
-     *
-     * <p>C'est par LUI qu'il faut charger toute texture que l'on veut voir
-     * suivre les resource packs : le classloader, lui, sert la version du
-     * jar et ignore les packs. Ajouté le 2026-08-31 après constat sur le pack
-     * « Ice Cream » de l'utilisateur, qui surcharge à la fois les sprites
-     * vanilla de faim/cœur ET l'atlas d'AppleSkin.
-     */
-    public static net.minecraft.server.packs.resources.ReloadableResourceManager resourceManager() {
-        return AccessorRegistry.as(net.minecraft.server.packs.resources.ReloadableResourceManager.class,
-            AccessPoint.CLIENT_RESOURCE_MANAGER, null);
-    }
-
-    public static ClientPacketListener connection() {
-        Minecraft mc = client();
-        try {
-            return mc == null ? null : mc.getConnection();
-        } catch (Throwable t) {
-            return null;
-        }
-    }
 }
