@@ -13,4 +13,9 @@ public class Session {
 
     private Session() {
     }
+
+    /** Pendant de {@code User.getName()} en 26.1.2 — sert {@code CLIENT_USERNAME}. */
+    public String getUsername() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

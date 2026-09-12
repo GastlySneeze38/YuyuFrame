@@ -2,17 +2,27 @@ package com.yuyuframe.launcheragent.apimixin.typed.v1_21_11;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
+import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.HungerManagerAccessor1211;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.MinecraftClientAccessor1211;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.SimpleOption;
+import net.minecraft.client.session.Session;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.effect.StatusEffect;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.text.Text;
 import net.minecraft.entity.player.HungerManager;
 import net.minecraft.entity.player.PlayerEntity;
 
@@ -74,6 +84,11 @@ public final class AccessorBindings1211 {
         // n'est pas tissé (plutôt que de rendre un 0 faux) — AccessorRegistry
         // attrape, journalise une fois, et l'appelant reçoit son repli.
         AccessorRegistry.bind(AccessPoint.CLIENT_FPS, (r, a) -> Integer.valueOf(MinecraftClientAccessor1211.la$fps()));
+        AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
+            MinecraftClient c = mc(r);
+            Session s = c == null ? null : c.getSession();
+            return s == null ? null : s.getUsername();
+        });
 
         // ── Options ────────────────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.OPTIONS_FOV, (r, a) -> { GameOptions o = options(r); return o == null ? null : o.getFov(); });
@@ -120,6 +135,54 @@ public final class AccessorBindings1211 {
         AccessorRegistry.bind(AccessPoint.PLAYER_YAW, (r, a) -> { Entity p = player(r); return p == null ? null : Float.valueOf(p.getYaw()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_PITCH, (r, a) -> { Entity p = player(r); return p == null ? null : Float.valueOf(p.getPitch()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_EYE_HEIGHT, (r, a) -> { Entity p = player(r); return p == null ? null : Float.valueOf(p.getStandingEyeHeight()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_PING, (r, a) -> {
+            MinecraftClient c = mc(null);
+            ClientPlayNetworkHandler net = c == null ? null : c.getNetworkHandler();
+            Session s = c == null ? null : c.getSession();
+            if (net == null || s == null) return null;
+            // Recherche par PSEUDO et non par UUID : Entity n'expose pas de
+            // getUuid() dans les mappings Yarn 1.21.11 (seuls le champ uuid et
+            // setUuid y figurent). Le point d'accès absorbe la divergence.
+            PlayerListEntry entry = net.getPlayerListEntry(s.getUsername());
+            return entry == null ? null : Integer.valueOf(entry.getLatency());
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_HAS_EFFECT, (r, a) -> {
+            LivingEntity p = player(r);
+            RegistryEntry effect = effectById(a);
+            return p == null || effect == null ? null : Boolean.valueOf(p.hasStatusEffect(effect));
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_REMOVE_EFFECT, (r, a) -> {
+            LivingEntity p = player(r);
+            RegistryEntry effect = effectById(a);
+            if (p != null && effect != null) p.removeStatusEffect(effect);
+            return null;
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_ACTIVE_EFFECTS, (r, a) -> {
+            LivingEntity p = player(r);
+            if (p == null) return null;
+            java.util.List<PlayerEffect> out = new java.util.ArrayList<>();
+            for (Object o : p.getStatusEffects()) {
+                if (!(o instanceof StatusEffectInstance)) continue;
+                StatusEffectInstance i = (StatusEffectInstance) o;
+                RegistryEntry holder = i.getEffectType();
+                Object v = holder != null ? holder.value() : null;
+                StatusEffect effect = v instanceof StatusEffect ? (StatusEffect) v : null;
+                String name = "?";
+                int color = 0xFFFFFF;
+                boolean beneficial = false;
+                if (effect != null) {
+                    Text display = effect.getName();
+                    if (display != null && display.getString() != null && !display.getString().isEmpty()) {
+                        name = display.getString();
+                    }
+                    color = effect.getColor();
+                    beneficial = effect.isBeneficial();
+                }
+                out.add(new PlayerEffect(name, i.getAmplifier(), i.getDuration(),
+                    i.isInfinite(), color, beneficial, registryId(holder)));
+            }
+            return out;
+        });
         AccessorRegistry.bind(AccessPoint.PLAYER_HEALTH, (r, a) -> { LivingEntity p = player(r); return p == null ? null : Float.valueOf(p.getHealth()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_MAX_HEALTH, (r, a) -> { LivingEntity p = player(r); return p == null ? null : Float.valueOf(p.getMaxHealth()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_ATTACK_STRENGTH, (r, a) -> {
@@ -137,6 +200,46 @@ public final class AccessorBindings1211 {
             r instanceof ServerInfo ? ((ServerInfo) r).address : null);
         AccessorRegistry.bind(AccessPoint.SERVER_NAME, (r, a) ->
             r instanceof ServerInfo ? ((ServerInfo) r).name : null);
+    }
+
+    /**
+     * Poignée d'effet → identifiant de registre ({@code "minecraft:speed"}), ou
+     * {@code null}.
+     *
+     * <p>Un appel là où la 26.1.2 en fait trois ({@code unwrapKey} → {@code get}
+     * → {@code identifier}) : {@code getIdAsString()} n'existe que sur cette
+     * ligne de versions. Le {@code Throwable} couvre l'entrée DIRECTE, sans clé
+     * de registre, plutôt que de laisser remonter une erreur dans une liaison.
+     * Il est journalisé UNE FOIS — cette méthode est appelée par effet et par
+     * frame, un log par appel noierait le fichier.
+     */
+    private static boolean registryIdReported;
+
+    private static String registryId(RegistryEntry holder) {
+        if (holder == null) return null;
+        try {
+            return holder.getIdAsString();
+        } catch (Throwable t) {
+            if (!registryIdReported) {
+                registryIdReported = true;
+                LauncherLog.warn("[AccessorBindings1211] identifiant d'effet illisible : " + t);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Identifiant de registre → constante d'effet de CETTE version.
+     *
+     * <p>Même table explicite qu'en 26.1.2, et pour la même raison : on ne sert
+     * que des effets dont le nom a été vérifié, un identifiant inconnu rend
+     * {@code null} et le point d'accès répond « indisponible ».
+     */
+    private static RegistryEntry effectById(Object[] args) {
+        if (args.length < 1 || !(args[0] instanceof String)) return null;
+        String id = (String) args[0];
+        if ("minecraft:darkness".equals(id)) return StatusEffects.DARKNESS;
+        return null;
     }
 
     /**

@@ -2,9 +2,14 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
+import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.Holder;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
@@ -62,6 +67,11 @@ public final class AccessorBindings261 {
         // tissé (plutôt que de renvoyer un 0 faux) — AccessorRegistry.invoke()
         // attrape, journalise une fois, et l'appelant reçoit son repli.
         AccessorRegistry.bind(AccessPoint.CLIENT_FPS, (r, a) -> MinecraftAccessor261.la$fps());
+        AccessorRegistry.bind(AccessPoint.CLIENT_USERNAME, (r, a) -> {
+            MinecraftAccessor261 m = mc(r);
+            net.minecraft.client.User u = m == null ? null : m.la$user();
+            return u == null ? null : u.getName();
+        });
 
         // ── Options ────────────────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.OPTIONS_FOV, (r, a) -> { OptionsAccessor261 o = options(r); return o == null ? null : o.la$fov(); });
@@ -96,6 +106,50 @@ public final class AccessorBindings261 {
         AccessorRegistry.bind(AccessPoint.PLAYER_YAW, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getYRot()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_PITCH, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getXRot()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_EYE_HEIGHT, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getEyeHeight()); });
+        AccessorRegistry.bind(AccessPoint.PLAYER_ACTIVE_EFFECTS, (r, a) -> {
+            LocalPlayer p = player(r);
+            if (p == null) return null;
+            java.util.List<PlayerEffect> out = new java.util.ArrayList<>();
+            for (net.minecraft.world.effect.MobEffectInstance i : p.getActiveEffects()) {
+                Holder<MobEffect> holder = i.getEffect();
+                MobEffect effect = holder != null ? holder.value() : null;
+                String name = "?";
+                int color = 0xFFFFFF;
+                boolean beneficial = false;
+                if (effect != null) {
+                    net.minecraft.network.chat.Component display = effect.getDisplayName();
+                    if (display != null && display.getString() != null && !display.getString().isEmpty()) {
+                        name = display.getString();
+                    }
+                    color = effect.getColor();
+                    beneficial = effect.isBeneficial();
+                }
+                out.add(new PlayerEffect(name, i.getAmplifier(), i.getDuration(),
+                    i.isInfiniteDuration(), color, beneficial, registryId(holder)));
+            }
+            return out;
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_PING, (r, a) -> {
+            LocalPlayer p = player(r);
+            Minecraft client = client();
+            if (p == null || client == null) return null;
+            // getConnection() est PUBLIQUE : pas d'accessor à ajouter.
+            net.minecraft.client.multiplayer.ClientPacketListener c = client.getConnection();
+            if (c == null) return null;
+            net.minecraft.client.multiplayer.PlayerInfo info = c.getPlayerInfo(p.getUUID());
+            return info == null ? null : Integer.valueOf(info.getLatency());
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_HAS_EFFECT, (r, a) -> {
+            LocalPlayer p = player(r);
+            Holder<MobEffect> effect = effectById(a);
+            return p == null || effect == null ? null : Boolean.valueOf(p.hasEffect(effect));
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_REMOVE_EFFECT, (r, a) -> {
+            LocalPlayer p = player(r);
+            Holder<MobEffect> effect = effectById(a);
+            if (p != null && effect != null) p.removeEffect(effect);
+            return null;
+        });
         AccessorRegistry.bind(AccessPoint.PLAYER_HEALTH, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getHealth()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_MAX_HEALTH, (r, a) -> { LocalPlayer p = player(r); return p == null ? null : Float.valueOf(p.getMaxHealth()); });
         AccessorRegistry.bind(AccessPoint.PLAYER_ATTACK_STRENGTH, (r, a) -> {
@@ -144,11 +198,50 @@ public final class AccessorBindings261 {
     }
 
     /**
-     * Receveur → accessor {@code Minecraft}. Receveur {@code null} = « prends
-     * l'instance courante » : les appelants neutres n'ont ainsi jamais à
-     * fabriquer le receveur eux-mêmes, ce qui les obligerait à nommer
-     * {@code Minecraft}.
+     * Identifiant de registre COMPLET d'un effet ({@code "minecraft:speed"}),
+     * ou {@code null}.
+     *
+     * <p>{@code unwrapKey()} et {@code identifier()} sont les VRAIS noms
+     * 26.1.2 — les noms « évidents » {@code getKey()}/{@code getValue()}
+     * n'existent pas ici (piège déjà payé sur le biome de {@code CoordsModule}).
+     *
+     * <p>L'échec est journalisé UNE FOIS : appelée par effet et par frame,
+     * cette méthode noierait le fichier de log à raison d'une ligne par appel.
      */
+    private static boolean registryIdReported;
+
+    private static String registryId(Holder<MobEffect> holder) {
+        if (holder == null) return null;
+        try {
+            java.util.Optional<net.minecraft.resources.ResourceKey<MobEffect>> key = holder.unwrapKey();
+            if (key == null || !key.isPresent()) return null;
+            net.minecraft.resources.Identifier id = key.get().identifier();
+            return id == null ? null : id.toString();
+        } catch (Throwable t) {
+            if (!registryIdReported) {
+                registryIdReported = true;
+                LauncherLog.warn("[AccessorBindings261] identifiant d'effet illisible : " + t);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Identifiant de registre → constante d'effet de CETTE version.
+     *
+     * <p>Table explicite plutôt que recherche dans le registre : on ne sert que
+     * des effets dont le nom a été vérifié ici, et un identifiant inconnu rend
+     * {@code null} — le point d'accès répond alors « indisponible » au lieu de
+     * deviner. Ajouter un effet = une ligne ici ET dans la liaison de l'autre
+     * version.
+     */
+    private static Holder<MobEffect> effectById(Object[] args) {
+        if (args.length < 1 || !(args[0] instanceof String)) return null;
+        String id = (String) args[0];
+        if ("minecraft:darkness".equals(id)) return MobEffects.DARKNESS;
+        return null;
+    }
+
     /**
      * Receveur → joueur local. Receveur {@code null} = celui du client courant,
      * même convention que {@link #mc(Object)} : aucun appelant neutre n'a ainsi
@@ -160,6 +253,12 @@ public final class AccessorBindings261 {
         return client == null ? null : client.la$player();
     }
 
+    /**
+     * Receveur → accessor {@code Minecraft}. Receveur {@code null} = « prends
+     * l'instance courante » : les appelants neutres n'ont ainsi jamais à
+     * fabriquer le receveur eux-mêmes, ce qui les obligerait à nommer
+     * {@code Minecraft}.
+     */
     private static MinecraftAccessor261 mc(Object receiver) {
         Object target = receiver != null ? receiver : client();
         return target instanceof MinecraftAccessor261 ? (MinecraftAccessor261) target : null;

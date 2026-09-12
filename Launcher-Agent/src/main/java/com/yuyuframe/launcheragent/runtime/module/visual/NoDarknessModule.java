@@ -1,14 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.effect.MobEffects;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import com.yuyuframe.launcheragent.runtime.module.hud.PotionEffectsModule;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 
@@ -32,6 +26,9 @@ import com.yuyuframe.launcheragent.runtime.game.PlayerData;
  */
 public final class NoDarknessModule extends LauncherModule {
 
+    /** Identifiant de registre de l'effet — traduit en constante par chaque liaison (voir {@code AccessPoint.PLAYER_HAS_EFFECT}). */
+    private static final String DARKNESS_ID = "minecraft:darkness";
+
     private static boolean errorLogged;
 
     public NoDarknessModule() {
@@ -46,9 +43,12 @@ public final class NoDarknessModule extends LauncherModule {
         // du champ statique DARKNESS) a été supprimé le 2026-08-27 ; à noter
         // pour un futur portage : DARKNESS n'existe pas avant la 1.19.
         try {
-            LocalPlayer player = PlayerData.player();
-            if (player == null) return;
-            if (player.hasEffect(MobEffects.DARKNESS)) player.removeEffect(MobEffects.DARKNESS);
+            // Par les POINTS D'ACCÈS : l'effet est désigné par son identifiant
+            // de registre, et c'est la liaison de la version qui le traduit en
+            // constante (MobEffects.DARKNESS en 26.1.2, StatusEffects.DARKNESS
+            // en 1.21.11) puis appelle hasEffect/hasStatusEffect. Tenir un
+            // LocalPlayer ici liait le type 26.1.2.
+            if (PlayerData.hasEffect(DARKNESS_ID)) PlayerData.removeEffect(DARKNESS_ID);
         } catch (Throwable t) {
             if (!errorLogged) {
                 errorLogged = true;

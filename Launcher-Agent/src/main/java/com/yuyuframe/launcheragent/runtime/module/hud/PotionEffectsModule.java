@@ -8,16 +8,11 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
+import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.Holder;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.effect.MobEffectInstance;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -103,7 +98,7 @@ public final class PotionEffectsModule extends SingleHudModule {
     }
 
     /**
-     * Icône = pastille de la couleur du liquide ({@code MobEffect.getColor()}),
+     * Icône = pastille de la couleur du liquide ({@code PlayerEffect.color}),
      * PAS l'icône vanilla réelle : l'original faisait déjà ce choix. Le
      * remplacement par les vraies textures {@code mob_effect/*.png} est
      * décidé mais reporté — voir la javadoc de classe.
@@ -192,9 +187,9 @@ public final class PotionEffectsModule extends SingleHudModule {
             /**
              * Chemin de registre de l'effet ({@code speed},
              * {@code hero_of_the_village}…) — c'est LUI qui nomme la texture
-             * vanilla, voir {@link Renderer#iconOf}. {@code null} si le
-             * {@code Holder} n'est pas enregistré (effet d'un mod tiers non
-             * résolu, par exemple).
+             * vanilla, voir {@link Renderer#iconOf}. {@code null} si l'effet
+             * n'a pas d'identifiant de registre lisible (effet d'un mod tiers
+             * non résolu, par exemple).
              */
             final String iconKey;
             EffectRow(String name, String time, UiColor color, int secondsLeft, boolean beneficial, String iconKey) {
@@ -272,35 +267,29 @@ public final class PotionEffectsModule extends SingleHudModule {
 
         private List<EffectRow> computeRows() {
             List<EffectRow> rows = new ArrayList<EffectRow>();
-            // Joueur par l'accessor Mixin (PlayerData) + getActiveEffects()/
-            // getAmplifier()/getDuration()/getEffect()/value() (méthodes
-            // publiques, voir stubs LocalPlayer/MobEffectInstance/Holder) —
-            // zéro réflexion.
+            // Plus une seule classe du jeu ici (2026-09-12) : la liste arrive en
+            // PlayerEffect, porteur neutre rempli par la liaison de la tranche
+            // active. Ce module lisait auparavant LocalPlayer.getActiveEffects()
+            // puis MobEffectInstance/Holder/MobEffect directement — du code qui
+            // ne pouvait compiler QUE contre les stubs 26.1.2, et tombait en
+            // NoClassDefFoundError sur 1.21.11.
             //
-            // Le repli réflexif multi-bracket a été supprimé le 2026-08-27. À
-            // savoir avant tout portage vers un autre bracket : cette méthode a
-            // été RENOMMÉE trois fois — getStatusEffectInstances (1.8.9) →
-            // getStatusEffects (1.16.5) → getActiveEffects (26.1) ; et avant la
-            // ~1.13 ("Flattening"), l'effet se lisait via getEffectId() (int)
-            // indexant le tableau statique StatusEffect.STATUS_EFFECTS, tous
-            // deux disparus depuis au profit d'un accès direct à l'objet.
+            // À savoir avant tout portage : la méthode source a été RENOMMÉE
+            // trois fois — getStatusEffectInstances (1.8.9) → getStatusEffects
+            // (1.16.5/1.21.11) → getActiveEffects (26.1) ; et avant la ~1.13
+            // ("Flattening"), l'effet se lisait via getEffectId() (int) indexant
+            // le tableau statique StatusEffect.STATUS_EFFECTS, tous deux
+            // disparus depuis au profit d'un accès direct à l'objet. C'est
+            // exactement ce qu'AccessPoint.PLAYER_ACTIVE_EFFECTS absorbe.
             try {
-                LocalPlayer player = PlayerData.player();
-                if (player == null) return rows;
-                Collection<MobEffectInstance> effects = player.getActiveEffects();
-                if (effects == null) return rows;
-
-                for (MobEffectInstance instance : effects) {
-                    Holder<MobEffect> holder = instance.getEffect();
-                    MobEffect effect = holder != null ? holder.value() : null;
-
+                for (PlayerEffect effect : PlayerData.activeEffects()) {
                     rows.add(new EffectRow(
-                        nameOf(effect, instance.getAmplifier()),
-                        vanillaStyle ? clockText(instance) : durationText(instance),
+                        nameOf(effect),
+                        vanillaStyle ? clockText(effect) : durationText(effect),
                         colorOf(effect),
-                        instance.isInfiniteDuration() ? -1 : instance.getDuration() / 20,
-                        effect != null && effect.isBeneficial(),
-                        registryPath(holder)));
+                        effect.infinite ? -1 : effect.durationTicks / 20,
+                        effect.beneficial,
+                        effect.registryPath()));
                 }
                 sort(rows);
             } catch (Throwable t) {
@@ -329,52 +318,31 @@ public final class PotionEffectsModule extends SingleHudModule {
          * RIEN afficher, comme le faisait le test {@code <= ROMAN.length} :
          * un effet de commande peut monter très haut, et « Force 42 » reste
          * infiniment plus lisible qu'un « XLII » de toute façon absent.
-         */
-        private String nameOf(MobEffect effect, int amplifier) {
-            String name = displayName(effect);
-            int level = amplifier + 1;
-            if (level <= 1) return name;
-            return name + " " + (level <= ROMAN.length ? ROMAN[level - 1] : String.valueOf(level));
-        }
-
-        /**
-         * Nom TRADUIT, par {@code MobEffect.getDisplayName()} — l'ancien
+         *
+         * <p>Le nom lui-même est déjà TRADUIT quand il arrive ici : la liaison
+         * de la tranche appelle {@code getDisplayName()} (26.1.2) ou
+         * {@code getName()} (1.21.11) et aplatit le texte. L'ancien
          * {@code prettify()} découpait la clé de traduction à la main
          * ({@code effect.minecraft.speed} → « Speed »), donc un nom anglais
-         * quelle que soit la langue du jeu. Le commentaire d'époque
-         * justifiait ce choix par « éviterait une nouvelle chaîne de
-         * réflexion » : argument caduc depuis la migration aux accessors,
-         * c'est un simple appel de méthode publique.
+         * quelle que soit la langue du jeu.
          */
-        private String displayName(MobEffect effect) {
-            if (effect == null) return "?";
-            try {
-                Component name = effect.getDisplayName();
-                if (name != null) {
-                    String text = name.getString();
-                    if (text != null && !text.isEmpty()) return text;
-                }
-            } catch (Throwable t) {
-                if (!nameErrorLogged) {
-                    nameErrorLogged = true;
-                    LauncherLog.err("[PotionEffectsModule] displayName: " + t);
-                }
-            }
-            return "?";
+        private String nameOf(PlayerEffect effect) {
+            int level = effect.amplifier + 1;
+            if (level <= 1) return effect.name;
+            return effect.name + " " + (level <= ROMAN.length ? ROMAN[level - 1] : String.valueOf(level));
         }
-
-        private static boolean nameErrorLogged;
 
         /**
          * BUG TROUVÉ (rework 2026-08-31) : un effet INFINI s'affichait
-         * « 0s ». {@code getDuration()} renvoie {@code -1} dans ce cas, et
-         * {@code -1 / 20} vaut 0 en division entière — l'effet paraissait
-         * donc expiré en permanence. {@code isInfiniteDuration()} lève
-         * l'ambiguïté.
+         * « 0s ». La durée vaut {@code -1} dans ce cas, et {@code -1 / 20} vaut
+         * 0 en division entière — l'effet paraissait donc expiré en
+         * permanence. Le drapeau {@code infinite} de {@link PlayerEffect} lève
+         * l'ambiguïté, et c'est justement pour qu'aucun appelant n'ait à
+         * redécouvrir ce piège qu'il est porté explicitement.
          */
-        private String durationText(MobEffectInstance instance) {
-            if (instance.isInfiniteDuration()) return "∞";
-            int seconds = Math.max(0, instance.getDuration() / 20);
+        private String durationText(PlayerEffect effect) {
+            if (effect.infinite) return "∞";
+            int seconds = Math.max(0, effect.durationTicks / 20);
             return (seconds >= 60 ? (seconds / 60) + "m " : "") + (seconds % 60) + "s";
         }
 
@@ -383,40 +351,18 @@ public final class PotionEffectsModule extends SingleHudModule {
          * fournie par l'utilisateur l'affiche ainsi. Le style « Personnalisé »
          * garde son {@code 1m 5s}, plus court quand la place manque.
          */
-        private String clockText(MobEffectInstance instance) {
-            if (instance.isInfiniteDuration()) return "∞";
-            int seconds = Math.max(0, instance.getDuration() / 20);
+        private String clockText(PlayerEffect effect) {
+            if (effect.infinite) return "∞";
+            int seconds = Math.max(0, effect.durationTicks / 20);
             int m = seconds / 60, s = seconds % 60;
             return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
         }
 
-        /**
-         * Chemin de registre de l'effet ({@code speed},
-         * {@code hero_of_the_village}…), qui nomme aussi sa texture.
-         *
-         * <p>{@code unwrapKey()} et {@code identifier()} sont les VRAIS noms
-         * 26.1.2 — deux pièges déjà payés au prix fort sur le biome de
-         * {@code CoordsModule} (les noms « évidents » {@code getKey()} /
-         * {@code getValue()} n'existent pas), voir les javadocs des stubs
-         * {@code Holder} et {@code ResourceKey}.
-         */
-        private String registryPath(Holder<MobEffect> holder) {
-            if (holder == null) return null;
-            try {
-                java.util.Optional<net.minecraft.resources.ResourceKey<MobEffect>> key = holder.unwrapKey();
-                if (key == null || !key.isPresent()) return null;
-                net.minecraft.resources.Identifier id = key.get().identifier();
-                return id != null ? id.getPath() : null;
-            } catch (Throwable t) {
-                if (!keyErrorLogged) {
-                    keyErrorLogged = true;
-                    LauncherLog.err("[PotionEffectsModule] registryPath: " + t);
-                }
-                return null;
-            }
-        }
-
-        private static boolean keyErrorLogged;
+        // Le chemin de registre ({@code speed}, {@code hero_of_the_village}…),
+        // qui nomme aussi la texture, est désormais porté par PlayerEffect :
+        // c'est la liaison de la tranche qui le résout (unwrapKey()+identifier()
+        // en 26.1.2, getIdAsString() en 1.21.11 — deux chemins que ce module
+        // n'a plus à connaître).
 
         // ── Textures d'effets vanilla ─────────────────────────────────────
         //
@@ -460,14 +406,13 @@ public final class PotionEffectsModule extends SingleHudModule {
 
         private static boolean iconErrorLogged;
 
-        private UiColor colorOf(MobEffect effect) {
-            if (effect == null) return UiTheme.ACCENT;
-            int rgb = effect.getColor();
+        private UiColor colorOf(PlayerEffect effect) {
+            int rgb = effect.color;
             return new UiColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 255);
         }
 
         /**
-         * L'ordre de {@code getActiveEffects()} n'est garanti par rien : sans
+         * L'ordre rendu par le jeu n'est garanti par rien : sans
          * tri explicite, la liste pouvait se réordonner d'une frame à l'autre.
          * Les trois modes se terminent tous par le NOM, ce qui rend l'ordre
          * total et donc parfaitement déterministe — sans ce départage, deux

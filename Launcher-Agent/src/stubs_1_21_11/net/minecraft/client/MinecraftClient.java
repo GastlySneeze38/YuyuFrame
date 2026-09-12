@@ -54,6 +54,11 @@ public class MinecraftClient {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Pendant de {@code getConnection()} en 26.1.2 — {@code null} hors partie. */
+    public net.minecraft.client.network.ClientPlayNetworkHandler getNetworkHandler() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public ResourceManager getResourceManager() {
         throw new UnsupportedOperationException("stub compile-only");
     }

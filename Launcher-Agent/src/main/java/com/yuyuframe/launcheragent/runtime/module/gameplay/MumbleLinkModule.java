@@ -5,10 +5,9 @@ import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.mumble.MumbleLinkBridge;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
-import net.minecraft.client.player.LocalPlayer;
 
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
-import com.mojang.authlib.GameProfile;
 
 /**
  * Port de PvP-Mod MumbleLinkHandler/MumbleLinkConfig — envoie position/
@@ -68,17 +67,19 @@ public final class MumbleLinkModule extends LauncherModule {
             // chacun leur propre lecture de x/y/z/yaw, avec les mêmes pièges de
             // mappings découverts et corrigés séparément des deux côtés ; il
             // n'en existe désormais qu'une seule implémentation.
-            LocalPlayer directPlayer = PlayerData.player();
-            if (directPlayer == null) return;
+            // inGame() et non player() : ce module n'a besoin que de SAVOIR
+            // qu'une partie est en cours, pas de tenir l'objet joueur — et la
+            // variante typée lierait le type 26.1.2 (voir PlayerData).
+            if (!PlayerData.inGame()) return;
 
             double[] pos = PlayerData.position();
             float eyeHeight = PlayerData.eyeHeight();
-            // GameProfile (com.mojang.authlib) — bibliothèque EXTERNE, pas sur
-            // le classpath de compilation de ce module (ni stub ni jar,
-            // contrairement à net.minecraft.*) : getName() par réflexion reste
-            // nécessaire pour ce seul champ, voir profileName(). C'est la seule
-            // réflexion restante du module, et elle ne porte pas sur le jeu.
-            String username = identity(profileName(directPlayer.getGameProfile()));
+            // Pseudo par le POINT D'ACCÈS : il le rend en String, ce qui évite
+            // GameProfile (com.mojang.authlib, absent de tout classpath de
+            // compilation) et supprime la DERNIÈRE réflexion de ce module —
+            // chaque liaison lit sa propre source (User en 26.1.2, Session en
+            // 1.21.11).
+            String username = identity(ClientData.username());
 
             float yawRad = (float) Math.toRadians(PlayerData.yaw());
             float pitchRad = (float) Math.toRadians(PlayerData.pitch());
@@ -179,16 +180,11 @@ public final class MumbleLinkModule extends LauncherModule {
      */
     private static final String CONTEXT = "{\"domain\":\"AllTalk\"}";
 
-    /** {@code GameProfile.getName()} par réflexion directe — voir javadoc de classe (bibliothèque externe, hors classpath de compilation). */
-    /**
-     * BUG TROUVÉ (2026-08-27) : cette méthode lisait le pseudo par réflexion
-     * sur {@code getName()} — or {@code GameProfile} est devenu un RECORD,
-     * dont l'accesseur s'appelle {@code name()}. La recherche échouait, le
-     * {@code catch} renvoyait {@code null}, et Mumble recevait un pseudo vide
-     * sans le moindre log. Le stub {@code com.mojang.authlib.GameProfile}
-     * (ajouté en même temps) supprime la réflexion ET l'erreur de nom.
-     */
-    private String profileName(GameProfile profile) {
-        return profile == null ? null : profile.name();
-    }
+    // profileName(GameProfile) supprimée : le pseudo vient désormais du point
+    // d'accès CLIENT_USERNAME, qui le rend en String. Historique conservé pour
+    // mémoire — cette méthode lisait d'abord le pseudo par réflexion sur
+    // getName(), or GameProfile est devenu un RECORD dont l'accesseur s'appelle
+    // name() : la recherche échouait, le catch rendait null, et Mumble recevait
+    // un pseudo vide sans le moindre log. Passer par le point d'accès supprime
+    // et la réflexion, et la dépendance à authlib.
 }

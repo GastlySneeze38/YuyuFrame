@@ -50,6 +50,18 @@ public final class ClientData {
     }
 
     /**
+     * Pseudo du joueur connecté, ou {@code ""} si indisponible.
+     *
+     * <p>Rendu en {@code String} par le point d'accès : les appelants n'ont
+     * ainsi à nommer ni la session du jeu, ni {@code GameProfile}
+     * (com.mojang.authlib), absent de tout classpath de compilation.
+     */
+    public static String username() {
+        Object v = AccessorRegistry.get(AccessPoint.CLIENT_USERNAME, null);
+        return v instanceof String ? (String) v : "";
+    }
+
+    /**
      * Les mêmes options, mais en poignée OPAQUE — pour les chemins PARTAGÉS
      * entre versions.
      *

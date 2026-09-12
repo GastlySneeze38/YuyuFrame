@@ -4,10 +4,6 @@ import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.player.LocalPlayer;
 
 import java.lang.reflect.Method;
 import java.util.UUID;
@@ -43,12 +39,12 @@ public final class PingModule extends SingleHudModule {
             // boucle sans le moindre log. L'accessor rend ce piège sans objet
             // ici, mais il se reposera tel quel sur un bracket obfusqué.
             try {
-                LocalPlayer player = PlayerData.player();
-                if (player == null) return new String[]{ "-- ms" };
-                ClientPacketListener connection = ClientData.connection();
-                if (connection == null) return new String[]{ "-- ms" };
-                PlayerInfo info = connection.getPlayerInfo(player.getUUID());
-                return info == null ? new String[]{ "-- ms" } : new String[]{ info.getLatency() + " ms" };
+                // Toute la chaîne (connexion → entrée de liste → latence) est
+                // faite par la liaison de la version : le module ne tient plus
+                // ni le joueur ni la connexion, donc ne nomme plus aucun type
+                // du jeu. Le -1 est distinct d'un vrai ping, voir PlayerData.
+                int ping = PlayerData.ping();
+                return ping < 0 ? new String[]{ "-- ms" } : new String[]{ ping + " ms" };
             } catch (Throwable t) {
                 return new String[]{ "-- ms" };
             }

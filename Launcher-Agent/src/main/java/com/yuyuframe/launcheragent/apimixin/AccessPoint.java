@@ -66,6 +66,16 @@ public enum AccessPoint {
     CLIENT_RESOURCE_MANAGER,
     /** FPS courant — champ STATIQUE {@code fps} (pas de receveur). */
     CLIENT_FPS,
+    /**
+     * Pseudo du joueur connecté — {@code User.getName()} en 26.1.2,
+     * {@code Session.getUsername()} en Yarn 1.21.11.
+     *
+     * <p>Rendu en {@code String} et non via l'objet session : ça évite aux
+     * appelants de passer par {@code GameProfile} (com.mojang.authlib), qui
+     * n'est sur AUCUN classpath de compilation et les obligeait à de la
+     * réflexion — voir {@code MumbleLinkModule}, qui en était le dernier usage.
+     */
+    CLIENT_USERNAME,
 
     // ── Options (net.minecraft.client.Options) ─────────────────────────────
     /** Poignée d'option du champ de vision — champ {@code fov}. */
@@ -104,6 +114,40 @@ public enum AccessPoint {
     PLAYER_PITCH,
     /** Hauteur des yeux — {@code getEyeHeight()} en 26.1.2, {@code getStandingEyeHeight()} en Yarn. */
     PLAYER_EYE_HEIGHT,
+    /**
+     * L'effet est-il actif ? Argument : son identifiant de registre
+     * ({@code "minecraft:darkness"}).
+     *
+     * <p>L'effet est désigné par une CHAÎNE et non par l'objet du jeu : un
+     * appelant neutre ne peut pas nommer {@code MobEffects}/{@code StatusEffects}.
+     * Chaque liaison traduit l'identifiant vers sa constante — ajouter un effet
+     * demande donc une ligne des DEUX côtés, ce qui est voulu : on ne sert que
+     * des effets dont on a vérifié le nom sur chaque version.
+     */
+    PLAYER_HAS_EFFECT,
+    /** Retire cet effet — même convention d'identifiant que {@link #PLAYER_HAS_EFFECT}. */
+    PLAYER_REMOVE_EFFECT,
+    /**
+     * Latence du joueur local, en millisecondes.
+     *
+     * <p>Toute la CHAÎNE est faite par la liaison (connexion → entrée de liste
+     * → latence), et chaque version prend le chemin qui existe chez elle :
+     * 26.1.2 cherche par UUID, 1.21.11 par pseudo, faute de {@code getUuid()}
+     * sur {@code Entity} dans ses mappings. Un point d'accès par OPÉRATION —
+     * et non un qui rendrait la connexion — est ce qui rend cette divergence
+     * invisible à l'appelant.
+     */
+    PLAYER_PING,
+    /**
+     * Effets actifs, rendus en {@code List<PlayerEffect>} — données neutres,
+     * jamais les objets du jeu (voir {@link PlayerEffect}).
+     *
+     * <p>La méthode a été RENOMMÉE trois fois au fil des versions
+     * ({@code getStatusEffectInstances} → {@code getStatusEffects} →
+     * {@code getActiveEffects}) : raison de plus pour que le module ne la nomme
+     * jamais lui-même.
+     */
+    PLAYER_ACTIVE_EFFECTS,
     /** Points de vie courants — {@code getHealth()}. */
     PLAYER_HEALTH,
     /** Points de vie maximum — {@code getMaxHealth()}. */

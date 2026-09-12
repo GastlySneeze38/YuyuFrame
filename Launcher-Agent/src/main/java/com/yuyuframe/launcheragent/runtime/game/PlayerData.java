@@ -121,6 +121,52 @@ public final class PlayerData {
         return AccessorRegistry.getFloat(AccessPoint.PLAYER_EYE_HEIGHT, null, 0f);
     }
 
+    /**
+     * L'effet est-il actif sur le joueur ?
+     *
+     * @param effectId identifiant de registre, ex. {@code "minecraft:darkness"}
+     *                 — voir {@link AccessPoint#PLAYER_HAS_EFFECT} pour pourquoi
+     *                 une chaîne plutôt que l'objet du jeu.
+     * @return {@code false} hors partie, sur une version non liée, ou si cette
+     *         version ne connaît pas cet identifiant.
+     */
+    public static boolean hasEffect(String effectId) {
+        Object v = AccessorRegistry.invoke(AccessPoint.PLAYER_HAS_EFFECT, null, effectId);
+        return v instanceof Boolean && (Boolean) v;
+    }
+
+    /** Retire cet effet s'il est actif — sans effet si la version ne le connaît pas. */
+    public static void removeEffect(String effectId) {
+        AccessorRegistry.invoke(AccessPoint.PLAYER_REMOVE_EFFECT, null, effectId);
+    }
+
+    /**
+     * Latence du joueur local en millisecondes, ou {@code -1} si elle n'est pas
+     * lisible (hors partie, entrée de liste absente, version non liée).
+     *
+     * <p>L'appelant DOIT distinguer ce {@code -1} d'un vrai ping : un « 0 ms »
+     * affiché à la place serait faux.
+     */
+    public static int ping() {
+        return AccessorRegistry.getInt(AccessPoint.PLAYER_PING, null, -1);
+    }
+
+    /**
+     * Effets actifs, en données neutres — liste VIDE hors partie ou sur une
+     * version non liée, jamais {@code null}.
+     *
+     * <p>Voir {@link com.yuyuframe.launcheragent.apimixin.PlayerEffect} : c'est
+     * un porteur à nous, pas un objet du jeu, précisément pour que l'appelant
+     * puisse le lire sans nommer de type de version.
+     */
+    @SuppressWarnings("unchecked")
+    public static java.util.List<com.yuyuframe.launcheragent.apimixin.PlayerEffect> activeEffects() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_ACTIVE_EFFECTS, null);
+        return v instanceof java.util.List
+            ? (java.util.List<com.yuyuframe.launcheragent.apimixin.PlayerEffect>) v
+            : java.util.Collections.emptyList();
+    }
+
     /** Points de vie courants — 0 hors partie. */
     public static float health() {
         return AccessorRegistry.getFloat(AccessPoint.PLAYER_HEALTH, null, 0f);
