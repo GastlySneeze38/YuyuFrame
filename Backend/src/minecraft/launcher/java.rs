@@ -4,11 +4,10 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-use std::sync::atomic::AtomicU64;
 use crate::process::hidden_command;
 use super::classpath::download_verified;
 use super::jvm_args::JvmVendor;
-use super::progress::set_progress_monotonic;
+use super::progress::{set_progress_monotonic, ProgressFloor};
 
 /// Délai au-delà duquel on considère que ce `java` ne répondra pas.
 ///
@@ -121,7 +120,7 @@ pub(super) async fn ensure_java(
     mc_dir: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
     vendor: JvmVendor,
     custom_path: Option<&str>,
 ) -> Result<(String, u32)> {
@@ -301,7 +300,7 @@ async fn ensure_openj9(
     mc_dir: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
 ) -> Result<(String, u32)> {
     let dir = mc_dir.join("runtime").join(format!("openj9-{required_major}"));
     let exe = dir.join("bin").join(java_exe_name());
@@ -329,7 +328,7 @@ async fn download_mojang_runtime(
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
 ) -> Result<()> {
     let platform = mojang_platform_key();
 

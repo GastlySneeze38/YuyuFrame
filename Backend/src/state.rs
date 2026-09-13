@@ -42,6 +42,7 @@ impl YuyuSession {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct DownloadProgress {
+    pub instance_id: String,
     pub current: u64,
     pub total: u64,
     pub message: String,
@@ -65,7 +66,6 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub yuyu_session: Option<YuyuSession>,
     pub session: Option<MinecraftSession>,
-    pub download_progress: Option<DownloadProgress>,
     pub running_instances: std::collections::HashSet<String>,
     /// Un `watch::Sender` par instance en cours de lancement — `cancel_launch`
     /// y envoie `true` pour demander l'arrêt (téléchargement en cours ou JVM déjà lancée).

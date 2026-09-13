@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-use crate::minecraft::launcher::progress::set_progress_monotonic;
+use crate::minecraft::launcher::progress::{set_progress_monotonic, ProgressFloor};
 
 use crate::minecraft::mod_files::is_enabled_jar;
 use crate::minecraft::versions::predicate::{
@@ -344,7 +344,7 @@ pub async fn resolve_and_install_deps(
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
-    progress_floor: &std::sync::atomic::AtomicU64,
+    progress_floor: &ProgressFloor,
 ) -> Result<Vec<String>> {
     if !mods_dir.exists() {
         return Ok(vec![]);

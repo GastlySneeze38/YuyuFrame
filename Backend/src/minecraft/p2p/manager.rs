@@ -10,7 +10,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use tungstenite::{accept, Message};
 
-use crate::minecraft::launcher::progress::set_progress_monotonic;
+use crate::minecraft::launcher::progress::{set_progress_monotonic, ProgressFloor};
 use crate::minecraft::p2p::libp2p_bridge::{BridgeEvent, P2PLibp2pHandle};
 
 pub const SIGNALING_PORT: u16 = 8765;
@@ -318,7 +318,7 @@ pub async fn ensure_yarn_mappings(
     version: &str,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-    progress_floor: &std::sync::atomic::AtomicU64,
+    progress_floor: &ProgressFloor,
 ) -> Result<PathBuf> {
     let cache_dir = p2p_dir().join("cache");
     tokio::fs::create_dir_all(&cache_dir).await?;
@@ -369,7 +369,7 @@ async fn download_yarn(
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-    progress_floor: &std::sync::atomic::AtomicU64,
+    progress_floor: &ProgressFloor,
 ) -> Result<()> {
     match download_yarn_from(
         mc_version, dest, client, app, progress_floor,
@@ -393,7 +393,7 @@ async fn download_yarn_from(
     dest: &Path,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
-    progress_floor: &std::sync::atomic::AtomicU64,
+    progress_floor: &ProgressFloor,
     meta_base: &str,
     maven_base: &str,
 ) -> Result<()> {

@@ -14,10 +14,25 @@ import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
 import { useT } from '@/i18n'
 import type { SavedServer } from '@/api/client'
 
-interface DownloadProgress {
+interface LaunchProgress {
   current: number
   total: number
   message: string
+}
+
+/// Plusieurs instances peuvent se lancer en parallèle : chaque événement de
+/// lancement porte l'id de son instance, et l'accueil n'affiche que l'état de
+/// celle sélectionnée.
+interface DownloadProgress extends LaunchProgress {
+  instance_id: string
+}
+
+/// Ajoute (`value` non nul) ou retire l'entrée d'une instance.
+function withEntry<T>(map: Record<string, T>, id: string, value: T | null): Record<string, T> {
+  const next = { ...map }
+  if (value === null) delete next[id]
+  else next[id] = value
+  return next
 }
 
 function useFeatures(t: ReturnType<typeof useT>) {
@@ -66,7 +81,7 @@ export default function Home() {
     p2pEnabled, setP2pEnabled,
     avoidBetaDependencies,
     showConsole,
-    launchPhaseDurations, recordLaunchPhaseDuration,
+    recordLaunchPhaseDuration,
     showHomeServers,
     confirmServerLaunch,
     favoriteServers, toggleFavoriteServer,
@@ -74,8 +89,14 @@ export default function Home() {
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
 
-  const [progress, setProgress] = useState<DownloadProgress | null>(null)
-  const [cancelling, setCancelling] = useState(false)
+  const [progressByInstance, setProgressByInstance] = useState<Record<string, LaunchProgress>>({})
+  const [cancellingByInstance, setCancellingByInstance] = useState<Record<string, true>>({})
+  const progress = selectedInstanceId ? progressByInstance[selectedInstanceId] ?? null : null
+  const cancelling = !!selectedInstanceId && !!cancellingByInstance[selectedInstanceId]
+  const setProgress = (id: string, value: LaunchProgress | null) =>
+    setProgressByInstance((prev) => withEntry(prev, id, value))
+  const setCancelling = (id: string, value: boolean) =>
+    setCancellingByInstance((prev) => withEntry(prev, id, value ? true : null))
   const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
   const [bannerAnimating, setBannerAnimating] = useState(false)
@@ -123,28 +144,35 @@ export default function Home() {
   // connue. On mesure la durée réelle à chaque lancement (voir game_ready
   // ci-dessous) et on la réutilise pour animer la barre les fois suivantes,
   // au lieu de la laisser figée à 60% pendant tout ce temps.
-  const phase2StartRef = useRef<number | null>(null)
-  const phase2TimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Un départ et un minuteur par instance en cours de lancement.
+  const phase2StartRef = useRef<Record<string, number>>({})
+  const phase2TimerRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
-  const clearPhase2 = () => {
-    if (phase2TimerRef.current) { clearInterval(phase2TimerRef.current); phase2TimerRef.current = null }
-    phase2StartRef.current = null
+  const clearPhase2 = (instanceId: string) => {
+    const timer = phase2TimerRef.current[instanceId]
+    if (timer) clearInterval(timer)
+    delete phase2TimerRef.current[instanceId]
+    delete phase2StartRef.current[instanceId]
   }
 
   const startPhase2 = (instanceId: string) => {
-    phase2StartRef.current = Date.now()
-    const remembered = launchPhaseDurations[instanceId]
+    const start = Date.now()
+    phase2StartRef.current[instanceId] = start
+    // Lu dans le store au moment du démarrage : les listeners d'événements
+    // ci-dessous sont posés une seule fois, leur closure serait périmée.
+    const remembered = useStore.getState().launchPhaseDurations[instanceId]
     if (!remembered) return // pas encore de mesure — reste figé à 60%, rien à animer
-    if (phase2TimerRef.current) clearInterval(phase2TimerRef.current)
-    phase2TimerRef.current = setInterval(() => {
-      if (!phase2StartRef.current) return
-      const elapsed = Date.now() - phase2StartRef.current
-      const frac = Math.min(0.975, elapsed / remembered)
-      setProgress({ current: 60 + Math.round(frac * 40), total: 100, message: t('home.startingMinecraft') })
+    const previous = phase2TimerRef.current[instanceId]
+    if (previous) clearInterval(previous)
+    phase2TimerRef.current[instanceId] = setInterval(() => {
+      const frac = Math.min(0.975, (Date.now() - start) / remembered)
+      setProgress(instanceId, { current: 60 + Math.round(frac * 40), total: 100, message: t('home.startingMinecraft') })
     }, 250)
   }
 
-  useEffect(() => clearPhase2, [])
+  useEffect(() => () => {
+    for (const timer of Object.values(phase2TimerRef.current)) clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     api.instances.list().then((list) => {
@@ -170,25 +198,27 @@ export default function Home() {
     return () => { cancelled = true }
   }, [showHomeServers, selectedInstanceId])
 
-  useTauriEvent<DownloadProgress>('download_progress', (payload) => {
-    setProgress(payload)
+  useTauriEvent<DownloadProgress>('download_progress', ({ instance_id, ...value }) => {
+    setProgress(instance_id, value)
     // Palier exact émis par le backend une fois tous les téléchargements
     // finis (voir DOWNLOAD_PHASE_PERCENT côté Rust) — démarre la phase 2.
-    if (payload.current === 60 && payload.total === 100 && !phase2StartRef.current && selectedInstanceId) {
-      startPhase2(selectedInstanceId)
+    if (value.current === 60 && value.total === 100 && !phase2StartRef.current[instance_id]) {
+      startPhase2(instance_id)
     }
-  }, [selectedInstanceId])
+  })
+
+  const resetLaunchUi = (instanceId: string) => {
+    clearPhase2(instanceId)
+    setProgress(instanceId, null)
+    setCancelling(instanceId, false)
+  }
 
   // La mise à jour du store (setInstanceRunning) et le show() de la fenêtre
   // sont gérés globalement dans App.tsx (survit à la navigation hors de cette
   // page) — ici on ne garde que les resets propres à l'UI de lancement de
   // cette page (barre de progression, bouton Annuler).
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', (payload) => {
-    if (!payload.running) {
-      clearPhase2()
-      setProgress(null)
-      setCancelling(false)
-    }
+    if (!payload.running) resetLaunchUi(payload.instance_id)
   })
 
   // Émis par le backend quand le hook TitleScreen.init() du LauncherAgent se
@@ -198,39 +228,36 @@ export default function Home() {
   // mort (aucun signal entre la fin de nos téléchargements et le jeu
   // réellement visible). On mesure la durée réelle de cette phase pour
   // affiner l'animation des prochains lancements de cette instance.
-  useTauriEvent<{ instance_id: string }>('game_ready', (payload) => {
-    if (payload.instance_id !== selectedInstanceId) return
-    if (phase2StartRef.current) {
-      recordLaunchPhaseDuration(payload.instance_id, Date.now() - phase2StartRef.current)
-    }
-    clearPhase2()
-    setProgress({ current: 100, total: 100, message: t('home.minecraftReady') })
-    setTimeout(() => setProgress(null), 900)
-  }, [selectedInstanceId])
+  // Traité quelle que soit l'instance sélectionnée : ignorer celui d'une autre
+  // instance laissait sa barre figée à ~97% pour toujours.
+  useTauriEvent<{ instance_id: string }>('game_ready', ({ instance_id }) => {
+    const start = phase2StartRef.current[instance_id]
+    if (start) recordLaunchPhaseDuration(instance_id, Date.now() - start)
+    clearPhase2(instance_id)
+    setProgress(instance_id, { current: 100, total: 100, message: t('home.minecraftReady') })
+    setTimeout(() => setProgress(instance_id, null), 900)
+  })
 
-  useTauriEvent<string>('launch_error', (payload) => {
-    showError(payload)
-    if (selectedInstanceId) setInstanceRunning(selectedInstanceId, false)
-    clearPhase2()
-    setProgress(null)
-    setCancelling(false)
-  }, [selectedInstanceId])
+  useTauriEvent<{ instance_id: string; message: string }>('launch_error', ({ instance_id, message }) => {
+    showError(message)
+    setInstanceRunning(instance_id, false)
+    resetLaunchUi(instance_id)
+  })
 
-  useTauriEvent<string>('launch_cancelled', () => {
+  useTauriEvent<string>('launch_cancelled', (instanceId) => {
     showNotice(t('home.launchCancelled'))
-    clearPhase2()
-    setProgress(null)
-    setCancelling(false)
+    resetLaunchUi(instanceId)
   })
 
   const handleCancelLaunch = async () => {
-    if (!selectedInstanceId || cancelling) return
-    setCancelling(true)
+    const instanceId = selectedInstanceId
+    if (!instanceId || cancelling) return
+    setCancelling(instanceId, true)
     try {
-      await api.launch.cancel(selectedInstanceId)
+      await api.launch.cancel(instanceId)
     } catch (e) {
       showError(e)
-      setCancelling(false)
+      setCancelling(instanceId, false)
     }
   }
 
@@ -247,13 +274,15 @@ export default function Home() {
   }
 
   const launch = async (connectServer?: string) => {
-    if (!selectedInstanceId || gameRunning || !username) return
+    // Figé ici : l'utilisateur peut changer d'instance pendant l'appel.
+    const instanceId = selectedInstanceId
+    if (!instanceId || gameRunning || !username) return
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
     try {
-      if (p2pEnabled && P2P_ENABLED) await api.launch.startP2p(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
-      else await api.launch.start(selectedInstanceId, avoidBetaDependencies, showConsole, connectServer)
-      setInstanceRunning(selectedInstanceId, true)
+      if (p2pEnabled && P2P_ENABLED) await api.launch.startP2p(instanceId, avoidBetaDependencies, showConsole, connectServer)
+      else await api.launch.start(instanceId, avoidBetaDependencies, showConsole, connectServer)
+      setInstanceRunning(instanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
       if (closeOnLaunch) getCurrentWindow().hide()
     } catch (e) {

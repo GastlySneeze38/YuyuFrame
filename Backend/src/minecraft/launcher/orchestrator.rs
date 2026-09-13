@@ -3,13 +3,13 @@ use futures::StreamExt;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinSet;
 
-use crate::state::{MinecraftSession, SharedState};
+use crate::state::MinecraftSession;
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
 use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
@@ -20,7 +20,7 @@ use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, ex
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
-use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready};
+use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready, ProgressFloor};
 use super::ready_event::{create_ready_event, wait_for_ready_event};
 use super::servers::build_server_connect_args;
 
@@ -59,7 +59,6 @@ pub async fn download_and_launch(
     ram_mb: u32,
     game_dir: &std::path::Path,
     app: tauri::AppHandle,
-    state: SharedState,
     p2p: bool,
     avoid_beta: bool,
     console_label: &str,
@@ -142,17 +141,17 @@ pub async fn download_and_launch(
         let _ = tokio::fs::rename(&legacy_version_json_cache, &version_json_cache).await;
     }
     let details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
-        set_progress(&app, 5, 100, "Détails de version (cache local)...");
+        set_progress(&app, instance_id, 5, 100, "Détails de version (cache local)...");
         serde_json::from_str(&text)?
     } else {
-        set_progress(&app, 0, 100, "Récupération du manifest...");
+        set_progress(&app, instance_id, 0, 100, "Récupération du manifest...");
         let versions = fetch_version_list().await?;
         let version_info = versions
             .iter()
             .find(|v| v.id == version_id)
             .ok_or_else(|| anyhow!("Version {} introuvable", version_id))?;
 
-        set_progress(&app, 5, 100, "Récupération des détails...");
+        set_progress(&app, instance_id, 5, 100, "Récupération des détails...");
         let raw = client.get(&version_info.url).send().await?.text().await?;
         if let Some(parent) = version_json_cache.parent() {
             let _ = tokio::fs::create_dir_all(parent).await;
@@ -164,7 +163,7 @@ pub async fn download_and_launch(
     // Plafond partagé entre les deux émetteurs concurrents (libs + assets, voir
     // set_progress_monotonic) — un seul par lancement, jamais partagé entre
     // deux lancements différents.
-    let progress_floor = Arc::new(AtomicU64::new(0));
+    let progress_floor = Arc::new(ProgressFloor::new(instance_id));
 
     // ── Java en tâche de fond — démarre immédiatement, indépendant des libs ──
     // `ensure_java` ne dépend QUE du manifeste de version (déjà résolu
@@ -696,9 +695,6 @@ pub async fn download_and_launch(
         None => tracing::info!("[ReadyEvent] pas d'event créé — repli sur stdout/fichier uniquement pour ce lancement"),
     }
 
-    // Clear progress — game is now running
-    state.write().await.download_progress = None;
-
     let mut cancel_wait = cancel;
     let cancelled_while_running = tokio::select! {
         status = child.wait() => {
@@ -758,7 +754,7 @@ pub async fn preview_jvm_config(
     let mc_dir = minecraft_dir();
     let versions_dir = mc_dir.join("versions").join(version_id);
     let natives_dir = versions_dir.join("natives");
-    let progress_floor = Arc::new(AtomicU64::new(0));
+    let progress_floor = Arc::new(ProgressFloor::new(instance_id));
 
     let client = Arc::new(reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))

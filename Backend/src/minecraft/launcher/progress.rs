@@ -19,13 +19,31 @@ use crate::state::DownloadProgress;
 /// qui mesure la durée réelle d'un lancement à l'autre pour l'estimer).
 pub(crate) const DOWNLOAD_PHASE_PERCENT: u64 = 60;
 
-pub(crate) fn set_progress(app: &tauri::AppHandle, current: u64, total: u64, message: &str) {
+/// Chaque événement porte l'id de l'instance lancée : plusieurs instances
+/// peuvent se lancer en parallèle, et l'accueil n'affiche que la progression
+/// de celle sélectionnée.
+pub(crate) fn set_progress(app: &tauri::AppHandle, instance_id: &str, current: u64, total: u64, message: &str) {
     let scaled = if total > 0 { current * DOWNLOAD_PHASE_PERCENT / total } else { 0 };
     let _ = app.emit("download_progress", DownloadProgress {
+        instance_id: instance_id.to_string(),
         current: scaled,
         total: 100,
         message: message.to_string(),
     });
+}
+
+/// Plancher de progression d'UN lancement (voir `set_progress_monotonic`) —
+/// porte aussi l'id de l'instance, pour que chaque émetteur publie sous le bon
+/// id sans le recevoir en paramètre supplémentaire.
+pub(crate) struct ProgressFloor {
+    value: AtomicU64,
+    instance_id: String,
+}
+
+impl ProgressFloor {
+    pub(crate) fn new(instance_id: &str) -> Self {
+        Self { value: AtomicU64::new(0), instance_id: instance_id.to_string() }
+    }
 }
 
 /// Variante monotone — tout le lancement (téléchargements vanilla, Java,
@@ -47,16 +65,16 @@ pub(crate) fn set_progress(app: &tauri::AppHandle, current: u64, total: u64, mes
 ///    plutôt que de les ignorer (perdant le message) ou de les laisser
 ///    écraser le pourcentage avec 0, on les affiche au pourcentage déjà
 ///    atteint (clampé), jamais en dessous.
-pub(crate) fn set_progress_monotonic(app: &tauri::AppHandle, floor: &AtomicU64, current: u64, total: u64, message: &str) {
-    let prev = floor.load(Ordering::Relaxed);
+pub(crate) fn set_progress_monotonic(app: &tauri::AppHandle, floor: &ProgressFloor, current: u64, total: u64, message: &str) {
+    let prev = floor.value.load(Ordering::Relaxed);
     if current > prev {
         // Best-effort : si un autre appel concurrent a déjà avancé le plancher
         // plus loin entre le load et ici, on perd la course sans problème —
         // `displayed` ci-dessous relira la valeur qui a gagné de toute façon.
-        let _ = floor.compare_exchange(prev, current, Ordering::Relaxed, Ordering::Relaxed);
+        let _ = floor.value.compare_exchange(prev, current, Ordering::Relaxed, Ordering::Relaxed);
     }
-    let displayed = current.max(floor.load(Ordering::Relaxed));
-    set_progress(app, displayed, total, message);
+    let displayed = current.max(floor.value.load(Ordering::Relaxed));
+    set_progress(app, &floor.instance_id, displayed, total, message);
 }
 
 /// Émet un game_log vers la fenêtre console dédiée à cette instance.

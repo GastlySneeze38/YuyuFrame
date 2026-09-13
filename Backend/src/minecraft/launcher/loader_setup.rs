@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -8,7 +7,7 @@ use tokio::task::JoinSet;
 use crate::minecraft::loaders::{deps, fabric, forge, neoforge, quilt};
 use super::jvm_args::extract_tweak_class_args;
 use super::mojang_rules::extract_conditional_args;
-use super::progress::set_progress_monotonic;
+use super::progress::{set_progress_monotonic, ProgressFloor};
 
 /// Substitue les placeholders propres au version json de Forge moderne
 /// (>= ~1.17, vérifié empiriquement sur le JSON réel de 1.20.1-47.2.20) et
@@ -51,7 +50,7 @@ pub(super) async fn setup_fabric(
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
     client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Fabric Loader...");
@@ -143,7 +142,7 @@ pub(super) async fn setup_quilt(
     mods_dir: &Path,
     app: &tauri::AppHandle,
     avoid_beta: bool,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
     client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Quilt Loader...");
@@ -221,7 +220,7 @@ pub(super) async fn setup_forge(
     libraries_dir: &Path,
     java: &str,
     app: &tauri::AppHandle,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
     client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version Forge...");
@@ -347,7 +346,7 @@ pub(super) async fn setup_neoforge(
     libraries_dir: &Path,
     java: &str,
     app: &tauri::AppHandle,
-    progress_floor: &AtomicU64,
+    progress_floor: &ProgressFloor,
     client: &reqwest::Client,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version NeoForge...");

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::minecraft::p2p;
 use crate::state::MinecraftSession;
 use super::agent_deploy::{launcher_agent_dir, launcher_agent_libs_dir};
-use super::progress::log_to_console;
+use super::progress::{log_to_console, ProgressFloor};
 
 /// Sortie commune à `setup_p2p` et `setup_launcher_agent` : arguments
 /// `-javaagent:...` à passer à la JVM et entrées de classpath associées
@@ -27,7 +27,7 @@ pub(super) async fn setup_p2p(
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     console_label: &str,
-    progress_floor: &std::sync::atomic::AtomicU64,
+    progress_floor: &ProgressFloor,
 ) -> Result<AgentSetup> {
     p2p::start_signaling(app.clone());
 
@@ -179,7 +179,7 @@ pub(super) async fn setup_launcher_agent(
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     console_label: &str,
-    progress_floor: &std::sync::atomic::AtomicU64,
+    progress_floor: &ProgressFloor,
     ready_event_name: Option<&str>,
 ) -> AgentSetup {
     let libs_dir = launcher_agent_libs_dir();
