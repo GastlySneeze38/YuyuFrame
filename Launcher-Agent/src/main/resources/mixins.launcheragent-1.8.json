@@ -9,7 +9,6 @@
   "mixins": [],
   "client": [
     "client.v1_8.TitleScreenMixin189",
-    "client.v1_8.EntityCullingMixin",
     "client.v1_8.GlobalUiRenderMixin189",
     "client.v1_8.MixinGameRenderer189",
     "client.v1_8.MixinToggleSprint189",
@@ -22,18 +21,7 @@
     "client.v1_8.MixinOldConsume189",
     "client.v1_8.MixinSneakRamp189",
     "client.v1_8.MixinCrosshair189",
-    "client.v1_8.MixinWorldTime189",
-    "client.v1_8.optimodule.MixinUnstackedItems189",
-    "client.v1_8.optimodule.MixinPlayerBackfaceCulling189",
-    "client.v1_8.optimodule.MixinEntityBackfaceCulling189",
-    "client.v1_8.optimodule.MixinLowAnimationTick189",
-    "client.v1_8.optimodule.MixinTileEntityRenderDistance189",
-    "client.v1_8.optimodule.MixinChunkBuilderThreads189",
-    "client.v1_8.optimodule.MixinCachedFancyClouds189",
-    "client.v1_8.optimodule.MixinLabelRenderDistance189",
-    "client.v1_8.optimodule.MixinCachedStringWidth189",
-    "client.v1_8.optimodule.MixinParticleRenderDistance189",
-    "client.v1_8.optimodule.MixinBorderlessWindow189"
+    "client.v1_8.MixinWorldTime189"
   ],
   "injectors": {
     "defaultRequire": 1

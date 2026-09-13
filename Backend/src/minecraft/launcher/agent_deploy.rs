@@ -51,7 +51,7 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         ("libs/asm-util-9.5.jar", dest_libs.join("asm-util-9.5.jar")),
         ("libs/asm-analysis-9.5.jar", dest_libs.join("asm-analysis-9.5.jar")),
         ("libs/asm-commons-9.5.jar", dest_libs.join("asm-commons-9.5.jar")),
-        // JNA (module "Fenêtre sans bordure", BorderlessWindowNative) — appel
+        // JNA (MumbleLinkBridge, ReadyEventSignal) — appel
         // direct de l'API Win32 depuis du Java pur, pas de nouvelle DLL Rust.
         ("libs/jna.jar", dest_libs.join("jna.jar")),
         ("libs/jna-platform.jar", dest_libs.join("jna-platform.jar")),

@@ -50,8 +50,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <p>Aucun code natif à nous : JNA appelle kernel32 (jna.jar/jna-platform.jar,
  * déployés par build.bat et ajoutés au classpath par le launcher — voir
- * {@code agents.rs}), même principe que {@code BorderlessWindowNative} pour
- * User32. Les liaisons viennent de {@code com.sun.jna.platform.win32.Kernel32}
+ * {@code agents.rs}), même principe que {@code ReadyEventSignal}. Les liaisons viennent de {@code com.sun.jna.platform.win32.Kernel32}
  * plutôt que d'une interface maison : types {@code HANDLE} corrects et surtout
  * {@code GetLastError()} disponible, ce qui manquait cruellement (voir
  * {@link #fail}).

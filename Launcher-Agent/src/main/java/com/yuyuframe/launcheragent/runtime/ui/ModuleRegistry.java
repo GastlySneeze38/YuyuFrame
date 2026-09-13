@@ -32,20 +32,9 @@ import com.yuyuframe.launcheragent.runtime.module.gameplay.ToggleSneakModule;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.ToggleSprintModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.WorldTimeModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.ZoomModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.BorderlessWindowModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.CachedFancyCloudsModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.ChunkBuilderThreadsModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.EntityBackfaceCullingModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.LabelRenderDistanceModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.LowAnimationTickModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.ParticleRenderDistanceModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.PlayerBackfaceCullingModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.TileEntityRenderDistanceModule;
-import com.yuyuframe.launcheragent.runtime.module.optimodule.UnstackedItemsModule;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -264,30 +253,9 @@ public final class ModuleRegistry {
         safeRegister(() -> new FullbrightModule());
         safeRegister(() -> new WorldTimeModule());
         safeRegister(() -> new ChatEnhancementsModule());
-        // Modules "Optimisations" — leur implémentation réelle vit
-        // ENTIÈREMENT dans des Mixins *189 (1.8.9 uniquement, voir
-        // mixin/client/v1_8/optimodule et le mémo project-optimodule-fps-status) :
-        // jamais portés vers aucun autre bracket. Étaient enregistrés
-        // INCONDITIONNELLEMENT jusqu'ici (contrairement à Fov/ToggleSprint/etc.
-        // ci-dessus, déjà protégés par IS_1_16) — cartes cliquables qui ne
-        // faisaient RIEN sur 1.16.5+/1.20.4/1.21.4/1.21.11/26.1.2 (aucune
-        // classe Mixin *189 ne se charge en dehors du bracket 1.8.9, voir
-        // VersionProfileRegistry). Gaté sur demande explicite de l'utilisateur
-        // (audit avant publication) avec le MÊME flag IS_1_16 — pas un nouveau
-        // flag séparé, il n'y a aucune raison que le critère diffère de celui
-        // déjà établi pour les autres modules 1.8.9-only.
-        if (!IS_1_16) {
-            safeRegister(() -> new UnstackedItemsModule());
-            safeRegister(() -> new PlayerBackfaceCullingModule());
-            safeRegister(() -> new EntityBackfaceCullingModule());
-            safeRegister(() -> new LowAnimationTickModule());
-            safeRegister(() -> new TileEntityRenderDistanceModule());
-            safeRegister(() -> new ChunkBuilderThreadsModule());
-            safeRegister(() -> new CachedFancyCloudsModule());
-            safeRegister(() -> new LabelRenderDistanceModule());
-            safeRegister(() -> new ParticleRenderDistanceModule());
-            safeRegister(() -> new BorderlessWindowModule());
-        }
+        // Les modules « Optimisations » 1.8.9 (optimodule) et la fenêtre sans
+        // bordure ont été retirés le 2026-09-13 : le renderer 1.8.9 et LWJGL 3
+        // les remplacent (docs/LauncherAgent/v1.8.9/README.md).
         safeRegister(() -> new MumbleLinkModule());
         // Macros + connexion automatique — 26.1.2 ET 1.21.11 depuis le
         // 2026-09-12. La restriction d'origine disait « la détection du login
@@ -357,45 +325,6 @@ public final class ModuleRegistry {
             legacyGroup.iconUrl = LauncherModule.icons8("time-machine");
             GROUPS.add(legacyGroup);
         }
-        // Optimisations FPS (voir mixin/.../optimodule et runtime/module/optimodule) —
-        // portage de features de PolyPatcher (mod d'optimisation 1.8.9 open source),
-        // pas de dépendance sur PolyPatcher lui-même, juste la même idée en Mixin natif.
-        // Groupe entier gaté par IS_1_16 (comme les modules eux-mêmes juste
-        // au-dessus, voir leur commentaire) — plutôt que de filtrer les
-        // membres un par un ici (les Tab ci-dessous en contiennent aussi,
-        // il aurait fallu les filtrer séparément), tout le bloc est sauté
-        // d'un coup : sur les brackets exclus, aucun des 10 modules n'est
-        // enregistré de toute façon (get(id) renverrait null partout).
-        if (!IS_1_16) {
-            List<LauncherModule> optimisationMembers = Arrays.asList(get("unstacked-items"), get("player-backface-culling"),
-                get("entity-backface-culling"), get("low-animation-tick"), get("tile-entity-render-distance"),
-                get("chunk-builder-threads"), get("cached-fancy-clouds"), get("label-render-distance"),
-                get("particle-render-distance"), get("borderless-window"));
-            // Onglets regroupés — demandé explicitement pour réduire le nombre
-            // d'onglets ET la longueur de leurs noms dans la sous-sidebar (les
-            // noms complets des modules débordaient de la largeur des onglets,
-            // voir UiModGroupConfigScreen) : les 2 modules de culling face
-            // arrière (joueur/entités) et les 3 modules de distance de rendu
-            // (tile entities/labels/particules) partagent maintenant chacun un
-            // seul onglet au lieu d'un par module — chaque module GARDE son
-            // propre toggle d'activation et ses réglages annotés, juste empilés
-            // à la suite les uns des autres dans le même onglet (voir
-            // UiModGroupConfigScreen.buildLayout()). Les modules restants gardent
-            // un onglet dédié (Tab à un seul membre).
-            ModuleGroup optimisationsGroup = new ModuleGroup("optimisations", "Optimisations", "Gains FPS ciblés", optimisationMembers,
-                Arrays.asList(
-                    new ModuleGroup.Tab("Items non empilés", Collections.singletonList(get("unstacked-items"))),
-                    new ModuleGroup.Tab("Culling face arrière", Arrays.asList(get("player-backface-culling"), get("entity-backface-culling"))),
-                    new ModuleGroup.Tab("Animations réduites", Collections.singletonList(get("low-animation-tick"))),
-                    new ModuleGroup.Tab("Distance de rendu", Arrays.asList(get("tile-entity-render-distance"), get("label-render-distance"), get("particle-render-distance"))),
-                    new ModuleGroup.Tab("Threads de construction", Collections.singletonList(get("chunk-builder-threads"))),
-                    new ModuleGroup.Tab("Nuages Fancy en cache", Collections.singletonList(get("cached-fancy-clouds"))),
-                    new ModuleGroup.Tab("Fenêtre sans bordure", Collections.singletonList(get("borderless-window")))
-                ));
-            optimisationsGroup.iconUrl = LauncherModule.icons8("rocket");
-            GROUPS.add(optimisationsGroup);
-        }
-
         // Charge l'état "favori" persisté de CHAQUE groupe (demandé
         // explicitement : "rends les groupes favorisables") — même rôle que
         // HudConfigStore.applyTo(module) pour un LauncherModule, appliqué

@@ -26,9 +26,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * Hurt cam : bobViewWhenHurt (officiel "d") applique une rotation OpenGL
  * directe (immediate-mode, pas de valeur de retour à modifier après coup) —
- * annulée via un @Inject cancellable en HEAD, même pattern déjà utilisé par
- * EntityCullingMixin dans ce projet (donc pas une nouvelle capacité, juste
- * une nouvelle cible).
+ * annulée via un @Inject cancellable en HEAD.
  *
  * CORRECTIF (session de débogage sprint/sneak) : {@code method=} en nom Yarn
  * ("updateMovementFovMultiplier()V"/"bobViewWhenHurt(F)V") ne se résolvait

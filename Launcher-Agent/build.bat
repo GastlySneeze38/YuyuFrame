@@ -151,10 +151,10 @@ if not exist "%LIB%\mixinextras.jar" (
     if errorlevel 1 ( echo [ERREUR] Telechargement MixinExtras echoue & goto :error )
 )
 
-:: JNA (BorderlessWindowNative, module "Fenetre sans bordure") : appel direct
-:: de l'API Win32 (User32/Kernel32) depuis du Java pur, sans ecrire/compiler
-:: le moindre code natif nous-memes — contrairement a content_core.dll/
-:: rust_core.dll, aucune nouvelle DLL Rust pour cette feature.
+:: JNA (MumbleLinkBridge, ReadyEventSignal) : appel direct de l'API Win32
+:: (Kernel32) depuis du Java pur, sans ecrire/compiler le moindre code natif
+:: nous-memes — contrairement a content_core.dll/rust_core.dll, aucune
+:: nouvelle DLL Rust pour ces features.
 if not exist "%LIB%\jna.jar" (
     echo [Deps] Telechargement JNA 5.14.0...
     powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.14.0/jna-5.14.0.jar' -OutFile '%LIB%\jna.jar' -UseBasicParsing"

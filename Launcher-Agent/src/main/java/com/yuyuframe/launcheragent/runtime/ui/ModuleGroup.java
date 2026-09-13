@@ -21,10 +21,8 @@ import java.util.List;
  * de "comment les regrouper visuellement en onglets" : par défaut un onglet
  * par module ({@link #ModuleGroup(String, String, String, List)}), mais un
  * groupe peut aussi fournir explicitement des {@link Tab} qui rassemblent
- * PLUSIEURS modules apparentés sous un seul onglet (ex: les deux "Culling
- * face arrière (joueur/entités)" ou les 3 "Distance de rendu" du groupe
- * "Optimisations" — demandé explicitement pour réduire le nombre d'onglets
- * et la longueur de leurs noms, voir ModuleRegistry).
+ * PLUSIEURS modules apparentés sous un seul onglet, pour réduire le nombre
+ * d'onglets et la longueur de leurs noms.
  */
 public final class ModuleGroup {
     public final String id;
@@ -61,10 +59,6 @@ public final class ModuleGroup {
 
     public ModuleGroup(String id, String name, String description, String shortDescription, List<LauncherModule> members) {
         this(id, name, description, shortDescription, members, oneTabPerMember(members));
-    }
-
-    public ModuleGroup(String id, String name, String description, List<LauncherModule> members, List<Tab> tabs) {
-        this(id, name, description, null, members, tabs);
     }
 
     public ModuleGroup(String id, String name, String description, String shortDescription, List<LauncherModule> members, List<Tab> tabs) {

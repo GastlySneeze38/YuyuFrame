@@ -15,7 +15,7 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
  * (OpenEventW) et de le signaler (SetEvent) — toute la synchronisation/
  * l'attente reste côté Rust.
  *
- * Même principe JNA que MumbleLinkBridge/BorderlessWindowNative — appel
+ * Même principe JNA que MumbleLinkBridge — appel
  * direct à kernel32.dll (jna.jar/jna-platform.jar, voir build.bat), pas de
  * nouvelle DLL Rust.
  *

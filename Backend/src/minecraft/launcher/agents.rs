@@ -198,7 +198,7 @@ pub(super) async fn setup_launcher_agent(
     // Java), MixinExtras n'a pas ce problème de singleton partagé — le skip
     // simple suffit ici.
     let mixinextras_jar = libs_dir.join("mixinextras.jar");
-    // JNA (module optimodule "Fenêtre sans bordure", BorderlessWindowNative) —
+    // JNA (MumbleLinkBridge, ReadyEventSignal côté agent) —
     // pas de conflit "duplicate classes" façon ASM/Fabric, donc ajoutée au
     // classpath dans tous les cas (vanilla ET Fabric), pas seulement !is_fabric.
     let jna_jar          = libs_dir.join("jna.jar");

@@ -32,11 +32,9 @@ import java.util.Map;
  * chaque onglet empilant le toggle d'activation (déplacé ici puisqu'un module
  * groupé n'a plus sa propre carte pour le porter) + les réglages annotés
  * habituels (via {@link ConfigScreenBuilder}) de CHAQUE module qui lui est
- * rattaché — la plupart des onglets n'ont qu'un seul module, mais certains en
- * cumulent plusieurs d'apparentés (ex: "Culling face arrière" = joueur +
- * entités, "Distance de rendu" = tile entities + labels + particules — voir
- * ModuleRegistry) pour réduire le nombre d'onglets et la longueur de leurs
- * noms dans la sous-sidebar.
+ * rattaché — la plupart des onglets n'ont qu'un seul module, mais un onglet
+ * peut en cumuler plusieurs d'apparentés (voir {@link ModuleGroup.Tab}) pour
+ * réduire le nombre d'onglets et la longueur de leurs noms dans la sous-sidebar.
  *
  * REFONTE (même demande explicite que UiModConfigScreen, voir sa javadoc) :
  * fond transparent, carte autour de la sous-sidebar (plus du contenu), liste
@@ -158,9 +156,8 @@ public class UiModGroupConfigScreen extends UiScreenBase {
         ROW_GAP = UiTheme.scaled(8f);
         LABEL_SCALE = UiTheme.scaled(0.5f);
         // Agrandi (retour utilisateur : "c'est trop petit") — noms d'onglets
-        // désormais raccourcis pour les tabs multi-modules (voir
-        // ModuleRegistry/optimodule), plus besoin d'un scale aussi réduit
-        // qu'avant pour éviter le débordement.
+        // courts, plus besoin d'un scale aussi réduit qu'avant pour éviter
+        // le débordement.
         TAB_LABEL_SCALE = UiTheme.scaled(0.46f);
         TAB_LABEL_SCALE_BIG = UiTheme.scaled(0.52f);
 

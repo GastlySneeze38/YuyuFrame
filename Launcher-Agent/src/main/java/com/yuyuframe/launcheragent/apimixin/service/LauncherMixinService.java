@@ -236,10 +236,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/TitleScreenMixin189",
             "net/minecraft/client/gui/screen/TitleScreen",
             "init", "()V", "net/minecraft/client/gui/screen/Screen"),
-        // render(Entity,D,D,D,F,F)Z déclaré directement sur EntityRenderDispatcher — pas de repli.
-        new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/EntityCullingMixin",
-            "net/minecraft/client/render/entity/EntityRenderDispatcher",
-            "render", "(Lnet/minecraft/entity/Entity;DDDFF)Z", null),
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/v1_8/GlobalUiRenderMixin189",
             "net/minecraft/client/render/GameRenderer",
             "render", "(FJ)V", null),
