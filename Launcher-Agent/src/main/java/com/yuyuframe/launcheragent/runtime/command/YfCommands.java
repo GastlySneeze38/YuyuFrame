@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.runtime.command;
 
 import com.yuyuframe.launcheragent.agent.LauncherAgent;
-import com.yuyuframe.launcheragent.apimixin.v26_1.core.GlobalUiRenderBridge261;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.ui.HudConfigStore;
 import com.yuyuframe.launcheragent.runtime.ui.HudElementOwner;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -25,9 +25,12 @@ import java.util.Set;
  * {@code blendpoc}, {@code particlepoc} (26.1.2 seulement, inutiles au joueur),
  * avec leur code de test dans le moteur.
  *
- * 26.1.2 UNIQUEMENT pour l'instant (comme tout ce chantier) — le pont utilisé
- * ({@code apimixin.v26_1.core.GlobalUiRenderBridge261}) est spécifique à ce
- * bracket ; le hook d'interception ({@code ChatSendMixin261}) aussi.
+ * <p>26.1.2 ET 1.21.11 (2026-09-13) : aucune commande ne nomme plus de type de
+ * version. {@code /yf} et {@code /yf reload-config} passaient par
+ * {@code GlobalUiRenderBridge261}, spécifique à la 26.1.2 — en 1.21.11,
+ * {@code NoClassDefFoundError} à l'exécution. Elles passent désormais par
+ * {@link ClientData#setScreen} (point d'accès {@code CLIENT_SET_SCREEN}, lié
+ * sur les deux tranches), comme {@code MacroModule}.
  *
  * Feedback utilisateur : route par {@link LauncherLog} (visible dans
  * launcher-agent.log) plutôt qu'un écho local dans le chat — construire un
@@ -59,9 +62,10 @@ final class YfCommands {
             public String description() { return "Réouvre l'écran principal du launcher"; }
             public void execute(String[] args) {
                 try {
-                    Object mc = GlobalUiRenderBridge261.getMcInstance();
-                    if (mc == null) return;
-                    GlobalUiRenderBridge261.setScreen(mc, new UiMainMenuScreen(null));
+                    if (!ClientData.setScreen(new UiMainMenuScreen(null))) {
+                        LauncherLog.err("[YfCommands] /yf : ouverture de l'écran principal refusée"
+                            + " (CLIENT_SET_SCREEN sans réponse sur cette version)");
+                    }
                 } catch (Throwable t) {
                     LauncherLog.err("[YfCommands] /yf: " + t);
                 }
@@ -189,9 +193,15 @@ final class YfCommands {
                 try {
                     // Ferme l'écran HUD/config en cours AVANT de recharger — évite
                     // une désync état affiché / état réel (voir ROADMAP-agent.md §Phase 4.5).
-                    Object mc = GlobalUiRenderBridge261.getMcInstance();
-                    if (mc != null) GlobalUiRenderBridge261.closeScreen(mc, null);
-                } catch (Throwable ignored) {}
+                    // Journalisé et non plus avalé : un écran resté ouvert
+                    // afficherait l'ancienne config sans que rien ne l'explique.
+                    if (ClientData.screenObject() != null && !ClientData.setScreen(null)) {
+                        LauncherLog.err("[YfCommands] /yf reload-config : fermeture de l'écran en cours refusée"
+                            + " (CLIENT_SET_SCREEN sans réponse) — rechargement quand même");
+                    }
+                } catch (Throwable t) {
+                    LauncherLog.err("[YfCommands] /yf reload-config : fermeture de l'écran : " + t);
+                }
                 try {
                     HudConfigStore.reload();
                     for (LauncherModule m : ModuleRegistry.all()) {
