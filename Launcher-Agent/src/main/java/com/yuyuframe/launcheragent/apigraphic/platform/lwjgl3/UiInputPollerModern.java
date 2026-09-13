@@ -69,6 +69,92 @@ public final class UiInputPollerModern extends UiInputPoller {
     private final boolean[] keyDown = new boolean[350];
     private final Object[] previousKeyCb = new Object[1];
 
+    /**
+     * Touches que GLFW ne sait PAS nommer ({@code GLFW_KEY_UNKNOWN}, code
+     * {@code -1}) — touches multimédia, touches OEM de certains claviers —
+     * indexées par leur SCANCODE, seul identifiant stable qu'il en donne.
+     * Sans ce suivi, elles étaient invisibles pour la capture : le code −1
+     * sortait de {@link #keyDown} et l'appui était perdu sans un mot.
+     */
+    private final java.util.Set<Integer> scancodeDown =
+        java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<Integer, Boolean>());
+
+    /**
+     * APPUI JAMAIS PERDU (2026-09-13). L'état est lu par échantillonnage —
+     * à chaque frame pour la capture, à chaque tick pour les macros. Un appui
+     * dont l'enfoncement ET le relâchement tombent entre deux lectures n'était
+     * donc jamais vu. Ce n'est pas théorique : sous Windows, Impr. écran
+     * n'envoie ses deux événements qu'au relâchement, ensemble — la touche
+     * était impossible à capturer. Un clic très bref pouvait aussi échapper
+     * à une macro.
+     *
+     * <p>Règle : un appui reste visible au moins {@link #MIN_VISIBLE_NANOS}
+     * à partir de sa PREMIÈRE lecture ; un relâchement arrivé avant est
+     * différé jusque-là. Une fenêtre de TEMPS et non « une lecture » : chaque
+     * frame, plusieurs consommateurs lisent la même entrée (l'interface, puis
+     * les modules au tick) — si la première lecture appliquait le
+     * relâchement, la seconde raterait l'appui. 60 ms couvre un tick de jeu
+     * (50 ms) ; seul un tap plus court que ça est allongé, jamais un appui
+     * normal. Indexé comme {@link #keyDown} et {@link #buttonDown}.
+     */
+    private static final long MIN_VISIBLE_NANOS = 60_000_000L;
+    /** Instant de première lecture de l'appui en cours, {@code 0} = pas encore lu. */
+    private final long[] keySeenAt = new long[350];
+    private final boolean[] keyReleasePending = new boolean[350];
+    private final long[] buttonSeenAt = new long[8];
+    private final boolean[] buttonReleasePending = new boolean[8];
+    private final Map<Integer, Long> scancodeSeenAt = new java.util.concurrent.ConcurrentHashMap<Integer, Long>();
+    private final java.util.Set<Integer> scancodeReleasePending =
+        java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<Integer, Boolean>());
+
+    /** Lecture d'une entrée avec la règle « appui jamais perdu » — voir {@link #keySeenAt}. */
+    private static boolean readLatched(boolean[] down, long[] seenAt, boolean[] releasePending, int index) {
+        if (index < 0 || index >= down.length || !down[index]) return false;
+        long now = System.nanoTime();
+        if (seenAt[index] == 0L) seenAt[index] = now;
+        if (releasePending[index] && now - seenAt[index] >= MIN_VISIBLE_NANOS) {
+            // Assez vu : le relâchement différé s'applique maintenant.
+            down[index] = false;
+            releasePending[index] = false;
+            return false;
+        }
+        return true;
+    }
+
+    /** Écriture depuis un callback natif, pendant de {@link #readLatched}. */
+    private static void writeLatched(boolean[] down, long[] seenAt, boolean[] releasePending, int index, boolean pressed) {
+        if (index < 0 || index >= down.length) return;
+        if (pressed) {
+            // PRESS ou REPEAT. Un REPEAT ne remet pas l'horloge à zéro : seul
+            // un vrai nouvel appui (depuis l'état relâché) le fait.
+            if (!down[index]) seenAt[index] = 0L;
+            down[index] = true;
+            releasePending[index] = false;
+        } else if (seenAt[index] != 0L && System.nanoTime() - seenAt[index] >= MIN_VISIBLE_NANOS) {
+            down[index] = false;
+        } else {
+            releasePending[index] = true;
+        }
+    }
+
+    private boolean scancodeDownLatched(int scancode) {
+        if (!scancodeDown.contains(scancode)) return false;
+        long now = System.nanoTime();
+        Long seen = scancodeSeenAt.get(scancode);
+        if (seen == null) { seen = now; scancodeSeenAt.put(scancode, now); }
+        if (scancodeReleasePending.contains(scancode) && now - seen >= MIN_VISIBLE_NANOS) {
+            scancodeReleasePending.remove(scancode);
+            scancodeDown.remove(scancode);
+            return false;
+        }
+        return true;
+    }
+
+    /** Préfixe d'une touche connue de GLFW mais absente de {@link #CAPTURABLE_KEYS} — suivi du code GLFW. */
+    private static final String KEYCODE_PREFIX = "KEY";
+    /** Préfixe d'une touche sans code GLFW — suivi du scancode, voir {@link #scancodeDown}. */
+    private static final String SCANCODE_PREFIX = "SCAN";
+
     // Touches "capturables" pour UiKeybindButton — codes GLFW standards (API
     // publique stable, pas obfusqués, littéraux sûrs comme les constantes GL
     // ailleurs dans ce package). Pas de callback clavier ici (contrairement à
@@ -185,9 +271,10 @@ public final class UiInputPollerModern extends UiInputPoller {
     /** Vrai si l'entrée nommée (touche OU bouton de souris) est actuellement maintenue. */
     private boolean isNamedInputDown(String name) {
         int mouse = mouseIndexForName(name);
-        if (mouse >= 0) return buttonDown[mouse];
-        int code = menuKeyCode(name);
-        return code >= 0 && code < keyDown.length && keyDown[code];
+        if (mouse >= 0) return readLatched(buttonDown, buttonSeenAt, buttonReleasePending, mouse);
+        int scancode = numberAfter(name, SCANCODE_PREFIX);
+        if (scancode >= 0) return scancodeDownLatched(scancode);
+        return readLatched(keyDown, keySeenAt, keyReleasePending, menuKeyCode(name));
     }
 
     /**
@@ -236,6 +323,17 @@ public final class UiInputPollerModern extends UiInputPoller {
         for (int i = 0; i <= 9; i++) m.put(320 + i, "NUM" + i);
         m.put(330, "NUMDECIMAL"); m.put(331, "NUMDIVIDE"); m.put(332, "NUMMULTIPLY");
         m.put(333, "NUMSUBTRACT"); m.put(334, "NUMADD"); m.put(335, "NUMENTER"); m.put(336, "NUMEQUAL");
+
+        // COUVERTURE COMPLÈTE du clavier GLFW (demande utilisateur
+        // 2026-09-13, « toutes les touches et combinaisons »). Codes relus
+        // dans lwjgl-glfw-3.2.2.jar (javap -constants) : ce sont TOUTES les
+        // constantes GLFW_KEY_* qui manquaient encore à la table.
+        for (int i = 0; i < 13; i++) m.put(302 + i, "F" + (13 + i));   // F13-F25
+        m.put(281, "SCROLLLOCK"); m.put(282, "NUMLOCK"); m.put(283, "PRINTSCREEN"); m.put(284, "PAUSE");
+        m.put(343, "LSUPER"); m.put(347, "RSUPER"); m.put(348, "MENU");
+        // Touches « non-US » : la touche en plus à gauche de W sur les
+        // claviers ISO (< > sur AZERTY), entre autres.
+        m.put(161, "WORLD1"); m.put(162, "WORLD2");
         Object[][] out = new Object[m.size()][2];
         int idx = 0;
         for (Map.Entry<Integer, String> e : m.entrySet()) out[idx++] = new Object[]{ e.getKey(), e.getValue() };
@@ -376,9 +474,7 @@ public final class UiInputPollerModern extends UiInputPoller {
                     // (long window, int button, int action, int mods)
                     int button = (Integer) args[1];
                     int action = (Integer) args[2];
-                    if (button >= 0 && button < buttonDown.length) {
-                        buttonDown[button] = action != 0;
-                    }
+                    writeLatched(buttonDown, buttonSeenAt, buttonReleasePending, button, action != 0);
                     Object prev = previousMouseButtonCb[0];
                     if (prev != null) {
                         try { method.invoke(prev, args); } catch (Throwable ignored) {}
@@ -417,9 +513,25 @@ public final class UiInputPollerModern extends UiInputPoller {
                 if (args != null && args.length == 5 && "invoke".equals(method.getName())) {
                     // (long window, int key, int scancode, int action, int mods)
                     int key = (Integer) args[1];
+                    int scancode = (Integer) args[2];
                     int action = (Integer) args[3];
                     if (key >= 0 && key < keyDown.length) {
-                        keyDown[key] = action != 0;
+                        writeLatched(keyDown, keySeenAt, keyReleasePending, key, action != 0);
+                    } else if (key < 0) {
+                        // GLFW_KEY_UNKNOWN : seul le scancode l'identifie.
+                        // Même règle « appui jamais perdu » que writeLatched.
+                        if (action != 0) {
+                            if (!scancodeDown.contains(scancode)) scancodeSeenAt.remove(scancode);
+                            scancodeDown.add(scancode);
+                            scancodeReleasePending.remove(scancode);
+                        } else {
+                            Long seen = scancodeSeenAt.get(scancode);
+                            if (seen != null && System.nanoTime() - seen >= MIN_VISIBLE_NANOS) {
+                                scancodeDown.remove(scancode);
+                            } else {
+                                scancodeReleasePending.add(scancode);
+                            }
+                        }
                     }
                     Object prev = previousKeyCb[0];
                     if (prev != null) {
@@ -512,19 +624,22 @@ public final class UiInputPollerModern extends UiInputPoller {
 
         // Callback natif (registerMouseButtonCallback), plus un poll —
         // voir sa javadoc pour le pourquoi (carence "polling lié au FPS").
-        leftDown = buttonDown[0];
-        rightDown = buttonDown[1];
-        middleDown = buttonDown[2];
-        for (int i = 0; i < sideButtonDown.length; i++) sideButtonDown[i] = buttonDown[3 + i];
+        // Lu avec la règle « appui jamais perdu » (voir keySeenAt) : un clic
+        // plus bref qu'une frame est désormais vu par l'interface aussi.
+        leftDown = readLatched(buttonDown, buttonSeenAt, buttonReleasePending, 0);
+        rightDown = readLatched(buttonDown, buttonSeenAt, buttonReleasePending, 1);
+        middleDown = readLatched(buttonDown, buttonSeenAt, buttonReleasePending, 2);
+        for (int i = 0; i < sideButtonDown.length; i++) {
+            sideButtonDown[i] = readLatched(buttonDown, buttonSeenAt, buttonReleasePending, 3 + i);
+        }
 
         shiftDown = glfwGetKey(windowHandle, 340) == 1 || glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_LEFT/RIGHT_SHIFT
     }
 
     @Override
     protected boolean readMenuKeyDown() throws Exception {
-        int code = menuKeyCode(menuKeyName);
-        if (code < 0) return false;
-        return code < keyDown.length && keyDown[code]; // callback natif, voir registerKeyCallback
+        // Callback natif (registerKeyCallback), lu avec la règle « appui jamais perdu ».
+        return readLatched(keyDown, keySeenAt, keyReleasePending, menuKeyCode(menuKeyName));
     }
 
     /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
@@ -538,24 +653,43 @@ public final class UiInputPollerModern extends UiInputPoller {
      * captures de la même combinaison donneraient deux chaînes différentes,
      * donc deux réglages incompatibles.
      *
-     * <p>Ne consomme aucun état — c'est un instantané, appelé chaque frame
-     * pendant la capture.
+     * <p>Instantané appelé chaque frame pendant la capture, avec la règle
+     * « appui jamais perdu » (voir {@link #keySeenAt}) : c'est ce qui rend
+     * Impr. écran capturable.
      */
     public java.util.List<String> heldCapturableKeys() {
         java.util.List<String> modifiers = new java.util.ArrayList<String>();
         java.util.List<String> others = new java.util.ArrayList<String>();
         for (Object[] entry : CAPTURABLE_KEYS) {
             int code = (Integer) entry[0];
-            if (code < 0 || code >= keyDown.length || !keyDown[code]) continue;
+            if (!readLatched(keyDown, keySeenAt, keyReleasePending, code)) continue;
             String name = (String) entry[1];
             if (isModifier(name)) modifiers.add(name);
             else others.add(name);
+        }
+        // Tout code GLFW maintenu que la table ne nomme pas : capturé sous
+        // « KEY<code> » plutôt qu'ignoré. La table couvre aujourd'hui toutes
+        // les constantes GLFW_KEY_* ; ce repli protège d'une version de GLFW
+        // qui en ajouterait, au lieu de retomber dans « l'appui ne fait rien ».
+        for (int code = 0; code < keyDown.length; code++) {
+            if (keyDown[code] && menuKeyNameForCode(code) == null
+                && readLatched(keyDown, keySeenAt, keyReleasePending, code)) {
+                others.add(KEYCODE_PREFIX + code);
+            }
+        }
+        // Touches sans code GLFW, par scancode — voir scancodeDown. Triées :
+        // l'ordre d'itération d'un ensemble concurrent n'est pas stable, et
+        // la même combinaison doit toujours donner la même chaîne.
+        java.util.List<Integer> scancodes = new java.util.ArrayList<Integer>(scancodeDown);
+        java.util.Collections.sort(scancodes);
+        for (Integer sc : scancodes) {
+            if (scancodeDownLatched(sc)) others.add(SCANCODE_PREFIX + sc);
         }
         // Boutons de souris — capturables au même titre qu'une touche (voir
         // mouseIndexForName). Jamais des modificateurs : « MOUSE4 » se
         // combine comme une lettre, pas comme un Ctrl.
         for (int i = 0; i < buttonDown.length; i++) {
-            if (buttonDown[i]) others.add(MOUSE_PREFIX + (i + 1));
+            if (readLatched(buttonDown, buttonSeenAt, buttonReleasePending, i)) others.add(MOUSE_PREFIX + (i + 1));
         }
         modifiers.addAll(others);
         return modifiers;
@@ -564,14 +698,44 @@ public final class UiInputPollerModern extends UiInputPoller {
     private static boolean isModifier(String name) {
         return "LCTRL".equals(name) || "RCTRL".equals(name)
             || "LSHIFT".equals(name) || "RSHIFT".equals(name)
-            || "LALT".equals(name) || "RALT".equals(name);
+            || "LALT".equals(name) || "RALT".equals(name)
+            // Touche Windows / Cmd : modificateur au même titre que Ctrl, donc
+            // placée en tête d'une combinaison.
+            || "LSUPER".equals(name) || "RSUPER".equals(name);
     }
 
     private static int menuKeyCode(String name) {
         for (Object[] entry : CAPTURABLE_KEYS) {
             if (entry[1].equals(name)) return (Integer) entry[0];
         }
-        return -1;
+        // « KEY<code> » — voir heldCapturableKeys.
+        return numberAfter(name, KEYCODE_PREFIX);
+    }
+
+    /** Nom de table d'un code GLFW, {@code null} s'il n'y figure pas. */
+    private static String menuKeyNameForCode(int code) {
+        for (Object[] entry : CAPTURABLE_KEYS) {
+            if (((Integer) entry[0]) == code) return (String) entry[1];
+        }
+        return null;
+    }
+
+    /**
+     * Entier qui suit {@code prefix} dans {@code name} (« SCAN57 » → 57),
+     * {@code -1} si le nom n'a pas cette forme. Exige des CHIFFRES seuls après
+     * le préfixe : « KEYPAD » ou « SCANNER » ne doivent pas être lus comme
+     * des codes.
+     */
+    private static int numberAfter(String name, String prefix) {
+        if (name == null || !name.startsWith(prefix) || name.length() == prefix.length()) return -1;
+        for (int i = prefix.length(); i < name.length(); i++) {
+            if (!Character.isDigit(name.charAt(i))) return -1;
+        }
+        try {
+            return Integer.parseInt(name.substring(prefix.length()));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /**
@@ -612,7 +776,7 @@ public final class UiInputPollerModern extends UiInputPoller {
         try {
             for (Object[] entry : CAPTURABLE_KEYS) {
                 int code = (Integer) entry[0];
-                boolean down = code < keyDown.length && keyDown[code]; // callback natif, voir registerKeyCallback
+                boolean down = readLatched(keyDown, keySeenAt, keyReleasePending, code); // callback natif, voir registerKeyCallback et keySeenAt
                 boolean was = Boolean.TRUE.equals(prevKeyDown.get(code));
                 prevKeyDown.put(code, down);
                 if (down && !was) return (String) entry[1];
