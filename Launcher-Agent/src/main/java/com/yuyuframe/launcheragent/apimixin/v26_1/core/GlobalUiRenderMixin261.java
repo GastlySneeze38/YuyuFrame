@@ -83,9 +83,9 @@ public abstract class GlobalUiRenderMixin261 {
             // résolus par l'input poller (même source que ModuleRegistry
             // .renderOverlayAll, voir GlobalUiPresentMixin261), pas besoin de
             // re-résoudre GLFW ici.
-            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur.testEnabled) {
                 try {
-                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.drawTestPanel(
+                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur.drawTestPanel(
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DBlur.drawTestPanel() a levé: " + t);
@@ -107,9 +107,9 @@ public abstract class GlobalUiRenderMixin261 {
 
             // Preuve de mécanisme modes de fusion (roadmap Phase 5.4) — voir
             // Blaze3DBlend, /yf blendpoc pour activer.
-            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlend.testEnabled) {
                 try {
-                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.drawTestPanels(
+                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlend.drawTestPanels(
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DBlend.drawTestPanels() a levé: " + t);
@@ -118,9 +118,9 @@ public abstract class GlobalUiRenderMixin261 {
 
             // Preuve de mécanisme rects batchés (roadmap Phase 5.5) — voir
             // Blaze3DRect, /yf batchpoc pour activer.
-            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled) {
+            if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DRect.batchTestEnabled) {
                 try {
-                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.drawTestBatch(
+                    com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DRect.drawTestBatch(
                         GlobalUiRenderBridge261.inputPoller.fbWidth, GlobalUiRenderBridge261.inputPoller.fbHeight);
                 } catch (Throwable t) {
                     LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin261 (apimixin): Blaze3DRect.drawTestBatch() a levé: " + t);

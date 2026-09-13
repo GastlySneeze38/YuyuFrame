@@ -4,7 +4,7 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudRenderer;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;

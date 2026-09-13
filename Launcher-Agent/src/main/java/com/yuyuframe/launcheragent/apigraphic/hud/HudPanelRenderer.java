@@ -71,11 +71,11 @@ public final class HudPanelRenderer {
         // laisserait CHAQUE panneau recalculer sa chaîne). C'est
         // VanillaGuiTarget.beginGlassFrame qui est idempotent sur la durée de
         // la passe — voir sa javadoc.
-        if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiTarget.isArmed()) {
+        if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiTarget.isArmed()) {
             renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
             return;
         }
-        if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore.queuedCount() > 0) return;
+        if (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore.queuedCount() > 0) return;
         renderer.beginGlassFrame(GLASS_PASSES, vpWidth, vpHeight);
     }
     // Ombre légère ajoutée (voir audit runtime/ui/ : le HUD était le seul

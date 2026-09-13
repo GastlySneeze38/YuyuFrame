@@ -314,9 +314,9 @@ public final class ModuleRegistry {
         // chaque accès), donc AUCUN module. Perdre le HUD vaut mieux que
         // perdre tous les modules.
         try {
-            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiPass.setHudPass(
+            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiPass.setHudPass(
                 com.yuyuframe.launcheragent.runtime.ui.hud.HudOverlayRenderer::renderInVanillaGui);
-            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiPass.install();
+            com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiPass.install();
         } catch (Throwable t) {
             com.yuyuframe.launcheragent.base.log.LauncherLog.err(
                 "[ModuleRegistry] installation du HUD dans la passe GUI vanilla impossible sur cette version : " + t);

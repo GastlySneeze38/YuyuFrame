@@ -534,7 +534,7 @@ public final class UiRenderer {
      * backdrop courant flouté + teinté, coins arrondis par coin. Era E
      * (Blaze3D) uniquement pour l'instant — pas d'implémentation legacy/
      * modern GL (no-op silencieux ailleurs, voir {@link
-     * com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur}).
+     * com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur}).
      *
      * @param passes       étages downsample/upsample, {@code [1,5]} — plus haut = flou plus fort et plus coûteux.
      * @param tint         couleur mélangée par-dessus le flou.
@@ -564,7 +564,7 @@ public final class UiRenderer {
      * flouté que tous les {@link #drawGlassPanel} de ce frame partageront.
      * À appeler AVANT eux (typiquement en toute première ligne du {@code
      * uiDraw} d'un écran), sinon chaque panneau paye sa propre chaîne de flou
-     * — voir {@link com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur#queueFrameChain}
+     * — voir {@link com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur#queueFrameChain}
      * pour le détail du coût (9 passes plein écran pour TOUT le frame ici, vs
      * 9 PAR PANNEAU sans ça) et la conséquence visuelle assumée (le verre
      * floute le monde du jeu, jamais l'UI dessinée avant lui).

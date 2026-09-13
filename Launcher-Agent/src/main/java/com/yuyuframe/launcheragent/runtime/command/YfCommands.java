@@ -229,9 +229,9 @@ final class YfCommands {
             public String name() { return "yf blurpoc"; }
             public String description() { return "Toggle un panneau de test flouté (dual-Kawase, roadmap Phase 5.1) centré à l'écran — voir Blaze3DBlur"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled;
-                LauncherLog.info("[YfCommands] Test panneau flouté : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlur.testEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur.testEnabled;
+                LauncherLog.info("[YfCommands] Test panneau flouté : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur.testEnabled ? "activé" : "désactivé")
                     + " (panneau violet translucide centré si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
@@ -304,9 +304,9 @@ final class YfCommands {
             public String name() { return "yf batchpoc"; }
             public String description() { return "Toggle une grille de test de 40 rects (couleurs/tailles variées, même rayon) dessinés en UN SEUL draw call — roadmap Phase 5.5, voir Blaze3DRect#drawRectBatch"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled;
-                LauncherLog.info("[YfCommands] Test rects batchés : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DRect.batchTestEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DRect.batchTestEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DRect.batchTestEnabled;
+                LauncherLog.info("[YfCommands] Test rects batchés : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DRect.batchTestEnabled ? "activé" : "désactivé")
                     + " (grille 10x4 dégradée si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };
@@ -317,9 +317,9 @@ final class YfCommands {
             public String name() { return "yf blendpoc"; }
             public String description() { return "Toggle 3 panneaux de test (multiply/screen/overlay, roadmap Phase 5.4) mélangés avec le fond actuel — voir Blaze3DBlend"; }
             public void execute(String[] args) {
-                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled =
-                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled;
-                LauncherLog.info("[YfCommands] Test modes de fusion : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DBlend.testEnabled ? "activé" : "désactivé")
+                com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlend.testEnabled =
+                    !com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlend.testEnabled;
+                LauncherLog.info("[YfCommands] Test modes de fusion : " + (com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlend.testEnabled ? "activé" : "désactivé")
                     + " (3 panneaux orange multiply/screen/overlay si le mécanisme fonctionne — voir logs en cas d'échec)");
             }
         };

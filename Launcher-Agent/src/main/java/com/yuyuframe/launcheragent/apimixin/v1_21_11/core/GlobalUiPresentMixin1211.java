@@ -1,7 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v1_21_11.core;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DCore;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 import com.yuyuframe.launcheragent.apimixin.AgentBridge;

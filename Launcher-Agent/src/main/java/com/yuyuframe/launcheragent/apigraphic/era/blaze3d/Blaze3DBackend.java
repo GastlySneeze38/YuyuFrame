@@ -1,6 +1,12 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.item.Blaze3DVanillaItemRenderer;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DGradient;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DRect;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DText;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;

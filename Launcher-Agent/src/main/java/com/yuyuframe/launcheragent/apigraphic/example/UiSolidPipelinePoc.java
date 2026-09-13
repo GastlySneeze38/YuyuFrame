@@ -1,8 +1,8 @@
 package com.yuyuframe.launcheragent.apigraphic.example;
 
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGpu;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGpus;
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.ShaderPipelineFactory;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.Blaze3DGpu;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.Blaze3DGpus;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.ShaderPipelineFactory;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.nio.ByteBuffer;
