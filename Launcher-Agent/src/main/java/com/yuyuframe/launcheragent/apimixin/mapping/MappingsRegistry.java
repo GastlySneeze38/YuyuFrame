@@ -61,7 +61,21 @@ public final class MappingsRegistry implements IRemapper {
      * chaîne complète est {@code named → official → srg} (l'index SRG ne
      * connaît que sa seconde moitié).
      */
-    public static boolean isLoaded() { return YarnMappings.isLoaded(); }
+    public static boolean isLoaded() {
+        // BUG TROUVÉ (2026-09-13, icônes 1.21.11) : ce test ne déclenchait PAS
+        // le chargement paresseux. Or huit traducteurs nom→officiel
+        // (getObfFieldName, getObfMethodName, namedToRuntimeMethod…) commencent
+        // par « if (!isLoaded()) return nomYarn; » — sur la copie Knot de cette
+        // classe, si l'un d'eux était le PREMIER appel de la session, il rendait
+        // le nom Yarn non traduit sans jamais charger les mappings (seule
+        // l'étape officiel→runtime appelait ensureInitialized, trop tard).
+        // Vu en jeu : « champ state introuvable sur class_11228 » à 08:57:47,
+        // et « [Yarn] Chargé » à la ligne suivante, déclenché par un autre
+        // appelant. Un point unique : poser la question « est-ce chargé ? »
+        // charge si ce n'est pas encore tenté. Sans coût ensuite.
+        ensureInitialized();
+        return YarnMappings.isLoaded();
+    }
 
     private static volatile boolean autoInitAttempted = false;
 

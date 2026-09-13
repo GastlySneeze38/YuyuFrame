@@ -90,6 +90,7 @@ final class Blaze3DVanillaItemRenderer {
     private static Field guiRendererField;
     private static Field guiStateField;
     private static boolean resolveFailed;
+    private static boolean guiStateFieldMissingReported;
 
     /**
      * Depuis un {@code GameRenderer} vivant (26.1.2, {@code GuiFlushMixin261}).
@@ -120,7 +121,7 @@ final class Blaze3DVanillaItemRenderer {
             }
             Object guiRenderer = guiRendererField.get(gameRenderer);
             if (guiRenderer == null) return;
-            flushFromGuiRenderer(guiRenderer);
+            flushFromGuiRenderer(guiRenderer); // étiquette GUI_RENDERER : la 26.1.2 y remonte
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] flushPendingModernItemIcons: " + t);
         }
@@ -141,15 +142,23 @@ final class Blaze3DVanillaItemRenderer {
                     MappingsRegistry.getObfFieldName("net/minecraft/client/gui/render/GuiRenderer", "state"),
                     "state", "renderState");
                 if (guiStateField == null) {
-                    resolveFailed = true;
-                    LauncherLog.err("[UiRenderer] itemIconModern: champ state/renderState introuvable sur "
-                        + guiRenderer.getClass());
+                    // Journalisé une fois, sans drapeau définitif : ce chemin
+                    // n'est qu'un filet de sécurité en 1.21.11 (le vidage réel
+                    // passe par GUI_STATE), son échec ne doit pas bloquer
+                    // l'autre. N'arrive plus depuis que MappingsRegistry
+                    // charge ses mappings au premier isLoaded() (v1113) — s'il
+                    // réapparaît, c'est une vraie erreur, pas un délai.
+                    if (!guiStateFieldMissingReported) {
+                        guiStateFieldMissingReported = true;
+                        LauncherLog.err("[UiRenderer] itemIconModern: champ state/renderState introuvable sur "
+                            + guiRenderer.getClass() + " (mappings chargés=" + MappingsRegistry.isLoaded() + ")");
+                    }
                     return;
                 }
             }
             Object guiState = guiStateField.get(guiRenderer);
             if (guiState == null) return;
-            flushFromGuiState(guiState);
+            flushInto(guiState, guiState.getClass().getClassLoader(), "GUI_RENDERER");
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] flushPendingModernItemIconsFromGuiRenderer: " + t);
         }
@@ -158,7 +167,7 @@ final class Blaze3DVanillaItemRenderer {
     /** Depuis un {@code GuiRenderState} vivant, déjà en main — chemin de {@code VanillaGuiSink1211}. */
     void flushFromGuiState(Object guiState) {
         if (guiState == null) return;
-        flushInto(guiState, guiState.getClass().getClassLoader());
+        flushInto(guiState, guiState.getClass().getClassLoader(), "GUI_STATE");
     }
 
     // ── Le vidage lui-même ────────────────────────────────────────────────
@@ -175,7 +184,7 @@ final class Blaze3DVanillaItemRenderer {
      * nécessaire pour que le flush EXISTANT de vanilla, plus loin dans la
      * frame, inclue nos éléments.
      */
-    private void flushInto(Object guiState, ClassLoader cl) {
+    private void flushInto(Object guiState, ClassLoader cl, String host) {
         List<VanillaItemIcon> batch = queue.drainIcons();
         List<VanillaGuiBlit> batchBlits = queue.drainBlits();
         if (batch.isEmpty() && batchBlits.isEmpty()) {
@@ -183,6 +192,7 @@ final class Blaze3DVanillaItemRenderer {
             return;
         }
         queue.reportFirstBatch(batch.size(), batchBlits.size());
+        reportFirstFlushHost(host, batch.size());
         if (resolveFailed) {
             if (!flushResolveFailedReported) {
                 flushResolveFailedReported = true;
@@ -245,6 +255,7 @@ final class Blaze3DVanillaItemRenderer {
             }
 
             Object drawContext = drawContextCtor.newInstance(mc, guiState, 0, 0);
+            reportResolution(batch);
 
             // Fond de fenêtre de conteneur — dessiné AVANT les icônes, sinon il
             // les recouvrirait.
@@ -283,6 +294,34 @@ final class Blaze3DVanillaItemRenderer {
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] flushPendingModernItemIcons: " + t);
         }
+    }
+
+    // ── Diagnostics one-shot (icônes absentes en 1.21.11, v1110) ──────────
+    //
+    // Symptôme : fond de case et barre de durabilité visibles, icône absente.
+    // Ils encadrent drawItem dans la boucle, donc drawItem est APPELÉ sans
+    // exception — l'icône est ajoutée à l'état puis ignorée au rendu. Deux
+    // causes possibles, que ces lignes départagent :
+    //  - le mauvais point de vidage passe en premier (GUI_RENDERER, après la
+    //    préparation de l'atlas d'items en 1.21.11 — cf. audit v1101) ;
+    //  - la mauvaise surcharge de drawItem est résolue (cf. v1105).
+
+    private static boolean hostReported, resolutionReported;
+
+    private static void reportFirstFlushHost(String host, int iconCount) {
+        if (hostReported || iconCount == 0) return;
+        hostReported = true;
+        LauncherLog.info("[UiRenderer] itemIconModern: premier vidage d'icônes par l'hôte " + host
+            + " (" + iconCount + " icône(s))");
+    }
+
+    private static void reportResolution(List<VanillaItemIcon> batch) {
+        if (resolutionReported || batch.isEmpty()) return;
+        resolutionReported = true;
+        VanillaItemIcon first = batch.get(0);
+        LauncherLog.info("[UiRenderer] itemIconModern: drawItem=" + drawItemMethod
+            + " | drawItemBar=" + drawItemBarMethod + " | drawGuiTexture=" + drawGuiTextureMethod
+            + " | 1re icône=" + first.itemStack + " @" + first.guiX + "," + first.guiY);
     }
 
     // ── Résolutions best-effort ───────────────────────────────────────────
