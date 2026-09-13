@@ -88,6 +88,17 @@ public final class RuntimeBridge implements AgentBridge {
     }
 
     @Override
+    public void renderHud(Object uiRenderer, Object currentScreen, int fbWidth, int fbHeight) {
+        if (!(uiRenderer instanceof UiRenderer)) return;
+        UiRenderer renderer = (UiRenderer) uiRenderer;
+        if (currentScreen == null) {
+            HudOverlayRenderer.render(renderer, fbWidth, fbHeight);
+        } else {
+            HudOverlayRenderer.renderPersistent(renderer, currentScreen, fbWidth, fbHeight);
+        }
+    }
+
+    @Override
     public Object mainMenuScreen() {
         return new UiMainMenuScreen(null);
     }

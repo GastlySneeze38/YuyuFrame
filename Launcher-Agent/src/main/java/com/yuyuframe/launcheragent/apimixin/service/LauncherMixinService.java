@@ -188,6 +188,12 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         "(Lnet/minecraft/client/render/fog/FogData;Lnet/minecraft/client/render/Camera;"
         + "Lnet/minecraft/client/world/ClientWorld;FLnet/minecraft/client/render/RenderTickCounter;)V";
 
+    /** Préfixe interne des mixins apimixin 1.8.9. */
+    private static final String M189 = "com/yuyuframe/launcheragent/apimixin/v1_8_9/";
+
+    /** {@code Window} 1.8.9 (Yarn legacy), paramètre de la plupart des méthodes du HUD. */
+    private static final String WINDOW_189 = "Lnet/minecraft/client/util/Window;";
+
     private static final RefmapEntry[] REFMAP_ENTRIES = {
         // init() héritée de Screen — repli sur Screen pour la lookup Yarn.
         new RefmapEntry("com/yuyuframe/launcheragent/mixin/client/TitleScreenMixin",
@@ -644,6 +650,112 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry("com/yuyuframe/launcheragent/apimixin/v1_21_11/lifecycle/ClientLevelLoadMixin1211",
             "net/minecraft/client/MinecraftClient", "setWorld",
             "(Lnet/minecraft/client/world/ClientWorld;Z)V", null),
+
+        // ── apimixin 1.8.9 (v1_8_9.*) — noms Yarn LEGACY, chaque sélecteur
+        // vérifié dans yarn-1.8.9-mergedv2 et sur le bytecode du jar 1.8.9.
+        // Les cibles @At (drawTexture, Profiler, TextRenderer…) n'ont pas
+        // d'entrée : REFMAP_REMAP les traduit.
+        new RefmapEntry(M189 + "core/TitleScreenMixin189",
+            "net/minecraft/client/gui/screen/TitleScreen", "init", "()V", "net/minecraft/client/gui/screen/Screen"),
+        new RefmapEntry(M189 + "core/GlobalUiRenderMixin189",
+            "net/minecraft/client/render/GameRenderer", "render", "(FJ)V", null),
+
+        new RefmapEntry(M189 + "hud/HudExtractCrosshairMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "showCrosshair", "()Z", null),
+        new RefmapEntry(M189 + "hud/HudExtractTextureOverlayMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderPumpkinBlur", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractCameraOverlayMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderVignetteOverlay", "(F" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractCameraOverlayMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderNausea", "(F" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractItemHotbarMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderHotbar", "(" + WINDOW_189 + "F)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractSpectatorHotbarMixin189",
+            "net/minecraft/client/gui/hud/SpectatorHud", "render", "(" + WINDOW_189 + "F)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractSpectatorActionMixin189",
+            "net/minecraft/client/gui/hud/SpectatorHud", "render", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractArmorMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderStatusBars", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractHeartsMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderStatusBars", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractFoodMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderStatusBars", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractAirBubblesMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderStatusBars", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractVehicleHealthMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderStatusBars", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractContextualBarBackgroundMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderExperienceBar", "(" + WINDOW_189 + "I)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractContextualBarBackgroundMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderHorseHealth", "(" + WINDOW_189 + "I)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractExperienceLevelMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderExperienceBar", "(" + WINDOW_189 + "I)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractSelectedItemNameMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderHeldItemName", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractBossOverlayMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderBossBar", "()V", null),
+        new RefmapEntry(M189 + "hud/HudExtractSleepOverlayMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "render", "(F)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractDemoOverlayMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderDemoTime", "(" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractScoreboardSidebarMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "renderScoreboardObjective",
+            "(Lnet/minecraft/scoreboard/ScoreboardObjective;" + WINDOW_189 + ")V", null),
+        new RefmapEntry(M189 + "hud/HudExtractOverlayMessageMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "render", "(F)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractTitleMixin189",
+            "net/minecraft/client/gui/hud/InGameHud", "render", "(F)V", null),
+        new RefmapEntry(M189 + "hud/HudExtractTabListMixin189",
+            "net/minecraft/client/gui/hud/PlayerListHud", "render",
+            "(ILnet/minecraft/scoreboard/Scoreboard;Lnet/minecraft/scoreboard/ScoreboardObjective;)V", null),
+
+        new RefmapEntry(M189 + "render/ItemDecorationsExtractMixin189",
+            "net/minecraft/client/render/item/ItemRenderer", "renderGuiItemOverlay",
+            "(Lnet/minecraft/client/font/TextRenderer;Lnet/minecraft/item/ItemStack;IILjava/lang/String;)V", null),
+        new RefmapEntry(M189 + "level/LevelBlockOutlineExtractMixin189",
+            "net/minecraft/client/render/WorldRenderer", "drawBlockOutline",
+            "(Lnet/minecraft/entity/player/PlayerEntity;Lnet/minecraft/util/hit/BlockHitResult;IF)V", null),
+        new RefmapEntry(M189 + "level/LevelExtractMixin189",
+            "net/minecraft/client/render/GameRenderer", "renderWorld", "(FJ)V", null),
+        new RefmapEntry(M189 + "level/GameRenderExtractMixin189",
+            "net/minecraft/client/render/GameRenderer", "render", "(FJ)V", null),
+
+        new RefmapEntry(M189 + "screen/ScreenInitMixin189",
+            "net/minecraft/client/gui/screen/Screen", "init", "(Lnet/minecraft/client/MinecraftClient;II)V", null),
+        new RefmapEntry(M189 + "screen/ScreenSetMixin189",
+            "net/minecraft/client/MinecraftClient", "setScreen", "(Lnet/minecraft/client/gui/screen/Screen;)V", null),
+        new RefmapEntry(M189 + "screen/KeyboardKeyMixin189",
+            "net/minecraft/client/gui/screen/Screen", "handleKeyboard", "()V", null),
+        new RefmapEntry(M189 + "screen/ScreenAfterBackgroundExtractMixin189",
+            "net/minecraft/client/gui/screen/Screen", "renderBackground", "(I)V", null),
+        new RefmapEntry(M189 + "keybind/KeybindRegisterMixin189",
+            "net/minecraft/client/option/GameOptions", "load", "()V", null),
+
+        new RefmapEntry(M189 + "chat/ChatReceiveMixin189",
+            "net/minecraft/client/network/ClientPlayNetworkHandler", "onChatMessage",
+            "(Lnet/minecraft/network/packet/s2c/play/ChatMessageS2CPacket;)V",
+            "net/minecraft/network/listener/ClientPlayPacketListener"),
+        new RefmapEntry(M189 + "chat/ChatSendMixin189",
+            "net/minecraft/entity/player/ClientPlayerEntity", "sendChatMessage", "(Ljava/lang/String;)V", null),
+        new RefmapEntry(M189 + "chat/CommandSendMixin189",
+            "net/minecraft/entity/player/ClientPlayerEntity", "sendChatMessage", "(Ljava/lang/String;)V", null),
+        new RefmapEntry(M189 + "item/ItemTooltipMixin189",
+            "net/minecraft/item/ItemStack", "getTooltip",
+            "(Lnet/minecraft/entity/player/PlayerEntity;Z)Ljava/util/List;", null),
+
+        new RefmapEntry(M189 + "lifecycle/ClientTickMixin189",
+            "net/minecraft/client/MinecraftClient", "tick", "()V", null),
+        new RefmapEntry(M189 + "lifecycle/EntityLoadMixin189",
+            "net/minecraft/client/world/ClientWorld", "onEntitySpawned", "(Lnet/minecraft/entity/Entity;)V",
+            "net/minecraft/world/World"),
+        new RefmapEntry(M189 + "lifecycle/EntityUnloadMixin189",
+            "net/minecraft/client/world/ClientWorld", "onEntityRemoved", "(Lnet/minecraft/entity/Entity;)V",
+            "net/minecraft/world/World"),
+        new RefmapEntry(M189 + "lifecycle/ClientLevelLoadMixin189",
+            "net/minecraft/client/MinecraftClient", "connect",
+            "(Lnet/minecraft/client/world/ClientWorld;Ljava/lang/String;)V", null),
+        new RefmapEntry(M189 + "clock/ClockTotalTicksMixin189",
+            "net/minecraft/world/World", "getSkyAngle", "(F)F", null),
     };
 
     /**

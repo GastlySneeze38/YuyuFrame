@@ -342,6 +342,77 @@ public final class MixinHookPointRegistry {
 
         // ── Horloge — même HookPoint qu'en 26.1.2, sur World.getTimeOfDay ──
         gate("1.21.11", "v1_21_11.clock.ClockTotalTicksMixin1211", HookPoint.CLOCK_TOTAL_TICKS);
+
+        // ══════════════════════════════════════════════════════════════════
+        // 1.8.9 — MC OBFUSQUÉ, noms Yarn LEGACY (Legacy Fabric), vanilla seul
+        // (docs/LauncherAgent/v1.8.9/README.md). Méthodes traduites par le
+        // refmap, cibles @At par REFMAP_REMAP. Tranche encore GELÉE : voir
+        // VersionProfileRegistry pour ce qui manque avant de l'activer.
+        //
+        // Absents faute d'équivalent 1.8.9 : HUD_EXTRACT_EFFECTS (aucun effet
+        // affiché dans le HUD), HUD_EXTRACT_CHAT (passe GUI Blaze3D),
+        // SUBTITLE_OVERLAY_EXTRACT, GUI_RENDER_STATE_RESET, MOUSE_SCROLL (pas
+        // de défilement centralisé dans Screen), KEYBIND_CATEGORY_REGISTER
+        // (catégories = simples chaînes), COMMAND_TREE_RECEIVE (pas de
+        // brigadier), PIERCING_ATTACK. Reportés : FOG_SETUP_* et
+        // ADVANCEMENT_TOAST_EXTRACT (données du joueur via points d'accès),
+        // freelook.
+        // ══════════════════════════════════════════════════════════════════
+
+        // ── Infrastructure ────────────────────────────────────────────────
+        always("1.8.9", "v1_8_9.core.TitleScreenMixin189");
+        always("1.8.9", "v1_8_9.core.GlobalUiRenderMixin189");
+
+        // ── HUD ────────────────────────────────────────────────────────────
+        gate("1.8.9", "v1_8_9.hud.HudExtractCrosshairMixin189", HookPoint.HUD_EXTRACT_CROSSHAIR);
+        gate("1.8.9", "v1_8_9.hud.HudExtractTextureOverlayMixin189", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+        gate("1.8.9", "v1_8_9.hud.HudExtractCameraOverlayMixin189", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
+        gate("1.8.9", "v1_8_9.hud.HudExtractSpectatorHotbarMixin189", HookPoint.HUD_EXTRACT_HOTBAR);
+        gate("1.8.9", "v1_8_9.hud.HudExtractItemHotbarMixin189", HookPoint.HUD_EXTRACT_ITEM_HOTBAR);
+        gate("1.8.9", "v1_8_9.hud.HudExtractArmorMixin189", HookPoint.HUD_EXTRACT_ARMOR);
+        gate("1.8.9", "v1_8_9.hud.HudExtractHeartsMixin189", HookPoint.HUD_EXTRACT_HEARTS);
+        gate("1.8.9", "v1_8_9.hud.HudExtractFoodMixin189", HookPoint.HUD_EXTRACT_FOOD);
+        gate("1.8.9", "v1_8_9.hud.HudExtractAirBubblesMixin189", HookPoint.HUD_EXTRACT_AIR_BUBBLES);
+        gate("1.8.9", "v1_8_9.hud.HudExtractVehicleHealthMixin189", HookPoint.HUD_EXTRACT_VEHICLE_HEALTH);
+        gate("1.8.9", "v1_8_9.hud.HudExtractContextualBarBackgroundMixin189", HookPoint.HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND);
+        gate("1.8.9", "v1_8_9.hud.HudExtractExperienceLevelMixin189", HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL);
+        gate("1.8.9", "v1_8_9.hud.HudExtractSelectedItemNameMixin189", HookPoint.HUD_EXTRACT_SELECTED_ITEM_NAME);
+        gate("1.8.9", "v1_8_9.hud.HudExtractSpectatorActionMixin189", HookPoint.HUD_EXTRACT_SPECTATOR_ACTION);
+        gate("1.8.9", "v1_8_9.hud.HudExtractBossOverlayMixin189", HookPoint.HUD_EXTRACT_BOSS_OVERLAY);
+        gate("1.8.9", "v1_8_9.hud.HudExtractSleepOverlayMixin189", HookPoint.HUD_EXTRACT_SLEEP_OVERLAY);
+        gate("1.8.9", "v1_8_9.hud.HudExtractDemoOverlayMixin189", HookPoint.HUD_EXTRACT_DEMO_OVERLAY);
+        gate("1.8.9", "v1_8_9.hud.HudExtractScoreboardSidebarMixin189", HookPoint.HUD_EXTRACT_SCOREBOARD_SIDEBAR);
+        gate("1.8.9", "v1_8_9.hud.HudExtractOverlayMessageMixin189", HookPoint.HUD_EXTRACT_OVERLAY_MESSAGE);
+        gate("1.8.9", "v1_8_9.hud.HudExtractTitleMixin189", HookPoint.HUD_EXTRACT_TITLE);
+        gate("1.8.9", "v1_8_9.hud.HudExtractTabListMixin189", HookPoint.HUD_EXTRACT_TAB_LIST);
+
+        // ── Rendu / monde / frame ──────────────────────────────────────────
+        gate("1.8.9", "v1_8_9.render.ItemDecorationsExtractMixin189", HookPoint.ITEM_DECORATIONS_EXTRACT);
+        gate("1.8.9", "v1_8_9.level.LevelBlockOutlineExtractMixin189", HookPoint.LEVEL_BLOCK_OUTLINE_EXTRACT);
+        gate("1.8.9", "v1_8_9.level.LevelExtractMixin189", HookPoint.LEVEL_EXTRACT);
+        gate("1.8.9", "v1_8_9.level.GameRenderExtractMixin189", HookPoint.GAME_RENDER_EXTRACT);
+
+        // ── Écrans / entrées / touches ─────────────────────────────────────
+        gate("1.8.9", "v1_8_9.screen.ScreenInitMixin189", HookPoint.SCREEN_INIT);
+        gate("1.8.9", "v1_8_9.screen.KeyboardKeyMixin189", HookPoint.KEYBOARD_KEY);
+        gate("1.8.9", "v1_8_9.screen.ScreenSetMixin189", HookPoint.SCREEN_SET);
+        gate("1.8.9", "v1_8_9.screen.ScreenAfterBackgroundExtractMixin189", HookPoint.CONTAINER_SCREEN_EXTRACT_TOOLTIP);
+        gate("1.8.9", "v1_8_9.keybind.KeybindRegisterMixin189", HookPoint.KEYBIND_REGISTER);
+
+        // ── Chat / objets ──────────────────────────────────────────────────
+        gate("1.8.9", "v1_8_9.chat.ChatReceiveMixin189", HookPoint.CHAT_RECEIVE);
+        gate("1.8.9", "v1_8_9.chat.ChatSendMixin189", HookPoint.CHAT_SEND);
+        gate("1.8.9", "v1_8_9.chat.CommandSendMixin189", HookPoint.COMMAND_SEND);
+        gate("1.8.9", "v1_8_9.item.ItemTooltipMixin189", HookPoint.ITEM_TOOLTIP);
+
+        // ── Cycle de vie ───────────────────────────────────────────────────
+        gate("1.8.9", "v1_8_9.lifecycle.ClientTickMixin189", HookPoint.CLIENT_TICK);
+        gate("1.8.9", "v1_8_9.lifecycle.EntityLoadMixin189", HookPoint.ENTITY_LOAD);
+        gate("1.8.9", "v1_8_9.lifecycle.EntityUnloadMixin189", HookPoint.ENTITY_UNLOAD);
+        gate("1.8.9", "v1_8_9.lifecycle.ClientLevelLoadMixin189", HookPoint.CLIENT_LEVEL_LOAD);
+
+        // ── Horloge — LevelProperties.getTimeOfDay lue par World.getSkyAngle ──
+        gate("1.8.9", "v1_8_9.clock.ClockTotalTicksMixin189", HookPoint.CLOCK_TOTAL_TICKS);
     }
 
     /**

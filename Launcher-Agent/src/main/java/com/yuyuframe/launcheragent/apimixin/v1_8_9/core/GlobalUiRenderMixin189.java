@@ -1,0 +1,107 @@
+package com.yuyuframe.launcheragent.apimixin.v1_8_9.core;
+
+import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
+import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl2.UiInputPollerLegacy;
+import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
+import com.yuyuframe.launcheragent.apimixin.AgentBridge;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/**
+ * Hub du moteur UI sur 1.8.9 — logique ET dessin, portage apimixin de
+ * {@code mixin.client.v1_8.GlobalUiRenderMixin189} (conservé comme référence).
+ *
+ * <p>Même point d'accroche que l'ancien : {@code GameRenderer.render(FJ)V},
+ * TAIL. En ère {@code gl2} il n'y a ni présentation Blaze3D ni passe GUI
+ * vanilla où s'intercaler : tout se dessine ici, après la frame vanilla, comme
+ * avant. D'où {@link AgentBridge#renderHud}, absent des hubs Blaze3D.
+ *
+ * <p>Deux différences avec l'ancien :
+ * <ul>
+ *   <li>plus aucun appel à {@code runtime/} — tout passe par {@link AgentBridge} ;</li>
+ *   <li>plus de réflexion : Minecraft et l'écran courant passent par les points
+ *       d'accès {@link AccessPoint#CLIENT_SCREEN} et
+ *       {@link AccessPoint#CLIENT_SET_SCREEN}. Tant que leurs liaisons 1.8.9
+ *       n'existent pas, rien n'est dessiné (voir {@link #screensAvailable()}) ;
+ *       entrées et tick des modules tournent déjà.</li>
+ * </ul>
+ */
+@Mixin(targets = "net.minecraft.client.render.GameRenderer")
+public abstract class GlobalUiRenderMixin189 {
+
+    private static UiInputPoller inputPoller;
+
+    @Inject(method = "render(FJ)V", at = @At("TAIL"))
+    private void la$onRenderTail(CallbackInfo ci) {
+        try {
+            ClassLoader gameLoader = this.getClass().getClassLoader();
+            AgentBridge agent = AgentBridge.get(gameLoader);
+
+            if (inputPoller == null) {
+                // LWJGL 2 : pas de handle de fenêtre, Display est global.
+                inputPoller = new UiInputPollerLegacy(gameLoader);
+                try {
+                    agent.bootstrap();
+                } catch (Throwable t) {
+                    LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: bootstrap() a levé: " + t);
+                }
+            }
+            inputPoller.poll();
+            agent.tick();
+
+            if (!screensAvailable()) return;
+
+            UiRenderer renderer = UiRenderer.get(gameLoader);
+            Object currentScreen = AccessorRegistry.get(AccessPoint.CLIENT_SCREEN, null);
+            if (currentScreen == null) {
+                drawInGame(agent, renderer);
+                if (inputPoller.menuKeyPressed) {
+                    Object menu = agent.mainMenuScreen();
+                    if (menu != null) AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, menu);
+                }
+                return;
+            }
+
+            if (!(currentScreen instanceof UiDrawable)) {
+                // Écran vanilla ouvert : seuls les éléments HUD persistants restent.
+                agent.renderHud(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+                return;
+            }
+
+            UiDrawable ui = (UiDrawable) currentScreen;
+            ui.uiPollInput(inputPoller);
+            ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
+
+            if (agent.hasPendingNavigation(currentScreen)) {
+                // null = fermer l'écran : même point d'accès, argument null.
+                Object target = agent.consumePendingNavigation(currentScreen);
+                AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, target);
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: " + t);
+        }
+    }
+
+    /** HUD en jeu : masqué avec le HUD vanilla (F1), comme l'ancien hub. */
+    private static void drawInGame(AgentBridge agent, UiRenderer renderer) {
+        if (agent.hudHidden()) return;
+        agent.renderHud(renderer, null, inputPoller.fbWidth, inputPoller.fbHeight);
+        agent.renderOverlay(renderer, inputPoller.fbWidth, inputPoller.fbHeight);
+    }
+
+    /**
+     * Sans liaison de l'écran courant, « aucun écran » et « liaison absente »
+     * se confondent : le hub ouvrirait le menu et dessinerait le HUD par-dessus
+     * n'importe quel écran vanilla. Mieux vaut ne rien dessiner.
+     */
+    private static boolean screensAvailable() {
+        return AccessorRegistry.isBound(AccessPoint.CLIENT_SCREEN)
+            && AccessorRegistry.isBound(AccessPoint.CLIENT_SET_SCREEN);
+    }
+}

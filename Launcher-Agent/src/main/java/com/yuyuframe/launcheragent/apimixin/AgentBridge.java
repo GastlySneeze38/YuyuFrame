@@ -64,6 +64,15 @@ public interface AgentBridge {
      */
     void renderOverlay(Object uiRenderer, int fbWidth, int fbHeight);
 
+    /**
+     * HUD de l'agent dessiné par le hub lui-même — ère {@code gl2} (1.8.9),
+     * où aucune passe GUI vanilla n'accueille le HUD comme sur Blaze3D.
+     *
+     * @param currentScreen écran vanilla ouvert, {@code null} en jeu : sa
+     *                      nature décide des éléments qui restent visibles
+     */
+    void renderHud(Object uiRenderer, Object currentScreen, int fbWidth, int fbHeight);
+
     /** Écran principal de l'agent, à ouvrir sur la touche dédiée — {@code null} si indisponible. */
     Object mainMenuScreen();
 
@@ -128,6 +137,7 @@ public interface AgentBridge {
         @Override public void tick() {}
         @Override public boolean hudHidden() { return false; }
         @Override public void renderOverlay(Object uiRenderer, int fbWidth, int fbHeight) {}
+        @Override public void renderHud(Object uiRenderer, Object currentScreen, int fbWidth, int fbHeight) {}
         @Override public Object mainMenuScreen() { return null; }
         @Override public boolean hasPendingNavigation(Object screen) { return false; }
         @Override public Object consumePendingNavigation(Object screen) { return null; }

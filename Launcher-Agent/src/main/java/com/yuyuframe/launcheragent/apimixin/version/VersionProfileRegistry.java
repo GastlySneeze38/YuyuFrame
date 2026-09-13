@@ -51,12 +51,24 @@ public final class VersionProfileRegistry {
     private static final List<VersionProfile> PROFILES = new ArrayList<>();
 
     static {
+        // Refonte 1.8.9 (2026-09-13, docs/LauncherAgent/v1.8.9/README.md) :
+        // tranche déclarative, mixins dans apimixin/v1_8_9 et
+        // MixinHookPointRegistry sous "1.8.9". mixins.launcheragent-1.8.json
+        // et mixin/client/v1_8 restent sur le disque comme référence des
+        // anciens points d'injection, sans être chargés.
+        //
+        // TOUJOURS GELÉE, en attendant :
+        //  - les liaisons de points d'accès 1.8.9 (écran courant, setScreen,
+        //    monde client…), sans lesquelles le hub ne dessine rien ;
+        //  - le niveau de compatibilité Mixin : le template apimixin déclare
+        //    JAVA_17, refusé tant que la 1.8.9 tourne sur Java 8 (Java 21
+        //    prévu, décision D7).
         PROFILES.add(new VersionProfile(
             "1_8_9",
             new String[]{ "1.8.*" },
             "1.8.9",
             "1.8.9",
-            "mixins.launcheragent-1.8.json",
+            null,
             "gl2").frozen());
 
         // Resserré à la version exacte (avant : tout ce qui n'était pas
