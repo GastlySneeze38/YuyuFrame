@@ -311,6 +311,25 @@ public enum AccessPoint {
      * {@code ofFloored} à la place).
      */
     LEVEL_BIOME_ID,
+    /**
+     * Le monde passé en receveur est-il le monde CLIENT ? Rendu en
+     * {@code Boolean}.
+     *
+     * <p>Pour les hooks posés sur une classe de monde PARTAGÉE client/serveur :
+     * en solo, le serveur intégré tourne dans la même JVM, et agir sur son
+     * monde fausserait la simulation réelle. Un {@code instanceof} typé dans la
+     * liaison — {@code ClientWorld} en 1.21.11, {@code ClientLevel} en 26.1.2.
+     */
+    LEVEL_IS_CLIENT,
+    /**
+     * Chemin (sans espace de noms) de l'identifiant de ressource passé en
+     * receveur, en {@code String} — ex. {@code "misc/pumpkinblur.png"}.
+     *
+     * <p>Pour les Mixins qui reçoivent un identifiant du jeu : leur corps n'est
+     * pas traduit au chargement, ils ne peuvent donc pas l'appeler eux-mêmes en
+     * 1.21.11 (nom obfusqué).
+     */
+    IDENTIFIER_PATH,
 
     // ── Faim/saturation (net.minecraft.world.food.FoodData) ────────────────
     /** Niveau de faim — champ {@code foodLevel}. */

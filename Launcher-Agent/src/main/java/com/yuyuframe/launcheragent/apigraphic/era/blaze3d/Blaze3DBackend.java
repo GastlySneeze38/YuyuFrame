@@ -54,17 +54,15 @@ public final class Blaze3DBackend implements UiBackend {
         return true;
     }
 
-    /** Hôtes de CETTE ère : les trois façons d'atteindre l'état de GUI vivant. */
+    /**
+     * Le choix des hôtes servis appartient au sink de la version
+     * ({@code VanillaGuiSink.guiState}) : la 26.1.2 sert les trois façons
+     * d'atteindre l'état de GUI, la 1.21.11 seulement {@code GUI_STATE}.
+     */
     @Override
     public void flushVanillaFrame(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost host,
                                   Object hostObject) {
-        if (hostObject == null) return;
-        switch (host) {
-            case GAME_RENDERER: vanillaItems.flushFromGameRenderer(hostObject); break;
-            case GUI_RENDERER: vanillaItems.flushFromGuiRenderer(hostObject); break;
-            case GUI_STATE: vanillaItems.flushFromGuiState(hostObject); break;
-            default: break;
-        }
+        vanillaItems.flush(host, hostObject);
     }
 
     @Override

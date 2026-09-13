@@ -94,4 +94,28 @@ public interface VanillaGuiSink {
 
     /** Vide la file d'icônes d'item vanilla dans l'état de GUI (no-op si non porté). */
     void flushItemIcons(Object hookContext);
+
+    // ── Pont vers les renderers d'objets vanilla (2026-09-13) ─────────────
+    //
+    // Remplacent le pont RÉFLEXIF de Blaze3DVanillaItemRenderer, qui cherchait
+    // DrawContext/GuiGraphicsExtractor et ses méthodes par nom Yarn — c'est lui
+    // qui avait perdu ses icônes deux fois (mauvaise surcharge en v1105,
+    // mappings pas encore chargés en v1112). La file et les diagnostics
+    // restent dans le moteur ; seul l'appel au jeu passe ici, typé par version.
+
+    /**
+     * L'état de GUI vivant derrière un hôte de vidage, ou {@code null} si cette
+     * version ne sert pas cet hôte (l'implémentation le journalise alors une
+     * fois).
+     */
+    Object guiState(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost host, Object hostObject);
+
+    /**
+     * Soumet les blits PUIS les icônes dans {@code guiState} (un blit de fond de
+     * conteneur recouvrirait sinon les icônes). Pour chaque icône
+     * {@code vanillaExtras} : fond de case AVANT l'icône, décorations APRÈS.
+     */
+    void drawVanillaItems(Object guiState,
+                          java.util.List<com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaItemIcon> icons,
+                          java.util.List<com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiBlit> blits);
 }

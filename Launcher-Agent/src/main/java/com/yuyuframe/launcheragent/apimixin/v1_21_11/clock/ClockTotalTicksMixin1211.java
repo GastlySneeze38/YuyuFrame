@@ -1,8 +1,9 @@
 package com.yuyuframe.launcheragent.apimixin.v1_21_11.clock;
 
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,33 +30,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>Remplace {@code mixin.client.WorldTimeMixin}, qui lisait le module en dur
  * ({@code ModuleRegistry.get("world-time")}) — interdit à {@code apimixin/}.
  *
- * <h2>Garde {@code ClientWorld} obligatoire</h2>
+ * <h2>Garde « monde client » obligatoire</h2>
  *
  * {@code World} est partagé client/serveur : sans ce garde, activer le module
  * en solo (serveur intégré, même JVM) fausserait AUSSI le temps réellement
  * simulé côté serveur. Le module est explicitement « client seulement ».
- * Classe résolue une fois puis mise en cache.
+ *
+ * <p>Le garde passait par {@code McReflect.yarnClass("ClientWorld")} puis
+ * {@code isInstance}. Il passe désormais par le point d'accès
+ * {@link AccessPoint#LEVEL_IS_CLIENT} (2026-09-13) : le corps d'un Mixin n'est
+ * pas traduit au chargement et ne peut donc pas nommer {@code ClientWorld}
+ * lui-même ; la liaison typée, elle, l'est.
  */
 @Mixin(targets = "net.minecraft.world.World")
 public abstract class ClockTotalTicksMixin1211 {
 
-    private static volatile Class<?> clientWorldClass;
-    private static volatile boolean resolutionFailed;
-
     @Inject(method = "getTimeOfDay()J", at = @At("HEAD"), cancellable = true, require = 0)
     private void la$dispatchTimeOfDay(CallbackInfoReturnable<Long> cir) {
         try {
-            if (resolutionFailed) return;
-            if (clientWorldClass == null) {
-                clientWorldClass = McReflect.yarnClass("net/minecraft/client/world/ClientWorld",
-                    "net.minecraft.client.multiplayer.ClientLevel");
-                if (clientWorldClass == null) {
-                    resolutionFailed = true;
-                    LauncherLog.err("[ClockTotalTicksMixin1211] ClientWorld introuvable — temps du monde désactivé");
-                    return;
-                }
-            }
-            if (!clientWorldClass.isInstance(this)) return;
+            // Faux aussi si la liaison manque — déjà journalisé une fois par
+            // AccessorRegistry : dans le doute, on ne touche pas au temps simulé.
+            if (!AccessorRegistry.getBoolean(AccessPoint.LEVEL_IS_CLIENT, this, false)) return;
 
             Object replacement = VanillaHookRegistry.dispatchValue(HookPoint.CLOCK_TOTAL_TICKS, this);
             if (replacement instanceof Long) {

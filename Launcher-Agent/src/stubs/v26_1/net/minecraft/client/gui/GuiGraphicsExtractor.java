@@ -42,4 +42,25 @@ public abstract class GuiGraphicsExtractor {
 
     /** Demande que le décor soit flouté sous la strate courante (mécanisme de flou natif de vanilla). */
     public void blurBeforeThisStratum() {}
+
+    // ── Pont des icônes d'objet (2026-09-13) ─────────────────────────────
+    //
+    // Pour VanillaGuiSink261.drawVanillaItems, qui remplace le pont réflexif.
+    // Tous PUBLICS sur le jar 26.1.2, descripteurs exacts. itemBar n'est PAS
+    // déclaré : il est PRIVÉ — la barre passe par itemDecorations, public, qui
+    // l'appelle (méthode de la vraie hotbar).
+
+    /** Icône d'objet, taille native 16x16 — surcharge {@code (ItemStack, int, int)}. */
+    public void item(net.minecraft.world.item.ItemStack stack, int x, int y) {}
+
+    /** Décorations de pile : barre de durabilité, compteur (s'il diffère de 1), voile de recharge. */
+    public void itemDecorations(Font font, net.minecraft.world.item.ItemStack stack, int x, int y) {}
+
+    /** Blit BRUT, région source explicite : {@code (x, y, u, v, largeur, hauteur, largeurTexture, hauteurTexture)}. */
+    public void blit(RenderPipeline pipeline, net.minecraft.resources.Identifier texture, int x, int y,
+                     float u, float v, int width, int height, int textureWidth, int textureHeight) {}
+
+    /** Sprite de l'atlas GUI. */
+    public void blitSprite(RenderPipeline pipeline, net.minecraft.resources.Identifier sprite,
+                           int x, int y, int width, int height) {}
 }

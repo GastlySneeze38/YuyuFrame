@@ -17,11 +17,14 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.render.DrawContextStateBinding1211;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.GpuSampler;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.render.state.GuiRenderState;
 import net.minecraft.client.texture.TextureSetup;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.Identifier;
 
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
@@ -456,6 +459,79 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
             UiRenderer.flushPendingModernItemIconsFromState(state);
         } catch (Throwable t) {
             reportOnce("vidage des icônes d'item : " + t);
+        }
+    }
+
+    // ── Pont des icônes d'objet — typé, sans réflexion (2026-09-13) ───────
+
+    private boolean guiRendererHostReported;
+
+    /**
+     * Seul {@code GUI_STATE} est servi sur cette version.
+     *
+     * <p>{@code GUI_RENDERER} demanderait le champ {@code GuiRenderer.state},
+     * PAQUET-privé ici : ni appel typé possible d'un autre paquet, ni accessor
+     * Mixin (l'interface d'un Mixin n'est pas traduite, elle ne peut pas nommer
+     * {@code GuiRenderState}). Rien n'est perdu : ce point d'accroche arrive
+     * APRÈS la préparation de l'atlas d'items — une icône qui y serait vidée ne
+     * se rendrait pas (audit v1101), et la file est de toute façon déjà vidée
+     * par {@link #flushItemIcons}, dans la passe du HUD. Il n'y restait qu'un
+     * filet de sécurité, jamais sollicité en jeu (v1115 : « premier vidage
+     * d'icônes par l'hôte GUI_STATE »).
+     */
+    @Override
+    public Object guiState(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost host, Object hostObject) {
+        // Des if, PAS un switch : un switch sur une énumération fait générer à
+        // javac une classe synthétique (VanillaGuiSink1211$1, la table
+        // $SwitchMap$) qui ne peut pas porter @YarnNamed — RemapCheck l'a
+        // signalée. Sans nom du jeu dedans elle était inoffensive, mais une
+        // classe non marquable dans une unité traduite est un piège qui
+        // attend le premier switch sur un type Yarn.
+        if (host == com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost.GUI_STATE) {
+            return hostObject;
+        }
+        if (host == com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost.GUI_RENDERER
+                && !guiRendererHostReported) {
+            guiRendererHostReported = true;
+            LauncherLog.info("[VanillaGuiSink1211] hôte GUI_RENDERER non servi sur 1.21.11"
+                + " — les icônes d'objet sont vidées par GUI_STATE, dans la passe du HUD");
+        }
+        return null; // GAME_RENDERER : 26.1.2 seulement ; DRAW_CONTEXT* : ère gl3
+    }
+
+    @Override
+    public void drawVanillaItems(Object guiState,
+                                 java.util.List<com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaItemIcon> icons,
+                                 java.util.List<com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiBlit> blits) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || !(guiState instanceof GuiRenderState)) return;
+        // Constructeur PUBLIC à 4 arguments ; il délègue au privé, que
+        // DrawContextStateMixin1211 capte — sans effet de bord ici, l'état est
+        // le même.
+        DrawContext ctx = new DrawContext(client, (GuiRenderState) guiState, 0, 0);
+        RenderPipeline textured = RenderPipelines.GUI_TEXTURED;
+
+        for (com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiBlit blit : blits) {
+            ctx.drawTexture(textured, Identifier.ofVanilla(blit.texturePath),
+                blit.guiX, blit.guiY, blit.u, blit.v, blit.guiW, blit.guiH,
+                Math.round(blit.texW), Math.round(blit.texH));
+        }
+
+        Identifier slot = null;
+        for (com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaItemIcon icon : icons) {
+            if (!(icon.itemStack instanceof ItemStack)) continue;
+            ItemStack stack = (ItemStack) icon.itemStack;
+            if (icon.vanillaExtras) {
+                if (slot == null) slot = Identifier.ofVanilla(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.SPRITE);
+                ctx.drawGuiTexture(textured, slot,
+                    icon.guiX - com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.ICON_DX,
+                    icon.guiY - com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.ICON_DY,
+                    com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.W,
+                    com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.H);
+            }
+            ctx.drawItem(stack, icon.guiX, icon.guiY);
+            // drawItemBar est PRIVÉ ici : drawStackOverlay, public, l'appelle.
+            if (icon.vanillaExtras) ctx.drawStackOverlay(client.textRenderer, stack, icon.guiX, icon.guiY);
         }
     }
 

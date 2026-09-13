@@ -3,7 +3,6 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 
-import java.lang.reflect.Field;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 

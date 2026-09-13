@@ -1,19 +1,23 @@
 package com.yuyuframe.launcheragent.apimixin.mapping;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Recherches réflexives par nom YARN, quand {@link McReflect} ne suffit pas —
- * c'est-à-dire quand le membre doit être trouvé en REMONTANT une hiérarchie de
- * classes, ou choisi parmi plusieurs surcharges par la FORME de ses paramètres.
+ * Recherches réflexives par nom YARN, quand {@link McReflect} ne suffit pas.
  *
  * <p>Vit dans la couche {@code mapping} et non dans le moteur graphique parce
  * que c'est son métier : traduire un nom Yarn vers le nom d'exécution du loader
  * actif avant de comparer. Extrait de {@code UiVanillaItemRenderer} lors de son
- * découpage, où ces quatre recherches étaient partagées par deux ères.
+ * découpage.
+ *
+ * <p><b>Ne sert plus que les brackets GELÉS</b> ({@code Gl3VanillaItemRenderer},
+ * 1.20.4/1.21.4) depuis le 2026-09-13 : l'ère Blaze3D (26.1.2, 1.21.11) passe
+ * par des appels typés dans ses {@code VanillaGuiSink}. {@code fieldInHierarchy}
+ * et {@code methodInHierarchy}, qui n'avaient plus d'appelant, ont été retirés ;
+ * la leçon de la seconde (résolution par nom seul face à quatre surcharges de
+ * {@code drawItem}) est consignée dans l'audit, v1105.
  *
  * <h2>Piège que ces méthodes existent pour éviter</h2>
  *
@@ -41,73 +45,6 @@ public final class McLookup {
                     m.setAccessible(true);
                     return m;
                 }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Champ déclaré, en remontant la hiérarchie de {@code owner}.
-     *
-     * <p>Les candidats sont essayés DANS L'ORDRE et passés tels quels : c'est
-     * à l'appelant de mettre le nom déjà traduit en premier et le repli en
-     * second (motif {@code getObfFieldName(...), "state", "renderState"}).
-     * Un candidat {@code null} est ignoré, ce qui permet de passer directement
-     * le résultat d'une traduction qui peut échouer.
-     */
-    public static Field fieldInHierarchy(Class<?> owner, String... candidateNames) {
-        for (String name : candidateNames) {
-            if (name == null) continue;
-            Class<?> c = owner;
-            while (c != null) {
-                try {
-                    Field f = c.getDeclaredField(name);
-                    f.setAccessible(true);
-                    return f;
-                } catch (NoSuchFieldException e) {
-                    c = c.getSuperclass();
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Méthode {@code (X, int, int)} où {@code X} accepte {@code argType}, par
-     * nom Yarn, en remontant la hiérarchie de {@code owner}.
-     *
-     * @param namedDesc descripteur Yarn « named » de la surcharge visée, ex.
-     *     {@code "(Lnet/minecraft/item/ItemStack;II)V"} — ou {@code null} pour
-     *     une résolution par nom seul, acceptable UNIQUEMENT quand le nom est
-     *     unique dans la classe.
-     *
-     *     <p>Il n'est pas optionnel en pratique : {@code DrawContext.drawItem}
-     *     a QUATRE surcharges en 1.21.11, chacune avec un nom d'exécution
-     *     DIFFÉRENT ({@code method_51423/51425/51427/51428}). Résolue par nom
-     *     seul, la table ne peut pas trancher et rend le nom Yarn INCHANGÉ —
-     *     donc introuvable, donc plus aucune icône d'item de toute la session,
-     *     le drapeau d'échec étant définitif. {@code drawItemBar}, lui, n'a
-     *     qu'une surcharge et fonctionnait : d'où « seules les icônes
-     *     manquent ». Même famille de piège que {@code Text.getString}.
-     */
-    public static Method methodInHierarchy(Class<?> owner, Class<?> argType, String yarnClass,
-                                           String namedDesc, String... candidateNames) {
-        for (String name : candidateNames) {
-            if (name == null) continue;
-            String runtimeName = namedDesc != null
-                ? MappingsRegistry.namedToRuntimeMethod(yarnClass, name, namedDesc, false)
-                : MappingsRegistry.getObfMethodName(yarnClass, name);
-            Class<?> c = owner;
-            while (c != null) {
-                for (Method m : c.getDeclaredMethods()) {
-                    if (!m.getName().equals(runtimeName) || m.getParameterCount() != 3) continue;
-                    Class<?>[] p = m.getParameterTypes();
-                    if (p[0].isAssignableFrom(argType) && p[1] == int.class && p[2] == int.class) {
-                        m.setAccessible(true);
-                        return m;
-                    }
-                }
-                c = c.getSuperclass();
             }
         }
         return null;

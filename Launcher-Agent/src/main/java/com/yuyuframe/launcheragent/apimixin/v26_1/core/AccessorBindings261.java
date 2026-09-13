@@ -349,6 +349,10 @@ public final class AccessorBindings261 {
             r instanceof ServerDataAccessor261 ? ((ServerDataAccessor261) r).la$name() : null);
 
         // ── Monde ──────────────────────────────────────────────────────────
+        AccessorRegistry.bind(AccessPoint.LEVEL_IS_CLIENT, (r, a) ->
+            Boolean.valueOf(r instanceof net.minecraft.client.multiplayer.ClientLevel));
+        AccessorRegistry.bind(AccessPoint.IDENTIFIER_PATH, (r, a) ->
+            r instanceof net.minecraft.resources.Identifier ? ((net.minecraft.resources.Identifier) r).getPath() : null);
         AccessorRegistry.bind(AccessPoint.LEVEL_BIOME_ID, (r, a) -> {
             if (a.length < 3 || !(a[0] instanceof Number) || !(a[1] instanceof Number) || !(a[2] instanceof Number)) return null;
             MinecraftAccessor261 m = mc(null);

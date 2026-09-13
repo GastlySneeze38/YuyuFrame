@@ -1,9 +1,24 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d;
 
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiBlit;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaItemIcon;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apimixin.v26_1.render.GameRendererAccessor261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.render.GuiGraphicsExtractorInvoker261;
+import com.yuyuframe.launcheragent.apimixin.v26_1.render.GuiRendererAccessor261;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.state.gui.GuiRenderState;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
 
 import java.awt.image.BufferedImage;
+import java.util.List;
 
 /**
  * {@link VanillaGuiSink} de la 26.1.2 — délègue à {@link VanillaGuiLayer},
@@ -86,5 +101,58 @@ final class VanillaGuiSink261 implements VanillaGuiSink {
     @Override
     public void flushItemIcons(Object hookContext) {
         VanillaGuiLayer.flushItemIcons(hookContext);
+    }
+
+    // ── Pont des icônes d'objet — typé, sans réflexion (2026-09-13) ───────
+    //
+    // Les trois hôtes sont servis. Les champs privés (GameRenderer.guiRenderer,
+    // GuiRenderer.renderState) et le constructeur passent par les accessors et
+    // l'invoker 26.1.2 déjà tissés, écrits pour ce pont et jamais branchés
+    // jusqu'ici ; tout le reste est public.
+
+    @Override
+    public Object guiState(VanillaFlushHost host, Object hostObject) {
+        switch (host) {
+            case GUI_STATE:
+                return hostObject;
+            case GUI_RENDERER:
+                return hostObject instanceof GuiRendererAccessor261
+                    ? ((GuiRendererAccessor261) hostObject).la$renderState() : null;
+            case GAME_RENDERER: {
+                if (!(hostObject instanceof GameRendererAccessor261)) return null;
+                Object guiRenderer = ((GameRendererAccessor261) hostObject).la$guiRenderer();
+                return guiRenderer instanceof GuiRendererAccessor261
+                    ? ((GuiRendererAccessor261) guiRenderer).la$renderState() : null;
+            }
+            default:
+                return null; // hôtes de l'ère gl3, jamais émis sur cette version
+        }
+    }
+
+    @Override
+    public void drawVanillaItems(Object guiState, List<VanillaItemIcon> icons, List<VanillaGuiBlit> blits) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || !(guiState instanceof GuiRenderState)) return;
+        GuiGraphicsExtractor g = GuiGraphicsExtractorInvoker261.la$new(mc, (GuiRenderState) guiState, 0, 0);
+        RenderPipeline textured = RenderPipelines.GUI_TEXTURED;
+
+        for (VanillaGuiBlit blit : blits) {
+            g.blit(textured, Identifier.withDefaultNamespace(blit.texturePath),
+                blit.guiX, blit.guiY, blit.u, blit.v, blit.guiW, blit.guiH,
+                Math.round(blit.texW), Math.round(blit.texH));
+        }
+
+        Identifier slot = null;
+        for (VanillaItemIcon icon : icons) {
+            if (!(icon.itemStack instanceof ItemStack)) continue;
+            ItemStack stack = (ItemStack) icon.itemStack;
+            if (icon.vanillaExtras) {
+                if (slot == null) slot = Identifier.withDefaultNamespace(VanillaSlotSprite.SPRITE);
+                g.blitSprite(textured, slot, icon.guiX - VanillaSlotSprite.ICON_DX,
+                    icon.guiY - VanillaSlotSprite.ICON_DY, VanillaSlotSprite.W, VanillaSlotSprite.H);
+            }
+            g.item(stack, icon.guiX, icon.guiY);
+            if (icon.vanillaExtras) g.itemDecorations(mc.font, stack, icon.guiX, icon.guiY);
+        }
     }
 }

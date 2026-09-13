@@ -31,6 +31,9 @@ public class MinecraftClient {
 
     public Screen currentScreen;
 
+    /** {@code field_1772}, public final en jeu — pour {@code DrawContext.drawStackOverlay}. */
+    public net.minecraft.client.font.TextRenderer textRenderer;
+
     public final InGameHud inGameHud = null;
 
     public final Mouse mouse = null;

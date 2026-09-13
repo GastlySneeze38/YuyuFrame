@@ -25,6 +25,10 @@ import java.lang.annotation.Target;
  *       classe interne est un fichier {@code .class} distinct, qui n'hérite pas
  *       de l'annotation de sa classe englobante. Aucune classe ANONYME dans ce
  *       code — elle ne pourrait pas être annotée.</li>
+ *   <li>Pas de {@code switch} sur une énumération dans une classe marquée :
+ *       javac génère une classe synthétique ({@code Outer$1}, table
+ *       {@code $SwitchMap$}) qui ne peut pas être annotée. Utiliser des
+ *       {@code if}. Vu par {@code RemapCheck} sur {@code VanillaGuiSink1211}.</li>
  *   <li>Jamais sur un {@code @Mixin}.</li>
  *   <li>Oublier le marqueur ne se voit pas à la compilation : la classe part en
  *       jeu avec ses noms Yarn et lève {@code NoClassDefFoundError} au premier

@@ -54,4 +54,6 @@ public abstract class Minecraft {
     public Screen screen;
     public MouseHandler mouseHandler;
     public Options options;
+    /** Public final en jeu (vérifié sur le jar) — pour {@code GuiGraphicsExtractor.itemDecorations}. */
+    public net.minecraft.client.gui.Font font;
 }

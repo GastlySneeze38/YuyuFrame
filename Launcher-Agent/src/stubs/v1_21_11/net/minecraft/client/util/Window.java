@@ -23,4 +23,9 @@ public class Window {
     public int getScaledHeight() {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Poignée GLFW native ({@code method_4490}) — pour le poller d'entrées. */
+    public long getHandle() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

@@ -380,6 +380,10 @@ public final class AccessorBindings1211 {
                 ((Number) a[0]).intValue(), ((Number) a[1]).intValue(), ((Number) a[2]).intValue()));
             return biome == null ? null : registryId(biome);
         });
+        AccessorRegistry.bind(AccessPoint.LEVEL_IS_CLIENT, (r, a) ->
+            Boolean.valueOf(r instanceof net.minecraft.client.world.ClientWorld));
+        AccessorRegistry.bind(AccessPoint.IDENTIFIER_PATH, (r, a) ->
+            r instanceof Identifier ? ((Identifier) r).getPath() : null);
 
         // ── Connexion au serveur ───────────────────────────────────────────
         // Tout est PUBLIC ici comme en 26.1.2 ; seuls les noms changent
