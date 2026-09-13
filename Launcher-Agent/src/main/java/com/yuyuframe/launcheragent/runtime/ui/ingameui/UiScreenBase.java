@@ -303,7 +303,21 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
             boolean shift = lastInput != null && lastInput.shiftDown;
             return dispatchTab(shift);
         }
+        return onKeyPressed(keyCode);
+    }
+
+    /**
+     * Touche pressée (ou répétée en la maintenant) qu'aucun comportement
+     * commun n'a consommée — code GLFW. Pour un écran qui a ses propres
+     * raccourcis (flèches de l'éditeur HUD). {@code false} = laissée à vanilla.
+     */
+    protected boolean onKeyPressed(int glfwKeyCode) {
         return false;
+    }
+
+    /** Maj maintenu, d'après le dernier sondage d'entrées — pour les raccourcis de {@link #onKeyPressed}. */
+    protected boolean shiftHeld() {
+        return lastInput != null && lastInput.shiftDown;
     }
 
     /**

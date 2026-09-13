@@ -27,8 +27,9 @@ import java.util.Properties;
  * <pre>
  * &lt;id&gt;.enabled=true|false
  * &lt;id&gt;.hud.anchor=TOP_LEFT
- * &lt;id&gt;.hud.offsetX=0.0041  (FRACTION du viewport, pas des pixels — voir HudElement)
- * &lt;id&gt;.hud.offsetY=0.0074
+ * &lt;id&gt;.hud.marginX=8.0    (pixels depuis le bord d'ancrage — voir HudElement.marginX)
+ * &lt;id&gt;.hud.marginY=8.0
+ *   (ancien format, relu puis remplacé : hud.offsetX/offsetY en fraction d'écran)
  * &lt;id&gt;.hud.scale=1.0
  * &lt;id&gt;.hud.locked=false
  * &lt;id&gt;.hud.showWhenScreenOpen=false
@@ -137,8 +138,16 @@ public final class HudConfigStore {
             if (anchor != null) {
                 try { element.anchor = HudAnchor.valueOf(anchor); } catch (IllegalArgumentException ignored) {}
             }
-            element.offsetX = getFloat(id + ".hud.offsetX", element.offsetX);
-            element.offsetY = getFloat(id + ".hud.offsetY", element.offsetY);
+            if (DATA.getProperty(id + ".hud.marginX") != null) {
+                element.marginX = getFloat(id + ".hud.marginX", element.marginX);
+                element.marginY = getFloat(id + ".hud.marginY", element.marginY);
+            } else if (DATA.getProperty(id + ".hud.offsetX") != null) {
+                // Ancien format (fraction d'écran au centre) : converti au
+                // premier rendu, quand la taille d'écran est connue — voir
+                // HudElement.setLegacyFractionOffsets.
+                element.setLegacyFractionOffsets(
+                    getFloat(id + ".hud.offsetX", 0f), getFloat(id + ".hud.offsetY", 0f));
+            }
             element.locked = getBoolean(id + ".hud.locked", element.locked);
             element.opacity = getFloat(id + ".hud.opacity", element.opacity);
             // Couleur de texte : stockée en ARGB packé. Absente = on GARDE
@@ -294,8 +303,20 @@ public final class HudConfigStore {
         if (module instanceof HudElementOwner) {
             HudElement element = ((HudElementOwner) module).hudElement();
             DATA.setProperty(id + ".hud.anchor", element.anchor.name());
-            DATA.setProperty(id + ".hud.offsetX", String.valueOf(element.offsetX));
-            DATA.setProperty(id + ".hud.offsetY", String.valueOf(element.offsetY));
+            if (element.hasPendingLegacyPosition()) {
+                // Jamais rendu depuis le chargement (module jamais affiché) :
+                // on réécrit l'ancien format tel quel plutôt qu'un écart faux.
+                float[] legacy = element.legacyFractionOffsets();
+                DATA.setProperty(id + ".hud.offsetX", String.valueOf(legacy[0]));
+                DATA.setProperty(id + ".hud.offsetY", String.valueOf(legacy[1]));
+                DATA.remove(id + ".hud.marginX");
+                DATA.remove(id + ".hud.marginY");
+            } else {
+                DATA.setProperty(id + ".hud.marginX", String.valueOf(element.marginX));
+                DATA.setProperty(id + ".hud.marginY", String.valueOf(element.marginY));
+                DATA.remove(id + ".hud.offsetX");
+                DATA.remove(id + ".hud.offsetY");
+            }
             DATA.setProperty(id + ".hud.scale", String.valueOf(element.scale));
             DATA.setProperty(id + ".hud.locked", String.valueOf(element.locked));
             DATA.setProperty(id + ".hud.opacity", String.valueOf(element.opacity));

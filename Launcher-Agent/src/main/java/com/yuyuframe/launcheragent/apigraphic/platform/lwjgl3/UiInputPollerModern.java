@@ -634,6 +634,7 @@ public final class UiInputPollerModern extends UiInputPoller {
         }
 
         shiftDown = glfwGetKey(windowHandle, 340) == 1 || glfwGetKey(windowHandle, 344) == 1; // GLFW_KEY_LEFT/RIGHT_SHIFT
+        altDown = glfwGetKey(windowHandle, 342) == 1 || glfwGetKey(windowHandle, 346) == 1;   // GLFW_KEY_LEFT/RIGHT_ALT
     }
 
     @Override

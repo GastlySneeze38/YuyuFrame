@@ -10,6 +10,7 @@ import com.yuyuframe.launcheragent.apigraphic.layout.LayoutSolver;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyNode;
 import com.yuyuframe.launcheragent.apigraphic.layout.TaffyStyle;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
+import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.HudSnapEngine;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiHudBox;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
@@ -80,15 +81,8 @@ public class UiHudEditorScreen extends UiScreenBase {
         try {
             UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
 
-            // Lignes de guide d'alignement — dessinées PAR-DESSUS les boîtes,
-            // uniquement pendant qu'une boîte est effectivement en train de
-            // s'accrocher à ce repère (voir UiHudBox.pollContinuous).
-            for (UiHudBox box : hudBoxes) {
-                Float gx = box.snapGuideX();
-                if (gx != null) renderer.drawRoundedRect(gx - 0.5f, 0, gx + 0.5f, screenHeight, 0, UiTheme.ACCENT, screenWidth, screenHeight);
-                Float gy = box.snapGuideY();
-                if (gy != null) renderer.drawRoundedRect(0, gy - 0.5f, screenWidth, gy + 0.5f, 0, UiTheme.ACCENT, screenWidth, screenHeight);
-            }
+            // Aides de placement — PAR-DESSUS les boîtes.
+            drawPlacementAids(renderer);
             // Voir UiModConfigScreen — ré-appliqué pour couvrir les lignes de guide ci-dessus.
             drawRevealVeil(renderer);
         } catch (Throwable ignored) {}
@@ -114,10 +108,150 @@ public class UiHudEditorScreen extends UiScreenBase {
 
         hudBoxes = new ArrayList<>();
         for (HudElement element : HudRegistry.elements()) {
-            UiHudBox box = new UiHudBox(element, screenWidth, screenHeight, hudBoxes);
+            final UiHudBox box = new UiHudBox(element, screenWidth, screenHeight, hudBoxes);
+            box.setOnSelect(() -> select(box));
+            // La sélection survit à la reconstruction (redimensionnement de fenêtre).
+            if (selectedElement == element) box.setSelected(true);
             hudBoxes.add(box);
             widgets.add(box);
         }
+    }
+
+    // ── Sélection et déplacement fin au clavier ────────────────────────────
+
+    /** Élément sélectionné (dernier cliqué) — par élément et non par boîte, les boîtes étant recréées au redimensionnement. */
+    private HudElement selectedElement;
+
+    private void select(UiHudBox box) {
+        selectedElement = box.element();
+        for (UiHudBox b : hudBoxes) b.setSelected(b == box);
+    }
+
+    private UiHudBox selectedBox() {
+        for (UiHudBox b : hudBoxes) if (b.element() == selectedElement) return b;
+        return null;
+    }
+
+    /**
+     * Flèches : déplace l'élément sélectionné d'un pixel GUI, de dix avec Maj.
+     * Reçu par le vrai {@code keyPressed} de l'écran, donc répété en
+     * maintenant la touche, comme dans n'importe quel éditeur.
+     */
+    @Override
+    protected boolean onKeyPressed(int glfwKeyCode) {
+        UiHudBox box = selectedBox();
+        if (box == null) return false;
+        int step = shiftHeld() ? 10 : 1;
+        switch (glfwKeyCode) {
+            case 263: box.nudge(-step, 0, screenWidth, screenHeight); return true; // GLFW_KEY_LEFT
+            case 262: box.nudge(step, 0, screenWidth, screenHeight); return true;  // GLFW_KEY_RIGHT
+            case 265: box.nudge(0, step, screenWidth, screenHeight); return true;  // GLFW_KEY_UP (Y vers le haut)
+            case 264: box.nudge(0, -step, screenWidth, screenHeight); return true; // GLFW_KEY_DOWN
+            default: return false;
+        }
+    }
+
+    // ── Aides de placement ─────────────────────────────────────────────────
+
+    private static final UiColor GUIDE_SCREEN = UiTheme.ACCENT;
+    private static final UiColor GUIDE_ELEMENT = new UiColor(90, 200, 255, 255);
+    private static final UiColor GUIDE_VANILLA = new UiColor(120, 220, 140, 255);
+    private static final UiColor GUIDE_SPACING = new UiColor(235, 120, 225, 255);
+    private static final UiColor VANILLA_OUTLINE = new UiColor(120, 220, 140, 70);
+    private static final UiColor MEASURE_LINE = new UiColor(255, 255, 255, 140);
+    private static final UiColor LABEL_BG = new UiColor(10, 10, 14, 200);
+    private static final float LABEL_SCALE = 0.34f;
+
+    /**
+     * Pendant un glisser : contours des éléments vanilla aimantables, guides
+     * colorés par nature de repère (écran, élément, vanilla, espacement ; pâles
+     * = proches mais pas accrochés), et distances aux voisins en pixels GUI.
+     * Élément sélectionné au repos : ses distances seules, pour régler aux
+     * flèches. Redimensionnement : le repère de taille accroché.
+     */
+    private void drawPlacementAids(UiRenderer renderer) {
+        UiHudBox active = null;
+        for (UiHudBox b : hudBoxes) if (b.isDragging() || b.isResizing()) { active = b; break; }
+        UiHudBox focus = active != null ? active : selectedBox();
+        if (focus == null) return;
+
+        float scale = guiScale();
+        List<HudSnapEngine.Rect> targets =
+            focus.snapTargets(screenHeight, scale);
+
+        if (active != null && active.isDragging()) {
+            for (HudSnapEngine.Rect t : targets) {
+                if (t.kind == HudSnapEngine.Kind.VANILLA) {
+                    outline(renderer, t.x, t.y, t.w, t.h, VANILLA_OUTLINE);
+                }
+            }
+            HudSnapEngine.Result snap = active.activeSnap();
+            if (snap != null) {
+                for (HudSnapEngine.Guide g : snap.guides) {
+                    drawGuide(renderer, g);
+                }
+            }
+        }
+
+        if (active != null && active.isResizing()) {
+            String label = active.resizeSnapLabel();
+            if (label != null) drawLabel(renderer, label, focus.x + focus.w / 2f, focus.y - 12f);
+            return;
+        }
+
+        for (HudSnapEngine.Measure m :
+                HudSnapEngine.measure(
+                    focus.x, focus.y, focus.w, focus.h, targets, screenWidth, screenHeight, scale)) {
+            line(renderer, m.x1, m.y1, m.x2, m.y2, MEASURE_LINE);
+            drawLabel(renderer, String.valueOf(m.gui), (m.x1 + m.x2) / 2f, (m.y1 + m.y2) / 2f);
+        }
+    }
+
+    private float guiScale() {
+        float s = UiRenderer.guiScale(screenWidth);
+        return s > 0f ? s : 1f;
+    }
+
+    private void drawGuide(UiRenderer renderer,
+                           HudSnapEngine.Guide g) {
+        UiColor base;
+        switch (g.kind) {
+            case ELEMENT: base = GUIDE_ELEMENT; break;
+            case VANILLA: base = GUIDE_VANILLA; break;
+            case SPACING: base = GUIDE_SPACING; break;
+            default: base = GUIDE_SCREEN;
+        }
+        UiColor c = g.preview ? new UiColor(Math.round(base.r * 255f), Math.round(base.g * 255f),
+            Math.round(base.b * 255f), 70) : base;
+        if (g.vertical) line(renderer, g.pos, g.from, g.pos, g.to, c);
+        else line(renderer, g.from, g.pos, g.to, g.pos, c);
+    }
+
+    /** Segment d'un pixel d'épaisseur, horizontal ou vertical. */
+    private void line(UiRenderer renderer, float x1, float y1, float x2, float y2, UiColor c) {
+        if (Math.abs(x1 - x2) < 0.01f) {
+            renderer.drawRoundedRect(x1 - 0.5f, Math.min(y1, y2), x1 + 0.5f, Math.max(y1, y2), 0, c, screenWidth, screenHeight);
+        } else {
+            renderer.drawRoundedRect(Math.min(x1, x2), y1 - 0.5f, Math.max(x1, x2), y1 + 0.5f, 0, c, screenWidth, screenHeight);
+        }
+    }
+
+    private void outline(UiRenderer renderer, float x, float y, float w, float h, UiColor c) {
+        line(renderer, x, y, x + w, y, c);
+        line(renderer, x, y + h, x + w, y + h, c);
+        line(renderer, x, y, x, y + h, c);
+        line(renderer, x + w, y, x + w, y + h, c);
+    }
+
+    /** Étiquette centrée sur (cx, cy), sur fond sombre pour rester lisible sur le jeu. */
+    private void drawLabel(UiRenderer renderer, String text, float cx, float cy) {
+        float tw = renderer.textWidth(text, LABEL_SCALE);
+        float th = 12f;
+        float pad = 3f;
+        float x = Math.max(0f, Math.min(screenWidth - tw - 2 * pad, cx - tw / 2f - pad));
+        float y = Math.max(0f, Math.min(screenHeight - th, cy - th / 2f));
+        renderer.drawRoundedRect(x, y, x + tw + 2 * pad, y + th, 3f, LABEL_BG, screenWidth, screenHeight);
+        renderer.drawText(text, x + pad, y + 3f, UiTheme.TEXT_PRIMARY, LABEL_SCALE, screenWidth, screenHeight);
     }
 
     /**

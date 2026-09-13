@@ -56,6 +56,8 @@ public abstract class UiInputPoller {
     protected final boolean[] prevSideButtonDown = new boolean[5];
     /** État brut Maj (gauche OU droite), renseigné par {@link #readState()} à chaque frame — voir {@code UiScreenBase} (raccourcis Maj+clic). PAS le même champ que editShiftHeld (celui-ci ne se met à jour que quand pollTextEdit() est appelé, c-à-d un UiTextField focus). */
     public boolean shiftDown;
+    /** État brut Alt (gauche OU droite), comme {@link #shiftDown} — l'éditeur HUD s'en sert pour suspendre l'aimant. Toujours faux sur LWJGL2 (1.8.9). */
+    public boolean altDown;
 
     /**
      * Nom de la touche d'ouverture du menu — même format que

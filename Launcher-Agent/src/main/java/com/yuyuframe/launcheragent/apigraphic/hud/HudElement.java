@@ -6,19 +6,10 @@ package com.yuyuframe.launcheragent.apigraphic.hud;
  * (UiHudEditorScreen, ouvert depuis la sidebar de l'accueil) ET en jeu
  * (HudOverlayRenderer) — même rendu dans les deux cas (voir HudPanelRenderer).
  *
- * Position stockée comme (ancre + décalage), PAS en coordonnées absolues —
- * voir HudAnchor. Le décalage lui-même ({@link #offsetX}/{@link #offsetY})
- * est stocké comme une FRACTION du viewport (0.05 = 5% de la largeur/hauteur
- * ACTUELLE), pas des pixels bruts : un décalage en pixels fixes ne "suit" pas
- * un changement de taille de fenêtre/résolution — un élément glissé vers le
- * centre de l'écran (donc à une grande distance en pixels de son ancre)
- * pouvait se retrouver hors écran si la fenêtre rétrécissait ensuite (bug
- * remonté par l'utilisateur : "la position ne s'adapte pas à la taille de
- * l'écran"). Les constructeurs prennent toujours des valeurs "en pixels" par
- * lisibilité (ex: {@code 8f, 8f} pour un coin) mais les convertissent en
- * fraction via {@link #REFERENCE_WIDTH}/{@link #REFERENCE_HEIGHT} — voir
- * {@link #screenX}/{@link #screenY} (fraction → pixels courants) et
- * {@link #setScreenPosition} (pixels glissés → fraction, sens inverse).
+ * Position stockée comme (ancre + écart en pixels au bord d'ancrage), PAS en
+ * coordonnées absolues — voir {@link #marginX} (refonte du 2026-09-13, qui
+ * remplace l'ancienne fraction d'écran mesurée au centre) et
+ * {@link #setScreenPositionAutoAnchor}, qui choisit l'ancre au dépôt.
  *
  * {@code w}/{@code h} ne sont PLUS librement réglables indépendamment l'un de
  * l'autre — après inspection du fonctionnement réel d'OneConfig (constaté
@@ -49,10 +40,6 @@ public class HudElement {
     public static final float MIN_SCALE = 0.5f;
     /** Au-dessus, la boîte devient déraisonnablement grande — plafond de {@link #scale}. */
     public static final float MAX_SCALE = 4f;
-
-    /** Résolution de référence pour convertir les décalages "en pixels" des constructeurs en fraction du viewport — voir la javadoc de classe. Purement conventionnelle (1920x1080), aucun lien avec la résolution réelle du joueur. */
-    private static final float REFERENCE_WIDTH = 1920f;
-    private static final float REFERENCE_HEIGHT = 1080f;
 
     /** Fournit le contenu affiché (une ligne par entrée), recalculé à CHAQUE frame — voir runtime.module.FpsModule/PingModule/CoordsModule (leur ContentSource nichée) pour des exemples réels. */
     public interface ContentSource {
@@ -139,8 +126,35 @@ public class HudElement {
     public String accentSuffix;
 
     public HudAnchor anchor;
-    /** Fraction du viewport (voir javadoc de classe), PAS des pixels — ne jamais assigner de valeur "en pixels" directement ici, passer par {@link #setScreenPosition}. */
-    public float offsetX, offsetY;
+
+    /**
+     * Écart au bord d'ancrage, en pixels framebuffer — REFONTE du 2026-09-13,
+     * voir {@link #screenX}. Horizontal : du bord gauche de l'écran au bord
+     * gauche de la boîte ({@code *_LEFT}), du bord droit au bord droit
+     * ({@code *_RIGHT}), ou du centre de l'écran au centre de la boîte
+     * ({@code *_CENTER}, signé). Vertical : du haut au haut ({@code TOP_*}) ou
+     * du bas au bas ({@code BOTTOM_*}).
+     *
+     * <p>Remplace l'ancien {@code offsetX}/{@code offsetY}, une FRACTION de
+     * l'écran mesurée au CENTRE de la boîte. Retour utilisateur : un élément
+     * calé contre un bord ou contre un voisin se décalait dès que son contenu
+     * changeait de largeur (FPS 99 → 144) ou que la fenêtre changeait de
+     * taille (l'écart suivait la proportion de l'écran). Un écart en pixels,
+     * mesuré depuis le bord que l'élément touche, garde l'alignement dans les
+     * deux cas ; l'ancre est choisie automatiquement au dépôt
+     * ({@link #setScreenPositionAutoAnchor}), ce qui couvre aussi l'ancien
+     * souci « élément glissé au milieu, sorti de l'écran en rétrécissant ».
+     */
+    public float marginX, marginY;
+
+    /**
+     * Position lue dans un fichier ANTÉRIEUR (fraction d'écran, au centre),
+     * pas encore convertie : la conversion demande la taille d'écran, connue
+     * seulement au premier {@link #screenX}/{@link #screenY}. Voir
+     * {@link #setLegacyFractionOffsets}.
+     */
+    private boolean legacyX, legacyY;
+    private float legacyOffsetX, legacyOffsetY;
 
     // ── Réglages génériques façon OneConfig ─────────────────────────────────
     /** Empêche le glisser/redimensionner dans l'éditeur (voir UiHudBox). */
@@ -152,14 +166,14 @@ public class HudElement {
     public float scale = 1f;
 
     private final HudAnchor defaultAnchor;
-    private final float defaultOffsetX, defaultOffsetY;
+    private final float defaultMarginX, defaultMarginY;
 
     /**
-     * {@code offsetX}/{@code offsetY} ici sont des pixels "à la résolution de
-     * référence" ({@link #REFERENCE_WIDTH}/{@link #REFERENCE_HEIGHT}) — juste
-     * pour rester lisible dans le code des modules (ex: {@code 8f, 8f} pour
-     * un coin) — convertis immédiatement en fraction, la SEULE forme stockée
-     * (voir javadoc de classe).
+     * {@code offsetX}/{@code offsetY} : écart en pixels au bord d'ancrage
+     * (voir {@link #marginX}) — pour {@code *_CENTER}, décalage du centre.
+     * C'était déjà la convention des modules ({@code 8f, 8f} pour un coin) :
+     * les valeurs déclarées gardent leur sens, elles ne sont simplement plus
+     * converties en fraction d'écran.
      */
     public HudElement(String id, String displayName, HudAnchor anchor, float offsetX, float offsetY, ContentSource content) {
         this.id = id;
@@ -167,53 +181,27 @@ public class HudElement {
         this.anchor = anchor;
         this.content = content;
         this.customRenderer = null;
-        recomputeSize(); // besoin de w/h AVANT la conversion bord->centre ci-dessous
-        this.offsetX = edgeOffsetToCenterOffsetX(offsetX, anchor, w) / REFERENCE_WIDTH;
-        this.offsetY = edgeOffsetToCenterOffsetY(offsetY, h) / REFERENCE_HEIGHT;
+        recomputeSize();
+        this.marginX = offsetX;
+        this.marginY = offsetY;
         this.defaultAnchor = anchor;
-        this.defaultOffsetX = this.offsetX;
-        this.defaultOffsetY = this.offsetY;
+        this.defaultMarginX = offsetX;
+        this.defaultMarginY = offsetY;
     }
 
-    /** Variante rendu personnalisé — voir {@link CustomRenderer}. Mêmes unités "pixels de référence" que l'autre constructeur. */
+    /** Variante rendu personnalisé — voir {@link CustomRenderer}. Mêmes unités que l'autre constructeur. */
     public HudElement(String id, String displayName, HudAnchor anchor, float offsetX, float offsetY, CustomRenderer customRenderer) {
         this.id = id;
         this.displayName = displayName;
         this.anchor = anchor;
         this.content = null;
         this.customRenderer = customRenderer;
-        recomputeSize(); // besoin de w/h AVANT la conversion bord->centre ci-dessous
-        this.offsetX = edgeOffsetToCenterOffsetX(offsetX, anchor, w) / REFERENCE_WIDTH;
-        this.offsetY = edgeOffsetToCenterOffsetY(offsetY, h) / REFERENCE_HEIGHT;
+        recomputeSize();
+        this.marginX = offsetX;
+        this.marginY = offsetY;
         this.defaultAnchor = anchor;
-        this.defaultOffsetX = this.offsetX;
-        this.defaultOffsetY = this.offsetY;
-    }
-
-    /**
-     * BUG TROUVÉ (retour utilisateur : "l'ancrage du HUD n'est pas bon...
-     * si les FPS passent de 150 à 95 le HUD est plus petit et là il bouge —
-     * si il est fixé par son centre il ne bougera pas") — {@link #offsetX}/
-     * {@link #offsetY} mesuraient jusqu'ici la distance du coin d'écran au
-     * BORD de la boîte (voir {@link #screenX}/{@link #screenY} avant ce
-     * correctif) : un contenu de largeur variable (FPS "150"→"95") gardait
-     * un bord fixe, donc l'autre bord — et le CENTRE visuel du HUD — se
-     * déplaçait à chaque frame où le texte changeait de largeur/hauteur.
-     * {@link #offsetX}/{@link #offsetY} mesurent désormais la distance du
-     * coin d'écran au CENTRE de la boîte (voir screenX/screenY), invariant à
-     * un changement de taille du contenu. Cette conversion (appliquée UNE
-     * SEULE FOIS, ici, à la taille naturelle de départ) garde la position
-     * VISUELLE de chaque module inchangée par rapport à avant ce correctif
-     * — seul le comportement FUTUR (au changement de taille) change.
-     */
-    private static float edgeOffsetToCenterOffsetX(float edgeOffsetPx, HudAnchor anchor, float w) {
-        if (anchor == HudAnchor.TOP_CENTER || anchor == HudAnchor.BOTTOM_CENTER) return edgeOffsetPx;
-        return edgeOffsetPx + w / 2f;
-    }
-
-    /** Voir {@link #edgeOffsetToCenterOffsetX} — pas de variante Y "centrée" (aucune ancre TOP/BOTTOM médiane sur cet axe), la conversion s'applique donc à TOUTES les ancres. */
-    private static float edgeOffsetToCenterOffsetY(float edgeOffsetPx, float h) {
-        return edgeOffsetPx + h / 2f;
+        this.defaultMarginX = offsetX;
+        this.defaultMarginY = offsetY;
     }
 
     /**
@@ -314,102 +302,114 @@ public class HudElement {
         return new float[]{ naturalW, naturalH };
     }
 
+    private static boolean isRight(HudAnchor a) { return a == HudAnchor.TOP_RIGHT || a == HudAnchor.BOTTOM_RIGHT; }
+    private static boolean isCenter(HudAnchor a) { return a == HudAnchor.TOP_CENTER || a == HudAnchor.BOTTOM_CENTER; }
+    private static boolean isTop(HudAnchor a) { return a == HudAnchor.TOP_LEFT || a == HudAnchor.TOP_CENTER || a == HudAnchor.TOP_RIGHT; }
+
     /**
-     * Coin bas-gauche de la boîte (espace pixels framebuffer, comme UiWidget)
-     * pour un viewport donné — reconvertit offsetX (fraction) en pixels du
-     * viewport COURANT à chaque appel, voir javadoc de classe.
+     * Coin bas-gauche de la boîte (pixels framebuffer, comme UiWidget).
      *
-     * offsetX est la distance du coin d'écran au CENTRE de la boîte (voir
-     * BUG TROUVÉ dans la javadoc des constructeurs) — le centre ({@code
-     * centerX}) ne dépend donc JAMAIS de {@code w}, seul le bord retourné
-     * ici ({@code centerX - w/2}) en dépend : un changement de largeur du
-     * contenu fait grandir/rétrécir la boîte symétriquement autour de ce
-     * centre fixe, au lieu de déplacer tout le HUD.
+     * <p>Le bord d'ancrage reste fixe quand le contenu change de largeur : un
+     * élément calé à droite grandit vers la gauche, un élément centré grandit
+     * des deux côtés. Voir {@link #marginX} pour le pourquoi.
      *
-     * Clampé au final dans {@code [0, vpWidth - w]} : la LARGEUR de la boîte
-     * reste fixe en pixels (voir naturalSize()) alors que sa POSITION est
-     * proportionnelle — un élément glissé loin de son ancre (ex: FPS ancré
-     * TOP_LEFT mais glissé côté droit, offsetX proche de 1.0) voit sa position
-     * proportionnelle se resserrer en rétrécissant la fenêtre SANS que la
-     * largeur fixe de la boîte ne suive, ce qui peut pousser son bord au-delà
-     * de l'écran ("des HUD sont en dehors de la fenêtre" en redimensionnant).
-     * Ce clamp final est un filet de sécurité générique, pareil que celui déjà
-     * appliqué pendant le glisser-déposer dans l'éditeur (voir UiHudBox) —
-     * étendu ici à TOUS les chemins de rendu (jeu ET éditeur), pas seulement
-     * pendant un drag actif.
+     * <p>Clampé dans {@code [0, vpWidth − w]} : filet de sécurité si la fenêtre
+     * devient plus petite que l'écart enregistré.
      */
     public float screenX(int vpWidth) {
-        float centerOffsetXPx = offsetX * vpWidth;
-        float centerX;
-        switch (anchor) {
-            case TOP_RIGHT:
-            case BOTTOM_RIGHT:
-                centerX = vpWidth - centerOffsetXPx;
-                break;
-            case TOP_CENTER:
-            case BOTTOM_CENTER:
-                centerX = vpWidth / 2f + centerOffsetXPx;
-                break;
-            default: // TOP_LEFT, BOTTOM_LEFT
-                centerX = centerOffsetXPx;
-        }
-        float x = centerX - w / 2f;
+        if (legacyX) convertLegacyX(vpWidth);
+        float x;
+        if (isRight(anchor)) x = vpWidth - w - marginX;
+        else if (isCenter(anchor)) x = vpWidth / 2f + marginX - w / 2f;
+        else x = marginX;
         return Math.max(0f, Math.min(vpWidth - w, x));
     }
 
-    /** Même principe centre-invariant + même clamp final que {@link #screenX} — voir sa javadoc. */
+    /** Même principe que {@link #screenX} — repère Y vers le HAUT, {@code TOP_*} mesure depuis le haut. */
     public float screenY(int vpHeight) {
-        float centerOffsetYPx = offsetY * vpHeight;
-        float centerY;
-        switch (anchor) {
-            case TOP_LEFT:
-            case TOP_CENTER:
-            case TOP_RIGHT:
-                centerY = vpHeight - centerOffsetYPx;
-                break;
-            default: // BOTTOM_*
-                centerY = centerOffsetYPx;
-        }
-        float y = centerY - h / 2f;
+        if (legacyY) convertLegacyY(vpHeight);
+        float y = isTop(anchor) ? vpHeight - h - marginY : marginY;
         return Math.max(0f, Math.min(vpHeight - h, y));
     }
 
-    /**
-     * Recalcule offsetX/offsetY (fraction, distance au CENTRE de la boîte —
-     * voir javadoc de {@link #screenX}) à partir d'une position absolue
-     * glissée en pixels ({@code absX,absY} = coin bas-gauche de la boîte
-     * pendant le drag, voir UiHudBox — recomposé ici en centre via
-     * {@code +w/2}/{@code +h/2} avant conversion selon l'ancre actuelle).
-     */
+    /** Recalcule l'écart au bord d'ancrage ACTUEL depuis une position absolue (coin bas-gauche). */
     public void setScreenPosition(float absX, float absY, int vpWidth, int vpHeight) {
-        float centerX = absX + w / 2f;
-        float centerOffsetXPx;
-        switch (anchor) {
-            case TOP_RIGHT:
-            case BOTTOM_RIGHT:
-                centerOffsetXPx = vpWidth - centerX;
-                break;
-            case TOP_CENTER:
-            case BOTTOM_CENTER:
-                centerOffsetXPx = centerX - vpWidth / 2f;
-                break;
-            default:
-                centerOffsetXPx = centerX;
-        }
-        offsetX = centerOffsetXPx / vpWidth;
+        legacyX = false;
+        legacyY = false;
+        if (isRight(anchor)) marginX = vpWidth - (absX + w);
+        else if (isCenter(anchor)) marginX = (absX + w / 2f) - vpWidth / 2f;
+        else marginX = absX;
+        marginY = isTop(anchor) ? vpHeight - (absY + h) : absY;
+    }
 
-        float centerY = absY + h / 2f;
-        float centerOffsetYPx;
-        switch (anchor) {
-            case TOP_LEFT:
-            case TOP_CENTER:
-            case TOP_RIGHT:
-                centerOffsetYPx = vpHeight - centerY;
-                break;
-            default:
-                centerOffsetYPx = centerY;
-        }
-        offsetY = centerOffsetYPx / vpHeight;
+    /**
+     * Comme {@link #setScreenPosition}, en choisissant l'ancre d'après la
+     * position : tiers gauche/centre/droit de l'écran selon le centre de la
+     * boîte, moitié haute/basse. Appelé au DÉPÔT dans l'éditeur (pas pendant
+     * le glisser, où l'ancre changerait sous la souris).
+     *
+     * <p>Un élément calé contre le bord droit a son centre dans le tiers droit,
+     * il prend donc l'ancre droite et y reste collé quelle que soit la taille
+     * de fenêtre — c'est l'objet même de cette méthode.
+     */
+    public void setScreenPositionAutoAnchor(float absX, float absY, int vpWidth, int vpHeight) {
+        float cx = absX + w / 2f, cy = absY + h / 2f;
+        boolean top = cy >= vpHeight / 2f;
+        if (cx < vpWidth / 3f) anchor = top ? HudAnchor.TOP_LEFT : HudAnchor.BOTTOM_LEFT;
+        else if (cx > vpWidth * 2f / 3f) anchor = top ? HudAnchor.TOP_RIGHT : HudAnchor.BOTTOM_RIGHT;
+        else anchor = top ? HudAnchor.TOP_CENTER : HudAnchor.BOTTOM_CENTER;
+        setScreenPosition(absX, absY, vpWidth, vpHeight);
+    }
+
+    /**
+     * Position d'un fichier de configuration ANTÉRIEUR : fraction de l'écran,
+     * mesurée au CENTRE de la boîte. Convertie paresseusement au premier
+     * rendu, à la position VISUELLE qu'elle avait, puis sauvegardée au nouveau
+     * format à la prochaine écriture. Personne ne perd sa disposition.
+     */
+    public void setLegacyFractionOffsets(float fractionX, float fractionY) {
+        legacyOffsetX = fractionX;
+        legacyOffsetY = fractionY;
+        legacyX = true;
+        legacyY = true;
+    }
+
+    /**
+     * Ancienne formule de centre, reprise telle quelle pour retrouver la
+     * position visuelle — puis ANCRE RECHOISIE comme au dépôt. Sans ça, un
+     * élément glissé à droite sous l'ancien format garderait son ancre gauche
+     * d'origine : désormais mesuré en pixels depuis la gauche, il sortirait de
+     * l'écran en rétrécissant la fenêtre. Un axe par méthode : chacune ne
+     * touche qu'à SA moitié de l'ancre, l'ordre des deux conversions est donc
+     * indifférent.
+     */
+    private void convertLegacyX(int vpWidth) {
+        legacyX = false;
+        float off = legacyOffsetX * vpWidth;
+        float centerX;
+        if (isRight(anchor)) centerX = vpWidth - off;
+        else if (isCenter(anchor)) centerX = vpWidth / 2f + off;
+        else centerX = off;
+        boolean top = isTop(anchor);
+        if (centerX < vpWidth / 3f) anchor = top ? HudAnchor.TOP_LEFT : HudAnchor.BOTTOM_LEFT;
+        else if (centerX > vpWidth * 2f / 3f) anchor = top ? HudAnchor.TOP_RIGHT : HudAnchor.BOTTOM_RIGHT;
+        else anchor = top ? HudAnchor.TOP_CENTER : HudAnchor.BOTTOM_CENTER;
+        float absX = centerX - w / 2f;
+        if (isRight(anchor)) marginX = vpWidth - (absX + w);
+        else if (isCenter(anchor)) marginX = centerX - vpWidth / 2f;
+        else marginX = absX;
+    }
+
+    private void convertLegacyY(int vpHeight) {
+        legacyY = false;
+        float off = legacyOffsetY * vpHeight;
+        float centerY = isTop(anchor) ? vpHeight - off : off;
+        boolean top = centerY >= vpHeight / 2f;
+        if (isRight(anchor)) anchor = top ? HudAnchor.TOP_RIGHT : HudAnchor.BOTTOM_RIGHT;
+        else if (isCenter(anchor)) anchor = top ? HudAnchor.TOP_CENTER : HudAnchor.BOTTOM_CENTER;
+        else anchor = top ? HudAnchor.TOP_LEFT : HudAnchor.BOTTOM_LEFT;
+        float absY = centerY - h / 2f;
+        marginY = top ? vpHeight - (absY + h) : absY;
     }
 
     /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+décalage tels que déclarés à la construction, PAS la taille/l'échelle (volontairement laissées telles quelles). */
@@ -438,8 +438,20 @@ public class HudElement {
 
     public void resetPosition() {
         this.anchor = defaultAnchor;
-        this.offsetX = defaultOffsetX;
-        this.offsetY = defaultOffsetY;
+        this.marginX = defaultMarginX;
+        this.marginY = defaultMarginY;
+        this.legacyX = false;
+        this.legacyY = false;
+    }
+
+    /** {@code true} tant qu'une position d'ancien format attend sa conversion — voir {@link #setLegacyFractionOffsets}. */
+    public boolean hasPendingLegacyPosition() {
+        return legacyX || legacyY;
+    }
+
+    /** Fractions d'ancien format encore non converties — pour les réécrire telles quelles si la sauvegarde passe avant tout rendu. */
+    public float[] legacyFractionOffsets() {
+        return new float[]{ legacyOffsetX, legacyOffsetY };
     }
 
     /**
