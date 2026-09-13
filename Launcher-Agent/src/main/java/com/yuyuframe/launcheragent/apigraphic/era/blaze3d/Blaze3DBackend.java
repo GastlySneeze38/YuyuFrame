@@ -37,6 +37,36 @@ public final class Blaze3DBackend implements UiBackend {
     /** Public sans argument : instancié par réflexion depuis {@code UiBackendRegistry}. */
     public Blaze3DBackend() {}
 
+    private final Blaze3DVanillaItemRenderer vanillaItems = new Blaze3DVanillaItemRenderer();
+
+    @Override
+    public boolean vanillaItemIcon(Object itemStack, float x, float y, float size,
+                                   boolean vanillaExtras, int vpWidth, int vpHeight) {
+        if (itemStack == null) return true;
+        vanillaItems.enqueueItemIcon(itemStack, x, y, size, vanillaExtras, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean vanillaGuiBlit(String texturePath, float x, float y, float w, float h,
+                                  float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
+        vanillaItems.enqueueGuiBlit(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
+        return true;
+    }
+
+    /** Hôtes de CETTE ère : les trois façons d'atteindre l'état de GUI vivant. */
+    @Override
+    public void flushVanillaFrame(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost host,
+                                  Object hostObject) {
+        if (hostObject == null) return;
+        switch (host) {
+            case GAME_RENDERER: vanillaItems.flushFromGameRenderer(hostObject); break;
+            case GUI_RENDERER: vanillaItems.flushFromGuiRenderer(hostObject); break;
+            case GUI_STATE: vanillaItems.flushFromGuiState(hostObject); break;
+            default: break;
+        }
+    }
+
     @Override
     public String id() {
         return "blaze3d";

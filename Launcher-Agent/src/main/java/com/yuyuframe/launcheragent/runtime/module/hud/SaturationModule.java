@@ -2,7 +2,6 @@ package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
@@ -480,7 +479,7 @@ public final class SaturationModule extends LauncherModule {
                 : food[PlayerData.FOOD_SATURATION];
             float exhaustion = food[PlayerData.FOOD_EXHAUSTION];
 
-            float scale = UiVanillaItemRenderer.guiScale(vpWidth);
+            float scale = UiRenderer.guiScale(vpWidth);
             if (scale <= 0f) { reportOnce("échelle GUI invalide: " + scale); return; }
 
             // Dimensions GUI EXACTES de vanilla plutôt que reconstruites par

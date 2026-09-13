@@ -177,6 +177,54 @@ public interface UiBackend {
                        UiColor colorA, UiColor colorB, boolean gradient,
                        int vpWidth, int vpHeight) { return false; }
 
+    // ── Pont vers les renderers DU JEU (icônes d'objet, textures de GUI) ──
+    //
+    // Ces trois entrées remplacent l'ancien UiVanillaItemRenderer, qui empilait
+    // les trois ères dans un seul fichier et les distinguait par des sondages à
+    // l'exécution (owner.isModern(), puis « la classe GuiRenderer existe-t-elle
+    // ? »). Ces sondages ont disparu : l'ère EST le dispatch, et chacune sait
+    // seule comment participer au rendu vanilla de sa génération.
+
+    /**
+     * Icône RÉELLE d'un {@code ItemStack} (modèle vanilla, pas un rectangle de
+     * substitution). {@code itemStack} est une poignée OPAQUE, jamais inspectée
+     * par le moteur.
+     *
+     * <p>Coordonnées en convention du projet (coin BAS-gauche, origine
+     * bas-gauche écran, pixels framebuffer) ; c'est l'ère qui convertit.
+     *
+     * @param vanillaExtras dessiner aussi le fond de case et la barre de
+     *        durabilité vanilla
+     */
+    default boolean vanillaItemIcon(Object itemStack, float x, float y, float size,
+                                    boolean vanillaExtras, int vpWidth, int vpHeight) { return false; }
+
+    /**
+     * Blit BRUT d'une texture GUI vanilla arbitraire — fond de fenêtre de
+     * conteneur, par exemple. « Brut » = région source explicite, par
+     * opposition à l'atlas de sprites.
+     *
+     * @param texturePath chemin RELATIF avec extension, ex.
+     *        {@code "textures/gui/container/shulker_box.png"}
+     * @param u,v,texW,texH région source ET dimensions RÉELLES du fichier PNG
+     */
+    default boolean vanillaGuiBlit(String texturePath, float x, float y, float w, float h,
+                                   float u, float v, float texW, float texH,
+                                   int vpWidth, int vpHeight) { return false; }
+
+    /**
+     * Cycle de vie d'une frame : un point d'accroche du jeu passe le contexte
+     * de rendu VIVANT qu'il tient, et l'ère y soumet ce qu'elle a en attente.
+     *
+     * <p>C'est la décision que le découpage de {@code UiVanillaItemRenderer}
+     * attendait. Le moteur ne peut pas aller chercher ce contexte : il n'existe
+     * qu'à l'intérieur d'une méthode du jeu, le temps de quelques
+     * microsecondes. Le hook le DONNE, {@link VanillaFlushHost} dit ce que
+     * c'est, et l'ère ignore les hôtes qui ne sont pas les siens.
+     */
+    default void flushVanillaFrame(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost host,
+                                   Object hostObject) {}
+
     /** Ouvre un clip à coins arrondis (stencil). */
     default boolean beginRoundedClip(float x1, float y1, float x2, float y2, float radius,
                                      int vpWidth, int vpHeight) { return false; }

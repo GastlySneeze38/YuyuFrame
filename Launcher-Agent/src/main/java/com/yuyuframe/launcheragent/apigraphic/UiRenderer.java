@@ -4,12 +4,12 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
-import com.yuyuframe.launcheragent.apigraphic.render.UiPrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
 import com.yuyuframe.launcheragent.apigraphic.draw.geometry.GradientStops;
 import com.yuyuframe.launcheragent.apigraphic.draw.shape.UiShapes;
 import com.yuyuframe.launcheragent.apigraphic.text.UiTextLayout;
-import com.yuyuframe.launcheragent.apigraphic.render.UiVanillaItemRenderer;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiScale;
 import com.yuyuframe.launcheragent.apigraphic.backend.RenderEra;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackendRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
@@ -40,8 +40,8 @@ import java.nio.FloatBuffer;
  *    explicite en uniform + shaders GLSL 150 (in/out, pas de gl_Vertex/
  *    gl_Color/ftransform), voir ensure*ShaderInitModern / draw*Modern.
  *
- * Découpé en 4 classes (voir {@link GlBridge}, {@link UiPrimitiveRenderer},
- * {@link UiVanillaItemRenderer}) — cette classe reste
+ * Découpé (voir {@link GlBridge} et les backends d'ère {@code era/*}) —
+ * cette classe reste
  * l'orchestrateur : singleton, pipeline moderne partagé (VAO/VBO, projection,
  * compilation de programme), scissor, et façade déléguant à chaque
  * sous-renderer pour garder l'API publique inchangée (~40 appelants externes).
@@ -55,8 +55,6 @@ public final class UiRenderer {
     public boolean isModern() { return modern; }
 
     private final GlBridge glBridge;
-    private final UiPrimitiveRenderer primitives;
-    private final UiVanillaItemRenderer vanillaItems;
 
     // ══════════════════════════════════════════════════════════════════════
     // ── Pipeline MODERNE (1.21.11+) — voir javadoc de la classe pour le
@@ -102,8 +100,6 @@ public final class UiRenderer {
         // de ce drapeau, qui ne pilote que le STYLE de dessin.
         this.modern = RenderEra.active() != RenderEra.GL2;
         this.glBridge = new GlBridge();
-        this.primitives = new UiPrimitiveRenderer(this, glBridge);
-        this.vanillaItems = new UiVanillaItemRenderer(this, glBridge);
     }
 
     /**
@@ -363,17 +359,15 @@ public final class UiRenderer {
      * Clip aux coins arrondis via stencil buffer (roadmap Phase 5.1) —
      * remplace {@link #beginScissor} quand la zone de clip doit suivre un
      * rect ARRONDI (scissor seul coupe en angle droit même sur un coin
-     * visuellement rond). Legacy/modern GL uniquement (no-op sur Blaze3D era
-     * E, voir {@link UiPrimitiveRenderer#beginRoundedClip}).
+     * visuellement rond). Ères GL uniquement ({@code GlRoundedClip}) ; sans
+     * effet sur Blaze3D et sur l'ère nulle.
      */
     public void beginRoundedClip(float x1, float y1, float x2, float y2, float radius, int vpWidth, int vpHeight) {
-        if (backend().beginRoundedClip(x1, y1, x2, y2, radius, vpWidth, vpHeight)) return;
-        primitives.beginRoundedClip(x1, y1, x2, y2, radius, vpWidth, vpHeight);
+        backend().beginRoundedClip(x1, y1, x2, y2, radius, vpWidth, vpHeight);
     }
 
     public void endRoundedClip() {
-        if (backend().endRoundedClip()) return;
-        primitives.endRoundedClip();
+        backend().endRoundedClip();
     }
 
     /**
@@ -397,12 +391,11 @@ public final class UiRenderer {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // ── Façade — délègue à chaque sous-renderer, API publique 100% inchangée
-    // (voir GlBridge/UiPrimitiveRenderer/UiVanillaItemRenderer, et era/*/ pour
-    // le texte, déjà découpé).
+    // ── Façade — délègue au backend de l'ère active (era/*), API publique
+    // inchangée. Le paquet render/ a été dissous le 2026-09-13.
     // ══════════════════════════════════════════════════════════════════════
 
-    // ── UiPrimitiveRenderer (rect/vignette/fx/gradient2D/icône) ──────────────
+    // ── Primitives (rect/vignette/fx/gradient2D/icône) ─────────────────────
 
     /**
      * {@code true} si le dégradé GPU est utilisable — sinon l'appelant peut se
@@ -471,13 +464,12 @@ public final class UiRenderer {
      * endroit. Comportement identique appel pour appel ; ce qui change, c'est
      * que la façade ne nomme plus une ère, elle demande à celle qui tourne.
      *
-     * <p>Les autres primitives suivront au découpage des renderers de
-     * {@code render/} ; en attendant, elles gardent leur chaîne d'essais.
+     * <p>Depuis la dissolution de {@code render/} (2026-09-13), toutes les
+     * primitives passent par le contrat ; il n'y a plus de sous-renderer de repli.
      */
     public void drawRoundedRect(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                  int vpWidth, int vpHeight) {
-        if (UiBackendRegistry.get().roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
-        primitives.drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        UiBackendRegistry.get().roundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
     /**
@@ -491,7 +483,7 @@ public final class UiRenderer {
      * Blaze3D ({@code Blaze3DCore.RECT_FRAGMENT_SRC}) mappe les deux premiers
      * à {@code p.y < 0}, c'est-à-dire SOUS le centre dans ce repère Y-MONTANT
      * (celui de {@code gl_FragCoord}, voir la javadoc de classe) ; et le repli
-     * legacy ({@code UiPrimitiveRenderer}) découpe de la même façon en partant
+     * par composition, juste en dessous, découpe de la même façon en partant
      * de {@code y1}, le bord BAS. Le piège venait de noms calqués sur CSS,
      * dont l'axe Y descend.
      */
@@ -501,7 +493,21 @@ public final class UiRenderer {
         if (backend().roundedRect(x1, y1, x2, y2,
                 radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
                 color, vpWidth, vpHeight)) return;
-        primitives.drawRoundedRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight, color, vpWidth, vpHeight);
+        // Ères sans rayon par coin dans leur shader (gl2/gl3) : composition
+        // « rect au rayon max + bandes plates par-dessus les coins moins
+        // arrondis ». Écrite une fois ici, au-dessus du contrat — elle vivait
+        // dans render/UiPrimitiveRenderer jusqu'au 2026-09-13.
+        float maxRadius = Math.max(Math.max(radiusBottomLeft, radiusBottomRight), Math.max(radiusTopLeft, radiusTopRight));
+        drawRoundedRect(x1, y1, x2, y2, maxRadius, color, vpWidth, vpHeight);
+        float splitY = y1 + maxRadius;
+        if (splitY < y2) {
+            if (radiusBottomLeft < maxRadius || radiusBottomRight < maxRadius) {
+                drawRoundedRect(x1, y1, x2, splitY, 0f, color, vpWidth, vpHeight);
+            }
+            if (radiusTopLeft < maxRadius || radiusTopRight < maxRadius) {
+                drawRoundedRect(x1, splitY, x2, y2, 0f, color, vpWidth, vpHeight);
+            }
+        }
     }
 
     /** @deprecated identique à {@link #drawRoundedRect} depuis que celui-ci route par Blaze3D sur era E — gardé pour ne pas retoucher HudPanelRenderer/KeystrokesModule. */
@@ -509,7 +515,7 @@ public final class UiRenderer {
     public void drawRoundedRectHud(float x1, float y1, float x2, float y2, float radius, UiColor color,
                                     int vpWidth, int vpHeight) {
         if (backend().roundedRectHud(x1, y1, x2, y2, radius, color, vpWidth, vpHeight)) return;
-        primitives.drawRoundedRectHud(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
+        drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
     public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
@@ -694,8 +700,8 @@ public final class UiRenderer {
     /**
      * Dégradé multi-stop (2 à 8 couleurs) linéaire/radial/conique — voir
      * {@link UiGradientType} pour {@code startX/Y}/{@code endX/Y} et
-     * {@link UiPrimitiveRenderer#drawMultiStopGradientRect} pour le détail
-     * complet (roadmap Phase 5.1).
+     * {@code draw/geometry/GradientStops} et les implémentations d'ère pour
+     * le détail complet (roadmap Phase 5.1).
      */
     public void drawMultiStopGradientRect(float x1, float y1, float x2, float y2, float radius,
                                            UiGradientType type, float startX, float startY, float endX, float endY,
@@ -743,45 +749,60 @@ public final class UiRenderer {
         UiShapes.spinner(this, centerX, centerY, radius, dotRadius, rotationDeg, color, vpWidth, vpHeight);
     }
 
-    // ── UiVanillaItemRenderer (icône ItemStack vanilla / fond de conteneur) ──
+    // ── Pont vers les renderers DU JEU (icône ItemStack, fond de conteneur) ──
+    //
+    // Plus aucun sous-renderer ici : l'ère active fait tout (voir
+    // UiBackend.vanillaItemIcon / vanillaGuiBlit / flushVanillaFrame). Les
+    // noms publics ci-dessous sont conservés tels quels — les Mixins et les
+    // modules les appellent, et ils disent chacun QUEL hôte ils tiennent.
 
-    /** Voir {@link UiVanillaItemRenderer#guiScale}. */
-    public static float guiScale(int vpWidth) { return UiVanillaItemRenderer.guiScale(vpWidth); }
+    /** Voir {@link VanillaGuiScale#of}. */
+    public static float guiScale(int vpWidth) { return VanillaGuiScale.of(vpWidth); }
 
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight) {
-        vanillaItems.drawVanillaItemIcon(itemStack, x, y, size, vpWidth, vpHeight);
+        drawVanillaItemIcon(itemStack, x, y, size, vpWidth, vpHeight, false);
     }
 
+    /**
+     * @param withDurabilityBar en plus de l'icône, la VRAIE barre de durabilité
+     *     et le fond de case vanilla — pour le style « Vanilla »
+     *     d'{@code ArmorDurabilityModule}. Ignoré sur l'ère gl2 ; barre absente
+     *     sur 1.20.4 (pas de {@code drawItemBar} dans ses mappings).
+     */
     public void drawVanillaItemIcon(Object itemStack, float x, float y, float size, int vpWidth, int vpHeight, boolean withDurabilityBar) {
-        vanillaItems.drawVanillaItemIcon(itemStack, x, y, size, vpWidth, vpHeight, withDurabilityBar);
+        if (itemStack == null) return;
+        backend().vanillaItemIcon(itemStack, x, y, size, withDurabilityBar, vpWidth, vpHeight);
     }
 
+    /** Voir {@link UiBackend#vanillaGuiBlit}. Aucun effet sur l'ère gl2. */
     public void drawVanillaContainerTexture(String texturePath, float x, float y, float w, float h,
                                              float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
-        vanillaItems.drawVanillaContainerTexture(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
+        backend().vanillaGuiBlit(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
     }
 
+    /** Voir {@link VanillaFlushHost#DRAW_CONTEXT_CONTAINER} — aucun point d'accroche ne l'appelle aujourd'hui. */
     public void flushPendingImmediateGuiBlits(Object realDrawContext) {
-        vanillaItems.flushPendingImmediateGuiBlits(realDrawContext);
+        backend().flushVanillaFrame(VanillaFlushHost.DRAW_CONTEXT_CONTAINER, realDrawContext);
     }
 
+    /** Voir {@link VanillaFlushHost#DRAW_CONTEXT}. */
     public void flushPendingImmediateItemIcons(Object realDrawContext) {
-        vanillaItems.flushPendingImmediateItemIcons(realDrawContext);
+        backend().flushVanillaFrame(VanillaFlushHost.DRAW_CONTEXT, realDrawContext);
     }
 
-    /** Voir {@link UiVanillaItemRenderer#flushPendingModernItemIcons}. */
+    /** Voir {@link VanillaFlushHost#GAME_RENDERER}. */
     public static void flushPendingModernItemIcons(Object gameRenderer) {
-        UiVanillaItemRenderer.flushPendingModernItemIcons(gameRenderer);
+        UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.GAME_RENDERER, gameRenderer);
     }
 
-    /** Voir {@link UiVanillaItemRenderer#flushPendingModernItemIconsFromState}. */
+    /** Voir {@link VanillaFlushHost#GUI_STATE}. */
     public static void flushPendingModernItemIconsFromState(Object guiState) {
-        UiVanillaItemRenderer.flushPendingModernItemIconsFromState(guiState);
+        UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.GUI_STATE, guiState);
     }
 
-    /** Voir {@link UiVanillaItemRenderer#flushPendingModernItemIconsFromGuiRenderer}. */
+    /** Voir {@link VanillaFlushHost#GUI_RENDERER}. */
     public static void flushPendingModernItemIconsFromGuiRenderer(Object guiRenderer) {
-        UiVanillaItemRenderer.flushPendingModernItemIconsFromGuiRenderer(guiRenderer);
+        UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.GUI_RENDERER, guiRenderer);
     }
 
     // ── Texte (police bitmap UiFont) ──────────────────────────────────────────

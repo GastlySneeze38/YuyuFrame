@@ -2,8 +2,11 @@ package com.yuyuframe.launcheragent.apigraphic.era.gl3;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.FontAtlasTextures;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlRoundedClip;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlSrgbDiagnostic;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 
@@ -24,6 +27,9 @@ public final class Gl3Backend implements UiBackend {
 
     private Gl3TextRenderer textRenderer;
     private Gl3PrimitiveRenderer primitives;
+    private GlRoundedClip roundedClip;
+    /** Pas de GL requis (file + réflexion) : créé tout de suite, pas dans {@link #attach}. */
+    private final Gl3VanillaItemRenderer vanillaItems = new Gl3VanillaItemRenderer();
 
     @Override
     public String id() {
@@ -34,6 +40,34 @@ public final class Gl3Backend implements UiBackend {
     public void attach(UiRenderer owner, GlBridge gl) {
         this.textRenderer = new Gl3TextRenderer(owner, gl, new FontAtlasTextures(gl));
         this.primitives = new Gl3PrimitiveRenderer(owner, gl);
+        this.roundedClip = new GlRoundedClip(gl);
+        GlSrgbDiagnostic.logOnce(gl, "gl3");
+    }
+
+    @Override
+    public boolean vanillaItemIcon(Object itemStack, float x, float y, float size,
+                                   boolean vanillaExtras, int vpWidth, int vpHeight) {
+        if (itemStack == null) return true;
+        vanillaItems.enqueueItemIcon(itemStack, x, y, size, vanillaExtras, vpWidth, vpHeight);
+        return true;
+    }
+
+    @Override
+    public boolean vanillaGuiBlit(String texturePath, float x, float y, float w, float h,
+                                  float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
+        vanillaItems.enqueueGuiBlit(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
+        return true;
+    }
+
+    /** Hôtes de CETTE ère : les deux {@code DrawContext} vivants (HUD, écran de conteneur). */
+    @Override
+    public void flushVanillaFrame(VanillaFlushHost host, Object hostObject) {
+        if (hostObject == null) return;
+        switch (host) {
+            case DRAW_CONTEXT: vanillaItems.flushItemIcons(hostObject); break;
+            case DRAW_CONTEXT_CONTAINER: vanillaItems.flushGuiBlits(hostObject); break;
+            default: break;
+        }
     }
 
     @Override
@@ -119,6 +153,23 @@ public final class Gl3Backend implements UiBackend {
                         float alpha, int vpWidth, int vpHeight) {
         if (primitives == null) return false;
         primitives.icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
+        return true;
+    }
+
+    /** Stencil commun aux ères GL ({@link GlRoundedClip}) ; le masque est dessiné par CETTE ère. */
+    @Override
+    public boolean beginRoundedClip(float x1, float y1, float x2, float y2, float radius,
+                                    int vpWidth, int vpHeight) {
+        if (roundedClip == null) return false;
+        final UiColor opaque = new UiColor(1f, 1f, 1f, 1f);
+        roundedClip.begin(() -> roundedRect(x1, y1, x2, y2, radius, opaque, vpWidth, vpHeight));
+        return true;
+    }
+
+    @Override
+    public boolean endRoundedClip() {
+        if (roundedClip == null) return false;
+        roundedClip.end();
         return true;
     }
 }

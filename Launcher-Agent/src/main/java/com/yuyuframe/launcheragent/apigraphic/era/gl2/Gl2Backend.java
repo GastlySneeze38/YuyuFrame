@@ -4,6 +4,8 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackend;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.FontAtlasTextures;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlRoundedClip;
+import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlSrgbDiagnostic;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 
@@ -24,6 +26,8 @@ public final class Gl2Backend implements UiBackend {
 
     private Gl2TextRenderer textRenderer;
     private Gl2PrimitiveRenderer primitives;
+    private GlRoundedClip roundedClip;
+    private Gl2VanillaItemRenderer vanillaItems;
 
     @Override
     public String id() {
@@ -34,6 +38,24 @@ public final class Gl2Backend implements UiBackend {
     public void attach(UiRenderer owner, GlBridge gl) {
         this.textRenderer = new Gl2TextRenderer(gl, new FontAtlasTextures(gl));
         this.primitives = new Gl2PrimitiveRenderer(gl);
+        this.roundedClip = new GlRoundedClip(gl);
+        GlSrgbDiagnostic.logOnce(gl, "gl2");
+        this.vanillaItems = new Gl2VanillaItemRenderer(gl);
+    }
+
+    /**
+     * Dessin SYNCHRONE : le pipeline fixe n'a pas de passe de GUI différée à
+     * rejoindre. {@code vanillaExtras} est ignoré — ni case ni barre de
+     * durabilité sur cette ère, comme avant le découpage. Pas de
+     * {@code vanillaGuiBlit} ni de {@code flushVanillaFrame} : aucun appelant
+     * ne les a jamais ciblés ici, le défaut du contrat décline.
+     */
+    @Override
+    public boolean vanillaItemIcon(Object itemStack, float x, float y, float size,
+                                   boolean vanillaExtras, int vpWidth, int vpHeight) {
+        if (vanillaItems == null) return false;
+        vanillaItems.drawItemIcon(itemStack, x, y, size, vpWidth, vpHeight);
+        return true;
     }
 
     @Override
@@ -119,6 +141,23 @@ public final class Gl2Backend implements UiBackend {
                         float alpha, int vpWidth, int vpHeight) {
         if (primitives == null) return false;
         primitives.icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
+        return true;
+    }
+
+    /** Stencil commun aux ères GL ({@link GlRoundedClip}) ; le masque est dessiné par CETTE ère. */
+    @Override
+    public boolean beginRoundedClip(float x1, float y1, float x2, float y2, float radius,
+                                    int vpWidth, int vpHeight) {
+        if (roundedClip == null) return false;
+        final UiColor opaque = new UiColor(1f, 1f, 1f, 1f);
+        roundedClip.begin(() -> roundedRect(x1, y1, x2, y2, radius, opaque, vpWidth, vpHeight));
+        return true;
+    }
+
+    @Override
+    public boolean endRoundedClip() {
+        if (roundedClip == null) return false;
+        roundedClip.end();
         return true;
     }
 }
