@@ -30,7 +30,46 @@ import {
   type ModrinthInfo, type ModUpdate, type ModrinthHit, type ModrinthSearchFilters, type Tab,
 } from '@/components/mods/modUtils'
 
+import { useSearchRunner } from '@/hooks/useSearchRunner'
+
 export { updateModsForNewVersion } from '@/components/mods/modUtils'
+
+// ── Recherche — voir hooks/useSearchRunner.ts ─────────────────────────────────
+
+const SEARCH_DEBOUNCE_MS = 450
+
+interface SearchParams {
+  q: string
+  filters: ModrinthSearchFilters
+  mcVersion: string
+  loader: string
+}
+
+/// Deux recherches de même clé renvoient les mêmes résultats : texte sans espaces
+/// autour ni casse, catégories triées.
+function searchKey({ q, filters, mcVersion, loader }: SearchParams, withFilters: boolean): string {
+  const base = [q.trim().toLowerCase(), mcVersion, loader]
+  if (!withFilters) return JSON.stringify(base)
+  return JSON.stringify([
+    ...base,
+    [...(filters.categories ?? [])].sort(),
+    filters.environment ?? '',
+    filters.license?.trim().toLowerCase() ?? '',
+    !!filters.openSourceOnly,
+    filters.sort ?? 'relevance',
+  ])
+}
+
+/// Le champ licence est le seul filtre tapé au clavier : lui seul attend la fin de
+/// la frappe, les clics (catégories, environnement, tri, réinitialisation) partent
+/// tout de suite.
+function onlyLicenseChanged(prev: ModrinthSearchFilters, next: ModrinthSearchFilters): boolean {
+  return prev.license !== next.license
+    && prev.categories === next.categories
+    && prev.environment === next.environment
+    && prev.openSourceOnly === next.openSourceOnly
+    && prev.sort === next.sort
+}
 
 // ── ModsContent — embeddable in any page ──────────────────────────────────────
 
@@ -97,6 +136,40 @@ export function ModsContent({ instance }: { instance: Instance }) {
     for (const [name, m] of Object.entries(cfMatchByModName)) map[name] = m.fileName
     return map
   }, [cfMatchByModName])
+
+  const modrinthSearch = useSearchRunner<SearchParams, ModrinthHit[]>({
+    name: 'modrinth-mods',
+    keyOf: (p) => searchKey(p, true),
+    fetch: (p) => fetchModrinthSearch(p.q.trim(), p.mcVersion, p.loader, p.filters),
+    onResult: setResults,
+    onError: (e) => {
+      console.error('[Mods] recherche Modrinth :', e)
+      showError(t('mods.cannotReachModrinth'))
+    },
+    onBusyChange: setSearching,
+  })
+
+  // CurseForge ne reçoit pas les filtres Modrinth : sa clé les ignore, un
+  // changement de filtre ne le relance donc pas.
+  const curseforgeSearch = useSearchRunner<SearchParams, CurseforgeHit[]>({
+    name: 'curseforge-mods',
+    keyOf: (p) => searchKey(p, false),
+    fetch: (p) => fetchCurseforgeSearch(p.q.trim(), p.mcVersion, p.loader),
+    onResult: setCfResults,
+    onError: (e) => showApiError(e, t('common.serverUnreachable')),
+    onBusyChange: setCfSearching,
+  })
+
+  /// Une seule barre de recherche interroge les deux sources — voir mergedResults
+  /// pour la fusion. Un seul événement analytics, et seulement si une requête part.
+  const commitModSearch = (q: string, filters: ModrinthSearchFilters) => {
+    const params: SearchParams = { q, filters, mcVersion, loader }
+    const modrinthLaunched = modrinthSearch.request(params)
+    const curseforgeLaunched = curseforgeSearch.request(params)
+    if ((modrinthLaunched || curseforgeLaunched) && q.trim()) {
+      api.analytics.track('mod_search_performed', { query: q.trim() })
+    }
+  }
 
   /// Classe un hit par qualité de correspondance avec le texte tapé (0 =
   /// meilleur). Calculé côté client car ni Modrinth ni CurseForge n'exposent
@@ -223,39 +296,46 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const packFileSet = new Set((modpackMeta?.mod_files ?? []).map((f) => f.toLowerCase()))
   const isPackMod = (name: string) => packFileSet.has(baseFilename(name).toLowerCase())
 
-  const runPackSearch = async (q: string, filters: ModrinthSearchFilters = packFilters) => {
-    setPackSearching(true)
-    try {
-      setPackResults(await searchModrinthModpacks(q, mcVersion, loader, filters))
-    } catch {
+  const modrinthPackSearch = useSearchRunner<SearchParams, ModpackHit[]>({
+    name: 'modrinth-modpacks',
+    keyOf: (p) => searchKey(p, true),
+    fetch: (p) => searchModrinthModpacks(p.q.trim(), p.mcVersion, p.loader, p.filters),
+    onResult: setPackResults,
+    onError: (e) => {
+      console.error('[Mods] recherche de modpacks Modrinth :', e)
       showError(t('mods.cannotReachModrinth'))
-    } finally {
-      setPackSearching(false)
-    }
-  }
+    },
+    onBusyChange: setPackSearching,
+  })
 
-  const runCfPackSearch = async (q: string) => {
-    setCfPackSearching(true)
-    try {
-      setCfPackResults(await searchCurseforgeModpacks(q, mcVersion, loader))
-    } catch (e) {
-      showApiError(e, t('common.serverUnreachable'))
-    } finally {
-      setCfPackSearching(false)
-    }
+  const curseforgePackSearch = useSearchRunner<SearchParams, CurseforgeModpackHit[]>({
+    name: 'curseforge-modpacks',
+    keyOf: (p) => searchKey(p, false),
+    fetch: (p) => searchCurseforgeModpacks(p.q.trim(), p.mcVersion, p.loader),
+    onResult: setCfPackResults,
+    onError: (e) => showApiError(e, t('common.serverUnreachable')),
+    onBusyChange: setCfPackSearching,
+  })
+
+  const commitPackSearch = (q: string, filters: ModrinthSearchFilters) => {
+    const params: SearchParams = { q, filters, mcVersion, loader }
+    modrinthPackSearch.request(params)
+    curseforgePackSearch.request(params)
   }
 
   const handlePackQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
     setPackQuery(q)
     if (packDebounceRef.current) clearTimeout(packDebounceRef.current)
-    packDebounceRef.current = setTimeout(() => { runPackSearch(q); runCfPackSearch(q) }, 450)
+    packDebounceRef.current = setTimeout(() => commitPackSearch(q, packFilters), SEARCH_DEBOUNCE_MS)
   }
 
   const handlePackFiltersChange = (filters: ModrinthSearchFilters) => {
+    const debounce = onlyLicenseChanged(packFilters, filters)
     setPackFilters(filters)
     if (packDebounceRef.current) clearTimeout(packDebounceRef.current)
-    runPackSearch(packQuery, filters)
+    if (debounce) packDebounceRef.current = setTimeout(() => commitPackSearch(packQuery, filters), SEARCH_DEBOUNCE_MS)
+    else commitPackSearch(packQuery, filters)
   }
 
   const handleInstallModpack = async (hit: ModpackHit) => {
@@ -524,19 +604,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
     loadMods()
   }, [instanceId])
 
+  // Ouvrir un onglet affiche la recherche en cours — un aller-retour d'onglet
+  // redemande la même clé, que les runners ignorent (y compris sur résultat vide).
   useEffect(() => {
-    if (tab === 'browse' && results.length === 0 && !searching) {
-      runSearch(query)
-    }
-    if (tab === 'browse' && cfResults.length === 0 && !cfSearching) {
-      runCfSearch(query)
-    }
-    if (tab === 'modpack' && packResults.length === 0 && !packSearching) {
-      runPackSearch(packQuery)
-    }
-    if (tab === 'modpack' && cfPackResults.length === 0 && !cfPackSearching) {
-      runCfPackSearch(packQuery)
-    }
+    if (tab === 'browse') commitModSearch(query, searchFilters)
+    if (tab === 'modpack') commitPackSearch(packQuery, packFilters)
   }, [tab])
 
   const handleToggle = useCallback(async (mod: Mod) => {
@@ -692,31 +764,19 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
-  const runSearch = async (q: string, filters: ModrinthSearchFilters = searchFilters) => {
-    setSearching(true)
-    if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim() })
-    try {
-      setResults(await fetchModrinthSearch(q, mcVersion, loader, filters))
-    } catch {
-      showError(t('mods.cannotReachModrinth'))
-    } finally {
-      setSearching(false)
-    }
-  }
-
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value
     setQuery(q)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    // Une seule barre de recherche déclenche les deux sources en parallèle — voir
-    // mergedResults pour la fusion + dédoublonnage des résultats obtenus.
-    debounceRef.current = setTimeout(() => { runSearch(q); runCfSearch(q) }, 450)
+    debounceRef.current = setTimeout(() => commitModSearch(q, searchFilters), SEARCH_DEBOUNCE_MS)
   }
 
   const handleFiltersChange = (filters: ModrinthSearchFilters) => {
+    const debounce = onlyLicenseChanged(searchFilters, filters)
     setSearchFilters(filters)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    runSearch(query, filters)
+    if (debounce) debounceRef.current = setTimeout(() => commitModSearch(query, filters), SEARCH_DEBOUNCE_MS)
+    else commitModSearch(query, filters)
   }
 
   const handleInstall = async (hit: ModrinthHit) => {
@@ -751,17 +811,6 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   // ── CurseForge — résultats fusionnés avec Modrinth dans le même onglet (mergedResults) ──
 
-  const runCfSearch = async (q: string) => {
-    setCfSearching(true)
-    if (q.trim()) api.analytics.track('mod_search_performed', { query: q.trim(), source: 'curseforge' })
-    try {
-      setCfResults(await fetchCurseforgeSearch(q, mcVersion, loader))
-    } catch (e) {
-      showApiError(e, t('common.serverUnreachable'))
-    } finally {
-      setCfSearching(false)
-    }
-  }
 
   const handleCfInstall = async (hit: CurseforgeHit) => {
     setCfInstalling(hit.id)
