@@ -608,23 +608,13 @@ pub async fn download_and_launch(
     let ready_sent_file = ready_sent.clone();
     let ready_sent_event = ready_sent.clone();
 
-    let mut java_cmd = tokio::process::Command::new(&java);
+    let mut java_cmd = crate::process::hidden_command(&java);
     java_cmd
         .args(&args)
         .current_dir(&mc_game_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
-    // java.exe est une appli console Windows : sans console déjà attachée au
-    // process parent (cas du build release, qui tourne en windows_subsystem
-    // "windows"), Windows lui en alloue une nouvelle — d'où le terminal qui
-    // s'ouvrait à côté du jeu uniquement en release (en dev, la console du
-    // launcher déjà attachée était simplement héritée, donc invisible en plus).
-    #[cfg(target_os = "windows")]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        java_cmd.creation_flags(CREATE_NO_WINDOW);
-    }
     if cancelled(&cancel) {
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
     }

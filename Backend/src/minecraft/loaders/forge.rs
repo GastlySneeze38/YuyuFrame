@@ -270,7 +270,7 @@ pub async fn install(
     let result = match profile {
         InstallerProfile::Modern { id } => {
             tracing::info!("Lancement installeur Forge...");
-            let output = tokio::process::Command::new(java)
+            let output = crate::process::hidden_command(java)
                 .args([
                     "-jar",
                     &installer_path.to_string_lossy(),

@@ -115,7 +115,7 @@ pub async fn install(neoforge_ver: &str, mc_dir: &Path, java: &str, client: &req
     }
 
     tracing::info!("Lancement installeur NeoForge...");
-    let output = tokio::process::Command::new(java)
+    let output = crate::process::hidden_command(java)
         .args([
             "-jar",
             &installer_path.to_string_lossy(),

@@ -3,6 +3,7 @@ mod db;
 mod integrations;
 mod minecraft;
 mod paths;
+mod process;
 mod state;
 
 use std::sync::Arc;

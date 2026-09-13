@@ -5,6 +5,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use std::sync::atomic::AtomicU64;
+use crate::process::hidden_command;
 use super::classpath::download_verified;
 use super::jvm_args::JvmVendor;
 use super::progress::set_progress_monotonic;
@@ -41,7 +42,7 @@ const JAVA_VERSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 pub(super) async fn is_openj9(java: &str) -> bool {
     let Ok(Ok(out)) = tokio::time::timeout(
         JAVA_VERSION_TIMEOUT,
-        tokio::process::Command::new(java).arg("-version").output(),
+        hidden_command(java).arg("-version").output(),
     )
     .await
     else {
@@ -57,7 +58,7 @@ pub(super) async fn is_openj9(java: &str) -> bool {
 pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
     let out = tokio::time::timeout(
         JAVA_VERSION_TIMEOUT,
-        tokio::process::Command::new(java).arg("-version").output(),
+        hidden_command(java).arg("-version").output(),
     )
     .await
     .ok()?
