@@ -22,7 +22,7 @@ const OVERLAY_MARGIN = 24
 export default function Login() {
   const t = useT()
   const navigate = useNavigate()
-  const { uuid, username, accounts, setAccounts, setUser, removeAccount, addAccount } = useStore()
+  const { uuid, username, accounts, setAccounts, setUser, clearUser, removeAccount, addAccount } = useStore()
   const [showOfflineModal, setShowOfflineModal] = useState(false)
   const [skins, setSkins] = useState<Record<string, string>>({})
   const [step, setStep] = useState<Step>('idle')
@@ -232,10 +232,14 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
     } catch (e) { showError(e) }
   }
 
+  // Le backend désigne le compte qui reprend la main si l'actif est supprimé —
+  // on s'aligne sur lui plutôt que de deviner localement.
   const handleRemove = async (acc: Account) => {
     try {
-      await api.mc.delete(acc.uuid)
+      const active = await api.mc.delete(acc.uuid)
       removeAccount(acc.uuid)
+      if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
+      else clearUser()
     } catch (e) { showError(e) }
   }
 

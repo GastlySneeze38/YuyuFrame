@@ -166,25 +166,9 @@ pub fn run() {
                     }
                 });
 
-            // Restaurer la session MC active depuis la DB, sous le même id
-            // YuyuFrame que `state::AppState::current_yuyu_user_id` (dupliqué
-            // ici car l'`AppState` n'existe pas encore à ce stade du setup) : 0
-            // est le placeholder "pas de compte" déjà utilisé dans le schéma
-            // (cf. table `instances`, colonne yuyu_user_id DEFAULT 0), utilisé
-            // tant qu'aucune session YuyuFrame n'est restaurée.
-            let mc_yuyu_user_id = yuyu_session.as_ref().map(|ys| ys.user_id).unwrap_or(0);
-            let mc_session = (|| {
-                let active_uuid = db::get_active_mc_uuid(&conn, mc_yuyu_user_id).ok().flatten()?;
-                let row = db::get_mc_session(&conn, mc_yuyu_user_id, &active_uuid).ok().flatten()?;
-                tracing::info!("Session Minecraft restaurée pour {}", row.mc_username);
-                Some(state::MinecraftSession {
-                    username: row.mc_username,
-                    uuid: row.mc_uuid,
-                    access_token: row.access_token,
-                    refresh_token: Some(row.ms_refresh_token),
-                    expires_at: row.expires_at,
-                })
-            })();
+            // Comptes Minecraft propres au PC, restaurés avec ou sans session
+            // YuyuFrame (voir db::mc_account).
+            let mc_session = commands::account::startup_session(&conn);
 
             let instance_id_migrations = migrate_legacy_instance_ids(&conn);
 

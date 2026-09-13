@@ -23,14 +23,12 @@ pub struct PollResponse {
     pub error: Option<String>,
 }
 
+/// Aucun compte YuyuFrame requis : les comptes Minecraft appartiennent au PC
+/// (voir db::mc_account).
 #[tauri::command]
 pub async fn auth_start_device(
     state: tauri::State<'_, SharedState>,
 ) -> Result<DeviceAuthResponse, String> {
-    if state.read().await.yuyu_session.is_none() {
-        return Err("Non authentifié sur YuyuFrame".into());
-    }
-
     match auth::start_device_auth().await {
         Ok(resp) => {
             let expires_at = chrono::Utc::now().timestamp() + resp.expires_in;
@@ -52,20 +50,6 @@ pub async fn auth_start_device(
 
 #[tauri::command]
 pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollResponse, String> {
-    let yuyu_user_id = {
-        let s = state.read().await;
-        match &s.yuyu_session {
-            Some(y) => y.user_id,
-            None => {
-                return Ok(PollResponse {
-                    status: "error".into(),
-                    username: None,
-                    error: Some("Non authentifié".into()),
-                })
-            }
-        }
-    };
-
     let device_code = {
         let s = state.read().await;
         s.auth_device_code.clone()
@@ -95,6 +79,7 @@ pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollRespo
             let ms_refresh = session.refresh_token.clone().unwrap_or_default();
             let expires_at = session.expires_at;
 
+            state.write().await.auth_device_code = None;
             {
                 let s = state.read().await;
                 let conn = s.db.lock().await;
@@ -103,17 +88,15 @@ pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollRespo
                 // compterait comme un nouvel ajout à chaque fois (voir
                 // offline_account_created dans offline.rs, qui n'a pas ce
                 // problème car chaque appel y est une vraie création).
-                let is_new_account = db::get_mc_session(&conn, yuyu_user_id, &uuid).ok().flatten().is_none();
-                db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, &session.access_token, &ms_refresh, expires_at, false).ok();
-                db::set_active_mc(&conn, yuyu_user_id, &uuid).ok();
+                let is_new_account = db::get_mc_session(&conn, &uuid).map_err(|e| e.to_string())?.is_none();
+                // Une reconnexion remplace les tokens révoqués de ce compte.
+                db::upsert_mc_session(&conn, &username, &uuid, &session.access_token, &ms_refresh, expires_at, false)
+                    .map_err(|e| format!("Enregistrement du compte impossible : {}", e))?;
                 if is_new_account {
                     crate::integrations::analytics::capture("microsoft_account_added", serde_json::json!({}));
                 }
             }
-
-            let mut w = state.write().await;
-            w.session = Some(session);
-            w.auth_device_code = None;
+            super::activate_account(&state, &uuid).await?;
 
             Ok(PollResponse { status: "success".into(), username: Some(username), error: None })
         }
@@ -122,50 +105,29 @@ pub async fn auth_poll(state: tauri::State<'_, SharedState>) -> Result<PollRespo
     }
 }
 
+/// Appelée au démarrage puis toutes les 10 minutes par le frontend : garde le
+/// token du compte actif à jour même sans lancer de jeu.
 #[tauri::command]
 pub async fn auth_status(state: tauri::State<'_, SharedState>) -> Result<AuthStatusResponse, String> {
-    let s = state.read().await;
-
-    let Some(yuyu_user_id) = s.current_yuyu_user_id() else {
-        return Ok(AuthStatusResponse { authenticated: false, username: None, uuid: None });
-    };
-
-    let session = s.session.clone();
-    drop(s);
-
-    let Some(sess) = session else {
-        return Ok(AuthStatusResponse { authenticated: false, username: None, uuid: None });
-    };
-
-    let now = chrono::Utc::now().timestamp();
-    if sess.expires_at - now < 1800 {
-        if let Some(ms_ref) = &sess.refresh_token {
-            tracing::info!("Auto-rafraîchissement du token MC pour {}", sess.username);
-            if let Ok(result) = auth::refresh_session(ms_ref).await {
-                let s = state.read().await;
-                let conn = s.db.lock().await;
-                let new_sess = super::apply_refreshed_tokens(&conn, yuyu_user_id, result);
-                drop(conn);
-                drop(s);
-
-                let (username, uuid) = (new_sess.username.clone(), new_sess.uuid.clone());
-                state.write().await.session = Some(new_sess);
-                return Ok(AuthStatusResponse { authenticated: true, username: Some(username), uuid: Some(uuid) });
-            }
-        }
+    match super::refresh_active(&state).await? {
+        Some(sess) => Ok(AuthStatusResponse {
+            authenticated: true,
+            username: Some(sess.username),
+            uuid: Some(sess.uuid),
+        }),
+        None => Ok(AuthStatusResponse { authenticated: false, username: None, uuid: None }),
     }
-
-    Ok(AuthStatusResponse {
-        authenticated: true,
-        username: Some(sess.username),
-        uuid: Some(sess.uuid),
-    })
 }
 
 #[tauri::command]
 pub async fn auth_logout(state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    // Pas de garde sur `yuyu_session` : se déconnecter du compte Minecraft
-    // n'a jamais nécessité d'être connecté à YuyuFrame.
+    // Plus aucun compte actif, en base comme en mémoire : sinon le compte
+    // « déconnecté » revenait tout seul au redémarrage suivant.
+    {
+        let s = state.read().await;
+        let conn = s.db.lock().await;
+        db::clear_active_mc(&conn).map_err(|e| e.to_string())?;
+    }
     state.write().await.session = None;
     Ok(())
 }

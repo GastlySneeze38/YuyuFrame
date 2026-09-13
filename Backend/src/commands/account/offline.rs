@@ -1,6 +1,7 @@
 use md5::{Digest, Md5};
 
-use crate::{db, state::SharedState};
+use crate::db;
+use crate::state::SharedState;
 
 use super::minecraft::AccountInfo;
 
@@ -18,10 +19,8 @@ fn offline_uuid(username: &str) -> String {
 }
 
 // Pas de vrai token Microsoft à rafraîchir pour un compte hors ligne — une
-// expiration très lointaine fait naturellement prendre le chemin "pas besoin
-// de refresh" partout où `expires_at` est déjà vérifié (mc_switch,
-// auth_status, refresh_if_needed dans launch.rs), sans aucune branche
-// spéciale à y ajouter : le seul contournement nécessaire vit ici.
+// expiration très lointaine, en plus de `is_offline` (voir
+// `account::fresh_session`), garantit qu'aucun rafraîchissement n'est tenté.
 const NEVER_EXPIRES: i64 = 253_402_300_799; // 9999-12-31
 
 /// Ajoute un compte local "hors ligne" (pas d'authentification Microsoft) —
@@ -40,27 +39,16 @@ pub async fn mc_add_offline(
 
     let uuid = offline_uuid(&username);
 
-    let yuyu_user_id = {
-        let s = state.read().await;
-        s.current_yuyu_user_id().ok_or("Non authentifié")?
-    };
-
+    // Aucun compte YuyuFrame requis : les comptes Minecraft appartiennent au
+    // PC (voir db::mc_account).
     {
         let s = state.read().await;
         let conn = s.db.lock().await;
-        db::upsert_mc_session(&conn, yuyu_user_id, &username, &uuid, "offline", "", NEVER_EXPIRES, true)
+        db::upsert_mc_session(&conn, &username, &uuid, "offline", "", NEVER_EXPIRES, true)
             .map_err(|e| e.to_string())?;
-        db::set_active_mc(&conn, yuyu_user_id, &uuid).map_err(|e| e.to_string())?;
     }
 
-    state.write().await.session = Some(crate::state::MinecraftSession {
-        username: username.clone(),
-        uuid: uuid.clone(),
-        access_token: "offline".to_string(),
-        refresh_token: None,
-        expires_at: NEVER_EXPIRES,
-    });
-
+    let info = super::activate_account(&state, &uuid).await?;
     crate::integrations::analytics::capture("offline_account_created", serde_json::json!({}));
-    Ok(AccountInfo { mc_username: username, mc_uuid: uuid, is_active: true, is_offline: true })
+    Ok(info)
 }

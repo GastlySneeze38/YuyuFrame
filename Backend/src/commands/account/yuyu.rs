@@ -93,8 +93,9 @@ pub async fn yuyu_register(
 
     let data: ApiAuthResponse = resp.json().await.map_err(|e| e.to_string())?;
     save_session(&state, data.user_id, &data.username, &data.token, &data.plan, data.plan_expires_at).await?;
+    let accounts = super::list_accounts(&state).await?;
 
-    Ok(LoginResp { token: data.token, username: data.username, plan: data.plan, plan_expires_at: data.plan_expires_at, accounts: vec![] })
+    Ok(LoginResp { token: data.token, username: data.username, plan: data.plan, plan_expires_at: data.plan_expires_at, accounts })
 }
 
 #[tauri::command]
@@ -103,9 +104,6 @@ pub async fn yuyu_login(
     username: String,
     password: String,
 ) -> Result<LoginResp, String> {
-    use crate::minecraft::auth as mc_auth;
-    use crate::state::MinecraftSession;
-
     let client = state.read().await.http.clone();
     let resp = client
         .post(format!("{}/auth/login", api_base()))
@@ -122,62 +120,9 @@ pub async fn yuyu_login(
     let data: ApiAuthResponse = resp.json().await.map_err(|e| e.to_string())?;
     save_session(&state, data.user_id, &data.username, &data.token, &data.plan, data.plan_expires_at).await?;
 
-    // Charger les sessions Minecraft locales pour cet utilisateur
-    let (rows, active_uuid) = {
-        let s = state.read().await;
-        let conn = s.db.lock().await;
-        let rows = db::list_mc_sessions(&conn, data.user_id).map_err(|e| e.to_string())?;
-        let active_uuid =
-            db::get_active_mc_uuid(&conn, data.user_id).map_err(|e| e.to_string())?;
-        (rows, active_uuid)
-    };
-
-    let now = chrono::Utc::now().timestamp();
-    let mut accounts: Vec<AccountInfo> = Vec::new();
-    let mut active_session: Option<MinecraftSession> = None;
-
-    for row in &rows {
-        let is_active = active_uuid.as_deref() == Some(&row.mc_uuid);
-        accounts.push(AccountInfo {
-            mc_username: row.mc_username.clone(),
-            mc_uuid: row.mc_uuid.clone(),
-            is_active,
-            is_offline: row.is_offline,
-        });
-
-        if is_active {
-            if row.expires_at - now < 1800 {
-                tracing::info!("Rafraîchissement du token pour {}", row.mc_username);
-                match mc_auth::refresh_session(&row.ms_refresh_token).await {
-                    Ok(result) => {
-                        let s = state.read().await;
-                        let conn = s.db.lock().await;
-                        active_session = Some(super::apply_refreshed_tokens(&conn, data.user_id, result));
-                    }
-                    Err(e) => {
-                        tracing::warn!("Échec du rafraîchissement : {}", e);
-                        active_session = Some(MinecraftSession {
-                            username: row.mc_username.clone(),
-                            uuid: row.mc_uuid.clone(),
-                            access_token: row.access_token.clone(),
-                            refresh_token: Some(row.ms_refresh_token.clone()),
-                            expires_at: row.expires_at,
-                        });
-                    }
-                }
-            } else {
-                active_session = Some(MinecraftSession {
-                    username: row.mc_username.clone(),
-                    uuid: row.mc_uuid.clone(),
-                    access_token: row.access_token.clone(),
-                    refresh_token: Some(row.ms_refresh_token.clone()),
-                    expires_at: row.expires_at,
-                });
-            }
-        }
-    }
-
-    state.write().await.session = active_session;
+    // Les comptes Minecraft appartiennent au PC : la connexion YuyuFrame ne
+    // change ni la liste ni le compte actif, elle les renvoie simplement.
+    let accounts = super::list_accounts(&state).await?;
 
     Ok(LoginResp { token: data.token, username: data.username, plan: data.plan, plan_expires_at: data.plan_expires_at, accounts })
 }
@@ -189,9 +134,8 @@ pub async fn yuyu_logout(state: tauri::State<'_, SharedState>) -> Result<(), Str
         let conn = s.db.lock().await;
         db::delete_yuyu_jwt(&conn).ok();
     }
-    let mut w = state.write().await;
-    w.yuyu_session = None;
-    w.session = None;
+    // Le compte Minecraft actif reste connecté : il ne dépend pas de YuyuFrame.
+    state.write().await.yuyu_session = None;
     Ok(())
 }
 

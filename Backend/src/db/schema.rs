@@ -119,6 +119,8 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // littéral "offline" posé par mc_add_offline comme access_token n'est
     // jamais celui d'un vrai token Microsoft, donc marqueur fiable à 100%.
     let _ = conn.execute("UPDATE mc_sessions SET is_offline = 1 WHERE access_token = 'offline' AND is_offline = 0", []);
+    // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
+    super::mc_account::migrate_to_pc_scope(&conn)?;
 
     Ok(conn)
 }

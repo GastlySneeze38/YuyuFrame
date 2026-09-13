@@ -179,8 +179,10 @@ export const useStore = create<Store>()(
         set({ yuyuToken: token, yuyuUsername: username, yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
       setYuyuPlan: (plan, planExpiresAt) =>
         set({ yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
+      // Les comptes Minecraft appartiennent au PC (voir db::mc_account côté
+      // backend) : quitter YuyuFrame ne les retire pas.
       clearYuyuSession: () =>
-        set({ yuyuToken: null, yuyuUsername: null, yuyuPlan: 'free', yuyuPlanExpiresAt: null, accounts: [], username: null, uuid: null }),
+        set({ yuyuToken: null, yuyuUsername: null, yuyuPlan: 'free', yuyuPlanExpiresAt: null }),
       isPremium: () => {
         const { yuyuPlan, yuyuPlanExpiresAt } = get()
         const active = yuyuPlan === 'premium' || yuyuPlan === 'ultimate'

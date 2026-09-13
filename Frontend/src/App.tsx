@@ -42,7 +42,7 @@ const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, isOffline, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline } = useStore()
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
   const [showReconnect, setShowReconnect] = useState(false)
@@ -50,6 +50,8 @@ export default function App() {
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
   const needsReconnectRef = useRef(authSystemVersion < AUTH_SYSTEM_VERSION)
+  // Décidé une fois la liste des comptes chargée (voir plus bas).
+  const offlineReminderRef = useRef(false)
 
   // Monté pour toute la durée de vie de la fenêtre principale — contrairement
   // à l'ancien listener posé uniquement dans Home.tsx, qui se désabonnait dès
@@ -105,20 +107,23 @@ export default function App() {
       .then((accs) => {
         const active = accs.find((a) => a.is_active)
         if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
+        // Un seul compte Microsoft enregistré prouve que le jeu est acheté :
+        // pas de rappel d'achat, même si le compte actif est hors ligne.
+        offlineReminderRef.current = !!active?.is_offline && !accs.some((a) => !a.is_offline)
         if (pendingPatchNotes) {
           setShowPatchNotes(true)
         } else if (needsReconnectRef.current && active) {
           setShowReconnect(true)
-        } else if (active?.is_offline) {
+        } else if (offlineReminderRef.current) {
           setShowOfflineReminder(true)
         }
       })
-      .catch(() => {
-        // Repli sur l'instantané persisté si la revalidation échoue (ex: pas
-        // encore authentifié) — mieux que rien, moins fiable que le fetch.
+      .catch((e) => {
+        // Sans la liste des comptes, impossible de savoir si le jeu est
+        // acheté : pas de rappel d'achat plutôt qu'un rappel à tort.
+        console.error('[App] liste des comptes Minecraft :', e)
         if (pendingPatchNotes) setShowPatchNotes(true)
         else if (needsReconnectRef.current && uuid) setShowReconnect(true)
-        else if (uuid && isOffline) setShowOfflineReminder(true)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -127,13 +132,13 @@ export default function App() {
     setShowPatchNotes(false)
     setPendingPatchNotes(null)
     if (needsReconnectRef.current && uuid) setShowReconnect(true)
-    else if (uuid && isOffline) setShowOfflineReminder(true)
+    else if (offlineReminderRef.current) setShowOfflineReminder(true)
   }
 
   const handleCloseReconnect = () => {
     setShowReconnect(false)
     needsReconnectRef.current = false
-    if (uuid && isOffline) setShowOfflineReminder(true)
+    if (offlineReminderRef.current) setShowOfflineReminder(true)
   }
 
   useEffect(() => {

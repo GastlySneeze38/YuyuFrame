@@ -157,7 +157,8 @@ export const api = {
   mc: {
     accounts: () => invoke<McAccountInfo[]>('mc_list_accounts'),
     switch: (uuid: string) => invoke<McAccountInfo>('mc_switch', { uuid }),
-    delete: (uuid: string) => invoke<void>('mc_delete', { uuid }),
+    /** Renvoie le compte actif après suppression (`null` s'il n'en reste aucun). */
+    delete: (uuid: string) => invoke<McAccountInfo | null>('mc_delete', { uuid }),
     addOffline: (username: string) => invoke<McAccountInfo>('mc_add_offline', { username }),
     setSkin: (uuid: string, sourcePath: string) => invoke<string>('set_account_skin', { uuid, sourcePath }),
     setSkinFromUrl: (uuid: string, url: string) => invoke<string>('set_account_skin_from_url', { uuid, url }),

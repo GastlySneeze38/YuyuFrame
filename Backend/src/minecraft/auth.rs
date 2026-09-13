@@ -229,11 +229,34 @@ pub async fn poll_device_auth(device_code: &str) -> Result<Option<MinecraftSessi
 
 // ── Token refresh ─────────────────────────────────────────────────────────────
 
+/// Échec d'un rafraîchissement, selon ce qu'il implique pour l'utilisateur.
+#[derive(Debug)]
+pub enum RefreshError {
+    /// Microsoft refuse le refresh token (expiré, révoqué, mot de passe
+    /// changé) : seule une reconnexion du compte peut rétablir la session.
+    Revoked(String),
+    /// Réseau, service Xbox/Minecraft indisponible… — réessayable, le token
+    /// actuel reste peut-être valable.
+    Other(anyhow::Error),
+}
+
+impl std::fmt::Display for RefreshError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RefreshError::Revoked(code) => write!(f, "session Microsoft révoquée ({})", code),
+            RefreshError::Other(e) => write!(f, "{}", e),
+        }
+    }
+}
+
 /// Use a Microsoft refresh token to get a new Minecraft session.
 /// Returns (mc_access_token, mc_username, mc_uuid, new_ms_refresh_token, new_expires_at).
 pub async fn refresh_session(
     ms_refresh_token: &str,
-) -> Result<(String, String, String, String, i64)> {
+) -> std::result::Result<(String, String, String, String, i64), RefreshError> {
+    if ms_refresh_token.is_empty() {
+        return Err(RefreshError::Revoked("aucun refresh token enregistré".into()));
+    }
     let client = crate::minecraft::http::short_lived_client();
 
     // Exchange refresh token for new MS access token
@@ -248,20 +271,27 @@ pub async fn refresh_session(
         .post(TOKEN_URL)
         .form(&params)
         .send()
-        .await?
+        .await
+        .map_err(|e| RefreshError::Other(e.into()))?
         .text()
-        .await?;
-    tracing::debug!("MS refresh raw response: {}", raw);
+        .await
+        .map_err(|e| RefreshError::Other(e.into()))?;
     let resp: MsTokenResp = serde_json::from_str(&raw)
-        .map_err(|e| anyhow!("Échec parsing refresh: {} — Body: {}", e, raw))?;
+        .map_err(|e| RefreshError::Other(anyhow!("Échec parsing refresh: {}", e)))?;
 
     if let Some(err) = resp.error {
-        return Err(anyhow!("MS refresh error: {}", err));
+        // OAuth 2 (RFC 6749 §5.2) : `invalid_grant` = refresh token refusé.
+        // Tout autre code (serveur, requête) n'invalide pas le compte.
+        return Err(if err == "invalid_grant" {
+            RefreshError::Revoked(err)
+        } else {
+            RefreshError::Other(anyhow!("MS refresh error: {}", err))
+        });
     }
 
     let ms_access_token = resp
         .access_token
-        .ok_or_else(|| anyhow!("No MS access token from refresh"))?;
+        .ok_or_else(|| RefreshError::Other(anyhow!("No MS access token from refresh")))?;
 
     // Keep old refresh token if Microsoft didn't issue a new one
     let new_ms_refresh_token = resp
@@ -269,7 +299,7 @@ pub async fn refresh_session(
         .unwrap_or_else(|| ms_refresh_token.to_string());
 
     let (mc_access_token, mc_username, mc_uuid) =
-        xbox_auth_chain(&client, &ms_access_token).await?;
+        xbox_auth_chain(&client, &ms_access_token).await.map_err(RefreshError::Other)?;
 
     let expires_at = chrono::Utc::now().timestamp() + 86400;
 

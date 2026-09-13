@@ -2,8 +2,8 @@ use tauri::{Emitter, Manager};
 
 use crate::commands::instance::crud::instance_dir;
 use crate::db;
-use crate::minecraft::{auth, launcher, server_ping};
-use crate::state::{MinecraftSession, SharedState};
+use crate::minecraft::{launcher, server_ping};
+use crate::state::SharedState;
 
 #[tauri::command]
 pub async fn launch_game(
@@ -15,13 +15,11 @@ pub async fn launch_game(
     show_console: Option<bool>,
     connect_server: Option<String>,
 ) -> Result<(), String> {
-    let session = {
-        let s = state.read().await;
-        s.session.clone().ok_or("Non connecté à Minecraft")?
-    };
-
-    // Refresh the MC token if it expires within the next 5 minutes
-    let session = refresh_if_needed(session, &state).await?;
+    // Token rafraîchi s'il expire bientôt — voir account::fresh_session pour
+    // ce qui bloque (session révoquée) ou non (Microsoft injoignable).
+    let session = crate::commands::account::refresh_active(&state)
+        .await?
+        .ok_or("Aucun compte Minecraft actif — ajoute ou sélectionne un compte")?;
 
     if state.read().await.is_instance_running(&instance_id) {
         return Err(format!("L'instance {} est déjà en cours", instance_id));
@@ -368,51 +366,6 @@ pub async fn cancel_launch(
 pub async fn console_ready(console_label: String) -> Result<(), String> {
     launcher::signal_console_ready(&console_label);
     Ok(())
-}
-
-/// Best-effort : un token MC expiré (ou son rafraîchissement en panne, hors
-/// ligne...) ne doit JAMAIS empêcher un lancement solo. Minecraft n'a besoin
-/// d'un token à jour que pour rejoindre un serveur en ligne ou récupérer un
-/// skin — jamais pour charger une sauvegarde locale déjà présente sur le
-/// disque. Avant ce correctif, un rafraîchissement raté (typiquement : pas de
-/// connexion) faisait échouer TOUT le lancement avec `?`, alors que rien
-/// d'autre dans `download_and_launch` n'a besoin du réseau une fois les
-/// fichiers déjà en cache (voir les caches version/assets/libs juste après).
-async fn refresh_if_needed(
-    session: MinecraftSession,
-    state: &tauri::State<'_, SharedState>,
-) -> Result<MinecraftSession, String> {
-    let now = chrono::Utc::now().timestamp();
-    // Refresh if the token expires within 5 minutes
-    if session.expires_at > now + 300 {
-        return Ok(session);
-    }
-
-    let Some(refresh_token) = session.refresh_token.clone() else {
-        tracing::warn!("Token MC expiré et pas de refresh_token — lancement quand même (solo uniquement, reconnectez-vous pour le multijoueur)");
-        return Ok(session);
-    };
-
-    tracing::info!("Token MC expiré — rafraîchissement en cours...");
-
-    match auth::refresh_session(&refresh_token).await {
-        Ok(result) => {
-            // Persist to state and DB
-            let new_session = {
-                let s = state.read().await;
-                let yuyu_user_id = s.current_yuyu_user_id().unwrap_or(0);
-                let db = s.db.lock().await;
-                crate::commands::account::apply_refreshed_tokens(&db, yuyu_user_id, result)
-            };
-            state.write().await.session = Some(new_session.clone());
-            tracing::info!("Token MC rafraîchi — expire dans 24h");
-            Ok(new_session)
-        }
-        Err(e) => {
-            tracing::warn!("Échec du rafraîchissement du token MC (hors ligne ?) — lancement avec l'ancien token : {}", e);
-            Ok(session)
-        }
-    }
 }
 
 #[tauri::command]
