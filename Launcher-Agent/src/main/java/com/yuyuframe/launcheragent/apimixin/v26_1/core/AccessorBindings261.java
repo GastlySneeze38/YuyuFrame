@@ -2,8 +2,8 @@ package com.yuyuframe.launcheragent.apimixin.v26_1.core;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
-import com.yuyuframe.launcheragent.apimixin.ItemInfo;
-import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
+import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
+import com.yuyuframe.launcheragent.apimixin.data.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import com.mojang.blaze3d.platform.InputConstants;

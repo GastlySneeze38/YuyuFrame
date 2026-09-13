@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1.fog;
 
-import com.yuyuframe.launcheragent.apimixin.FogOverride;
+import com.yuyuframe.launcheragent.apimixin.data.FogOverride;
 import net.minecraft.client.renderer.fog.FogData;
 
 /**

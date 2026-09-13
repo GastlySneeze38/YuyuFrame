@@ -1,4 +1,6 @@
-package com.yuyuframe.launcheragent.apimixin;
+package com.yuyuframe.launcheragent.apimixin.data;
+
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
 
 /**
  * Valeurs écrites par les mixins {@code FOG_SETUP_*} quand un handler demande

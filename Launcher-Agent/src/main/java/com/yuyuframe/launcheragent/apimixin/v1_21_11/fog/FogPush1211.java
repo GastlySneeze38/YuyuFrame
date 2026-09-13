@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v1_21_11.fog;
 
-import com.yuyuframe.launcheragent.apimixin.FogOverride;
+import com.yuyuframe.launcheragent.apimixin.data.FogOverride;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;

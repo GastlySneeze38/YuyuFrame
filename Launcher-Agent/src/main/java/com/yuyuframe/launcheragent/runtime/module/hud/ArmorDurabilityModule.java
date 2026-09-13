@@ -7,7 +7,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
-import com.yuyuframe.launcheragent.apimixin.ItemInfo;
+import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
 
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;

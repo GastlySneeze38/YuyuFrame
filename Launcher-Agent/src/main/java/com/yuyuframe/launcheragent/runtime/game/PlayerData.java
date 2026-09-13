@@ -2,6 +2,8 @@ package com.yuyuframe.launcheragent.runtime.game;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
+import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
+import com.yuyuframe.launcheragent.apimixin.data.PlayerEffect;
 
 /**
  * Accès PARTAGÉ aux données du joueur et du monde — <b>zéro réflexion</b>.
@@ -136,15 +138,15 @@ public final class PlayerData {
      * Effets actifs, en données neutres — liste VIDE hors partie ou sur une
      * version non liée, jamais {@code null}.
      *
-     * <p>Voir {@link com.yuyuframe.launcheragent.apimixin.PlayerEffect} : c'est
+     * <p>Voir {@link PlayerEffect} : c'est
      * un porteur à nous, pas un objet du jeu, précisément pour que l'appelant
      * puisse le lire sans nommer de type de version.
      */
     @SuppressWarnings("unchecked")
-    public static java.util.List<com.yuyuframe.launcheragent.apimixin.PlayerEffect> activeEffects() {
+    public static java.util.List<PlayerEffect> activeEffects() {
         Object v = AccessorRegistry.get(AccessPoint.PLAYER_ACTIVE_EFFECTS, null);
         return v instanceof java.util.List
-            ? (java.util.List<com.yuyuframe.launcheragent.apimixin.PlayerEffect>) v
+            ? (java.util.List<PlayerEffect>) v
             : java.util.Collections.emptyList();
     }
 
@@ -153,19 +155,17 @@ public final class PlayerData {
      * torse, jambes, pieds, main principale, main secondaire.
      *
      * <p>Jamais {@code null} et jamais de case nulle : hors partie ou sur une
-     * version non liée, six {@link com.yuyuframe.launcheragent.apimixin.ItemInfo#EMPTY}.
+     * version non liée, six {@link ItemInfo#EMPTY}.
      * L'appelant peut donc indexer sans test.
      */
-    public static com.yuyuframe.launcheragent.apimixin.ItemInfo[] equipment() {
+    public static ItemInfo[] equipment() {
         Object v = AccessorRegistry.get(AccessPoint.PLAYER_EQUIPMENT, null);
-        if (v instanceof com.yuyuframe.launcheragent.apimixin.ItemInfo[]) {
-            com.yuyuframe.launcheragent.apimixin.ItemInfo[] slots =
-                (com.yuyuframe.launcheragent.apimixin.ItemInfo[]) v;
+        if (v instanceof ItemInfo[]) {
+            ItemInfo[] slots = (ItemInfo[]) v;
             if (slots.length == EQUIPMENT_SLOTS) return slots;
         }
-        com.yuyuframe.launcheragent.apimixin.ItemInfo[] empty =
-            new com.yuyuframe.launcheragent.apimixin.ItemInfo[EQUIPMENT_SLOTS];
-        java.util.Arrays.fill(empty, com.yuyuframe.launcheragent.apimixin.ItemInfo.EMPTY);
+        ItemInfo[] empty = new ItemInfo[EQUIPMENT_SLOTS];
+        java.util.Arrays.fill(empty, ItemInfo.EMPTY);
         return empty;
     }
 

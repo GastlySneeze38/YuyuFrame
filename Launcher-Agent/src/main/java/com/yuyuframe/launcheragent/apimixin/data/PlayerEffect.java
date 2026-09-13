@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apimixin;
+package com.yuyuframe.launcheragent.apimixin.data;
 
 /**
  * Un effet actif sur le joueur, en données NEUTRES.

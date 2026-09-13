@@ -1,5 +1,8 @@
 package com.yuyuframe.launcheragent.apimixin;
 
+import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
+import com.yuyuframe.launcheragent.apimixin.data.PlayerEffect;
+
 /**
  * Catalogue fixe des ACCÈS à l'état du jeu exposés à nos modules — pendant de
  * {@link HookPoint}, pour la lecture/écriture plutôt que pour l'injection.

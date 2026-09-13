@@ -8,7 +8,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
-import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
+import com.yuyuframe.launcheragent.apimixin.data.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 

@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apimixin;
+package com.yuyuframe.launcheragent.apimixin.data;
 
 /**
  * Une pile d'objets, en données NEUTRES — pendant de {@link PlayerEffect} pour
