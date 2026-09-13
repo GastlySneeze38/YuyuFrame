@@ -64,10 +64,56 @@ public class UiButton extends UiWidget {
             }
         }
         if (label != null) {
-            float tw = renderer.textWidth(label, LABEL_SCALE);
-            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - UiTheme.scaled(5f), UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
+            String shown = fittedLabel(renderer);
+            float tw = renderer.textWidth(shown, LABEL_SCALE);
+            renderer.drawText(shown, x + (w - tw) / 2f, y + h / 2f - UiTheme.scaled(5f), UiTheme.TEXT_PRIMARY, LABEL_SCALE, vpWidth, vpHeight);
         }
     }
+
+    /** Suffixe de troncature — trois points ASCII, présents dans toutes les polices de l'atlas. */
+    private static final String ELLIPSIS = "...";
+    private String fittedFor;
+    private float fittedWidth = -1f;
+
+    /**
+     * Libellé tenant dans la largeur du bouton, coupé avec « ... » sinon.
+     *
+     * <p>BUG TROUVÉ (retour utilisateur 2026-09-13, palette de macros) : le
+     * libellé était dessiné centré sans aucune limite, et un nom long
+     * débordait des deux côtés du bouton. Couper plutôt que rétrécir : un
+     * texte réduit à la largeur deviendrait illisible pour un long nom. Le
+     * texte complet reste disponible en infobulle — posée seulement quand le
+     * libellé est réellement coupé, et jamais par-dessus une infobulle choisie
+     * par l'appelant.
+     *
+     * <p>Recalculé seulement quand la largeur change : la mesure de texte
+     * lettre par lettre n'a pas à tourner à chaque frame.
+     */
+    private String fittedLabel(UiRenderer renderer) {
+        if (fittedFor != null && fittedWidth == w) return fittedFor;
+        float maxW = w - UiTheme.scaled(12f);
+        String result = label;
+        if (renderer.textWidth(label, LABEL_SCALE) > maxW) {
+            int end = label.length();
+            while (end > 0 && renderer.textWidth(label.substring(0, end).trim() + ELLIPSIS, LABEL_SCALE) > maxW) {
+                end--;
+            }
+            result = label.substring(0, end).trim() + ELLIPSIS;
+            if (tooltip == null) {
+                tooltip = label;
+                autoTooltip = true;
+            }
+        } else if (autoTooltip) {
+            tooltip = null;
+            autoTooltip = false;
+        }
+        fittedFor = result;
+        fittedWidth = w;
+        return result;
+    }
+
+    /** L'infobulle actuelle a été posée par {@link #fittedLabel}, pas par l'appelant. */
+    private boolean autoTooltip;
 
     @Override
     public void onClick() {
