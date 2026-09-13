@@ -325,11 +325,23 @@ public final class MappingsRegistry implements IRemapper {
      * second essai, il est la seule voie fonctionnelle sous Fabric.
      */
     public static String getOfficialClassAlways(String yarnClass) {
+        ensureInitialized(); // même piège que isLoaded() en v1113 — voir getObfClassDot
         String obf = YarnMappings.getOfficialClass(yarnClass);
         return obf != null ? obf : yarnClass;
     }
 
     public static String getObfClassDot(String yarnClass) {
+        // BUG TROUVÉ (v1118, 1.21.11) : cette méthode lisait YarnMappings SANS
+        // déclencher le chargement paresseux — deuxième cas de la famille
+        // corrigée en v1113 sur isLoaded(), qui lui passait entre les mailles
+        // parce qu'elle n'appelle pas isLoaded(). Tant que l'ancien
+        // GlobalUiRenderBridge1211 appelait runtimeClass() au premier rendu,
+        // les mappings étaient chargés PAR EFFET DE BORD et le bug restait
+        // invisible. Le pont typé (v1116) a retiré cet appel : loadClass() —
+        // donc McReflect.minecraftClient() — cherchait le nom Yarn
+        // « net.minecraft.client.MinecraftClient » non traduit, et « [Yarn]
+        // Chargé » avait disparu du log.
+        ensureInitialized();
         String obf = YarnMappings.getOfficialClass(yarnClass);
         if (obf == null) return yarnClass.replace('/', '.');
         return officialToRuntimeClass(obf).replace('/', '.');
