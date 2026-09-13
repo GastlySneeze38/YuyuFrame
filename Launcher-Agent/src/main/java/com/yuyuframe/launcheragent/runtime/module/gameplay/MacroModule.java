@@ -58,7 +58,10 @@ import java.util.Map;
  */
 public final class MacroModule extends LauncherModule {
 
-    /** Un nom, une touche, une commande. La touche peut être vide : la macro n'existe alors que dans la palette. */
+    /** Valeur « aucune touche », celle que rendent les boutons de capture pour Échap. */
+    public static final String NO_KEY = "NONE";
+
+    /** Un nom, une touche, une commande. La touche peut être {@link #NO_KEY} : la macro n'existe alors que dans la palette. */
     public static final class Macro {
         public String key;
         /** Libellé affiché dans la palette — vide, on retombe sur la commande. */
@@ -66,7 +69,10 @@ public final class MacroModule extends LauncherModule {
         public String command;
 
         public Macro(String key, String name, String command) {
-            this.key = key == null ? "" : key;
+            // « NONE » par défaut (demande utilisateur 2026-09-13) : une touche
+            // vide affichait un bouton vide dans la ligne de la macro. Couvre
+            // aussi les macros sauvegardées avant, relues avec une touche vide.
+            this.key = key == null || key.trim().isEmpty() ? NO_KEY : key;
             this.name = name == null ? "" : name;
             this.command = command == null ? "" : command;
         }
@@ -95,7 +101,7 @@ public final class MacroModule extends LauncherModule {
      * revendiquée par un mod ou un autre, et un conflit silencieux serait plus
      * pénible à comprendre qu'un réglage à faire une fois.
      */
-    public String menuKey = "NONE";
+    public String menuKey = NO_KEY;
 
     public boolean autoLogin = true;
 
@@ -223,7 +229,7 @@ public final class MacroModule extends LauncherModule {
     private String serializeMacros() {
         StringBuilder sb = new StringBuilder();
         for (Macro m : macros) {
-            if (m.key.isEmpty() && m.name.isEmpty() && m.command.isEmpty()) continue;
+            if (!hasKey(m.key) && m.name.isEmpty() && m.command.isEmpty()) continue;
             if (sb.length() > 0) sb.append(ENTRY_SEP);
             sb.append(m.key).append(FIELD_SEP).append(m.name).append(FIELD_SEP).append(m.command);
         }
@@ -292,6 +298,11 @@ public final class MacroModule extends LauncherModule {
 
     private static boolean tickErrorLogged;
 
+    /** Une touche réellement assignée — ni vide (anciennes sauvegardes), ni {@link #NO_KEY}. */
+    private static boolean hasKey(String key) {
+        return key != null && !key.trim().isEmpty() && !NO_KEY.equals(key);
+    }
+
     private void tickMacros() {
         // UiInputPollerModern et non UiInputPoller : seule la variante
         // moderne expose la lecture par NOM de touche (GLFW). Sur 1.8.9 elle
@@ -310,7 +321,7 @@ public final class MacroModule extends LauncherModule {
 
         // Palette : même détection de front montant que les macros, donc la
         // touche s'ouvre une fois et pas vingt fois par seconde.
-        if (menuKey != null && !menuKey.isEmpty() && !"NONE".equals(menuKey)) {
+        if (hasKey(menuKey)) {
             boolean down = poller.isKeyDownByName(menuKey);
             if (down && !heldLastTick.contains(menuKey)) openPicker();
             if (down) heldLastTick.add(menuKey);
@@ -318,7 +329,10 @@ public final class MacroModule extends LauncherModule {
         }
 
         for (Macro macro : macros) {
-            if (macro.key == null || macro.key.isEmpty()) continue;
+            // « NONE » est une vraie valeur, plus seulement la chaîne vide :
+            // sans ce test, la macro interrogerait le poller sur une touche
+            // nommée « NONE » à chaque tick.
+            if (!hasKey(macro.key)) continue;
             if (macro.command == null || macro.command.trim().isEmpty()) continue;
 
             boolean down = poller.isKeyDownByName(macro.key);

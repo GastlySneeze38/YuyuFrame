@@ -28,6 +28,8 @@ public final class UiModalForm {
 
     private static final float PANEL_W = 420f;
     private static final float PANEL_H = 210f;
+    /** Valeur « aucune touche » — la même que {@code UiKeybindButton} rend pour Échap. */
+    private static final String NO_KEY = "NONE";
 
     private final SettingModal modal;
     private final List<String> answers = new ArrayList<String>();
@@ -43,7 +45,13 @@ public final class UiModalForm {
     public UiModalForm(SettingModal modal, Runnable onClose) {
         this.modal = modal;
         this.onClose = onClose;
-        for (int i = 0; i < modal.steps.size(); i++) answers.add("");
+        // Une étape de touche démarre sur « NONE », la valeur que produit
+        // UiKeybindButton pour « aucune touche » (Échap). Une chaîne vide
+        // affichait un bouton VIDE et passait « Suivant » sans rien assigner
+        // avec une valeur qu'aucun autre réglage de touche n'utilise.
+        for (int i = 0; i < modal.steps.size(); i++) {
+            answers.add(modal.steps.get(i).keybind ? NO_KEY : "");
+        }
     }
 
     /** Widgets actifs — passés tels quels à {@code UiScreenBase.modalWidgets()}, ce qui leur réserve TOUS les clics. */
