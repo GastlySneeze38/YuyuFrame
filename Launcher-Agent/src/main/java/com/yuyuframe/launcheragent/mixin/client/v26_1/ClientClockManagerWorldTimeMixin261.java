@@ -47,7 +47,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 // {@code net.minecraft.core.Holder} ne passe PAS la validation (contrairement
 // à ce qu'on pourrait attendre, "Object" n'est PAS toujours accepté comme
 // substitut universel). Fix : nouveau stub compile-only {@code
-// net.minecraft.core.Holder} (src/stubs), paramètre retypé en conséquence.
+// net.minecraft.core.Holder} (src/stubs/v26_1), paramètre retypé en conséquence.
 @Mixin(targets = "net.minecraft.client.ClientClockManager")
 public abstract class ClientClockManagerWorldTimeMixin261 {
 

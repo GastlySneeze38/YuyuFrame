@@ -8,9 +8,11 @@
  * n'a ni {@code ColorTargetState} ni {@code DepthStencilState}, décrit l'état
  * couleur/profondeur par {@code withBlend}/{@code withDepthTestFunction}…).
  * Les deux ne peuvent pas cohabiter sur un même classpath de compilation.
- * {@code build.bat} compile donc ce dossier ({@code src/main_1_21_11/java})
- * dans une passe SÉPARÉE, contre {@code src/stubs_1_21_11} seulement — jamais
- * contre {@code src/stubs} (26.1.2) — puis l'embarque dans le même jar.
+ * {@code build.bat} compile donc ce dossier dans une passe SÉPARÉE, contre
+ * {@code src/stubs/v1_21_11} seulement — jamais contre {@code src/stubs/v26_1}
+ * — puis l'embarque dans le même jar. Il vit dans {@code src/main/java} avec
+ * le reste depuis le 2026-09-13 : c'est la passe qui sélectionne les dossiers
+ * {@code v1_21_11}, plus une racine de sources à part.
  *
  * <h2>Noms utilisés, et traduction au chargement</h2>
  *

@@ -10,7 +10,7 @@ import net.minecraft.client.renderer.DynamicUniforms;
  * <h2>Règles pour tous les stubs Blaze3D de cette unité</h2>
  * <ul>
  *   <li>Signatures relevées sur le vrai jar client 26.1.2 — jamais devinées,
- *       jamais recopiées depuis {@code src/stubs_1_21_11} : les deux API
+ *       jamais recopiées depuis {@code src/stubs/v1_21_11} : les deux API
  *       portent les MÊMES noms de classes mais diffèrent réellement. Deux
  *       exemples vécus : {@code GpuDevice}/{@code CommandEncoder}/{@code
  *       RenderPass} sont des INTERFACES en 1.21.11 et des CLASSES ici (un

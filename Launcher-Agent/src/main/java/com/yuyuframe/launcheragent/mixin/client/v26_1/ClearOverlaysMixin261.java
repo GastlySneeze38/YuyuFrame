@@ -30,7 +30,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * l'autre).
  *
  * {@code Identifier}/{@code GuiGraphicsExtractor} : stubs compile-only
- * (voir {@code src/stubs/net/minecraft/resources/Identifier.java}) — noms
+ * (voir {@code src/stubs/v26_1/net/minecraft/resources/Identifier.java}) — noms
  * réels Mojang déjà littéraux sur 26.1+, aucune traduction Yarn nécessaire,
  * juste assez pour typer les paramètres capturés par ce {@code @Inject}.
  *

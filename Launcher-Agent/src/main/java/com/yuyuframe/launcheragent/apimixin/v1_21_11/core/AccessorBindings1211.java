@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apimixin.typed.v1_21_11;
+package com.yuyuframe.launcheragent.apimixin.v1_21_11.core;
 
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
@@ -6,8 +6,6 @@ import com.yuyuframe.launcheragent.apimixin.ItemInfo;
 import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.chat.ChatHudAccessor1211;
-import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.HungerManagerAccessor1211;
-import com.yuyuframe.launcheragent.apimixin.v1_21_11.core.MinecraftClientAccessor1211;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.option.SimpleOptionAccessor1211;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ChatHud;
@@ -75,11 +73,16 @@ import net.minecraft.entity.player.PlayerEntity;
  *
  * <h2>Unité de compilation et traduction</h2>
  *
- * Ce fichier vit dans {@code src/main_1_21_11} et nomme les classes du jeu
- * sous leur nom YARN ; {@code YarnNamedRemapper} les traduit au chargement
- * vers les noms du loader actif (son tableau {@code PACKAGES} couvre ce
- * paquet). Ne jamais le déplacer hors de ce paquet : non traduit, il
- * chercherait des classes Yarn inexistantes en jeu.
+ * Ce fichier est compilé contre {@code src/stubs/v1_21_11} et nomme les
+ * classes du jeu sous leur nom YARN ; {@code YarnNamedRemapper} les traduit au
+ * chargement vers les noms du loader actif. Non traduit, il chercherait des
+ * classes Yarn inexistantes en jeu.
+ *
+ * <p>⚠️ Déplacé ici depuis {@code apimixin/typed/v1_21_11} (2026-09-13) pour
+ * vivre à côté de ses accessors, comme {@code AccessorBindings261}. La sélection
+ * du remappeur (par paquet jusqu'ici) et la passe de compilation doivent suivre
+ * — étape suivante du chantier ; tant qu'elle n'est pas faite, l'arbre ne
+ * compile pas et ce fichier ne serait pas traduit.
  *
  * <p>Chargée par NOM depuis {@code AccessorRegistry.ensureInitialized()} —
  * jamais référencée par du code neutre, qui tomberait sinon en

@@ -34,7 +34,7 @@ import java.util.OptionalInt;
 /**
  * {@link Blaze3DGpu} pour la 1.21.11 — appels TYPÉS, aucune réflexion.
  *
- * <p>Compilé contre {@code src/stubs_1_21_11} : classes {@code com.mojang.blaze3d.*}
+ * <p>Compilé contre {@code src/stubs/v1_21_11} : classes {@code com.mojang.blaze3d.*}
  * sous leur vrai nom, types obfusqués sous leur nom Yarn ({@code GpuSampler},
  * {@code UniformType}, {@code Identifier}…). Les noms Yarn sont traduits au
  * chargement vers ceux du loader actif par {@code YarnNamedRemapper} — c'est

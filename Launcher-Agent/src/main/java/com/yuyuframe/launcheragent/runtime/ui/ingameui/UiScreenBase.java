@@ -155,7 +155,7 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
 
     /**
      * PAS de {@code @Override} : le stub de compilation {@code Screen}
-     * (src/stubs) ne déclare pas cette méthode (déclarée sur l'interface
+     * (src/stubs/v26_1) ne déclare pas cette méthode (déclarée sur l'interface
      * {@code Element} du vrai jeu) — la JVM la reconnaît quand même comme un
      * override réel une fois la superclasse patchée par bytecode (voir
      * javadoc de classe et historique de session — même motif que partout

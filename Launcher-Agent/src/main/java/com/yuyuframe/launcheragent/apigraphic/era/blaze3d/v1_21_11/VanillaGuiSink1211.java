@@ -29,7 +29,7 @@ import java.util.Map;
 /**
  * {@link VanillaGuiSink} pour la 1.21.11 — appels TYPÉS, aucune réflexion.
  *
- * <p>Compilée contre {@code src/stubs_1_21_11}, noms Yarn traduits au
+ * <p>Compilée contre {@code src/stubs/v1_21_11}, noms Yarn traduits au
  * chargement par {@code YarnNamedRemapper} : cette classe DOIT rester dans ce
  * paquet (voir {@code package-info}).
  *

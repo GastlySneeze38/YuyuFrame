@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * GuiRenderState} vérifié par javap sur le jar client 26.1.2 réel : {@code
  * net.minecraft.renderer.state.gui} (PAS {@code net.minecraft.client.gui.
  * render.state} — corrigé après un crash au lancement causé par ce mauvais
- * package, voir le stub {@code src/stubs/net/minecraft/client/renderer/
+ * package, voir le stub {@code src/stubs/v26_1/net/minecraft/client/renderer/
  * state/gui/GuiRenderState.java}).
  */
 @Mixin(targets = "net.minecraft.client.gui.render.GuiRenderer")

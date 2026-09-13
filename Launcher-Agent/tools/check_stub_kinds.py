@@ -211,5 +211,5 @@ if __name__ == "__main__":
         sys.exit(2)
     root = sys.argv[3] if len(sys.argv) > 3 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "src", "stubs_1_21_11")
+        "src", "stubs", "v1_21_11")
     sys.exit(main(sys.argv[1], sys.argv[2], root))

@@ -8,7 +8,7 @@ import net.minecraft.client.gl.SamplerCache;
 
 /**
  * Stub compile-only — API Blaze3D de la <b>1.21.11</b>, unité de compilation
- * SÉPARÉE de {@code src/stubs} (26.1.2). Voir {@code build.bat}, passe
+ * SÉPARÉE de {@code src/stubs/v26_1}. Voir {@code build.bat}, passe
  * « Stubs 1.21.11 ».
  *
  * <h2>Règles de cette unité (valables pour tous ses fichiers)</h2>

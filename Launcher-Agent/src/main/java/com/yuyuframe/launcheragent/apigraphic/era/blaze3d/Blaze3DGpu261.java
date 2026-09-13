@@ -39,7 +39,7 @@ import java.util.OptionalInt;
  * supportées ont une implémentation typée, et {@link Blaze3DGpus} n'a plus de
  * repli.
  *
- * <p>Compilé dans l'unité PRINCIPALE, contre {@code src/stubs} (26.1.2) — pas
+ * <p>Compilé dans l'unité PRINCIPALE, contre {@code src/stubs/v26_1} — pas
  * dans une unité séparée comme {@code Blaze3DGpu1211}. La raison de cette
  * asymétrie tient en un mot : la 26.1.2 n'est pas obfusquée. Aucun type à
  * nommer en Yarn, donc aucune traduction au chargement, donc aucune contrainte
