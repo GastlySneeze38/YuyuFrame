@@ -95,9 +95,20 @@ public final class ZoomModule extends LauncherModule {
             "Temps pour atteindre le niveau de zoom cible en douceur, à l'appui comme au relâchement — 0 = instantané (comportement d'origine).",
             "Réglages", 0f, 1f, 0.05f, null, () -> transitionSeconds, v -> transitionSeconds = v);
         s.slider("sensitivityCompensation", "Réduction de la sensibilité en zoom (%)",
-            "Ralentit la rotation de la caméra proportionnellement au niveau de zoom courant, pour un ressenti cohérent (100% = compensation complète façon longue-vue, au-delà = encore plus lent qu'une longue-vue, 0% = sensibilité inchangée).",
+            "Ralentit la rotation de la caméra selon le niveau de zoom, sur une courbe qui suit ce que l'écran montre réellement : 100% = un mouvement de souris couvre la même portion d'écran zoomé ou non, au-delà = la réduction se creuse aux forts zooms, en dessous = plus douce, 0% = sensibilité inchangée.",
             "Réglages", 0f, 200f, 5f, null, () -> sensitivityCompensation, v -> sensitivityCompensation = v);
+        s.dropdown("sensitivityCurve", "Courbe de réduction",
+            "Exponentielle = suit ce que l'écran montre : peu de réduction aux zooms légers, très forte aux zooms forts. Linéaire = réduction régulière dès le début du zoom, qui plafonne aux zooms forts (comportement d'origine).",
+            // Pas de condition d'activation : seul un curseur sait se griser
+            // (ConfigScreenBuilder journalise une erreur sinon).
+            "Réglages", new String[]{ "Exponentielle", "Linéaire" }, null,
+            () -> sensitivityCurve, v -> sensitivityCurve = v);
     }
+
+    /** Courbe de {@link #applySensitivityScale} : {@link #CURVE_EXPONENTIAL} (défaut) ou {@link #CURVE_LINEAR}. */
+    public int sensitivityCurve = CURVE_EXPONENTIAL;
+    private static final int CURVE_EXPONENTIAL = 0;
+    private static final int CURVE_LINEAR = 1;
 
     // Essential-style : scroller PENDANT le zoom va encore plus loin que la
     // base (jamais en-deçà, voir javadoc de classe) — demandé explicitement
@@ -347,35 +358,93 @@ public final class ZoomModule extends LauncherModule {
     }
 
     /**
-     * Réduit la sensibilité de rotation caméra proportionnellement au niveau
-     * de zoom COURANT (suit {@link #effectiveFov}, donc la réduction
-     * s'installe/se retire EN DOUCEUR en même temps que le FOV, pas d'un
-     * coup) — voir javadoc de classe § 3 pour le pourquoi (vanilla ne
-     * compense jamais ça tout seul). {@code ratio} vaut 1.0 hors zoom (aucune
-     * réduction) et diminue vers {@code zoomFov(Min)/savedFov} en zoom
-     * maximal ; {@link #sensitivityCompensation} permet de doser l'intensité
-     * de l'effet (0% = désactivé, 100% = réduction dans les mêmes
-     * proportions que le zoom lui-même).
+     * Réduit la vitesse de rotation caméra selon le niveau de zoom COURANT
+     * (suit {@link #effectiveFov}, donc la réduction s'installe/se retire EN
+     * DOUCEUR avec le FOV) — voir javadoc de classe § 3 pour le pourquoi.
+     *
+     * <h2>Refonte du 2026-09-13 — deux erreurs dans l'ancienne courbe</h2>
+     *
+     * Retour utilisateur : « on suit une courbe linéaire, il faudrait une
+     * courbe exponentielle ». L'ancien calcul prenait
+     * {@code 1 − (1 − fov/fovBase) × compensation} et multipliait la VALEUR
+     * de l'option par ce facteur. Deux fautes :
+     * <ol>
+     *   <li><b>Linéaire en FOV.</b> Ce qu'un mouvement de souris fait parcourir
+     *       à l'ÉCRAN dépend de {@code tan(fov/2)}, pas du FOV : de 90° à 20°
+     *       le rapport vrai est 0,176, le linéaire donnait 0,222 — la caméra
+     *       restait trop rapide, d'autant plus que le zoom est fort.</li>
+     *   <li><b>Le jeu cube la sensibilité.</b> Relu dans le bytecode
+     *       ({@code MouseHandler.turnPlayer} 26.1.2, {@code Mouse}
+     *       {@code class_312} 1.21.11) : rotation = souris × {@code 8 × d³}
+     *       avec {@code d = 0,6 × sensibilité + 0,2}. Réduire l'option de
+     *       moitié ne réduit donc pas la rotation de moitié, et le {@code + 0,2}
+     *       empêchait de descendre sous (0,2 / d)³ — 6,4 % de la vitesse à la
+     *       sensibilité par défaut, quel que soit le curseur.</li>
+     * </ol>
+     *
+     * <h2>Nouveau calcul</h2>
+     *
+     * On vise directement le MULTIPLICATEUR DE ROTATION :
+     * {@code m = (tan(fov/2) / tan(fovBase/2)) ^ (compensation / 100)}.
+     * À 100 %, un mouvement de souris couvre la même fraction d'écran zoomé
+     * ou non ; au-dessus, l'exposant creuse la courbe (plus lent aux forts
+     * zooms, très peu aux faibles) ; en dessous, il l'aplatit. Puis on inverse
+     * la formule du jeu pour trouver la valeur d'option qui produit {@code m} :
+     * {@code d' = ∛m × d}, {@code sensibilité' = (d' − 0,2) / 0,6}.
+     *
+     * <p>La valeur écrite peut être NÉGATIVE (jusqu'à −1/3 exclu) : c'est ce
+     * qui lève le plancher de 6,4 %. Écrite directement dans l'option, sans la
+     * validation vanilla (voir {@link #writeOptionValue}), et restaurée à la
+     * sortie du zoom ; le zoom ne tourne jamais écran ouvert, donc jamais
+     * pendant que le jeu sauvegarde ses options.
      */
     private void applySensitivityScale(Object options) {
         if (savedSensitivity < 0 || sensitivityCompensation <= 0f || savedFov <= 0) return;
         try {
             Object handle = sensitivityHandle(options);
             if (handle == null) return;
-            double ratio = Math.min(1.0, effectiveFov / savedFov);
-            double scale = 1.0 - (1.0 - ratio) * (sensitivityCompensation / 100.0);
-            // Le curseur monte à 200% (retour utilisateur 2026-09-01 : la
-            // compensation « complète » restait trop rapide à fort zoom) —
-            // au-delà de 100%, l'expression ci-dessus passe par zéro puis
-            // devient NÉGATIVE, ce qui inverserait la caméra. Plancher à 2%
-            // de la sensibilité d'origine : très lent, jamais inversé, jamais
-            // complètement figé (0 rendrait la visée impossible).
-            scale = Math.max(0.02, Math.min(1.0, scale));
-            writeOptionValue(handle, options, savedSensitivity * scale);
+            if (sensitivityCurve == CURVE_LINEAR) {
+                writeOptionValue(handle, options, savedSensitivity * linearOptionScale());
+                return;
+            }
+            double screenRatio = Math.tan(Math.toRadians(effectiveFov) / 2.0)
+                / Math.tan(Math.toRadians(savedFov) / 2.0);
+            screenRatio = Math.max(0.0, Math.min(1.0, screenRatio));
+            double multiplier = Math.pow(screenRatio, sensitivityCompensation / 100.0);
+            // Plancher : très lent, jamais figé (0 rendrait la visée
+            // impossible) — et d' reste positif, donc jamais inversé.
+            multiplier = Math.max(MIN_TURN_MULTIPLIER, Math.min(1.0, multiplier));
+
+            double d = savedSensitivity * SENS_MUL + SENS_ADD;
+            double zoomedD = Math.cbrt(multiplier) * d;
+            writeOptionValue(handle, options, (zoomedD - SENS_ADD) / SENS_MUL);
         } catch (Throwable t) {
             LauncherLog.err("[ZoomModule] applySensitivityScale: " + t);
         }
     }
+
+    /**
+     * Courbe LINÉAIRE — l'ancien calcul, conservé À L'IDENTIQUE à la demande
+     * de l'utilisateur (2026-09-13, « ce n'est pas du tout la même
+     * sensation ») : facteur {@code 1 − (1 − fov/fovBase) × compensation}
+     * appliqué à la VALEUR de l'option. Ses « défauts » décrits plus haut
+     * (linéaire en FOV, passé au cube par le jeu, plancher vers 7 %) font
+     * précisément son ressenti : forte réduction dès le début du zoom, qui
+     * plafonne ensuite. Le corriger en ferait une troisième courbe.
+     */
+    private double linearOptionScale() {
+        double ratio = Math.min(1.0, effectiveFov / savedFov);
+        double scale = 1.0 - (1.0 - ratio) * (sensitivityCompensation / 100.0);
+        // Au-delà de 100 %, l'expression passe par zéro puis devient négative
+        // (caméra inversée) : plancher à 2 % de la valeur d'origine.
+        return Math.max(0.02, Math.min(1.0, scale));
+    }
+
+    /** {@code d = sensibilité × 0,6 + 0,2} — constantes du jeu, voir {@link #applySensitivityScale}. */
+    private static final double SENS_MUL = 0.6000000238418579;
+    private static final double SENS_ADD = 0.20000000298023224;
+    /** Multiplicateur de rotation minimal en zoom : 0,5 % de la vitesse d'origine. */
+    private static final double MIN_TURN_MULTIPLIER = 0.005;
 
     private void saveSensitivity(Object options) {
         try {
