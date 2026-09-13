@@ -495,6 +495,9 @@ public final class ModuleRegistry {
      */
     private static final HookPoint[] INFRA_HOOK_POINTS = {
         HookPoint.COMMAND_SEND,
+        // Ajouté le 2026-09-13 : ClientCommandRegistry y greffe ses commandes
+        // pour que le chat les suggère.
+        HookPoint.COMMAND_TREE_RECEIVE,
         // Ajouté le 2026-08-30 : aucun module ne le réclame, mais l'infra de
         // rendu s'en sert pour vider la file d'icônes d'item vanilla JUSTE
         // AVANT le chat (voir VanillaGuiLayer.installItemIconFlush). Sans

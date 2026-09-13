@@ -130,6 +130,44 @@ public final class AccessorBindings1211 {
         return out.toByteArray();
     }
 
+    /**
+     * Greffe les chemins de commandes sur la racine — pendant exact de
+     * {@code AccessorBindings261.addClientCommands}, voir sa javadoc.
+     * Brigadier n'est pas obfusqué : ses noms traversent le remappeur tels quels.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean addClientCommands(com.mojang.brigadier.tree.CommandNode root, String[][] paths) {
+        java.util.Map<String, java.util.Map> tree = new java.util.LinkedHashMap<>();
+        for (String[] path : paths) {
+            java.util.Map level = tree;
+            for (String word : path) {
+                level = (java.util.Map) level.computeIfAbsent(word, k -> new java.util.LinkedHashMap());
+            }
+        }
+        boolean added = false;
+        for (java.util.Map.Entry<String, java.util.Map> e : tree.entrySet()) {
+            if (root.getChild(e.getKey()) != null) continue;
+            root.addChild(clientLiteral(e.getKey(), e.getValue()).build());
+            added = true;
+        }
+        return added;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder clientLiteral(String name, java.util.Map<String, java.util.Map> children) {
+        com.mojang.brigadier.builder.LiteralArgumentBuilder builder =
+            com.mojang.brigadier.builder.LiteralArgumentBuilder.literal(name);
+        builder.executes(CLIENT_COMMAND_NOOP);
+        for (java.util.Map.Entry<String, java.util.Map> child : children.entrySet()) {
+            builder.then(clientLiteral(child.getKey(), child.getValue()));
+        }
+        return builder;
+    }
+
+    /** Voir {@link #addClientCommands} — jamais réellement exécutée. */
+    @SuppressWarnings("rawtypes")
+    private static final com.mojang.brigadier.Command CLIENT_COMMAND_NOOP = context -> 1;
+
     /** La connexion courante, ou {@code null} en solo/hors partie. Méthode publique, pas un champ. */
     private static ClientPlayNetworkHandler connection() {
         MinecraftClient c = mc(null);
@@ -417,6 +455,13 @@ public final class AccessorBindings1211 {
             com.mojang.brigadier.CommandDispatcher<?> commands = c.getCommandDispatcher();
             if (commands == null || commands.getRoot() == null) return Boolean.FALSE;
             return Boolean.valueOf(commands.getRoot().getChild((String) a[0]) != null);
+        });
+        AccessorRegistry.bind(AccessPoint.NETWORK_ADD_CLIENT_COMMANDS, (r, a) -> {
+            ClientPlayNetworkHandler c = r instanceof ClientPlayNetworkHandler ? (ClientPlayNetworkHandler) r : connection();
+            if (c == null || a.length < 1 || !(a[0] instanceof String[][])) return null;
+            com.mojang.brigadier.CommandDispatcher<?> commands = c.getCommandDispatcher();
+            if (commands == null || commands.getRoot() == null) return Boolean.FALSE;
+            return Boolean.valueOf(addClientCommands(commands.getRoot(), (String[][]) a[0]));
         });
 
         // ── Chat ───────────────────────────────────────────────────────────

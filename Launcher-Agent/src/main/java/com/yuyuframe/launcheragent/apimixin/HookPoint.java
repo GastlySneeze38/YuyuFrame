@@ -237,6 +237,17 @@ public enum HookPoint {
      * reconnaître leur écho, une commande n'a rien à y faire.
      */
     COMMAND_SEND,
+    /**
+     * Arbre de commandes du serveur reçu et installé — contexte : la connexion
+     * (poignée opaque). Notification pure.
+     *
+     * <p>C'est le SEUL moment où le client remplace son arbre (connexion,
+     * changement de monde, {@code /reload} côté serveur) : un nouveau
+     * {@code CommandDispatcher} est construit à chaque paquet. Y greffer nos
+     * commandes une fois par réception suffit à ce que le chat les suggère,
+     * sans rien exécuter à chaque image (2026-09-13).
+     */
+    COMMAND_TREE_RECEIVE,
 
     // ── Item (fabric-item-api-v1) ──────────────────────────────────────────
     /** Voir {@code client.ItemInHandRendererMixin} — recoupe SwingSpeedModule/OldItemRotationsModule. */

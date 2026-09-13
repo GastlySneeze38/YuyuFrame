@@ -505,6 +505,18 @@ public enum AccessPoint {
      * jeu. Un point par question posée plutôt qu'un point qui rend l'arbre.
      */
     NETWORK_HAS_COMMAND,
+    /**
+     * Greffe nos commandes client sur l'arbre de commandes de la connexion,
+     * pour que l'écran de chat les SUGGÈRE. Receveur : la connexion (poignée
+     * opaque reçue de {@link HookPoint#COMMAND_TREE_RECEIVE}), ou {@code null}
+     * pour la connexion courante. Argument : un {@code String[][]}, un chemin
+     * de mots par ligne ({@code {"yf", "safe-mode", "activate"}}). Rend
+     * {@code true} si au moins une commande a été ajoutée.
+     *
+     * <p>Une commande déjà déclarée par le serveur sous le même premier mot
+     * n'est pas touchée : le serveur reste maître de son arbre.
+     */
+    NETWORK_ADD_CLIENT_COMMANDS,
 
     // ── Sons d'interface (net.minecraft.client.sounds.SoundManager) ────────
     /**

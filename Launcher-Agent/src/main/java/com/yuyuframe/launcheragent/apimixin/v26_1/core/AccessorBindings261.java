@@ -32,6 +32,7 @@ import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Liaisons {@link AccessPoint} → accessors de la tranche 26.1.2 — le SEUL
@@ -414,6 +415,13 @@ public final class AccessorBindings261 {
             if (commands == null || commands.getRoot() == null) return Boolean.FALSE;
             return Boolean.valueOf(commands.getRoot().getChild((String) a[0]) != null);
         });
+        AccessorRegistry.bind(AccessPoint.NETWORK_ADD_CLIENT_COMMANDS, (r, a) -> {
+            ClientPacketListener c = r instanceof ClientPacketListener ? (ClientPacketListener) r : connection();
+            if (c == null || a.length < 1 || !(a[0] instanceof String[][])) return null;
+            com.mojang.brigadier.CommandDispatcher<?> commands = c.getCommands();
+            if (commands == null || commands.getRoot() == null) return Boolean.FALSE;
+            return Boolean.valueOf(addClientCommands(commands.getRoot(), (String[][]) a[0]));
+        });
 
         // ── Chat ───────────────────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.CHAT_HEAD_MESSAGE, (r, a) -> {
@@ -545,6 +553,49 @@ public final class AccessorBindings261 {
         for (int n; (n = in.read(buffer)) > 0; ) out.write(buffer, 0, n);
         return out.toByteArray();
     }
+
+    /**
+     * Greffe les chemins de commandes sur la racine — voir
+     * {@code AccessPoint.NETWORK_ADD_CLIENT_COMMANDS}. Un premier mot déjà
+     * déclaré par le serveur est laissé tel quel.
+     *
+     * <p>Chaque nœud porte une commande qui ne fait rien : l'exécution réelle
+     * passe par {@code COMMAND_SEND}, qui annule l'envoi AVANT que brigadier
+     * ne soit consulté. Sans commande, l'écran de chat marquerait
+     * {@code /yf version} comme incomplète.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean addClientCommands(com.mojang.brigadier.tree.CommandNode root, String[][] paths) {
+        Map<String, Map> tree = new java.util.LinkedHashMap<>();
+        for (String[] path : paths) {
+            Map level = tree;
+            for (String word : path) {
+                level = (Map) level.computeIfAbsent(word, k -> new java.util.LinkedHashMap());
+            }
+        }
+        boolean added = false;
+        for (Map.Entry<String, Map> e : tree.entrySet()) {
+            if (root.getChild(e.getKey()) != null) continue;
+            root.addChild(clientLiteral(e.getKey(), e.getValue()).build());
+            added = true;
+        }
+        return added;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder clientLiteral(String name, Map<String, Map> children) {
+        com.mojang.brigadier.builder.LiteralArgumentBuilder builder =
+            com.mojang.brigadier.builder.LiteralArgumentBuilder.literal(name);
+        builder.executes(CLIENT_COMMAND_NOOP);
+        for (Map.Entry<String, Map> child : children.entrySet()) {
+            builder.then(clientLiteral(child.getKey(), child.getValue()));
+        }
+        return builder;
+    }
+
+    /** Voir {@link #addClientCommands} — jamais réellement exécutée. */
+    @SuppressWarnings("rawtypes")
+    private static final com.mojang.brigadier.Command CLIENT_COMMAND_NOOP = context -> 1;
 
     /** La connexion courante, ou {@code null} en solo/hors partie. Méthode publique, pas un champ. */
     private static ClientPacketListener connection() {

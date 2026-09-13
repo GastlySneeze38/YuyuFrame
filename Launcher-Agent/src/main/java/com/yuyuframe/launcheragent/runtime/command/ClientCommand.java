@@ -4,8 +4,8 @@ package com.yuyuframe.launcheragent.runtime.command;
  * Commande client (préfixe {@code /yf} ou autre, voir ROADMAP-agent.md Phase
  * 4.5) — même principe que {@link com.yuyuframe.launcheragent.runtime.ui.LauncherModule}
  * pour les modules : n'importe quel module peut enregistrer la sienne via
- * {@link ClientCommandRegistry#register}, sans toucher au mixin d'interception
- * ({@code apimixin/v26_1/chat/ChatSendMixin261}).
+ * {@link ClientCommandRegistry#register}, sans toucher aux mixins
+ * d'interception ({@code CommandSendMixin261}/{@code CommandSendMixin1211}).
  *
  * Toutes les commandes sont publiques et documentées (pas de gating dev vs
  * utilisateur, décision actée dans la roadmap) — le vrai garde-fou est la
@@ -27,4 +27,13 @@ public interface ClientCommand {
 
     /** {@code args} = les tokens restants après le nom (ex: {"activate"} pour "/yf safe-mode activate"). */
     void execute(String[] args);
+
+    /**
+     * Valeurs proposées par l'écran de chat pour le PREMIER argument
+     * ({@code {"activate", "deactivate"}} pour {@code /yf safe-mode}) — vide
+     * par défaut. Voir {@link ClientCommandRegistry}, « Suggestions ».
+     */
+    default String[] argumentSuggestions() {
+        return new String[0];
+    }
 }

@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.command;
 
+import com.yuyuframe.launcheragent.apimixin.AccessPoint;
+import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
@@ -33,6 +35,16 @@ import java.util.Map;
  * bytecode de {@code ChatScreen.keyPressed} (26.1.2 et 1.21.11) : l'envoi est
  * suivi, dans le même appel, de la fermeture de l'écran de chat. Exécutée sur
  * place, {@code /yf} ouvrait le menu… aussitôt remplacé par cette fermeture.
+ *
+ * <h2>Suggestions</h2>
+ *
+ * L'écran de chat ne suggère que ce que contient l'arbre de commandes
+ * brigadier de la connexion, envoyé par le serveur — nos commandes n'y sont
+ * pas. À chaque arbre reçu ({@link HookPoint#COMMAND_TREE_RECEIVE}), on y
+ * greffe nos noms et les valeurs de {@link ClientCommand#argumentSuggestions()}
+ * ({@code AccessPoint.NETWORK_ADD_CLIENT_COMMANDS}). Le client ne remplace son
+ * arbre qu'à ce moment-là (connexion, changement de monde, rechargement des
+ * commandes côté serveur) : une greffe par réception, rien à chaque image.
  */
 public final class ClientCommandRegistry {
     private ClientCommandRegistry() {}
@@ -47,12 +59,44 @@ public final class ClientCommandRegistry {
         if (bootstrapped) return;
         bootstrapped = true;
         VanillaHookRegistry.register(HookPoint.COMMAND_SEND, ctx -> dispatch(ctx instanceof String ? (String) ctx : null));
+        VanillaHookRegistry.register(HookPoint.COMMAND_TREE_RECEIVE, connection -> {
+            addSuggestions(connection);
+            return false;
+        });
         YfCommands.registerAll();
         LauncherLog.agent(1, "[ClientCommandRegistry] bootstrap — " + COMMANDS.size() + " commande(s) enregistrée(s)");
     }
 
     public static void register(ClientCommand command) {
         COMMANDS.put(command.name(), command);
+    }
+
+    /** Greffe nos commandes sur l'arbre qui vient d'arriver — voir « Suggestions ». */
+    private static void addSuggestions(Object connection) {
+        try {
+            Object result = AccessorRegistry.invoke(AccessPoint.NETWORK_ADD_CLIENT_COMMANDS, connection,
+                (Object) suggestionPaths());
+            if (!Boolean.TRUE.equals(result) && !Boolean.FALSE.equals(result)) {
+                LauncherLog.err("[ClientCommandRegistry] suggestions : arbre de commandes inaccessible sur cette version");
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[ClientCommandRegistry] suggestions : " + t);
+        }
+    }
+
+    /** Un chemin de mots par commande, plus un par valeur d'argument suggérée. */
+    private static String[][] suggestionPaths() {
+        List<String[]> paths = new ArrayList<>();
+        for (ClientCommand cmd : COMMANDS.values()) {
+            String[] words = cmd.name().split(" ");
+            paths.add(words);
+            for (String arg : cmd.argumentSuggestions()) {
+                String[] withArg = Arrays.copyOf(words, words.length + 1);
+                withArg[words.length] = arg;
+                paths.add(withArg);
+            }
+        }
+        return paths.toArray(new String[0][]);
     }
 
     /**

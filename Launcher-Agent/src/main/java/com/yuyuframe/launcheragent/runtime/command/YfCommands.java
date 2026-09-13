@@ -77,6 +77,7 @@ final class YfCommands {
         return new ClientCommand() {
             public String name() { return "yf safe-mode"; }
             public String description() { return "activate|deactivate — désactive/réactive tous les modules d'un coup, sans toucher la config sauvegardée"; }
+            public String[] argumentSuggestions() { return new String[]{ "activate", "deactivate" }; }
             public void execute(String[] args) {
                 if (args.length == 0) {
                     LauncherLog.info("[YfCommands] Usage : /yf safe-mode activate|deactivate");
