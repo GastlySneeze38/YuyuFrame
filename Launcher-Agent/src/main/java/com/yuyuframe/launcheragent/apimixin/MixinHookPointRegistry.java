@@ -217,6 +217,7 @@ public final class MixinHookPointRegistry {
         // ── Chat / combat ──────────────────────────────────────────────────
         gate("26.1.2", "v26_1.chat.ChatReceiveMixin261", HookPoint.CHAT_RECEIVE);
         gate("26.1.2", "v26_1.chat.ChatSendMixin261", HookPoint.CHAT_SEND);
+        gate("26.1.2", "v26_1.chat.CommandSendMixin261", HookPoint.COMMAND_SEND);
         gate("26.1.2", "v26_1.combat.PiercingAttackMixin261", HookPoint.PIERCING_ATTACK);
 
         // ── Item ───────────────────────────────────────────────────────────
@@ -327,6 +328,7 @@ public final class MixinHookPointRegistry {
         // ── Chat / combat / objets ─────────────────────────────────────────
         gate("1.21.11", "v1_21_11.chat.ChatReceiveMixin1211", HookPoint.CHAT_RECEIVE);
         gate("1.21.11", "v1_21_11.chat.ChatSendMixin1211", HookPoint.CHAT_SEND);
+        gate("1.21.11", "v1_21_11.chat.CommandSendMixin1211", HookPoint.COMMAND_SEND);
         gate("1.21.11", "v1_21_11.combat.PiercingAttackMixin1211", HookPoint.PIERCING_ATTACK);
         gate("1.21.11", "v1_21_11.item.ItemTooltipMixin1211", HookPoint.ITEM_TOOLTIP);
 

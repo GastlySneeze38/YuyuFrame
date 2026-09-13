@@ -221,6 +221,22 @@ public enum HookPoint {
     CHAT_RECEIVE,
     /** Voir {@code client.message.ClientPacketListenerMixin} — envoi. */
     CHAT_SEND,
+    /**
+     * Envoi d'une COMMANDE ({@code /…}) — contexte : le texte SANS le « / ».
+     * Annulable : {@code true} = prise en charge côté client, la commande ne
+     * part pas au serveur.
+     *
+     * <p>Distinct de {@link #CHAT_SEND} (2026-09-13) : depuis la 1.19, l'écran
+     * de chat route tout texte commençant par « / » vers
+     * {@code sendCommand}/{@code sendChatCommand} et jamais vers
+     * {@code sendChat} — relu dans le bytecode de {@code ChatScreen}
+     * (26.1.2 et 1.21.11). Les commandes {@code /yf} accrochées à
+     * {@code CHAT_SEND} n'étaient donc JAMAIS vues. Un point séparé plutôt
+     * que de réinjecter les commandes dans {@code CHAT_SEND} :
+     * {@code ChatEnhancementsModule} y mémorise les messages envoyés pour
+     * reconnaître leur écho, une commande n'a rien à y faire.
+     */
+    COMMAND_SEND,
 
     // ── Item (fabric-item-api-v1) ──────────────────────────────────────────
     /** Voir {@code client.ItemInHandRendererMixin} — recoupe SwingSpeedModule/OldItemRotationsModule. */

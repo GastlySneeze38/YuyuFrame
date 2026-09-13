@@ -11,13 +11,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Porte (simplifié) {@code ClientPacketListenerMixin#fabric_allowSendChatMessage}
  * (fabric-message-api-v1, voir mixinapi/26.1.2) vers {@link HookPoint#CHAT_SEND}.
  *
- * ANNULABLE (contrairement à {@link ChatReceiveMixin261}, notification pure) —
- * Phase 4.5 (ROADMAP-agent.md), système de commandes client : {@code
- * ClientCommandRegistry} s'enregistre sur ce HookPoint et retourne {@code
- * true} quand {@code content} correspond à une commande reconnue ("/yf ...")
- * — l'envoi vanilla est alors annulé (la commande ne part
- * JAMAIS au serveur), même convention "true = pris en charge" que les hooks
- * HUD (voir {@code VanillaHookRegistry#dispatch}).
+ * ANNULABLE (contrairement à {@link ChatReceiveMixin261}, notification pure) :
+ * un handler qui répond {@code true} empêche le message de partir, même
+ * convention "true = pris en charge" que les hooks HUD (voir
+ * {@code VanillaHookRegistry#dispatch}).
+ *
+ * <p>MESSAGES uniquement : un texte commençant par « / » n'arrive jamais ici,
+ * {@code ChatScreen} l'envoie par {@code sendCommand} — voir
+ * {@link CommandSendMixin261}, où {@code ClientCommandRegistry} intercepte
+ * désormais les commandes {@code /yf} (il était abonné ici jusqu'au
+ * 2026-09-13, et ne voyait donc aucune commande).
  */
 @Mixin(targets = "net.minecraft.client.multiplayer.ClientPacketListener")
 abstract class ChatSendMixin261 {

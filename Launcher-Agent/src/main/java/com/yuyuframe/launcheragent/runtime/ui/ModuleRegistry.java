@@ -481,8 +481,10 @@ public final class ModuleRegistry {
      *
      * {@code LauncherModule.hookPoints} couvre les modules, mais pas
      * l'infrastructure : {@code ClientCommandRegistry.bootstrap()} enregistre
-     * {@link HookPoint#CHAT_SEND} pour intercepter les commandes client, sans
-     * être un module. Toute future décision prise avant le tissage (gate
+     * {@link HookPoint#COMMAND_SEND} pour intercepter les commandes client, sans
+     * être un module (c'était {@code CHAT_SEND} jusqu'au 2026-09-13, où aucune
+     * commande n'arrive — voir ClientCommandRegistry ; {@code CHAT_SEND} reste
+     * déclaré par {@code ChatEnhancementsModule}). Toute future décision prise avant le tissage (gate
      * déclarative) doit donc réunir CE jeu et celui des modules, sinon le
      * mixin correspondant serait écarté à tort.
      *
@@ -492,7 +494,7 @@ public final class ModuleRegistry {
      * « UTILISÉS MAIS NON DÉCLARÉS ».
      */
     private static final HookPoint[] INFRA_HOOK_POINTS = {
-        HookPoint.CHAT_SEND,
+        HookPoint.COMMAND_SEND,
         // Ajouté le 2026-08-30 : aucun module ne le réclame, mais l'infra de
         // rendu s'en sert pour vider la file d'icônes d'item vanilla JUSTE
         // AVANT le chat (voir VanillaGuiLayer.installItemIconFlush). Sans
@@ -643,6 +645,9 @@ public final class ModuleRegistry {
         // Ici plutôt que dans un mixin : c'est le seul point de tick déjà
         // partagé par tous les brackets.
         HudConfigStore.tick();
+        // Commandes client reconnues depuis la dernière image — exécutées ici
+        // et non dans le hook d'envoi, voir ClientCommandRegistry.
+        com.yuyuframe.launcheragent.runtime.command.ClientCommandRegistry.tick();
 
         for (LauncherModule m : MODULES) {
             if (m.isEnabled()) {

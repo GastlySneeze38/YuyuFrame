@@ -4,8 +4,10 @@ import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -14,12 +16,23 @@ import java.util.Map;
  * pour qu'un nom multi-mots ("yf safe-mode") et un nom simple ("yf")
  * cohabitent sans dispatcher spécial par "namespace".
  *
- * {@link #bootstrap()} — appelé une seule fois depuis {@code LauncherAgent.premain0()}
- * (PAS depuis un Mixin — pur Java, aucune dépendance au jeu, sûr à exécuter
- * inconditionnellement dès le tout début) : enregistre le hook {@link
- * HookPoint#CHAT_SEND} (dispatché par {@code ChatSendMixin261}, apimixin,
- * PAS encore tissé — voir sa javadoc, comme tout le reste d'apimixin cette
- * session) + les commandes intégrées ({@link YfCommands}).
+ * <h2>Chemin d'une commande (réparé le 2026-09-13)</h2>
+ *
+ * {@link #bootstrap()} s'abonne à {@link HookPoint#COMMAND_SEND}, dispatché
+ * par {@code CommandSendMixin261}/{@code CommandSendMixin1211} sur la méthode
+ * d'envoi de COMMANDE du jeu. Il était jusqu'ici abonné à
+ * {@link HookPoint#CHAT_SEND} — l'envoi de MESSAGE —, où aucune commande
+ * n'arrive jamais : depuis la 1.19, {@code ChatScreen} route tout texte en
+ * « / » vers {@code sendCommand}/{@code sendChatCommand}. Aucune commande
+ * {@code /yf} ne fonctionnait, sur aucune version.
+ *
+ * <h2>Exécution à l'image suivante</h2>
+ *
+ * Le hook RECONNAÎT la commande tout de suite (pour annuler son envoi au
+ * serveur) mais ne l'EXÉCUTE qu'au prochain {@link #tick()}. Relu dans le
+ * bytecode de {@code ChatScreen.keyPressed} (26.1.2 et 1.21.11) : l'envoi est
+ * suivi, dans le même appel, de la fermeture de l'écran de chat. Exécutée sur
+ * place, {@code /yf} ouvrait le menu… aussitôt remplacé par cette fermeture.
  */
 public final class ClientCommandRegistry {
     private ClientCommandRegistry() {}
@@ -27,10 +40,13 @@ public final class ClientCommandRegistry {
     private static final Map<String, ClientCommand> COMMANDS = new LinkedHashMap<>();
     private static boolean bootstrapped = false;
 
+    /** Commandes reconnues, en attente d'exécution — voir « Exécution à l'image suivante ». */
+    private static final List<Runnable> PENDING = new ArrayList<>();
+
     public static synchronized void bootstrap() {
         if (bootstrapped) return;
         bootstrapped = true;
-        VanillaHookRegistry.register(HookPoint.CHAT_SEND, ctx -> dispatch(ctx instanceof String ? (String) ctx : null));
+        VanillaHookRegistry.register(HookPoint.COMMAND_SEND, ctx -> dispatch(ctx instanceof String ? (String) ctx : null));
         YfCommands.registerAll();
         LauncherLog.agent(1, "[ClientCommandRegistry] bootstrap — " + COMMANDS.size() + " commande(s) enregistrée(s)");
     }
@@ -40,30 +56,47 @@ public final class ClientCommandRegistry {
     }
 
     /**
-     * @return {@code true} si {@code rawMessage} correspondait à une commande
-     * enregistrée (l'appelant — {@code ChatSendMixin261} — doit alors annuler
-     * l'envoi vanilla), {@code false} sinon (message envoyé normalement au
-     * serveur, chemin inchangé).
+     * @param command la commande telle que le jeu l'envoie, SANS le « / »
+     *     ({@code "yf safe-mode activate"})
+     * @return {@code true} si elle correspond à une commande enregistrée —
+     *     l'appelant annule alors l'envoi au serveur, et l'exécution est
+     *     planifiée pour le prochain {@link #tick()} ; {@code false} sinon
+     *     (commande serveur, chemin vanilla inchangé)
      */
-    public static boolean dispatch(String rawMessage) {
-        if (rawMessage == null) return false;
-        String trimmed = rawMessage.trim();
-        if (!trimmed.startsWith("/")) return false;
-        String[] tokens = trimmed.substring(1).split("\\s+");
+    public static boolean dispatch(String command) {
+        if (command == null) return false;
+        String trimmed = command.trim();
+        if (trimmed.startsWith("/")) trimmed = trimmed.substring(1);
+        String[] tokens = trimmed.split("\\s+");
         if (tokens.length == 0 || tokens[0].isEmpty()) return false;
 
         for (int len = tokens.length; len >= 1; len--) {
-            String candidate = String.join(" ", Arrays.copyOfRange(tokens, 0, len));
-            ClientCommand cmd = COMMANDS.get(candidate);
+            final String candidate = String.join(" ", Arrays.copyOfRange(tokens, 0, len));
+            final ClientCommand cmd = COMMANDS.get(candidate);
             if (cmd == null) continue;
-            String[] args = Arrays.copyOfRange(tokens, len, tokens.length);
-            try {
-                cmd.execute(args);
-            } catch (Throwable t) {
-                LauncherLog.err("[ClientCommandRegistry] \"" + candidate + "\" a levé : " + t);
+            final String[] args = Arrays.copyOfRange(tokens, len, tokens.length);
+            synchronized (PENDING) {
+                PENDING.add(() -> {
+                    try {
+                        cmd.execute(args);
+                    } catch (Throwable t) {
+                        LauncherLog.err("[ClientCommandRegistry] \"" + candidate + "\" a levé : " + t);
+                    }
+                });
             }
             return true;
         }
         return false;
+    }
+
+    /** Exécute les commandes reconnues depuis le dernier appel — appelé par {@code ModuleRegistry.tickAll}. */
+    public static void tick() {
+        List<Runnable> batch;
+        synchronized (PENDING) {
+            if (PENDING.isEmpty()) return;
+            batch = new ArrayList<>(PENDING);
+            PENDING.clear();
+        }
+        for (Runnable r : batch) r.run();
     }
 }
