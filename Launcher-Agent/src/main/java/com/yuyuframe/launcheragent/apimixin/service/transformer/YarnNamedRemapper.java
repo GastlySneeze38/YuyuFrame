@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.service.transformer;
 
 import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -31,8 +32,11 @@ import java.util.Set;
  *
  * <h2>Périmètre</h2>
  *
- * Uniquement les classes des paquets listés dans {@link #PACKAGES} (code typé
- * par version, voir {@code src/main_1_21_11}). Rien d'autre n'est touché.
+ * Uniquement nos classes portant {@link YarnNamed} (code typé par version).
+ * Rien d'autre n'est touché — en particulier pas les Mixins rangés dans les
+ * mêmes dossiers, que Mixin traduit par sa refmap. Sélection par PAQUET
+ * jusqu'au 2026-09-13, voir la javadoc de {@link YarnNamed} pour le pourquoi du
+ * changement.
  *
  * <h2>Ce qui est traduit</h2>
  *
@@ -56,25 +60,41 @@ public final class YarnNamedRemapper {
 
     private YarnNamedRemapper() {}
 
-    /** Paquets (noms internes, avec « / » final) dont les classes sont traduites. */
-    private static final String[] PACKAGES = {
-        "com/yuyuframe/launcheragent/apigraphic/era/blaze3d/v1_21_11/",
-        // Accès aux données du jeu en 1.21.11 (AccessorBindings1211) : même
-        // unité de compilation typée, mêmes règles. L essentiel de ce que
-        // les 26.1.2 atteignent par accessor Mixin est PUBLIC sur cette
-        // version — du code typé suffit, sans mixin ni réflexion.
-        "com/yuyuframe/launcheragent/apimixin/typed/v1_21_11/",
-    };
+    /** Seules NOS classes peuvent porter le marqueur — filtre préalable, sans lecture du bytecode. */
+    private static final String OWN_PREFIX = "com/yuyuframe/launcheragent/";
+
+    /** Descripteur de {@link YarnNamed}, tel qu'il apparaît dans le bytecode annoté. */
+    private static final String MARKER_DESC = Type.getDescriptor(YarnNamed.class);
 
     /** Membres net.minecraft introuvables dans Yarn — journalisés une fois chacun. */
     private static final Set<String> REPORTED = new HashSet<>();
 
-    public static boolean applies(String internalName) {
-        if (internalName == null) return false;
-        for (String p : PACKAGES) {
-            if (internalName.startsWith(p)) return true;
+    /**
+     * {@code true} si cette classe porte {@link YarnNamed}.
+     *
+     * <p>Lecture de l'en-tête et des annotations de classe seulement (ni code,
+     * ni frames, ni debug), et uniquement pour nos propres classes : les
+     * milliers de classes du jeu et des mods ne sont jamais ouvertes ici.
+     */
+    public static boolean applies(String internalName, byte[] classBytes) {
+        if (internalName == null || classBytes == null || !internalName.startsWith(OWN_PREFIX)) return false;
+        final boolean[] marked = { false };
+        try {
+            new ClassReader(classBytes).accept(new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                    if (MARKER_DESC.equals(descriptor)) marked[0] = true;
+                    return null;
+                }
+            }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        } catch (Throwable t) {
+            // Jamais muet : une classe illisible ici serait laissée NON traduite,
+            // et le NoClassDefFoundError qui suivrait n'aurait aucune explication.
+            LauncherLog.err("[YarnNamedRemapper] lecture des annotations impossible pour "
+                + internalName + " : " + t);
+            return false;
         }
-        return false;
+        return marked[0];
     }
 
     /** @return les octets traduits, ou {@code null} si rien à faire (Yarn non chargé). */

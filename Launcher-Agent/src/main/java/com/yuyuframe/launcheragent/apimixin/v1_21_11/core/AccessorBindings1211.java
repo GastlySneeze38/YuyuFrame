@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.ItemInfo;
 import com.yuyuframe.launcheragent.apimixin.PlayerEffect;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.chat.ChatHudAccessor1211;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.option.SimpleOptionAccessor1211;
@@ -75,14 +76,13 @@ import net.minecraft.entity.player.PlayerEntity;
  *
  * Ce fichier est compilé contre {@code src/stubs/v1_21_11} et nomme les
  * classes du jeu sous leur nom YARN ; {@code YarnNamedRemapper} les traduit au
- * chargement vers les noms du loader actif. Non traduit, il chercherait des
- * classes Yarn inexistantes en jeu.
+ * chargement vers les noms du loader actif, parce que la classe porte
+ * {@link YarnNamed}. Sans ce marqueur, elle chercherait des classes Yarn
+ * inexistantes en jeu.
  *
- * <p>⚠️ Déplacé ici depuis {@code apimixin/typed/v1_21_11} (2026-09-13) pour
- * vivre à côté de ses accessors, comme {@code AccessorBindings261}. La sélection
- * du remappeur (par paquet jusqu'ici) et la passe de compilation doivent suivre
- * — étape suivante du chantier ; tant qu'elle n'est pas faite, l'arbre ne
- * compile pas et ce fichier ne serait pas traduit.
+ * <p>Rangée à côté de ses accessors, comme {@code AccessorBindings261}, depuis
+ * le 2026-09-13 (auparavant dans un paquet {@code typed/v1_21_11} à part, seul
+ * moyen de la désigner au remappeur tant qu'il sélectionnait par paquet).
  *
  * <p>Chargée par NOM depuis {@code AccessorRegistry.ensureInitialized()} —
  * jamais référencée par du code neutre, qui tomberait sinon en
@@ -100,6 +100,7 @@ import net.minecraft.entity.player.PlayerEntity;
  * {@code getBoundKeyTranslationKey()} pour le code de touche, et
  * {@code addMessage}/{@code refresh} pour le chat.
  */
+@YarnNamed
 public final class AccessorBindings1211 {
 
     private AccessorBindings1211() {

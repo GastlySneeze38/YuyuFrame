@@ -15,6 +15,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.textures.TextureFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.Blaze3DGpu;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.Framebuffer;
 import net.minecraft.client.gl.GpuSampler;
@@ -45,6 +46,7 @@ import java.util.OptionalInt;
  * l'API 1.21.11 n'ayant ni {@code ColorTargetState} ni {@code DepthStencilState}
  * (voir {@link #buildPipeline}).
  */
+@YarnNamed
 public final class Blaze3DGpu1211 implements Blaze3DGpu {
 
     /** Constantes LUES par {@code DynamicUniforms.write} — partagées, jamais modifiées. */
@@ -269,6 +271,7 @@ public final class Blaze3DGpu1211 implements Blaze3DGpu {
      * pas la méthode fonctionnelle d'une lambda (voir sa javadoc). Remplace le
      * proxy dynamique ({@code java.lang.reflect.Proxy}) de ShaderPipelineFactory.
      */
+    @YarnNamed // classe imbriquée = fichier .class distinct, n'hérite pas du marqueur
     private static final class HomeShaderSource implements ShaderSourceGetter {
         private final Identifier vertexId, fragmentId;
         private final String vertexGlsl, fragmentGlsl;

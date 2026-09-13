@@ -22,11 +22,12 @@
  *       soit le loader.</li>
  *   <li>{@code net.minecraft.*} et imbriquées obfusquées ({@code Identifier},
  *       {@code UniformType}, {@code GpuSampler}, {@code VertexFormat$DrawMode}…) :
- *       sous leur NOM YARN. Toute classe de CE paquet est réécrite au chargement
- *       par {@code YarnNamedRemapper} vers les noms du loader actif
- *       (intermédiaire sous Fabric, officiel en vanilla). Ne jamais déplacer ce
- *       code hors du paquet : non traduit, il chercherait des classes Yarn
- *       inexistantes en jeu.</li>
+ *       sous leur NOM YARN. Chaque classe porte {@code @YarnNamed} et est
+ *       réécrite au chargement par {@code YarnNamedRemapper} vers les noms du
+ *       loader actif (intermédiaire sous Fabric, officiel en vanilla). Oublier
+ *       le marqueur sur une nouvelle classe — classe imbriquée comprise — la
+ *       laisse non traduite : elle chercherait des classes Yarn inexistantes en
+ *       jeu.</li>
  *   <li>Une interface du jeu s'implémente par une CLASSE, jamais par une lambda
  *       (le remappeur ne traduit pas la méthode fonctionnelle d'une lambda).</li>
  * </ul>

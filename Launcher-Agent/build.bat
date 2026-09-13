@@ -5,15 +5,16 @@ cd /d "%~dp0"
 
 set "AGENT_DIR=%~dp0"
 set "SRC_MAIN=%AGENT_DIR%src\main\java"
-set "SRC_STUBS=%AGENT_DIR%src\stubs"
+set "SRC_STUBS=%AGENT_DIR%src\stubs\v26_1"
 set "RES=%AGENT_DIR%src\main\resources"
 set "LIB=%AGENT_DIR%lib"
 set "OUT_MAIN=%AGENT_DIR%build\main"
 set "OUT_STUBS=%AGENT_DIR%build\stubs"
 :: Unite 1.21.11 (API Blaze3D differente de la 26.1.2, meme noms de classes) —
-:: voir la passe "Unite 1.21.11" plus bas.
-set "SRC_STUBS_1211=%AGENT_DIR%src\stubs_1_21_11"
-set "SRC_MAIN_1211=%AGENT_DIR%src\main_1_21_11\java"
+:: voir la passe "Unite 1.21.11" plus bas. Ses SOURCES vivent dans
+:: src\main\java comme le reste : c'est tout dossier nomme "v1_21_11" qui est
+:: selectionne, pas une racine a part (2026-09-13).
+set "SRC_STUBS_1211=%AGENT_DIR%src\stubs\v1_21_11"
 set "OUT_STUBS_1211=%AGENT_DIR%build\stubs_1_21_11"
 set "OUT_ASM=%AGENT_DIR%build\_asm_tmp"
 set "JAR=%AGENT_DIR%build\launcher-agent.jar"
@@ -172,7 +173,7 @@ mkdir "%OUT_STUBS%"
 echo [Stubs] Compilation des stubs Minecraft...
 
 set "STUBLIST=%TEMP%\launcheragent_stubs.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%AGENT_DIR%src\stubs' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_STUBS%' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST%', $files)"
 
 :: Garde-fou : une liste vide fait "reussir" javac trivialement (0 fichier a
 :: compiler, exit code 0) sans AUCUNE erreur — deja arrive en CI (jar final
@@ -180,14 +181,15 @@ powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filt
 :: compte tant que le jeu ne plante pas au lancement). Mieux vaut echouer ICI,
 :: bruyamment, que produire un agent silencieusement casse.
 for %%A in ("%STUBLIST%") do if %%~zA==0 (
-    echo [ERREUR] Aucun fichier .java trouve dans src\stubs — chemin/checkout incorrect ?
+    echo [ERREUR] Aucun fichier .java trouve dans src\stubs\v26_1 — chemin/checkout incorrect ?
     del "%STUBLIST%" 2>nul
     goto :error
 )
 
 "%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS%" "@%STUBLIST%"
+set "JAVAC_RC=!errorlevel!"
 del "%STUBLIST%" 2>nul
-if errorlevel 1 (
+if not "!JAVAC_RC!"=="0" (
     echo [ERREUR] Compilation stubs echouee.
     goto :error
 )
@@ -216,8 +218,14 @@ echo [Build] Compilation principale...
 :: sur un stub sans corps) — icones d'armure invisibles en boucle, 35k+ fois
 :: dans le log. Fix : stubs UNIQUEMENT sur le classpath (-cp ci-dessous),
 :: plus jamais dans la liste de sources de cette compilation.
+::
+:: Tout dossier "v1_21_11" est EXCLU de cette passe : il est compile plus bas,
+:: contre les stubs 1.21.11 (meme noms de classes que la 26.1.2, API
+:: differente — les deux ne tiennent pas sur un classpath). Le filtre porte
+:: sur un SEGMENT de chemin complet (\v1_21_11\), jamais sur une sous-chaine
+:: de nom de fichier.
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $dirs=@('%AGENT_DIR%src\main\java'); $files=$dirs | ForEach-Object { Get-ChildItem -Recurse -Filter '*.java' $_ } | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (
@@ -239,8 +247,9 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
+set "JAVAC_RC=!errorlevel!"
 del "%SRCLIST%" 2>nul
-if errorlevel 1 (
+if not "!JAVAC_RC!"=="0" (
     echo [ERREUR] Compilation echouee.
     goto :error
 )
@@ -250,12 +259,17 @@ echo [Build] Compilation OK
 :: La 1.21.11 et la 26.1.2 exposent des classes com.mojang.blaze3d.* de MEME
 :: NOM mais d'API differente (ColorTargetState/DepthStencilState absents en
 :: 1.21.11, etc.) : impossible de les avoir toutes deux sur un meme classpath.
-:: Cette unite est donc compilee contre SES stubs (src\stubs_1_21_11)
+:: Cette unite est donc compilee contre SES stubs (src\stubs\v1_21_11)
 :: UNIQUEMENT — surtout pas contre %OUT_STUBS% (26.1.2) — avec %OUT_MAIN% sur
 :: le -cp pour voir les interfaces du moteur, et emise DANS %OUT_MAIN% pour
 :: finir dans le meme jar. Comme pour les stubs 26.1.2 : les stubs 1.21.11
 :: ne sont JAMAIS emis dans %OUT_MAIN% (ils ne doivent pas finir dans le jar).
-:: Voir src\main_1_21_11\java\...\era\blaze3d\v1_21_11\package-info.java.
+::
+:: Sources : TOUT dossier "v1_21_11" de src\main\java — code type du moteur
+:: (apigraphic\era\blaze3d\v1_21_11) ET mixins/liaisons (apimixin\v1_21_11).
+:: Les mixins n'y nomment aucun type du jeu (cibles en chaines, parametres en
+:: Object) : cette passe ne change rien pour eux, elle les range avec leur
+:: version. Voir ...\era\blaze3d\v1_21_11\package-info.java.
 
 if exist "%OUT_STUBS_1211%" rmdir /s /q "%OUT_STUBS_1211%"
 mkdir "%OUT_STUBS_1211%"
@@ -266,14 +280,15 @@ powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filt
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%STUBLIST_1211%") do if %%~zA==0 (
-    echo [ERREUR] Aucun fichier .java trouve dans src\stubs_1_21_11 — chemin/checkout incorrect ?
+    echo [ERREUR] Aucun fichier .java trouve dans src\stubs\v1_21_11 — chemin/checkout incorrect ?
     del "%STUBLIST_1211%" 2>nul
     goto :error
 )
 
 "%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS_1211%" "@%STUBLIST_1211%"
+set "JAVAC_RC=!errorlevel!"
 del "%STUBLIST_1211%" 2>nul
-if errorlevel 1 (
+if not "!JAVAC_RC!"=="0" (
     echo [ERREUR] Compilation stubs 1.21.11 echouee.
     goto :error
 )
@@ -281,11 +296,11 @@ echo [Stubs 1.21.11] OK
 
 echo [Build 1.21.11] Compilation du code type 1.21.11...
 set "SRCLIST_1211=%TEMP%\launcheragent_sources_1211.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN_1211%' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_1211%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v1_21_11\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_1211%', $files)"
 
 :: Meme garde-fou — voir plus haut.
 for %%A in ("%SRCLIST_1211%") do if %%~zA==0 (
-    echo [ERREUR] Aucun fichier .java trouve dans src\main_1_21_11\java — chemin/checkout incorrect ?
+    echo [ERREUR] Aucun dossier v1_21_11 trouve dans src\main\java — chemin/checkout incorrect ?
     del "%SRCLIST_1211%" 2>nul
     goto :error
 )
@@ -295,8 +310,9 @@ for %%A in ("%SRCLIST_1211%") do if %%~zA==0 (
   -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_1211%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST_1211%"
+set "JAVAC_RC=!errorlevel!"
 del "%SRCLIST_1211%" 2>nul
-if errorlevel 1 (
+if not "!JAVAC_RC!"=="0" (
     echo [ERREUR] Compilation du code type 1.21.11 echouee.
     goto :error
 )

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v1_21_11;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import net.minecraft.client.gui.ScreenRect;
 import net.minecraft.client.gui.render.state.SimpleGuiElementRenderState;
 import net.minecraft.client.render.VertexConsumer;
@@ -18,6 +19,7 @@ import net.minecraft.client.texture.TextureSetup;
  * {@code TextureSetup} diffèrent, et ce sont EUX qui décident du regroupement
  * en maillages côté vanilla.
  */
+@YarnNamed
 final class GlassPanelElement1211 implements SimpleGuiElementRenderState {
 
     private final float x0, y0, x1, y1;

@@ -2,12 +2,14 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v1_21_11;
 
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiSink;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiSinkProvider;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 
 /**
  * Fournisseur de {@link VanillaGuiSink1211}. Ne référence AUCUN type du jeu :
  * le {@code ServiceLoader} l'instancie sur toutes les versions (voir
  * {@link VanillaGuiSinkProvider}).
  */
+@YarnNamed
 public final class VanillaGuiSinkProvider1211 implements VanillaGuiSinkProvider {
 
     @Override

@@ -14,6 +14,7 @@ import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.VanillaGuiSink;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import com.yuyuframe.launcheragent.apimixin.v1_21_11.render.DrawContextStateBinding1211;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import net.minecraft.client.gl.GpuSampler;
@@ -61,6 +62,7 @@ import java.util.Map;
  * {@link Blaze3DGpu}, donc par l'implémentation de la version active. Seule la
  * soumission à l'état de GUI est propre à cette tranche.
  */
+@YarnNamed
 public final class VanillaGuiSink1211 implements VanillaGuiSink {
 
     private RenderPipeline rectPipeline;

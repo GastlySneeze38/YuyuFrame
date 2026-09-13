@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v1_21_11;
 
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
+import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import net.minecraft.client.gui.ScreenRect;
 import net.minecraft.client.gui.render.state.SimpleGuiElementRenderState;
 import net.minecraft.client.render.VertexConsumer;
@@ -25,6 +26,7 @@ import net.minecraft.client.texture.TextureSetup;
  * inversions se compensent, le winding accepté par le culling est préservé
  * (c'est le piège qui avait fait disparaître tout le texte en v403).
  */
+@YarnNamed
 final class TextElement1211 implements SimpleGuiElementRenderState {
 
     private final UiFont font;
