@@ -164,9 +164,7 @@ public class UiHudEditorScreen extends UiScreenBase {
      * distances chiffrées, des guides pâles pour les repères proches, des
      * contours vanilla et des couleurs par nature de repère — « des valeurs
      * avec des lignes à moitié visibles au lieu de la ligne violette très
-     * visible et très compréhensible ». On revient à ce langage : le moteur
-     * (HudSnapEngine) calcule toujours tout, seul l'affichage est réduit aux
-     * repères accrochés, dans une seule couleur.
+     * visible et très compréhensible ». Retirés, du moteur comme de l'écran.
      */
     private void drawPlacementAids(UiRenderer renderer) {
         for (UiHudBox box : hudBoxes) {
@@ -174,7 +172,6 @@ public class UiHudEditorScreen extends UiScreenBase {
             HudSnapEngine.Result snap = box.activeSnap();
             if (snap == null) return;
             for (HudSnapEngine.Guide g : snap.guides) {
-                if (g.preview) continue;
                 float half = GUIDE_THICKNESS / 2f;
                 if (g.vertical) {
                     renderer.drawRoundedRect(g.pos - half, 0, g.pos + half, screenHeight, 0,

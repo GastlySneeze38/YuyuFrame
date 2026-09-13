@@ -1,15 +1,11 @@
 package com.yuyuframe.launcheragent.runtime.module.hud;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
-import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
-import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 
-import java.util.Optional;
-import java.util.Set;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
@@ -183,17 +179,6 @@ public final class SaturationModule extends LauncherModule {
     /** Idem : le lunge exige au moins ce niveau de faim. */
     private static final int LUNGE_MIN_FOOD = 7;
 
-    /**
-     * Niveau de « lunge » sur l'objet tenu, 0 s'il ne l'a pas.
-     *
-     * <p>Parcourt les enchantements de l'objet et compare le CHEMIN DE
-     * REGISTRE, plutôt que de chercher {@code Enchantments.LUNGE} dans le
-     * registre : un {@code Holder} porte déjà sa clé
-     * ({@code unwrapKey().identifier()}), là où une recherche en registre
-     * demanderait un {@code HolderLookup.Provider}, donc l'accès au monde,
-     * depuis un chemin appelé en plein combat.
-     */
-
     // ── Géométrie des barres vanilla ──────────────────────────────────────
     //
     // Reprise de Gui : la barre de faim occupe 10 icônes de 9 px espacées de
@@ -209,12 +194,6 @@ public final class SaturationModule extends LauncherModule {
 
     /** Épuisement maximum avant que le jeu ne le convertisse en perte de saturation. */
     private static final float MAX_EXHAUSTION = 4f;
-
-    private static final UiColor SATURATION_COLOR = new UiColor(255, 190, 60, 255);
-    private static final UiColor SATURATION_GHOST = new UiColor(255, 230, 150, 255);
-    private static final UiColor EXHAUSTION_COLOR = new UiColor(255, 255, 255, 190);
-    private static final UiColor FOOD_GHOST = new UiColor(200, 140, 60, 255);
-    private static final UiColor HEALTH_GHOST = new UiColor(240, 80, 80, 255);
 
     /**
      * Alpha du clignotement des aperçus — même forme d'onde qu'AppleSkin :
@@ -406,12 +385,6 @@ public final class SaturationModule extends LauncherModule {
         }
 
         /**
-         * Seuls le sprint et l'eau coûtent quelque chose : marcher, s'accroupir
-         * et tomber sont GRATUITS depuis la 1.9 — c'est la confusion la plus
-         * courante sur cette mécanique, et la compter ferait fondre
-         * l'estimation bien trop vite.
-         */
-        /**
          * Coup de lance chargé — voir {@link SaturationModule#onPiercingAttack}.
          * Appelé depuis le hook, hors du tick : l'épuisement est simplement
          * ajouté à l'accumulateur, la conversion en saturation se fera au tick
@@ -421,6 +394,12 @@ public final class SaturationModule extends LauncherModule {
             exhaustion += amount;
         }
 
+        /**
+         * Seuls le sprint et l'eau coûtent quelque chose : marcher, s'accroupir
+         * et tomber sont GRATUITS depuis la 1.9 — c'est la confusion la plus
+         * courante sur cette mécanique, et la compter ferait fondre
+         * l'estimation bien trop vite.
+         */
         private float movementExhaustion(boolean[] flags, double dx, double dy, double dz) {
             if (flags[PlayerData.FLAG_SWIMMING]) {
                 double d = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -436,13 +415,6 @@ public final class SaturationModule extends LauncherModule {
     private final Estimator estimator = new Estimator();
 
     /**
-     * Dessiné DANS la passe GUI de vanilla, donc au-dessus des barres qui
-     * viennent d'y être extraites et sous le chat — voir
-     * {@code LauncherModule.onRenderInVanillaGui}. Pas de chemin après
-     * présentation : il passerait par-dessus le chat, et de toute façon les
-     * accessors dont ce module dépend n'existent que sur ce bracket.
-     */
-    /**
      * Ces indicateurs sont COLLÉS aux barres vanilla, qui restent dessinées
      * derrière les écrans : ils doivent l'être aussi. Sans ça, ouvrir le tchat
      * ou l'inventaire faisait disparaître la saturation d'une barre de faim
@@ -453,6 +425,13 @@ public final class SaturationModule extends LauncherModule {
         return true;
     }
 
+    /**
+     * Dessiné DANS la passe GUI de vanilla, donc au-dessus des barres qui
+     * viennent d'y être extraites et sous le chat — voir
+     * {@code LauncherModule.onRenderInVanillaGui}. Pas de chemin après
+     * présentation : il passerait par-dessus le chat, et de toute façon les
+     * accessors dont ce module dépend n'existent que sur ce bracket.
+     */
     @Override
     public void onRenderInVanillaGui(UiRenderer renderer, int vpWidth, int vpHeight) {
         try {
@@ -769,30 +748,6 @@ public final class SaturationModule extends LauncherModule {
     }
 
     /**
-     * Valeurs nutritionnelles de l'aliment tenu — main principale d'abord,
-     * main secondaire ensuite (l'ordre de vanilla pour décider quoi consommer).
-     * {@code null} si aucune des deux ne tient de nourriture, ou si l'aliment
-     * n'est PAS consommable maintenant.
-     *
-     * <p>BUG TROUVÉ (retour utilisateur 2026-08-31) : « ça nous fait clignoter
-     * la barre de saturation pour dire qu'elle va augmenter alors que notre
-     * barre de bouffe est pleine, donc on ne peut pas manger cet aliment ».
-     * La première version affichait l'aperçu dès qu'un aliment était en main,
-     * sans jamais demander s'il était consommable — elle promettait donc un
-     * gain impossible.
-     *
-     * <p>{@code canEat(canAlwaysEat)} est la garde qu'utilise vanilla lui-même
-     * avant de consommer : faux barre pleine, sauf pour un aliment marqué
-     * {@code canAlwaysEat} (pomme dorée, ragoût suspect…), qui se mange à tout
-     * moment et dont l'aperçu reste donc légitime. Filtrer ici plutôt qu'à
-     * chaque appelant éteint d'un coup les trois aperçus (faim, saturation,
-     * cœurs), qui n'ont aucune raison de diverger sur ce point.
-     */
-
-
-    private static boolean canEatErrorLogged;
-
-    /**
      * Saturation en liseré SOUS le bord haut des icônes de faim, un segment
      * par demi-point (20 demi-points pour 10 icônes, exactement la granularité
      * d'AppleSkin). Le dernier segment est tronqué au prorata quand la
@@ -857,44 +812,6 @@ public final class SaturationModule extends LauncherModule {
         }
     }
 
-    /**
-     * Trace {@code value} demi-points (2 par icône) en partant de la DROITE,
-     * comme la barre de faim elle-même. Facteur commun à la saturation et à
-     * son aperçu, qui ne diffèrent que par la couleur et le point de départ.
-     */
-    private void drawHalfIconRun(UiRenderer renderer, float value, float barRight, float y,
-                                 float thickness, float scale, UiColor color, int vpWidth, int vpHeight) {
-        drawHalfIconRun(renderer, 0f, value, barRight, y, thickness, scale, color, vpWidth, vpHeight);
-    }
-
-    /** Variante à INTERVALLE : dessine de {@code from} à {@code to} demi-points — c'est ce qui permet à un aperçu de commencer là où la valeur réelle s'arrête. */
-    private void drawHalfIconRun(UiRenderer renderer, float from, float to, float barRight, float y,
-                                 float thickness, float scale, UiColor color, int vpWidth, int vpHeight) {
-        float maxHalves = ICONS * 2f;
-        from = Math.max(0f, Math.min(maxHalves, from));
-        to = Math.max(0f, Math.min(maxHalves, to));
-        if (to <= from) return;
-
-        for (int half = (int) Math.floor(from); half < Math.ceil(to); half++) {
-            int icon = half / 2;
-            boolean rightHalf = (half % 2) == 0; // les demi-points se remplissent de la droite vers la gauche
-            float iconRight = barRight - icon * ICON_STEP * scale;
-            float halfW = ICON_W * scale * 0.5f;
-            float x1 = rightHalf ? iconRight - halfW : iconRight - ICON_W * scale;
-            float x2 = rightHalf ? iconRight : iconRight - halfW;
-
-            // Fraction réellement couverte de CE demi-point — c'est elle qui
-            // rend la descente continue plutôt que par paliers.
-            float coverStart = Math.max(0f, from - half);
-            float coverEnd = Math.min(1f, to - half);
-            if (coverEnd <= coverStart) continue;
-            float w = x2 - x1;
-            float sx1 = x2 - w * coverEnd;
-            float sx2 = x2 - w * coverStart;
-
-            renderer.drawRoundedRect(sx1, y, sx2, y + thickness, 0f, color, vpWidth, vpHeight);
-        }
-    }
 
     /**
      * Épuisement en barre fine SOUS les icônes de faim, largeur proportionnelle

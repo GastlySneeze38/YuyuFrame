@@ -108,15 +108,13 @@ public final class HudPanelRenderer {
     static final float TEXT_SCALE = 0.55f;
 
     /**
-     * Tolérance de "collé au bord", en pixels — un panneau posé à 1 px du bord
-     * est visuellement collé, et l'arrondi y produit le même défaut qu'à 0 px.
-     * Volontairement petite : au-delà, un retrait DÉLIBÉRÉ de quelques pixels
-     * se ferait écraser et l'utilisateur perdrait ses arrondis sans comprendre
-     * pourquoi.
-     */
-    /**
      * Marge en dessous de laquelle un panneau est considéré COLLÉ à un bord
      * d'écran, pour la mise au carré de ses coins.
+     *
+     * <p>En pixels : un panneau posé à 1 px du bord est visuellement collé, et
+     * l'arrondi y produit le même défaut qu'à 0 px. Volontairement petite :
+     * au-delà, un retrait DÉLIBÉRÉ de quelques pixels se ferait écraser et
+     * l'utilisateur perdrait ses arrondis sans comprendre pourquoi.
      *
      * <p>⚠️ Contact STRICT, pas « du côté de » : la marge par défaut d'un
      * élément HUD étant de 8 unités, un panneau posé contre le bord droit de

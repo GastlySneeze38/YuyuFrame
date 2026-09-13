@@ -12,7 +12,7 @@ import net.minecraft.client.gui.render.TextureSetup;
  * passage de notre rendu dans l'état de GUI vanilla : c'est par ces méthodes
  * qu'on peut émettre un élément À LA POSITION Z du hook où l'on se trouve,
  * au lieu de dessiner dans une passe séparée après coup — voir
- * {@code apigraphic/render/vanillagui/VanillaGuiLayer} pour le pourquoi.
+ * {@code apigraphic/era/blaze3d/v26_1/vanillagui/VanillaGuiLayer} pour le pourquoi.
  *
  * <p>Signatures vérifiées sur {@code net/minecraft/client/gui/GuiGraphicsExtractor.class}
  * du jar client 26.1.2. La surcharge {@code fill(RenderPipeline, TextureSetup,

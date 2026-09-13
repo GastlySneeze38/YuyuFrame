@@ -10,7 +10,6 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
 
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
-import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
 import com.yuyuframe.launcheragent.runtime.game.PlayerData;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;

@@ -643,7 +643,6 @@ public final class UiInputPollerModern extends UiInputPoller {
         return readLatched(keyDown, keySeenAt, keyReleasePending, menuKeyCode(menuKeyName));
     }
 
-    /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
     /**
      * Noms des touches capturables ACTUELLEMENT maintenues, modificateurs
      * d'abord — pour {@link com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiKeybindButton},
@@ -705,6 +704,7 @@ public final class UiInputPollerModern extends UiInputPoller {
             || "LSUPER".equals(name) || "RSUPER".equals(name);
     }
 
+    /** Résout un nom de touche (même format que CAPTURABLE_KEYS/pollAnyKeyJustPressed) vers son code GLFW — {@code -1} si inconnu. */
     private static int menuKeyCode(String name) {
         for (Object[] entry : CAPTURABLE_KEYS) {
             if (entry[1].equals(name)) return (Integer) entry[0];

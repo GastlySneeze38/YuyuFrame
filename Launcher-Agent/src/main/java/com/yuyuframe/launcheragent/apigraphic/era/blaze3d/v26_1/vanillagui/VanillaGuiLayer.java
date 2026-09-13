@@ -294,7 +294,6 @@ public final class VanillaGuiLayer {
      * est compilée contre les noms 26.1.2. Voir sa javadoc pour le pourquoi du
      * point d'accroche (entre le HUD vanilla et le chat).
      */
-
     public static void flushItemIcons(Object hookContext) {
         GuiRenderState state = renderState(hookContext);
         if (state == null) return;

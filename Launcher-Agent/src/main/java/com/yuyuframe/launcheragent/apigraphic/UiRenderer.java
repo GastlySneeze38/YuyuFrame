@@ -131,13 +131,6 @@ public final class UiRenderer {
     // ── Helpers partagés du pipeline MODERNE (voir javadoc de la classe) ────
 
     /**
-     * Compile+lie un programme moderne (GLSL 150) — {@code aPos}/{@code aTexCoord}
-     * liés respectivement aux emplacements 0/1 AVANT le link (glBindAttribLocation),
-     * pour que {@link #ensureModernBuffersInit()} puisse configurer UN SEUL VAO
-     * réutilisable par les 3 shaders (rect/vignette/texte), au lieu d'interroger
-     * un emplacement différent par programme.
-     */
-    /**
      * VÉRIFICATION JAMAIS FAITE JUSQU'ICI (voir historique du projet) : une
      * erreur de compilation/link GLSL ne lève AUCUNE exception Java —
      * glCompileShader/glLinkProgram "réussissent" toujours du point de vue
@@ -166,6 +159,13 @@ public final class UiRenderer {
         }
     }
 
+    /**
+     * Compile+lie un programme moderne (GLSL 150) — {@code aPos}/{@code aTexCoord}
+     * liés respectivement aux emplacements 0/1 AVANT le link (glBindAttribLocation),
+     * pour que {@link #ensureModernBuffersInit()} puisse configurer UN SEUL VAO
+     * réutilisable par les 3 shaders (rect/vignette/texte), au lieu d'interroger
+     * un emplacement différent par programme.
+     */
     public int compileModernProgram(String vertexSrc, String fragmentSrc) throws Exception {
         int vsh = glBridge.glCreateShader(0x8B31); // GL_VERTEX_SHADER
         glBridge.glShaderSource(vsh, vertexSrc);

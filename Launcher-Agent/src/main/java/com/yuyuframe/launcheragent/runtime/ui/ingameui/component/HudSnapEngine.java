@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * Moteur d'aimantation de l'éditeur HUD — calcul PUR : ni dessin, ni entrée,
  * ni modèle. {@link UiHudBox} lui passe la position brute du glisser, il rend
- * la position aimantée, les guides à dessiner et les distances à afficher.
+ * la position aimantée et les lignes de guide des repères accrochés.
  *
  * <h2>Pourquoi une refonte (2026-09-13)</h2>
  *
@@ -39,8 +39,6 @@ public final class HudSnapEngine {
     static final float SNAP_GUI = 5f;
     /** Zone de maintien d'un repère déjà accroché — voir l'hystérésis dans la javadoc de classe. */
     static final float HOLD_GUI = 8f;
-    /** Au-delà de la zone d'aimantation, jusqu'ici, un repère est ANNONCÉ (guide pâle) sans aimanter. */
-    static final float PREVIEW_GUI = 16f;
     /** Marge standard aux bords de l'écran, en pixels GUI. */
     static final float MARGIN_GUI = 4f;
     /** Écart standard entre deux éléments collés, en pixels GUI. */
@@ -48,18 +46,12 @@ public final class HudSnapEngine {
     /** Un écart plus grand que ça n'est pas proposé comme « espacement égal ». */
     static final float MAX_SPACING_GUI = 60f;
 
-    /** Nature d'un repère — décide de la couleur de son guide. */
-    public enum Kind { SCREEN, ELEMENT, VANILLA, SPACING }
-
     /** Un rectangle cible (autre élément HUD ou élément vanilla). */
     public static final class Rect {
         public final float x, y, w, h;
-        public final Kind kind;
-        public final String label;
 
-        public Rect(float x, float y, float w, float h, Kind kind, String label) {
+        public Rect(float x, float y, float w, float h) {
             this.x = x; this.y = y; this.w = w; this.h = h;
-            this.kind = kind; this.label = label;
         }
 
         float left() { return x; }
@@ -70,28 +62,14 @@ public final class HudSnapEngine {
         float centerY() { return y + h / 2f; }
     }
 
-    /** Segment de guide : vertical (x constant) ou horizontal (y constant). */
+    /** Ligne de guide d'un repère accroché : verticale (x constant) ou horizontale (y constant). */
     public static final class Guide {
         public final boolean vertical;
-        public final float pos, from, to;
-        public final Kind kind;
-        /** Repère proche mais pas encore accroché — dessiné pâle. */
-        public final boolean preview;
+        public final float pos;
 
-        Guide(boolean vertical, float pos, float from, float to, Kind kind, boolean preview) {
-            this.vertical = vertical; this.pos = pos;
-            this.from = Math.min(from, to); this.to = Math.max(from, to);
-            this.kind = kind; this.preview = preview;
-        }
-    }
-
-    /** Distance mesurée entre la boîte et un voisin (ou un bord d'écran), en pixels GUI. */
-    public static final class Measure {
-        public final float x1, y1, x2, y2;
-        public final int gui;
-
-        Measure(float x1, float y1, float x2, float y2, int gui) {
-            this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2; this.gui = gui;
+        Guide(boolean vertical, float pos) {
+            this.vertical = vertical;
+            this.pos = pos;
         }
     }
 
@@ -108,12 +86,9 @@ public final class HudSnapEngine {
         final float delta;
         /** Position du guide sur l'axe. */
         final float pos;
-        final Kind kind;
-        /** Cible, pour l'étendue du guide ; {@code null} = l'écran entier. */
-        final Rect target;
 
-        Candidate(String key, float delta, float pos, Kind kind, Rect target) {
-            this.key = key; this.delta = delta; this.pos = pos; this.kind = kind; this.target = target;
+        Candidate(String key, float delta, float pos) {
+            this.key = key; this.delta = delta; this.pos = pos;
         }
     }
 
@@ -129,7 +104,7 @@ public final class HudSnapEngine {
                               int fbW, int fbH, float scale, String prevKeyX, String prevKeyY,
                               boolean enabled) {
         Result r = new Result();
-        float snap = SNAP_GUI * scale, hold = HOLD_GUI * scale, preview = PREVIEW_GUI * scale;
+        float snap = SNAP_GUI * scale, hold = HOLD_GUI * scale;
 
         List<Candidate> xs = new ArrayList<Candidate>();
         List<Candidate> ys = new ArrayList<Candidate>();
@@ -156,10 +131,8 @@ public final class HudSnapEngine {
         r.keyX = bx != null ? bx.key : null;
         r.keyY = by != null ? by.key : null;
 
-        if (enabled) {
-            addGuides(r, xs, bx, true, w, h, fbW, fbH, preview);
-            addGuides(r, ys, by, false, w, h, fbW, fbH, preview);
-        }
+        addGuides(r, xs, bx, true);
+        addGuides(r, ys, by, false);
         return r;
     }
 
@@ -168,23 +141,23 @@ public final class HudSnapEngine {
         float l = x, c = x + w / 2f, rr = x + w;
         float m = MARGIN_GUI * scale, gap = GAP_GUI * scale;
 
-        add(out, "screen.left", 0f - l, 0f, Kind.SCREEN, null);
-        add(out, "screen.left.margin", m - l, m, Kind.SCREEN, null);
-        add(out, "screen.right", fbW - rr, fbW, Kind.SCREEN, null);
-        add(out, "screen.right.margin", (fbW - m) - rr, fbW - m, Kind.SCREEN, null);
-        add(out, "screen.centerX", fbW / 2f - c, fbW / 2f, Kind.SCREEN, null);
+        add(out, "screen.left", 0f - l, 0f);
+        add(out, "screen.left.margin", m - l, m);
+        add(out, "screen.right", fbW - rr, fbW);
+        add(out, "screen.right.margin", (fbW - m) - rr, fbW - m);
+        add(out, "screen.centerX", fbW / 2f - c, fbW / 2f);
 
         for (int i = 0; i < targets.size(); i++) {
             Rect t = targets.get(i);
             String k = "t" + i + ".";
-            add(out, k + "L=L", t.left() - l, t.left(), t.kind, t);
-            add(out, k + "R=R", t.right() - rr, t.right(), t.kind, t);
-            add(out, k + "C=C", t.centerX() - c, t.centerX(), t.kind, t);
+            add(out, k + "L=L", t.left() - l, t.left());
+            add(out, k + "R=R", t.right() - rr, t.right());
+            add(out, k + "C=C", t.centerX() - c, t.centerX());
             // Bords OPPOSÉS : juxtaposer, collé ou avec l'écart standard.
-            add(out, k + "L=R", t.right() - l, t.right(), t.kind, t);
-            add(out, k + "L=R+gap", t.right() + gap - l, t.right() + gap, t.kind, t);
-            add(out, k + "R=L", t.left() - rr, t.left(), t.kind, t);
-            add(out, k + "R=L-gap", t.left() - gap - rr, t.left() - gap, t.kind, t);
+            add(out, k + "L=R", t.right() - l, t.right());
+            add(out, k + "L=R+gap", t.right() + gap - l, t.right() + gap);
+            add(out, k + "R=L", t.left() - rr, t.left());
+            add(out, k + "R=L-gap", t.left() - gap - rr, t.left() - gap);
         }
 
         // Espacement égal : reprendre un écart déjà présent entre deux cibles
@@ -193,8 +166,8 @@ public final class HudSnapEngine {
             for (int i = 0; i < targets.size(); i++) {
                 Rect t = targets.get(i);
                 if (!overlaps(y, y + h, t.bottom(), t.top())) continue;
-                add(out, "t" + i + ".spaceR" + g, t.right() + g - l, t.right() + g, Kind.SPACING, t);
-                add(out, "t" + i + ".spaceL" + g, t.left() - g - rr, t.left() - g, Kind.SPACING, t);
+                add(out, "t" + i + ".spaceR" + g, t.right() + g - l, t.right() + g);
+                add(out, "t" + i + ".spaceL" + g, t.left() - g - rr, t.left() - g);
             }
         }
     }
@@ -204,36 +177,36 @@ public final class HudSnapEngine {
         float b = y, c = y + h / 2f, t0 = y + h;
         float m = MARGIN_GUI * scale, gap = GAP_GUI * scale;
 
-        add(out, "screen.bottom", 0f - b, 0f, Kind.SCREEN, null);
-        add(out, "screen.bottom.margin", m - b, m, Kind.SCREEN, null);
-        add(out, "screen.top", fbH - t0, fbH, Kind.SCREEN, null);
-        add(out, "screen.top.margin", (fbH - m) - t0, fbH - m, Kind.SCREEN, null);
-        add(out, "screen.centerY", fbH / 2f - c, fbH / 2f, Kind.SCREEN, null);
+        add(out, "screen.bottom", 0f - b, 0f);
+        add(out, "screen.bottom.margin", m - b, m);
+        add(out, "screen.top", fbH - t0, fbH);
+        add(out, "screen.top.margin", (fbH - m) - t0, fbH - m);
+        add(out, "screen.centerY", fbH / 2f - c, fbH / 2f);
 
         for (int i = 0; i < targets.size(); i++) {
             Rect t = targets.get(i);
             String k = "t" + i + ".";
-            add(out, k + "B=B", t.bottom() - b, t.bottom(), t.kind, t);
-            add(out, k + "T=T", t.top() - t0, t.top(), t.kind, t);
-            add(out, k + "C=C", t.centerY() - c, t.centerY(), t.kind, t);
-            add(out, k + "B=T", t.top() - b, t.top(), t.kind, t);
-            add(out, k + "B=T+gap", t.top() + gap - b, t.top() + gap, t.kind, t);
-            add(out, k + "T=B", t.bottom() - t0, t.bottom(), t.kind, t);
-            add(out, k + "T=B-gap", t.bottom() - gap - t0, t.bottom() - gap, t.kind, t);
+            add(out, k + "B=B", t.bottom() - b, t.bottom());
+            add(out, k + "T=T", t.top() - t0, t.top());
+            add(out, k + "C=C", t.centerY() - c, t.centerY());
+            add(out, k + "B=T", t.top() - b, t.top());
+            add(out, k + "B=T+gap", t.top() + gap - b, t.top() + gap);
+            add(out, k + "T=B", t.bottom() - t0, t.bottom());
+            add(out, k + "T=B-gap", t.bottom() - gap - t0, t.bottom() - gap);
         }
 
         for (float g : spacings(targets, false, scale)) {
             for (int i = 0; i < targets.size(); i++) {
                 Rect t = targets.get(i);
                 if (!overlaps(x, x + w, t.left(), t.right())) continue;
-                add(out, "t" + i + ".spaceT" + g, t.top() + g - b, t.top() + g, Kind.SPACING, t);
-                add(out, "t" + i + ".spaceB" + g, t.bottom() - g - t0, t.bottom() - g, Kind.SPACING, t);
+                add(out, "t" + i + ".spaceT" + g, t.top() + g - b, t.top() + g);
+                add(out, "t" + i + ".spaceB" + g, t.bottom() - g - t0, t.bottom() - g);
             }
         }
     }
 
-    private static void add(List<Candidate> out, String key, float delta, float pos, Kind kind, Rect target) {
-        out.add(new Candidate(key, delta, pos, kind, target));
+    private static void add(List<Candidate> out, String key, float delta, float pos) {
+        out.add(new Candidate(key, delta, pos));
     }
 
     /**
@@ -279,73 +252,14 @@ public final class HudSnapEngine {
     }
 
     /**
-     * Guide du repère accroché, plus ceux qui COÏNCIDENT avec lui une fois la
-     * boîte posée (plusieurs alignements simultanés), plus les repères
-     * proches annoncés en pâle — au plus deux, les plus proches.
+     * Ligne du repère accroché, plus celles qui COÏNCIDENT avec lui une fois la
+     * boîte posée (plusieurs alignements simultanés).
      */
-    private static void addGuides(Result r, List<Candidate> cands, Candidate chosen, boolean vertical,
-                                  float w, float h, int fbW, int fbH, float previewDist) {
-        float applied = chosen != null ? chosen.delta : 0f;
-        List<Candidate> previews = new ArrayList<Candidate>();
+    private static void addGuides(Result r, List<Candidate> cands, Candidate chosen, boolean vertical) {
+        if (chosen == null) return;
         for (Candidate c : cands) {
-            float rest = Math.abs(c.delta - applied);
-            if (chosen != null && rest < 0.5f) {
-                r.guides.add(guide(r, c, vertical, w, h, fbW, fbH, false));
-            } else if (rest <= previewDist) {
-                previews.add(c);
-            }
+            if (Math.abs(c.delta - chosen.delta) < 0.5f) r.guides.add(new Guide(vertical, c.pos));
         }
-        java.util.Collections.sort(previews, (a, b) ->
-            Float.compare(Math.abs(a.delta - applied), Math.abs(b.delta - applied)));
-        for (int i = 0; i < previews.size() && i < 2; i++) {
-            r.guides.add(guide(r, previews.get(i), vertical, w, h, fbW, fbH, true));
-        }
-    }
-
-    /** Étendue du guide : de la boîte à sa cible, ou tout l'écran pour un repère d'écran. */
-    private static Guide guide(Result r, Candidate c, boolean vertical, float w, float h,
-                               int fbW, int fbH, boolean preview) {
-        if (c.target == null) {
-            return vertical ? new Guide(true, c.pos, 0f, fbH, c.kind, preview)
-                            : new Guide(false, c.pos, 0f, fbW, c.kind, preview);
-        }
-        Rect t = c.target;
-        return vertical
-            ? new Guide(true, c.pos, Math.min(r.y, t.bottom()), Math.max(r.y + h, t.top()), c.kind, preview)
-            : new Guide(false, c.pos, Math.min(r.x, t.left()), Math.max(r.x + w, t.right()), c.kind, preview);
-    }
-
-    /**
-     * Distances de la boîte à son plus proche voisin de chaque côté — autre
-     * cible qui lui fait face, sinon le bord de l'écran — en pixels GUI.
-     */
-    public static List<Measure> measure(float x, float y, float w, float h, List<Rect> targets,
-                                        int fbW, int fbH, float scale) {
-        List<Measure> out = new ArrayList<Measure>();
-        float cx = x + w / 2f, cy = y + h / 2f;
-
-        float leftEdge = 0f, rightEdge = fbW, bottomEdge = 0f, topEdge = fbH;
-        for (Rect t : targets) {
-            if (overlaps(y, y + h, t.bottom(), t.top())) {
-                if (t.right() <= x) leftEdge = Math.max(leftEdge, t.right());
-                if (t.left() >= x + w) rightEdge = Math.min(rightEdge, t.left());
-            }
-            if (overlaps(x, x + w, t.left(), t.right())) {
-                if (t.top() <= y) bottomEdge = Math.max(bottomEdge, t.top());
-                if (t.bottom() >= y + h) topEdge = Math.min(topEdge, t.bottom());
-            }
-        }
-        addMeasure(out, leftEdge, cy, x, cy, x - leftEdge, scale);
-        addMeasure(out, x + w, cy, rightEdge, cy, rightEdge - (x + w), scale);
-        addMeasure(out, cx, bottomEdge, cx, y, y - bottomEdge, scale);
-        addMeasure(out, cx, y + h, cx, topEdge, topEdge - (y + h), scale);
-        return out;
-    }
-
-    private static void addMeasure(List<Measure> out, float x1, float y1, float x2, float y2,
-                                   float px, float scale) {
-        if (px < 0.5f) return;
-        out.add(new Measure(x1, y1, x2, y2, Math.round(px / scale)));
     }
 
     /**
@@ -367,17 +281,17 @@ public final class HudSnapEngine {
         if (guiSize == null || scale <= 0f) return out;
         int gw = guiSize[0], gh = guiSize[1];
         int center = gw / 2;
-        vanilla(out, center - 91, gh - 22, 182, 22, "Hotbar", fbH, scale);
-        vanilla(out, center - 91 - 29, gh - 23, 29, 24, "Main secondaire", fbH, scale);
-        vanilla(out, center + 91, gh - 23, 29, 24, "Main secondaire", fbH, scale);
-        vanilla(out, center - 91, gh - 39, 81, 9, "Vie", fbH, scale);
-        vanilla(out, center + 91 - 81, gh - 39, 81, 9, "Faim", fbH, scale);
-        vanilla(out, (gw - 15) / 2, (gh - 15) / 2, 15, 15, "Curseur", fbH, scale);
+        vanilla(out, center - 91, gh - 22, 182, 22, fbH, scale);       // hotbar
+        vanilla(out, center - 91 - 29, gh - 23, 29, 24, fbH, scale);   // main secondaire, gauche
+        vanilla(out, center + 91, gh - 23, 29, 24, fbH, scale);        // main secondaire, droite
+        vanilla(out, center - 91, gh - 39, 81, 9, fbH, scale);         // vie
+        vanilla(out, center + 91 - 81, gh - 39, 81, 9, fbH, scale);    // faim
+        vanilla(out, (gw - 15) / 2, (gh - 15) / 2, 15, 15, fbH, scale); // curseur
         return out;
     }
 
     /** Rectangle GUI (origine haut-gauche) → repère moteur (origine bas-gauche). */
-    private static void vanilla(List<Rect> out, int gx, int gy, int gw, int gh, String label, int fbH, float s) {
-        out.add(new Rect(gx * s, fbH - (gy + gh) * s, gw * s, gh * s, Kind.VANILLA, label));
+    private static void vanilla(List<Rect> out, int gx, int gy, int gw, int gh, int fbH, float s) {
+        out.add(new Rect(gx * s, fbH - (gy + gh) * s, gw * s, gh * s));
     }
 }

@@ -36,7 +36,7 @@ public final class McLookup {
      * <p>Cas d'usage : {@code Identifier.ofVanilla(path)} (Yarn 1.21.11) ==
      * {@code Identifier.withDefaultNamespace(path)} (vrai nom Mojang 26.1.2).
      */
-    public static Method staticStringMethod(Class<?> owner, String yarnClass, String... candidateNames) {
+    private static Method staticStringMethod(Class<?> owner, String yarnClass, String... candidateNames) {
         for (String name : candidateNames) {
             if (name == null) continue;
             String runtimeName = MappingsRegistry.getObfMethodName(yarnClass, name);
@@ -61,7 +61,7 @@ public final class McLookup {
      * instance vivante, son propre classloader est la seule réponse sans
      * ambiguïté.
      */
-    public static Class<?> classByLoader(ClassLoader cl, String... candidateNames) {
+    private static Class<?> classByLoader(ClassLoader cl, String... candidateNames) {
         for (String name : candidateNames) {
             if (name == null) continue;
             try {

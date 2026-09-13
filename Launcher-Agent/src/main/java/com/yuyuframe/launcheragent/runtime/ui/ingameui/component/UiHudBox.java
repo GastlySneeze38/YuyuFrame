@@ -58,8 +58,8 @@ public class UiHudBox extends UiWidget {
     // haut y+h restent fixes pendant tout le glissement.
     private boolean resizing;
     private float resizeAnchorX, resizeAnchorTopY;
-    /** Repère de taille accroché (« Taille naturelle », « Même largeur que FPS »…), {@code null} = cran de grille. */
-    private String resizeSnapLabel;
+    /** Taille accrochée à un repère (voir {@link #snapScale}) plutôt qu'à un cran de grille — poignée verte. */
+    private boolean resizeSnapped;
 
     /** Sélection clavier (flèches) — posée par l'éditeur. */
     private boolean selected;
@@ -73,9 +73,7 @@ public class UiHudBox extends UiWidget {
 
     public HudElement element() { return element; }
     public boolean isDragging() { return dragging; }
-    public boolean isResizing() { return resizing; }
     public HudSnapEngine.Result activeSnap() { return activeSnap; }
-    public String resizeSnapLabel() { return resizeSnapLabel; }
     public void setSelected(boolean selected) { this.selected = selected; }
     public void setOnSelect(Runnable onSelect) { this.onSelect = onSelect; }
 
@@ -94,8 +92,7 @@ public class UiHudBox extends UiWidget {
         List<HudSnapEngine.Rect> out = new ArrayList<HudSnapEngine.Rect>();
         for (UiHudBox other : siblings) {
             if (other == this) continue;
-            out.add(new HudSnapEngine.Rect(other.x, other.y, other.w, other.h,
-                HudSnapEngine.Kind.ELEMENT, other.element.displayName));
+            out.add(new HudSnapEngine.Rect(other.x, other.y, other.w, other.h));
         }
         out.addAll(HudSnapEngine.vanillaTargets(ClientData.guiSize(), fbHeight, scale));
         return out;
@@ -133,7 +130,7 @@ public class UiHudBox extends UiWidget {
         gripHoverAnim.setTarget(resizing || overGrip(mouseX, mouseY) ? 1f : 0f);
         // Vert quand la taille est accrochée à un repère — confirmation qu'on
         // est sur « la taille proposée », pas un cran de grille quelconque.
-        UiColor gripColor = resizing && resizeSnapLabel != null
+        UiColor gripColor = resizing && resizeSnapped
             ? SNAPPED_GREEN
             : UiColor.lerp(new UiColor(255, 255, 255, 100), UiTheme.ACCENT, gripHoverAnim.get());
         renderer.drawRoundedRect(x + w - GRIP_SIZE, y, x + w, y + GRIP_SIZE, 2f, gripColor, vpWidth, vpHeight);
@@ -145,7 +142,7 @@ public class UiHudBox extends UiWidget {
         if (resizing) {
             if (!input.leftDown) {
                 resizing = false;
-                resizeSnapLabel = null;
+                resizeSnapped = false;
                 element.setScreenPositionAutoAnchor(x, y, input.fbWidth, input.fbHeight);
                 HudConfigStore.save();
                 return;
@@ -219,13 +216,8 @@ public class UiHudBox extends UiWidget {
 
         float snapped = input.altDown ? Float.NaN
             : snapScale(rawScale, natW, natH, diagLen, guiScale(input.fbWidth), maxScale);
-        float finalScale;
-        if (!Float.isNaN(snapped)) {
-            finalScale = snapped;
-        } else {
-            resizeSnapLabel = null;
-            finalScale = Math.round(rawScale / SCALE_GRID) * SCALE_GRID;
-        }
+        resizeSnapped = !Float.isNaN(snapped);
+        float finalScale = resizeSnapped ? snapped : Math.round(rawScale / SCALE_GRID) * SCALE_GRID;
         finalScale = Math.max(HudElement.MIN_SCALE, Math.min(maxScale, finalScale));
 
         element.setScale(finalScale);
@@ -240,35 +232,28 @@ public class UiHudBox extends UiWidget {
      * même largeur ou même hauteur qu'un autre. Le plus proche gagne, mesuré en
      * pixels le long de la diagonale — même zone d'aimantation que le glisser.
      *
-     * @return l'échelle retenue (et {@link #resizeSnapLabel} renseigné), ou
-     *     {@code NaN} si aucun repère n'est à portée
+     * @return l'échelle retenue, ou {@code NaN} si aucun repère n'est à portée
      */
     private float snapScale(float rawScale, float natW, float natH, float diagLen, float guiScale, float maxScale) {
-        float threshold = HudSnapEngine.SNAP_GUI * guiScale;
-        float best = Float.NaN;
-        String bestLabel = null;
-        float bestDist = Float.MAX_VALUE;
-
-        List<Object[]> cands = new ArrayList<Object[]>();
-        cands.add(new Object[]{ 1f, "Taille naturelle" });
+        List<Float> cands = new ArrayList<Float>();
+        cands.add(1f);
         for (UiHudBox other : siblings) {
             if (other == this) continue;
-            String name = other.element.displayName;
-            cands.add(new Object[]{ other.element.scale, "Même échelle que " + name });
-            if (natW > 0f) cands.add(new Object[]{ other.w / natW, "Même largeur que " + name });
-            if (natH > 0f) cands.add(new Object[]{ other.h / natH, "Même hauteur que " + name });
+            cands.add(other.element.scale);
+            if (natW > 0f) cands.add(other.w / natW);
+            if (natH > 0f) cands.add(other.h / natH);
         }
-        for (Object[] c : cands) {
-            float s = (Float) c[0];
+        float threshold = HudSnapEngine.SNAP_GUI * guiScale;
+        float best = Float.NaN;
+        float bestDist = Float.MAX_VALUE;
+        for (float s : cands) {
             if (s < HudElement.MIN_SCALE || s > maxScale) continue;
             float dist = Math.abs(s - rawScale) * diagLen;
             if (dist <= threshold && dist < bestDist) {
                 bestDist = dist;
                 best = s;
-                bestLabel = (String) c[1];
             }
         }
-        resizeSnapLabel = bestLabel;
         return best;
     }
 

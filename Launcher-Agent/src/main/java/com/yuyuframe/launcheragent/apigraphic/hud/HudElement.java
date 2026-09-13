@@ -217,17 +217,6 @@ public class HudElement {
     }
 
     /**
-     * Recalcule w/h depuis naturalSize()*scale sans changer scale — à appeler
-     * CHAQUE FRAME avant lecture de w/h (voir HudOverlayRenderer/UiHudBox) :
-     * un contenu texte de largeur variable (FPS/Ping, "9 FPS" vs "144 FPS")
-     * n'était mesuré QU'À LA CONSTRUCTION de l'élément (avant même que
-     * MinecraftClient existe, donc sur un texte de repli), jamais remesuré
-     * ensuite — la boîte restait figée sur cette largeur de repli alors que
-     * le texte réel affiché changeait de largeur en jeu ("le calcul de la
-     * taille était pas bon" : gros espace vide ou texte débordant selon le
-     * texte de repli utilisé au démarrage).
-     */
-    /**
      * Lignes de contenu de la frame COURANTE.
      *
      * <p>AUDIT PERF : {@code content.lines()} était appelé DEUX FOIS par frame
@@ -251,6 +240,17 @@ public class HudElement {
         return cachedLines;
     }
 
+    /**
+     * Recalcule w/h depuis naturalSize()*scale sans changer scale — à appeler
+     * CHAQUE FRAME avant lecture de w/h (voir HudOverlayRenderer/UiHudBox) :
+     * un contenu texte de largeur variable (FPS/Ping, "9 FPS" vs "144 FPS")
+     * n'était mesuré QU'À LA CONSTRUCTION de l'élément (avant même que
+     * MinecraftClient existe, donc sur un texte de repli), jamais remesuré
+     * ensuite — la boîte restait figée sur cette largeur de repli alors que
+     * le texte réel affiché changeait de largeur en jeu ("le calcul de la
+     * taille était pas bon" : gros espace vide ou texte débordant selon le
+     * texte de repli utilisé au démarrage).
+     */
     public void refreshSize() {
         cachedLines = null; // nouvelle frame : le contenu a pu changer
         recomputeSize();
@@ -412,7 +412,6 @@ public class HudElement {
         marginY = top ? vpHeight - (absY + h) : absY;
     }
 
-    /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+décalage tels que déclarés à la construction, PAS la taille/l'échelle (volontairement laissées telles quelles). */
     /**
      * Défauts capturés PARESSEUSEMENT au premier {@link #captureDefaults()} —
      * pas dans le constructeur : {@link #textColor}/{@link #paddingX} sont
@@ -436,6 +435,7 @@ public class HudElement {
         defaultTextColor = textColor;
     }
 
+    /** Bouton "Réinitialiser la position" (voir ConfigScreenBuilder) — remet ancre+écart tels que déclarés à la construction, PAS la taille/l'échelle (volontairement laissées telles quelles). */
     public void resetPosition() {
         this.anchor = defaultAnchor;
         this.marginX = defaultMarginX;

@@ -20,7 +20,6 @@ import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.Perspective;
-import net.minecraft.client.option.SimpleOption;
 import net.minecraft.client.session.Session;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.util.Window;

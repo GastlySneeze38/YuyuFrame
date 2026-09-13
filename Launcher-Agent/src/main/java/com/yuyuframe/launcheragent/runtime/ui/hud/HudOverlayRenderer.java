@@ -11,7 +11,6 @@ import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
-import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 
 import java.lang.reflect.Field;
