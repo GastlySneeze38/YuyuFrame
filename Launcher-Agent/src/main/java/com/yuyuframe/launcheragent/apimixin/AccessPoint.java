@@ -57,6 +57,21 @@ public enum AccessPoint {
     /** Écran ouvert, {@code null} en jeu — champ {@code screen}. */
     CLIENT_SCREEN,
     /**
+     * GENRE de l'écran passé en receveur, rendu en {@code String} :
+     * {@code "CHAT"}, {@code "INVENTORY"}, {@code "CONTAINER"} ou
+     * {@code "OTHER"} (y compris pour {@code null}).
+     *
+     * <p>Une OPÉRATION plutôt que les trois classes : l'appelant n'a ni à
+     * nommer {@code ChatScreen}/{@code InventoryScreen}/{@code
+     * AbstractContainerScreen} (renommées {@code HandledScreen} en Yarn), ni à
+     * les résoudre par réflexion. La liaison fait trois {@code instanceof}
+     * typés.
+     *
+     * <p>L'inventaire du joueur EST un conteneur du point de vue du jeu : la
+     * liaison doit tester {@code INVENTORY} avant {@code CONTAINER}.
+     */
+    SCREEN_KIND,
+    /**
      * Ouvre un écran. Argument : la poignée de l'écran, ou {@code null} pour
      * revenir au jeu.
      *

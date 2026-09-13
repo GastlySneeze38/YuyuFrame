@@ -144,6 +144,13 @@ public final class AccessorBindings1211 {
         AccessorRegistry.bind(AccessPoint.CLIENT_OPTIONS, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.options; });
         AccessorRegistry.bind(AccessPoint.CLIENT_USER, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.getSession(); });
         AccessorRegistry.bind(AccessPoint.CLIENT_SCREEN, (r, a) -> { MinecraftClient c = mc(r); return c == null ? null : c.currentScreen; });
+        // INVENTORY avant CONTAINER : InventoryScreen hérite de HandledScreen.
+        AccessorRegistry.bind(AccessPoint.SCREEN_KIND, (r, a) -> {
+            if (r instanceof net.minecraft.client.gui.screen.ChatScreen) return "CHAT";
+            if (r instanceof net.minecraft.client.gui.screen.ingame.InventoryScreen) return "INVENTORY";
+            if (r instanceof net.minecraft.client.gui.screen.ingame.HandledScreen) return "CONTAINER";
+            return "OTHER";
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_SET_SCREEN, (r, a) -> {
             MinecraftClient c = mc(r);
             if (c == null || a.length < 1) return null;
