@@ -388,6 +388,22 @@ public enum AccessPoint {
      */
     CLIENT_GUI_SIZE,
     /**
+     * Échelle GUI de vanilla, ENTIÈRE ({@code 1}, {@code 2}, {@code 3}…) —
+     * {@code 0} hors fenêtre lisible.
+     *
+     * <p>Ne JAMAIS la reconstruire par {@code largeurFB / largeurGUI} : la
+     * dimension GUI est arrondie AU SUPÉRIEUR ({@code ceil(fb / échelle)}),
+     * donc ce rapport n'est l'échelle que si la fenêtre en est un multiple.
+     * Vanilla projette sa GUI avec {@code largeur / guiScale} et
+     * {@code hauteur / guiScale} en entiers (bytecode {@code GuiRenderer},
+     * 26.1.2) : un pixel GUI vaut exactement {@code guiScale} pixels écran,
+     * origine en haut à gauche, et la GUI DÉBORDE sous le bas de la fenêtre
+     * quand la hauteur n'est pas un multiple. C'est ce qui décalait la
+     * saturation d'un pixel GUI sous la barre de faim (2026-09-13).
+     * Renommage : {@code getGuiScale()} (26.1.2) / {@code getScaleFactor()} (Yarn 1.21.11).
+     */
+    CLIENT_GUI_SCALE,
+    /**
      * Contenu BRUT d'une ressource du jeu, en octets — arguments : espace de
      * noms et chemin ({@code "minecraft"}, {@code "textures/gui/sprites/..."}).
      * {@code null} si la ressource est absente.

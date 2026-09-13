@@ -491,8 +491,8 @@ public final class SaturationModule extends LauncherModule {
             // d'écart décale tout l'alignement sur ses barres. Repli sur la
             // division quand la fenêtre n'est pas lisible.
             int[] gui = ClientData.guiSize();
-            int guiW = gui != null ? gui[0] : Math.round(vpWidth / scale);
-            int guiH = gui != null ? gui[1] : Math.round(vpHeight / scale);
+            int guiW = gui != null ? gui[0] : (int) Math.ceil(vpWidth / scale);
+            int guiH = gui != null ? gui[1] : (int) Math.ceil(vpHeight / scale);
             if (guiW <= 0 || guiH <= 0) { reportOnce("dimensions GUI invalides: " + guiW + "x" + guiH); return; }
             float guiWidth = guiW;
 
@@ -516,12 +516,19 @@ public final class SaturationModule extends LauncherModule {
             // seulement dans certaines tailles de fenêtre, d'où un défaut qui
             // apparaît et disparaît au redimensionnement.
             float barRight = (guiW / 2 + BAR_HALF_WIDTH) * scale;
-            // L'axe VERTICAL a son propre rapport : la hauteur GUI est
-            // arrondie au SUPÉRIEUR indépendamment de la largeur, donc
-            // vpHeight/guiH n'égale pas exactement vpWidth/guiW. Sous-pixel,
-            // mais gratuit à corriger une fois guiH connu.
-            float scaleY = (float) vpHeight / guiH;
-            float barBottom = (BAR_BOTTOM_OFFSET - ICON_W) * scaleY;
+            // BUG TROUVÉ (retour utilisateur 2026-09-13, « décalé d'un pixel
+            // par rapport au rendu vanilla ») : on prenait ici un rapport
+            // vertical vpHeight / guiH, en pensant corriger l'arrondi. C'était
+            // l'inverse. Vanilla projette sa GUI avec l'échelle ENTIÈRE, origine
+            // en HAUT (bytecode GuiRenderer 26.1.2) : quand la hauteur de
+            // fenêtre n'est pas un multiple de l'échelle, la GUI DÉBORDE sous le
+            // bas de l'écran, et les icônes de faim (haut à guiH − 39, extractFood)
+            // sont plus bas que « 30 pixels GUI au-dessus du bas ». Exemple :
+            // 1017 px à l'échelle 4 → guiH = 255, l'ancien calcul posait tout
+            // 0,66 pixel GUI (2,6 pixels écran) trop HAUT.
+            // Conversion exacte vers le repère moteur (Y vers le haut) :
+            // y = hauteurFB − (guiH − 30) × échelle.
+            float barBottom = vpHeight - (guiH - (BAR_BOTTOM_OFFSET - ICON_W)) * scale;
 
             reportOnce("OK", "OK — fb=" + vpWidth + "x" + vpHeight + " éch=" + scale
                 + " barRight=" + barRight + " barBottom=" + barBottom

@@ -23,4 +23,9 @@ public abstract class Window {
      * confirmée sur le vrai jar 26.1.2 : {@code getGuiScaledHeight ()I}.
      */
     public int getGuiScaledHeight() { return 0; }
+    /**
+     * Échelle GUI entière — pour {@code AccessPoint.CLIENT_GUI_SCALE}.
+     * Signature confirmée sur le vrai jar 26.1.2 : {@code getGuiScale ()I}.
+     */
+    public int getGuiScale() { return 0; }
 }

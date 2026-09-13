@@ -501,6 +501,11 @@ public final class AccessorBindings1211 {
             Window w = c == null ? null : c.getWindow();
             return w == null ? null : new int[]{ w.getScaledWidth(), w.getScaledHeight() };
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_GUI_SCALE, (r, a) -> {
+            MinecraftClient c = mc(r);
+            Window w = c == null ? null : c.getWindow();
+            return w == null ? null : Integer.valueOf(w.getScaleFactor());
+        });
         AccessorRegistry.bind(AccessPoint.RESOURCE_BYTES, (r, a) -> {
             if (a.length < 2 || !(a[0] instanceof String) || !(a[1] instanceof String)) return null;
             MinecraftClient c = mc(null);

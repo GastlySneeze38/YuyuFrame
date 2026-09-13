@@ -319,6 +319,11 @@ public final class AccessorBindings261 {
             com.mojang.blaze3d.platform.Window w = m == null ? null : m.la$window();
             return w == null ? null : new int[]{ w.getGuiScaledWidth(), w.getGuiScaledHeight() };
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_GUI_SCALE, (r, a) -> {
+            MinecraftAccessor261 m = mc(r);
+            com.mojang.blaze3d.platform.Window w = m == null ? null : m.la$window();
+            return w == null ? null : Integer.valueOf(w.getGuiScale());
+        });
         AccessorRegistry.bind(AccessPoint.RESOURCE_BYTES, (r, a) -> {
             if (a.length < 2 || !(a[0] instanceof String) || !(a[1] instanceof String)) return null;
             MinecraftAccessor261 m = mc(null);

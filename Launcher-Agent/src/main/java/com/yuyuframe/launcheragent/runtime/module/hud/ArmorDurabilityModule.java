@@ -491,9 +491,19 @@ public final class ArmorDurabilityModule extends SingleHudModule {
          */
         private void drawVanillaHotbarRow(UiRenderer renderer, ItemInfo[] stacks, int vpWidth, int vpHeight) {
             float guiScale = UiRenderer.guiScale(vpWidth);
-            float guiWidth = vpWidth / guiScale;
+            // Dimensions GUI RÉELLES, pas vpWidth / guiScale : l'échelle est
+            // désormais l'entier de vanilla (voir AccessPoint.CLIENT_GUI_SCALE,
+            // 2026-09-13), et la taille GUI en est l'arrondi AU SUPÉRIEUR. La
+            // division redonnait la bonne largeur tant que l'échelle était
+            // elle-même reconstruite par division — les deux erreurs s'annulaient.
+            int[] gui = ClientData.guiSize();
+            int guiW = gui != null ? gui[0] : (int) Math.ceil(vpWidth / guiScale);
+            int guiH = gui != null ? gui[1] : (int) Math.ceil(vpHeight / guiScale);
 
-            float hotbarLeftGui = (guiWidth - HOTBAR_W_GUI) / 2f;
+            // Gui.extractItemHotbar (bytecode 26.1.2) : centre = guiWidth / 2 en
+            // division ENTIÈRE, hotbar à centre − 91. Une division flottante
+            // décalait la rangée d'un demi-pixel GUI sur une largeur impaire.
+            float hotbarLeftGui = guiW / 2 - HOTBAR_W_GUI / 2f;
             float offhandReserveGui = vanillaOffhandVisibleOnLeft() ? VANILLA_OFFHAND_RESERVED_GUI : 0f;
             float rowLeftGui = hotbarLeftGui - offhandReserveGui - VANILLA_ROW_GAP_GUI - VANILLA_ROW_W_GUI;
             // Centré verticalement sur la hauteur de la hotbar (22 GUI-px) —
@@ -501,15 +511,16 @@ public final class ArmorDurabilityModule extends SingleHudModule {
             // (-1 chacun), exactement comme la vraie case de main secondaire
             // vanilla (même sprite).
             float spriteTopGui = (HOTBAR_H_GUI - VANILLA_SPRITE_H_GUI) / 2f;
-            float iconTopGui = spriteTopGui + VANILLA_ICON_OFFSET_Y_GUI;
-            // guiHeight - iconTopGui - taille = bord BAS de l'icône en
-            // GUI-space (origine haut) ; converti en framebuffer (origine
-            // bas, voir UiRenderer.drawVanillaItemIcon) : hotbar flush en
-            // bas d'écran (y_gui=guiHeight au bord bas de la hotbar), donc
-            // le calcul se simplifie à une distance FIXE depuis le bas de
-            // l'écran, indépendante de guiHeight — voir dérivation dans
-            // l'historique de session.
-            float iconBottomFb = (HOTBAR_H_GUI - iconTopGui - VANILLA_ICON_GUI) * guiScale;
+            // Haut de l'icône en GUI (origine haut) : la hotbar est à
+            // guiHeight − 22 (extractItemHotbar).
+            float iconTopGui = (guiH - HOTBAR_H_GUI) + spriteTopGui + VANILLA_ICON_OFFSET_Y_GUI;
+            // BUG TROUVÉ (2026-09-13, même cause que SaturationModule) : on
+            // supposait la hotbar collée au bas de l'écran, d'où une distance
+            // fixe depuis le bas. Faux quand la hauteur de fenêtre n'est pas un
+            // multiple de l'échelle : vanilla projette avec l'échelle entière,
+            // origine en HAUT, et sa GUI déborde sous l'écran. Conversion exacte
+            // vers le repère moteur (Y vers le haut) :
+            float iconBottomFb = vpHeight - (iconTopGui + VANILLA_ICON_GUI) * guiScale;
 
             for (int i = 0; i < stacks.length && i < VANILLA_SLOT_OFFSETS_GUI.length; i++) {
                 ItemInfo stack = stacks[i];

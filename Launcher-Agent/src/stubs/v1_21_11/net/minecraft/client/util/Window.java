@@ -24,6 +24,14 @@ public class Window {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /**
+     * Échelle GUI entière ({@code method_4495}, {@code ()I}, vérifié dans
+     * Yarn 1.21.11) — {@code getGuiScale()} en 26.1.2.
+     */
+    public int getScaleFactor() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** Poignée GLFW native ({@code method_4490}) — pour le poller d'entrées. */
     public long getHandle() {
         throw new UnsupportedOperationException("stub compile-only");

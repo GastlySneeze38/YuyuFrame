@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiScale;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur;
@@ -81,7 +82,12 @@ public final class VanillaGuiTarget {
         }
         context = hookContext;
         sink = target;
-        guiScale = (float) fbWidth / (float) guiWidth;
+        // L'échelle ENTIÈRE de vanilla, pas fbWidth / guiWidth : la largeur GUI
+        // est arrondie au supérieur, le rapport n'est donc exact que pour une
+        // fenêtre multiple de l'échelle — voir AccessPoint.CLIENT_GUI_SCALE
+        // (décalage d'un pixel de la saturation, 2026-09-13). guiWidth reste
+        // le test « la voie est-elle disponible » ci-dessus.
+        guiScale = VanillaGuiScale.of(fbWidth);
         fbHeight = fbHeightPx;
         glassChainDone = false;
         return true;

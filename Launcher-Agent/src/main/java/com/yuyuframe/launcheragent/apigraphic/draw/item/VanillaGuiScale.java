@@ -42,9 +42,17 @@ public final class VanillaGuiScale {
      *         valeur neutre pour l'appelant.
      */
     public static float of(int vpWidth) {
-        // MÊME CHEMIN sur 26.1.2 ET 1.21.11 depuis le 2026-09-12 : le point
-        // d'accès CLIENT_GUI_SIZE est lié des deux côtés et rend les VRAIES
-        // dimensions GUI, sans qu'on nomme ici le moindre type de version.
+        // MÊME CHEMIN sur 26.1.2 ET 1.21.11 : le point d'accès
+        // CLIENT_GUI_SCALE est lié des deux côtés et rend la VRAIE échelle,
+        // sans qu'on nomme ici le moindre type de version.
+        //
+        // BUG TROUVÉ (2026-09-13, « la saturation est décalée d'un pixel ») :
+        // jusqu'ici on rendait largeurFB / largeurGUI (CLIENT_GUI_SIZE). Or la
+        // largeur GUI est arrondie AU SUPÉRIEUR : ce rapport n'est l'échelle
+        // que si la fenêtre en est un multiple (1366 px à l'échelle 3 donnait
+        // 2,9956). Vanilla, lui, projette sa GUI avec l'échelle ENTIÈRE — voir
+        // AccessPoint.CLIENT_GUI_SCALE. D'où un écart qui grandit vers la
+        // droite de l'écran et n'apparaît qu'à certaines tailles de fenêtre.
         //
         // Avant, ce code appelait ClientData.window(), dont la signature nomme
         // com.mojang.blaze3d.platform.Window — la fenêtre de la 26.1.2. Sur
@@ -55,8 +63,8 @@ public final class VanillaGuiScale {
         // par cette valeur pour obtenir des pixels GUI, donc chaque icône
         // d'item se retrouvait placée 2 à 3 fois trop loin — hors de l'écran,
         // sans un mot dans le log.
-        int[] gui = ClientData.guiSize();
-        if (gui != null && gui[0] > 0) return (float) vpWidth / gui[0];
+        int scale = ClientData.guiScale();
+        if (scale > 0) return scale;
 
         // Brackets GELÉS (1.8.9/1.20.4/1.21.4) : le point d'accès n'y est pas
         // lié, le chemin réflexif reste leur seul recours — cache compris.

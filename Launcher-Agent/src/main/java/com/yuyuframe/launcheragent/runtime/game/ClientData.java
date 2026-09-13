@@ -149,6 +149,16 @@ public final class ClientData {
     }
 
     /**
+     * Échelle GUI ENTIÈRE de vanilla — {@code 0} si la fenêtre n'est pas
+     * lisible. Un pixel GUI vaut exactement ce nombre de pixels écran : voir
+     * {@link AccessPoint#CLIENT_GUI_SCALE} pour pourquoi ce n'est PAS
+     * {@code largeurFB / guiSize()[0]}.
+     */
+    public static int guiScale() {
+        return AccessorRegistry.getInt(AccessPoint.CLIENT_GUI_SCALE, null, 0);
+    }
+
+    /**
      * Contenu BRUT d'une ressource du jeu, ou {@code null} si elle est absente.
      *
      * <p>Passe par le gestionnaire de ressources, donc SUIT LES RESOURCE PACKS
