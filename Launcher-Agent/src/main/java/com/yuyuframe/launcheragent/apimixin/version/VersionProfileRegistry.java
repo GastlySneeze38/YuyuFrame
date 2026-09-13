@@ -195,11 +195,44 @@ public final class VersionProfileRegistry {
      */
     public static void setActive(VersionProfile profile) {
         active = profile;
+        if (profile != null) System.setProperty(ACTIVE_PROFILE_PROPERTY, profile.key);
     }
 
-    /** Profil réellement actif, ou {@code null} si le bootstrap Mixin n'a pas eu lieu. */
+    /**
+     * Canal du profil actif ENTRE COPIES de cette classe.
+     *
+     * <p>BUG TROUVÉ (2026-09-13, « aucun profil actif publié » à CHAQUE
+     * lancement, 26.1.2 comme 1.21.11) : sous Fabric, {@code IsolatedBootstrap}
+     * tourne sur le classloader isolé de {@code LauncherAgent.startIsolated},
+     * qui charge sa PROPRE copie de {@code launcher-agent.jar}. Il publiait le
+     * profil dans le champ statique de CETTE copie ; le moteur graphique
+     * ({@code RenderEra}), chargé par le classloader du jeu, lit l'AUTRE copie,
+     * dont {@link #active} n'avait jamais été renseigné — d'où le repli par
+     * déduction à chaque lancement. Même piège, et même remède, que les
+     * mappings Yarn ({@code launcheragent.yarnPath}, voir {@code LauncherAgent}) :
+     * une propriété système est le seul canal qui traverse toutes les copies.
+     */
+    private static final String ACTIVE_PROFILE_PROPERTY = "launcheragent.versionProfile";
+
+    /**
+     * Profil réellement actif, ou {@code null} si le bootstrap Mixin n'a pas
+     * eu lieu. Dans une copie de cette classe autre que celle du bootstrap, le
+     * profil est retrouvé par sa clé — voir {@link #ACTIVE_PROFILE_PROPERTY}.
+     */
     public static VersionProfile active() {
-        return active;
+        VersionProfile p = active;
+        if (p != null) return p;
+        String key = System.getProperty(ACTIVE_PROFILE_PROPERTY);
+        if (key == null) return null;
+        for (VersionProfile candidate : PROFILES) {
+            if (candidate.key.equals(key)) {
+                active = candidate;
+                return candidate;
+            }
+        }
+        com.yuyuframe.launcheragent.base.log.LauncherLog.err(
+            "[VersionProfileRegistry] profil publié \"" + key + "\" absent de la table de cette copie");
+        return null;
     }
 
     /**
@@ -223,7 +256,7 @@ public final class VersionProfileRegistry {
      * apparaît indique que le chemin normal (profil publié) n'a pas fonctionné.
      */
     public static String activeRenderEra() {
-        VersionProfile p = active;
+        VersionProfile p = active();
         if (p != null) return p.renderEra;
 
         String mcVersion = System.getProperty("launcheragent.mcVersion", "");

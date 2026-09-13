@@ -144,6 +144,28 @@ public class UiToggle extends UiWidget {
     /** Setter fluent — voir {@link #heartStyle}. */
     public UiToggle heartStyle() { this.heartStyle = true; return this; }
 
+    /**
+     * Condition d'activation, {@code null} = toujours actif — même contrat
+     * que {@code UiSlider.enabledSupplier} : interrogée à chaque frame, donc
+     * le toggle se grise ou se réactive EN DIRECT quand le réglage dont il
+     * dépend change dans le même écran.
+     *
+     * <p>Ajouté le 2026-09-13 : {@code ConfigScreenBuilder} journalisait une
+     * erreur pour « Estimation continue » de la saturation, qui dépend de
+     * « Indicateur de saturation » — seul un curseur savait se griser.
+     */
+    private java.util.function.BooleanSupplier enabledWhen;
+
+    /** Setter fluent — voir {@link #enabledWhen}. */
+    public UiToggle enabledWhen(java.util.function.BooleanSupplier condition) {
+        this.enabledWhen = condition;
+        return this;
+    }
+
+    private boolean enabled() {
+        return enabledWhen == null || enabledWhen.getAsBoolean();
+    }
+
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         // AVANT le repli "invisible" : un toggle invisible (bande de carte en
@@ -157,18 +179,23 @@ public class UiToggle extends UiWidget {
             return;
         }
         float t = anim.get();
+        boolean enabled = enabled();
         // Piste en dégradé (haut plus clair, bas = accent normal) plutôt
         // qu'une couleur plate à l'état ON — petit reflet "glossy" cohérent
         // avec les jeux de lumière du reste de l'appli (voir ModCard/
         // SidebarItem). Le OFF reste plat (TRACK_OFF des deux côtés) : le
         // dégradé n'apparaît qu'en se rapprochant de ON.
-        UiColor top = UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.accentLight(), t).multiplyAlpha(drawAlpha);
-        UiColor bottom = UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.ACCENT, t).multiplyAlpha(drawAlpha);
+        // Grisé (voir #enabledWhen) : piste plate TRACK_OFF et bouton
+        // TEXT_MUTED, comme UiSlider — la POSITION du bouton reste lisible,
+        // on voit ce que vaut le réglage même quand il ne peut pas changer.
+        UiColor top = (enabled ? UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.accentLight(), t) : UiTheme.TRACK_OFF).multiplyAlpha(drawAlpha);
+        UiColor bottom = (enabled ? UiColor.lerp(UiTheme.TRACK_OFF, UiTheme.ACCENT, t) : UiTheme.TRACK_OFF).multiplyAlpha(drawAlpha);
         renderer.drawGradientRect(x, y, x + w, y + h, h / 2f, bottom, top, vpWidth, vpHeight);
 
         float knobD = h - 4f;
         float knobXOff = 2f + t * (w - knobD - 4f); // 2f (position OFF) -> w-knobD-2f (position ON)
-        renderer.drawRoundedRect(x + knobXOff, y + 2f, x + knobXOff + knobD, y + h - 2f, knobD / 2f, UiTheme.TEXT_PRIMARY.multiplyAlpha(drawAlpha), vpWidth, vpHeight);
+        UiColor knob = enabled ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_MUTED;
+        renderer.drawRoundedRect(x + knobXOff, y + 2f, x + knobXOff + knobD, y + h - 2f, knobD / 2f, knob.multiplyAlpha(drawAlpha), vpWidth, vpHeight);
     }
 
     private static final Map<String, BufferedImage> HEART_CACHE = new HashMap<>();
@@ -237,6 +264,7 @@ public class UiToggle extends UiWidget {
 
     @Override
     public void onClick() {
+        if (!enabled()) return;
         // Part de la valeur RÉELLE (source liée si présente) — sinon un
         // changement venu d'ailleurs ferait basculer ce toggle dans le
         // mauvais sens au clic suivant.

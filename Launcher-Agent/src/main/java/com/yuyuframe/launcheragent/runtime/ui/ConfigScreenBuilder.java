@@ -374,10 +374,10 @@ public final class ConfigScreenBuilder {
 
         cursor = toggleRow(rows, x, w, cursor, Lang.tr("Verrouillé"),
             Lang.tr("Empêche de déplacer/redimensionner cet élément dans l'éditeur de HUD."),
-            element.locked, v -> { element.locked = v; module.onConfigChanged(); HudConfigStore.save(); });
+            element.locked, v -> { element.locked = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
         cursor = toggleRow(rows, x, w, cursor, Lang.tr("Afficher même avec un écran ouvert"),
             Lang.tr("Reste visible pendant le chat, l'inventaire ou tout autre écran (sauf nos propres menus)."),
-            element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); HudConfigStore.save(); });
+            element.showWhenScreenOpen, v -> { element.showWhenScreenOpen = v; module.onConfigChanged(); HudConfigStore.save(); }, null);
         cursor = sliderRow(rows, x, w, cursor, Lang.tr("Échelle"),
             Lang.tr("Taille de toute la boîte (largeur ET hauteur ensemble, jamais l'une sans l'autre)."),
             HudElement.MIN_SCALE, HudElement.MAX_SCALE, 0.05f, element.scale, v -> { element.setScale(v); module.onConfigChanged(); HudConfigStore.save(); }, null);
@@ -445,9 +445,8 @@ public final class ConfigScreenBuilder {
 
         if (setting instanceof Setting.Toggle) {
             Setting.Toggle t = (Setting.Toggle) setting;
-            warnUnsupportedDependency(module, setting);
             return toggleRow(rows, x, w, cursor, label, tooltip, t.get.getAsBoolean(),
-                v -> { t.set.accept(v); commit.run(); });
+                v -> { t.set.accept(v); commit.run(); }, setting.enabledWhen);
         }
         if (setting instanceof Setting.Slider) {
             Setting.Slider sl = (Setting.Slider) setting;
@@ -510,18 +509,18 @@ public final class ConfigScreenBuilder {
     }
 
     /**
-     * {@link Setting#enabledWhen} n'est honoré que par {@code UiSlider}, seul
-     * widget sachant se griser aujourd'hui. Le déclarer ailleurs n'a donc
-     * aucun effet visible — on le DIT plutôt que de l'ignorer en silence,
-     * puisque c'est précisément le genre de panne muette que le passage aux
-     * réglages déclarés supprime. À retirer le jour où toggle/dropdown/color/
-     * keybind sauront se griser eux aussi.
+     * {@link Setting#enabledWhen} n'est honoré que par {@code UiSlider} et
+     * {@code UiToggle} (depuis le 2026-09-13), seuls widgets sachant se griser
+     * aujourd'hui. Le déclarer ailleurs n'a donc aucun effet visible — on le
+     * DIT plutôt que de l'ignorer en silence, puisque c'est précisément le
+     * genre de panne muette que le passage aux réglages déclarés supprime. À
+     * retirer le jour où dropdown/color/keybind/text sauront se griser eux aussi.
      */
     private static void warnUnsupportedDependency(LauncherModule module, Setting setting) {
         if (setting.enabledWhen == null || WARNED_DEPENDENCY.contains(module.id + "." + setting.id)) return;
         WARNED_DEPENDENCY.add(module.id + "." + setting.id);
         LauncherLog.err("[ConfigScreenBuilder] " + module.id + "." + setting.id
-            + " : enabledWhen déclaré mais seul un curseur sait se griser — réglage laissé actif");
+            + " : enabledWhen déclaré mais seuls un curseur ou un toggle savent se griser — réglage laissé actif");
     }
 
     private static final java.util.Set<String> WARNED_DEPENDENCY = new java.util.HashSet<>();
@@ -589,11 +588,13 @@ public final class ConfigScreenBuilder {
     }
 
     private static float toggleRow(List<UiWidget> rows, float x, float w, float cursor, String label, String tooltip,
-                                    boolean initial, Consumer<Boolean> onChange) {
+                                    boolean initial, Consumer<Boolean> onChange,
+                                    java.util.function.BooleanSupplier enabledWhen) {
         float rowY = cursor - ROW_H;
         rowLabel(rows, x, w, rowY, label, tooltip);
         float toggleH = UiTheme.scaled(24f);
-        rows.add(new UiToggle(x + w - UiTheme.scaled(44f) - UiTheme.scaled(10f), rowY + (ROW_H - toggleH) / 2f, initial, onChange));
+        rows.add(new UiToggle(x + w - UiTheme.scaled(44f) - UiTheme.scaled(10f), rowY + (ROW_H - toggleH) / 2f, initial, onChange)
+            .enabledWhen(enabledWhen));
         return rowY - ROW_GAP;
     }
 

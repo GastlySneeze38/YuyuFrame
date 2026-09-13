@@ -99,8 +99,8 @@ public final class ZoomModule extends LauncherModule {
             "Réglages", 0f, 200f, 5f, null, () -> sensitivityCompensation, v -> sensitivityCompensation = v);
         s.dropdown("sensitivityCurve", "Courbe de réduction",
             "Exponentielle = suit ce que l'écran montre : peu de réduction aux zooms légers, très forte aux zooms forts. Linéaire = réduction régulière dès le début du zoom, qui plafonne aux zooms forts (comportement d'origine).",
-            // Pas de condition d'activation : seul un curseur sait se griser
-            // (ConfigScreenBuilder journalise une erreur sinon).
+            // Pas de condition d'activation : une liste déroulante ne sait pas
+            // se griser (ConfigScreenBuilder journalise une erreur sinon).
             "Réglages", new String[]{ "Exponentielle", "Linéaire" }, null,
             () -> sensitivityCurve, v -> sensitivityCurve = v);
     }
