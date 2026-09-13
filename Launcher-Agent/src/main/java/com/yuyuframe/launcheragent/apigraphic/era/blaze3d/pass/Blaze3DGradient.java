@@ -27,7 +27,7 @@ public final class Blaze3DGradient {
     /**
      * Position uniquement (Color/UV2 du format hérité de GUI_TEXT restent
      * bindés dans le buffer mais volontairement PAS déclarés ici, inutiles —
-     * même principe que {@code UiSolidPipelinePoc}) + UV0 (pour le masque de
+     * GLSL ignore un attribut de sommet non lu) + UV0 (pour le masque de
      * coin arrondi, {@code Sampler0}). {@code fragPos} = position brute en
      * pixels framebuffer, réutilisée telle quelle côté fragment pour calculer
      * {@code t} PAR PIXEL (linéaire/radial/conique) — élimine le besoin

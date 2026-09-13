@@ -382,32 +382,6 @@ public final class Blaze3DRect {
         Blaze3DCore.enqueue(() -> drawRectBatch(bounds, colors, radius, vpWidth, vpHeight));
     }
 
-    /** Toggle via {@code /yf batchpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
-    public static volatile boolean batchTestEnabled = false;
-
-    /** 40 rects de couleurs/tailles variées, MÊME rayon, en UN SEUL draw call — preuve de mécanisme, dessiné en direct (comme drawTestPanel/drawTestParagraph). */
-    public static void drawTestBatch(int vpWidth, int vpHeight) {
-        int cols = 10, rows = 4;
-        float cell = 44f, gap = 8f, x0 = 40f, y0 = 200f;
-        float[][] bounds = new float[cols * rows][4];
-        UiColor[] colors = new UiColor[cols * rows];
-        int i = 0;
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                float x = x0 + c * (cell + gap), y = y0 + r * (cell + gap);
-                bounds[i] = new float[]{ x, y, x + cell, y + cell };
-                float t = (r * cols + c) / (float) (cols * rows - 1);
-                colors[i] = UiColor.lerp(new UiColor(139, 124, 255, 255), new UiColor(230, 95, 95, 255), t);
-                i++;
-            }
-        }
-        // Appel DIRECT (pas queueRectBatch/enqueue) — même convention que
-        // Blaze3DBlur.drawTestPanel : un POC isolé n'a pas besoin de passer
-        // par la file différée (flushQueued, appelée depuis un tout autre
-        // point du frame, voir GuiFlushMixin), dessine directement ici.
-        drawRectBatch(bounds, colors, 10f, vpWidth, vpHeight);
-    }
-
     private static boolean drawRectBatch(float[][] bounds, UiColor[] colors, float radius, int vpWidth, int vpHeight) {
         if (!isAvailable() || !resolve()) return false;
         if (bounds.length == 0) return true;

@@ -11,8 +11,8 @@ import java.util.Map;
 /**
  * Registre plat des commandes client (voir {@link ClientCommand}) —
  * résolution par préfixe le PLUS LONG d'abord ("yf safe-mode" avant "yf"),
- * pour qu'un nom multi-mots ("yf safe-mode") et un nom simple
- * ("shader-reload") cohabitent sans dispatcher spécial par "namespace".
+ * pour qu'un nom multi-mots ("yf safe-mode") et un nom simple ("yf")
+ * cohabitent sans dispatcher spécial par "namespace".
  *
  * {@link #bootstrap()} — appelé une seule fois depuis {@code LauncherAgent.premain0()}
  * (PAS depuis un Mixin — pur Java, aucune dépendance au jeu, sûr à exécuter

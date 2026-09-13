@@ -23,32 +23,6 @@ import java.util.List;
 public final class UiRichText {
     private UiRichText() {}
 
-    /** Toggle via {@code /yf richtextpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
-    public static volatile boolean testEnabled = false;
-    private static Layout testLayout;
-    private static String testHoveredLink;
-
-    /** Paragraphe de test fixe (gras/couleur/lien mélangés, forcé à wrapper sur plusieurs lignes) — dessiné en direct, POC autonome comme {@code UiSolidPipelinePoc}/{@code Blaze3DBlur.drawTestPanel}. */
-    public static void drawTestParagraph(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-        if (testLayout == null) {
-            List<UiTextSpan> spans = new ArrayList<>();
-            spans.add(UiTextSpan.plain("YuyuFrame ", new UiColor(232, 232, 238, 255)));
-            spans.add(UiTextSpan.bold("Phase 5.3", new UiColor(139, 124, 255, 255)));
-            spans.add(UiTextSpan.plain(" — preuve de mécanisme du rich text : ce paragraphe mélange du ", new UiColor(232, 232, 238, 255)));
-            spans.add(UiTextSpan.bold("gras", new UiColor(232, 232, 238, 255)));
-            spans.add(UiTextSpan.plain(", de la ", new UiColor(232, 232, 238, 255)));
-            spans.add(UiTextSpan.plain("couleur", new UiColor(230, 95, 95, 255)));
-            spans.add(UiTextSpan.plain(" et un ", new UiColor(232, 232, 238, 255)));
-            spans.add(UiTextSpan.link("lien cliquable", new UiColor(139, 124, 255, 255), "https://yuyuframe.eu"));
-            spans.add(UiTextSpan.sized("GROS", new UiColor(255, 255, 255, 255), 1.6f));
-            spans.add(UiTextSpan.plain(" mot (taille de span) dans une seule chaîne, avec un vrai retour à la ligne automatique (word-wrap) à largeur fixe.\nEt un saut de paragraphe explicite ici.", new UiColor(150, 150, 163, 255)));
-            testLayout = layout(spans, 340f, 0.4f);
-        }
-        float x = 40f, yTop = vpHeight - 120f;
-        testHoveredLink = hitTestLink(testLayout, x, yTop, 0.4f, mouseX, mouseY);
-        draw(renderer, testLayout, x, yTop, vpWidth, vpHeight);
-    }
-
     /** Un mot (ou fragment insécable) déjà positionné dans le paragraphe layouté. */
     public static final class Run {
         public final UiTextSpan span;

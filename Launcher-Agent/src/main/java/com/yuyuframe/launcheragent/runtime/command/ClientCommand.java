@@ -16,7 +16,7 @@ package com.yuyuframe.launcheragent.runtime.command;
 public interface ClientCommand {
     /**
      * Nom complet de la commande, SANS le "/" ni les arguments — un seul mot
-     * ("shader-reload") ou plusieurs séparés par un espace pour un
+     * ("yf") ou plusieurs séparés par un espace pour un
      * sous-commande ("yf safe-mode") — voir {@link ClientCommandRegistry#dispatch}
      * pour la résolution par préfixe le plus long.
      */

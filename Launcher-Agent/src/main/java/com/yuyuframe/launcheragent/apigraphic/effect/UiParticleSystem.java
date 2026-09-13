@@ -117,26 +117,4 @@ public final class UiParticleSystem {
                 p.size * 0.25f, p.color.multiplyAlpha(fade), vpWidth, vpHeight);
         }
     }
-
-    // ── POC ──────────────────────────────────────────────────────────────
-    /** Toggle via {@code /yf particlepoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
-    public static volatile boolean testEnabled = false;
-    private static final UiParticleSystem TEST_SYSTEM = new UiParticleSystem();
-    private static long lastTestTickNanos = -1L;
-    private static long lastBurstAtNanos = -1L;
-
-    /** Rejoue un burst de confettis toutes les ~1.5s en bas au centre de l'écran — preuve de mécanisme, tick+dessin en direct. */
-    public static void tickAndDrawTest(UiRenderer renderer, int vpWidth, int vpHeight) {
-        long now = System.nanoTime();
-        if (lastTestTickNanos < 0) lastTestTickNanos = now;
-        float dt = (now - lastTestTickNanos) / 1_000_000_000f;
-        lastTestTickNanos = now;
-
-        if (lastBurstAtNanos < 0 || (now - lastBurstAtNanos) > 1_500_000_000L) {
-            TEST_SYSTEM.burstConfetti(vpWidth / 2f, 60f, 30);
-            lastBurstAtNanos = now;
-        }
-        TEST_SYSTEM.tick(Math.min(dt, 0.1f)); // clamp — évite un saut énorme après un freeze/F3+T
-        TEST_SYSTEM.draw(renderer, vpWidth, vpHeight);
-    }
 }

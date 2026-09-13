@@ -296,18 +296,4 @@ public final class Blaze3DBlend {
         }
         return backdropSampler;
     }
-
-    // ── POC ──────────────────────────────────────────────────────────────
-    /** Toggle via {@code /yf blendpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
-    public static volatile boolean testEnabled = false;
-
-    /** 3 panneaux côte à côte (multiply/screen/overlay) sur le même fond — preuve de mécanisme, dessiné en direct. */
-    public static void drawTestPanels(int vpWidth, int vpHeight) {
-        float w = 160f, h = 160f, gap = 20f, y0 = vpHeight - 500f;
-        float x0 = 40f;
-        UiColor orange = new UiColor(255, 140, 0, 255);
-        drawBlendRect(x0, y0, x0 + w, y0 + h, 12f, 12f, 12f, 12f, orange, MODE_MULTIPLY, vpWidth, vpHeight);
-        drawBlendRect(x0 + (w + gap), y0, x0 + (w + gap) + w, y0 + h, 12f, 12f, 12f, 12f, orange, MODE_SCREEN, vpWidth, vpHeight);
-        drawBlendRect(x0 + 2 * (w + gap), y0, x0 + 2 * (w + gap) + w, y0 + h, 12f, 12f, 12f, 12f, orange, MODE_OVERLAY, vpWidth, vpHeight);
-    }
 }

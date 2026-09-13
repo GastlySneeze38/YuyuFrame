@@ -14,8 +14,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * ANNULABLE (contrairement à {@link ChatReceiveMixin261}, notification pure) —
  * Phase 4.5 (ROADMAP-agent.md), système de commandes client : {@code
  * ClientCommandRegistry} s'enregistre sur ce HookPoint et retourne {@code
- * true} quand {@code content} correspond à une commande reconnue ("/yf ...",
- * "/shader-reload") — l'envoi vanilla est alors annulé (la commande ne part
+ * true} quand {@code content} correspond à une commande reconnue ("/yf ...")
+ * — l'envoi vanilla est alors annulé (la commande ne part
  * JAMAIS au serveur), même convention "true = pris en charge" que les hooks
  * HUD (voir {@code VanillaHookRegistry#dispatch}).
  */

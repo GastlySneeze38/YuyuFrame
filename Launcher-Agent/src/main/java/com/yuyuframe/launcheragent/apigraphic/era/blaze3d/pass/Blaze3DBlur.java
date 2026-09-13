@@ -30,9 +30,6 @@ import java.nio.ByteBuffer;
 public final class Blaze3DBlur {
     private Blaze3DBlur() {}
 
-    /** Toggle via {@code /yf blurpoc} (voir {@code YfCommands}) — vérifié chaque frame par {@code GlobalUiRenderMixin261}, jamais actif par défaut. */
-    public static volatile boolean testEnabled = false;
-
     /**
      * {@code true} si un vrai panneau de verre est dessinable sur ce bracket —
      * classes Blaze3D présentes ET pipelines de flou effectivement construits.
@@ -46,14 +43,6 @@ public final class Blaze3DBlur {
      */
     public static boolean isGlassAvailable() {
         return isAvailable() && resolve() && compositePipeline != null;
-    }
-
-    /** Panneau de test fixe (centré, 420×260, coins 24/24/4/4 pour vérifier le rayon par coin en même temps, teinte violette 25%) — dessiné en direct (PAS via {@link Blaze3DCore#enqueue}, même style que {@code UiSolidPipelinePoc}, POC autonome). */
-    public static void drawTestPanel(int vpWidth, int vpHeight) {
-        float w = 420f, h = 260f;
-        float x0 = (vpWidth - w) / 2f, y0 = (vpHeight - h) / 2f;
-        drawBlurredPanel(x0, y0, x0 + w, y0 + h, 24f, 24f, 4f, 4f, 4,
-            new UiColor(0.55f, 0.35f, 0.95f, 1f), 0.25f, vpWidth, vpHeight);
     }
 
     /**

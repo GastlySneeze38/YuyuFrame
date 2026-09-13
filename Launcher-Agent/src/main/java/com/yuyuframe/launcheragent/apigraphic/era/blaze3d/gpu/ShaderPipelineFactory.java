@@ -3,7 +3,7 @@ package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu;
 /**
  * Façade de construction de {@code RenderPipeline} maison (roadmap Phase 5,
  * "pipeline shader maison") — conservée pour ses appelants (état de GUI
- * vanilla {@code Blaze3DGui*}, {@code UiSolidPipelinePoc}).
+ * vanilla {@code Blaze3DGui*}).
  *
  * <p>Ne fait PLUS aucune réflexion : chaque appel est délégué à l'implémentation
  * {@link Blaze3DGpu} de la version en cours ({@link Blaze3DGpus#active()}).
