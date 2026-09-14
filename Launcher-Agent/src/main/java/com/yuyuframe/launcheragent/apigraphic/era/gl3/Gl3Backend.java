@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.apigraphic.era.gl3.item.Gl3VanillaItemRendere
 import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3Backdrop;
 import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3Blend;
 import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3Blur;
+import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3Icon;
 import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3PrimitiveRenderer;
 import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3Rect;
 import com.yuyuframe.launcheragent.apigraphic.era.gl3.pass.Gl3TextBatch;
@@ -36,6 +37,7 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
  *       <li>{@link Gl3TextBatch} : lot de texte ;</li>
  *       <li>{@link Gl3Blur} : verre dépoli et panneau flouté ;</li>
  *       <li>{@link Gl3Blend} : modes de fusion ;</li>
+ *       <li>{@link Gl3Icon} + {@code Gl3IconAtlas} : icônes depuis l'atlas partagé ;</li>
  *       <li>{@link Gl3Backdrop}, {@code Gl3Core}, {@code Gl3VertexStream} :
  *           infrastructure partagée (copie du fond, programmes, sommets) ;</li>
  *     </ul>
@@ -61,6 +63,7 @@ public final class Gl3Backend implements UiBackend {
     private Gl3TextBatch textBatch;
     private Gl3PrimitiveRenderer primitives;
     private Gl3Rect rects;
+    private Gl3Icon icons;
     private Gl3Blur blur;
     private Gl3Blend blend;
     private GlRoundedClip roundedClip;
@@ -80,6 +83,7 @@ public final class Gl3Backend implements UiBackend {
         this.textBatch = new Gl3TextBatch(fonts);
         this.primitives = new Gl3PrimitiveRenderer(owner, gl);
         this.rects = new Gl3Rect();
+        this.icons = new Gl3Icon();
         this.blur = new Gl3Blur(backdrop);
         this.blend = new Gl3Blend(backdrop);
         this.roundedClip = new GlRoundedClip(gl);
@@ -280,9 +284,16 @@ public final class Gl3Backend implements UiBackend {
         return true;
     }
 
+    /**
+     * Atlas partagé d'abord ({@link Gl3Icon}) ; une icône qui n'y rentre pas
+     * (atlas plein, image trop grande) garde sa propre texture
+     * ({@link Gl3PrimitiveRenderer#icon}).
+     */
     @Override
     public boolean icon(String cacheKey, java.awt.image.BufferedImage img, float x, float y, float w, float h,
                         float alpha, int vpWidth, int vpHeight) {
+        if (img == null) return true;
+        if (icons != null && icons.draw(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight)) return true;
         if (primitives == null) return false;
         primitives.icon(cacheKey, img, x, y, w, h, alpha, vpWidth, vpHeight);
         return true;
