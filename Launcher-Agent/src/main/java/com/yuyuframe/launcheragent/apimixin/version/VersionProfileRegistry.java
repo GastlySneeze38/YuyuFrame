@@ -57,9 +57,8 @@ public final class VersionProfileRegistry {
         // et mixin/client/v1_8 restent sur le disque comme référence des
         // anciens points d'injection, sans être chargés.
         //
-        // TOUJOURS GELÉE, en attendant :
-        //  - les liaisons de points d'accès 1.8.9 (écran courant, setScreen,
-        //    monde client…), sans lesquelles le hub ne dessine rien ;
+        // TOUJOURS GELÉE, en attendant (les liaisons de points d'accès sont
+        // faites depuis v1146, voir AccessorBindings189) :
         //  - le niveau de compatibilité Mixin : le template apimixin déclare
         //    JAVA_17, refusé tant que la 1.8.9 tourne sur Java 8 (Java 21
         //    prévu, décision D7).

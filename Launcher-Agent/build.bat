@@ -16,6 +16,10 @@ set "OUT_STUBS=%AGENT_DIR%build\stubs"
 :: selectionne, pas une racine a part (2026-09-13).
 set "SRC_STUBS_1211=%AGENT_DIR%src\stubs\v1_21_11"
 set "OUT_STUBS_1211=%AGENT_DIR%build\stubs_1_21_11"
+:: Unite 1.8.9 (Yarn legacy : MEMES noms de classes que les modernes, API
+:: sans rapport) — meme montage que la 1.21.11, voir "Unite 1.8.9" plus bas.
+set "SRC_STUBS_189=%AGENT_DIR%src\stubs\v1_8_9"
+set "OUT_STUBS_189=%AGENT_DIR%build\stubs_1_8_9"
 set "OUT_ASM=%AGENT_DIR%build\_asm_tmp"
 set "JAR=%AGENT_DIR%build\launcher-agent.jar"
 set "VER_TMP=%TEMP%\launcheragent_ver.txt"
@@ -223,9 +227,9 @@ echo [Build] Compilation principale...
 :: contre les stubs 1.21.11 (meme noms de classes que la 26.1.2, API
 :: differente — les deux ne tiennent pas sur un classpath). Le filtre porte
 :: sur un SEGMENT de chemin complet (\v1_21_11\), jamais sur une sous-chaine
-:: de nom de fichier.
+:: de nom de fichier. Idem pour tout dossier "v1_8_9" (unite 1.8.9).
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (
@@ -317,6 +321,61 @@ if not "!JAVAC_RC!"=="0" (
     goto :error
 )
 echo [Build 1.21.11] Compilation OK
+
+:: --- Unite 1.8.9 : stubs Yarn legacy + liaisons, compiles A PART ------------
+:: Meme raison et meme montage que l'unite 1.21.11 : Yarn legacy reutilise les
+:: noms des classes modernes (MinecraftClient, Window, Text...) avec une API
+:: sans rapport (Window = ancien ScaledResolution, Text = interface...). Stubs
+:: src\stubs\v1_8_9 sur le -cp UNIQUEMENT, jamais emis dans %OUT_MAIN%.
+:: Sources : tout dossier "v1_8_9" de src\main\java (apimixin\v1_8_9 : mixins
+:: nommant le jeu en chaines + AccessorBindings189 type).
+
+if exist "%OUT_STUBS_189%" rmdir /s /q "%OUT_STUBS_189%"
+mkdir "%OUT_STUBS_189%"
+echo [Stubs 1.8.9] Compilation des stubs Yarn legacy 1.8.9...
+
+set "STUBLIST_189=%TEMP%\launcheragent_stubs_189.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_STUBS_189%' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST_189%', $files)"
+
+:: Meme garde-fou que pour STUBLIST — voir plus haut.
+for %%A in ("%STUBLIST_189%") do if %%~zA==0 (
+    echo [ERREUR] Aucun fichier .java trouve dans src\stubs\v1_8_9 — chemin/checkout incorrect ?
+    del "%STUBLIST_189%" 2>nul
+    goto :error
+)
+
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS_189%" "@%STUBLIST_189%"
+set "JAVAC_RC=!errorlevel!"
+del "%STUBLIST_189%" 2>nul
+if not "!JAVAC_RC!"=="0" (
+    echo [ERREUR] Compilation stubs 1.8.9 echouee.
+    goto :error
+)
+echo [Stubs 1.8.9] OK
+
+echo [Build 1.8.9] Compilation du code type 1.8.9...
+set "SRCLIST_189=%TEMP%\launcheragent_sources_189.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v1_8_9\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_189%', $files)"
+
+:: Meme garde-fou — voir plus haut.
+for %%A in ("%SRCLIST_189%") do if %%~zA==0 (
+    echo [ERREUR] Aucun dossier v1_8_9 trouve dans src\main\java — chemin/checkout incorrect ?
+    del "%SRCLIST_189%" 2>nul
+    goto :error
+)
+
+:: -proc:none : meme raison que la compilation principale (voir plus haut).
+"%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
+  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_189%" ^
+  -d "%OUT_MAIN%" ^
+  "@%SRCLIST_189%"
+set "JAVAC_RC=!errorlevel!"
+del "%SRCLIST_189%" 2>nul
+if not "!JAVAC_RC!"=="0" (
+    echo [ERREUR] Compilation du code type 1.8.9 echouee.
+    goto :error
+)
+echo [Build 1.8.9] Compilation OK
 
 :: --- Copier les ressources (mixins.launcheragent.json + META-INF) ------------
 

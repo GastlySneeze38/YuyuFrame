@@ -362,6 +362,10 @@ public final class MixinHookPointRegistry {
         // ── Infrastructure ────────────────────────────────────────────────
         always("1.8.9", "v1_8_9.core.TitleScreenMixin189");
         always("1.8.9", "v1_8_9.core.GlobalUiRenderMixin189");
+        // Accessors des trois seuls champs privés que lit AccessorBindings189.
+        always("1.8.9", "v1_8_9.core.HungerManagerAccessor189");
+        always("1.8.9", "v1_8_9.chat.ChatHudAccessor189");
+        always("1.8.9", "v1_8_9.item.FoodItemAccessor189");
 
         // ── HUD ────────────────────────────────────────────────────────────
         gate("1.8.9", "v1_8_9.hud.HudExtractCrosshairMixin189", HookPoint.HUD_EXTRACT_CROSSHAIR);

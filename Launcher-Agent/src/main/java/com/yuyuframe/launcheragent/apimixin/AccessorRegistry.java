@@ -89,6 +89,11 @@ public final class AccessorRegistry {
             // AccessorBindings261.
             return "com.yuyuframe.launcheragent.apimixin.v1_21_11.core.AccessorBindings1211";
         }
+        if ("1.8.9".equals(mcVersion)) {
+            // Même principe que la 1.21.11 : presque tout est public, trois
+            // accessors seulement (épuisement, historique du chat, alwaysEdible).
+            return "com.yuyuframe.launcheragent.apimixin.v1_8_9.core.AccessorBindings189";
+        }
         return null;
     }
 

@@ -756,6 +756,15 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "(Lnet/minecraft/client/world/ClientWorld;Ljava/lang/String;)V", null),
         new RefmapEntry(M189 + "clock/ClockTotalTicksMixin189",
             "net/minecraft/world/World", "getSkyAngle", "(F)F", null),
+        // ── apimixin 1.8.9 : accès aux données du jeu ─────────────────────
+        // Trois champs PRIVÉS seulement (javap sur le jar réel) : tout le
+        // reste passe par du code typé (AccessorBindings189).
+        RefmapEntry.field(M189 + "core/HungerManagerAccessor189",
+            "net/minecraft/entity/player/HungerManager", "exhaustion"),
+        RefmapEntry.field(M189 + "chat/ChatHudAccessor189",
+            "net/minecraft/client/gui/hud/ChatHud", "messages"),
+        RefmapEntry.field(M189 + "item/FoodItemAccessor189",
+            "net/minecraft/item/FoodItem", "alwaysEdible"),
     };
 
     /**
