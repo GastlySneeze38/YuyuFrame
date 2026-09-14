@@ -20,6 +20,13 @@ set "OUT_STUBS_1211=%AGENT_DIR%build\stubs_1_21_11"
 :: sans rapport) — meme montage que la 1.21.11, voir "Unite 1.8.9" plus bas.
 set "SRC_STUBS_189=%AGENT_DIR%src\stubs\v1_8_9"
 set "OUT_STUBS_189=%AGENT_DIR%build\stubs_1_8_9"
+:: Couche LWJGL 2 -> 3 de la 1.8.9 (reprise de legacy-lwjgl3, LGPL-2.1) —
+:: jar SEPARE lwjgl2-compat.jar, jamais dans launcher-agent.jar : ses classes
+:: org.lwjgl.opengl.Display & co ne doivent pas apparaitre sur le classpath
+:: des autres versions. Voir la passe "Couche LWJGL 2 -> 3" plus bas.
+set "LIB_LWJGL3=%AGENT_DIR%lib\lwjgl3"
+set "OUT_COMPAT=%AGENT_DIR%build\lwjgl2compat"
+set "COMPAT_JAR=%AGENT_DIR%build\lwjgl2-compat.jar"
 set "OUT_ASM=%AGENT_DIR%build\_asm_tmp"
 set "JAR=%AGENT_DIR%build\launcher-agent.jar"
 set "VER_TMP=%TEMP%\launcheragent_ver.txt"
@@ -170,6 +177,25 @@ if not exist "%LIB%\mixinextras.jar" (
     if errorlevel 1 ( echo [ERREUR] Telechargement MixinExtras echoue & goto :error )
 )
 
+:: LWJGL 3.4.1 (couche LWJGL 2 -> 3 de la 1.8.9) : COMPILATION SEULEMENT —
+:: jamais embarque ni deploye, le launcher met les vrais jars LWJGL 3 sur le
+:: classpath du jeu. Meme version que Minecraft 26.1.2. Copie depuis les
+:: bibliotheques du launcher si elles sont deja la, sinon Maven Central.
+if not exist "%LIB_LWJGL3%" mkdir "%LIB_LWJGL3%"
+for %%M in (lwjgl lwjgl-glfw lwjgl-opengl lwjgl-openal) do (
+    if not exist "%LIB_LWJGL3%\%%M-3.4.1.jar" (
+        if exist "%APPDATA%\YuyuFrame\.minecraft\libraries\org\lwjgl\%%M\3.4.1\%%M-3.4.1.jar" (
+            echo [Deps] Copie %%M 3.4.1 depuis les bibliotheques du launcher...
+            copy /Y "%APPDATA%\YuyuFrame\.minecraft\libraries\org\lwjgl\%%M\3.4.1\%%M-3.4.1.jar" "%LIB_LWJGL3%\%%M-3.4.1.jar" >nul
+        ) else (
+            echo [Deps] Telechargement %%M 3.4.1...
+            powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/lwjgl/%%M/3.4.1/%%M-3.4.1.jar' -OutFile '%LIB_LWJGL3%\%%M-3.4.1.jar' -UseBasicParsing"
+        )
+        if not exist "%LIB_LWJGL3%\%%M-3.4.1.jar" ( echo [ERREUR] %%M 3.4.1 introuvable & goto :error )
+    )
+)
+set "CP_LWJGL3=%LIB_LWJGL3%\lwjgl-3.4.1.jar;%LIB_LWJGL3%\lwjgl-glfw-3.4.1.jar;%LIB_LWJGL3%\lwjgl-opengl-3.4.1.jar;%LIB_LWJGL3%\lwjgl-openal-3.4.1.jar"
+
 :: JNA (MumbleLinkBridge, ReadyEventSignal) : appel direct de l'API Win32
 :: (Kernel32) depuis du Java pur, sans ecrire/compiler le moindre code natif
 :: nous-memes — contrairement a content_core.dll/rust_core.dll, aucune
@@ -242,9 +268,11 @@ echo [Build] Compilation principale...
 :: contre les stubs 1.21.11 (meme noms de classes que la 26.1.2, API
 :: differente — les deux ne tiennent pas sur un classpath). Le filtre porte
 :: sur un SEGMENT de chemin complet (\v1_21_11\), jamais sur une sous-chaine
-:: de nom de fichier. Idem pour tout dossier "v1_8_9" (unite 1.8.9).
+:: de nom de fichier. Idem pour tout dossier "v1_8_9" (unite 1.8.9), et pour
+:: la couche LWJGL 2 -> 3 (dossier lwjgl2compat + arborescence org\lwjgl),
+:: compilee dans son propre jar.
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (
@@ -273,6 +301,41 @@ if not "!JAVAC_RC!"=="0" (
     goto :error
 )
 echo [Build] Compilation OK
+
+:: --- Couche LWJGL 2 -> 3 (1.8.9) : lwjgl2-compat.jar -------------------------
+:: Reprise de legacy-lwjgl3 (moehreag, LGPL-2.1) : API LWJGL 2 (Display,
+:: Keyboard, Mouse, Sys, GLU, vecteurs...) au-dessus de LWJGL 3 / GLFW.
+:: Sources : dossier com\yuyuframe\launcheragent\lwjgl2compat (notre code et
+:: les implementations reprises) + src\main\java\org\lwjgl (l'API LWJGL 2,
+:: qui doit garder ses noms de paquet). Compilee contre les jars LWJGL 3 de
+:: lib\lwjgl3 uniquement, vers %OUT_COMPAT% puis un jar a part : jamais dans
+:: launcher-agent.jar (voir la definition de COMPAT_JAR en haut).
+
+if exist "%OUT_COMPAT%" rmdir /s /q "%OUT_COMPAT%"
+mkdir "%OUT_COMPAT%"
+echo [Build LWJGL2 compat] Compilation de la couche LWJGL 2 -^> 3...
+set "SRCLIST_COMPAT=%TEMP%\launcheragent_sources_compat.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\lwjgl2compat\\' -or $_ -match '\\src\\main\\java\\org\\lwjgl\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_COMPAT%', $files)"
+
+for %%A in ("%SRCLIST_COMPAT%") do if %%~zA==0 (
+    echo [ERREUR] Aucune source de la couche LWJGL 2 -^> 3 trouvee — chemin/checkout incorrect ?
+    del "%SRCLIST_COMPAT%" 2>nul
+    goto :error
+)
+
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none -nowarn ^
+  -cp "%CP_LWJGL3%" ^
+  -d "%OUT_COMPAT%" ^
+  "@%SRCLIST_COMPAT%"
+set "JAVAC_RC=!errorlevel!"
+del "%SRCLIST_COMPAT%" 2>nul
+if not "!JAVAC_RC!"=="0" (
+    echo [ERREUR] Compilation de la couche LWJGL 2 -^> 3 echouee.
+    goto :error
+)
+if not exist "%OUT_COMPAT%\META-INF" mkdir "%OUT_COMPAT%\META-INF"
+copy /Y "%SRC_MAIN%\com\yuyuframe\launcheragent\lwjgl2compat\LICENSE-legacy-lwjgl3.txt" "%OUT_COMPAT%\META-INF\LICENSE-legacy-lwjgl3.txt" >nul
+echo [Build LWJGL2 compat] Compilation OK
 
 :: --- Unite 1.21.11 : stubs + code type, compiles A PART ---------------------
 :: La 1.21.11 et la 26.1.2 exposent des classes com.mojang.blaze3d.* de MEME
@@ -381,7 +444,7 @@ for %%A in ("%SRCLIST_189%") do if %%~zA==0 (
 
 :: -proc:none : meme raison que la compilation principale (voir plus haut).
 "%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
-  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_189%" ^
+  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_189%;%OUT_COMPAT%;%CP_LWJGL3%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST_189%"
 set "JAVAC_RC=!errorlevel!"
@@ -422,6 +485,14 @@ if errorlevel 1 (
 )
 for %%F in ("%JAR%") do set /a JAR_KB=%%~zF / 1024
 echo [Build] JAR cree : build\launcher-agent.jar (%JAR_KB% Ko)
+
+if exist "%COMPAT_JAR%" del "%COMPAT_JAR%"
+"%JAR_CMD%" --create --file="%COMPAT_JAR%" -C "%OUT_COMPAT%" .
+if errorlevel 1 (
+    echo [ERREUR] Packaging lwjgl2-compat.jar echoue.
+    goto :error
+)
+echo [Build] JAR cree : build\lwjgl2-compat.jar
 
 :: Garde-fou final, DEUX niveaux.
 ::
@@ -476,6 +547,7 @@ copy /Y "%LIB%\asm-commons-9.5.jar"   "%LIBS_DEPLOY_DIR%\asm-commons-9.5.jar"   
 copy /Y "%LIB%\jna.jar"               "%LIBS_DEPLOY_DIR%\jna.jar"                >nul
 copy /Y "%LIB%\jna-platform.jar"      "%LIBS_DEPLOY_DIR%\jna-platform.jar"       >nul
 copy /Y "%LIB%\mixinextras.jar"       "%LIBS_DEPLOY_DIR%\mixinextras.jar"        >nul
+copy /Y "%COMPAT_JAR%"                "%LIBS_DEPLOY_DIR%\lwjgl2-compat.jar"      >nul
 if exist "%~dp0content-core\target\release\content_core.dll" (
     copy /Y "%~dp0content-core\target\release\content_core.dll" "%AGENT_DEPLOY_DIR%\content_core.dll" >nul
     echo [Deploy] content_core.dll deploye

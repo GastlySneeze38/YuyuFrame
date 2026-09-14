@@ -990,6 +990,11 @@ public final class IsolatedBootstrap {
 
     private static void checkMapped(String simpleName, String yarnSlash, String obfSlash,
                                       Map<String, String> unmapped) {
+        // Seules les classes DU JEU passent par les mappings : une cible de
+        // bibliothèque (org/lwjgl/..., paulscode/... — couche LWJGL 2 → 3 de
+        // la 1.8.9) garde légitimement son nom, ce n'est pas une traduction
+        // manquée.
+        if (!yarnSlash.startsWith("net/minecraft/") && !yarnSlash.startsWith("com/mojang/")) return;
         if (MappingsRegistry.isLoaded() && yarnSlash.equals(obfSlash)) {
             unmapped.put(simpleName + " → " + yarnSlash.replace('/', '.'),
                 "aucune entrée Yarn pour cette classe (mapping inchangé)");

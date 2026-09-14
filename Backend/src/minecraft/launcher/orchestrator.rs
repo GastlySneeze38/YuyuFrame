@@ -16,6 +16,7 @@ use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
 use super::java::{ensure_java, is_openj9, java_requirement};
+use super::legacy_lwjgl3::{compat_jar as legacy_compat_jar, natives_dir_name, swap_libraries, uses_legacy_lwjgl3};
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, parse_user_jvm_args, resolve_auto_vendor, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
@@ -91,7 +92,7 @@ pub async fn download_and_launch(
     let versions_dir = mc_dir.join("versions").join(version_id);
     let libraries_dir = mc_dir.join("libraries");
     let assets_dir = mc_dir.join("assets");
-    let natives_dir = versions_dir.join("natives");
+    let natives_dir = versions_dir.join(natives_dir_name(version_id, loader));
 
     for dir in [&versions_dir, &libraries_dir, &assets_dir, &natives_dir] {
         tokio::fs::create_dir_all(dir).await?;
@@ -140,7 +141,7 @@ pub async fn download_and_launch(
     if !version_json_cache.exists() && legacy_version_json_cache.exists() {
         let _ = tokio::fs::rename(&legacy_version_json_cache, &version_json_cache).await;
     }
-    let details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
+    let mut details: VersionDetails = if let Ok(text) = tokio::fs::read_to_string(&version_json_cache).await {
         set_progress(&app, instance_id, 5, 100, "Détails de version (cache local)...");
         serde_json::from_str(&text)?
     } else {
@@ -158,6 +159,16 @@ pub async fn download_and_launch(
         }
         let _ = tokio::fs::write(&version_json_cache, &raw).await;
         serde_json::from_str(&raw)?
+    };
+
+    // Refonte 1.8.9 : LWJGL 2 → LWJGL 3.4.1 AVANT le téléchargement des
+    // bibliothèques (voir legacy_lwjgl3.rs). La couche de compatibilité est
+    // résolue tout de suite pour échouer avant de télécharger quoi que ce soit.
+    let lwjgl3_compat_jar = if uses_legacy_lwjgl3(version_id, loader) {
+        swap_libraries(&mut details.libraries)?;
+        Some(legacy_compat_jar()?)
+    } else {
+        None
     };
 
     // Plafond partagé entre les deux émetteurs concurrents (libs + assets, voir
@@ -506,6 +517,12 @@ pub async fn download_and_launch(
     // innocente de ces `extend` casserait Forge/Fabric silencieusement — le
     // launcher démarrerait, mais avec les mauvaises versions de libs.
     let mut full_classpath: Vec<String> = extra_classpath;
+    // API LWJGL 2 de la 1.8.9 (Display, Keyboard…) en tête : ces classes
+    // n'existent dans aucun autre jar, la position ne masque rien, mais on
+    // la veut indépendante de l'ordre des autres entrées.
+    if let Some(jar) = &lwjgl3_compat_jar {
+        full_classpath.push(jar.to_string_lossy().to_string());
+    }
     full_classpath.extend(p2p_extra_cp); // asm-9.5.jar + asm-tree-9.5.jar avant tout le reste
     full_classpath.extend(launcher_agent_extra_cp); // idem pour le LauncherAgent
     full_classpath.extend(classpath); // libs vanilla — APRÈS les libs loader ci-dessus
@@ -750,7 +767,7 @@ pub async fn preview_jvm_config(
     let jvm_vendor = JvmVendor::parse(jvm_vendor);
     let mc_dir = minecraft_dir();
     let versions_dir = mc_dir.join("versions").join(version_id);
-    let natives_dir = versions_dir.join("natives");
+    let natives_dir = versions_dir.join(natives_dir_name(version_id, None));
     let progress_floor = Arc::new(ProgressFloor::new(instance_id));
 
     let client = Arc::new(reqwest::Client::builder()

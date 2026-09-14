@@ -367,6 +367,20 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.chat.ChatHudAccessor189");
         always("1.8.9", "v1_8_9.item.FoodItemAccessor189");
 
+        // ── Plateforme LWJGL 3 (couche LWJGL 2 → 3, reprise de legacy-lwjgl3) ──
+        // Sans eux le jeu ne démarre pas : API LWJGL 2 recréée sur les classes
+        // LWJGL 3 (GL11, GL20, ARBShaderObjects, AL10, AL), fermeture OpenAL de
+        // paulscode, rapport de crash sans contexte GL, presse-papier/liens
+        // sans AWT. Voir apimixin/v1_8_9/lwjgl et lwjgl2compat.
+        always("1.8.9", "v1_8_9.lwjgl.GL11LegacyMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.GL20LegacyMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.ARBShaderObjectsLegacyMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.AL10LegacyMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.ALLegacyMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.LibraryLWJGLOpenALMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.CrashReportGlContextMixin189");
+        always("1.8.9", "v1_8_9.lwjgl.ScreenGlfwClipboardMixin189");
+
         // ── HUD ────────────────────────────────────────────────────────────
         gate("1.8.9", "v1_8_9.hud.HudExtractCrosshairMixin189", HookPoint.HUD_EXTRACT_CROSSHAIR);
         gate("1.8.9", "v1_8_9.hud.HudExtractTextureOverlayMixin189", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);

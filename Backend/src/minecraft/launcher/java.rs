@@ -25,7 +25,7 @@ pub(super) fn java_requirement(
     loader: Option<&str>,
     declared: Option<&JavaVersionInfo>,
 ) -> (String, u32) {
-    if version_id == "1.8.9" && loader.unwrap_or("vanilla") == "vanilla" {
+    if super::legacy_lwjgl3::uses_legacy_lwjgl3(version_id, loader) {
         return ("java-runtime-epsilon".to_string(), 25);
     }
     match declared {

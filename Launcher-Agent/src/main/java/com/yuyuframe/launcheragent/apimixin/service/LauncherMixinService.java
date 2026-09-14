@@ -765,6 +765,18 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/gui/hud/ChatHud", "messages"),
         RefmapEntry.field(M189 + "item/FoodItemAccessor189",
             "net/minecraft/item/FoodItem", "alwaysEdible"),
+        // ── apimixin 1.8.9 : correctifs de la plateforme LWJGL 3 ──────────
+        // Les mixins sur LWJGL et paulscode sont en remap = false : pas
+        // d'entrée ici. Seuls les deux correctifs visant Minecraft en ont.
+        new RefmapEntry(M189 + "lwjgl/CrashReportGlContextMixin189",
+            "net/minecraft/client/MinecraftClient", "addSystemDetailsToCrashReport",
+            "(Lnet/minecraft/util/crash/CrashReport;)Lnet/minecraft/util/crash/CrashReport;", null),
+        new RefmapEntry(M189 + "lwjgl/ScreenGlfwClipboardMixin189",
+            "net/minecraft/client/gui/screen/Screen", "getClipboard", "()Ljava/lang/String;", null),
+        new RefmapEntry(M189 + "lwjgl/ScreenGlfwClipboardMixin189",
+            "net/minecraft/client/gui/screen/Screen", "setClipboard", "(Ljava/lang/String;)V", null),
+        new RefmapEntry(M189 + "lwjgl/ScreenGlfwClipboardMixin189",
+            "net/minecraft/client/gui/screen/Screen", "openLink", "(Ljava/net/URI;)V", null),
     };
 
     /**

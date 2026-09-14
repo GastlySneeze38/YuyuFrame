@@ -4,6 +4,7 @@ mod appcds;
 mod classpath;
 mod java;
 mod jvm_args;
+mod legacy_lwjgl3;
 mod loader_setup;
 mod mojang_rules;
 mod orchestrator;

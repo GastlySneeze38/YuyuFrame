@@ -106,6 +106,93 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         // confirmation explicite que CE Mixin s'est bien tissé dans sa cible
         // réelle, pas juste "bootstrap réussi" au sens large.
         LauncherLog.asm(3, "[MixinPlugin] Mixin initialisé avec succès : " + mixinClassName + " → " + targetClassName);
+        applyLegacyLwjglApi(targetClass);
+    }
+
+    private static final String LEGACY_ALIAS = "Lcom/yuyuframe/launcheragent/lwjgl2compat/LegacyAlias;";
+    private static final String LEGACY_PUBLIC = "Lcom/yuyuframe/launcheragent/lwjgl2compat/LegacyPublic;";
+
+    /**
+     * Couche LWJGL 2 → 3 de la 1.8.9 : ajoute aux classes LWJGL 3 les méthodes
+     * statiques PUBLIQUES que Minecraft 1.8.9 appelle encore. Mixin refuse
+     * d'en créer lui-même (une méthode statique ajoutée par mixin doit être
+     * privée) ; on les produit donc ici, après tissage :
+     * <ul>
+     *   <li>{@code @LegacyAlias("nomLwjgl2")} sur un {@code @Shadow} → nouvelle
+     *       méthode {@code public static nomLwjgl2} au même descripteur, qui
+     *       délègue à la méthode LWJGL 3 ;</li>
+     *   <li>{@code @LegacyPublic} sur un {@code @Unique private static} →
+     *       rendu public tel quel.</li>
+     * </ul>
+     * Mécanisme de {@code Lwjgl3MixinPostProcessor} (legacy-lwjgl3, moehreag,
+     * LGPL-2.1). Sans effet sur toute classe qui ne porte aucune des deux
+     * annotations — donc sur tous les autres mixins, toutes versions.
+     */
+    private static void applyLegacyLwjglApi(org.objectweb.asm.tree.ClassNode target) {
+        for (org.objectweb.asm.tree.MethodNode method : new java.util.ArrayList<>(target.methods)) {
+            if ((method.access & org.objectweb.asm.Opcodes.ACC_STATIC) == 0) continue;
+            if (hasInvisibleAnnotation(method, LEGACY_PUBLIC)) {
+                method.access &= ~(org.objectweb.asm.Opcodes.ACC_PRIVATE | org.objectweb.asm.Opcodes.ACC_PROTECTED);
+                method.access |= org.objectweb.asm.Opcodes.ACC_PUBLIC;
+                LauncherLog.asm(1, "[MixinPlugin] API LWJGL 2 rendue publique : " + target.name + "." + method.name + method.desc);
+            }
+            String alias = legacyAliasOf(method);
+            if (alias != null && !hasMethod(target, alias, method.desc)) {
+                target.methods.add(delegatingStaticMethod(target, method, alias));
+                LauncherLog.asm(1, "[MixinPlugin] API LWJGL 2 recréée : " + target.name + "." + alias + method.desc
+                    + " → " + method.name);
+            }
+        }
+    }
+
+    private static boolean hasInvisibleAnnotation(org.objectweb.asm.tree.MethodNode method, String desc) {
+        if (method.invisibleAnnotations == null) return false;
+        for (org.objectweb.asm.tree.AnnotationNode a : method.invisibleAnnotations) {
+            if (desc.equals(a.desc)) return true;
+        }
+        return false;
+    }
+
+    private static String legacyAliasOf(org.objectweb.asm.tree.MethodNode method) {
+        if (method.invisibleAnnotations == null) return null;
+        for (org.objectweb.asm.tree.AnnotationNode a : method.invisibleAnnotations) {
+            if (!LEGACY_ALIAS.equals(a.desc) || a.values == null) continue;
+            for (int i = 0; i + 1 < a.values.size(); i += 2) {
+                if ("value".equals(a.values.get(i)) && a.values.get(i + 1) instanceof String) {
+                    return (String) a.values.get(i + 1);
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasMethod(org.objectweb.asm.tree.ClassNode target, String name, String desc) {
+        for (org.objectweb.asm.tree.MethodNode m : target.methods) {
+            if (m.name.equals(name) && m.desc.equals(desc)) return true;
+        }
+        return false;
+    }
+
+    /** {@code public static alias(args) { return target(args); }} — aucun branchement, donc aucun frame à calculer. */
+    private static org.objectweb.asm.tree.MethodNode delegatingStaticMethod(
+            org.objectweb.asm.tree.ClassNode owner, org.objectweb.asm.tree.MethodNode target, String alias) {
+        org.objectweb.asm.tree.MethodNode stub = new org.objectweb.asm.tree.MethodNode(
+            org.objectweb.asm.Opcodes.ACC_PUBLIC | org.objectweb.asm.Opcodes.ACC_STATIC,
+            alias, target.desc, target.signature,
+            target.exceptions == null ? null : target.exceptions.toArray(new String[0]));
+        int slot = 0;
+        for (org.objectweb.asm.Type arg : org.objectweb.asm.Type.getArgumentTypes(target.desc)) {
+            stub.instructions.add(new org.objectweb.asm.tree.VarInsnNode(arg.getOpcode(org.objectweb.asm.Opcodes.ILOAD), slot));
+            slot += arg.getSize();
+        }
+        boolean isInterface = (owner.access & org.objectweb.asm.Opcodes.ACC_INTERFACE) != 0;
+        stub.instructions.add(new org.objectweb.asm.tree.MethodInsnNode(
+            org.objectweb.asm.Opcodes.INVOKESTATIC, owner.name, target.name, target.desc, isInterface));
+        org.objectweb.asm.Type ret = org.objectweb.asm.Type.getReturnType(target.desc);
+        stub.instructions.add(new org.objectweb.asm.tree.InsnNode(ret.getOpcode(org.objectweb.asm.Opcodes.IRETURN)));
+        stub.maxLocals = slot;
+        stub.maxStack = Math.max(slot, ret.getSize());
+        return stub;
     }
 
     /**

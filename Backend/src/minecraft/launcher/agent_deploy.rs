@@ -42,7 +42,7 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         return;
     }
 
-    let files: [(&str, PathBuf); 11] = [
+    let files: [(&str, PathBuf); 12] = [
         ("launcher-agent.jar", dest_dir.join("launcher-agent.jar")),
         ("content_core.dll", dest_dir.join("content_core.dll")),
         ("libs/mixin.jar", dest_libs.join("mixin.jar")),
@@ -61,6 +61,9 @@ pub fn deploy_bundled_agent(app: &tauri::AppHandle) {
         // fichier soit deja en place chez l'utilisateur le jour ou ce cablage
         // sera fait, plutot que de devoir attendre une mise a jour separee.
         ("libs/mixinextras.jar", dest_libs.join("mixinextras.jar")),
+        // Couche LWJGL 2 → 3 de la 1.8.9 (legacy-lwjgl3, LGPL-2.1) — mise sur
+        // le classpath du jeu par legacy_lwjgl3.rs, jamais par l'agent.
+        ("libs/lwjgl2-compat.jar", dest_libs.join("lwjgl2-compat.jar")),
     ];
 
     let mut deployed = 0;

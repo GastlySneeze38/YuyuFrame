@@ -2,7 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.v1_8_9.core;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
-import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl2.UiInputPollerLegacy;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
@@ -21,6 +21,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * TAIL. En ère {@code gl2} il n'y a ni présentation Blaze3D ni passe GUI
  * vanilla où s'intercaler : tout se dessine ici, après la frame vanilla, comme
  * avant. D'où {@link AgentBridge#renderHud}, absent des hubs Blaze3D.
+ *
+ * <p>Entrées : {@code UiInputPollerModern} sur le handle GLFW de la fenêtre
+ * depuis le passage à LWJGL 3 (2026-09-14) — plus {@code UiInputPollerLegacy}.
  *
  * <p>Deux différences avec l'ancien :
  * <ul>
@@ -44,8 +47,15 @@ public abstract class GlobalUiRenderMixin189 {
             AgentBridge agent = AgentBridge.get(gameLoader);
 
             if (inputPoller == null) {
-                // LWJGL 2 : pas de handle de fenêtre, Display est global.
-                inputPoller = new UiInputPollerLegacy(gameLoader);
+                // LWJGL 3 (2026-09-14) : la fenêtre est une fenêtre GLFW créée
+                // par la couche de compatibilité (org.lwjgl.opengl.Display de
+                // lwjgl2-compat.jar) — même lecteur d'entrées que les versions
+                // GLFW, comme en 1.16.5. Appel typé, pas de réflexion. Ses
+                // callbacks GLFW enchaînent ceux de la couche (Keyboard/Mouse
+                // de LWJGL 2), qui continuent d'alimenter le jeu.
+                long window = org.lwjgl.opengl.Display.getHandle();
+                if (window == -1L || window == 0L) return;
+                inputPoller = new UiInputPollerModern(window, gameLoader);
                 try {
                     agent.bootstrap();
                 } catch (Throwable t) {
