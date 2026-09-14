@@ -34,6 +34,16 @@ public class MinecraftClient {
 
     public MouseInput mouse;
 
+    public net.minecraft.client.font.TextRenderer textRenderer;
+
+    public net.minecraft.client.render.item.ItemRenderer getItemRenderer() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    public net.minecraft.client.texture.TextureManager getTextureManager() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     private MinecraftClient() {
     }
 

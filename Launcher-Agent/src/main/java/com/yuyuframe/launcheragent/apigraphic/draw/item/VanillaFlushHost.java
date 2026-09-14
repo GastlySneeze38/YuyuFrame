@@ -66,5 +66,18 @@ public enum VanillaFlushHost {
      * {@code HandledScreen} et surtout PAS la classe {@code Screen} partagée
      * par tous les écrans, nos écrans custom compris.
      */
-    DRAW_CONTEXT_CONTAINER
+    DRAW_CONTEXT_CONTAINER,
+
+    /**
+     * {@code InGameHud} vivant de la 1.8.9 — {@code HudItemFlushMixin189}, au
+     * {@code profiler.push("chat")} de {@code InGameHud.render(float)}.
+     *
+     * <p>Pas de contexte de dessin sur cette version : le GUI se dessine en
+     * pipeline fixe, et à ce point précis vanilla a DÉJÀ posé son état GUI
+     * (projection mise à l'échelle, profondeur). L'ère gl3 y dessine donc
+     * directement, par le récepteur de la version ({@code Gl3VanillaItemSink}) —
+     * au-dessus du HUD, sous le chat, comme {@code GUI_STATE} sur Blaze3D.
+     * L'objet transmis ne sert qu'à signaler que le hook est vivant.
+     */
+    LEGACY_HUD
 }

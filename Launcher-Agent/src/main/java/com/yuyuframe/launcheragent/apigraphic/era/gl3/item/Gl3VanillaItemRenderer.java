@@ -78,6 +78,33 @@ public final class Gl3VanillaItemRenderer {
         LauncherLog.err("[UiRenderer] " + message);
     }
 
+    // ── Vidage 1.8.9 : GUI en pipeline fixe, récepteur typé de la version ──
+
+    /**
+     * Hôte {@link com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost#LEGACY_HUD}
+     * — même modèle que {@code Blaze3DVanillaItemRenderer.flush} : la file et
+     * les diagnostics restent ici, l'appel au jeu part au récepteur de la
+     * version ({@link Gl3VanillaItemSinks}), typé et sans réflexion.
+     *
+     * <p>Sans récepteur, la file n'est PAS vidée : son plafond la borne.
+     */
+    public void flushLegacyHud() {
+        try {
+            Gl3VanillaItemSink sink = Gl3VanillaItemSinks.active();
+            if (sink == null) return;
+            List<VanillaItemIcon> icons = queue.drainIcons();
+            List<com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiBlit> blits = queue.drainBlits();
+            if (icons.isEmpty() && blits.isEmpty()) {
+                queue.reportEmptyBatch();
+                return;
+            }
+            queue.reportFirstBatch(icons.size(), blits.size());
+            sink.drawVanillaItems(icons, blits);
+        } catch (Throwable t) {
+            warnOnce("vidage 1.8.9 (LEGACY_HUD) : " + t);
+        }
+    }
+
     // ── Vidage des icônes, dans le DrawContext vivant du HUD ──────────────
 
     private static Method drawItemMethodImmediate;

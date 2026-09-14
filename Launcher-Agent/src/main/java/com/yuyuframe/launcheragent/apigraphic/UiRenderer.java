@@ -830,6 +830,11 @@ public final class UiRenderer {
         UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.GUI_STATE, guiState);
     }
 
+    /** Voir {@link VanillaFlushHost#LEGACY_HUD} — 1.8.9. */
+    public static void flushPendingLegacyHudItems(Object inGameHud) {
+        UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.LEGACY_HUD, inGameHud);
+    }
+
     /** Voir {@link VanillaFlushHost#GUI_RENDERER}. */
     public static void flushPendingModernItemIconsFromGuiRenderer(Object guiRenderer) {
         UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.GUI_RENDERER, guiRenderer);

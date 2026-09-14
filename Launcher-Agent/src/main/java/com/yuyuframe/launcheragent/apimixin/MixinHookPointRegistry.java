@@ -362,6 +362,8 @@ public final class MixinHookPointRegistry {
         // ── Infrastructure ────────────────────────────────────────────────
         always("1.8.9", "v1_8_9.core.TitleScreenMixin189");
         always("1.8.9", "v1_8_9.core.GlobalUiRenderMixin189");
+        // Vidage des icônes d'item vanilla (ère gl3, récepteur Gl3VanillaItemSink189).
+        always("1.8.9", "v1_8_9.core.HudItemFlushMixin189");
         // Accessors des trois seuls champs privés que lit AccessorBindings189.
         always("1.8.9", "v1_8_9.core.HungerManagerAccessor189");
         always("1.8.9", "v1_8_9.chat.ChatHudAccessor189");
