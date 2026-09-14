@@ -30,27 +30,24 @@ echo    YuyuFrame LauncherAgent - Build + Deploy
 echo  ================================================
 echo.
 
-:: --- Trouver javac.exe et jar.exe automatiquement ----------------------------
+:: --- Trouver un JDK 25 (javac.exe + jar.exe) ----------------------------------
+:: L'agent est compile en --release 25 (2026-09-14, refonte 1.8.9 : toutes les
+:: versions qui chargent l'agent tournent en Java 25). Un JDK plus ancien ne
+:: sait pas produire ce bytecode : on cherche d'abord un dossier jdk-25*, puis
+:: JAVA_HOME, et on VERIFIE la version dans les deux cas. Le launcher suit la
+:: meme borne (LAUNCHER_AGENT_MIN_JAVA dans agents.rs).
 
+set "JAVA_RELEASE=25"
 set "JAVAC_CMD="
 set "JAR_CMD="
 
-if defined JAVA_HOME (
-    if exist "%JAVA_HOME%\bin\javac.exe" (
-        set "JAVAC_CMD=%JAVA_HOME%\bin\javac.exe"
-        set "JAR_CMD=%JAVA_HOME%\bin\jar.exe"
-    )
-)
-
-if not defined JAVAC_CMD (
-    for %%R in ("C:\Program Files\Java" "C:\Program Files\Eclipse Adoptium" "C:\Program Files\Microsoft" "C:\Program Files\BellSoft" "C:\Program Files\Amazon Corretto") do (
-        if not defined JAVAC_CMD (
-            for /d %%D in ("%%~R\jdk-*") do (
-                if not defined JAVAC_CMD (
-                    if exist "%%~D\bin\javac.exe" (
-                        set "JAVAC_CMD=%%~D\bin\javac.exe"
-                        set "JAR_CMD=%%~D\bin\jar.exe"
-                    )
+for %%R in ("C:\Program Files\Java" "C:\Program Files\Eclipse Adoptium" "C:\Program Files\Microsoft" "C:\Program Files\BellSoft" "C:\Program Files\Amazon Corretto") do (
+    if not defined JAVAC_CMD (
+        for /d %%D in ("%%~R\jdk-%JAVA_RELEASE%*") do (
+            if not defined JAVAC_CMD (
+                if exist "%%~D\bin\javac.exe" (
+                    set "JAVAC_CMD=%%~D\bin\javac.exe"
+                    set "JAR_CMD=%%~D\bin\jar.exe"
                 )
             )
         )
@@ -58,8 +55,26 @@ if not defined JAVAC_CMD (
 )
 
 if not defined JAVAC_CMD (
-    echo [ERREUR] javac.exe introuvable.
-    echo  Installe un JDK 17+ et configure JAVA_HOME.
+    if defined JAVA_HOME (
+        if exist "%JAVA_HOME%\bin\javac.exe" (
+            set "JAVAC_CMD=%JAVA_HOME%\bin\javac.exe"
+            set "JAR_CMD=%JAVA_HOME%\bin\jar.exe"
+        )
+    )
+)
+
+if not defined JAVAC_CMD (
+    echo [ERREUR] Aucun JDK %JAVA_RELEASE% trouve.
+    echo  Installe un JDK %JAVA_RELEASE% ^(ex. Eclipse Temurin^) ou pointe JAVA_HOME dessus.
+    goto :error
+)
+
+:: "javac 25.0.1" -> accepte ; "javac 24.0.2" -> refuse (ne sait pas --release 25).
+"%JAVAC_CMD%" -version 2>&1 | findstr /b /c:"javac %JAVA_RELEASE%" >nul
+if errorlevel 1 (
+    echo [ERREUR] %JAVAC_CMD% n'est pas un JDK %JAVA_RELEASE% :
+    "%JAVAC_CMD%" -version
+    echo  Installe un JDK %JAVA_RELEASE% ^(ex. Eclipse Temurin^) ou pointe JAVA_HOME dessus.
     goto :error
 )
 echo [Java] %JAVAC_CMD%
@@ -190,7 +205,7 @@ for %%A in ("%STUBLIST%") do if %%~zA==0 (
     goto :error
 )
 
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS%" "@%STUBLIST%"
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -d "%OUT_STUBS%" "@%STUBLIST%"
 set "JAVAC_RC=!errorlevel!"
 del "%STUBLIST%" 2>nul
 if not "!JAVAC_RC!"=="0" (
@@ -247,7 +262,7 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
 :: emettre la moindre classe - jar final de 2 Ko, silencieux avant les
 :: gardes-fous ci-dessus. -proc:none l'empeche de tourner du tout, plutot
 :: que de corriger un mecanisme qu'on ne veut pas.
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
   -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%OUT_STUBS%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
@@ -289,7 +304,7 @@ for %%A in ("%STUBLIST_1211%") do if %%~zA==0 (
     goto :error
 )
 
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS_1211%" "@%STUBLIST_1211%"
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -d "%OUT_STUBS_1211%" "@%STUBLIST_1211%"
 set "JAVAC_RC=!errorlevel!"
 del "%STUBLIST_1211%" 2>nul
 if not "!JAVAC_RC!"=="0" (
@@ -310,7 +325,7 @@ for %%A in ("%SRCLIST_1211%") do if %%~zA==0 (
 )
 
 :: -proc:none : meme raison que la compilation principale (voir plus haut).
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
   -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_1211%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST_1211%"
@@ -344,7 +359,7 @@ for %%A in ("%STUBLIST_189%") do if %%~zA==0 (
     goto :error
 )
 
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 -d "%OUT_STUBS_189%" "@%STUBLIST_189%"
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -d "%OUT_STUBS_189%" "@%STUBLIST_189%"
 set "JAVAC_RC=!errorlevel!"
 del "%STUBLIST_189%" 2>nul
 if not "!JAVAC_RC!"=="0" (
@@ -365,7 +380,7 @@ for %%A in ("%SRCLIST_189%") do if %%~zA==0 (
 )
 
 :: -proc:none : meme raison que la compilation principale (voir plus haut).
-"%JAVAC_CMD%" --release 8 -encoding UTF-8 -proc:none ^
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
   -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_189%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST_189%"

@@ -474,7 +474,7 @@ pub async fn download_and_launch(
     // -javaagent, mais attendu seulement après le spawn (plus bas).
     let ready_event = create_ready_event(instance_id);
     let ready_event_name = ready_event.as_ref().map(|(name, _)| name.clone());
-    let launcher_agent = setup_launcher_agent(version_id, loader, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
+    let launcher_agent = setup_launcher_agent(version_id, loader, java_major, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
     let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
     // ── Attente des assets ────────────────────────────────────────────────────

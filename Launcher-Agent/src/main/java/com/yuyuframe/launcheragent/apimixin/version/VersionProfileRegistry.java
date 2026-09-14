@@ -57,11 +57,11 @@ public final class VersionProfileRegistry {
         // et mixin/client/v1_8 restent sur le disque comme référence des
         // anciens points d'injection, sans être chargés.
         //
-        // TOUJOURS GELÉE, en attendant (les liaisons de points d'accès sont
-        // faites depuis v1146, voir AccessorBindings189) :
-        //  - le niveau de compatibilité Mixin : le template apimixin déclare
-        //    JAVA_17, refusé tant que la 1.8.9 tourne sur Java 8 (Java 21
-        //    prévu, décision D7).
+        // TOUJOURS GELÉE, par choix : dégel prévu après le passage à
+        // LWJGL 3 (legacy-lwjgl3). Les deux blocages techniques sont levés :
+        // liaisons de points d'accès (v1146, AccessorBindings189) et niveau
+        // de compatibilité Mixin (la 1.8.9 tourne en Java 25 et l'agent est
+        // compilé en --release 25, template en JAVA_25, 2026-09-14).
         PROFILES.add(new VersionProfile(
             "1_8_9",
             new String[]{ "1.8.*" },

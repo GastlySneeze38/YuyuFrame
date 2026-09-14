@@ -9,6 +9,10 @@ use super::progress::{log_to_console, ProgressFloor};
 /// Sortie commune à `setup_p2p` et `setup_launcher_agent` : arguments
 /// `-javaagent:...` à passer à la JVM et entrées de classpath associées
 /// (ASM/JNA...). Vide par défaut (P2P désactivé, ou agent indisponible).
+/// Version de Java minimale de launcher-agent.jar — celle de son `--release`
+/// dans `Launcher-Agent/build.bat`. Les deux doivent bouger ensemble.
+const LAUNCHER_AGENT_MIN_JAVA: u32 = 25;
+
 #[derive(Default)]
 pub(super) struct AgentSetup {
     pub(super) jvm_args: Vec<String>,
@@ -176,12 +180,24 @@ fn resolve_srg_mappings(version_id: &str, loader: Option<&str>) -> Option<PathBu
 pub(super) async fn setup_launcher_agent(
     version_id: &str,
     loader: Option<&str>,
+    java_major: u32,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     console_label: &str,
     progress_floor: &ProgressFloor,
     ready_event_name: Option<&str>,
 ) -> AgentSetup {
+    // launcher-agent.jar est compilé en --release 25 (build.bat) : sur une JVM
+    // plus ancienne, son Premain-Class lève UnsupportedClassVersionError et la
+    // JVM refuse de démarrer (« processing of -javaagent failed ») — le jeu ne
+    // se lancerait plus du tout. On lance donc sans agent plutôt que de planter.
+    if java_major < LAUNCHER_AGENT_MIN_JAVA {
+        log_to_console(app, console_label, &format!(
+            "[LauncherAgent] désactivé : MC {} tourne en Java {}, l'agent exige Java {}",
+            version_id, java_major, LAUNCHER_AGENT_MIN_JAVA
+        ), "out");
+        return AgentSetup::default();
+    }
     let libs_dir = launcher_agent_libs_dir();
     let mixin_jar    = libs_dir.join("mixin.jar");
     let agent_jar    = launcher_agent_dir().join("launcher-agent.jar");
