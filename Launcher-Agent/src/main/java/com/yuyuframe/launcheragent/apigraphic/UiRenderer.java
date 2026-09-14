@@ -519,6 +519,35 @@ public final class UiRenderer {
         drawRoundedRect(x1, y1, x2, y2, radius, color, vpWidth, vpHeight);
     }
 
+    /**
+     * Lot de rects arrondis — un seul appel de dessin sur les ères qui le
+     * savent (voir {@link UiBackend#roundedRectBatch}). Repli : un dessin par
+     * rect, même rendu.
+     */
+    public void drawRoundedRectBatch(float[][] bounds, UiColor[] colors, float radius, int vpWidth, int vpHeight) {
+        if (bounds == null || colors == null || bounds.length != colors.length || bounds.length == 0) return;
+        if (backend().roundedRectBatch(bounds, colors, radius, vpWidth, vpHeight)) return;
+        for (int i = 0; i < bounds.length; i++) {
+            float[] b = bounds[i];
+            drawRoundedRect(b[0], b[1], b[2], b[3], radius, colors[i], vpWidth, vpHeight);
+        }
+    }
+
+    /**
+     * Rect arrondi à mode de fusion (voir {@link UiBackend#blendRect}).
+     * Repli, sur une ère qui ne sait pas lire le fond : aplat de la couleur du
+     * dessus — la forme reste visible, sans l'effet.
+     */
+    public void drawBlendRect(float x1, float y1, float x2, float y2,
+                              float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
+                              UiColor topColor, com.yuyuframe.launcheragent.apigraphic.value.UiBlendMode mode,
+                              int vpWidth, int vpHeight) {
+        if (backend().blendRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+                topColor, mode, vpWidth, vpHeight)) return;
+        drawRoundedRect(x1, y1, x2, y2, radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight,
+            topColor, vpWidth, vpHeight);
+    }
+
     public void drawShadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
                             UiColor color, int vpWidth, int vpHeight) {
         if (backend().shadow(x1, y1, x2, y2, radius, blur, spread, color, vpWidth, vpHeight)) return;

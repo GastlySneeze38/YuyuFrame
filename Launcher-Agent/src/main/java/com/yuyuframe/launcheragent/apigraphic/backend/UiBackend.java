@@ -125,6 +125,28 @@ public interface UiBackend {
     /** La vignette est-elle dessinable en l'état ? */
     default boolean vignetteAvailable() { return false; }
 
+    /**
+     * Rects arrondis EN LOT : un seul appel de dessin pour tous. Rayon partagé
+     * par le lot, une couleur par rect ; {@code bounds[i]} = {@code {x1,y1,x2,y2}}.
+     *
+     * <p>Opt-in explicite de l'appelant, jamais un regroupement automatique :
+     * tout le lot est dessiné à la même profondeur, ce que seul l'appelant sait
+     * être sans risque pour l'ordre d'affichage.
+     */
+    default boolean roundedRectBatch(float[][] bounds, UiColor[] colors, float radius,
+                                     int vpWidth, int vpHeight) { return false; }
+
+    /**
+     * Rect arrondi à MODE DE FUSION : sa couleur résultante se calcule à partir
+     * du fond affiché derrière lui. Rayons dans le même ordre POSITIONNEL que
+     * {@link #roundedRect(float, float, float, float, float, float, float, float, UiColor, int, int)}.
+     */
+    default boolean blendRect(float x1, float y1, float x2, float y2,
+                              float radiusBottomLeft, float radiusBottomRight,
+                              float radiusTopLeft, float radiusTopRight,
+                              UiColor topColor, com.yuyuframe.launcheragent.apigraphic.value.UiBlendMode mode,
+                              int vpWidth, int vpHeight) { return false; }
+
     // ── Primitives dont le test d'ère vivait DANS UiPrimitiveRenderer ─────
     //
     // Contrairement aux précédentes, celles-ci n'avaient aucun test dans la

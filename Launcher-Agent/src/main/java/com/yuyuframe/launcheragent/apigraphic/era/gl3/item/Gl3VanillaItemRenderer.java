@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic.era.gl3;
+package com.yuyuframe.launcheragent.apigraphic.era.gl3.item;
 
 import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiBlit;
 import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaItemIcon;
@@ -46,13 +46,13 @@ import java.util.List;
  * {@code static} et partagée lexicalement avec l'ère blaze3d, est désormais la
  * sienne (voir {@link VanillaItemQueue}).
  */
-final class Gl3VanillaItemRenderer {
+public final class Gl3VanillaItemRenderer {
 
     private final VanillaItemQueue queue = new VanillaItemQueue("immediat");
 
     // ── Mise en file ──────────────────────────────────────────────────────
 
-    void enqueueItemIcon(Object itemStack, float x, float y, float size,
+    public void enqueueItemIcon(Object itemStack, float x, float y, float size,
                          boolean vanillaExtras, int vpWidth, int vpHeight) {
         try {
             queue.enqueueIcon(itemStack, x, y, size, vanillaExtras, vpWidth, vpHeight);
@@ -61,7 +61,7 @@ final class Gl3VanillaItemRenderer {
         }
     }
 
-    void enqueueGuiBlit(String texturePath, float x, float y, float w, float h,
+    public void enqueueGuiBlit(String texturePath, float x, float y, float w, float h,
                         float u, float v, float texW, float texH, int vpWidth, int vpHeight) {
         try {
             queue.enqueueBlit(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
@@ -92,7 +92,7 @@ final class Gl3VanillaItemRenderer {
      * qu'AJOUTER nos commandes à une instance déjà dans le bon état, vidée par
      * vanilla via SON propre mécanisme.
      */
-    void flushItemIcons(Object realDrawContext) {
+    public void flushItemIcons(Object realDrawContext) {
         List<VanillaItemIcon> batch = queue.drainIcons();
         if (batch.isEmpty()) return;
         try {
@@ -183,7 +183,7 @@ final class Gl3VanillaItemRenderer {
      * {@code Screen} partagée par tous les écrans, nos écrans custom compris
      * (leçon coûteuse de l'ancien aperçu shulker sur ce risque précis).
      */
-    void flushGuiBlits(Object realDrawContext) {
+    public void flushGuiBlits(Object realDrawContext) {
         List<VanillaGuiBlit> batch = queue.drainBlits();
         if (batch.isEmpty()) return;
         try {

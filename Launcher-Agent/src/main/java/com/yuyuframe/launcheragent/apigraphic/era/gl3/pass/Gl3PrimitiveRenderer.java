@@ -1,4 +1,4 @@
-package com.yuyuframe.launcheragent.apigraphic.era.gl3;
+package com.yuyuframe.launcheragent.apigraphic.era.gl3.pass;
 
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.era.glsupport.GlBridge;

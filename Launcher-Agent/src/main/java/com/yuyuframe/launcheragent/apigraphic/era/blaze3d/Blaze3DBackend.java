@@ -175,6 +175,31 @@ public final class Blaze3DBackend implements UiBackend {
         return VanillaGuiTarget.isArmed();
     }
 
+    /**
+     * Expose au contrat le lot déjà écrit en Phase 5.5 ({@link Blaze3DRect#queueRectBatch}),
+     * que rien n'atteignait jusqu'ici faute d'entrée dans la façade (2026-09-14).
+     */
+    @Override
+    public boolean roundedRectBatch(float[][] bounds, UiColor[] colors, float radius, int vpWidth, int vpHeight) {
+        Blaze3DRect.queueRectBatch(bounds, colors, radius, vpWidth, vpHeight);
+        return true;
+    }
+
+    /**
+     * Expose au contrat les modes de fusion de la Phase 5.4 ({@link Blaze3DBlend#queueBlendRect}).
+     * Rayons transmis dans leur ordre d'arrivée, comme {@link #roundedRect} le fait pour
+     * {@code Blaze3DRect.queueRect} (même convention positionnelle).
+     */
+    @Override
+    public boolean blendRect(float x1, float y1, float x2, float y2,
+                             float radiusBottomLeft, float radiusBottomRight, float radiusTopLeft, float radiusTopRight,
+                             UiColor topColor, com.yuyuframe.launcheragent.apigraphic.value.UiBlendMode mode,
+                             int vpWidth, int vpHeight) {
+        com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlend.queueBlendRect(x1, y1, x2, y2,
+            radiusBottomLeft, radiusBottomRight, radiusTopLeft, radiusTopRight, topColor, mode.code, vpWidth, vpHeight);
+        return true;
+    }
+
     @Override
     public boolean glassAvailable() {
         return Blaze3DBlur.isGlassAvailable();
