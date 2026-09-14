@@ -108,8 +108,7 @@ public final class FontAtlasTextures {
     private static boolean nativeImageBackedTextureNeedsLabel;
     private static java.lang.reflect.Field nativeImagePointerField;
     private static Method nativeImageSetColor, nativeImageCloseMethod, textureUploadMethod, textureGetGlIdMethod,
-        textureBindTextureMethod, textureManagerRegisterTextureMethod, identifierOfMethod, mcGetTextureManagerMethod,
-        memCopyMethod, memAddressMethod;
+        textureBindTextureMethod, textureManagerRegisterTextureMethod, identifierOfMethod, mcGetTextureManagerMethod;
     private static boolean nativeTextureApiResolveAttempted, nativeTextureApiAvailable, bulkCopyAvailable;
     private static int fontTextureCounter;
 
@@ -194,8 +193,8 @@ public final class FontAtlasTextures {
                 String pointerObf = MappingsRegistry.getObfFieldName("net/minecraft/client/texture/NativeImage", "pointer");
                 nativeImagePointerField = nativeImageClass.getDeclaredField(pointerObf);
                 nativeImagePointerField.setAccessible(true);
-                memCopyMethod = gl.rawMethod("org.lwjgl.system.MemoryUtil", "memCopy", long.class, long.class, long.class);
-                memAddressMethod = gl.rawMethod("org.lwjgl.system.MemoryUtil", "memAddress", java.nio.ByteBuffer.class);
+                // MemoryUtil appelé en typé (plus de gl.rawMethod) : LWJGL 3
+                // est une dépendance de compilation, voir GlBridge.
                 bulkCopyAvailable = true;
             } catch (Throwable t) {
                 LauncherLog.warn("[UiRenderer] copie mémoire en bloc (MemoryUtil) indisponible, repli sur setColor() pixel par pixel (lent) : " + t);
@@ -245,9 +244,9 @@ public final class FontAtlasTextures {
                     }
                 }
                 buf.flip();
-                long srcAddr = (long) memAddressMethod.invoke(null, buf);
+                long srcAddr = org.lwjgl.system.MemoryUtil.memAddress(buf);
                 long dstAddr = (long) nativeImagePointerField.get(nativeImage);
-                memCopyMethod.invoke(null, srcAddr, dstAddr, (long) buf.remaining());
+                org.lwjgl.system.MemoryUtil.memCopy(srcAddr, dstAddr, (long) buf.remaining());
             } else {
                 // Repli lent (voir ensureNativeTextureApiResolved) — évite
                 // juste de ne RIEN dessiner si MemoryUtil ne se résout pas.

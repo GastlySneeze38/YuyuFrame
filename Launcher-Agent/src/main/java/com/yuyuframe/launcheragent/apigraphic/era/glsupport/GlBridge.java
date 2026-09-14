@@ -1,41 +1,53 @@
 package com.yuyuframe.launcheragent.apigraphic.era.glsupport;
 
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL30;
 
-import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
- * Pont réflexion vers OpenGL (org.lwjgl.opengl.GL11/13/15/20/30 — noms publics,
- * pas obfusqués, identiques LWJGL2/LWJGL3, donc pas besoin de MappingsRegistry
- * ici) + routage GlStateManager (bindTexture/activeTexture, voir leur javadoc
- * respective) + capture/restauration d'état legacy — extrait de UiRenderer
- * (voir sa javadoc de classe pour l'architecture générale à 2 pipelines).
+ * Pont vers OpenGL des ères GL (gl2, gl3) + capture/restauration d'état legacy
+ * — extrait de UiRenderer (voir sa javadoc de classe pour l'architecture
+ * générale à 2 pipelines).
+ *
+ * <h2>Plus aucune réflexion (2026-09-14)</h2>
+ *
+ * Chaque appel passait par {@code Class.forName} + {@code Method.invoke} sur
+ * {@code org.lwjgl.opengl.GL*}, résolus dans le classloader du jeu : un coût à
+ * CHAQUE appel GL de chaque primitive (boxing des arguments, contrôles
+ * d'accès), et une entorse à D4. Deux raisons le justifiaient, toutes deux
+ * tombées :
+ * <ul>
+ *   <li>LWJGL 2 (1.8.9) et LWJGL 3 cohabitaient : plus depuis que la 1.8.9
+ *       tourne sur LWJGL 3 ;</li>
+ *   <li>l'agent compilait en {@code --release 8} sans LWJGL sur le classpath :
+ *       il compile désormais en {@code --release 25}, LWJGL 3.4.1 en
+ *       dépendance de compilation ({@code build.bat}).</li>
+ * </ul>
+ * Toutes les méthodes utilisées ici existent à l'identique depuis LWJGL 3.0.
+ * Elles se résolvent par le classloader qui a chargé cette classe — celui du
+ * jeu (système en vanilla, Knot sous Fabric), où LWJGL est toujours présent.
+ * Les signatures {@code throws Exception} sont conservées pour ne rien changer
+ * chez les appelants.
+ *
+ * <h2>Routage par GlStateManager retiré</h2>
+ *
+ * {@code glBindTexture}/{@code glActiveTexture} passaient, quand la classe
+ * était trouvée, par {@code GlStateManager} (résolu par réflexion) pour
+ * garder son cache de texture synchrone. Sur les versions actives cela ne
+ * servait plus : la 1.8.9 (classe obfusquée, jamais trouvée) resynchronise
+ * tout l'état GL une fois par frame ({@code GlFrameState189}), et Blaze3D
+ * n'utilise pas ce pont. Une tranche GL qu'on dégèlera (1.16.5, 1.17 –
+ * 1.21.x) devra faire de même dans son hub, en appels typés.
  */
 public final class GlBridge {
 
-    private final Map<String, Method> glMethods = new HashMap<>();
-    public ClassLoader gameClassLoader;
-
-    private Method gl(String cls, String method, Class<?>... params) throws Exception {
-        String key = cls + "#" + method + java.util.Arrays.toString(params);
-        Method m = glMethods.get(key);
-        if (m != null) return m;
-        Class<?> c = Class.forName(cls, true, gameClassLoader);
-        m = c.getMethod(method, params);
-        glMethods.put(key, m);
-        return m;
-    }
-
-    /** Résolution réflexion brute générique (même cache/classloader que {@link #gl}) — pour des classes hors org.lwjgl.opengl (ex: MemoryUtil, voir UiTextRenderer#ensureNativeTextureApiResolved). */
-    public Method rawMethod(String cls, String method, Class<?>... params) throws Exception {
-        return gl(cls, method, params);
-    }
-
     public int glGetError() throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL11", "glGetError").invoke(null);
+        return GL11.glGetError();
     }
     /** Vide tous les codes d'erreur en attente, retourne le premier non-zéro rencontré (0 = aucune erreur). */
     public int drainGlErrors() throws Exception {
@@ -48,156 +60,90 @@ public final class GlBridge {
     }
 
     public int glCreateShader(int type) throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL20", "glCreateShader", int.class).invoke(null, type);
+        return GL20.glCreateShader(type);
     }
     public void glShaderSource(int shader, String src) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glShaderSource", int.class, CharSequence.class).invoke(null, shader, src);
+        GL20.glShaderSource(shader, src);
     }
     public void glCompileShader(int shader) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glCompileShader", int.class).invoke(null, shader);
+        GL20.glCompileShader(shader);
     }
     public int glCreateProgram() throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL20", "glCreateProgram").invoke(null);
+        return GL20.glCreateProgram();
     }
     public void glAttachShader(int program, int shader) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glAttachShader", int.class, int.class).invoke(null, program, shader);
+        GL20.glAttachShader(program, shader);
     }
     public void glLinkProgram(int program) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glLinkProgram", int.class).invoke(null, program);
+        GL20.glLinkProgram(program);
     }
     public int glGetUniformLocation(int program, String name) throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL20", "glGetUniformLocation", int.class, CharSequence.class)
-            .invoke(null, program, name);
+        return GL20.glGetUniformLocation(program, name);
     }
     public int glGetShaderi(int shader, int pname) throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL20", "glGetShaderi", int.class, int.class).invoke(null, shader, pname);
+        return GL20.glGetShaderi(shader, pname);
     }
     public String glGetShaderInfoLog(int shader) throws Exception {
-        return (String) gl("org.lwjgl.opengl.GL20", "glGetShaderInfoLog", int.class).invoke(null, shader);
+        return GL20.glGetShaderInfoLog(shader);
     }
     public int glGetProgrami(int program, int pname) throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL20", "glGetProgrami", int.class, int.class).invoke(null, program, pname);
+        return GL20.glGetProgrami(program, pname);
     }
     public String glGetProgramInfoLog(int program) throws Exception {
-        return (String) gl("org.lwjgl.opengl.GL20", "glGetProgramInfoLog", int.class).invoke(null, program);
+        return GL20.glGetProgramInfoLog(program);
     }
     public void glUseProgram(int program) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glUseProgram", int.class).invoke(null, program);
+        GL20.glUseProgram(program);
     }
     public void glUniform1f(int loc, float v) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glUniform1f", int.class, float.class).invoke(null, loc, v);
+        GL20.glUniform1f(loc, v);
     }
     public void glUniform1i(int loc, int v) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glUniform1i", int.class, int.class).invoke(null, loc, v);
+        GL20.glUniform1i(loc, v);
     }
     public void glUniform2f(int loc, float a, float b) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glUniform2f", int.class, float.class, float.class).invoke(null, loc, a, b);
+        GL20.glUniform2f(loc, a, b);
     }
     public void glUniform4f(int loc, float a, float b, float c, float d) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glUniform4f", int.class, float.class, float.class, float.class, float.class)
-            .invoke(null, loc, a, b, c, d);
+        GL20.glUniform4f(loc, a, b, c, d);
     }
     public void glColor4f(float r, float g, float b, float a) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glColor4f", float.class, float.class, float.class, float.class)
-            .invoke(null, r, g, b, a);
+        GL11.glColor4f(r, g, b, a);
     }
     public void glBegin(int mode) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glBegin", int.class).invoke(null, mode);
+        GL11.glBegin(mode);
     }
     public void glVertex2f(float x, float y) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glVertex2f", float.class, float.class).invoke(null, x, y);
+        GL11.glVertex2f(x, y);
     }
     public void glEnd() throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glEnd").invoke(null);
+        GL11.glEnd();
     }
     public void glEnable(int cap) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glEnable", int.class).invoke(null, cap);
+        GL11.glEnable(cap);
     }
     public void glDisable(int cap) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glDisable", int.class).invoke(null, cap);
+        GL11.glDisable(cap);
     }
     public boolean glIsEnabled(int cap) throws Exception {
-        return (boolean) gl("org.lwjgl.opengl.GL11", "glIsEnabled", int.class).invoke(null, cap);
+        return GL11.glIsEnabled(cap);
     }
     public void glBlendFunc(int sfactor, int dfactor) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glBlendFunc", int.class, int.class).invoke(null, sfactor, dfactor);
+        GL11.glBlendFunc(sfactor, dfactor);
     }
     public void glClear(int mask) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glClear", int.class).invoke(null, mask);
+        GL11.glClear(mask);
     }
 
-    private Method glStateManagerActiveTexture;
-    private boolean glStateManagerActiveTextureResolved;
-
     /**
-     * BUG TROUVÉ (era E, 1.21.11 — cause RÉELLE de la corruption de texte
-     * "aléatoire d'un lancement à l'autre", après avoir écarté rastérisation/
-     * SDF/upload GPU/GC, tous confirmés innocents par diagnostic direct) :
-     * {@code GlStateManager} (la couche GL de Blaze3D) maintient DEUX caches
-     * logiciels — un par unité de texture bindée (déjà connu, voir
-     * {@link #glBindTexture}) ET un pour l'UNITÉ ACTIVE elle-même (champ
-     * `activeTexture`, vérifié par désassemblage de
-     * {@code com.mojang.blaze3d.opengl.GlStateManager._activeTexture(int)} :
-     * si le cache dit déjà cette unité, le vrai {@code glActiveTexture} est
-     * SAUTÉ). Nos appels précédents en {@code GL13.glActiveTexture} brut
-     * changeaient l'unité RÉELLE sans jamais mettre à jour ce cache — un
-     * appel Blaze3D ultérieur (n'importe quel rendu vanilla après le nôtre,
-     * variable d'une frame/d'un lancement à l'autre selon ce qui a été
-     * dessiné juste avant) qui CROIT être déjà sur la bonne unité saute son
-     * propre {@code glActiveTexture}, laissant la VRAIE unité active être
-     * celle où NOUS l'avons laissée — son {@code bindTexture} suivant se
-     * retrouve alors à binder SA texture sur NOTRE unité (ou vice-versa),
-     * un draw échantillonnant une texture totalement étrangère avec des UV
-     * qui n'ont aucun sens pour elle = bruit visuel, exactement le symptôme
-     * observé, non-déterministe puisqu'il dépend de l'historique de rendu de
-     * CETTE frame précise. Seul {@code glBindTexture} avait été routé via
-     * GlStateManager jusqu'ici (fix plus ancien, pour un bug similaire sur
-     * les icônes d'armure) — {@code glActiveTexture} ne l'a jamais été,
-     * sur AUCUN bracket, ce trou existant depuis toujours mais invisible
-     * tant que rien ne changeait volontairement d'unité de texture avant
-     * cette session (drawTextModern, ajouté pour l'era E, est le premier
-     * code de ce projet à le faire explicitement).
+     * Unité de texture active. Appel GL brut — voir la javadoc de classe pour
+     * le routage par {@code GlStateManager} qui vivait ici (et l'historique du
+     * désynchronisme de son cache d'unité active, corrigé en 1.21.11).
      */
     public void glActiveTexture(int texture) throws Exception {
-        if (!glStateManagerActiveTextureResolved) {
-            glStateManagerActiveTextureResolved = true;
-            glStateManagerActiveTexture = resolveGlStateManagerMethod("activeTexture", "_activeTexture");
-        }
-        if (glStateManagerActiveTexture != null) {
-            try {
-                glStateManagerActiveTexture.invoke(null, texture);
-                return;
-            } catch (Throwable ignored) {} // repli sur l'appel brut ci-dessous
-        }
-        gl("org.lwjgl.opengl.GL13", "glActiveTexture", int.class).invoke(null, texture);
+        GL13.glActiveTexture(texture);
     }
 
-    /**
-     * Résout {@code GlStateManager.<oldName>(int)} (package
-     * {@code com.mojang.blaze3d.platform}, brackets antérieurs à Blaze3D) ou,
-     * à défaut, {@code GlStateManager.<newName>(int)} (package
-     * {@code com.mojang.blaze3d.opengl}, era E/Blaze3D 1.21.6+ — nom de
-     * méthode préfixé {@code _}, vérifié par désassemblage direct du jar
-     * client 1.21.11, PAS supposé). Classes NON obfusquées (bibliothèque
-     * Blaze3D fournie telle quelle, jamais remappée par Yarn) — {@link
-     * McReflect#rawClass} est le bon outil, PAS {@code yarnClass}/
-     * {@code MappingsRegistry} (réservés aux classes obfusquées "net.minecraft").
-     */
-    private static Method resolveGlStateManagerMethod(String oldName, String newName) {
-        try {
-            Class<?> oldClass = McReflect.rawClass("com.mojang.blaze3d.platform.GlStateManager");
-            if (oldClass != null) {
-                try { return oldClass.getMethod(oldName, int.class); } catch (Throwable ignored) {}
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Class<?> newClass = McReflect.rawClass("com.mojang.blaze3d.opengl.GlStateManager");
-            if (newClass != null) {
-                try { return newClass.getMethod(newName, int.class); } catch (Throwable ignored) {}
-            }
-        } catch (Throwable ignored) {}
-        return null;
-    }
     /**
      * BUG TROUVÉ (retrouvé dans l'historique du projet, confirmé responsable
      * du crash NATIF 0xC0000409 sur 1.21.11 ET reproduit sur 1.21.4) : {@code
@@ -253,176 +199,117 @@ public final class GlBridge {
         try { glBlendFunc(state.blendSrc, state.blendDst); } catch (Throwable ignored) {}
     }
     public void matrixMode(int mode) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glMatrixMode", int.class).invoke(null, mode);
+        GL11.glMatrixMode(mode);
     }
     public void pushMatrix() throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glPushMatrix").invoke(null);
+        GL11.glPushMatrix();
     }
     public void popMatrix() throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glPopMatrix").invoke(null);
+        GL11.glPopMatrix();
     }
     public void loadIdentity() throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glLoadIdentity").invoke(null);
+        GL11.glLoadIdentity();
     }
     public void glOrtho(double left, double right, double bottom, double top, double near, double far) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glOrtho", double.class, double.class, double.class, double.class, double.class, double.class)
-            .invoke(null, left, right, bottom, top, near, far);
+        GL11.glOrtho(left, right, bottom, top, near, far);
     }
     public void glTranslatef(float x, float y, float z) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glTranslatef", float.class, float.class, float.class).invoke(null, x, y, z);
+        GL11.glTranslatef(x, y, z);
     }
     public void glScalef(float x, float y, float z) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glScalef", float.class, float.class, float.class).invoke(null, x, y, z);
+        GL11.glScalef(x, y, z);
     }
     public void glTexCoord2f(float u, float v) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glTexCoord2f", float.class, float.class).invoke(null, u, v);
+        GL11.glTexCoord2f(u, v);
     }
     public int glGenTextures() throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL11", "glGenTextures").invoke(null);
+        return GL11.glGenTextures();
     }
     public void glFinish() throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glFinish").invoke(null);
+        GL11.glFinish();
     }
 
     /**
-     * Équivalent de {@code java.lang.ref.Reference.reachabilityFence(Object)}
-     * (JDK 9+) via réflexion — ce fichier compile en {@code --release 8}
-     * (compat multi-version, voir build.bat), qui masque toute API postérieure
-     * à Java 8 à la COMPILATION (contrairement à un simple `-source 8`) : un
-     * appel direct à `reachabilityFence` ne compile pas ("cannot find
-     * symbol"), même si la JVM d'exécution réelle (21 ici) le possède bien.
-     * Résolu paresseusement, mis en cache, jamais réessayé après un premier
-     * échec (même motif que les autres wrappers `gl*` de ce fichier).
+     * Garde {@code ref} atteignable jusqu'ici — voir les appelants
+     * ({@code FontAtlasTextures}, {@code IconTextures}) pour le pourquoi.
+     * Appel direct depuis le passage en {@code --release 25} ; il passait par
+     * réflexion tant que l'agent compilait en {@code --release 8}.
      */
-    private static volatile Method reachabilityFenceMethod;
     public static void reachabilityFence(Object ref) {
-        try {
-            Method m = reachabilityFenceMethod;
-            if (m == null) {
-                m = java.lang.ref.Reference.class.getMethod("reachabilityFence", Object.class);
-                reachabilityFenceMethod = m;
-            }
-            m.invoke(null, ref);
-        } catch (Throwable ignored) {
-            // Best-effort — sans cette méthode (JDK < 9, ne devrait jamais
-            // arriver au runtime réel), aucune protection supplémentaire,
-            // comportement identique à avant ce fix.
-        }
+        java.lang.ref.Reference.reachabilityFence(ref);
     }
-    private Method glStateManagerBindTexture;
-    private boolean glStateManagerBindTextureResolved;
 
     /**
-     * Route le bind GL_TEXTURE_2D via {@code GlStateManager.bindTexture(int)}
-     * (Yarn "bfl.i", `method_9839`) plutôt que l'appel LWJGL brut — CRUCIAL :
-     * `GlStateManager` maintient son PROPRE cache Java de "texture active par
-     * unité" (`field_10722 activeTexture` / `field_10715 TEXTURES`, vérifié
-     * dans mappings-1.8.9.tiny) et SAUTE le vrai `glBindTexture` GL s'il croit
-     * que la texture demandée est déjà active. Nos appels précédents en
-     * `GL11.glBindTexture` brut changeaient la texture RÉELLE sans jamais
-     * mettre à jour ce cache — désynchronisant la croyance de GlStateManager
-     * de l'état GL réel. Résultat concret : après un drawText() (police,
-     * bind brut), l'appel vanilla suivant à `renderInGuiWithOverrides`
-     * (armor icon) demande à re-binder l'atlas de blocs via
-     * `GlStateManager.bindTexture(...)`, qui CROIT l'avoir déjà fait (son
-     * cache dit "atlas déjà actif") et SAUTE le bind réel — l'icône se
-     * retrouve alors dessinée avec la texture RÉELLEMENT active, notre atlas
-     * de police SDF, d'où les formes blanches fragmentées. Router NOS PROPRES
-     * binds à travers ce même GlStateManager élimine le désync à la racine
-     * (nos binds ET ceux de vanilla passent désormais par la même source de
-     * vérité), au lieu d'un fix ponctuel côté rendu d'item seulement.
+     * Liaison de texture. Appel GL brut — voir la javadoc de classe pour le
+     * routage par {@code GlStateManager} qui vivait ici, et pourquoi la 1.8.9
+     * n'en a plus besoin ({@code GlFrameState189}).
      */
     public void glBindTexture(int target, int texture) throws Exception {
-        if (target == 0x0DE1 && !glStateManagerBindTextureResolved) { // GL_TEXTURE_2D
-            glStateManagerBindTextureResolved = true;
-            // Era E (Blaze3D 1.21.6+) : classe déplacée vers
-            // com.mojang.blaze3d.opengl.GlStateManager, méthode renommée
-            // "_bindTexture" (vérifié par désassemblage direct, voir
-            // resolveGlStateManagerMethod) — l'ancienne résolution ne
-            // couvrait que "com/mojang/blaze3d/platform/GlStateManager"/
-            // "bindTexture" (brackets antérieurs), silencieusement null sur
-            // 1.21.11, d'où un repli permanent sur l'appel brut désynchronisant
-            // le cache de GlStateManager (cause racine du texte corrompu).
-            glStateManagerBindTexture = resolveGlStateManagerMethod("bindTexture", "_bindTexture");
-        }
-        if (target == 0x0DE1 && glStateManagerBindTexture != null) {
-            try {
-                glStateManagerBindTexture.invoke(null, texture);
-                return;
-            } catch (Throwable ignored) {} // repli sur l'appel brut ci-dessous
-        }
-        gl("org.lwjgl.opengl.GL11", "glBindTexture", int.class, int.class).invoke(null, target, texture);
+        GL11.glBindTexture(target, texture);
     }
     public void glTexParameteri(int target, int pname, int param) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glTexParameteri", int.class, int.class, int.class).invoke(null, target, pname, param);
+        GL11.glTexParameteri(target, pname, param);
     }
     public void glTexImage2D(int target, int level, int internalFormat, int width, int height, int border,
-                               int format, int type, java.nio.ByteBuffer pixels) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glTexImage2D", int.class, int.class, int.class, int.class, int.class,
-            int.class, int.class, int.class, java.nio.ByteBuffer.class)
-            .invoke(null, target, level, internalFormat, width, height, border, format, type, pixels);
+                               int format, int type, ByteBuffer pixels) throws Exception {
+        GL11.glTexImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
     }
     public void glScissor(int x, int y, int w, int h) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glScissor", int.class, int.class, int.class, int.class).invoke(null, x, y, w, h);
+        GL11.glScissor(x, y, w, h);
     }
-    // ── Stencil (roadmap Phase 5.1, clip doux aux coins arrondis — voir UiPrimitiveRenderer#beginRoundedClip) ──
+    // ── Stencil (roadmap Phase 5.1, clip doux aux coins arrondis — voir GlRoundedClip) ──
     public void glStencilFunc(int func, int ref, int mask) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glStencilFunc", int.class, int.class, int.class).invoke(null, func, ref, mask);
+        GL11.glStencilFunc(func, ref, mask);
     }
     public void glStencilOp(int sfail, int dpfail, int dppass) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glStencilOp", int.class, int.class, int.class).invoke(null, sfail, dpfail, dppass);
+        GL11.glStencilOp(sfail, dpfail, dppass);
     }
     public void glStencilMask(int mask) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glStencilMask", int.class).invoke(null, mask);
+        GL11.glStencilMask(mask);
     }
     public void glColorMask(boolean r, boolean g, boolean b, boolean a) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glColorMask", boolean.class, boolean.class, boolean.class, boolean.class).invoke(null, r, g, b, a);
+        GL11.glColorMask(r, g, b, a);
     }
     public void glGenerateMipmap(int target) throws Exception {
-        // GL30 (promu depuis GL_ARB_framebuffer_object) — dispo aussi bien
-        // sous LWJGL2 (1.8.9, contexte GL2.1) que LWJGL3 (1.21), l'extension
-        // sous-jacente étant supportée par tout GPU ~2006+.
-        gl("org.lwjgl.opengl.GL30", "glGenerateMipmap", int.class).invoke(null, target);
+        GL30.glGenerateMipmap(target);
     }
 
-    // ── GL réflexion — pipeline MODERNE uniquement (VAO/VBO, GL15/GL20/GL30) ──
+    // ── Pipeline MODERNE (VAO/VBO, GL15/GL20/GL30) ─────────────────────────
 
     public void glDrawArrays(int mode, int first, int count) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glDrawArrays", int.class, int.class, int.class).invoke(null, mode, first, count);
+        GL11.glDrawArrays(mode, first, count);
     }
     public int glGetInteger(int pname) throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL11", "glGetInteger", int.class).invoke(null, pname);
+        return GL11.glGetInteger(pname);
     }
     public int glGenVertexArrays() throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL30", "glGenVertexArrays").invoke(null);
+        return GL30.glGenVertexArrays();
     }
     public void glBindVertexArray(int array) throws Exception {
-        gl("org.lwjgl.opengl.GL30", "glBindVertexArray", int.class).invoke(null, array);
+        GL30.glBindVertexArray(array);
     }
     public int glGenBuffers() throws Exception {
-        return (int) gl("org.lwjgl.opengl.GL15", "glGenBuffers").invoke(null);
+        return GL15.glGenBuffers();
     }
     public void glBindBuffer(int target, int buffer) throws Exception {
-        gl("org.lwjgl.opengl.GL15", "glBindBuffer", int.class, int.class).invoke(null, target, buffer);
+        GL15.glBindBuffer(target, buffer);
     }
     public void glBufferData(int target, FloatBuffer data, int usage) throws Exception {
-        gl("org.lwjgl.opengl.GL15", "glBufferData", int.class, FloatBuffer.class, int.class).invoke(null, target, data, usage);
+        GL15.glBufferData(target, data, usage);
     }
     public void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, long pointer) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glVertexAttribPointer", int.class, int.class, int.class, boolean.class, int.class, long.class)
-            .invoke(null, index, size, type, normalized, stride, pointer);
+        GL20.glVertexAttribPointer(index, size, type, normalized, stride, pointer);
     }
     public void glEnableVertexAttribArray(int index) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glEnableVertexAttribArray", int.class).invoke(null, index);
+        GL20.glEnableVertexAttribArray(index);
     }
     public void glBindAttribLocation(int program, int index, String name) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glBindAttribLocation", int.class, int.class, CharSequence.class).invoke(null, program, index, name);
+        GL20.glBindAttribLocation(program, index, name);
     }
     public void glUniformMatrix4fv(int location, boolean transpose, FloatBuffer value) throws Exception {
-        gl("org.lwjgl.opengl.GL20", "glUniformMatrix4fv", int.class, boolean.class, FloatBuffer.class).invoke(null, location, transpose, value);
+        GL20.glUniformMatrix4fv(location, transpose, value);
     }
-    public void glReadPixels(int x, int y, int width, int height, int format, int type, java.nio.ByteBuffer pixels) throws Exception {
-        gl("org.lwjgl.opengl.GL11", "glReadPixels", int.class, int.class, int.class, int.class, int.class, int.class, java.nio.ByteBuffer.class)
-            .invoke(null, x, y, width, height, format, type, pixels);
+    public void glReadPixels(int x, int y, int width, int height, int format, int type, ByteBuffer pixels) throws Exception {
+        GL11.glReadPixels(x, y, width, height, format, type, pixels);
     }
 }

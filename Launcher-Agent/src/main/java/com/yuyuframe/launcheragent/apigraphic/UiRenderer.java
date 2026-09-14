@@ -123,8 +123,9 @@ public final class UiRenderer {
     }
 
     public static UiRenderer get(ClassLoader gameClassLoader) {
+        // gameClassLoader n'est plus transmis au pont GL : il appelle LWJGL
+        // en typé (voir GlBridge). Paramètre gardé pour les appelants.
         if (instance == null) instance = new UiRenderer();
-        instance.glBridge.gameClassLoader = gameClassLoader;
         return instance;
     }
 

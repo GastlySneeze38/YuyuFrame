@@ -291,7 +291,7 @@ for %%A in ("%SRCLIST%") do if %%~zA==0 (
 :: gardes-fous ci-dessus. -proc:none l'empeche de tourner du tout, plutot
 :: que de corriger un mecanisme qu'on ne veut pas.
 "%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
-  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%OUT_STUBS%" ^
+  -cp "%LIB%\mixin.jar;%LIB%\asm-9.5.jar;%LIB%\asm-tree-9.5.jar;%LIB%\jna.jar;%LIB%\jna-platform.jar;%LIB%\mixinextras.jar;%OUT_STUBS%;%CP_LWJGL3%" ^
   -d "%OUT_MAIN%" ^
   "@%SRCLIST%"
 set "JAVAC_RC=!errorlevel!"
