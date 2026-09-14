@@ -4,10 +4,35 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use crate::minecraft::versions::JavaVersionInfo;
 use crate::process::hidden_command;
 use super::classpath::download_verified;
 use super::jvm_args::JvmVendor;
 use super::progress::{set_progress_monotonic, ProgressFloor};
+
+/// Runtime Java d'une version : `(composant Mojang, version majeure)`.
+///
+/// Par défaut, ce que déclare le manifeste de la version (`javaVersion`) ; sans
+/// `javaVersion`, c'est une ancienne version → Java 8 (`jre-legacy`).
+///
+/// DÉROGATION 1.8.9 vanilla → Java 25 (`java-runtime-epsilon`, le runtime que
+/// Mojang sert déjà pour la 26.1.2) : refonte 1.8.9 du client, voir
+/// `docs/LauncherAgent/v1.8.9/README.md` § 3.1 (décision D7). Limitée au
+/// loader vanilla : Forge 1.8.9 passe par LaunchWrapper, incompatible avec
+/// Java 9+ (voir `ensure_java`), et Fabric/Quilt n'en sont pas concernés.
+pub(super) fn java_requirement(
+    version_id: &str,
+    loader: Option<&str>,
+    declared: Option<&JavaVersionInfo>,
+) -> (String, u32) {
+    if version_id == "1.8.9" && loader.unwrap_or("vanilla") == "vanilla" {
+        return ("java-runtime-epsilon".to_string(), 25);
+    }
+    match declared {
+        Some(j) => (j.component.clone(), j.major_version),
+        None => ("jre-legacy".to_string(), 8),
+    }
+}
 
 /// Délai au-delà duquel on considère que ce `java` ne répondra pas.
 ///

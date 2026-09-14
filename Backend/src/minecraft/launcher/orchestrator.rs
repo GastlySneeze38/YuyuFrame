@@ -15,7 +15,7 @@ use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
-use super::java::{ensure_java, is_openj9};
+use super::java::{ensure_java, is_openj9, java_requirement};
 use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, parse_user_jvm_args, resolve_auto_vendor, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
@@ -175,12 +175,9 @@ pub async fn download_and_launch(
     // point qui a réellement besoin du chemin java : installeur Forge/NeoForge).
     // `set_progress_monotonic` est fait pour ces émetteurs concurrents (voir
     // sa doc) — le plancher partagé empêche la barre de reculer.
-    let required_java = details.java_version.as_ref().map(|j| j.major_version).unwrap_or(8);
-    // Pas de javaVersion dans le manifest = ancienne version MC → Java 8 requis (LaunchWrapper)
-    let java_component = details.java_version.as_ref()
-        .map(|j| j.component.as_str())
-        .unwrap_or("jre-legacy") // composant Mojang pour Java 8
-        .to_string();
+    // Manifeste de la version, sauf dérogation (1.8.9 vanilla → Java 25) —
+    // voir java_requirement.
+    let (java_component, required_java) = java_requirement(version_id, loader, details.java_version.as_ref());
     let java_task = {
         let client = client.clone();
         let app = app.clone();
@@ -772,9 +769,9 @@ pub async fn preview_jvm_config(
         serde_json::from_str(&raw)?
     };
 
-    let required_java = details.java_version.as_ref().map(|j| j.major_version).unwrap_or(8);
-    let java_component = details.java_version.as_ref().map(|j| j.component.as_str()).unwrap_or("jre-legacy");
-    let (java, java_major) = ensure_java(java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, jvm_custom_path).await?;
+    // Aperçu sans loader connu : même règle que le lancement vanilla.
+    let (java_component, required_java) = java_requirement(version_id, None, details.java_version.as_ref());
+    let (java, java_major) = ensure_java(&java_component, required_java, &mc_dir, &client, &app, &progress_floor, jvm_vendor, jvm_custom_path).await?;
 
     // Même correction que dans le lancement réel — sans quoi l'aperçu des
     // paramètres afficherait des drapeaux que le jeu n'utilisera jamais.
