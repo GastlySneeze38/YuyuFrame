@@ -18,9 +18,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@code mixin.client.v1_8.GlobalUiRenderMixin189} (conservé comme référence).
  *
  * <p>Même point d'accroche que l'ancien : {@code GameRenderer.render(FJ)V},
- * TAIL. En ère {@code gl2} il n'y a ni présentation Blaze3D ni passe GUI
- * vanilla où s'intercaler : tout se dessine ici, après la frame vanilla, comme
- * avant. D'où {@link AgentBridge#renderHud}, absent des hubs Blaze3D.
+ * TAIL. En ère {@code gl3} (depuis le 2026-09-14, {@code gl2} avant) il n'y a
+ * ni présentation Blaze3D ni passe GUI vanilla où s'intercaler : tout se
+ * dessine ici, après la frame vanilla, encadré par {@link GlFrameState189}.
+ * D'où {@link AgentBridge#renderHud}, absent des hubs Blaze3D.
  *
  * <p>Entrées : {@code UiInputPollerModern} sur le handle GLFW de la fenêtre
  * depuis le passage à LWJGL 3 (2026-09-14) — plus {@code UiInputPollerLegacy}.
@@ -67,34 +68,49 @@ public abstract class GlobalUiRenderMixin189 {
 
             if (!screensAvailable()) return;
 
-            UiRenderer renderer = UiRenderer.get(gameLoader);
-            Object currentScreen = AccessorRegistry.get(AccessPoint.CLIENT_SCREEN, null);
-            if (currentScreen == null) {
-                drawInGame(agent, renderer);
-                if (inputPoller.menuKeyPressed) {
-                    Object menu = agent.mainMenuScreen();
-                    if (menu != null) AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, menu);
-                }
-                return;
-            }
-
-            if (!(currentScreen instanceof UiDrawable)) {
-                // Écran vanilla ouvert : seuls les éléments HUD persistants restent.
-                agent.renderHud(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
-                return;
-            }
-
-            UiDrawable ui = (UiDrawable) currentScreen;
-            ui.uiPollInput(inputPoller);
-            ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
-
-            if (agent.hasPendingNavigation(currentScreen)) {
-                // null = fermer l'écran : même point d'accès, argument null.
-                Object target = agent.consumePendingNavigation(currentScreen);
-                AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, target);
+            // Ère gl3 sur le pipeline fixe de la 1.8.9 : tout le dessin de
+            // l'agent est encadré par une capture/restauration de l'état GL,
+            // sans quoi les caches de GlStateManager divergent de l'état réel
+            // (voir GlFrameState189).
+            GL_STATE.capture();
+            try {
+                drawFrame(agent, gameLoader);
+            } finally {
+                GL_STATE.restore();
             }
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: " + t);
+        }
+    }
+
+    private static final GlFrameState189 GL_STATE = new GlFrameState189();
+
+    private static void drawFrame(AgentBridge agent, ClassLoader gameLoader) {
+        UiRenderer renderer = UiRenderer.get(gameLoader);
+        Object currentScreen = AccessorRegistry.get(AccessPoint.CLIENT_SCREEN, null);
+        if (currentScreen == null) {
+            drawInGame(agent, renderer);
+            if (inputPoller.menuKeyPressed) {
+                Object menu = agent.mainMenuScreen();
+                if (menu != null) AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, menu);
+            }
+            return;
+        }
+
+        if (!(currentScreen instanceof UiDrawable)) {
+            // Écran vanilla ouvert : seuls les éléments HUD persistants restent.
+            agent.renderHud(renderer, currentScreen, inputPoller.fbWidth, inputPoller.fbHeight);
+            return;
+        }
+
+        UiDrawable ui = (UiDrawable) currentScreen;
+        ui.uiPollInput(inputPoller);
+        ui.uiDraw(inputPoller.mouseX, inputPoller.mouseY);
+
+        if (agent.hasPendingNavigation(currentScreen)) {
+            // null = fermer l'écran : même point d'accès, argument null.
+            Object target = agent.consumePendingNavigation(currentScreen);
+            AccessorRegistry.invoke(AccessPoint.CLIENT_SET_SCREEN, null, target);
         }
     }
 

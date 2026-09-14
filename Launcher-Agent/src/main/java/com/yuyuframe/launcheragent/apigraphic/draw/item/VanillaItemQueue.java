@@ -40,6 +40,17 @@ public final class VanillaItemQueue {
     private final List<VanillaItemIcon> icons = new ArrayList<>();
     private final List<VanillaGuiBlit> blits = new ArrayList<>();
 
+    /**
+     * Plafond par file. Une frame réelle en met quelques dizaines ; au-delà,
+     * c'est que PERSONNE ne vide — cas de la 1.8.9 en ère gl3 (2026-09-14) :
+     * cette ère vide sur un {@code DrawContext} que la 1.8.9 n'a pas, et sans
+     * plafond la file grossissait à chaque frame, sans fin. On jette alors le
+     * contenu (les icônes ne s'affichent pas, ce qui est déjà le cas) et on le
+     * dit une fois.
+     */
+    private static final int MAX_PENDING = 1024;
+    private boolean overflowReported;
+
     public VanillaItemQueue(String path) {
         this.path = path;
     }
@@ -68,6 +79,7 @@ public final class VanillaItemQueue {
         int guiY = Math.round((vpHeight - y - size) / guiScale);
         reportFirstEnqueue(guiScale, guiX, guiY);
         synchronized (icons) {
+            if (icons.size() >= MAX_PENDING) dropUnflushed(icons, "icônes");
             icons.add(new VanillaItemIcon(itemStack, guiX, guiY, vanillaExtras));
         }
     }
@@ -81,8 +93,18 @@ public final class VanillaItemQueue {
         int guiW = Math.round(w / guiScale);
         int guiH = Math.round(h / guiScale);
         synchronized (blits) {
+            if (blits.size() >= MAX_PENDING) dropUnflushed(blits, "blits");
             blits.add(new VanillaGuiBlit(texturePath, guiX, guiY, guiW, guiH, u, v, texW, texH));
         }
+    }
+
+    /** Appelé sous le verrou de la liste concernée — voir {@link #MAX_PENDING}. */
+    private void dropUnflushed(List<?> queue, String what) {
+        queue.clear();
+        if (overflowReported) return;
+        overflowReported = true;
+        LauncherLog.warn("[UiRenderer] file de " + what + " (chemin " + path + ") jamais vidée — "
+            + MAX_PENDING + " éléments jetés ; l'ère active n'a pas d'hôte de vidage sur cette version");
     }
 
     // ── Vidage ────────────────────────────────────────────────────────────

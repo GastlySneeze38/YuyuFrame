@@ -37,7 +37,11 @@ public enum RenderEra {
     /** Pipeline fixe (≤ 1.16) — pile de matrices, {@code GL_ALPHA_TEST}, dessin immédiat. */
     GL2,
 
-    /** Core Profile 3.2 (1.17 – 1.21.x) — plus de pile de matrices, VAO/VBO obligatoires. */
+    /**
+     * Shaders GLSL 150 et VAO/VBO (1.17 – 1.21.x en Core Profile 3.2, et
+     * 1.8.9 depuis le 2026-09-14 en contexte 3.2 de compatibilité ouvert par
+     * la couche LWJGL 3) — plus de pile de matrices.
+     */
     GL3,
 
     /** Blaze3D (1.21.11 – 26.x) — {@code RenderPipeline}, {@code GuiRenderState} différé. */

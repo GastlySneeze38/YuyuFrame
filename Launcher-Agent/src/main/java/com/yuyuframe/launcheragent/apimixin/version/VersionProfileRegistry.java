@@ -68,7 +68,11 @@ public final class VersionProfileRegistry {
             "1.8.9",
             "1.8.9",
             null,
-            "gl2").frozen());
+            // gl3 depuis le 2026-09-14 : LWJGL 3 ouvre un contexte 3.2 de
+            // compatibilité, les shaders #version 150 y tournent. L'état GL
+            // est rendu à la 1.8.9 par GlFrameState189 (hub). Icônes d'item
+            // et blits vanilla pas encore portés sur cette ère en 1.8.9.
+            "gl3").frozen());
 
         // Resserré à la version exacte (avant : tout ce qui n'était pas
         // 1.8.x tombait implicitement ici) — une version 1.21.x non testée
