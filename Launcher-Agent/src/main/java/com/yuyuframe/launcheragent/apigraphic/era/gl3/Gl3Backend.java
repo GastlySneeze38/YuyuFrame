@@ -51,8 +51,9 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiGradientType;
  * Rayon par coin, verre dépoli, modes de fusion, lot de texte et rects en lot
  * sont servis depuis le 2026-09-14. Reste propre à Blaze3D : le rect « HUD »
  * inséré dans la passe GUI vanilla ({@link #roundedRectHud}, qui décline ici
- * et retombe sur le rect normal). Reste propre à gl3 : ombre, contour et clip
- * arrondi, que Blaze3D ne dessine pas.
+ * et retombe sur le rect normal). Reste propre à gl3 : le clip arrondi. Ombre,
+ * contour et lueur ne sont dessinés sur AUCUNE des deux ères (voir
+ * {@link #shadow}).
  */
 public final class Gl3Backend implements UiBackend {
 
@@ -240,10 +241,36 @@ public final class Gl3Backend implements UiBackend {
 
     // ── Effets et dégradés ────────────────────────────────────────────────
 
+    /**
+     * Ombres, contours et lueurs : acceptés mais NON dessinés (2026-09-16),
+     * exactement comme sur Blaze3D ({@code Blaze3DBackend.shadow}). Le rendu
+     * de référence est celui de 26.1.2, sans ombre ; dessinées ici, elles
+     * donnaient à la 1.8.9 des halos sombres et des liserés lumineux absents
+     * de 26.1.2 (constaté sur l'écran principal).
+     */
+    @Override
+    public boolean shadow(float x1, float y1, float x2, float y2, float radius, float blur, float spread,
+                          UiColor color, int vpWidth, int vpHeight) {
+        return true;
+    }
+
+    /** Non dessiné — même raison que {@link #shadow}. */
+    @Override
+    public boolean roundedRectBorder(float x1, float y1, float x2, float y2, float radius, float borderWidth,
+                                     UiColor color, int vpWidth, int vpHeight) {
+        return true;
+    }
+
+    /**
+     * Seul le mode dégradé est dessiné (la façade compose {@code drawGradientRect}
+     * dessus). Flou et contour — lueurs de {@code UiShapes.glow} — ne le sont
+     * pas, comme sur Blaze3D, qui ne sert pas du tout le FX.
+     */
     @Override
     public boolean fx(float x1, float y1, float x2, float y2, float radius, float blur, float borderWidth,
                       UiColor colorA, UiColor colorB, boolean gradient,
                       int vpWidth, int vpHeight) {
+        if (!gradient) return true;
         if (primitives == null) return false;
         primitives.fx(x1, y1, x2, y2, radius, blur, borderWidth, colorA, colorB, gradient, vpWidth, vpHeight);
         return true;

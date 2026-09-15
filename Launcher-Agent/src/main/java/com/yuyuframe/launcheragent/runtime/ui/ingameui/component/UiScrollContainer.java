@@ -392,7 +392,21 @@ public class UiScrollContainer {
 
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         applyOffsets();
-        renderer.beginScissor((int) vx, (int) vy, (int) vw, (int) vh);
+        // Marge autour du viewport (2026-09-16) : sur les ères GL, où ce
+        // scissor coupe réellement, un clip calé au pixel près sur le viewport
+        // rognait tout ce qui déborde légitimement des widgets — contour des
+        // cartes de verre (posé 1 px À L'EXTÉRIEUR, voir
+        // UiRenderer.drawGlassPanel), soulèvement au survol, éclat de clic.
+        // Constaté en 1.8.9 : contour gauche des cartes de la 1re colonne
+        // coupé. Rien ne défile horizontalement, d'où la marge large sur X ;
+        // sur Y, le défilement est estompé par clipFade, une petite marge suffit.
+        int marginX = Math.round(UiTheme.scaled(8f));
+        int marginY = Math.round(UiTheme.scaled(2f));
+        int scissorX = Math.max(0, (int) Math.floor(vx) - marginX);
+        int scissorY = Math.max(0, (int) Math.floor(vy) - marginY);
+        renderer.beginScissor(scissorX, scissorY,
+            (int) Math.ceil(vx + vw) + marginX - scissorX,
+            (int) Math.ceil(vy + vh) + marginY - scissorY);
         // try/finally OBLIGATOIRE ici : sans lui, une exception dans UN SEUL
         // w.draw() (widget de la liste) saute endScissor() — GL_SCISSOR_TEST
         // reste actif indéfiniment (aucun code ailleurs ne le redésactive de
