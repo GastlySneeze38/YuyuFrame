@@ -56,8 +56,7 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             storedTransformer = ((IMixinTransformerFactory) internal).createTransformer();
             LauncherLog.asm(1, "[LauncherAgent] offer() : transformer stocké, wrapper installé plus tard");
         } catch (Exception e) {
-            LauncherLog.err("[LauncherAgent] Erreur offer(): " + e.getMessage());
-            e.printStackTrace(System.err);
+            LauncherLog.err("[LauncherAgent] Erreur offer()", e);
         }
     }
 

@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-09-15-v1159";
+    private static final String BUILD_VERSION = "2026-09-15-v1160";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -38,8 +38,7 @@ public class LauncherAgent {
         try {
             premain0(agentArgs, inst);
         } catch (Throwable t) {
-            LauncherLog.err("[LauncherAgent] premain() exception non capturée : " + t);
-            t.printStackTrace(System.err);
+            LauncherLog.err("[LauncherAgent] premain() exception non capturée", t);
             throw t;
         }
     }
@@ -52,6 +51,11 @@ public class LauncherAgent {
         // qui n'arrive QUE tard dans le bootstrap Mixin, bien après la
         // plupart des logs de démarrage utiles (voir LauncherLog.loadConfigFromDefaultLocations).
         LauncherLog.loadConfigFromDefaultLocations(LauncherAgent.class.getClassLoader());
+
+        // Rapports de crash du jeu et exceptions non attrapées recopiés en
+        // console (2026-09-15) — voir CrashRelay : sans lui, un plantage au
+        // démarrage ne laisse rien dans la console du launcher.
+        com.yuyuframe.launcheragent.base.log.CrashRelay.install();
 
         // Filet de sécurité pour HudConfigStore (runtime.ui) : les points
         // d'accroche normaux (ConfigScreenBuilder, UiHudBox, toggle
@@ -239,8 +243,7 @@ public class LauncherAgent {
             try {
                 IsolatedBootstrap.start(inst, config.yarnPath, intermediary, false, mcVersion);
             } catch (Throwable t) {
-                LauncherLog.err("[LauncherAgent] Bootstrap non isolé échoué (vanilla) : " + t);
-                t.printStackTrace(System.err);
+                LauncherLog.err("[LauncherAgent] Bootstrap non isolé échoué (vanilla)", t);
             }
         }
 
@@ -470,8 +473,7 @@ public class LauncherAgent {
 
             LauncherLog.agent(3, "[LauncherAgent] Bootstrap isolé lancé (classloader=" + isolatedCl + ")");
         } catch (Throwable t) {
-            LauncherLog.err("[LauncherAgent] Bootstrap isolé échoué : " + t);
-            t.printStackTrace(System.err);
+            LauncherLog.err("[LauncherAgent] Bootstrap isolé échoué", t);
         }
     }
 

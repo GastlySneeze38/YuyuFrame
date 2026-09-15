@@ -15,8 +15,8 @@ public class LauncherLogger implements ILogger {
     @Override public String getId()   { return id; }
     @Override public String getType() { return "System"; }
 
-    @Override public void catching(Level lvl, Throwable t) { t.printStackTrace(System.err); }
-    @Override public void catching(Throwable t)            { t.printStackTrace(System.err); }
+    @Override public void catching(Level lvl, Throwable t) { log(lvl, "exception attrapée par Mixin", t); }
+    @Override public void catching(Throwable t)            { log(Level.ERROR, "exception attrapée par Mixin", t); }
 
     @Override public void debug(String msg, Object... args) { log(Level.DEBUG, msg, args); }
     @Override public void debug(String msg, Throwable t)    { log(Level.DEBUG, msg, t); }
@@ -63,22 +63,26 @@ public class LauncherLogger implements ILogger {
         }
     }
 
+    /**
+     * Message + pile COMPLÈTE (causes comprises) par {@code LauncherLog.err},
+     * quel que soit le niveau Mixin : une exception jointe est toujours une
+     * cause qu'on veut lire. Avant (2026-09-15), seul {@code getStackTrace()}
+     * de l'exception de tête partait au fichier — les « Caused by », où Mixin
+     * range la vraie raison d'un échec d'application, étaient perdus.
+     */
     @Override
     public void log(Level lvl, String msg, Throwable t) {
-        log(lvl, msg);
-        t.printStackTrace(System.err);
-        // La stack trace ne partait que sur System.err, donc absente du
-        // fichier : c'est justement la cause d'un échec qu'on veut lire.
-        com.yuyuframe.launcheragent.base.log.LauncherLog.err(
-            "[Mixin/" + lvl + "] [" + id + "] cause : " + t);
-        for (StackTraceElement el : t.getStackTrace()) {
-            com.yuyuframe.launcheragent.base.log.LauncherLog.err("    at " + el);
+        String formatted = "[Mixin/" + lvl + "] [" + id + "] " + msg;
+        if (t == null) {
+            log(lvl, msg);
+            return;
         }
+        com.yuyuframe.launcheragent.base.log.LauncherLog.err(formatted, t);
     }
 
     @Override
     public <T extends Throwable> T throwing(T t) {
-        t.printStackTrace(System.err);
+        log(Level.ERROR, "exception relancée par Mixin", t);
         return t;
     }
 }

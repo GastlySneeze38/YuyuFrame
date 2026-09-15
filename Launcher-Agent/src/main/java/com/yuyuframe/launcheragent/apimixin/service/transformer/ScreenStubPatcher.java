@@ -497,8 +497,7 @@ public final class ScreenStubPatcher {
             LauncherLog.asm(3, "[LauncherAgent ASM] " + cr.getClassName() + " patché : superclasse → " + realScreen);
             return cw.toByteArray();
         } catch (Exception e) {
-            LauncherLog.err("[LauncherAgent ASM] Erreur patch écran custom: " + e);
-            e.printStackTrace(System.err);
+            LauncherLog.err("[LauncherAgent ASM] Erreur patch écran custom", e);
             return null;
         }
     }

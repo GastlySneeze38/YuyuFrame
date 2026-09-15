@@ -115,8 +115,7 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             } else {
                 com.yuyuframe.launcheragent.base.log.LauncherLog.err("[LauncherAgent] Tissage Mixin ÉCHOUÉ pour " + obfDot
                     + " — classe chargée NON transformée (la JVM ignore silencieusement"
-                    + " toute exception d'un ClassFileTransformer) : " + t);
-                t.printStackTrace(System.err);
+                    + " toute exception d'un ClassFileTransformer)", t);
             }
             throw t;
         }

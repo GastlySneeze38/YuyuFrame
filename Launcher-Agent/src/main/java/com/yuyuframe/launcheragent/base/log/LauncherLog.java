@@ -165,6 +165,30 @@ public final class LauncherLog {
     public static void err(String msg)  { ORIGINAL_ERR.println("[ERR] " + msg); toFile("[ERR] " + msg, 3); }
     public static void warn(String msg) { ORIGINAL_ERR.println("[WARN] " + msg); toFile("[WARN] " + msg, 3); }
 
+    /**
+     * Erreur AVEC sa pile d'appels complète (causes et exceptions supprimées
+     * comprises), en console ET dans le fichier.
+     *
+     * <p>Remplace le couple {@code err("..." + e.getMessage())} +
+     * {@code e.printStackTrace(System.err)} (2026-09-15). Ce couple perdait la
+     * cause deux fois : le message seul ne dit presque rien
+     * ({@code "net/minecraft/launchwrapper/LaunchClassLoader"} au premier
+     * lancement de la 1.8.9 dégelée), et {@code System.err} lu à l'appel est
+     * redirigé vers log4j par Minecraft 1.8.9 ({@code Bootstrap}) — la pile
+     * n'atteignait ni la console du launcher ni ce fichier.
+     *
+     * <p>Toujours affichée, quel que soit le seuil : c'est une erreur.
+     */
+    public static void err(String msg, Throwable t) {
+        err(msg + (t == null ? "" : " : " + t));
+        if (t == null) return;
+        java.io.StringWriter buffer = new java.io.StringWriter();
+        t.printStackTrace(new java.io.PrintWriter(buffer));
+        String[] lines = buffer.toString().split("\r?\n");
+        // Ligne 0 = t.toString(), déjà dans le message.
+        for (int i = 1; i < lines.length; i++) err("    " + lines[i].trim());
+    }
+
     private static void log(String category, int threshold, int level, String msg) {
         String line = (level >= 3 ? "[!] " : "")
                     + (SHOW_CATEGORY ? "[" + category + "] " : "")
@@ -223,7 +247,32 @@ public final class LauncherLog {
         }
     }
 
-    private static synchronized void closeFile() {
+    /** Tâches à exécuter à l'arrêt de la JVM AVANT la fermeture du fichier — voir {@link #addShutdownTask}. */
+    private static final java.util.List<Runnable> SHUTDOWN_TASKS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /**
+     * Enregistre une tâche d'arrêt qui doit encore pouvoir JOURNALISER.
+     *
+     * <p>Un hook d'arrêt séparé tournerait en parallèle de celui qui ferme le
+     * fichier (la JVM ne garantit aucun ordre) : ses lignes pourraient arriver
+     * après la fermeture et être perdues. Exécutées ici, juste avant.
+     */
+    public static void addShutdownTask(Runnable task) {
+        SHUTDOWN_TASKS.add(task);
+    }
+
+    private static void closeFile() {
+        for (Runnable task : SHUTDOWN_TASKS) {
+            try {
+                task.run();
+            } catch (Throwable t) {
+                ORIGINAL_ERR.println("[ERR] [LauncherLog] tâche d'arrêt en échec : " + t);
+            }
+        }
+        closeWriter();
+    }
+
+    private static synchronized void closeWriter() {
         if (fileWriter == null) return;
         try { fileWriter.flush(); fileWriter.close(); } catch (Throwable ignored) {}
         fileWriter = null;

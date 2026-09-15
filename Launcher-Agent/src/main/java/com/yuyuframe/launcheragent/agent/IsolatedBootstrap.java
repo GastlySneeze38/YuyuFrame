@@ -381,8 +381,7 @@ public final class IsolatedBootstrap {
         } catch (Throwable e) {
             // Throwable, pas Exception : certains échecs Mixin (ex: MixinInitialisationError)
             // sont des Error, pas des Exception.
-            LauncherLog.err("[LauncherAgent] ERREUR Mixin bootstrap : " + e.getMessage());
-            e.printStackTrace(System.err);
+            LauncherLog.err("[LauncherAgent] ERREUR Mixin bootstrap", e);
             return false;
         }
     }
@@ -1036,8 +1035,7 @@ public final class IsolatedBootstrap {
                 inst.retransformClasses(cls);
                 count++;
             } catch (Throwable ex) {
-                LauncherLog.err("[LauncherAgent] Retransform immédiat " + cls.getName() + " erreur: " + ex);
-                ex.printStackTrace(System.err);
+                LauncherLog.err("[LauncherAgent] Retransform immédiat " + cls.getName() + " erreur", ex);
             }
         }
         LauncherLog.agent(3, "[LauncherAgent] Retransformations immédiates: " + count + "/" + targets.size());
@@ -1096,8 +1094,7 @@ public final class IsolatedBootstrap {
                         if (!mod) continue;
                         inst.retransformClasses(cls);
                     } catch (Throwable ex) {
-                        LauncherLog.err("[LauncherAgent] Retransform différé " + cls.getName() + " erreur: " + ex);
-                        ex.printStackTrace(System.err);
+                        LauncherLog.err("[LauncherAgent] Retransform différé " + cls.getName() + " erreur", ex);
                     }
                 }
             }
@@ -1112,8 +1109,7 @@ public final class IsolatedBootstrap {
                 try {
                     super.run();
                 } catch (Throwable fatal) {
-                    LauncherLog.err("[LauncherAgent] Thread retransform MORT : " + fatal);
-                    fatal.printStackTrace(System.err);
+                    LauncherLog.err("[LauncherAgent] Thread retransform MORT", fatal);
                 }
             }
         };
