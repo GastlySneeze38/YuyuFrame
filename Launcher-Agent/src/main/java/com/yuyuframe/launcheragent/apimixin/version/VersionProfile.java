@@ -56,7 +56,7 @@ public final class VersionProfile {
     public final String yarnJarNameHint;
 
     /**
-     * Ère de rendu de cette version — {@code "gl2"}, {@code "gl3"},
+     * Ère de rendu de cette version — {@code "gl3"},
      * {@code "blaze3d"}, ou {@code null} si aucun backend graphique ne la sert.
      *
      * <h2>Pourquoi une CHAÎNE et pas un type</h2>

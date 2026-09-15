@@ -108,7 +108,10 @@ public final class VersionProfileRegistry {
             "1.16.5",
             "1.16.5",
             "mixins.launcheragent-1.16.json",
-            "gl2").frozen());
+            // gl3 depuis le 2026-09-15 (ère gl2 supprimée) : le contexte de
+            // compatibilité ouvert par GLFW accepte les shaders #version 150
+            // sur tout pilote OpenGL 3.2+. À revérifier au dégel.
+            "gl3").frozen());
 
         // Bracket "C" — 1.17 à 1.20.4 : Core Profile OpenGL 3.2 obligatoire
         // (pipeline fixe supprimé), mais GameRenderer.render(FJZ)V garde la
@@ -251,14 +254,14 @@ public final class VersionProfileRegistry {
     }
 
     /**
-     * Ère de rendu de la version qui tourne — {@code "gl2"}, {@code "gl3"},
+     * Ère de rendu de la version qui tourne — {@code "gl3"},
      * {@code "blaze3d"}, ou {@code null}.
      *
      * <h2>Le repli, et pourquoi il est ICI</h2>
      *
      * Si aucun profil n'a été publié (bootstrap Mixin non passé, test hors
      * jeu), on retombe sur la DÉTECTION historique : présence de
-     * {@code GpuDevice} → Blaze3D, sinon le profil OpenGL déduit de la version.
+     * {@code GpuDevice} → Blaze3D, sinon gl3 (seule ère OpenGL restante).
      *
      * <p>Ce repli lit la version et sonde des classes du jeu — deux choses
      * parfaitement légitimes dans {@code apimixin}, dont c'est le métier, et
@@ -289,7 +292,7 @@ public final class VersionProfileRegistry {
                 .rawClass("com.mojang.blaze3d.systems.GpuDevice") != null) {
             return "blaze3d";
         }
-        return MinecraftVersionDetector.supportsFixedFunctionDrawing(mcVersion) ? "gl2" : "gl3";
+        return "gl3";
     }
 
     private static VersionProfile findExact(String mcVersion) {

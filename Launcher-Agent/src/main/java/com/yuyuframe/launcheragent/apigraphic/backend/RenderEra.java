@@ -34,13 +34,14 @@ public enum RenderEra {
     /** Aucun backend : rien n'est pris en charge. Version reconnue mais non servie, ou ère non encore écrite. */
     NOOP,
 
-    /** Pipeline fixe (≤ 1.16) — pile de matrices, {@code GL_ALPHA_TEST}, dessin immédiat. */
-    GL2,
-
     /**
      * Shaders GLSL 150 et VAO/VBO (1.17 – 1.21.x en Core Profile 3.2, et
      * 1.8.9 depuis le 2026-09-14 en contexte 3.2 de compatibilité ouvert par
      * la couche LWJGL 3) — plus de pile de matrices.
+     *
+     * <p>Seule ère OpenGL depuis le 2026-09-15 : l'ère gl2 (pipeline fixe)
+     * a été supprimée une fois gl3 à parité avec Blaze3D. La clé
+     * {@code "gl2"} n'existe plus et vaudrait {@link #NOOP}.
      */
     GL3,
 
@@ -49,7 +50,6 @@ public enum RenderEra {
 
     /** Clé portée par {@code VersionProfile.renderEra} — le vocabulaire de frontière. */
     public static RenderEra fromKey(String key) {
-        if ("gl2".equals(key)) return GL2;
         if ("gl3".equals(key)) return GL3;
         if ("blaze3d".equals(key)) return BLAZE3D;
         return NOOP;

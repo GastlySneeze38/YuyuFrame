@@ -10,7 +10,6 @@ import com.yuyuframe.launcheragent.apigraphic.draw.shape.UiShapes;
 import com.yuyuframe.launcheragent.apigraphic.text.UiTextLayout;
 import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaFlushHost;
 import com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaGuiScale;
-import com.yuyuframe.launcheragent.apigraphic.backend.RenderEra;
 import com.yuyuframe.launcheragent.apigraphic.backend.UiBackendRegistry;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
@@ -26,11 +25,11 @@ import java.nio.FloatBuffer;
  * le même nom de paquet, donc résolus par réflexion comme le reste de
  * l'agent : org.lwjgl n'est PAS obfusqué, pas besoin de MappingsRegistry ici).
  *
- * DEUX PIPELINES DE RENDU (voir {@link #modern}, historique du projet) :
- *  - LEGACY (1.8.9) : pipeline fixe OpenGL 1.x/2.x (glBegin/glVertex2f,
- *    glMatrixMode/glPushMatrix/glOrtho, ftransform()/gl_Color côté shader) —
- *    confirmé fonctionnel en jeu sur 1.8.9 (contexte GL2.1 compatibilité).
- *  - MODERNE (1.21.11+) : ce même pipeline fixe crashe NATIVEMENT (JVM,
+ * UN SEUL PIPELINE DE RENDU (historique du projet) :
+ *  - LEGACY (ancienne 1.8.9 LWJGL 2, ère gl2) : pipeline fixe OpenGL 1.x/2.x
+ *    (glBegin/glMatrixMode, ftransform()) — SUPPRIMÉ le 2026-09-15, la 1.8.9
+ *    tournant désormais sur LWJGL 3 en ère gl3.
+ *  - MODERNE : le pipeline fixe crashe NATIVEMENT (JVM,
  *    0xC0000409) sur cette version — confirmé en test réel, diagnostic
  *    ligne par ligne, jusqu'à isoler `glMatrixMode` lui-même comme point de
  *    crash (après un premier correctif ayant déjà isolé et supprimé
@@ -47,12 +46,6 @@ import java.nio.FloatBuffer;
  * sous-renderer pour garder l'API publique inchangée (~40 appelants externes).
  */
 public final class UiRenderer {
-
-    /** Déterminé une fois à la construction — voir la javadoc de la classe. */
-    private final boolean modern;
-
-    /** true si ce renderer utilise le pipeline moderne (1.21.11+), false si legacy (1.8.9) — voir javadoc de la classe. */
-    public boolean isModern() { return modern; }
 
     private final GlBridge glBridge;
 
@@ -82,23 +75,10 @@ public final class UiRenderer {
     private static UiRenderer instance;
 
     /**
-     * "moderne" = dessin exclusivement par shaders/VAO/VBO (Core Profile GL
-     * 3.2+, obligatoire depuis la 1.17) ; "legacy" = dessin immédiat
-     * (glBegin/glMatrixMode), possible sur 1.8.9 ET sur 1.13-1.16.x (ces
-     * dernières utilisent déjà LWJGL3/GLFW pour la fenêtre/l'input — voir
-     * UiInputPollerModern côté Mixin — mais leur contexte GL reste en
-     * dessous de 3.2, donc le pipeline fixe y fonctionne encore) — voir
-     * {@link MinecraftVersionDetector#supportsFixedFunctionDrawing}. La
-     * version MC est déjà posée en system property par
-     * {@code IsolatedBootstrap.start()} avant que quoi que ce soit ne
-     * s'affiche, donc toujours dispo ici.
+     * Plus de drapeau « moderne / legacy » depuis la suppression de l'ère gl2
+     * (2026-09-15) : toutes les ères servies dessinent par shaders/VAO/VBO.
      */
     private UiRenderer() {
-        // L'ère est REÇUE (VersionProfile.renderEra, publié au bootstrap), plus
-        // déduite d'une version ici — voir RenderEra. Seule l'ère gl2 dessine
-        // en pipeline fixe ; gl3 et Blaze3D sont toutes deux "modernes" au sens
-        // de ce drapeau, qui ne pilote que le STYLE de dessin.
-        this.modern = RenderEra.active() != RenderEra.GL2;
         this.glBridge = new GlBridge();
     }
 
