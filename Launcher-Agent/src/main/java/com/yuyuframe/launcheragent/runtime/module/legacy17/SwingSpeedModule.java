@@ -1,19 +1,19 @@
 package com.yuyuframe.launcheragent.runtime.module.legacy17;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 
 /**
- * Bascule "swing 1.7" (bras + item tenu plus rapides) — juste un marqueur
- * activé/désactivé + le réglage de vitesse ici, TOUTE la logique vit dans
- * {@code MixinSwingSpeed189} qui raccourcit
- * {@code LivingEntity.getArmSwingAnimationEnd()} (durée du swing, 6 ticks en
- * vanilla). Puisque {@code handSwingProgress} (utilisé PARTOUT pour
- * l'animation du bras ET la courbe de position de l'item tenu en 1ère
- * personne) est calculé comme {@code swingProgressInt / getArmSwingAnimationEnd()},
- * raccourcir cette seule durée accélère toute l'animation d'un coup — pas
- * besoin de toucher au rendu de position de l'item séparément (voir javadoc
- * du Mixin pour la vérification bytecode complète).
+ * Bascule "swing 1.7" (bras + item tenu plus rapides) — raccourcit la durée du
+ * swing ({@link HookPoint#SWING_DURATION}, 6 ticks en vanilla). L'avancement du
+ * swing, qui pilote À LA FOIS le bras et la courbe de l'objet tenu en 1ère
+ * personne, est calculé comme {@code ticks / durée} : raccourcir cette seule
+ * durée accélère toute l'animation d'un coup.
+ *
+ * <p>Logique ici depuis le 2026-09-15 (elle vivait dans
+ * {@code MixinSwingSpeed189}).
  */
 public final class SwingSpeedModule extends LauncherModule {
 
@@ -30,6 +30,13 @@ public final class SwingSpeedModule extends LauncherModule {
     }
 
     public SwingSpeedModule() {
-        super("swing-speed-1-7", "Swing 1.7", "Accélère l'animation de swing (bras + item tenu), façon 1.7", false);
+        super("swing-speed-1-7", "Swing 1.7", "Accélère l'animation de swing (bras + item tenu), façon 1.7", false,
+            HookPoint.SWING_DURATION);
+        VanillaHookRegistry.registerValue(HookPoint.SWING_DURATION, this::duration);
+    }
+
+    private Object duration(Object ctx) {
+        if (!isEnabled() || !(ctx instanceof Integer) || speedPercent <= 0f) return null;
+        return Integer.valueOf(Math.max(1, Math.round((Integer) ctx * 100f / speedPercent)));
     }
 }

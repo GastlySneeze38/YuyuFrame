@@ -1,5 +1,7 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
+import com.yuyuframe.launcheragent.apimixin.HookPoint;
+import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
@@ -9,8 +11,9 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
  * {@code GameOptions.fov} à CHAQUE frame tant que le module est activé (voir
  * {@link #onTick}, appelé par ModuleRegistry.tickAll() indépendamment de tout
  * écran ouvert, comme le TickEvent de l'original) ; le sprint/ralenti est
- * neutralisé séparément par {@code MixinGameRenderer189} (même découpage que
- * la référence, dont le seul vrai Mixin gère ce cas précis).
+ * neutralisé séparément par {@link HookPoint#FOV_MOVEMENT_EFFECT} (même
+ * découpage que la référence, dont le seul vrai Mixin gère ce cas précis —
+ * c'était {@code MixinGameRenderer189} jusqu'au 2026-09-15).
  */
 public final class FovModule extends LauncherModule {
 
@@ -25,7 +28,9 @@ public final class FovModule extends LauncherModule {
     private static boolean DIAG_LOGGED = false;
 
     public FovModule() {
-        super("fov", "FOV", "Remplace le FOV vanilla (sprint/ralenti compris)", false);
+        super("fov", "FOV", "Remplace le FOV vanilla (sprint/ralenti compris)", false,
+            HookPoint.FOV_MOVEMENT_EFFECT);
+        VanillaHookRegistry.register(HookPoint.FOV_MOVEMENT_EFFECT, ctx -> isEnabled());
     }
 
     /**

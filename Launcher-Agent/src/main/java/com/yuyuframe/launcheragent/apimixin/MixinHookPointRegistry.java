@@ -356,7 +356,9 @@ public final class MixinHookPointRegistry {
         // (catégories = simples chaînes), COMMAND_TREE_RECEIVE (pas de
         // brigadier), PIERCING_ATTACK. Reportés : FOG_SETUP_* et
         // ADVANCEMENT_TOAST_EXTRACT (données du joueur via points d'accès),
-        // freelook.
+        // freelook. Les HookPoints « façon 1.7 » (objet tenu, swing, hurt cam,
+        // FOV, sneak/sprint) n'existent QUE sur cette tranche : leurs modules
+        // sont exclus des versions récentes (réglages vanilla natifs).
         // ══════════════════════════════════════════════════════════════════
 
         // ── Infrastructure ────────────────────────────────────────────────
@@ -433,6 +435,20 @@ public final class MixinHookPointRegistry {
 
         // ── Horloge — LevelProperties.getTimeOfDay lue par World.getSkyAngle ──
         gate("1.8.9", "v1_8_9.clock.ClockTotalTicksMixin189", HookPoint.CLOCK_TOTAL_TICKS);
+
+        // ── Animations et contrôles « façon 1.7 » (2026-09-15) ─────────────
+        // Remplacent les mixins historiques de mixin/client/v1_8 (restés sur le
+        // disque) : la logique est dans les modules, ces mixins dispatchent.
+        gate("1.8.9", "v1_8_9.render.HeldItemTransformMixin189", HookPoint.HELD_ITEM_TRANSFORM);
+        gate("1.8.9", "v1_8_9.render.HeldItemSwingProgressMixin189", HookPoint.HELD_ITEM_SWING_PROGRESS);
+        gate("1.8.9", "v1_8_9.entity.SwingDurationMixin189", HookPoint.SWING_DURATION);
+        gate("1.8.9", "v1_8_9.camera.HurtCamTiltMixin189", HookPoint.CAMERA_HURT_TILT);
+        gate("1.8.9", "v1_8_9.camera.FovMovementEffectMixin189", HookPoint.FOV_MOVEMENT_EFFECT);
+        // Accessor écrit par FovMovementEffectMixin189 (deux champs privés).
+        always("1.8.9", "v1_8_9.camera.GameRendererAccessor189");
+        gate("1.8.9", "v1_8_9.input.SneakKeyHeldMixin189", HookPoint.SNEAK_KEY_HELD);
+        gate("1.8.9", "v1_8_9.input.SprintKeyHeldMixin189", HookPoint.SPRINT_KEY_HELD);
+        gate("1.8.9", "v1_8_9.input.SneakSlowdownMixin189", HookPoint.SNEAK_SLOWDOWN);
     }
 
     /**

@@ -16,7 +16,8 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
  * de rendu incompatibles entre versions — TOUS les brackets couverts,
  * audit demandé explicitement par l'utilisateur, vérifié par désassemblage
  * bytecode + mappings officiels Mojang téléchargés pour chaque version) :
- *   - {@code MixinWorldTime189} (1.8.9) — override {@code World.getSkyAngle(float)F}.
+ *   - {@code ClockTotalTicksMixin189} (1.8.9) — temps lu par {@code World.getSkyAngle(float)F}
+ *     (remplace {@code MixinWorldTime189}, qui recalculait l'angle par réflexion).
  *   - {@code WorldTimeMixin116}/{@code WorldTimeMixin1204}/{@code WorldTimeMixin1214}/
  *     {@code WorldTimeMixin} (1.16.5/1.20.4/1.21.4/1.21.11) — override
  *     {@code World.getTimeOfDay()J} (nom Yarn ; réel Mojang {@code getDayTime}) —

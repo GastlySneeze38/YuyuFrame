@@ -184,6 +184,13 @@ public final class ModuleRegistry {
      */
     private static final boolean IS_1_21_4 = "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""));
 
+    /**
+     * 1.8.9 — seule version où les animations 1.7, les bascules sneak/sprint,
+     * la hurt cam et le FOV fixe ont des mixins (apimixin/v1_8_9, portés le
+     * 2026-09-15). Utilisé pour la macro, ajoutée à cette version à la même date.
+     */
+    private static final boolean IS_1_8_9 = "1.8.9".equals(System.getProperty("launcheragent.mcVersion", ""));
+
     static {
         // Chaque module passe par safeRegister (2026-09-11) — voir sa javadoc :
         // un seul module lié à un type absent de la version (ex. SimpleSoundInstance
@@ -261,10 +268,11 @@ public final class ModuleRegistry {
         // 2026-09-12. La restriction d'origine disait « la détection du login
         // lit l'arbre de commandes via des accessors qui n'existent que sur ce
         // bracket » : ce n'est plus vrai, tout passe désormais par
-        // NetworkData/les points d'accès, liés des deux côtés. Reste exclue la
-        // 1.8.9, dont la lecture de touche par NOM demande le poller moderne
-        // (GLFW), absent de ce bracket.
-        if (IS_26_1 || IS_1_21_11) {
+        // NetworkData/les points d'accès, liés des deux côtés. La 1.8.9 s'y
+        // ajoute le 2026-09-15 : elle tourne sur GLFW, donc a le poller
+        // moderne. Sans Brigadier, NETWORK_HAS_COMMAND n'y est pas lié : les
+        // macros marchent, la connexion automatique ne se déclenche jamais.
+        if (IS_26_1 || IS_1_21_11 || IS_1_8_9) {
             safeRegister(() -> new MacroModule());
         }
 

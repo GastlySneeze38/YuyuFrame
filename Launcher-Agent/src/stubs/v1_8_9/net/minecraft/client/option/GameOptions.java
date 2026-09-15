@@ -31,6 +31,14 @@ public class GameOptions {
 
     public KeyBinding jumpKey;
 
+    public KeyBinding sneakKey;
+
+    public KeyBinding sprintKey;
+
+    public KeyBinding attackKey;
+
+    public KeyBinding useKey;
+
     private GameOptions() {
     }
 }

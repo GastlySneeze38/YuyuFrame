@@ -11,6 +11,9 @@ import net.minecraft.client.network.AbstractClientPlayerEntity;
  */
 public class ClientPlayerEntity extends AbstractClientPlayerEntity {
 
+    /** Entrées de déplacement du tick ({@code bew.b}, public). */
+    public net.minecraft.client.input.Input input;
+
     private ClientPlayerEntity() {
     }
 

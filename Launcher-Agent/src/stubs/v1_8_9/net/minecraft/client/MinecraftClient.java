@@ -36,6 +36,9 @@ public class MinecraftClient {
 
     public net.minecraft.client.font.TextRenderer textRenderer;
 
+    /** Cible du réticule ({@code ave.s}), {@code null} hors partie. */
+    public net.minecraft.util.hit.BlockHitResult result;
+
     public net.minecraft.client.render.item.ItemRenderer getItemRenderer() {
         throw new UnsupportedOperationException("stub compile-only");
     }

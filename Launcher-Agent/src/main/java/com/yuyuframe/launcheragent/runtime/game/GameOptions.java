@@ -62,6 +62,22 @@ public final class GameOptions {
         return v instanceof Object[] && ((Object[]) v).length == 5 ? (Object[]) v : null;
     }
 
+    /**
+     * Les quatre raccourcis d'action, en poignées opaques — attaquer, utiliser,
+     * s'accroupir, sprinter (index {@code KEY_*}) — ou {@code null} si l'accès
+     * n'est pas disponible. État RÉEL des touches, voir
+     * {@link AccessPoint#OPTIONS_ACTION_KEYS}.
+     */
+    public static Object[] actionKeys() {
+        Object v = AccessorRegistry.get(AccessPoint.OPTIONS_ACTION_KEYS, null);
+        return v instanceof Object[] && ((Object[]) v).length == 4 ? (Object[]) v : null;
+    }
+
+    public static final int KEY_ATTACK = 0;
+    public static final int KEY_USE = 1;
+    public static final int KEY_SNEAK = 2;
+    public static final int KEY_SPRINT = 3;
+
     /** Ce raccourci est-il enfoncé ? {@code false} si la poignée est absente. */
     public static boolean keyDown(Object handle) {
         if (handle == null) return false;

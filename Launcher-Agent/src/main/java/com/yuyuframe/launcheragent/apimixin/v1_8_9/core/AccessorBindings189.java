@@ -12,6 +12,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.client.gui.hud.ChatHudLine;
 import net.minecraft.client.gui.hud.InGameHud;
+import net.minecraft.client.input.Input;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.network.ServerInfo;
@@ -32,6 +33,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.FoodItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.SwordItem;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.resource.Resource;
 import net.minecraft.resource.ResourceManager;
@@ -39,6 +41,7 @@ import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.BlockView;
 import net.minecraft.world.biome.Biome;
@@ -290,6 +293,11 @@ public final class AccessorBindings189 {
             if (o == null) return null;
             return new Object[]{ o.forwardKey, o.leftKey, o.backKey, o.rightKey, o.jumpKey };
         });
+        AccessorRegistry.bind(AccessPoint.OPTIONS_ACTION_KEYS, (r, a) -> {
+            GameOptions o = options(r);
+            if (o == null) return null;
+            return new Object[]{ o.attackKey, o.useKey, o.sneakKey, o.sprintKey };
+        });
 
         // ── Poignée d'option ───────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.OPTION_VALUE, (r, a) ->
@@ -380,6 +388,50 @@ public final class AccessorBindings189 {
         // Pas de recharge d'attaque avant 1.9 : toujours pleine.
         AccessorRegistry.bind(AccessPoint.PLAYER_ATTACK_STRENGTH, (r, a) ->
             player(r) == null ? null : Float.valueOf(1f));
+        AccessorRegistry.bind(AccessPoint.PLAYER_SWING_PROGRESS, (r, a) -> {
+            LivingEntity p = player(r);
+            if (p == null || a.length < 1 || !(a[0] instanceof Number)) return null;
+            return Float.valueOf(p.getHandSwingProgress(((Number) a[0]).floatValue()));
+        });
+        // Les deux champs publics écrits comme le fait LivingEntity.swingHand(),
+        // SANS son paquet d'animation : la relance reste purement visuelle.
+        // 6 = durée vanilla hors Célérité/Fatigue (getHandSwingDuration est privée).
+        AccessorRegistry.bind(AccessPoint.PLAYER_RESTART_SWING_ANIMATION, (r, a) -> {
+            LivingEntity p = player(r);
+            if (p == null) return null;
+            if (p.handSwinging && p.handSwingTicks >= 0 && p.handSwingTicks < 3) return Boolean.FALSE;
+            p.handSwingTicks = -1;
+            p.handSwinging = true;
+            return Boolean.TRUE;
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_MAIN_HAND_KIND, (r, a) -> {
+            PlayerEntity p = player(r);
+            if (p == null) return null;
+            ItemStack stack = p.getMainHandStack();
+            if (stack == null) return "empty";
+            return stack.getItem() instanceof SwordItem ? "sword" : "other";
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_ITEM_USE, (r, a) -> {
+            PlayerEntity p = player(r);
+            if (p == null) return null;
+            int remaining = p.getItemUseTicks();
+            ItemStack stack = p.getMainHandStack();
+            if (remaining <= 0 || stack == null) return null;
+            return new int[]{ remaining, stack.getMaxUseTime() };
+        });
+        AccessorRegistry.bind(AccessPoint.PLAYER_INPUT_SNEAKING, (r, a) -> {
+            ClientPlayerEntity p = player(r);
+            Input input = p == null ? null : p.input;
+            return input == null ? null : Boolean.valueOf(input.sneaking);
+        });
+        AccessorRegistry.bind(AccessPoint.CLIENT_CROSSHAIR_TARGET, (r, a) -> {
+            MinecraftClient c = mc(r);
+            BlockHitResult hit = c == null ? null : c.result;
+            if (hit == null || hit.type == null) return null;
+            if (hit.type == BlockHitResult.Type.BLOCK) return "block";
+            if (hit.type == BlockHitResult.Type.ENTITY) return "entity";
+            return "miss";
+        });
         AccessorRegistry.bind(AccessPoint.PLAYER_EQUIPMENT, (r, a) -> {
             PlayerEntity p = player(r);
             if (p == null) return null;

@@ -5,14 +5,11 @@ import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudAnchor;
 import com.yuyuframe.launcheragent.apigraphic.hud.HudElement;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import com.yuyuframe.launcheragent.runtime.module.SingleHudModule;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
@@ -209,24 +206,20 @@ public final class KeystrokesModule extends SingleHudModule {
          * (1.13+), CPS toujours à 0 sur ces versions. Utilise désormais
          * l'état déjà pollé chaque frame par l'instance {@code
          * UiInputPollerModern} active (champs {@code leftDown}/{@code
-         * rightDown} de la classe de base {@code UiInputPoller}) quand
-         * disponible, sinon retombe sur LWJGL2 (1.8.9, inchangé).
+         * rightDown} de la classe de base {@code UiInputPoller}).
+         *
+         * <p>Le repli réflexif sur LWJGL2 a été retiré le 2026-09-15 : la
+         * 1.8.9 tourne désormais sur GLFW, son hub crée lui aussi un
+         * {@code UiInputPollerModern}. Sans poller actif (avant la première
+         * image), aucun clic n'est compté.
          */
         private void trackClicks() {
             try {
                 com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern modern =
                     com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern.ACTIVE;
-                boolean leftDown, rightDown;
-                if (modern != null) {
-                    leftDown = modern.leftDown;
-                    rightDown = modern.rightDown;
-                } else {
-                    Class<?> mouse = McReflect.rawClass("org.lwjgl.input.Mouse");
-                    Method isButtonDown = McReflect.rawMethod(mouse, "isButtonDown", int.class);
-                    if (isButtonDown == null) return;
-                    leftDown = (boolean) isButtonDown.invoke(null, 0);
-                    rightDown = (boolean) isButtonDown.invoke(null, 1);
-                }
+                if (modern == null) return;
+                boolean leftDown = modern.leftDown;
+                boolean rightDown = modern.rightDown;
 
                 if (leftDown && !prevLeftDown) leftClicks.addLast(System.currentTimeMillis());
                 prevLeftDown = leftDown;

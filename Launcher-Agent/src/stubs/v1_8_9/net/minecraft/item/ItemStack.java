@@ -17,6 +17,11 @@ public final class ItemStack {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Durée d'utilisation totale en ticks ({@code zx.l()I}). */
+    public int getMaxUseTime() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public boolean isDamageable() {
         throw new UnsupportedOperationException("stub compile-only");
     }

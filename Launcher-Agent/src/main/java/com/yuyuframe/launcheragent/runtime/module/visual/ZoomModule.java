@@ -2,7 +2,6 @@ package com.yuyuframe.launcheragent.runtime.module.visual;
 
 import com.yuyuframe.launcheragent.runtime.game.GameOptions;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
@@ -65,8 +64,8 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  *    rotation caméra (MouseHandler.turnPlayer) — encore un nouveau Mixin par
  *    bracket. Reproduit ici SANS Mixin : {@code GameOptions.sensitivity} est
  *    LUI AUSSI un {@code SimpleOption}/{@code OptionInstance} exactement
- *    comme {@code fov} (même mécanisme déjà en place, voir {@link
- *    McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue})
+ *    comme {@code fov} (même mécanisme déjà en place, voir
+ *    {@code GameOptions.value}/{@code GameOptions.setValue})
  *    — sauvegardé à l'entrée en zoom, réduit proportionnellement au niveau de
  *    zoom courant à chaque tick, restauré exactement à la sortie. Puisque
  *    c'est le RÉGLAGE réel qui est réduit (pas un Mixin sur le calcul de
@@ -123,9 +122,6 @@ public final class ZoomModule extends LauncherModule {
     public float transitionSeconds = 0.15f;
 
     public float sensitivityCompensation = 100f;
-
-    private String cachedKeyName;
-    private int cachedKeyCode = -1;
 
     private boolean zooming;
     /** Englobe {@link #zooming} ET la transition de sortie encore en cours après relâchement — voir onTick(). */
@@ -330,9 +326,8 @@ public final class ZoomModule extends LauncherModule {
      * "SimpleOption" (~1.19-1.20), {@code fov} n'est même plus un float/double
      * DU TOUT — c'est un objet {@code SimpleOption} FINAL (vérifié : {@code f
      * Levl; bM field_1826 fov}, et sur 26.1.2 réel {@code OptionInstance<
-     * Integer>}, confirmé par javap) — voir {@link
-     * McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue}
-     * pour le repli, qui gère déjà le boxing Integer/Float/Double.
+     * Integer>}, confirmé par javap) — le boxing Integer/Float/Double est
+     * désormais géré par {@code GameOptions.setValue}.
      *
      * Généralisé (ex-readFov/writeFov) pour aussi servir à {@code
      * sensitivity} (même famille d'objet sur 26.1.2 : {@code OptionInstance<
@@ -483,20 +478,14 @@ public final class ZoomModule extends LauncherModule {
      * org.lwjgl.input.Keyboard} (LWJGL2) — inexistant sous LWJGL3/GLFW
      * (1.13+), échec silencieux total sur ces versions. Utilise désormais
      * l'instance {@code UiInputPollerModern} active (créée par le Mixin de
-     * rendu global de son bracket) quand disponible, sinon retombe sur
-     * LWJGL2 (1.8.9, comportement d'origine inchangé).
+     * rendu global de son bracket).
+     *
+     * <p>Le repli réflexif sur LWJGL2 a été retiré le 2026-09-15 : la 1.8.9
+     * tourne désormais sur GLFW et son hub crée aussi ce poller.
      */
-    private boolean isZoomKeyDown() throws Exception {
+    private boolean isZoomKeyDown() {
         UiInputPollerModern modern = UiInputPollerModern.ACTIVE;
-        if (modern != null) return modern.isKeyDownByName(zoomKey);
-
-        Class<?> keyboard = McReflect.rawClass("org.lwjgl.input.Keyboard");
-        if (!zoomKey.equals(cachedKeyName)) {
-            cachedKeyName = zoomKey;
-            cachedKeyCode = (int) McReflect.rawMethod(keyboard, "getKeyIndex", String.class).invoke(null, zoomKey);
-        }
-        if (cachedKeyCode < 0) return false;
-        return (boolean) McReflect.rawMethod(keyboard, "isKeyDown", int.class).invoke(null, cachedKeyCode);
+        return modern != null && modern.isKeyDownByName(zoomKey);
     }
 
     /**

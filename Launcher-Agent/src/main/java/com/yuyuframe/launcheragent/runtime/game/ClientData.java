@@ -158,6 +158,12 @@ public final class ClientData {
         return AccessorRegistry.getInt(AccessPoint.CLIENT_GUI_SCALE, null, 0);
     }
 
+    /** Cible du réticule : {@code "block"}, {@code "entity"}, {@code "miss"}, ou {@code null} hors partie. */
+    public static String crosshairTarget() {
+        Object v = AccessorRegistry.get(AccessPoint.CLIENT_CROSSHAIR_TARGET, null);
+        return v instanceof String ? (String) v : null;
+    }
+
     /**
      * Contenu BRUT d'une ressource du jeu, ou {@code null} si elle est absente.
      *

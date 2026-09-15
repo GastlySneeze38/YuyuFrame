@@ -141,6 +141,16 @@ public enum AccessPoint {
     OPTIONS_PERSPECTIVE,
     /** Écriture de ce point de vue — même convention de chaîne qu'en lecture. */
     OPTIONS_PERSPECTIVE_SET,
+    /**
+     * Quatre raccourcis d'action, en poignées OPAQUES et dans CET ordre :
+     * attaquer, utiliser, s'accroupir, sprinter. Même usage que
+     * {@link #OPTIONS_MOVEMENT_KEYS} : à repasser à {@link #KEYBIND_IS_DOWN}.
+     *
+     * <p>Lire l'état par la poignée donne l'état RÉEL de la touche, même quand
+     * un module substitue ce que la logique de déplacement en voit
+     * ({@code HookPoint.SNEAK_KEY_HELD}/{@code SPRINT_KEY_HELD}).
+     */
+    OPTIONS_ACTION_KEYS,
 
     // ── Poignée d'option (net.minecraft.client.OptionInstance) ─────────────
     /** Valeur courante d'une poignée d'option — champ {@code value}. */
@@ -229,6 +239,42 @@ public enum AccessPoint {
      * même opération, deux noms, d'où l'intérêt de la nommer ici une seule fois.
      */
     PLAYER_ATTACK_STRENGTH,
+    /**
+     * Avancement du swing de bras, de 0 à 1 — argument : l'avancement dans le
+     * tick ({@code Float}). {@code getHandSwingProgress(F)} en Yarn,
+     * {@code getAttackAnim(F)} en Mojang.
+     */
+    PLAYER_SWING_PROGRESS,
+    /**
+     * Relance l'ANIMATION du swing, côté client seulement — contrairement au
+     * swing vanilla, aucun paquet n'est envoyé au serveur. Même garde que
+     * vanilla : ne relance pas un swing déjà dans sa première moitié. Rend
+     * {@code Boolean.TRUE} si l'animation a été relancée.
+     */
+    PLAYER_RESTART_SWING_ANIMATION,
+    /**
+     * Genre de l'objet en main principale, en CHAÎNE : {@code "sword"},
+     * {@code "empty"} ou {@code "other"} — {@code null} hors partie. Une
+     * opération pour la même raison que {@link #SCREEN_KIND} : la liaison
+     * fait les {@code instanceof}, l'appelant ne nomme aucune classe d'objet.
+     */
+    PLAYER_MAIN_HAND_KIND,
+    /**
+     * Utilisation d'objet en cours, rendue en
+     * {@code int[]{ ticks restants, durée totale }} — {@code null} si le
+     * joueur n'utilise rien.
+     */
+    PLAYER_ITEM_USE,
+    /**
+     * Le joueur est-il accroupi dans ses ENTRÉES de déplacement (touche
+     * sneak telle que vue au dernier tick, toggle compris) ? {@code Boolean}.
+     */
+    PLAYER_INPUT_SNEAKING,
+    /**
+     * Genre de la cible du réticule, en CHAÎNE : {@code "block"},
+     * {@code "entity"} ou {@code "miss"} — {@code null} hors partie.
+     */
+    CLIENT_CROSSHAIR_TARGET,
     /**
      * Équipement complet, rendu en {@code ItemInfo[6]} et dans CET ordre :
      * tête, torse, jambes, pieds, main principale, main secondaire (voir

@@ -309,4 +309,38 @@ public final class PlayerData {
         Object v = AccessorRegistry.invoke(AccessPoint.PLAYER_ATTACK_STRENGTH, null, Float.valueOf(partialTick));
         return v instanceof Number ? ((Number) v).floatValue() : fallback;
     }
+
+    /** Avancement du swing de bras, de 0 à 1 — {@code fallback} hors partie ou sur une version non liée. */
+    public static float swingProgress(float partialTick, float fallback) {
+        Object v = AccessorRegistry.invoke(AccessPoint.PLAYER_SWING_PROGRESS, null, Float.valueOf(partialTick));
+        return v instanceof Number ? ((Number) v).floatValue() : fallback;
+    }
+
+    /** Relance l'animation du swing, sans paquet serveur — voir {@link AccessPoint#PLAYER_RESTART_SWING_ANIMATION}. */
+    public static boolean restartSwingAnimation() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_RESTART_SWING_ANIMATION, null);
+        return v instanceof Boolean && (Boolean) v;
+    }
+
+    /** {@code "sword"}, {@code "empty"}, {@code "other"}, ou {@code null} hors partie. */
+    public static String mainHandKind() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_MAIN_HAND_KIND, null);
+        return v instanceof String ? (String) v : null;
+    }
+
+    /** {@code {ticks restants, durée totale}} de l'objet utilisé, ou {@code null} si rien n'est utilisé. */
+    public static int[] itemUse() {
+        Object v = AccessorRegistry.get(AccessPoint.PLAYER_ITEM_USE, null);
+        return v instanceof int[] && ((int[]) v).length == 2 ? (int[]) v : null;
+    }
+
+    /** Index de {@link #itemUse()} : ticks d'utilisation restants. */
+    public static final int USE_REMAINING = 0;
+    /** Index de {@link #itemUse()} : durée d'utilisation totale. */
+    public static final int USE_TOTAL = 1;
+
+    /** Accroupi dans les entrées de déplacement du dernier tick — {@code false} hors partie. */
+    public static boolean inputSneaking() {
+        return AccessorRegistry.getBoolean(AccessPoint.PLAYER_INPUT_SNEAKING, null, false);
+    }
 }

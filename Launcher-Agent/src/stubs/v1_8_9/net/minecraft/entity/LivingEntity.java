@@ -11,7 +11,18 @@ import net.minecraft.item.ItemStack;
  */
 public class LivingEntity extends Entity {
 
+    /** Animation de swing en cours ({@code pr.ar}, public). */
+    public boolean handSwinging;
+
+    /** Ticks écoulés dans le swing, {@code -1} = relancé ({@code pr.as}, public). */
+    public int handSwingTicks;
+
     protected LivingEntity() {
+    }
+
+    /** Avancement du swing, 0 à 1 ({@code pr.l(F)F}). */
+    public float getHandSwingProgress(float tickDelta) {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 
     public java.util.Collection getStatusEffectInstances() {

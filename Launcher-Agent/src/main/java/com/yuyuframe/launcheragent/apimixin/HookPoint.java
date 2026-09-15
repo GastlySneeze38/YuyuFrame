@@ -308,4 +308,82 @@ public enum HookPoint {
      * actif, {@code null} sinon (aucun changement).
      */
     FREELOOK_CAMERA_ROTATION_OFFSET,
+
+    // ── Animations et contrôles « façon 1.7 » (bespoke, 2026-09-15) ──────────
+    //
+    // Portage vers apimixin des mixins historiques mixin/client/v1_8 : leur
+    // LOGIQUE remonte dans les modules, le mixin ne fait plus que dispatcher et
+    // appliquer. Aucun contexte ne porte de type du jeu.
+    /**
+     * Transformation supplémentaire de l'objet tenu en 1re personne.
+     * Dispatché via {@link VanillaHookRegistry#dispatchValue} — {@code ctx} =
+     * {@code Object[]{ String étape, Float tickDelta }}, valeur =
+     * {@code apimixin.data.MatrixOps} ou {@code null} (rien à faire).
+     *
+     * <p>Étapes :
+     * <ul>
+     *   <li>{@code "item"} — juste avant le dessin de l'objet : les opérations
+     *       sont appliquées, vanilla continue ;</li>
+     *   <li>{@code "bow"} — à la fin de la pose de l'arc bandé : appliquées,
+     *       vanilla continue ;</li>
+     *   <li>{@code "rotation"} — pose qui fait suivre le regard à l'objet : une
+     *       valeur non nulle (même vide) REMPLACE la pose vanilla ;</li>
+     *   <li>{@code "consume"} — pose de manger/boire : une valeur non nulle
+     *       REMPLACE la pose vanilla.</li>
+     * </ul>
+     * Un handler ne répond qu'à SON étape : {@code dispatchValue} rend la
+     * première valeur non nulle.
+     */
+    HELD_ITEM_TRANSFORM,
+    /**
+     * Pendant une utilisation d'objet (manger/boire, bloquer, bander l'arc),
+     * vanilla passe un avancement de swing NUL au placement de l'objet : le
+     * coup ne se voit pas. Dispatché via {@link VanillaHookRegistry#dispatchValue}
+     * — {@code ctx} = l'action, {@code "consume"}, {@code "block"} ou
+     * {@code "bow"} ; valeur {@code Boolean.TRUE} = utiliser le vrai
+     * avancement du swing du joueur.
+     */
+    HELD_ITEM_SWING_PROGRESS,
+    /**
+     * Durée d'un swing de bras, en ticks. Dispatché via
+     * {@link VanillaHookRegistry#dispatchValue} — {@code ctx} = la durée
+     * vanilla ({@code Integer}, 6 hors Célérité/Fatigue), valeur = la durée à
+     * utiliser ({@code Integer}) ou {@code null}.
+     */
+    SWING_DURATION,
+    /**
+     * Inclinaison de la caméra à la prise de dégâts. {@code ctx} = {@code null} ;
+     * {@code true} = annuler l'inclinaison.
+     */
+    CAMERA_HURT_TILT,
+    /**
+     * Variation du champ de vision liée au déplacement (sprint, ralentissement).
+     * {@code ctx} = {@code null} ; {@code true} = la neutraliser, le champ de
+     * vision reste celui des options.
+     */
+    FOV_MOVEMENT_EFFECT,
+    /**
+     * État « maintenu » de la touche sneak, tel que le lit la logique de
+     * déplacement à chaque tick. Dispatché via
+     * {@link VanillaHookRegistry#dispatchValue} — {@code ctx} = l'état réel
+     * ({@code Boolean}), valeur = l'état à utiliser ({@code Boolean}) ou
+     * {@code null}.
+     *
+     * <p>Ne PAS y détecter les fronts d'appui : le site de lecture n'est pas
+     * atteint à chaque tick (le sprint, par exemple, n'est lu que si le joueur
+     * peut sprinter). L'état réel se lit à part, par
+     * {@code AccessPoint.OPTIONS_ACTION_KEYS} — la valeur substituée ici ne
+     * touche pas la touche elle-même.
+     */
+    SNEAK_KEY_HELD,
+    /** Même contrat que {@link #SNEAK_KEY_HELD}, pour la touche sprint (lue à deux endroits par tick). */
+    SPRINT_KEY_HELD,
+    /**
+     * Facteur de ralentissement appliqué au déplacement en sneak (0,3 en
+     * vanilla). Dispatché via {@link VanillaHookRegistry#dispatchValue} en
+     * DÉBUT de tick d'entrées, qu'on soit accroupi ou non — {@code ctx} =
+     * {@code Boolean} accroupi au tick précédent, valeur = le facteur
+     * ({@code Double}) ou {@code null} pour garder 0,3.
+     */
+    SNEAK_SLOWDOWN,
 }

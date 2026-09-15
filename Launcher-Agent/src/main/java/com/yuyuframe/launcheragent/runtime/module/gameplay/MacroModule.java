@@ -303,8 +303,9 @@ public final class MacroModule extends LauncherModule {
 
     private void tickMacros() {
         // UiInputPollerModern et non UiInputPoller : seule la variante
-        // moderne expose la lecture par NOM de touche (GLFW). Sur 1.8.9 elle
-        // est nulle — ce module ne cible pas ce bracket.
+        // moderne expose la lecture par NOM de touche (GLFW). La 1.8.9 y a
+        // accès depuis son passage à LWJGL 3 (2026-09-15) ; nulle seulement
+        // avant la première image.
         UiInputPollerModern poller = UiInputPollerModern.ACTIVE;
         if (poller == null) return;
 

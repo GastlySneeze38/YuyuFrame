@@ -28,6 +28,11 @@ public class PlayerEntity extends LivingEntity {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Ticks d'utilisation RESTANTS de l'objet utilisé, 0 hors utilisation ({@code wn.bR()I}). */
+    public int getItemUseTicks() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public ItemStack getMainHandStack() {
         throw new UnsupportedOperationException("stub compile-only");
     }
