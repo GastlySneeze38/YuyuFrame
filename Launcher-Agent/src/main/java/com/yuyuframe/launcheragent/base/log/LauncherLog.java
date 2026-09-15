@@ -221,6 +221,8 @@ public final class LauncherLog {
      * repaie une exception d'E/S à chaque ligne, ce que cette méthode est
      * précisément censée éviter. */
     private static boolean fileDisabled;
+    /** Writer ouvert pendant l'arrêt de la JVM, sans hook de fermeture : chaque ligne est vidée. */
+    private static boolean flushEveryLine;
 
     /**
      * BUG TROUVÉ (2026-09-04, écart de FPS d'un facteur deux avec un launcher
@@ -255,10 +257,19 @@ public final class LauncherLog {
                 System.setProperty(LOG_OPENED_PROPERTY, "true");
                 fileWriter = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
                     new java.io.FileOutputStream(f, append), java.nio.charset.StandardCharsets.UTF_8), 1 << 16);
-                Runtime.getRuntime().addShutdownHook(new Thread(LauncherLog::closeFile, "yuyu-log-close"));
+                try {
+                    Runtime.getRuntime().addShutdownHook(new Thread(LauncherLog::closeFile, "yuyu-log-close"));
+                } catch (IllegalStateException shuttingDown) {
+                    // Première écriture de CETTE copie pendant l'arrêt de la JVM
+                    // (vu le 2026-09-15 : thread de retransform qui journalise
+                    // pendant le crash). Plus de hook possible : écrire quand
+                    // même, en vidant à chaque ligne, plutôt que de désactiver le
+                    // journal au moment précis où il sert.
+                    flushEveryLine = true;
+                }
             }
             fileWriter.write("[" + System.currentTimeMillis() + "] " + line + "\n");
-            if (level >= 3) fileWriter.flush();
+            if (level >= 3 || flushEveryLine) fileWriter.flush();
         } catch (Throwable t) {
             // On EST le journal : impossible de se logger soi-même ici sans
             // risquer la récursion. Une ligne sur la sortie d'origine, et on

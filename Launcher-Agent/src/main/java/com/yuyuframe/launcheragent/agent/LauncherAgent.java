@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-09-15-v1161";
+    private static final String BUILD_VERSION = "2026-09-15-v1164";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -165,14 +165,18 @@ public class LauncherAgent {
         // puis ClassFormatError, retransform perdu (constaté 2026-09-11, Fabric
         // 1.21.11, 74 mods : MinecraftClient, World, Mouse, GameRenderer…).
         // Notre rattrapage passe par notre propre transformer, pas par cet agent.
-        if (needsIsolation) {
-            String hotSwap = System.getProperty("mixin.hotSwap");
-            if (hotSwap != null) {
-                System.clearProperty("mixin.hotSwap");
-                LauncherLog.agent(3, "[LauncherAgent] mixin.hotSwap=" + hotSwap
-                    + " (posé par mixin.jar) retiré — sinon la Mixin de " + loaderName
-                    + " réapplique ses mixins pendant nos retransforms");
-            }
+        //
+        // ÉTENDU À VANILLA (2026-09-15) : sans loader, c'est NOTRE Mixin qui lit
+        // la propriété et charge l'agent hot-swap (« Attempting to load Hot-Swap
+        // agent »). Son transformer passe lui aussi sur chacun de nos
+        // retransforms : 1er lancement de la 1.8.9 dégelée, « Error while
+        // re-transforming class ave/bfn/bcy » puis ClassFormatError.
+        String hotSwap = System.getProperty("mixin.hotSwap");
+        if (hotSwap != null) {
+            System.clearProperty("mixin.hotSwap");
+            LauncherLog.agent(3, "[LauncherAgent] mixin.hotSwap=" + hotSwap
+                + " (posé par mixin.jar) retiré — sinon l'agent hot-swap de Mixin ("
+                + loaderName + ") réapplique les mixins pendant nos retransforms");
         }
         // Conservé pour la propriété héritée "launcheragent.intermediary" et
         // pour le paramètre de IsolatedBootstrap.start, dont la signature est

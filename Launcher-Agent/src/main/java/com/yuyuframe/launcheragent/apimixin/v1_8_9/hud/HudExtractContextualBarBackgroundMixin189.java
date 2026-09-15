@@ -1,10 +1,10 @@
 package com.yuyuframe.launcheragent.apimixin.v1_8_9.hud;
 
-import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 /**
  * {@link HookPoint#HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND} sur 1.8.9 — la barre
@@ -17,16 +17,19 @@ import org.spongepowered.asm.mixin.injection.At;
  * {@code avo.b(avr,I)V}. Dans {@code renderHorseHealth}, que Yarn legacy nomme
  * ainsi mais qui dessine la barre de saut (libellé de profiler {@code "jumpBar"},
  * javap {@code avo.a(avr,I)V}), tous les dessins sont la barre.
+ *
+ * <p>Largeur mise à zéro plutôt qu'appel sauté : voir
+ * {@code HudExtractArmorMixin189} (receveur obfusqué refusé par MixinExtras).
  */
 @Mixin(targets = "net.minecraft.client.gui.hud.InGameHud")
 public abstract class HudExtractContextualBarBackgroundMixin189 {
 
-    @WrapWithCondition(method = {
+    @ModifyArg(method = {
             "renderExperienceBar(Lnet/minecraft/client/util/Window;I)V",
             "renderHorseHealth(Lnet/minecraft/client/util/Window;I)V" },
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;drawTexture(IIIIII)V"),
-        require = 0)
-    private boolean la$dispatchContextualBar(Object hud, int x, int y, int u, int v, int width, int height) {
-        return !VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND, null);
+        index = 4, require = 0)
+    private int la$dispatchContextualBar(int width) {
+        return VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND, null) ? 0 : width;
     }
 }

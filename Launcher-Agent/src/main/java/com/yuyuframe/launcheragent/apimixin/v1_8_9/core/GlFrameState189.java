@@ -36,7 +36,14 @@ import java.nio.ByteBuffer;
  * <p>Appels LWJGL 3 typés — compilé contre les jars LWJGL 3 (unité 1.8.9 de
  * {@code build.bat}), aucune réflexion.
  */
-final class GlFrameState189 {
+// PUBLIC, constructeur et méthodes compris (2026-09-15) : le code du hub est
+// FUSIONNÉ dans GameRenderer (paquet net.minecraft.client.render), qui
+// l'appelle donc depuis un autre paquet — en visibilité de paquet, IllegalAccessError
+// dans bfk.<clinit> au premier lancement de la 1.8.9 dégelée.
+public final class GlFrameState189 {
+
+    public GlFrameState189() {
+    }
 
     private static final int[] CAPS = {
         GL11.GL_TEXTURE_2D,
@@ -55,7 +62,7 @@ final class GlFrameState189 {
     private final int[] scissorBox = new int[4];
     private int activeTexture, texture2dUnit0, program, vertexArray, arrayBuffer;
 
-    void capture() {
+    public void capture() {
         for (int i = 0; i < CAPS.length; i++) enabled[i] = GL11.glIsEnabled(CAPS[i]);
         blendSrcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
         blendDstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
@@ -78,7 +85,7 @@ final class GlFrameState189 {
         GL13.glActiveTexture(activeTexture);
     }
 
-    void restore() {
+    public void restore() {
         GL20.glUseProgram(program);
         GL30.glBindVertexArray(vertexArray);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, arrayBuffer);

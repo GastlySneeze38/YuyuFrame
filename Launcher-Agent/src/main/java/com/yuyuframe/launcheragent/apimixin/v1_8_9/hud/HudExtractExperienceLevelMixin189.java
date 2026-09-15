@@ -1,32 +1,33 @@
 package com.yuyuframe.launcheragent.apimixin.v1_8_9.hud;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.yuyuframe.launcheragent.apimixin.HookPoint;
 import com.yuyuframe.launcheragent.apimixin.VanillaHookRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 /**
  * {@link HookPoint#HUD_EXTRACT_EXPERIENCE_LEVEL} sur 1.8.9 — le chiffre du
  * niveau, dessiné dans {@code InGameHud.renderExperienceBar} par cinq
  * {@code TextRenderer.draw(String, int, int, int)} (quatre contours noirs puis
- * le texte vert, javap {@code avo.b(avr,I)V}).
+ * le texte vert, javap {@code avo.b(avr,I)V}). Voir
+ * {@code HudExtractContextualBarBackgroundMixin189} pour la barre elle-même.
  *
- * <p>{@code @WrapOperation} et non {@code @WrapWithCondition} : l'appel renvoie
- * un {@code int} (largeur dessinée), que la méthode ignore — on renvoie 0
- * quand le dessin est sauté. Voir {@code HudExtractContextualBarBackgroundMixin189}
- * pour la barre elle-même.
+ * <h2>Texte vide plutôt qu'appel sauté (2026-09-15)</h2>
+ *
+ * La première version faisait un {@code @WrapOperation} avec un receveur typé
+ * {@code Object} : MixinExtras exige le vrai type obfusqué du
+ * {@code TextRenderer} et refuse. {@code @ModifyArg} remplace la CHAÎNE par
+ * {@code ""} : rien n'est dessiné, et la largeur rendue est ignorée par la
+ * méthode. Aucun type du jeu dans la signature.
  */
 @Mixin(targets = "net.minecraft.client.gui.hud.InGameHud")
 public abstract class HudExtractExperienceLevelMixin189 {
 
-    @WrapOperation(method = "renderExperienceBar(Lnet/minecraft/client/util/Window;I)V",
+    @ModifyArg(method = "renderExperienceBar(Lnet/minecraft/client/util/Window;I)V",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/font/TextRenderer;draw(Ljava/lang/String;III)I"),
-        require = 0)
-    private int la$dispatchExperienceLevel(Object textRenderer, String text, int x, int y, int color,
-                                           Operation<Integer> original) {
-        if (VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL, null)) return 0;
-        return original.call(textRenderer, text, x, y, color);
+        index = 0, require = 0)
+    private String la$dispatchExperienceLevel(String text) {
+        return VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL, null) ? "" : text;
     }
 }

@@ -142,8 +142,43 @@ public final class IsolatedBootstrap {
         if (apiMixinConfig != null) {
             mixinTargets.addAll(discoverMixinTargets(apiMixinConfig));
         }
+        if (!isolated) imposeMixinService();
         bootstrapMixin(inst, mixinTargets, mixinConfig, apiMixinConfig);
         scheduleDelayedRetransform(inst, mixinTargets);
+    }
+
+    /**
+     * Impose NOTRE service Mixin au lieu de le laisser DÉCOUVRIR.
+     *
+     * <h2>Pourquoi</h2>
+     *
+     * Sans ces propriétés, {@code MixinService.initService} parcourt par
+     * {@code ServiceLoader} tous les services déclarés sur le classpath — y
+     * compris ceux de {@code mixin.jar}, en tête de liste
+     * {@code MixinServiceLaunchWrapper} (Forge). Premier lancement de la 1.8.9
+     * dégelée (2026-09-15) : le lier exige
+     * {@code net.minecraft.launchwrapper.LaunchClassLoader}, absent en vanilla ;
+     * le {@code NoClassDefFoundError} sort de {@code Iterator.hasNext()},
+     * HORS du try de Mixin, et fait échouer {@code MixinBootstrap} — AUCUN
+     * mixin appliqué, crash au démarrage sur les alias LWJGL 2 manquants.
+     *
+     * <p>Deviner n'a de toute façon aucun sens : le launcher passe le loader
+     * en argument ({@code loader=vanilla}), l'agent SAIT déjà quel service
+     * sert. Les deux propriétés sont lues par Mixin avant toute découverte
+     * ({@code mixin.bootstrapService}, puis {@code mixin.service}).
+     *
+     * <h2>Seulement hors classloader isolé</h2>
+     *
+     * Ce sont des propriétés SYSTÈME, donc globales à la JVM. Sous Fabric,
+     * Quilt ou Forge 1.13+, le loader embarque son propre Mixin, qui les lirait
+     * aussi et chercherait notre service dans SON classloader. Dans le cas non
+     * isolé (vanilla), notre Mixin est le seul de la JVM.
+     */
+    private static void imposeMixinService() {
+        System.setProperty("mixin.bootstrapService",
+            com.yuyuframe.launcheragent.apimixin.service.LauncherMixinServiceBootstrap.class.getName());
+        System.setProperty("mixin.service", LauncherMixinService.class.getName());
+        LauncherLog.agent(1, "[LauncherAgent] service Mixin imposé : " + LauncherMixinService.class.getName());
     }
 
     /**

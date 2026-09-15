@@ -6,6 +6,7 @@ import com.yuyuframe.launcheragent.apimixin.data.MatrixOps;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -53,7 +54,7 @@ public abstract class HeldItemTransformMixin189 {
 
     @Inject(method = "applyBowTransformation(FLnet/minecraft/client/network/AbstractClientPlayerEntity;)V",
         at = @At("TAIL"), require = 0)
-    private void la$afterBow(float tickDelta, CallbackInfo ci) {
+    private void la$afterBow(float tickDelta, @Coerce Object player, CallbackInfo ci) {
         la$apply("bow", tickDelta);
     }
 
