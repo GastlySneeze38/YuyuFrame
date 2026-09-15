@@ -21,7 +21,7 @@ use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, ex
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
-use super::progress::{log_to_console, set_progress, set_progress_monotonic, tail_log_file, watch_agent_log_for_ready, ProgressFloor};
+use super::progress::{log_to_console, set_progress, set_progress_monotonic, watch_agent_log_for_ready, ProgressFloor};
 use super::ready_event::{create_ready_event, wait_for_ready_event};
 use super::servers::build_server_connect_args;
 
@@ -51,7 +51,7 @@ pub fn minecraft_dir() -> PathBuf {
 /// de fond) → client jar + libs vanilla → natives → Java → setup loader
 /// (Fabric/Forge, voir `loader_setup.rs`) → setup agents JVM (P2P/
 /// LauncherAgent, voir `agents.rs`) → attente des assets → spawn + supervision
-/// du process Java (voir `progress::tail_log_file`).
+/// du process Java (sorties stdout/stderr relayées à la console).
 #[allow(clippy::too_many_arguments)]
 pub async fn download_and_launch(
     version_id: &str,
@@ -607,13 +607,9 @@ pub async fn download_and_launch(
     #[cfg(target_os = "windows")]
     unsafe { timeBeginPeriod(1); }
 
-    let log_path = mc_game_dir.join("logs").join("latest.log");
     let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_tailer = stop_flag.clone();
     let stop_flag_ready = stop_flag.clone();
     let stop_flag_event = stop_flag.clone();
-    let app_log = app.clone();
-    let label_log = console_label.clone();
     // Partagé entre les trois canaux de détection de game_ready (event +
     // stdout + fichier, voir plus bas) — le premier qui voit le signal gagne.
     let ready_sent = Arc::new(AtomicBool::new(false));
@@ -686,9 +682,13 @@ pub async fn download_and_launch(
         });
     }
 
-    // Tailer logs/latest.log — Minecraft route ses logs via log4j2 vers ce fichier
-    // plutôt que vers stdout, donc on lit le fichier directement.
-    let log_tailer = tokio::spawn(tail_log_file(log_path, stop_flag_tailer, app_log, label_log));
+    // Plus de relecture de logs/latest.log (2026-09-15). Elle partait d'une
+    // hypothèse fausse : « log4j2 écrit dans ce fichier plutôt que sur stdout ».
+    // La config log4j2 embarquée dans le jar a aussi un appender console
+    // (SysOut) — ses lignes n'arrivaient pas parce que la lecture de stdout
+    // s'arrêtait au premier caractère non UTF-8 (voir read_line_lossy). Une
+    // fois ce défaut corrigé, chaque ligne du jeu s'affichait DEUX fois : une
+    // par stdout, une par ce fichier.
 
     // Filet de sécurité game_ready (voir watch_agent_log_for_ready) — course
     // avec la détection stdout ci-dessus, `ready_sent` partagé garantit qu'un
@@ -721,9 +721,8 @@ pub async fn download_and_launch(
         }
     };
 
-    // Arrêter le tailer et attendre qu'il finisse de vider les dernières lignes
+    // Arrête les surveillances restantes (événement « prêt », log de l'agent).
     stop_flag.store(true, Ordering::Relaxed);
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), log_tailer).await;
 
     // Restaure la résolution du timer Windows
     #[cfg(target_os = "windows")]

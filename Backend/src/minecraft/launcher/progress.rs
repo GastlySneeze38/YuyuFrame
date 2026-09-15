@@ -140,64 +140,6 @@ pub fn signal_console_ready(console_label: &str) {
     }
 }
 
-/// Relit en continu `logs/latest.log` (log4j2, où Minecraft écrit ses vrais
-/// logs — pas sur stdout) et republie chaque nouvelle ligne vers la fenêtre
-/// console. Démarre à la fin du fichier existant pour ignorer les logs d'une
-/// session précédente ; repart de 0 si le fichier est recréé plus petit
-/// (nouveau lancement). S'arrête quand `stop_flag` passe à `true`.
-pub(super) async fn tail_log_file(log_path: PathBuf, stop_flag: Arc<AtomicBool>, app: tauri::AppHandle, console_label: String) {
-    let current_end = tokio::fs::metadata(&log_path).await.map(|m| m.len()).unwrap_or(0);
-    let mut pos: u64 = current_end;
-    let mut last_len: u64 = current_end;
-    // O-5 (audit pipeline) : le handle reste ouvert ENTRE deux ticks au lieu
-    // d'être rouvert + reseeké à CHAQUE tick pendant toute la session de jeu
-    // (~36 000 réouvertures/heure avant ce correctif, pour un fichier dont on
-    // ne lit que la fin) — ne le rouvre que sur détection de troncature
-    // (ci-dessous) ou au tout premier tick où il y a quelque chose à lire.
-    let mut reader: Option<BufReader<tokio::fs::File>> = None;
-
-    loop {
-        if let Ok(metadata) = tokio::fs::metadata(&log_path).await {
-            let len = metadata.len();
-            if len < last_len {
-                // Fichier recréé au démarrage — recommencer depuis le début,
-                // et forcer une réouverture puisque l'ancien handle pointe
-                // vers l'ancien fichier (déjà remplacé sur disque).
-                pos = 0;
-                reader = None;
-            }
-            last_len = len;
-
-            if len > pos {
-                if reader.is_none() {
-                    if let Ok(mut file) = tokio::fs::File::open(&log_path).await {
-                        if file.seek(std::io::SeekFrom::Start(pos)).await.is_ok() {
-                            reader = Some(BufReader::new(file));
-                        }
-                    }
-                }
-                if let Some(r) = reader.as_mut() {
-                    let mut buf = Vec::new();
-                    // None = EOF ou erreur d'E/S — on arrête cette passe et on
-                    // retente au prochain tick, SANS fermer le handle (voir
-                    // commentaire plus haut).
-                    while let Some((n, trimmed)) = read_line_lossy(r, &mut buf).await {
-                        pos += n as u64;
-                        if !trimmed.is_empty() {
-                            log_to_console(&app, &console_label, &trimmed, "out");
-                        }
-                    }
-                }
-            }
-        }
-
-        if stop_flag.load(Ordering::Relaxed) {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-}
-
 /// Filet de sécurité pour `game_ready` (marqueur `[YUYUFRAME_READY]` du
 /// LauncherAgent, voir TitleScreenMixin*.java) — la capture du stdout du
 /// process Java par Rust s'est déjà avérée pas fiable à 100% par le passé

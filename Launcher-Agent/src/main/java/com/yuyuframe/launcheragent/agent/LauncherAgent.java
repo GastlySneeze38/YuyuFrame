@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class LauncherAgent {
 
-    private static final String BUILD_VERSION = "2026-09-15-v1164";
+    private static final String BUILD_VERSION = "2026-09-15-v1166";
 
     /** Accesseur public — voir {@code YfCommands} ("/yf version"/"/yf report"), Phase 4.5. */
     public static String buildVersion() { return BUILD_VERSION; }
@@ -44,7 +44,7 @@ public class LauncherAgent {
     }
 
     private static void premain0(String agentArgs, Instrumentation inst) {
-        // Tout premier appel : lit launcher-agent.properties (log.agent=1 etc.)
+        // Tout premier appel : lit launcher-agent.properties (log.agent=3 etc.)
         // et applique les seuils AVANT le moindre autre log. Sans ça, les
         // seuils restent à leur valeur par défaut (3 = critique seul) jusqu'à
         // ce que LauncherMixinConfigPlugin.onLoad() charge la même config —

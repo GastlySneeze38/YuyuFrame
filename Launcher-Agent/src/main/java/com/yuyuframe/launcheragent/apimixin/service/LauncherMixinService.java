@@ -822,10 +822,19 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
      * En vanilla (scheme OFFICIAL), l'appelant n'écrit aucun fichier du tout —
      * Mixin retombe sur la chaîne littérale Yarn named inchangée (warning
      * "No refMap loaded", non fatal) — comportement validé, aucune régression.
+     *
+     * @param activeMixins noms internes des mixins réellement chargés : seules
+     *     leurs entrées sont traduites (2026-09-15). La table couvre toutes les
+     *     versions ; la traduire entière à chaque lancement produisait ~185
+     *     lignes de log, dont des dizaines de faux avertissements sur des
+     *     mixins d'autres versions. Ensemble vide ou {@code null} = aucune
+     *     limite (repli si les configs n'ont pas pu être lues).
      */
-    public static String buildRefmapJson() {
+    public static String buildRefmapJson(java.util.Set<String> activeMixins) {
+        boolean limited = activeMixins != null && !activeMixins.isEmpty();
         java.util.Map<String, java.util.Map<String, String>> byMixin = new java.util.LinkedHashMap<>();
         for (RefmapEntry e : REFMAP_ENTRIES) {
+            if (limited && !activeMixins.contains(e.mixinInternalName)) continue;
             if (e.kind == RefmapEntry.Kind.FIELD) {
                 // @Accessor : clé = nom du champ tel qu'écrit dans l'annotation.
                 String fieldRef = MappingsRegistry.runtimeFieldReference(e.yarnTargetClass, e.namedMethod);

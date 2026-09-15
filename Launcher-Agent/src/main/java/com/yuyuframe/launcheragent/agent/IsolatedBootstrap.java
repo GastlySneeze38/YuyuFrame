@@ -122,7 +122,13 @@ public final class IsolatedBootstrap {
         // vanilla, intermediary sous Fabric/Quilt — un seul mécanisme couvre
         // les deux cas. writeRefmapFile ne dépend QUE de "isolated" (stratégie
         // fichier brut vs jar), jamais de "intermediary" — voir sa javadoc.
-        writeRefmapFile(inst, isolated);
+        //
+        // Écrit APRÈS les deux configs (2026-09-15) : le refmap ne couvre plus
+        // que les mixins qu'elles listent. Il était construit pour TOUTES les
+        // versions — ~185 lignes de log par lancement, dont ~75 faux
+        // avertissements « aucune entrée Yarn » sur des mixins 1.21.11/26.1
+        // qu'une 1.8.9 ne charge jamais. Toujours avant bootstrapMixin(), qui
+        // est le premier à lire le refmap.
 
         // Config Mixin héritée du système pré-déclaratif — NULLABLE : une
         // tranche entièrement basculée vers apimixin/ (voir
@@ -134,6 +140,11 @@ public final class IsolatedBootstrap {
         // plus de filtrage par regex. Fait ICI, avant tout enregistrement,
         // pour que Mixin n'ouvre même pas les mixins écartés.
         String apiMixinConfig = publishApiMixinConfig(inst, isolated, profile);
+
+        Set<String> activeMixins = new LinkedHashSet<>();
+        if (mixinConfig != null) activeMixins.addAll(configMixinClasses(mixinConfig));
+        if (apiMixinConfig != null) activeMixins.addAll(configMixinClasses(apiMixinConfig));
+        writeRefmapFile(inst, isolated, activeMixins);
 
         Set<String> mixinTargets = new LinkedHashSet<>();
         if (mixinConfig != null) {
@@ -200,11 +211,44 @@ public final class IsolatedBootstrap {
      *     n'accepte qu'un JarFile) — le refmap est donc empaqueté dans un
      *     petit jar dédié, ajouté au classloader système via cette API.
      */
-    private static void writeRefmapFile(Instrumentation inst, boolean isolated) {
-        String json = LauncherMixinService.buildRefmapJson();
+    private static void writeRefmapFile(Instrumentation inst, boolean isolated, Set<String> activeMixins) {
+        String json = LauncherMixinService.buildRefmapJson(activeMixins);
         boolean ok = publishGeneratedResource(inst, isolated,
             "mixins.launcheragent.refmap.json", "refmap.jar", json, "refmap");
         if (ok) LauncherLog.agent(1, "[LauncherAgent] refmap contenu : " + json);
+    }
+
+    /**
+     * Noms internes ({@code com/yuyuframe/.../XxxMixin}) des mixins listés par
+     * une config Mixin — même lecture que {@link #discoverMixinTargets}, sans
+     * ouvrir les classes. Sert à limiter le refmap aux mixins réellement chargés.
+     */
+    private static Set<String> configMixinClasses(String configName) {
+        Set<String> classes = new LinkedHashSet<>();
+        try (java.io.InputStream cfgIs = IsolatedBootstrap.class.getClassLoader().getResourceAsStream(configName)) {
+            if (cfgIs == null) {
+                LauncherLog.err("[LauncherAgent] " + configName + " introuvable — refmap non limité pour cette config");
+                return classes;
+            }
+            String json = new String(readAllBytes(cfgIs), java.nio.charset.StandardCharsets.UTF_8);
+            String pkg = jsonString(json, "package");
+            if (pkg == null) return classes;
+            for (String arrayKey : new String[]{"mixins", "client", "server"}) {
+                int keyIdx = json.indexOf("\"" + arrayKey + "\"");
+                if (keyIdx < 0) continue;
+                int arrStart = json.indexOf('[', keyIdx);
+                int arrEnd = json.indexOf(']', arrStart);
+                if (arrStart < 0 || arrEnd < 0) continue;
+                Matcher m = Pattern.compile("\"([A-Za-z][A-Za-z0-9$._]+)\"")
+                        .matcher(json.substring(arrStart + 1, arrEnd));
+                while (m.find()) {
+                    classes.add((pkg + "." + m.group(1)).replace('.', '/'));
+                }
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] lecture de " + configName + " pour le refmap", t);
+        }
+        return classes;
     }
 
     /**
@@ -1109,7 +1153,8 @@ public final class IsolatedBootstrap {
                         // LauncherMixinTransformerWrapper.MIXED_AT_LOAD).
                         if (com.yuyuframe.launcheragent.apimixin.service.LauncherMixinTransformerWrapper
                                 .wasMixedAtLoad(cls.getName())) {
-                            LauncherLog.agent(3, "[LauncherAgent] Cible déjà tissée au chargement (transformer): "
+                            // Niveau 2 (2026-09-15) : c'est le cas NORMAL, pas un incident.
+                            LauncherLog.agent(2, "[LauncherAgent] Cible déjà tissée au chargement (transformer): "
                                     + cls.getName() + " — skip retransform");
                             continue;
                         }

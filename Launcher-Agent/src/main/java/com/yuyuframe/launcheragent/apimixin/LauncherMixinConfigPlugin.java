@@ -105,7 +105,9 @@ public class LauncherMixinConfigPlugin implements IMixinConfigPlugin {
         // Niveau 3 (toujours visible en console, pas seulement en verbeux) —
         // confirmation explicite que CE Mixin s'est bien tissé dans sa cible
         // réelle, pas juste "bootstrap réussi" au sens large.
-        LauncherLog.asm(3, "[MixinPlugin] Mixin initialisé avec succès : " + mixinClassName + " → " + targetClassName);
+        // Niveau 2 (2026-09-15) : une ligne par mixin réussi n'est pas critique ;
+        // les échecs, eux, restent signalés en erreur.
+        LauncherLog.asm(2, "[MixinPlugin] Mixin initialisé avec succès : " + mixinClassName + " → " + targetClassName);
         applyLegacyLwjglApi(targetClass);
     }
 
