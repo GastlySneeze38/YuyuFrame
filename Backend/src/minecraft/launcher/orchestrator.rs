@@ -5,7 +5,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Emitter;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::BufReader;
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinSet;
 
@@ -646,15 +646,17 @@ pub async fn download_and_launch(
 
     if let Some(mut reader) = stdout {
         tokio::spawn(async move {
-            let mut line = String::new();
+            let mut buf = Vec::new();
             // Signalé une seule fois par lancement — le hook TitleScreen.init()
             // du LauncherAgent (voir TitleScreenMixin*.java) se redéclenche à
             // chaque retour au menu principal pendant la session, pas juste au
             // premier chargement. `ready_sent` est partagé avec le filet de
             // sécurité côté fichier (watch_agent_log_for_ready) — le premier
             // des deux canaux qui voit le marqueur gagne.
-            while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
-                let trimmed = line.trim_end().to_string();
+            //
+            // Lecture tolérante (read_line_lossy) : un `read_line` sur une
+            // ligne non UTF-8 arrêtait la capture pour toute la session.
+            while let Some((_, trimmed)) = super::progress::read_line_lossy(&mut reader, &mut buf).await {
                 log_to_console(&app_out, &label_out, &trimmed, "out");
                 if trimmed.contains("[YUYUFRAME_READY]")
                     && ready_sent_stdout.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
@@ -670,19 +672,16 @@ pub async fn download_and_launch(
                 // un crash/fermeture, ce qui rendait tout diagnostic après-coup
                 // impossible sans que l'utilisateur ait déjà tout copié à temps.
                 tracing::info!("[MC stdout] {}", trimmed);
-                line.clear();
             }
         });
     }
 
     if let Some(mut reader) = stderr {
         tokio::spawn(async move {
-            let mut line = String::new();
-            while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
-                let trimmed = line.trim_end().to_string();
+            let mut buf = Vec::new();
+            while let Some((_, trimmed)) = super::progress::read_line_lossy(&mut reader, &mut buf).await {
                 log_to_console(&app_err, &label_err, &trimmed, "err");
                 tracing::error!("[MC stderr] {}", trimmed);
-                line.clear();
             }
         });
     }

@@ -77,6 +77,28 @@ pub(crate) fn set_progress_monotonic(app: &tauri::AppHandle, floor: &ProgressFlo
     set_progress(app, &floor.instance_id, displayed, total, message);
 }
 
+/// Lit une ligne en octets et la décode en UTF-8 TOLÉRANT — `None` en fin de
+/// flux (ou sur erreur d'E/S réelle).
+///
+/// `read_line` exige de l'UTF-8 valide et renvoie une erreur sinon ; avec
+/// `unwrap_or(0)`, cette erreur passait pour une fin de flux et la lecture
+/// s'arrêtait DÉFINITIVEMENT. Or la JVM écrit dans le codage de la plateforme
+/// (Cp1252 sous Windows) : le premier accent de l'agent (« Démarrage… »,
+/// juste après la ligne VERSION) coupait stdout, et stderr était muet depuis
+/// juillet 2026 — aucune erreur de l'agent ni de la JVM n'atteignait la
+/// console (constaté le 2026-09-15). Un octet invalide devient maintenant un
+/// caractère de remplacement, et la lecture continue.
+pub(super) async fn read_line_lossy<R>(reader: &mut R, buf: &mut Vec<u8>) -> Option<(usize, String)>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    buf.clear();
+    match reader.read_until(b'\n', buf).await {
+        Ok(0) | Err(_) => None,
+        Ok(n) => Some((n, String::from_utf8_lossy(buf).trim_end().to_string())),
+    }
+}
+
 /// Émet un game_log vers la fenêtre console dédiée à cette instance.
 /// Fallback sur broadcast global si la fenêtre n'existe plus.
 pub(super) fn log_to_console(app: &tauri::AppHandle, console_label: &str, line: &str, level: &str) {
@@ -155,21 +177,14 @@ pub(super) async fn tail_log_file(log_path: PathBuf, stop_flag: Arc<AtomicBool>,
                     }
                 }
                 if let Some(r) = reader.as_mut() {
-                    let mut line = String::new();
-                    loop {
-                        line.clear();
-                        match r.read_line(&mut line).await {
-                            Ok(n) if n > 0 => {
-                                pos += n as u64;
-                                let trimmed = line.trim_end().to_string();
-                                if !trimmed.is_empty() {
-                                    log_to_console(&app, &console_label, &trimmed, "out");
-                                }
-                            }
-                            // Ok(0) = EOF, Err(_) = erreur de lecture — dans les deux cas
-                            // on arrête cette passe et on retente au prochain tick, SANS
-                            // fermer le handle (voir commentaire plus haut).
-                            _ => break,
+                    let mut buf = Vec::new();
+                    // None = EOF ou erreur d'E/S — on arrête cette passe et on
+                    // retente au prochain tick, SANS fermer le handle (voir
+                    // commentaire plus haut).
+                    while let Some((n, trimmed)) = read_line_lossy(r, &mut buf).await {
+                        pos += n as u64;
+                        if !trimmed.is_empty() {
+                            log_to_console(&app, &console_label, &trimmed, "out");
                         }
                     }
                 }
@@ -218,33 +233,29 @@ pub(super) async fn watch_agent_log_for_ready(
                 if let Ok(mut file) = tokio::fs::File::open(&log_path).await {
                     if file.seek(std::io::SeekFrom::Start(pos)).await.is_ok() {
                         let mut reader = BufReader::new(file);
-                        let mut line = String::new();
-                        loop {
-                            line.clear();
-                            match reader.read_line(&mut line).await {
-                                Ok(n) if n > 0 => {
-                                    pos += n as u64;
-                                    if line.contains("[YUYUFRAME_READY]")
-                                        && ready_sent.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
-                                    {
-                                        crate::integrations::analytics::capture("launch_completed", serde_json::json!({
-                                            "instance_id": &instance_id,
-                                            "duration_ms": launch_start.elapsed().as_millis() as u64,
-                                        }));
-                                        let _ = app.emit("game_ready", serde_json::json!({ "instance_id": &instance_id }));
-                                        return;
-                                    }
-                                }
-                                _ => break,
+                        let mut buf = Vec::new();
+                        while let Some((n, line)) = read_line_lossy(&mut reader, &mut buf).await {
+                            pos += n as u64;
+                            if line.contains("[YUYUFRAME_READY]")
+                                && ready_sent.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+                            {
+                                crate::integrations::analytics::capture("launch_completed", serde_json::json!({
+                                    "instance_id": &instance_id,
+                                    "duration_ms": launch_start.elapsed().as_millis() as u64,
+                                }));
+                                let _ = app.emit("game_ready", serde_json::json!({ "instance_id": &instance_id }));
+                                return;
                             }
                         }
                     }
                 }
             } else if len < pos {
-                // Fichier recréé/tronqué — repart de la fin actuelle plutôt que
-                // de re-scanner depuis 0 (pas notre log à nous, pas de besoin
-                // de tout relire).
-                pos = len;
+                // Fichier vidé : depuis le 2026-09-15, l'agent REPART DE ZÉRO à
+                // chaque lancement (voir LauncherLog.toFile). Tout ce qui suit la
+                // troncature appartient à CE lancement : relire depuis 0, sinon
+                // les lignes écrites entre la troncature et ce tick seraient
+                // sautées.
+                pos = 0;
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;

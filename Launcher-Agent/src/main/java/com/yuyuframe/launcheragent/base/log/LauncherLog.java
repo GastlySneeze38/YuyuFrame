@@ -38,8 +38,16 @@ public final class LauncherLog {
     // PrintStream, nos logs continuent d'écrire vers le flux ORIGINAL
     // (toujours connecté au pipe que Rust lit), au lieu de silencieusement
     // suivre la redirection et disparaître de ce que le launcher capture.
-    private static final java.io.PrintStream ORIGINAL_OUT = System.out;
-    private static final java.io.PrintStream ORIGINAL_ERR = System.err;
+    //
+    // UTF-8 EXPLICITE (2026-09-15) : enveloppe du flux d'origine, qui écrit
+    // les octets tels quels. Sans elle, la JVM encode en Cp1252 sous Windows
+    // (codage de la plateforme sur un tube), et le launcher lit de l'UTF-8 :
+    // chaque accent devenait un caractère illisible — et, avant le correctif
+    // côté Rust, le premier accent coupait carrément la capture.
+    private static final java.io.PrintStream ORIGINAL_OUT =
+        new java.io.PrintStream(System.out, true, java.nio.charset.StandardCharsets.UTF_8);
+    private static final java.io.PrintStream ORIGINAL_ERR =
+        new java.io.PrintStream(System.err, true, java.nio.charset.StandardCharsets.UTF_8);
 
     /** Modification d'UI Minecraft — ScreenHelper, mixins clients. */
     public static volatile int UI    = 3;
@@ -206,6 +214,9 @@ public final class LauncherLog {
             : null;
 
     private static java.io.Writer fileWriter;
+
+    /** Posée par la première copie de cette classe qui ouvre le fichier dans cette JVM — voir {@link #toFile}. */
+    private static final String LOG_OPENED_PROPERTY = "launcheragent.logFileOpened";
     /** Une fois le journal fichier en échec, ne plus jamais retenter : sinon on
      * repaie une exception d'E/S à chaque ligne, ce que cette méthode est
      * précisément censée éviter. */
@@ -233,7 +244,17 @@ public final class LauncherLog {
                 java.io.File f = new java.io.File(LOG_PATH);
                 java.io.File dir = f.getParentFile();
                 if (dir != null) dir.mkdirs();
-                fileWriter = new java.io.BufferedWriter(new java.io.FileWriter(f, true), 1 << 16);
+                // Repart de ZÉRO à chaque lancement (2026-09-15) : jamais vidé
+                // jusque-là, le fichier atteignait 833 Mo. Une seule copie de
+                // cette classe vide le fichier : l'agent est chargé par plusieurs
+                // classloaders dans la même JVM (bootstrap isolé, classloader du
+                // jeu), et chaque copie ouvre son propre writer — une seconde
+                // troncature effacerait les lignes de la première. La propriété
+                // système est le seul état partagé entre ces copies.
+                boolean append = System.getProperty(LOG_OPENED_PROPERTY) != null;
+                System.setProperty(LOG_OPENED_PROPERTY, "true");
+                fileWriter = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(f, append), java.nio.charset.StandardCharsets.UTF_8), 1 << 16);
                 Runtime.getRuntime().addShutdownHook(new Thread(LauncherLog::closeFile, "yuyu-log-close"));
             }
             fileWriter.write("[" + System.currentTimeMillis() + "] " + line + "\n");
