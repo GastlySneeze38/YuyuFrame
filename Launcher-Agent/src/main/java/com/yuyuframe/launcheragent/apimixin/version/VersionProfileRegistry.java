@@ -57,11 +57,11 @@ public final class VersionProfileRegistry {
         // et mixin/client/v1_8 restent sur le disque comme référence des
         // anciens points d'injection, sans être chargés.
         //
-        // TOUJOURS GELÉE, par choix : dégel prévu après le passage à
-        // LWJGL 3 (legacy-lwjgl3). Les deux blocages techniques sont levés :
-        // liaisons de points d'accès (v1146, AccessorBindings189) et niveau
-        // de compatibilité Mixin (la 1.8.9 tourne en Java 25 et l'agent est
-        // compilé en --release 25, template en JAVA_25, 2026-09-14).
+        // DÉGELÉE le 2026-09-15 (build v1159), après : liaisons de points
+        // d'accès (v1146), Java 25 + agent en --release 25 (2026-09-14),
+        // LWJGL 3 / legacy-lwjgl3 (v1150), ère gl3 (v1151-v1156) et modules
+        // migrés sur la nouvelle architecture (v1158). Rien de tout ça n'avait
+        // encore tourné en jeu : à valider mécanisme par mécanisme.
         PROFILES.add(new VersionProfile(
             "1_8_9",
             new String[]{ "1.8.*" },
@@ -70,9 +70,8 @@ public final class VersionProfileRegistry {
             null,
             // gl3 depuis le 2026-09-14 : LWJGL 3 ouvre un contexte 3.2 de
             // compatibilité, les shaders #version 150 y tournent. L'état GL
-            // est rendu à la 1.8.9 par GlFrameState189 (hub). Icônes d'item
-            // et blits vanilla pas encore portés sur cette ère en 1.8.9.
-            "gl3").frozen());
+            // est rendu à la 1.8.9 par GlFrameState189 (hub).
+            "gl3"));
 
         // Resserré à la version exacte (avant : tout ce qui n'était pas
         // 1.8.x tombait implicitement ici) — une version 1.21.x non testée

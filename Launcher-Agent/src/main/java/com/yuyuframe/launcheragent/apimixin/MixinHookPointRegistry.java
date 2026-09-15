@@ -346,8 +346,8 @@ public final class MixinHookPointRegistry {
         // ══════════════════════════════════════════════════════════════════
         // 1.8.9 — MC OBFUSQUÉ, noms Yarn LEGACY (Legacy Fabric), vanilla seul
         // (docs/LauncherAgent/v1.8.9/README.md). Méthodes traduites par le
-        // refmap, cibles @At par REFMAP_REMAP. Tranche encore GELÉE : voir
-        // VersionProfileRegistry pour ce qui manque avant de l'activer.
+        // refmap, cibles @At par REFMAP_REMAP. Tranche dégelée le 2026-09-15
+        // (voir VersionProfileRegistry).
         //
         // Absents faute d'équivalent 1.8.9 : HUD_EXTRACT_EFFECTS (aucun effet
         // affiché dans le HUD), HUD_EXTRACT_CHAT (passe GUI Blaze3D),
