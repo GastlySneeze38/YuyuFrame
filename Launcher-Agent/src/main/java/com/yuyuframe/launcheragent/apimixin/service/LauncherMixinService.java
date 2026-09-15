@@ -797,9 +797,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/input/KeyboardInput", "tick", "()V", "net/minecraft/client/input/Input"),
         new RefmapEntry(M189 + "input/SprintKeyHeldMixin189",
             "net/minecraft/entity/player/ClientPlayerEntity", "tickMovement", "()V", "net/minecraft/entity/LivingEntity"),
-        // ── apimixin 1.8.9 : vidage des icônes d'item vanilla (ère gl3) ───
-        new RefmapEntry(M189 + "core/HudItemFlushMixin189",
-            "net/minecraft/client/gui/hud/InGameHud", "render", "(F)V", null),
         // ── apimixin 1.8.9 : correctifs de la plateforme LWJGL 3 ──────────
         // Les mixins sur LWJGL et paulscode sont en remap = false : pas
         // d'entrée ici. Seuls les deux correctifs visant Minecraft en ont.

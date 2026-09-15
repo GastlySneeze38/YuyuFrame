@@ -23,10 +23,11 @@ import java.util.List;
  *
  * <h2>Où et comment</h2>
  *
- * Appelé au {@code profiler.push("chat")} de {@code InGameHud.render(float)}
- * ({@code HudItemFlushMixin189}) : vanilla y a posé son état GUI (projection
- * mise à l'échelle, profondeur), donc on dessine directement en pixels GUI —
- * au-dessus du HUD, sous le chat, comme sur Blaze3D.
+ * Appelé en fin de {@code GameRenderer.render}, juste après le dessin de
+ * l'agent ({@code GlobalUiRenderMixin189}) : la projection GUI de vanilla
+ * (mise à l'échelle) est encore en place, donc on dessine directement en
+ * pixels GUI — PAR-DESSUS les panneaux de l'agent. Vidées plus tôt dans
+ * {@code InGameHud.render} (2026-09-16), elles passaient dessous.
  *
  * <p>Séquence reprise de la hotbar vanilla, vérifiée au javap sur
  * {@code InGameHud.render} : {@code GlStateManager.enableRescaleNormal} →

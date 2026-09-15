@@ -78,6 +78,16 @@ public abstract class GlobalUiRenderMixin189 {
             } finally {
                 GL_STATE.restore();
             }
+
+            // Icônes d'item vanilla mises en file par le dessin ci-dessus,
+            // dessinées APRÈS lui (2026-09-16) : vidées plus tôt, dans
+            // InGameHud.render (ancien HudItemFlushMixin189), elles passaient
+            // SOUS les panneaux de l'agent dessinés ici — le fond du module
+            // Armure/Durabilité les recouvrait. Hors du cadre GL_STATE :
+            // Gl3VanillaItemSink189 dessine avec GlStateManager, dont les caches
+            // sont justes une fois l'état restauré ; la projection GUI posée par
+            // vanilla pour son HUD/écran est toujours en place.
+            UiRenderer.flushPendingLegacyHudItems(this);
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiRenderMixin189: " + t);
         }

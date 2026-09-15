@@ -69,15 +69,15 @@ public enum VanillaFlushHost {
     DRAW_CONTEXT_CONTAINER,
 
     /**
-     * {@code InGameHud} vivant de la 1.8.9 — {@code HudItemFlushMixin189}, au
-     * {@code profiler.push("chat")} de {@code InGameHud.render(float)}.
+     * {@code GameRenderer} vivant de la 1.8.9 — {@code GlobalUiRenderMixin189},
+     * juste APRÈS le dessin de l'agent en fin de {@code GameRenderer.render}.
      *
      * <p>Pas de contexte de dessin sur cette version : le GUI se dessine en
-     * pipeline fixe, et à ce point précis vanilla a DÉJÀ posé son état GUI
-     * (projection mise à l'échelle, profondeur). L'ère gl3 y dessine donc
-     * directement, par le récepteur de la version ({@code Gl3VanillaItemSink}) —
-     * au-dessus du HUD, sous le chat, comme {@code GUI_STATE} sur Blaze3D.
-     * L'objet transmis ne sert qu'à signaler que le hook est vivant.
+     * pipeline fixe, et la projection GUI posée par vanilla pour son HUD est
+     * encore en place. L'ère gl3 y dessine donc directement, par le récepteur
+     * de la version ({@code Gl3VanillaItemSink}) — au-dessus des panneaux de
+     * l'agent qui les ont mises en file. L'objet transmis ne sert qu'à signaler
+     * que le hook est vivant.
      */
     LEGACY_HUD
 }
