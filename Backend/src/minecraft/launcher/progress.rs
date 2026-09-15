@@ -99,6 +99,56 @@ where
     }
 }
 
+/// Lignes du jeu en attente de traitement, par flux (stdout ou stderr).
+const GAME_OUTPUT_QUEUE: usize = 10_000;
+
+/// Relaie un flux de sortie du jeu en séparant LECTURE et TRAITEMENT
+/// (2026-09-15).
+///
+/// Avant, chaque ligne était affichée (événement console, terminal du
+/// launcher, `yuyuframe.log`) avant de lire la suivante. Le terminal du
+/// launcher est une écriture bloquante : pendant une rafale (spam
+/// d'exceptions sur un serveur), le tube stdout de la JVM se remplissait, et
+/// `System.out.println` — synchronisé — bloquait le fil de rendu du jeu, qui
+/// gelait en attendant le launcher.
+///
+/// Ici, la tâche de lecture ne fait que vider le tube dans une file bornée ;
+/// `inspect` y tourne sur chaque ligne et doit rester instantané. Le
+/// traitement lent (`handle`) consomme la file dans sa propre tâche. File
+/// pleine : la ligne est abandonnée plutôt que de bloquer le jeu, et le nombre
+/// de lignes perdues est signalé à `handle` dès que la file se libère.
+pub(super) fn spawn_game_output_pump<R, I, H>(mut reader: R, mut inspect: I, mut handle: H)
+where
+    R: tokio::io::AsyncBufRead + Unpin + Send + 'static,
+    I: FnMut(&str) + Send + 'static,
+    H: FnMut(String) + Send + 'static,
+{
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(GAME_OUTPUT_QUEUE);
+    tokio::spawn(async move {
+        let mut buf = Vec::new();
+        let mut dropped: u64 = 0;
+        while let Some((_, line)) = read_line_lossy(&mut reader, &mut buf).await {
+            inspect(&line);
+            if dropped > 0 {
+                let notice = format!("[YuyuFrame] {dropped} ligne(s) du jeu ignorée(s) : console saturée");
+                if tx.try_send(notice).is_ok() {
+                    dropped = 0;
+                }
+            }
+            match tx.try_send(line) {
+                Ok(()) => {}
+                Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => dropped += 1,
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => break,
+            }
+        }
+    });
+    tokio::spawn(async move {
+        while let Some(line) = rx.recv().await {
+            handle(line);
+        }
+    });
+}
+
 /// Masque les jetons d'authentification d'une ligne avant affichage ou
 /// journalisation (2026-09-15) :
 /// - `--accessToken <jeton>` — dans la commande de lancement journalisée

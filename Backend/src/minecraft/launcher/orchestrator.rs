@@ -21,7 +21,7 @@ use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, ex
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
-use super::progress::{log_to_console, redact_secrets, set_progress, set_progress_monotonic, watch_agent_log_for_ready, ProgressFloor};
+use super::progress::{log_to_console, redact_secrets, spawn_game_output_pump, set_progress, set_progress_monotonic, watch_agent_log_for_ready, ProgressFloor};
 use super::ready_event::{create_ready_event, wait_for_ready_event};
 use super::servers::build_server_connect_args;
 
@@ -641,46 +641,52 @@ pub async fn download_and_launch(
     let label_err = console_label.clone();
     let instance_id_out = instance_id.to_string();
 
-    if let Some(mut reader) = stdout {
-        tokio::spawn(async move {
-            let mut buf = Vec::new();
+    // Lecture découplée de l'affichage (spawn_game_output_pump) : un affichage
+    // lent ne doit jamais remplir le tube de la JVM et geler le jeu.
+    // Lecture tolérante (read_line_lossy) : un `read_line` sur une ligne non
+    // UTF-8 arrêtait la capture pour toute la session.
+    if let Some(reader) = stdout {
+        let app_ready = app.clone();
+        spawn_game_output_pump(
+            reader,
             // Signalé une seule fois par lancement — le hook TitleScreen.init()
             // du LauncherAgent (voir TitleScreenMixin*.java) se redéclenche à
             // chaque retour au menu principal pendant la session, pas juste au
             // premier chargement. `ready_sent` est partagé avec le filet de
             // sécurité côté fichier (watch_agent_log_for_ready) — le premier
-            // des deux canaux qui voit le marqueur gagne.
-            //
-            // Lecture tolérante (read_line_lossy) : un `read_line` sur une
-            // ligne non UTF-8 arrêtait la capture pour toute la session.
-            while let Some((_, trimmed)) = super::progress::read_line_lossy(&mut reader, &mut buf).await {
-                log_to_console(&app_out, &label_out, &trimmed, "out");
-                if trimmed.contains("[YUYUFRAME_READY]")
+            // des deux canaux qui voit le marqueur gagne. Détecté à la lecture,
+            // avant la file : une ligne abandonnée ne peut pas perdre le marqueur.
+            move |line| {
+                if line.contains("[YUYUFRAME_READY]")
                     && ready_sent_stdout.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok()
                 {
                     crate::integrations::analytics::capture("launch_completed", serde_json::json!({
                         "instance_id": &instance_id_out,
                         "duration_ms": launch_start.elapsed().as_millis() as u64,
                     }));
-                    let _ = app_out.emit("game_ready", serde_json::json!({ "instance_id": &instance_id_out }));
+                    let _ = app_ready.emit("game_ready", serde_json::json!({ "instance_id": &instance_id_out }));
                 }
+            },
+            move |line| {
+                log_to_console(&app_out, &label_out, &line, "out");
                 // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
-                // main.rs) — la fenêtre console (webview) ne garde rien après
+                // lib.rs) — la fenêtre console (webview) ne garde rien après
                 // un crash/fermeture, ce qui rendait tout diagnostic après-coup
                 // impossible sans que l'utilisateur ait déjà tout copié à temps.
-                tracing::info!("[MC stdout] {}", redact_secrets(&trimmed));
-            }
-        });
+                tracing::info!("[MC stdout] {}", redact_secrets(&line));
+            },
+        );
     }
 
-    if let Some(mut reader) = stderr {
-        tokio::spawn(async move {
-            let mut buf = Vec::new();
-            while let Some((_, trimmed)) = super::progress::read_line_lossy(&mut reader, &mut buf).await {
-                log_to_console(&app_err, &label_err, &trimmed, "err");
-                tracing::error!("[MC stderr] {}", redact_secrets(&trimmed));
-            }
-        });
+    if let Some(reader) = stderr {
+        spawn_game_output_pump(
+            reader,
+            |_| {},
+            move |line| {
+                log_to_console(&app_err, &label_err, &line, "err");
+                tracing::error!("[MC stderr] {}", redact_secrets(&line));
+            },
+        );
     }
 
     // Plus de relecture de logs/latest.log (2026-09-15). Elle partait d'une

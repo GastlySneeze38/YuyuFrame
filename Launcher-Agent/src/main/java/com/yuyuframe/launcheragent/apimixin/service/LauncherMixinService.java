@@ -812,6 +812,12 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/gui/screen/Screen", "setClipboard", "(Ljava/lang/String;)V", null),
         new RefmapEntry(M189 + "lwjgl/ScreenGlfwClipboardMixin189",
             "net/minecraft/client/gui/screen/Screen", "openLink", "(Ljava/net/URI;)V", null),
+        // ── apimixin 1.8.9 : correctifs de bugs vanilla ───────────────────
+        new RefmapEntry(M189 + "fix/ScoreboardNullGuardMixin189",
+            "net/minecraft/scoreboard/Scoreboard", "removeTeam", "(Lnet/minecraft/scoreboard/Team;)V", null),
+        new RefmapEntry(M189 + "fix/ScoreboardNullGuardMixin189",
+            "net/minecraft/scoreboard/Scoreboard", "removeObjective",
+            "(Lnet/minecraft/scoreboard/ScoreboardObjective;)V", null),
     };
 
     /**
