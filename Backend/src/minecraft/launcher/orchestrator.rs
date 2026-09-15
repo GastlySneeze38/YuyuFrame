@@ -21,7 +21,7 @@ use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, ex
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
-use super::progress::{log_to_console, set_progress, set_progress_monotonic, watch_agent_log_for_ready, ProgressFloor};
+use super::progress::{log_to_console, redact_secrets, set_progress, set_progress_monotonic, watch_agent_log_for_ready, ProgressFloor};
 use super::ready_event::{create_ready_event, wait_for_ready_event};
 use super::servers::build_server_connect_args;
 
@@ -628,7 +628,8 @@ pub async fn download_and_launch(
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
     }
 
-    tracing::info!("[MC launch] {} {}", java, args.join(" "));
+    // Jeton masqué : cette ligne contient --accessToken en clair.
+    tracing::info!("[MC launch] {} {}", java, redact_secrets(&args.join(" ")));
     let mut child = java_cmd.spawn()?;
 
     let stdout = child.stdout.take().map(BufReader::new);
@@ -667,7 +668,7 @@ pub async fn download_and_launch(
                 // main.rs) — la fenêtre console (webview) ne garde rien après
                 // un crash/fermeture, ce qui rendait tout diagnostic après-coup
                 // impossible sans que l'utilisateur ait déjà tout copié à temps.
-                tracing::info!("[MC stdout] {}", trimmed);
+                tracing::info!("[MC stdout] {}", redact_secrets(&trimmed));
             }
         });
     }
@@ -677,7 +678,7 @@ pub async fn download_and_launch(
             let mut buf = Vec::new();
             while let Some((_, trimmed)) = super::progress::read_line_lossy(&mut reader, &mut buf).await {
                 log_to_console(&app_err, &label_err, &trimmed, "err");
-                tracing::error!("[MC stderr] {}", trimmed);
+                tracing::error!("[MC stderr] {}", redact_secrets(&trimmed));
             }
         });
     }

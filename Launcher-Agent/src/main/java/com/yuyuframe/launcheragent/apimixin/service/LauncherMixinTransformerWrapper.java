@@ -22,6 +22,9 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             "com/yuyuframe/launcheragent/runtime/ui/ingameui/UiScreenBase"
         )));
 
+    /** Paquet racine de l'agent — voir {@link #transform}, jamais transmis à Mixin. */
+    private static final String AGENT_PACKAGE = "com/yuyuframe/launcheragent/";
+
     private final IMixinTransformer transformer;
 
     public LauncherMixinTransformerWrapper(IMixinTransformer transformer) {
@@ -77,6 +80,15 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         // (Main), rien n'est donc perdu à attendre.
         if (!LauncherMixinService.hasGameClassLoader()) return null;
 
+        // ── Notre propre code : jamais une cible Mixin (2026-09-15) ──────────
+        // Les mixins visent le jeu, LWJGL ou paulscode, jamais l'agent. Le
+        // passer quand même à Mixin faisait lever un IllegalClassLoadError à
+        // chaque classe d'API du paquet déclaré par la config (AgentBridge,
+        // HookPoint, AccessorRegistry…) — une exception et un [WARN] par
+        // classe, ~15 à chaque lancement, sans rien transformer. Placé APRÈS le
+        // patch des écrans et la traduction Yarn, qui concernent eux notre code.
+        if (className.startsWith(AGENT_PACKAGE)) return null;
+
         String obfDot = className.replace('/', '.');
 
         byte[] result;
@@ -103,10 +115,9 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
             // fatal avec fabric-content-registries-v0. On relance après avoir
             // journalisé : comportement JVM inchangé, mais plus jamais muet.
             // IllegalClassLoadError = « cette classe est dans le package mixin
-            // déclaré mais n'est pas un mixin » — c'est le cas ATTENDU de nos
-            // classes d'API (HookPoint, VanillaHookRegistry…) qui vivent sous
-            // com.yuyuframe.launcheragent.apimixin, le package déclaré par le
-            // JSON. Sans intérêt à hurler dessus à chaque chargement : warn.
+            // déclaré mais n'est pas un mixin ». Nos classes d'API ne passent
+            // plus ici (voir AGENT_PACKAGE plus haut) ; conservé pour tout autre
+            // cas, qui mérite alors d'être vu.
             boolean expected = t.getClass().getName().endsWith("IllegalClassLoadError");
             if (expected) {
                 com.yuyuframe.launcheragent.base.log.LauncherLog.warn(

@@ -102,11 +102,27 @@ pub(super) fn extract_tweak_class_args(mc_args: &str) -> Vec<String> {
 /// `extra_args`/`args_mode` viennent de l'écran "Configuration JVM" (drapeaux
 /// tapés à la main) et sont appliqués en dernier — voir `merge_jvm_args`.
 pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32, vendor: JvmVendor, gc_policy: &str, extra_args: &str, args_mode: &str) -> Vec<String> {
-    let generated = match vendor {
+    let mut generated = match vendor {
         JvmVendor::OpenJ9 => build_openj9_jvm_args(ram_mb, natives_dir, gc_policy),
         JvmVendor::Temurin | JvmVendor::Graal | JvmVendor::Custom => build_hotspot_jvm_args(ram_mb, natives_dir, java_major, gc_policy),
     };
+    if let Some(flag) = native_access_arg(java_major) {
+        generated.push(flag);
+    }
     merge_jvm_args(generated, extra_args, args_mode)
+}
+
+/// Autorise l'accès natif au code du classpath (LWJGL charge ses DLL par
+/// `System.load`) — `None` avant Java 22.
+///
+/// Depuis Java 24, sans ce drapeau, chaque bibliothèque qui charge du natif
+/// fait écrire à la JVM quatre lignes « WARNING: A restricted method in
+/// java.lang.System has been called » au lancement (vues en 1.8.9 et 26.1.2,
+/// 2026-09-15), et une future version bloquera l'appel. Le drapeau n'existe
+/// qu'à partir de Java 22 : passé à une JVM plus ancienne (Java 8 des
+/// versions legacy), elle refuserait de démarrer.
+fn native_access_arg(java_major: u32) -> Option<String> {
+    (java_major >= 22).then(|| "--enable-native-access=ALL-UNNAMED".to_string())
 }
 
 /// Découpe le texte libre de l'écran "Configuration JVM" en drapeaux. Une
@@ -173,11 +189,14 @@ fn is_collector_specific(key: &str) -> bool {
 /// le jeu ne démarre pas du tout. Ces quatre-là ne sont donc jamais un choix
 /// de tuning, mais l'utilisateur peut quand même les redéfinir : un `-Xmx`
 /// tapé à la main écrase le généré par `arg_key` comme n'importe quel autre.
+/// `--enable-native-access` non plus n'est pas du tuning (voir
+/// `native_access_arg`) : il reste aussi.
 fn is_mandatory_base(arg: &str) -> bool {
     arg.starts_with("-Xmx")
         || arg.starts_with("-Xms")
         || arg.starts_with("-Djava.library.path=")
         || arg.starts_with("-Dorg.lwjgl.librarypath=")
+        || arg.starts_with("--enable-native-access=")
 }
 
 /// Fusionne les drapeaux générés et ceux tapés dans l'écran "Configuration
@@ -513,7 +532,26 @@ pub(super) fn extract_mojang_jvm_args(details: &VersionDetails, natives_dir: &Pa
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_jvm_args, parse_user_jvm_args};
+    use super::{merge_jvm_args, native_access_arg, parse_user_jvm_args};
+
+    /// Le drapeau n'existe qu'à partir de Java 22 : une JVM plus ancienne
+    /// refuserait de démarrer.
+    #[test]
+    fn acces_natif_seulement_a_partir_de_java_22() {
+        assert_eq!(native_access_arg(8), None);
+        assert_eq!(native_access_arg(21), None);
+        assert_eq!(native_access_arg(22).as_deref(), Some("--enable-native-access=ALL-UNNAMED"));
+        assert_eq!(native_access_arg(25).as_deref(), Some("--enable-native-access=ALL-UNNAMED"));
+    }
+
+    /// Pas du tuning : le mode "replace" ne doit pas le retirer.
+    #[test]
+    fn replace_garde_l_acces_natif() {
+        let mut gen = generated();
+        gen.push("--enable-native-access=ALL-UNNAMED".to_string());
+        let out = merge_jvm_args(gen, "-XX:+UseParallelGC", "replace");
+        assert!(out.contains(&"--enable-native-access=ALL-UNNAMED".to_string()));
+    }
 
     fn generated() -> Vec<String> {
         ["-Xmx6452m", "-Xms6452m", "-Djava.library.path=C:\natives", "-XX:+AlwaysPreTouch",

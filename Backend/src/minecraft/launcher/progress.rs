@@ -99,10 +99,48 @@ where
     }
 }
 
+/// Masque les jetons d'authentification d'une ligne avant affichage ou
+/// journalisation (2026-09-15) :
+/// - `--accessToken <jeton>` — dans la commande de lancement journalisée
+///   (`[MC launch]`), écrite en clair dans `yuyuframe.log` à chaque lancement ;
+/// - `token:<jeton>:<uuid>` — la ligne « (Session ID is token:…) » que
+///   Minecraft écrit lui-même au démarrage. L'UUID, public, est conservé.
+///
+/// Le jeton d'accès Microsoft permet de se connecter aux serveurs sous le
+/// compte du joueur : il ne doit apparaître ni dans la console, qu'on copie
+/// pour demander de l'aide, ni dans un fichier sur le disque.
+pub(super) fn redact_secrets(line: &str) -> String {
+    const MASK: &str = "***";
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    loop {
+        let flag = rest.find("--accessToken ").map(|i| (i, "--accessToken ", " "));
+        let session = rest.find("token:").map(|i| (i, "token:", ": )"));
+        let next = match (flag, session) {
+            (Some(a), Some(b)) => Some(if a.0 <= b.0 { a } else { b }),
+            (a, b) => a.or(b),
+        };
+        let Some((start, prefix, stops)) = next else {
+            out.push_str(rest);
+            return out;
+        };
+        let value_start = start + prefix.len();
+        let value_len = rest[value_start..]
+            .find(|c: char| stops.contains(c) || c.is_whitespace())
+            .unwrap_or(rest.len() - value_start);
+        out.push_str(&rest[..value_start]);
+        if value_len > 0 {
+            out.push_str(MASK);
+        }
+        rest = &rest[value_start + value_len..];
+    }
+}
+
 /// Émet un game_log vers la fenêtre console dédiée à cette instance.
 /// Fallback sur broadcast global si la fenêtre n'existe plus.
 pub(super) fn log_to_console(app: &tauri::AppHandle, console_label: &str, line: &str, level: &str) {
     let short_id = console_label.strip_prefix("mc-console-").unwrap_or(console_label);
+    let line = redact_secrets(line);
     let payload = serde_json::json!({ "line": line, "level": level, "instance_id": short_id });
     if let Some(win) = app.get_webview_window(console_label) {
         let _ = win.emit("game_log", &payload);
@@ -201,5 +239,43 @@ pub(super) async fn watch_agent_log_for_ready(
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_secrets;
+
+    /// Ligne réelle écrite par Minecraft : le jeton disparaît, l'UUID reste.
+    #[test]
+    fn masque_le_jeton_de_session_minecraft() {
+        let line = "[19:32:44] [Client thread/INFO]: (Session ID is token:eyJraWQ.eyJ4dWlk.BJXQ-Qc_Sm:8ac3a8cea6304fe89c1c5c0c88b1962e)";
+        assert_eq!(
+            redact_secrets(line),
+            "[19:32:44] [Client thread/INFO]: (Session ID is token:***:8ac3a8cea6304fe89c1c5c0c88b1962e)"
+        );
+    }
+
+    /// Commande de lancement : seul l'argument de --accessToken est masqué.
+    #[test]
+    fn masque_l_argument_access_token() {
+        let line = "java -Xmx4g Main --username Ghast --accessToken eyJhbGc.abc-def_123 --userType msa";
+        assert_eq!(
+            redact_secrets(line),
+            "java -Xmx4g Main --username Ghast --accessToken *** --userType msa"
+        );
+    }
+
+    #[test]
+    fn laisse_intacte_une_ligne_sans_jeton() {
+        let line = "[AGENT] [LauncherAgent] Profil de version résolu : 1_8_9";
+        assert_eq!(redact_secrets(line), line);
+    }
+
+    /// Masquer deux fois ne change plus rien (la console repasse une ligne déjà masquée).
+    #[test]
+    fn masquer_deux_fois_est_sans_effet() {
+        let once = redact_secrets("(Session ID is token:abc:uuid) --accessToken xyz");
+        assert_eq!(redact_secrets(&once), once);
     }
 }
