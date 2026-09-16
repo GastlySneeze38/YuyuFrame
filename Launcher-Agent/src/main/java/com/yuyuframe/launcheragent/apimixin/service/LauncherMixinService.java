@@ -61,6 +61,24 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
     }
 
     /** Appelé explicitement par LauncherAgent.premain() APRÈS mappings + addConfiguration(). */
+    /** Classes mixin des configs enregistrées, en noms internes — voir {@link #isMixinClass}. */
+    private static volatile java.util.Set<String> mixinClasses = java.util.Collections.emptySet();
+
+    /** Publié par le bootstrap, AVANT {@link #installWrapper()}. */
+    public static void setMixinClasses(java.util.Set<String> internalNames) {
+        mixinClasses = java.util.Collections.unmodifiableSet(new java.util.HashSet<>(internalNames));
+    }
+
+    /**
+     * Classe mixin déclarée par une config ? Le wrapper doit continuer de les
+     * passer à Mixin même si elles vivent dans le paquet de l'agent : c'est au
+     * chargement de l'interface accessor que Mixin lui applique les renommages
+     * posés dans la classe cible (voir {@code LauncherMixinTransformerWrapper}).
+     */
+    public static boolean isMixinClass(String internalName) {
+        return mixinClasses.contains(internalName);
+    }
+
     public static void installWrapper() {
         if (savedInst == null) { LauncherLog.err("[LauncherAgent] installWrapper: savedInst null"); return; }
         if (storedTransformer == null) { LauncherLog.err("[LauncherAgent] installWrapper: storedTransformer null"); return; }

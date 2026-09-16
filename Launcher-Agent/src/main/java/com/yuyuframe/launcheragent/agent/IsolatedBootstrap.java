@@ -139,6 +139,9 @@ public final class IsolatedBootstrap {
         Set<String> activeMixins = new LinkedHashSet<>();
         if (apiMixinConfig != null) activeMixins.addAll(configMixinClasses(apiMixinConfig));
         writeRefmapFile(inst, isolated, activeMixins);
+        // Le wrapper doit continuer de passer ces classes-là à Mixin — voir
+        // LauncherMixinService.isMixinClass.
+        LauncherMixinService.setMixinClasses(activeMixins);
 
         Set<String> mixinTargets = new LinkedHashSet<>();
         if (apiMixinConfig != null) {

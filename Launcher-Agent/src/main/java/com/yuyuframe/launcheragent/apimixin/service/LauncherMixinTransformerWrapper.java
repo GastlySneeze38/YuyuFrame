@@ -87,7 +87,15 @@ public class LauncherMixinTransformerWrapper implements ClassFileTransformer {
         // HookPoint, AccessorRegistry…) — une exception et un [WARN] par
         // classe, ~15 à chaque lancement, sans rien transformer. Placé APRÈS le
         // patch des écrans et la traduction Yarn, qui concernent eux notre code.
-        if (className.startsWith(AGENT_PACKAGE)) return null;
+        //
+        // SAUF les classes mixin elles-mêmes (2026-09-16) : sous Fabric, le
+        // Mixin renomme les méthodes d'accessor dans la cible (« Renaming
+        // @Accessor method la$fps()I to la$fps_$md$… ») et applique le même
+        // renommage à l'interface accessor quand elle passe ici. Les écarter
+        // laissait l'interface avec l'ancien nom face à une cible qui ne l'a
+        // plus : tous les accessors 26.1.2 « non tissé » (FPS, brouillard,
+        // formats de sommet → pipelines du rendu UI en échec) depuis v1167.
+        if (className.startsWith(AGENT_PACKAGE) && !LauncherMixinService.isMixinClass(className)) return null;
 
         String obfDot = className.replace('/', '.');
 
