@@ -158,10 +158,10 @@ public final class ModuleRegistry {
         // façon optimisée »). Il restait le dernier gros consommateur de
         // réflexion de l'agent (22 appels) et le seul rendu à devoir
         // s'intercaler dans un écran de conteneur vanilla.
-        // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11)
-        // + rappelle Camera.setRotation (voir sa javadoc) — aucun équivalent
-        // 1.8.9 pour l'instant.
-        if (IS_26_1 || IS_1_21_11) {
+        // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11)/
+        // l'appel à increaseTransforms de GameRenderer.render (1.8.9, depuis
+        // le 2026-09-16) et décale la rotation de la caméra (voir sa javadoc).
+        if (IS_26_1 || IS_1_21_11 || IS_1_8_9) {
             safeRegister(() -> new FreelookModule());
         }
         // 1.8.9 seulement (voir IS_1_8_9 plus haut), sur demande explicite de

@@ -198,20 +198,24 @@ public final class GuiElementShaders {
         "flat in float vSize;\n" +
         "out vec4 fragColor;\n" +
         "void main() {\n" +
-        // Distance au bord le plus proche : halfSize - |localPos| donne la
-        // distance à chaque paire de bords, le min() des deux axes donne le
-        // bord le plus proche des quatre. Le chevauchement des dégradés
-        // opposés quand la largeur dépasse 50% de l'écran est géré nativement
-        // par ce min(), sans double comptage.
-        "    vec2 d = halfSize - abs(localPos);\n" +
-        "    float distEdge = min(d.x, d.y);\n" +
+        // Profondeur dans la bande, NORMALISÉE par axe puis combinée en
+        // longueur (2026-09-16). L'ancienne distance au bord le plus proche,
+        // min(d.x, d.y), découpait l'écran en quatre trapèzes raccordés en
+        // diagonale : pente discontinue sur les diagonales, d'où l'effet
+        // « 4 rectangles sur les bords ». Ici u vaut 0 dans le rectangle
+        // intérieur, 1 sur un bord ; sa longueur donne un dégradé continu aux
+        // coins arrondis. Bande bornée à la demi-taille par axe : au-delà de
+        // 50 % de l'écran, le côté court garde un bord plein au lieu de
+        // dégénérer.
+        "    vec2 band = min(vec2(vSize), halfSize);\n" +
+        "    vec2 u = max(abs(localPos) - (halfSize - band), 0.0) / max(band, vec2(1.0));\n" +
         // smootherstep (Ken Perlin, 6t^5-15t^4+10t^3) : dérivée première ET
         // seconde nulles aux deux bornes, la référence pour ce type de
         // dégradé. Une tentative d'"ease-out" (1-t)^3 avait été essayée à
         // l'époque du chemin GL brut ; elle ne servait à rien, le bord net
         // venait d'un GL_ALPHA_TEST resté actif — problème qui ne peut plus
         // se poser ici, le pipeline déclarant lui-même son état.
-        "    float t = clamp(distEdge / max(vSize, 1.0), 0.0, 1.0);\n" +
+        "    float t = clamp(1.0 - length(u), 0.0, 1.0);\n" +
         "    float eased = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
         "    float alpha = 1.0 - eased;\n" +
         // Le framebuffer ne code que 256 niveaux par canal — même une courbe

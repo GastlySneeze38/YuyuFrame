@@ -167,12 +167,13 @@ public final class Gl3PrimitiveRenderer {
         "out vec4 fragColor;\n" +
         "void main() {\n" +
         "    vec2 p = gl_FragCoord.xy;\n" +
-        "    float distTop = u_ViewportSize.y - p.y;\n" +
-        "    float distBottom = p.y;\n" +
-        "    float distLeft = p.x;\n" +
-        "    float distRight = u_ViewportSize.x - p.x;\n" +
-        "    float distEdge = min(min(distTop, distBottom), min(distLeft, distRight));\n" +
-        "    float t = clamp(distEdge / u_VSize, 0.0, 1.0);\n" +
+        // Même profondeur normalisée que GuiElementShaders.VIGNETTE_FRAGMENT
+        // (2026-09-16) : le min() des distances aux quatre bords découpait
+        // l'écran en quatre trapèzes raccordés en diagonale (« 4 rectangles »).
+        "    vec2 halfSize = u_ViewportSize * 0.5;\n" +
+        "    vec2 band = min(vec2(u_VSize), halfSize);\n" +
+        "    vec2 u = max(abs(p - halfSize) - (halfSize - band), 0.0) / max(band, vec2(1.0));\n" +
+        "    float t = clamp(1.0 - length(u), 0.0, 1.0);\n" +
         "    float eased = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
         "    float alpha = 1.0 - eased;\n" +
         "    float dither = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;\n" +

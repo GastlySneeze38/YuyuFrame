@@ -75,7 +75,10 @@ import com.yuyuframe.launcheragent.runtime.game.GameOptions;
  * TitleScreen/ChatListener, déjà ciblés sans souci ailleurs dans ce projet),
  * jamais en touchant le joueur lui-même.
  *
- * 1.16.5/1.20.4/1.21.4/1.8.9 pas encore portés.
+ * 1.8.9 (2026-09-16) : {@code MouseTurnFreelookMixin189} intercepte
+ * {@code increaseTransforms} dans {@code GameRenderer.render}, et
+ * {@code CameraFreelookMixin189} décale la rotation du joueur le temps de
+ * {@code GameRenderer.transformCamera} (pas d'objet caméra sur cette version).
  */
 public final class FreelookModule extends LauncherModule {
 

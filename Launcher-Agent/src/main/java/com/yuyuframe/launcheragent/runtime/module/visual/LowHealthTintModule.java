@@ -46,13 +46,13 @@ public final class LowHealthTintModule extends LauncherModule {
     // framebuffer 8-bit pour représenter la transition sans paliers visibles.
     public float maxOpacityPercent = 18f;
 
-    // Le dégradé shader (drawEdgeVignette) est un calcul PAR PIXEL basé sur la
-    // distance au bord le plus proche — contrairement à l'ancien repli par
-    // bandes (drawVignetteBands, limité à 50% pour éviter le chevauchement
-    // haut/bas), aucune limite mathématique à respecter ici : au-delà de 50%
-    // les zones de dégradé des bords opposés se chevauchent simplement au
-    // centre (le min() des 4 distances gère ça nativement, jamais de double
-    // comptage). Plafond/valeur par défaut relevés après retour utilisateur :
+    // Le dégradé shader (drawEdgeVignette) est un calcul PAR PIXEL : profondeur
+    // dans la bande normalisée par axe, combinée en longueur — dégradé continu
+    // aux coins arrondis (2026-09-16 ; la distance au bord le plus proche
+    // d'avant dessinait « 4 rectangles » raccordés en diagonale). Au-delà de
+    // 50%, la bande est bornée à la demi-taille de chaque axe. Contrairement
+    // à l'ancien repli par bandes (drawVignetteBands), aucun chevauchement
+    // possible. Plafond/valeur par défaut relevés après retour utilisateur :
     // à 25% le dégradé restait perceptible comme un bord net même avec une
     // courbe lisse (smootherstep) — un dégradé plus LARGE, pas juste plus
     // lisse, était nécessaire pour que la transition soit vraiment invisible.

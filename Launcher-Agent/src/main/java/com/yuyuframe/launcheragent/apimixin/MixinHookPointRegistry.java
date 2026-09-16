@@ -445,6 +445,11 @@ public final class MixinHookPointRegistry {
         gate("1.8.9", "v1_8_9.camera.FovMovementEffectMixin189", HookPoint.FOV_MOVEMENT_EFFECT);
         // Accessor écrit par FovMovementEffectMixin189 (deux champs privés).
         always("1.8.9", "v1_8_9.camera.GameRendererAccessor189");
+        // Freelook : non gaté, même raison qu'en 26.1.2 et 1.21.11 (voir plus
+        // haut) — GameRenderer se charge avant l'enregistrement de FreelookModule.
+        always("1.8.9", "v1_8_9.freelook.EntityRotationAccessor189");
+        always("1.8.9", "v1_8_9.freelook.MouseTurnFreelookMixin189");
+        always("1.8.9", "v1_8_9.freelook.CameraFreelookMixin189");
         gate("1.8.9", "v1_8_9.input.SneakKeyHeldMixin189", HookPoint.SNEAK_KEY_HELD);
         gate("1.8.9", "v1_8_9.input.SprintKeyHeldMixin189", HookPoint.SPRINT_KEY_HELD);
         gate("1.8.9", "v1_8_9.input.SneakSlowdownMixin189", HookPoint.SNEAK_SLOWDOWN);
