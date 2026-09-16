@@ -89,6 +89,26 @@ public class EventQueue {
         return slice;
     }
 
+    /**
+     * Index absolu du dernier événement de la file, ou {@code -1} si elle est
+     * vide (2026-09-16, YuyuFrame). À lire et écrire avec les accès absolus de
+     * {@link #rawBuffer()}, sous le verrou de la file.
+     *
+     * <p>Remplace {@link #getLastEvent()} dans les implémentations d'entrée :
+     * celle-ci alloue une vue par appel (un {@code slice()} par mouvement de
+     * souris, jusqu'à ~1000 par seconde) et, sur une file VIDE, rend les octets
+     * périmés du dernier événement déjà lu au lieu de signaler l'absence.
+     */
+    public synchronized int lastEventOffset() {
+        int offset = queue.position() - event_size;
+        return offset >= 0 ? offset : -1;
+    }
+
+    /** Tampon de la file, pour les accès absolus à {@link #lastEventOffset()}. */
+    public ByteBuffer rawBuffer() {
+        return queue;
+    }
+
     public synchronized boolean hasEvents() {
         return queue.position() >= event_size;
     }

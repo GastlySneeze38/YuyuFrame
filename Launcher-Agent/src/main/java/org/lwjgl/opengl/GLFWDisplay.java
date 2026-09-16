@@ -434,7 +434,9 @@ public final class GLFWDisplay implements Display.Impl {
 	public void setResizable(boolean isResizable) {
 		resizable = isResizable;
 		if (isCreated()) {
-			GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, resizable ? 1 : 0);
+			// YuyuFrame (2026-09-16) : un hint ne vaut que pour la PROCHAINE
+			// fenêtre créée ; sur la fenêtre existante, c'est un attribut.
+			GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_RESIZABLE, resizable ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
 		}
 	}
 

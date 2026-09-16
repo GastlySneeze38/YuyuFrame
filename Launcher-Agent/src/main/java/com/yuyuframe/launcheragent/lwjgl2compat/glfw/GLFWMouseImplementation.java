@@ -94,17 +94,21 @@ public class GLFWMouseImplementation implements MouseImplementation {
 
     private void putMouseMotionEvent(double coord1, double coord2, long nanos) {
         synchronized (event_queue) {
-            if (event_queue.hasEvents()) {
-                ByteBuffer lastEvent = event_queue.getLastEvent();
-                if (lastEvent.get(0) == -1 && lastEvent.getDouble(18) == 0) {
+            // Fusion dans le dernier mouvement en accès absolus sur la file —
+            // sans la vue allouée par getLastEvent() à chaque événement
+            // (YuyuFrame, 2026-09-16).
+            int last = event_queue.lastEventOffset();
+            if (last >= 0) {
+                ByteBuffer queue = event_queue.rawBuffer();
+                if (queue.get(last) == -1 && queue.getDouble(last + 18) == 0) {
                     if (grabbed) {
-                        lastEvent.putDouble(2, lastEvent.getDouble(2) + coord1);
-                        lastEvent.putDouble(10, lastEvent.getDouble(10) + coord2);
+                        queue.putDouble(last + 2, queue.getDouble(last + 2) + coord1);
+                        queue.putDouble(last + 10, queue.getDouble(last + 10) + coord2);
                     } else {
-                        lastEvent.putDouble(2, coord1);
-                        lastEvent.putDouble(10, coord2);
+                        queue.putDouble(last + 2, coord1);
+                        queue.putDouble(last + 10, coord2);
                     }
-                    lastEvent.putLong(26, nanos);
+                    queue.putLong(last + 26, nanos);
                     return;
                 }
             }

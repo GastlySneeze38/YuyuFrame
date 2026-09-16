@@ -57,11 +57,20 @@ public class GLFWKeyboardImplementation implements KeyboardImplementation {
 
 	private void putKeyboardEvent(int keycode, byte state, int ch, long nanos, boolean repeat) {
 		if (keycode == -1) {
-			ByteBuffer lastEvent = event_queue.getLastEvent();
-			// check for: event has a keycode, character is not present and state is 'pressed'
-			if (lastEvent.getInt(0) > 0 && lastEvent.getInt(5) == 0 && lastEvent.get(4) == 1) {
-				lastEvent.putInt(5, ch);
-				return;
+			// YuyuFrame (2026-09-16) : accès absolus sur la file, et SEULEMENT
+			// si elle contient un événement. getLastEvent() rendait, sur une
+			// file vide, les octets périmés d'un appui déjà lu : le caractère y
+			// était « fusionné » puis perdu.
+			synchronized (event_queue) {
+				int last = event_queue.lastEventOffset();
+				if (last >= 0) {
+					ByteBuffer queue = event_queue.rawBuffer();
+					// check for: event has a keycode, character is not present and state is 'pressed'
+					if (queue.getInt(last) > 0 && queue.getInt(last + 5) == 0 && queue.get(last + 4) == 1) {
+						queue.putInt(last + 5, ch);
+						return;
+					}
+				}
 			}
 		}
 		this.tmp_event.clear();
