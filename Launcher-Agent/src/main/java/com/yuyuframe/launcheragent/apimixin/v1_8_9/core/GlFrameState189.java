@@ -83,6 +83,16 @@ public final class GlFrameState189 {
         GL13.glActiveTexture(GL13.GL_TEXTURE0);
         texture2dUnit0 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         GL13.glActiveTexture(activeTexture);
+
+        // Test alpha coupé pour tout le dessin de l'agent (2026-09-16), remis
+        // par restore(). Pipeline fixe, mais en contexte de COMPATIBILITÉ il
+        // s'applique aussi à la sortie de nos shaders : la 1.8.9 le laisse
+        // actif avec son seuil GREATER 0.1, donc tout pixel moins opaque que
+        // 10 % était jeté. Symptôme : bord net au milieu de chaque dégradé
+        // doux — « démarcation » de la vignette Low Health Tint (18 % max,
+        // coupée là où l'opacité passe sous 0,1), et même risque sur
+        // l'anticrénelage des coins arrondis et les ombres de texte.
+        GL11.glDisable(GL11.GL_ALPHA_TEST);
     }
 
     public void restore() {
