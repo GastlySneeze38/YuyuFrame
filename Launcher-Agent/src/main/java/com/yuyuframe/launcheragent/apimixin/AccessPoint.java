@@ -257,8 +257,24 @@ public enum AccessPoint {
      * {@code "empty"} ou {@code "other"} — {@code null} hors partie. Une
      * opération pour la même raison que {@link #SCREEN_KIND} : la liaison
      * fait les {@code instanceof}, l'appelant ne nomme aucune classe d'objet.
+     *
+     * <p>Plus fin sur 1.8.9 (2026-09-16), pour les positions d'objet 1.7 :
+     * {@code "block"} (objet rendu en volume, bloc), {@code "rod"} (objet
+     * dessiné retourné, canne à pêche), {@code "bow"}, avant {@code "sword"}
+     * et {@code "other"}.
      */
     PLAYER_MAIN_HAND_KIND,
+    /**
+     * L'ENTITÉ passée en receveur bloque-t-elle avec une épée ? {@code Boolean}
+     * ({@code false} pour une entité qui n'est pas un joueur).
+     */
+    ENTITY_IS_BLOCKING,
+    /**
+     * Particules de coup sur le bloc visé par le réticule, comme vanilla
+     * quand on frappe un bloc — côté client seulement, aucun paquet. Sans
+     * effet si le réticule ne vise pas un bloc.
+     */
+    CLIENT_BLOCK_HIT_PARTICLES,
     /**
      * Utilisation d'objet en cours, rendue en
      * {@code int[]{ ticks restants, durée totale }} — {@code null} si le

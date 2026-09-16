@@ -324,6 +324,8 @@ public enum HookPoint {
      * <ul>
      *   <li>{@code "item"} — juste avant le dessin de l'objet : les opérations
      *       sont appliquées, vanilla continue ;</li>
+     *   <li>{@code "bow_pre"} — dans la pose de l'arc bandé, juste avant sa
+     *       mise à l'échelle : appliquées, vanilla continue ;</li>
      *   <li>{@code "bow"} — à la fin de la pose de l'arc bandé : appliquées,
      *       vanilla continue ;</li>
      *   <li>{@code "rotation"} — pose qui fait suivre le regard à l'objet : une
@@ -379,11 +381,44 @@ public enum HookPoint {
     /** Même contrat que {@link #SNEAK_KEY_HELD}, pour la touche sprint (lue à deux endroits par tick). */
     SPRINT_KEY_HELD,
     /**
-     * Facteur de ralentissement appliqué au déplacement en sneak (0,3 en
-     * vanilla). Dispatché via {@link VanillaHookRegistry#dispatchValue} en
-     * DÉBUT de tick d'entrées, qu'on soit accroupi ou non — {@code ctx} =
-     * {@code Boolean} accroupi au tick précédent, valeur = le facteur
-     * ({@code Double}) ou {@code null} pour garder 0,3.
+     * Touche d'attaque lue par le jeu à chaque tick (clic gauche maintenu ou
+     * non), AVANT que vanilla ne décide de frapper un bloc — ce qu'il refuse
+     * pendant une utilisation d'objet. Dispatché via
+     * {@link VanillaHookRegistry#dispatch} — {@code ctx} = {@code Boolean}
+     * attaque maintenue. Purement informatif : le retour est ignoré.
      */
-    SNEAK_SLOWDOWN,
+    ATTACK_HELD_TICK,
+    /**
+     * Hauteur des yeux utilisée pour placer la caméra, lue une fois par image.
+     * Dispatché via {@link VanillaHookRegistry#dispatchValue} — {@code ctx} =
+     * la hauteur réelle de l'entité caméra ({@code Float}), valeur = la
+     * hauteur à utiliser ({@code Float}) ou {@code null}.
+     */
+    CAMERA_EYE_HEIGHT,
+    /**
+     * Clignotement des cœurs quand la vie change. {@code ctx} = {@code Boolean}
+     * « clignote à cette image » calculé par vanilla ; valeur = l'état à
+     * utiliser ({@code Boolean}) ou {@code null}.
+     */
+    HEALTH_BAR_FLASH,
+    /**
+     * Teinte rouge de dégâts appliquée aussi à l'armure portée. {@code ctx} =
+     * {@code null} ; valeur {@code Boolean.TRUE} = teinter l'armure, sinon
+     * {@code null} (vanilla : jamais).
+     */
+    ARMOR_DAMAGE_TINT,
+    /**
+     * Transformation de l'objet tenu par une entité en 3e personne, juste
+     * avant son dessin. Dispatché via {@link VanillaHookRegistry#dispatchValue}
+     * — {@code ctx} = l'entité (objet opaque, à passer aux points d'accès),
+     * valeur = {@code apimixin.data.MatrixOps} ou {@code null}.
+     */
+    THIRD_PERSON_HELD_ITEM_TRANSFORM,
+    /**
+     * Rotation du bras droit (lacet, radians) posée par le modèle bipède
+     * quand l'entité bloque avec une épée — -0,5236 (-30°) en vanilla.
+     * {@code ctx} = cette valeur ({@code Float}), valeur = la rotation à
+     * utiliser ({@code Float}) ou {@code null}.
+     */
+    BLOCKING_ARM_YAW,
 }

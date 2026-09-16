@@ -6,9 +6,9 @@ import com.yuyuframe.launcheragent.runtime.module.gameplay.ChatEnhancementsModul
 import com.yuyuframe.launcheragent.runtime.module.visual.ClearVisionModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.CoordsModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.CrosshairModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.DiagonalSwordModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.FovModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.FpsModule;
+import com.yuyuframe.launcheragent.runtime.module.legacy17.Animations17Module;
 import com.yuyuframe.launcheragent.runtime.module.visual.FreelookModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.FullbrightModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.HurtCamModule;
@@ -19,15 +19,9 @@ import com.yuyuframe.launcheragent.runtime.module.gameplay.MumbleLinkModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoDarknessModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoFogModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.NoPumpkinOverlayModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.OldBowModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.OldConsumeModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.OldItemRotationsModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PingModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.PotionEffectsModule;
 import com.yuyuframe.launcheragent.runtime.module.hud.SaturationModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.SneakRampModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.SwingSpeedModule;
-import com.yuyuframe.launcheragent.runtime.module.legacy17.SwingWhileBlockingModule;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.ToggleSneakModule;
 import com.yuyuframe.launcheragent.runtime.module.gameplay.ToggleSprintModule;
 import com.yuyuframe.launcheragent.runtime.module.visual.WorldTimeModule;
@@ -170,18 +164,9 @@ public final class ModuleRegistry {
         if (IS_1_8_9) safeRegister(() -> new HurtCamModule());
         if (IS_1_8_9) safeRegister(() -> new ToggleSprintModule());
         if (IS_1_8_9) safeRegister(() -> new ToggleSneakModule());
-        if (IS_1_8_9) safeRegister(() -> new SwingSpeedModule());
-        if (IS_1_8_9) safeRegister(() -> new DiagonalSwordModule());
-        if (IS_1_8_9) safeRegister(() -> new OldItemRotationsModule());
-        if (IS_1_8_9) safeRegister(() -> new SwingWhileBlockingModule());
-        if (IS_1_8_9) safeRegister(() -> new OldBowModule());
-        if (IS_1_8_9) safeRegister(() -> new OldConsumeModule());
-        // Réservé à la 1.8.9 comme les autres, sur demande explicite de
-        // l'utilisateur ("enlève-les TOUS") — initialement laissé de côté
-        // lors de l'audit (recrée juste une sensation, pas un vrai portage
-        // 1.7), mais reste visuellement groupé sous "Animations 1.7" dans
-        // l'UI, donc traité pareil que les 6 autres.
-        if (IS_1_8_9) safeRegister(() -> new SneakRampModule());
+        // Animations 1.7 : UN module depuis le 2026-09-16 (voir sa javadoc),
+        // à la place du groupe de sept modules séparés.
+        if (IS_1_8_9) safeRegister(() -> new Animations17Module());
         safeRegister(() -> new CrosshairModule());
         safeRegister(() -> new FullbrightModule());
         safeRegister(() -> new WorldTimeModule());
@@ -248,16 +233,6 @@ public final class ModuleRegistry {
                 "Réglages de confort et d'immersion", comfortMembers);
             comfortGroup.iconUrl = LauncherModule.icons8("visible");
             GROUPS.add(comfortGroup);
-        }
-        // Groupe absent hors 1.8.9 (les 7 membres n'y sont enregistrés que là,
-        // voir IS_1_8_9) — pas de carte vide affichée dans ce cas.
-        List<LauncherModule> legacyMembers = nonNull(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
-            get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"));
-        if (!legacyMembers.isEmpty()) {
-            ModuleGroup legacyGroup = new ModuleGroup("legacy-1-7", "Animations 1.7", "Swing, item, arc, manger/boire, sneak",
-                "Animations façon 1.7", legacyMembers);
-            legacyGroup.iconUrl = LauncherModule.icons8("time-machine");
-            GROUPS.add(legacyGroup);
         }
         // Charge l'état "favori" persisté de CHAQUE groupe (demandé
         // explicitement : "rends les groupes favorisables") — même rôle que

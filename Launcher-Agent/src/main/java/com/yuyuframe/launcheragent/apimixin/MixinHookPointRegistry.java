@@ -452,7 +452,13 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.freelook.CameraFreelookMixin189");
         gate("1.8.9", "v1_8_9.input.SneakKeyHeldMixin189", HookPoint.SNEAK_KEY_HELD);
         gate("1.8.9", "v1_8_9.input.SprintKeyHeldMixin189", HookPoint.SPRINT_KEY_HELD);
-        gate("1.8.9", "v1_8_9.input.SneakSlowdownMixin189", HookPoint.SNEAK_SLOWDOWN);
+        // Module unique « Animations 1.7 » (2026-09-16).
+        gate("1.8.9", "v1_8_9.animation.BlockHitMixin189", HookPoint.ATTACK_HELD_TICK);
+        gate("1.8.9", "v1_8_9.animation.SmoothSneakCameraMixin189", HookPoint.CAMERA_EYE_HEIGHT);
+        gate("1.8.9", "v1_8_9.animation.HealthFlashMixin189", HookPoint.HEALTH_BAR_FLASH);
+        gate("1.8.9", "v1_8_9.animation.ArmorDamageTintMixin189", HookPoint.ARMOR_DAMAGE_TINT);
+        gate("1.8.9", "v1_8_9.animation.ThirdPersonHeldItemMixin189", HookPoint.THIRD_PERSON_HELD_ITEM_TRANSFORM);
+        gate("1.8.9", "v1_8_9.animation.BlockingArmMixin189", HookPoint.BLOCKING_ARM_YAW);
     }
 
     /**

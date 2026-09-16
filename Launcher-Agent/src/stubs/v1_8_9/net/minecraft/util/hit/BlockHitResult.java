@@ -10,7 +10,15 @@ public class BlockHitResult {
 
     public Type type;
 
+    /** Face touchée ({@code auh.b}). */
+    public net.minecraft.util.math.Direction direction;
+
     private BlockHitResult() {
+    }
+
+    /** Bloc visé, {@code null} hors cible bloc ({@code auh.a()Lcj;}). */
+    public net.minecraft.util.math.BlockPos getBlockPos() {
+        throw new UnsupportedOperationException("stub compile-only");
     }
 
     /** {@code auh$a} : {@code MISS}, {@code BLOCK}, {@code ENTITY}. */

@@ -38,6 +38,8 @@ public class MinecraftClient {
 
     /** Cible du réticule ({@code ave.s}), {@code null} hors partie. */
     public net.minecraft.util.hit.BlockHitResult result;
+    /** Gestionnaire de particules ({@code ave.j}). */
+    public net.minecraft.client.particle.ParticleManager particleManager;
 
     public net.minecraft.client.render.item.ItemRenderer getItemRenderer() {
         throw new UnsupportedOperationException("stub compile-only");

@@ -322,10 +322,19 @@ public final class PlayerData {
         return v instanceof Boolean && (Boolean) v;
     }
 
-    /** {@code "sword"}, {@code "empty"}, {@code "other"}, ou {@code null} hors partie. */
+    /**
+     * {@code "sword"}, {@code "empty"}, {@code "other"}, ou {@code null} hors
+     * partie — plus {@code "block"}, {@code "rod"} et {@code "bow"} sur 1.8.9
+     * (voir {@link AccessPoint#PLAYER_MAIN_HAND_KIND}).
+     */
     public static String mainHandKind() {
         Object v = AccessorRegistry.get(AccessPoint.PLAYER_MAIN_HAND_KIND, null);
         return v instanceof String ? (String) v : null;
+    }
+
+    /** L'entité (objet opaque reçu d'un point d'accroche) bloque-t-elle avec une épée ? */
+    public static boolean isBlocking(Object entity) {
+        return entity != null && AccessorRegistry.getBoolean(AccessPoint.ENTITY_IS_BLOCKING, entity, false);
     }
 
     /** {@code {ticks restants, durée totale}} de l'objet utilisé, ou {@code null} si rien n'est utilisé. */

@@ -17,9 +17,10 @@ public final class MatrixOps {
     /** Aucune opération — utile pour REMPLACER une pose vanilla par rien. */
     public static final MatrixOps EMPTY = new MatrixOps();
 
-    /** Genre d'une opération : {@link #TRANSLATE} ou {@link #ROTATE}. */
+    /** Genre d'une opération : {@link #TRANSLATE}, {@link #ROTATE} ou {@link #SCALE}. */
     public static final int TRANSLATE = 0;
     public static final int ROTATE = 1;
+    public static final int SCALE = 2;
 
     /** Cinq nombres par opération : genre, puis {x, y, z, —} ou {angle, x, y, z}. */
     private static final int STRIDE = 5;
@@ -33,6 +34,11 @@ public final class MatrixOps {
 
     public MatrixOps rotate(float angleDegrees, float x, float y, float z) {
         return add(ROTATE, angleDegrees, x, y, z);
+    }
+
+    /** Mise à l'échelle par axe — ajoutée le 2026-09-16 pour les positions d'objet 1.7. */
+    public MatrixOps scale(float x, float y, float z) {
+        return add(SCALE, x, y, z, 0f);
     }
 
     /**
@@ -50,7 +56,7 @@ public final class MatrixOps {
         return count;
     }
 
-    /** Genre de l'opération {@code i} : {@link #TRANSLATE} ou {@link #ROTATE}. */
+    /** Genre de l'opération {@code i} : {@link #TRANSLATE}, {@link #ROTATE} ou {@link #SCALE}. */
     public int kind(int i) {
         return (int) data[i * STRIDE];
     }

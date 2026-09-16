@@ -23,6 +23,9 @@ public final class HeldItemGl189 {
         for (int i = 0; i < ops.size(); i++) {
             if (ops.kind(i) == MatrixOps.TRANSLATE) {
                 GL11.glTranslatef(ops.arg(i, 0), ops.arg(i, 1), ops.arg(i, 2));
+            } else if (ops.kind(i) == MatrixOps.SCALE) {
+                // bfl.a(FFF)V n'est lui aussi qu'un glScalef, sans cache (javap).
+                GL11.glScalef(ops.arg(i, 0), ops.arg(i, 1), ops.arg(i, 2));
             } else {
                 GL11.glRotatef(ops.arg(i, 0), ops.arg(i, 1), ops.arg(i, 2), ops.arg(i, 3));
             }

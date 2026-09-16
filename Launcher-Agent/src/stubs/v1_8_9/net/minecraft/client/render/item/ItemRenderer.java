@@ -15,6 +15,11 @@ public class ItemRenderer {
     private ItemRenderer() {
     }
 
+    /** Modèle rendu en volume (bloc) plutôt qu'en sprite plat ({@code bjh.a(Lzx;)Z}). */
+    public boolean hasDepth(ItemStack stack) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public void renderInGuiWithOverrides(ItemStack stack, int x, int y) {
         throw new UnsupportedOperationException("stub compile-only");
     }

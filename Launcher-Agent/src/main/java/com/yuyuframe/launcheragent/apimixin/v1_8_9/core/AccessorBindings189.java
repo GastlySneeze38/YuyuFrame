@@ -30,6 +30,7 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import net.minecraft.entity.player.HungerManager;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.BowItem;
 import net.minecraft.item.FoodItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -404,12 +405,41 @@ public final class AccessorBindings189 {
             p.handSwinging = true;
             return Boolean.TRUE;
         });
+        // Genres fins pour les positions d'objet 1.7 (2026-09-16) : « block » =
+        // modèle en volume (ItemRenderer.hasDepth, bjh.a(Lzx;)Z), « rod » =
+        // objet dessiné retourné (Item.shouldRotate, zw.e()Z — la canne à
+        // pêche), puis arc et épée.
         AccessorRegistry.bind(AccessPoint.PLAYER_MAIN_HAND_KIND, (r, a) -> {
             PlayerEntity p = player(r);
             if (p == null) return null;
             ItemStack stack = p.getMainHandStack();
             if (stack == null) return "empty";
-            return stack.getItem() instanceof SwordItem ? "sword" : "other";
+            Item item = stack.getItem();
+            MinecraftClient c = mc(null);
+            if (c != null && c.getItemRenderer().hasDepth(stack)) return "block";
+            if (item.shouldRotate()) return "rod";
+            if (item instanceof BowItem) return "bow";
+            return item instanceof SwordItem ? "sword" : "other";
+        });
+        // 1.8.9 : seule l'épée bloque, et l'objet utilisé est celui en main —
+        // même résultat que PlayerEntity.isBlocking (wn.bW, sans nom Yarn).
+        // Vaut aussi pour les AUTRES joueurs : leur durée d'utilisation est
+        // tenue à jour par le drapeau d'usage que le serveur leur envoie.
+        AccessorRegistry.bind(AccessPoint.ENTITY_IS_BLOCKING, (r, a) -> {
+            if (!(r instanceof PlayerEntity)) return Boolean.FALSE;
+            PlayerEntity p = (PlayerEntity) r;
+            ItemStack stack = p.getMainHandStack();
+            return Boolean.valueOf(p.getItemUseTicks() > 0 && stack != null && stack.getItem() instanceof SwordItem);
+        });
+        // Même appel que MinecraftClient.handleBlockBreaking quand on frappe un
+        // bloc (javap ave.b(Z)V, offset 111) : particleManager.addBlockBreakingParticles.
+        AccessorRegistry.bind(AccessPoint.CLIENT_BLOCK_HIT_PARTICLES, (r, a) -> {
+            MinecraftClient c = mc(r);
+            BlockHitResult hit = c == null ? null : c.result;
+            if (hit == null || hit.type != BlockHitResult.Type.BLOCK || c.particleManager == null) return null;
+            BlockPos pos = hit.getBlockPos();
+            if (pos != null) c.particleManager.addBlockBreakingParticles(pos, hit.direction);
+            return null;
         });
         AccessorRegistry.bind(AccessPoint.PLAYER_ITEM_USE, (r, a) -> {
             PlayerEntity p = player(r);

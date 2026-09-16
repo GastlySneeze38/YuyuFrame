@@ -52,6 +52,18 @@ public abstract class HeldItemTransformMixin189 {
         la$apply("item", tickDelta);
     }
 
+    /**
+     * Étape {@code "bow_pre"} : juste avant la mise à l'échelle qui termine la
+     * pose de l'arc ({@code bfl.a(FFF)V}, seul appel de {@code scale} de
+     * {@code bfn.a(FLbet;)V}, offset 165 au javap).
+     */
+    @Inject(method = "applyBowTransformation(FLnet/minecraft/client/network/AbstractClientPlayerEntity;)V",
+        at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/GlStateManager;scale(FFF)V"),
+        require = 0)
+    private void la$beforeBowScale(float tickDelta, @Coerce Object player, CallbackInfo ci) {
+        la$apply("bow_pre", tickDelta);
+    }
+
     @Inject(method = "applyBowTransformation(FLnet/minecraft/client/network/AbstractClientPlayerEntity;)V",
         at = @At("TAIL"), require = 0)
     private void la$afterBow(float tickDelta, @Coerce Object player, CallbackInfo ci) {

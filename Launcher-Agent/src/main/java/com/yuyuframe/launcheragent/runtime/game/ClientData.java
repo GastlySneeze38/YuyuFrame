@@ -158,6 +158,11 @@ public final class ClientData {
         return AccessorRegistry.getInt(AccessPoint.CLIENT_GUI_SCALE, null, 0);
     }
 
+    /** Particules de coup sur le bloc visé, côté client seulement — voir {@link AccessPoint#CLIENT_BLOCK_HIT_PARTICLES}. */
+    public static void spawnBlockHitParticles() {
+        AccessorRegistry.get(AccessPoint.CLIENT_BLOCK_HIT_PARTICLES, null);
+    }
+
     /** Cible du réticule : {@code "block"}, {@code "entity"}, {@code "miss"}, ou {@code null} hors partie. */
     public static String crosshairTarget() {
         Object v = AccessorRegistry.get(AccessPoint.CLIENT_CROSSHAIR_TARGET, null);
