@@ -40,8 +40,8 @@ public final class MinecraftVersionDetector {
      * confirmé par tests réels : glMatrixMode plante NATIVEMENT sur 1.21.11).
      *
      * INDÉPENDANT de {@link #isLegacy189} : une version 1.13-1.16.x utilise
-     * DÉJÀ LWJGL3/GLFW (donc {@code UiInputPollerModern}, pas
-     * {@code UiInputPollerLegacy}) mais peut ENCORE dessiner en immédiat comme
+     * DÉJÀ LWJGL3/GLFW (donc {@code UiInputPollerModern}) mais peut ENCORE
+     * dessiner en immédiat comme
      * la 1.8.9 — voir {@code UiRenderer.modern}, qui ne pilote QUE le style de
      * dessin (legacy vs shader/VAO), jamais le choix de l'input poller (décidé
      * séparément par CHAQUE classe Mixin selon son propre bracket).

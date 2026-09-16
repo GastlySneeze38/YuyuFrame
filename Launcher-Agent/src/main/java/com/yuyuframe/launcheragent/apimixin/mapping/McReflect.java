@@ -122,8 +122,7 @@ public final class McReflect {
     /**
      * Classe NON obfusquée (ex: {@code org.lwjgl.input.Keyboard}) — jamais
      * traduite par Yarn, mais toujours chargée via le classloader du jeu
-     * (notre agent compile contre des stubs, pas le vrai jar LWJGL/Minecraft,
-     * voir UiInputPollerLegacy pour le même besoin côté input).
+     * (notre agent compile contre des stubs, pas le vrai jar LWJGL/Minecraft).
      */
     public static Class<?> rawClass(String binaryName) {
         return RAW_CLASS_CACHE.computeIfAbsent(binaryName, k -> {

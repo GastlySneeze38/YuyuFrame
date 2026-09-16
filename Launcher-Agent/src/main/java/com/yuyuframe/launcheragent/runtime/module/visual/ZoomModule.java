@@ -16,9 +16,8 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  * de dézoomer complètement), relâchée restaure la valeur d'avant. Vanilla
  * 1.8.9 n'a pas de KeyBinding "zoom" dédié (contrairement à sneak/sprint, voir
  * MixinToggleSneak189/MixinToggleSprint189) donc pas de champ GameOptions à
- * rediriger — la touche est pollée directement via org.lwjgl.input.Keyboard
- * (API publique LWJGL2, pas obfusquée), même mécanisme que
- * UiInputPollerLegacy.readMenuKeyDown pour une touche configurable.
+ * rediriger — la touche est lue directement sur le poller GLFW actif
+ * ({@link #isZoomKeyDown}), comme sur les autres versions.
  *
  * Coopère avec FovModule (voir ModuleRegistry, enregistré JUSTE APRÈS lui pour
  * que tickAll() applique le zoom EN DERNIER) : {@code savedFov} capture la
@@ -32,7 +31,7 @@ import com.yuyuframe.launcheragent.runtime.game.ClientData;
  * précédente) :
  *
  * 1) "la molette ne marche pas" — BUG RÉEL trouvé : {@link
- *    UiInputPollerModern}/{@code UiInputPollerLegacy} drainent leur delta de
+ *    UiInputPollerModern} draine son delta de
  *    molette une fois par FRAME (voir {@code UiInputPoller.poll()}, accroché
  *    sur le rendu), alors que ce module ne le lisait qu'une fois par TICK JEU
  *    (20/s, beaucoup plus rare que les frames dès que le FPS dépasse ~20) — un

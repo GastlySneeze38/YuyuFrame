@@ -15,14 +15,14 @@ import java.util.Map;
  * fois par le vrai dispatch de Minecraft, une fois par ce sondage) — source
  * de plusieurs bugs (dont un crash) avant ce changement.
  *
- * Deux implémentations, une par famille LWJGL — choisie par le Mixin global
- * de CHAQUE version (GlobalUiRenderMixin en 1.21+, son équivalent v1_8 pour
- * 1.8.9), jamais de branchement runtime ici :
- *   - {@link UiInputPollerModern} : LWJGL3/GLFW (1.13+, dont 1.21)
- *   - {@link UiInputPollerLegacy} : LWJGL2 org.lwjgl.input.Mouse/Keyboard (1.8.9)
+ * Une seule implémentation, {@code UiInputPollerModern} (LWJGL3/GLFW), pour
+ * toutes les versions supportées — 1.8.9 comprise depuis son passage à
+ * LWJGL 3 (2026-09-14). Instanciée par le Mixin global de chaque version.
+ * L'ancienne {@code UiInputPollerLegacy} (LWJGL2 org.lwjgl.input) a été
+ * supprimée le 2026-09-16.
  *
- * Coordonnées Y — PAS symétriques entre les deux implémentations, mais
- * chacune normalise déjà vers l'espace pixels FRAMEBUFFER origine bas-gauche
+ * Coordonnées Y — l'implémentation normalise vers l'espace pixels
+ * FRAMEBUFFER origine bas-gauche
  * (mêmes unités que gl_FragCoord en GLSL, voir UiRenderer) :
  *   - LWJGL2 Mouse.getY() : déjà dans cet espace nativement, aucune conversion.
  *   - LWJGL3 glfwGetCursorPos() : coordonnées "fenêtre" origine haut-gauche —
@@ -42,11 +42,8 @@ public abstract class UiInputPoller {
      * Roadmap Phase 5.6 (carence input : "seuls les index GLFW 0/1 sont
      * lus") — clic milieu (molette cliquée, index GLFW 2) + boutons
      * latéraux souris gaming (index GLFW 3-7, mouse4-mouse8), même motif
-     * down/clicked que {@link #leftDown}/{@link #leftClicked}. Bracket
-     * moderne (GLFW) uniquement — LWJGL2/1.8.9 n'expose que 2 boutons via
-     * {@code org.lwjgl.input.Mouse.isButtonDown}, jamais renseignés côté
-     * {@code UiInputPollerLegacy} (restent {@code false} en permanence là-bas,
-     * pas un bug — ce bracket n'a simplement pas ces boutons).
+     * down/clicked que {@link #leftDown}/{@link #leftClicked}. Renseignés par
+     * GLFW sur toutes les versions supportées.
      */
     public boolean middleDown, middleClicked;
     protected boolean prevMiddleDown;
@@ -230,7 +227,7 @@ public abstract class UiInputPoller {
      * de façon répétée après {@link #REPEAT_INITIAL_DELAY_MS}, tant que
      * {@code down} reste {@code true}. {@code key} identifie la touche
      * logique (ex: "backspace") — namespacé par l'appelant si plusieurs
-     * touches partagent cette map (voir UiInputPollerLegacy/Modern).
+     * touches partagent cette map (voir UiInputPollerModern).
      */
     protected final boolean keyRepeatFire(String key, boolean down) {
         long now = System.currentTimeMillis();
