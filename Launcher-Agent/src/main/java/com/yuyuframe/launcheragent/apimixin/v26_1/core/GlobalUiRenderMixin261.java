@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Migration de l'ancien {@code mixin.client.v26_1.GlobalUiRenderMixin261}
- * (voir ce fichier pour l'historique complet — bugs trouvés, raisons des
+ * (supprimé le 2026-09-16 ; voir l'historique git pour l'historique complet — bugs trouvés, raisons des
  * différents ordres d'appel) — SEULE différence : utilise le pont apimixin
  * {@link GlobalUiRenderBridge261} (même dossier, sans réflexion — voir sa
  * javadoc) au lieu de l'ancien pont réflexif. Reste "hub" volontairement PAS

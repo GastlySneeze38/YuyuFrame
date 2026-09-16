@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Migration de l'ancien {@code mixin.client.v26_1.TitleScreenMixin261} (voir
- * ce fichier pour l'historique) — logique IDENTIQUE, package apimixin
+ * Migration de l'ancien {@code mixin.client.v26_1.TitleScreenMixin261} (supprimé
+ * le 2026-09-16 ; voir l'historique git) — logique IDENTIQUE, package apimixin
  * uniquement. Signal ponctuel de démarrage, pas de dispatch {@code
  * VanillaHookRegistry} (rien n'a besoin de l'observer génériquement).
  */

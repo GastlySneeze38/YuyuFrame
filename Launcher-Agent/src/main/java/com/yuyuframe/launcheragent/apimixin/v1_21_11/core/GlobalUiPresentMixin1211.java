@@ -13,8 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Hub de DESSIN du moteur UI sur 1.21.11, sur {@code Framebuffer.blitToScreen()}
- * — portage apimixin de {@code mixin.client.GlobalUiPresentMixin} (voir ce
- * fichier pour le pourquoi du double hook HEAD/TAIL : texte Blaze3D à flusher
+ * — portage apimixin de {@code mixin.client.GlobalUiPresentMixin} (supprimé le
+ * 2026-09-16, voir l'historique git pour le pourquoi du double hook HEAD/TAIL : texte Blaze3D à flusher
  * AVANT la présentation, dessin GL brut APRÈS).
  *
  * <h2>Le HUD n'est plus dessiné ici — volontairement</h2>

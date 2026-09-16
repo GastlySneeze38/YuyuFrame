@@ -30,19 +30,18 @@ import java.util.List;
  * {@code mixins.launcheragent-apimixin.template.json} fournit l'en-tête pour
  * toutes les versions. {@code build.bat} compile tout par wildcard.
  *
- * <h2>⚠️ SEULE la 26.1.2 est active (2026-08-31)</h2>
+ * <h2>Versions supportées (2026-09-16)</h2>
  *
- * Décision de l'utilisateur, en attendant son rework des autres versions : les
- * quatre autres tranches sont GELÉES ({@code .frozen()}). Elles restent
- * DÉCLARÉES — leurs commentaires expliquent pourquoi chacune est resserrée à
- * une version exacte, ce qui n'a aucune raison de disparaître — mais
- * {@link #resolve} les ignore.
+ * Décision de l'utilisateur : seules la 1.8.9 et les versions 1.21.11+ sont
+ * supportées. Les tranches 1.16.5, 1.20.4 et 1.21.4, gelées depuis le
+ * 2026-08-31, ont été supprimées avec le package {@code mixin/} et leurs
+ * configs JSON.
  *
- * <p>Conséquence sur une version gelée : le bootstrap Mixin s'arrête
- * proprement, l'agent reste chargé et ne tisse RIEN. Le jeu se lance
- * normalement, simplement sans aucune fonctionnalité de l'agent. C'est
- * volontairement le même chemin qu'une version inconnue, avec un message qui
- * distingue les deux cas.
+ * <p>Le gel ({@code .frozen()}) reste disponible pour suspendre une tranche
+ * sans supprimer sa déclaration : {@link #resolve} l'ignore alors, le bootstrap
+ * Mixin s'arrête proprement, l'agent reste chargé et ne tisse RIEN. Le jeu se
+ * lance normalement, simplement sans aucune fonctionnalité de l'agent — même
+ * chemin qu'une version inconnue, avec un message qui distingue les deux cas.
  */
 public final class VersionProfileRegistry {
 
@@ -53,9 +52,7 @@ public final class VersionProfileRegistry {
     static {
         // Refonte 1.8.9 (2026-09-13, docs/LauncherAgent/v1.8.9/README.md) :
         // tranche déclarative, mixins dans apimixin/v1_8_9 et
-        // MixinHookPointRegistry sous "1.8.9". mixins.launcheragent-1.8.json
-        // et mixin/client/v1_8 restent sur le disque comme référence des
-        // anciens points d'injection, sans être chargés.
+        // MixinHookPointRegistry sous "1.8.9".
         //
         // DÉGELÉE le 2026-09-15 (build v1159), après : liaisons de points
         // d'accès (v1146), Java 25 + agent en --release 25 (2026-09-14),
@@ -67,7 +64,6 @@ public final class VersionProfileRegistry {
             new String[]{ "1.8.*" },
             "1.8.9",
             "1.8.9",
-            null,
             // gl3 depuis le 2026-09-14 : LWJGL 3 ouvre un contexte 3.2 de
             // compatibilité, les shaders #version 150 y tournent. L'état GL
             // est rendu à la 1.8.9 par GlFrameState189 (hub).
@@ -79,9 +75,7 @@ public final class VersionProfileRegistry {
         // pour 1.21.11.
         //
         // DÉGELÉE le 2026-09-11 — deuxième tranche entièrement déclarative
-        // après 26.1.2 : plus de config Mixin en ressource
-        // (mixins.launcheragent.json reste sur le disque, avec les mixins
-        // mixin/client/* qu'elle liste, comme référence), la liste vit dans
+        // après 26.1.2 : plus de config Mixin en ressource, la liste vit dans
         // MixinHookPointRegistry sous "1.21.11". Contrairement à 26.1.2, la
         // version est obfusquée : l'indice Yarn reste indispensable.
         PROFILES.add(new VersionProfile(
@@ -89,62 +83,9 @@ public final class VersionProfileRegistry {
             new String[]{ "1.21.11" },
             "1.21.11",
             "1.21.11",
-            null,
             "blaze3d"));
 
-        // Bracket "B" — 1.13 à 1.16.x : LWJGL3/GLFW comme le pipeline 1.21.11,
-        // mais contexte GL encore en dessous du Core Profile 3.2 imposé depuis
-        // la 1.17, donc dessin immédiat encore possible (voir
-        // MinecraftVersionDetector.supportsFixedFunctionDrawing et
-        // GlobalUiRenderMixin116). Vérifié concrètement seulement pour 1.16.5
-        // au moment de l'écriture — resserré à ce sous-ensemble plutôt que
-        // d'inclure toute la 1.13-1.16 par simple confiance dans le
-        // raisonnement architectural (même risque qu'expliqué ci-dessus pour
-        // la 1.21.x : une version non testée peut échouer silencieusement).
-        PROFILES.add(new VersionProfile(
-            "1_16",
-            new String[]{ "1.16.*" },
-            "1.16.5",
-            "1.16.5",
-            "mixins.launcheragent-1.16.json",
-            // gl3 depuis le 2026-09-15 (ère gl2 supprimée) : le contexte de
-            // compatibilité ouvert par GLFW accepte les shaders #version 150
-            // sur tout pilote OpenGL 3.2+. À revérifier au dégel.
-            "gl3").frozen());
-
-        // Bracket "C" — 1.17 à 1.20.4 : Core Profile OpenGL 3.2 obligatoire
-        // (pipeline fixe supprimé), mais GameRenderer.render(FJZ)V garde la
-        // MÊME signature que le bracket "B" (vérifié via
-        // mappings/yarn-1.20.4-mergedv2.jar) — seul MixinCrosshair1204 diffère
-        // réellement de son équivalent 1.16.5 (InGameHud.renderCrosshair prend
-        // un DrawContext, pas un MatrixStack). Resserré à la version exacte
-        // 1.20.4 pour l'instant, pas encore élargi à toute la 1.17-1.20.4.
-        PROFILES.add(new VersionProfile(
-            "1_20_4",
-            new String[]{ "1.20.4" },
-            "1.20.4",
-            "1.20.4",
-            "mixins.launcheragent-1.20.4.json",
-            "gl3").frozen());
-
-        // Bracket "D" — ~1.21 à 1.21.5 : même profil OpenGL Core que le
-        // bracket "C" (1.20.4), mais GameRenderer.render change de signature —
-        // render(RenderTickCounter, boolean), RenderTickCounter introduit entre
-        // la 1.20.4 et la 1.21 (vérifié via mappings/yarn-1.21.4-mergedv2.jar)
-        // — MÊME signature que le bracket 1.21.11, mais celui-ci utilise des
-        // noms obfusqués figés en dur (technique fragile propre à un seul jar
-        // de mappings) plutôt que la résolution 100% dynamique utilisée ici.
-        // Resserré à 1.21.4 (seule version vérifiée par javap/mappings au
-        // moment de l'écriture), pas encore élargi à toute la 1.21-1.21.5.
-        PROFILES.add(new VersionProfile(
-            "1_21_4",
-            new String[]{ "1.21.4" },
-            "1.21.4",
-            "1.21.4",
-            "mixins.launcheragent-1.21.4.json",
-            "gl3").frozen());
-
-        // Bracket "E" — 26.1.2 : MC N'EST PLUS OBFUSQUÉ à partir de la ligne
+        // 26.1.2 : MC N'EST PLUS OBFUSQUÉ à partir de la ligne
         // 26.1.x (Mojang a arrêté de publier des mappings d'obfuscation,
         // confirmé absent à la fois du manifeste officiel ET de Yarn/Quilt/
         // intermediary Fabric — voir FabricMC/fabric-loom#1585 et le guide de
@@ -162,7 +103,6 @@ public final class VersionProfileRegistry {
             new String[]{ "26.1.2" },
             "26.1.2",
             null,
-            null,
             "blaze3d"));
     }
 
@@ -179,7 +119,7 @@ public final class VersionProfileRegistry {
      * <p>Le message distingue les deux cas, sinon « version non supportée » sur
      * une 1.8.9 qui marchait la veille serait incompréhensible.
      *
-     * <p>Correspondance EXACTE d'abord, familles ({@code "1.16.*"}) seulement
+     * <p>Correspondance EXACTE d'abord, familles ({@code "1.8.*"}) seulement
      * ensuite : un profil resserré sur une version précise doit toujours
      * gagner sur un profil de famille qui l'engloberait.
      */

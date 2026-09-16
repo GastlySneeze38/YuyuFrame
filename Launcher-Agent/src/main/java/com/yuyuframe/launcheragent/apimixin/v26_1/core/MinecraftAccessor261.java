@@ -21,10 +21,9 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * accès (audit ROADMAP-agent.md §3.3 — "presque plus de réflexion en
  * 26.1.2, tout passe par apimixin").
  *
- * Non branché pour l'instant (pas dans mixins.launcheragent-26.1.json) —
- * voir {@code core.GlobalUiRenderBridge261} (même dossier) : équivalent
- * apimixin de l'ancien pont, construit en parallèle, le pont mixin/ historique
- * reste actif et inchangé tant que le branchement final n'est pas décidé.
+ * Non déclaré dans {@code MixinHookPointRegistry} pour l'instant — voir
+ * {@code core.GlobalUiRenderBridge261} (même dossier), équivalent apimixin de
+ * l'ancien pont du package {@code mixin/} (supprimé le 2026-09-16).
  *
  * Noms de champs vérifiés via javap sur le jar client 26.1.2 réel (voir
  * javadoc historique de {@code mixin.client.v26_1.GlobalUiRenderBridge261}) :

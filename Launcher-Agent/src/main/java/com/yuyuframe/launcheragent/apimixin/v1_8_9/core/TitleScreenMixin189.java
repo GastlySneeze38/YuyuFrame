@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Écran-titre atteint sur 1.8.9 — pendant de {@code TitleScreenMixin1211},
- * portage apimixin de {@code mixin.client.v1_8.TitleScreenMixin189} (conservé
- * comme référence).
+ * portage apimixin de {@code mixin.client.v1_8.TitleScreenMixin189} (supprimé
+ * le 2026-09-16, historique dans git).
  *
  * <p>{@code init()V} n'est pas redéclarée par {@code TitleScreen} dans Yarn
  * legacy : l'entrée de refmap replie sur {@code Screen} (officiel {@code axu.b()V}).

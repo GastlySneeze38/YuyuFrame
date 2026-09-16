@@ -23,8 +23,11 @@ package com.yuyuframe.launcheragent.apimixin.version;
  *
  * Ne reste donc ici que ce qui se décide AVANT tout chargement Mixin et qui
  * n'a aucun rapport avec les points d'accroche : quels mappings charger, et
- * l'éventuelle config Mixin héritée d'un bracket pas encore migré vers la
- * table déclarative.
+ * quelle ère de rendu sert la version.
+ *
+ * <p>Plus de config Mixin héritée (2026-09-16) : le package {@code mixin/} et
+ * ses JSON par version ont été supprimés avec l'abandon des versions autres
+ * que 1.8.9 et 1.21.11+. Toutes les tranches sont déclaratives.
  */
 public final class VersionProfile {
 
@@ -75,18 +78,6 @@ public final class VersionProfile {
     public final String renderEra;
 
     /**
-     * Config Mixin héritée du système pré-déclaratif ({@code
-     * mixins.launcheragent-1.8.json} et consorts, package {@code mixin/}),
-     * {@code null} pour une tranche entièrement déclarative.
-     *
-     * <p>N'existe que pour les tranches GELÉES, pas encore migrées vers la
-     * table. À supprimer avec le JSON correspondant au moment où l'une d'elles
-     * sera reprise — sa migration consiste précisément à basculer sa liste de
-     * mixins dans {@code MixinHookPointRegistry}.
-     */
-    public final String legacyMixinConfigResource;
-
-    /**
      * Vrai = tranche DÉCLARÉE mais pas active : {@link VersionProfileRegistry#resolve}
      * l'ignore, donc le bootstrap Mixin s'arrête proprement sur cette version
      * (message clair, agent qui continue de tourner, aucun mixin appliqué).
@@ -100,18 +91,17 @@ public final class VersionProfile {
     public final boolean frozen;
 
     public VersionProfile(String key, String[] versions, String hookTableVersion,
-                          String yarnJarNameHint, String legacyMixinConfigResource, String renderEra) {
-        this(key, versions, hookTableVersion, yarnJarNameHint, legacyMixinConfigResource, renderEra, false);
+                          String yarnJarNameHint, String renderEra) {
+        this(key, versions, hookTableVersion, yarnJarNameHint, renderEra, false);
     }
 
     public VersionProfile(String key, String[] versions, String hookTableVersion,
-                          String yarnJarNameHint, String legacyMixinConfigResource, String renderEra,
+                          String yarnJarNameHint, String renderEra,
                           boolean frozen) {
         this.key = key;
         this.versions = versions;
         this.hookTableVersion = hookTableVersion;
         this.yarnJarNameHint = yarnJarNameHint;
-        this.legacyMixinConfigResource = legacyMixinConfigResource;
         this.renderEra = renderEra;
         this.frozen = frozen;
     }
@@ -119,7 +109,7 @@ public final class VersionProfile {
     /** Même tranche, gelée — voir {@link #frozen}. Fluent, pour que la déclaration reste lisible telle quelle. */
     public VersionProfile frozen() {
         return new VersionProfile(key, versions, hookTableVersion, yarnJarNameHint,
-            legacyMixinConfigResource, renderEra, true);
+            renderEra, true);
     }
 
     /**

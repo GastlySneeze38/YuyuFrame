@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Équivalent apimixin de l'ancien {@code mixin.client.v26_1.CameraFreelookMixin261}
- * (voir ce fichier pour l'historique complet des 3 bugs trouvés — ordre
+ * (supprimé le 2026-09-16 ; voir l'historique git pour l'historique complet des 3 bugs trouvés — ordre
  * yRot/xRot, orbite sur soi-même, clipping mur — le mixin/ historique reste
  * actif et inchangé, ceci est construit en parallèle, non branché).
  *

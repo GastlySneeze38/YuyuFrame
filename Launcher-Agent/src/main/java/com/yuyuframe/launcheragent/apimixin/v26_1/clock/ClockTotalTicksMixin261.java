@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Migration de l'ancien {@code mixin.client.v26_1.ClientClockManagerWorldTimeMixin261}
- * (voir ce fichier pour l'historique complet — pourquoi {@code
+ * (supprimé le 2026-09-16 ; voir l'historique git pour l'historique complet — pourquoi {@code
  * getTotalTicks(Holder)} est LA source unique dont dérive tout le rendu
  * temporel) vers {@link HookPoint#CLOCK_TOTAL_TICKS}. Contrairement aux
  * autres migrations de cette session, ce hook a besoin de REMPLACER une

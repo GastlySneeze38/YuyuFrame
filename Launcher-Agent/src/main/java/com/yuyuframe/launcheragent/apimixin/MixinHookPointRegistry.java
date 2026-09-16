@@ -436,8 +436,8 @@ public final class MixinHookPointRegistry {
         gate("1.8.9", "v1_8_9.clock.ClockTotalTicksMixin189", HookPoint.CLOCK_TOTAL_TICKS);
 
         // ── Animations et contrôles « façon 1.7 » (2026-09-15) ─────────────
-        // Remplacent les mixins historiques de mixin/client/v1_8 (restés sur le
-        // disque) : la logique est dans les modules, ces mixins dispatchent.
+        // Remplacent les mixins historiques de mixin/client/v1_8 (supprimés le
+        // 2026-09-16) : la logique est dans les modules, ces mixins dispatchent.
         gate("1.8.9", "v1_8_9.render.HeldItemTransformMixin189", HookPoint.HELD_ITEM_TRANSFORM);
         gate("1.8.9", "v1_8_9.render.HeldItemSwingProgressMixin189", HookPoint.HELD_ITEM_SWING_PROGRESS);
         gate("1.8.9", "v1_8_9.entity.SwingDurationMixin189", HookPoint.SWING_DURATION);

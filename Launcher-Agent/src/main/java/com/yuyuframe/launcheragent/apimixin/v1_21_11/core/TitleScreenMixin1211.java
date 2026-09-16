@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Portage apimixin de {@code mixin.client.TitleScreenMixin} (1.21.11, conservé
- * tel quel comme référence) — même logique que {@code TitleScreenMixin261}.
+ * Portage apimixin de {@code mixin.client.TitleScreenMixin} (1.21.11, supprimé
+ * le 2026-09-16, historique dans git) — même logique que {@code TitleScreenMixin261}.
  *
  * <p>Seule différence avec l'original : le signal au launcher passe par
  * {@link AgentBridge} au lieu d'importer {@code runtime.ipc.ReadyEventSignal}

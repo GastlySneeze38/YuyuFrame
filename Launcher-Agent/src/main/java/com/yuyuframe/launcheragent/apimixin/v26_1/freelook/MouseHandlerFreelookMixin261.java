@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Équivalent apimixin de l'ancien {@code mixin.client.v26_1.MouseHandlerFreelookMixin261}
- * (voir ce fichier pour l'historique complet — notamment le BUG "2 tours en
+ * (supprimé le 2026-09-16 ; voir l'historique git pour l'historique complet — notamment le BUG "2 tours en
  * freelook contre un demi-tour en F5", causé par une reconstruction MANUELLE
  * de la courbe de sensibilité vanilla ; le mixin/ historique reste actif et
  * inchangé, ceci est construit en parallèle, non branché).

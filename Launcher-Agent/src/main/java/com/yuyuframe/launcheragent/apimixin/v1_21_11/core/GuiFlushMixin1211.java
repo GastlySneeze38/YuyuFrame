@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Vide la file d'icônes d'item vanilla en attente dans l'état de GUI VIVANT,
  * en tête de {@code GuiRenderer.render(GpuBufferSlice)} — portage apimixin de
- * {@code mixin.client.GuiFlushMixin} (voir ce fichier pour le pourquoi de ce
+ * {@code mixin.client.GuiFlushMixin} (supprimé le 2026-09-16 ; voir l'historique git pour le pourquoi de ce
  * point d'accroche plutôt que {@code GuiRenderState.clear()}).
  *
  * <p>Filet de sécurité, comme {@code GuiFlushMixin261} l'est devenu : le vrai

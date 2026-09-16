@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Migration de l'ancien {@code mixin.client.v26_1.GuiFlushMixin261} (voir ce
- * fichier pour l'historique complet — piège classloader Knot, timing HEAD
+ * Migration de l'ancien {@code mixin.client.v26_1.GuiFlushMixin261} (supprimé
+ * le 2026-09-16 ; voir l'historique git pour l'historique complet — piège classloader Knot, timing HEAD
  * vs après {@code Lighting.setupFor}) — logique IDENTIQUE, package apimixin
  * uniquement. Reste "hub" (comme {@link GlobalUiRenderMixin261}), pas de
  * dispatch {@code VanillaHookRegistry}.

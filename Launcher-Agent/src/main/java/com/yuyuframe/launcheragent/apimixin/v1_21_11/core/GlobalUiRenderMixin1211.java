@@ -11,8 +11,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Hub LOGIQUE du moteur UI sur 1.21.11 — input, tick des modules, ouverture du
- * menu. Portage apimixin de {@code mixin.client.GlobalUiRenderMixin} (voir ce
- * fichier pour l'historique : pourquoi la logique est ici et le dessin sur
+ * menu. Portage apimixin de {@code mixin.client.GlobalUiRenderMixin} (supprimé
+ * le 2026-09-16 ; voir l'historique git : pourquoi la logique est ici et le dessin sur
  * {@code Framebuffer.blitToScreen}, pourquoi {@code MinecraftClient} ne peut
  * pas être ciblé dans les gros modpacks).
  *

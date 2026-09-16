@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Réconciliation avec l'ancien {@code mixin.client.v26_1.ChatListenerMixin261}
- * (voir ce fichier pour l'historique complet — notamment pourquoi TAIL, pas
+ * (supprimé le 2026-09-16 ; voir l'historique git pour l'historique complet — notamment pourquoi TAIL, pas
  * HEAD : {@code handleSystemMessage}/{@code handlePlayerChatMessage} ajoutent
  * eux-mêmes le message à {@code ChatComponent} de façon synchrone DANS leur
  * propre corps — en TAIL seulement le message est déjà présent en tête de

@@ -130,11 +130,6 @@ public final class IsolatedBootstrap {
         // qu'une 1.8.9 ne charge jamais. Toujours avant bootstrapMixin(), qui
         // est le premier à lire le refmap.
 
-        // Config Mixin héritée du système pré-déclaratif — NULLABLE : une
-        // tranche entièrement basculée vers apimixin/ (voir
-        // VersionProfileRegistry, 26.1.2) n'en a plus.
-        String mixinConfig = profile.legacyMixinConfigResource;
-
         // Config apimixin GÉNÉRÉE depuis la table déclarative
         // (MixinHookPointRegistry) — plus aucun JSON par version en ressource,
         // plus de filtrage par regex. Fait ICI, avant tout enregistrement,
@@ -142,19 +137,15 @@ public final class IsolatedBootstrap {
         String apiMixinConfig = publishApiMixinConfig(inst, isolated, profile);
 
         Set<String> activeMixins = new LinkedHashSet<>();
-        if (mixinConfig != null) activeMixins.addAll(configMixinClasses(mixinConfig));
         if (apiMixinConfig != null) activeMixins.addAll(configMixinClasses(apiMixinConfig));
         writeRefmapFile(inst, isolated, activeMixins);
 
         Set<String> mixinTargets = new LinkedHashSet<>();
-        if (mixinConfig != null) {
-            mixinTargets.addAll(discoverMixinTargets(mixinConfig));
-        }
         if (apiMixinConfig != null) {
             mixinTargets.addAll(discoverMixinTargets(apiMixinConfig));
         }
         if (!isolated) imposeMixinService();
-        bootstrapMixin(inst, mixinTargets, mixinConfig, apiMixinConfig);
+        bootstrapMixin(inst, mixinTargets, apiMixinConfig);
         scheduleDelayedRetransform(inst, mixinTargets);
     }
 
@@ -378,7 +369,7 @@ public final class IsolatedBootstrap {
     }
 
     /** @return true si le bootstrap a réussi. */
-    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String mixinConfig, String apiMixinConfig) {
+    private static boolean bootstrapMixin(Instrumentation inst, Set<String> mixinTargets, String apiMixinConfig) {
         try {
             MixinBootstrap.init();
 
@@ -429,11 +420,6 @@ public final class IsolatedBootstrap {
 
             initMixinExtras();
 
-            if (mixinConfig != null) {
-                Mixins.addConfiguration(mixinConfig, (IMixinConfigSource) null);
-                LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + mixinConfig);
-            }
-
             if (apiMixinConfig != null) {
                 Mixins.addConfiguration(apiMixinConfig, (IMixinConfigSource) null);
                 LauncherLog.agent(1, "[LauncherAgent] Config Mixin enregistrée : " + apiMixinConfig);
@@ -453,8 +439,7 @@ public final class IsolatedBootstrap {
 
             retransformLoadedTargets(inst, mixinTargets);
             LauncherLog.agent(3, "[LauncherAgent] Composant Mixin initialisé avec succès ("
-                + (mixinConfig != null ? mixinConfig : "(aucune config legacy)")
-                + (apiMixinConfig != null ? " + " + apiMixinConfig : "")
+                + (apiMixinConfig != null ? apiMixinConfig : "(aucune config)")
                 + ", " + mixinTargets.size() + " cible(s) : " + mixinTargets + ")");
             return true;
         } catch (Throwable e) {

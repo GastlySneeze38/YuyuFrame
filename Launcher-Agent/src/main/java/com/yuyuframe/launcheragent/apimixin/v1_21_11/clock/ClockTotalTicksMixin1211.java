@@ -19,7 +19,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * le rendu du ciel ». En 26.1.2 elle vient de
  * {@code ClientClockManager.getTotalTicks(Holder)} ; cette version n'a pas ce
  * système d'horloge, et la source commune y est {@code World.getTimeOfDay()}
- * — voir {@code mixin.client.WorldTimeMixin}, conservé, pour le raisonnement
+ * — voir {@code mixin.client.WorldTimeMixin} (supprimé le 2026-09-16,
+ * historique dans git) pour le raisonnement
  * complet (désassemblage du vrai jar, et confirmation VISUELLE en jeu sur
  * cette version, pas seulement « mixin appliqué »).
  *

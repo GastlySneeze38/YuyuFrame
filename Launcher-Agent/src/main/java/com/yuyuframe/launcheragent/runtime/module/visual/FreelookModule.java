@@ -335,7 +335,7 @@ public final class FreelookModule extends LauncherModule {
      * reproduisait la courbe de sensibilité vanilla (sens*0.6+0.2, cubée,
      * ×8) mais s'arrêtait LÀ, sans jamais appliquer ce facteur final —
      * environ 1/0.15 ≈ 6.7× trop de rotation, cohérent avec la mesure
-     * utilisateur. Voir {@link com.yuyuframe.launcheragent.mixin.client.v26_1.MouseHandlerFreelookMixin261}
+     * utilisateur. Voir {@link com.yuyuframe.launcheragent.apimixin.v26_1.freelook.MouseHandlerFreelookMixin261}
      * pour où ce facteur est désormais appliqué.
      */
     public static double resolveSensitivity(double gameSensitivity) {

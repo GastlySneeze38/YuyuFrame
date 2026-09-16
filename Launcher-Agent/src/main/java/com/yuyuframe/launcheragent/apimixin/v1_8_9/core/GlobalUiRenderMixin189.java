@@ -15,7 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Hub du moteur UI sur 1.8.9 — logique ET dessin, portage apimixin de
- * {@code mixin.client.v1_8.GlobalUiRenderMixin189} (conservé comme référence).
+ * {@code mixin.client.v1_8.GlobalUiRenderMixin189} (supprimé le 2026-09-16,
+ * historique dans git).
  *
  * <p>Même point d'accroche que l'ancien : {@code GameRenderer.render(FJ)V},
  * TAIL. En ère {@code gl3} (depuis le 2026-09-14, {@code gl2} avant) il n'y a

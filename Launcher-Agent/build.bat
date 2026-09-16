@@ -455,7 +455,7 @@ if not "!JAVAC_RC!"=="0" (
 )
 echo [Build 1.8.9] Compilation OK
 
-:: --- Copier les ressources (mixins.launcheragent.json + META-INF) ------------
+:: --- Copier les ressources (template Mixin apimixin, lang, textures, META-INF) -
 
 echo [Build] Copie des ressources...
 xcopy /s /e /y /q "%RES%\" "%OUT_MAIN%\" >nul
