@@ -776,7 +776,7 @@ public final class IsolatedBootstrap {
                 }
             }
 
-            String json = buildApiMixinConfig(kept);
+            String json = buildApiMixinConfig(kept, isolated);
             if (json == null) return null;
 
             if (!publishGeneratedResource(inst, isolated, APIMIXIN_GENERATED,
@@ -809,7 +809,7 @@ public final class IsolatedBootstrap {
      * @return le JSON complet, ou {@code null} si le template est introuvable
      *         ou ne contient pas le marqueur attendu
      */
-    private static String buildApiMixinConfig(List<String> mixinEntries) throws java.io.IOException {
+    private static String buildApiMixinConfig(List<String> mixinEntries, boolean isolated) throws java.io.IOException {
         ClassLoader agentCL = IsolatedBootstrap.class.getClassLoader();
         String template;
         try (java.io.InputStream is = agentCL.getResourceAsStream(APIMIXIN_TEMPLATE)) {
@@ -834,7 +834,27 @@ public final class IsolatedBootstrap {
             sb.append('\n');
         }
         sb.append("  ]");
-        return template.replace(marker, sb.toString());
+        String json = template.replace(marker, sb.toString());
+        return isolated ? withoutPlugin(json) : json;
+    }
+
+    /**
+     * Retire la déclaration du plugin de config (2026-09-16) — seulement quand
+     * Mixin tourne dans le classloader isolé (Fabric et autres loaders).
+     *
+     * <p>Là, le plugin ne s'est JAMAIS chargé : Mixin le résout depuis le
+     * classloader du jeu, où il implémente une autre copie de
+     * {@code IMixinConfigPlugin} que la sienne → {@code ClassCastException},
+     * attrapée par Mixin, plugin laissé à {@code null} (voir
+     * {@code LauncherMixinService.findClass}). L'erreur était invisible jusqu'à
+     * la réparation de la capture console, puis s'affichait en rouge à chaque
+     * lancement sans rien signaler de réel. Ne plus le déclarer donne
+     * exactement le même comportement, sans l'erreur : sous ces loaders, sa
+     * seule responsabilité critique (méthodes LWJGL 2 recréées) ne concerne
+     * pas la version, et le tri des mixins est déjà fait ici.
+     */
+    private static String withoutPlugin(String json) {
+        return json.replaceFirst("\\s*\"plugin\"\\s*:\\s*\"[^\"]*\"\\s*,", "");
     }
 
     /**
