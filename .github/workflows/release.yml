@@ -19,10 +19,12 @@ jobs:
         with:
           node-version: 20
 
+      # JDK 25 obligatoire : l'agent est compilé en --release 25 depuis le
+      # 2026-09-14 (1.8.9 sur Java 25), build.bat refuse tout autre javac.
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '25'
 
       - name: Install frontend deps
         working-directory: Frontend
