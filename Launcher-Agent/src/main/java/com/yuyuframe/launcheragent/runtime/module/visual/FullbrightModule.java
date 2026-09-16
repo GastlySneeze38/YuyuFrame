@@ -1,6 +1,5 @@
 package com.yuyuframe.launcheragent.runtime.module.visual;
 
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.LauncherModule;
 
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
@@ -21,8 +20,8 @@ import com.yuyuframe.launcheragent.runtime.game.GameOptions;
  * {@code OptionInstance<Double>}, vérifié javap). Écrit DIRECTEMENT le champ
  * {@code .value} via l'accessor, jamais {@code OptionInstance.set()} — même
  * raison que {@code ZoomModule} (validation vanilla qui clampe la valeur,
- * voir {@link McReflect#simpleOptionSetValue} pour l'historique complet de
- * ce piège). Repli réflexion multi-bracket sinon, comportement inchangé.
+ * {@code McReflect.simpleOptionSetValue}, supprimé le 2026-09-16, documentait
+ * l'historique complet de ce piège — voir git).
  */
 public final class FullbrightModule extends LauncherModule {
 
@@ -90,7 +89,7 @@ public final class FullbrightModule extends LauncherModule {
      * BUG TROUVÉ #2 (1.20.4, même refonte "SimpleOption" que ZoomModule.fov) :
      * {@code gamma} n'est plus un float/double DU TOUT ici — objet {@code
      * SimpleOption} FINAL (vérifié : {@code f Levl; cb field_1840 gamma}) —
-     * voir {@link McReflect#simpleOptionGetValue}/{@link McReflect#simpleOptionSetValue}.
+     * lu et écrit via {@link GameOptions}.
      */
     private float readGamma(Object handle, Object options) throws Exception {
         return (float) GameOptions.value(handle, Float.NaN);

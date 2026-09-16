@@ -46,29 +46,6 @@ public enum VanillaFlushHost {
     GUI_STATE,
 
     /**
-     * {@code DrawContext} vivant du HUD — 1.21.4, {@code HudItemFlushMixin1214},
-     * en TAIL de {@code InGameHud.render(...)}. C'est l'instance que vanilla
-     * utilise lui-même pour tout le HUD de la frame ; y ajouter nos commandes
-     * évite tous les contournements d'état GL qu'une instance reconstruite
-     * imposait.
-     */
-    DRAW_CONTEXT,
-
-    /**
-     * {@code DrawContext} vivant d'un écran de conteneur — 1.21.4, en TAIL de
-     * {@code HandledScreen.drawForeground(...)}, seul point où un fond de
-     * fenêtre passe PAR-DESSUS l'écran d'inventaire ouvert.
-     *
-     * <p>⚠️ Aucun point d'accroche ne l'émet depuis le 2026-08-31 : son Mixin a
-     * été supprimé avec le dernier producteur de la file. La capacité est
-     * conservée (elle est réelle et ce bracket n'a pas d'architecture
-     * différée) ; la rebrancher demande de recréter ce Mixin, en visant
-     * {@code HandledScreen} et surtout PAS la classe {@code Screen} partagée
-     * par tous les écrans, nos écrans custom compris.
-     */
-    DRAW_CONTEXT_CONTAINER,
-
-    /**
      * {@code GameRenderer} vivant de la 1.8.9 — {@code GlobalUiRenderMixin189},
      * juste APRÈS le dessin de l'agent en fin de {@code GameRenderer.render}.
      *

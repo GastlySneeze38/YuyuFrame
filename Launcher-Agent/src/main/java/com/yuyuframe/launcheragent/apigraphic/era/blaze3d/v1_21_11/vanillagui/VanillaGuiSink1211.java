@@ -501,7 +501,7 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
             LauncherLog.info("[VanillaGuiSink1211] hôte GUI_RENDERER non servi sur 1.21.11"
                 + " — les icônes d'objet sont vidées par GUI_STATE, dans la passe du HUD");
         }
-        return null; // GAME_RENDERER : 26.1.2 seulement ; DRAW_CONTEXT* : ère gl3
+        return null; // GAME_RENDERER : 26.1.2 seulement ; LEGACY_HUD : ère gl3
     }
 
     @Override

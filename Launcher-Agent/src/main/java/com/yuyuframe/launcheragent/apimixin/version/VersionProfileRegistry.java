@@ -227,11 +227,29 @@ public final class VersionProfileRegistry {
 
     /** Détection historique, conservée uniquement comme repli — voir {@link #activeRenderEra()}. */
     private static String probeRenderEra(String mcVersion) {
-        if (com.yuyuframe.launcheragent.apimixin.mapping.McReflect
-                .rawClass("com.mojang.blaze3d.systems.GpuDevice") != null) {
-            return "blaze3d";
+        return classPresent("com.mojang.blaze3d.systems.GpuDevice") ? "blaze3d" : "gl3";
+    }
+
+    /**
+     * Présence d'une classe non obfusquée, sans l'initialiser : classloader de
+     * contexte d'abord (celui du jeu), puis celui de cette classe.
+     */
+    private static boolean classPresent(String binaryName) {
+        ClassLoader ctx = Thread.currentThread().getContextClassLoader();
+        if (ctx != null) {
+            try {
+                Class.forName(binaryName, false, ctx);
+                return true;
+            } catch (Throwable ignored) {
+                // repli ci-dessous
+            }
         }
-        return "gl3";
+        try {
+            Class.forName(binaryName, false, VersionProfileRegistry.class.getClassLoader());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private static VersionProfile findExact(String mcVersion) {

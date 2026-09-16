@@ -790,16 +790,6 @@ public final class UiRenderer {
         backend().vanillaGuiBlit(texturePath, x, y, w, h, u, v, texW, texH, vpWidth, vpHeight);
     }
 
-    /** Voir {@link VanillaFlushHost#DRAW_CONTEXT_CONTAINER} — aucun point d'accroche ne l'appelle aujourd'hui. */
-    public void flushPendingImmediateGuiBlits(Object realDrawContext) {
-        backend().flushVanillaFrame(VanillaFlushHost.DRAW_CONTEXT_CONTAINER, realDrawContext);
-    }
-
-    /** Voir {@link VanillaFlushHost#DRAW_CONTEXT}. */
-    public void flushPendingImmediateItemIcons(Object realDrawContext) {
-        backend().flushVanillaFrame(VanillaFlushHost.DRAW_CONTEXT, realDrawContext);
-    }
-
     /** Voir {@link VanillaFlushHost#GAME_RENDERER}. */
     public static void flushPendingModernItemIcons(Object gameRenderer) {
         UiBackendRegistry.get().flushVanillaFrame(VanillaFlushHost.GAME_RENDERER, gameRenderer);

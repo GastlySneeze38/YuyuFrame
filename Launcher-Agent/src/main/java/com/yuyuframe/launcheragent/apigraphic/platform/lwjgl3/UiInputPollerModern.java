@@ -280,19 +280,12 @@ public final class UiInputPollerModern extends UiInputPoller {
     /**
      * {@code true} si un écran vanilla (chat, inventaire, renommage...) OU
      * un de nos écrans custom ({@code UiScreenBase}, ex: le menu principal)
-     * est actuellement affiché — {@code McReflect.field} avec repli nom réel
-     * (même motif que partout ailleurs dans ce projet) : nom Yarn du champ
-     * "currentScreen", renommé "screen" sur 26.1+ (voir MinecraftAccessor261
-     * pour la même confirmation déjà établie côté apimixin).
+     * est actuellement affiché — point d'accès {@code CLIENT_SCREEN}, lié sur
+     * les trois versions supportées (lu par réflexion jusqu'au 2026-09-16).
      */
     private static boolean isVanillaScreenOpen() {
         try {
-            Object mc = com.yuyuframe.launcheragent.apimixin.mapping.McReflect.minecraftClient();
-            if (mc == null) return false;
-            java.lang.reflect.Field f = com.yuyuframe.launcheragent.apimixin.mapping.McReflect.field(
-                mc.getClass(), "net/minecraft/client/MinecraftClient", "currentScreen", "screen");
-            if (f == null) return false;
-            return f.get(mc) != null;
+            return com.yuyuframe.launcheragent.runtime.game.ClientData.screenObject() != null;
         } catch (Throwable t) {
             return false;
         }

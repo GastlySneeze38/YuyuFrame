@@ -108,20 +108,11 @@ public final class Gl3Backend implements UiBackend {
         return true;
     }
 
-    /**
-     * Hôtes de CETTE ère : les deux {@code DrawContext} vivants (HUD, écran de
-     * conteneur) des versions 1.17 – 1.21.x, et le HUD en pipeline fixe de la
-     * 1.8.9 ({@code LEGACY_HUD}).
-     */
+    /** Seul hôte de CETTE ère : le hub en pipeline fixe de la 1.8.9 ({@code LEGACY_HUD}). */
     @Override
     public void flushVanillaFrame(VanillaFlushHost host, Object hostObject) {
         if (hostObject == null) return;
-        switch (host) {
-            case DRAW_CONTEXT: vanillaItems.flushItemIcons(hostObject); break;
-            case DRAW_CONTEXT_CONTAINER: vanillaItems.flushGuiBlits(hostObject); break;
-            case LEGACY_HUD: vanillaItems.flushLegacyHud(); break;
-            default: break;
-        }
+        if (host == VanillaFlushHost.LEGACY_HUD) vanillaItems.flushLegacyHud();
     }
 
     // ── Rects ─────────────────────────────────────────────────────────────

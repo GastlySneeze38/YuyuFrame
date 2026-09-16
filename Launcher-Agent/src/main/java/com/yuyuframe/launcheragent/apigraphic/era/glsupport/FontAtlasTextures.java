@@ -1,11 +1,8 @@
 package com.yuyuframe.launcheragent.apigraphic.era.glsupport;
 
-import com.yuyuframe.launcheragent.apimixin.mapping.MappingsRegistry;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -16,18 +13,18 @@ import java.util.Map;
  *
  * <h2>Pourquoi ici et pas dans une ère</h2>
  *
- * Ce bloc ne dépend d'AUCUNE des deux ères GL : il ne connaît que
- * {@link GlBridge}, plus la résolution réflexive de l'API de texture du jeu
- * ({@code NativeImage}/{@code TextureManager}). C'est du support GL partagé,
- * comme {@code GlBridge} lui-même — d'où {@code era/glsupport/}.
+ * Ce bloc ne dépend d'aucune ère : il ne connaît que {@link GlBridge}. C'est
+ * du support GL partagé, comme {@code GlBridge} lui-même — d'où
+ * {@code era/glsupport/}.
  *
- * <h2>Deux chemins, un repli</h2>
+ * <h2>Un seul chemin</h2>
  *
- * L'upload passe par {@code NativeImage}/{@code TextureManager} du jeu quand
- * l'API est résolvable (le texture manager connaît alors notre atlas et le
- * gère comme les siens), et retombe sur un {@code glTexImage2D} brut sinon.
- * Ce repli n'est pas décoratif : il est le seul chemin quand la résolution
- * réflexive échoue, et il a servi.
+ * Upload par {@code glTexImage2D} direct. Le chemin par
+ * {@code NativeImage}/{@code TextureManager} du jeu, résolu par réflexion, a
+ * été supprimé le 2026-09-16 : il ne servait qu'aux versions 1.17 – 1.21.x en
+ * ère gl3, abandonnées. La 1.8.9 (seule version gl3 restante) n'a pas
+ * {@code NativeImage} et passait déjà par l'upload direct ; les versions
+ * Blaze3D n'utilisent pas cette classe.
  *
  * <p>Le cache est par {@link UiFont} : une valeur {@code -1} mémorisée signifie
  * « échec déjà constaté », pour ne pas réessayer l'upload à chaque frame.
@@ -46,24 +43,11 @@ public final class FontAtlasTextures {
         Integer cached = fontTextures.get(font);
         if (cached != null) return cached;
 
-        ensureNativeTextureApiResolved();
-        if (nativeTextureApiAvailable) {
-            try {
-                int texId = createFontTextureViaNativeImage(font);
-                syncAfterFontUpload(texId);
-                fontTextures.put(font, texId);
-                LauncherLog.ui(1, "[UiRenderer] atlas police uploadé via NativeImage/TextureManager, texId=" + texId);
-                return texId;
-            } catch (Throwable t) {
-                LauncherLog.err("[UiRenderer] createFontTextureViaNativeImage a échoué, repli sur glTexImage2D brut : " + t);
-                // repli ci-dessous
-            }
-        }
         try {
             int texId = createFontTextureRaw(font);
             syncAfterFontUpload(texId);
             fontTextures.put(font, texId);
-            LauncherLog.ui(1, "[UiRenderer] atlas police uploadé (repli brut), texId=" + texId);
+            LauncherLog.ui(1, "[UiRenderer] atlas police uploadé, texId=" + texId);
             return texId;
         } catch (Throwable t) {
             LauncherLog.err("[UiRenderer] ensureFontTexture: " + t);
@@ -102,205 +86,7 @@ public final class FontAtlasTextures {
         }
     }
 
-    private static Class<?> nativeImageClass, nativeImageBackedTextureClass, textureManagerClass, abstractTextureClass, identifierClass;
-    private static Object nativeImageFormatRgba;
-    private static java.lang.reflect.Constructor<?> nativeImageCtor, nativeImageBackedTextureCtor;
-    private static boolean nativeImageBackedTextureNeedsLabel;
-    private static java.lang.reflect.Field nativeImagePointerField;
-    private static Method nativeImageSetColor, nativeImageCloseMethod, textureUploadMethod, textureGetGlIdMethod,
-        textureBindTextureMethod, textureManagerRegisterTextureMethod, identifierOfMethod, mcGetTextureManagerMethod;
-    private static boolean nativeTextureApiResolveAttempted, nativeTextureApiAvailable, bulkCopyAvailable;
-    private static int fontTextureCounter;
-
-    /**
-     * BUG TROUVÉ (1.21.4, crash natif confirmé par bissection — voir
-     * historique de session) : créer notre PROPRE texture GL brute
-     * (glGenTextures/glTexImage2D/glGenerateMipmap/glTexParameteri via
-     * réflexion) pour l'atlas de police plantait le process de façon
-     * imprévisible (parfois REGULAR, parfois BOLD, jamais un point de code
-     * fixe) — le déplacement de l'ordre de création n'a fait que déplacer le
-     * crash, pas le résoudre. Recherche sur les mods Fabric open-source
-     * confirmée : AUCUN mod sérieux ne crée de texture dynamique en GL brut
-     * — tous passent par {@code NativeImage} + {@code
-     * NativeImageBackedTexture} + {@code TextureManager.registerTexture()},
-     * le chemin de création de texture SUIVI par le système de gestion
-     * d'état interne de Minecraft ({@code GlStateManager}/{@code
-     * RenderSystem}). Notre ancien code contournait entièrement ce suivi —
-     * hypothèse retenue : ça désynchronisait l'état GL que le rendu vanilla
-     * (qui tourne dans la même frame) suppose cohérent, plantage
-     * imprévisible selon ce qui se dessine à côté. Résolu dynamiquement
-     * (aucune classe Minecraft compilée en dur) ; repli sur l'ancien chemin
-     * brut UNIQUEMENT si cette résolution échoue entièrement (ex: signature
-     * qui aurait changé sur une future version).
-     */
-    private void ensureNativeTextureApiResolved() {
-        if (nativeTextureApiResolveAttempted) return;
-        nativeTextureApiResolveAttempted = true;
-        try {
-            nativeImageClass = McReflect.yarnClass("net/minecraft/client/texture/NativeImage");
-            nativeImageBackedTextureClass = McReflect.yarnClass("net/minecraft/client/texture/NativeImageBackedTexture");
-            textureManagerClass = McReflect.yarnClass("net/minecraft/client/texture/TextureManager");
-            abstractTextureClass = McReflect.yarnClass("net/minecraft/client/texture/AbstractTexture");
-            identifierClass = McReflect.yarnClass("net/minecraft/util/Identifier");
-            Class<?> formatClass = McReflect.yarnClass("net/minecraft/client/texture/NativeImage$Format");
-            if (nativeImageClass == null || nativeImageBackedTextureClass == null || textureManagerClass == null
-                    || abstractTextureClass == null || identifierClass == null || formatClass == null) {
-                LauncherLog.warn("[UiRenderer] résolution NativeImage/TextureManager : une classe introuvable, repli brut");
-                return;
-            }
-
-            String rgbaObf = MappingsRegistry.getObfFieldName("net/minecraft/client/texture/NativeImage$Format", "RGBA");
-            java.lang.reflect.Field rgbaField = formatClass.getDeclaredField(rgbaObf);
-            rgbaField.setAccessible(true);
-            nativeImageFormatRgba = rgbaField.get(null);
-
-            nativeImageCtor = nativeImageClass.getDeclaredConstructor(formatClass, int.class, int.class, boolean.class);
-            nativeImageCtor.setAccessible(true);
-            // BUG TROUVÉ (era E, 1.21.11) : NativeImageBackedTexture(NativeImage)
-            // (le seul constructeur utilisé jusqu'à la 1.21.4) n'existe plus —
-            // Blaze3D ajoute un label de debug obligatoire en 1er paramètre
-            // (Supplier<String>), confirmé via mappings 1.21.11 :
-            // "(Ljava/util/function/Supplier;Lfyh;)V <init>" (fyh=NativeImage) —
-            // AUCUN constructeur 1-arg NativeImage-seul n'existe plus du tout sur
-            // cette version. Essaie l'ancien d'abord (1.20.4/1.21.4), puis le
-            // nouveau (Supplier<String>, NativeImage) en repli.
-            try {
-                nativeImageBackedTextureCtor = nativeImageBackedTextureClass.getDeclaredConstructor(nativeImageClass);
-                nativeImageBackedTextureNeedsLabel = false;
-            } catch (NoSuchMethodException e) {
-                nativeImageBackedTextureCtor = nativeImageBackedTextureClass.getDeclaredConstructor(java.util.function.Supplier.class, nativeImageClass);
-                nativeImageBackedTextureNeedsLabel = true;
-            }
-            nativeImageBackedTextureCtor.setAccessible(true);
-
-            nativeImageSetColor = McReflect.method(nativeImageClass, "net/minecraft/client/texture/NativeImage", "setColor", int.class, int.class, int.class);
-            nativeImageCloseMethod = McReflect.noArgMethod(nativeImageClass, "net/minecraft/client/texture/NativeImage", "close");
-
-            // BUG DE PERFORMANCE TROUVÉ (v347, signalé par l'utilisateur : "je
-            // lag à 8 FPS") : remplir un atlas 1024x2048 (2 millions de pixels)
-            // via setColor() UN PAR UN — chaque appel étant une réflexion Java
-            // (Method.invoke, avec autoboxing) — coûte des millions
-            // d'invocations réflexives par police créée. Repli : accès direct
-            // à la mémoire native de NativeImage (champ "pointer", un long
-            // pointant vers le buffer hors-tas) via MemoryUtil.memCopy — une
-            // SEULE copie mémoire brute au lieu de 2 millions d'appels
-            // individuels. Notre ByteBuffer existant (octets R,G,B,A
-            // consécutifs) a EXACTEMENT le même agencement mémoire que le
-            // format "RGBA petit-boutiste" de NativeImage (petit-boutiste :
-            // R d'abord en mémoire, A en dernier) — aucune conversion
-            // supplémentaire nécessaire, juste une copie brute octet à octet.
-            try {
-                String pointerObf = MappingsRegistry.getObfFieldName("net/minecraft/client/texture/NativeImage", "pointer");
-                nativeImagePointerField = nativeImageClass.getDeclaredField(pointerObf);
-                nativeImagePointerField.setAccessible(true);
-                // MemoryUtil appelé en typé (plus de gl.rawMethod) : LWJGL 3
-                // est une dépendance de compilation, voir GlBridge.
-                bulkCopyAvailable = true;
-            } catch (Throwable t) {
-                LauncherLog.warn("[UiRenderer] copie mémoire en bloc (MemoryUtil) indisponible, repli sur setColor() pixel par pixel (lent) : " + t);
-                bulkCopyAvailable = false;
-            }
-            textureUploadMethod = McReflect.noArgMethod(nativeImageBackedTextureClass, "net/minecraft/client/texture/NativeImageBackedTexture", "upload");
-            textureGetGlIdMethod = McReflect.noArgMethod(abstractTextureClass, "net/minecraft/client/texture/AbstractTexture", "getGlId");
-            textureBindTextureMethod = McReflect.noArgMethod(abstractTextureClass, "net/minecraft/client/texture/AbstractTexture", "bindTexture");
-            textureManagerRegisterTextureMethod = McReflect.method(textureManagerClass, "net/minecraft/client/texture/TextureManager",
-                "registerTexture", identifierClass, abstractTextureClass);
-            identifierOfMethod = McReflect.method(identifierClass, "net/minecraft/util/Identifier", "of", String.class, String.class);
-            Object mc = McReflect.minecraftClient();
-            mcGetTextureManagerMethod = mc != null
-                ? McReflect.noArgMethod(mc.getClass(), "net/minecraft/client/MinecraftClient", "getTextureManager")
-                : null;
-
-            nativeTextureApiAvailable = nativeImageSetColor != null && textureUploadMethod != null
-                && textureGetGlIdMethod != null && textureBindTextureMethod != null
-                && textureManagerRegisterTextureMethod != null && identifierOfMethod != null
-                && mcGetTextureManagerMethod != null && nativeImageFormatRgba != null;
-            LauncherLog.info("[UiRenderer] API NativeImage/TextureManager résolue : disponible=" + nativeTextureApiAvailable);
-        } catch (Throwable t) {
-            LauncherLog.err("[UiRenderer] résolution API NativeImage/TextureManager échouée, repli brut : " + t);
-            nativeTextureApiAvailable = false;
-        }
-    }
-
-    private int createFontTextureViaNativeImage(UiFont font) throws Exception {
-        java.awt.image.BufferedImage img = font.atlasImage();
-        int w = img.getWidth(), h = img.getHeight();
-
-        Object nativeImage = nativeImageCtor.newInstance(nativeImageFormatRgba, w, h, false);
-        try {
-            if (bulkCopyAvailable) {
-                // Chemin rapide : une seule copie mémoire brute (voir
-                // ensureNativeTextureApiResolved pour le pourquoi détaillé).
-                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
-                int[] row = new int[w];
-                for (int y = 0; y < h; y++) {
-                    img.getRGB(0, y, w, 1, row, 0, w);
-                    for (int x = 0; x < w; x++) {
-                        int argb = row[x];
-                        buf.put((byte) ((argb >> 16) & 0xFF)); // R
-                        buf.put((byte) ((argb >> 8) & 0xFF));  // G
-                        buf.put((byte) (argb & 0xFF));         // B
-                        buf.put((byte) ((argb >> 24) & 0xFF)); // A
-                    }
-                }
-                buf.flip();
-                long srcAddr = org.lwjgl.system.MemoryUtil.memAddress(buf);
-                long dstAddr = (long) nativeImagePointerField.get(nativeImage);
-                org.lwjgl.system.MemoryUtil.memCopy(srcAddr, dstAddr, (long) buf.remaining());
-            } else {
-                // Repli lent (voir ensureNativeTextureApiResolved) — évite
-                // juste de ne RIEN dessiner si MemoryUtil ne se résout pas.
-                int[] row = new int[w];
-                for (int y = 0; y < h; y++) {
-                    img.getRGB(0, y, w, 1, row, 0, w);
-                    for (int x = 0; x < w; x++) {
-                        int argb = row[x];
-                        int a = (argb >>> 24) & 0xFF, r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
-                        // NativeImage.setColor attend du RGBA petit-boutiste, donc
-                        // ABGR en notation big-endian habituelle (alpha=octet le
-                        // plus significatif, rouge=le moins significatif) — voir
-                        // sa javadoc Yarn ("little-endian RGBA, or big-endian ABGR").
-                        int nativeColor = (a << 24) | (b << 16) | (g << 8) | r;
-                        nativeImageSetColor.invoke(nativeImage, x, y, nativeColor);
-                    }
-                }
-            }
-
-            Object texture = nativeImageBackedTextureNeedsLabel
-                ? nativeImageBackedTextureCtor.newInstance((java.util.function.Supplier<String>) () -> "yuyuframe_font", nativeImage)
-                : nativeImageBackedTextureCtor.newInstance(nativeImage);
-            textureUploadMethod.invoke(texture); // fait le VRAI glTexImage2D, via le chemin suivi par Minecraft
-            int texId = (int) textureGetGlIdMethod.invoke(texture);
-
-            // Filtre trilinéaire + clamp-to-edge (voir historique de session
-            // pour le pourquoi) — appliqués APRÈS coup sur une texture déjà
-            // créée par la voie sûre : bind via AbstractTexture.bindTexture()
-            // (passe par GlStateManager, pas notre glBindTexture brut) avant
-            // ces quelques réglages, qui eux restent des appels GL directs
-            // mais bien plus anodins qu'une création de texture complète.
-            textureBindTextureMethod.invoke(texture);
-            gl.glGenerateMipmap(0x0DE1);
-            gl.glTexParameteri(0x0DE1, 0x2801, 0x2703); // GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR
-            gl.glTexParameteri(0x0DE1, 0x2800, 0x2601); // GL_TEXTURE_MAG_FILTER, GL_LINEAR
-            gl.glTexParameteri(0x0DE1, 0x2802, 0x812F); // GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE
-            gl.glTexParameteri(0x0DE1, 0x2803, 0x812F); // GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE
-
-            Object textureManager = mcGetTextureManagerMethod.invoke(McReflect.minecraftClient());
-            Object id = identifierOfMethod.invoke(null, "yuyuframe", "font_" + (fontTextureCounter++));
-            textureManagerRegisterTextureMethod.invoke(textureManager, id, texture);
-            return texId;
-        } finally {
-            // NativeImage possède de la mémoire HORS-TAS (native) — doit être
-            // explicitement libérée, contrairement au ByteBuffer direct de
-            // l'ancien chemin (géré par le GC, voir Cleaner de
-            // ByteBuffer.allocateDirect) : celui-ci ne l'est pas.
-            if (nativeImageCloseMethod != null) {
-                try { nativeImageCloseMethod.invoke(nativeImage); } catch (Throwable ignored) {}
-            }
-        }
-    }
-
-    /** Ancien chemin (GL brut via réflexion) — conservé UNIQUEMENT en repli si la résolution NativeImage échoue. */
+    /** Upload GL direct de l'atlas — seul chemin depuis le 2026-09-16 (voir la javadoc de classe). */
     private int createFontTextureRaw(UiFont font) throws Exception {
         java.awt.image.BufferedImage img = font.atlasImage();
         int w = img.getWidth(), h = img.getHeight();

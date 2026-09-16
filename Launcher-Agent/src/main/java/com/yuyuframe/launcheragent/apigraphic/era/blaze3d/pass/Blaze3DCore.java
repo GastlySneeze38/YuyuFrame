@@ -395,7 +395,7 @@ public final class Blaze3DCore {
             resolveOk = false;
             // Cause réelle DÉROULÉE (pas juste "InvocationTargetException"
             // générique) — piège du silent-catch déjà rencontré ailleurs dans
-            // ce projet (voir McReflect.minecraftClient()/getFramebuffer) :
+            // ce projet (ancien McReflect.minecraftClient()/getFramebuffer) :
             // un simple "+ t" sur une exception réflexive n'affiche QUE le
             // wrapper, jamais la vraie exception levée par le code du jeu.
             Throwable cause = t;

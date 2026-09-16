@@ -6,14 +6,11 @@ import com.yuyuframe.launcheragent.apigraphic.hud.HudRenderer;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.VanillaGuiTarget;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
-import com.yuyuframe.launcheragent.apimixin.mapping.McReflect;
 import com.yuyuframe.launcheragent.runtime.ui.GlobalUiSettings;
 import com.yuyuframe.launcheragent.apimixin.AccessPoint;
 import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.runtime.game.ClientData;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
-
-import java.lang.reflect.Field;
 
 /**
  * POLITIQUE d'affichage du HUD — décide QUOI montrer et QUAND ; le dessin
@@ -26,8 +23,8 @@ import java.lang.reflect.Field;
  *   <li>{@link GlobalUiSettings} — un {@code LauncherModule} annoté
  *       {@code @Config}, donc de la politique applicative pure ;</li>
  *   <li>{@link HudScreenKind} — la connaissance des types d'écrans du JEU ;</li>
- *   <li>{@link #vanillaHudHidden()} — la lecture d'un champ vanilla par
- *       réflexion.</li>
+ *   <li>{@link #vanillaHudHidden()} — la lecture d'un état vanilla (par
+ *       point d'accès).</li>
  * </ul>
  * Faire descendre l'un de ces trois dans {@code apigraphic} y aurait fait
  * entrer soit les réglages de l'application, soit les classes de Minecraft.
@@ -57,37 +54,12 @@ public final class HudOverlayRenderer {
      * persisté).
      */
     public static boolean vanillaHudHidden() {
-        // Tranche liée : accessor Mixin via AccessPoint.OPTIONS_HIDE_GUI, zéro
-        // réflexion (2026-08-31). C'était le dernier accès réflexif du chemin
-        // de rendu du HUD, appelé à chaque frame. Repli réflexif conservé pour
-        // les tranches sans liaison, où ni Options ni l'accessor n'existent
-        // sous ces noms.
-        try {
-            // La VALEUR, pas isBound() : un accès peut être déclaré par la
-            // tranche et rester sans réponse si son accessor n'a pas été tissé.
-            // Se contenter de isBound() rendrait le repli réflexif ci-dessous
-            // inatteignable dans ce cas précis, alors que c'est exactement
-            // celui pour lequel il existe.
-            Object hidden = AccessorRegistry.get(AccessPoint.OPTIONS_HIDE_GUI, null);
-            if (hidden instanceof Boolean) return (Boolean) hidden;
-        } catch (Throwable ignored) {
-            // NoClassDefFoundError attendu hors tranche liée — le repli
-            // ci-dessous prend le relais, inutile de le journaliser à chaque
-            // frame.
-        }
-        try {
-            Object mc = McReflect.minecraftClient();
-            if (mc == null) return false;
-            Object options = McReflect.field(mc.getClass(), "net/minecraft/client/MinecraftClient", "options").get(mc);
-            if (options == null) return false;
-            Field hudHiddenField = McReflect.field(options.getClass(),
-                "net/minecraft/client/option/GameOptions", "hudHidden", "hideGui");
-            if (hudHiddenField == null) return false;
-            return hudHiddenField.getBoolean(options);
-        } catch (Throwable t) {
-            LauncherLog.err("[HudOverlayRenderer] vanillaHudHidden: " + t);
-            return false;
-        }
+        // Accessor Mixin via AccessPoint.OPTIONS_HIDE_GUI, zéro réflexion
+        // (2026-08-31), lié sur les trois versions supportées. Le repli
+        // réflexif des tranches sans liaison a été supprimé le 2026-09-16 avec
+        // l'abandon de ces versions : sans réponse, le HUD reste affiché.
+        Object hidden = AccessorRegistry.get(AccessPoint.OPTIONS_HIDE_GUI, null);
+        return hidden instanceof Boolean && (Boolean) hidden;
     }
 
     /**
