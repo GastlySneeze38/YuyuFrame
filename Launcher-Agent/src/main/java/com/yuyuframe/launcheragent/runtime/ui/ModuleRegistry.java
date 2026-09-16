@@ -70,57 +70,12 @@ public final class ModuleRegistry {
     private static final java.util.Map<String, LauncherModule> BY_ID = new java.util.HashMap<>();
 
     /**
-     * 1.16.5 (et plus largement le bracket "B", voir VersionProfileRegistry —
-     * même prédicat {@code startsWith("1.16")}) exclut certains modules dont
-     * la logique ne vit QUE dans des Mixins {@code *189} (1.8.9), jamais
-     * portée ici : les afficher comme des cartes cliquables qui ne font rien
-     * serait trompeur. Exclus (voir historique de session, audit demandé par
-     * l'utilisateur) :
-     *   - ToggleSprint/ToggleSneak/Fov : REDONDANTS avec des réglages vanilla
-     *     natifs déjà présents en 1.13-1.16.5 (Contrôles: Sprint/Sneak
-     *     Maintenir/Basculer ; curseur FOV vidéo).
-     *   - Les 6 "animations 1.7" (Swing/Diagonal/ItemRotations/
-     *     SwingWhileBlocking/OldBow/OldConsume) : PAS redondants avec du
-     *     vanilla (ils restaurent des mécaniques retirées par la mise à jour
-     *     combat 1.9+, toujours pertinents en 1.16.5), mais leur Mixin
-     *     d'implémentation reste 1.8.9 uniquement pour l'instant — à
-     *     réintégrer ici le jour où un Mixin équivalent existe pour ce bracket.
-     * {@code SneakRampModule} n'est PAS dans cette liste (recrée juste une
-     * sensation, catégorisé à part lors de l'audit) — reste enregistré
-     * partout, y compris en 1.16.5.
-     *
-     * Élargi aux brackets "C" (1.20.4), "D" (1.21.4), et maintenant "1.21.11"
-     * et "E" (26.1.2, voir VersionProfileRegistry) : mêmes réglages vanilla
-     * natifs (FOV/Sprint/Sneak, hurt cam) présents depuis la "Flattening"
-     * (~1.13) et toujours là sur ces brackets, et les mêmes 7 Mixins
-     * "animations 1.7" restent 1.8.9-only — donc les mêmes exclusions
-     * s'appliquent partout. Le nom {@code IS_1_16} n'a pas été renommé (trop
-     * de commentaires y référeraient encore) mais couvre bien TOUS ces
-     * brackets malgré son nom.
-     *
-     * Demande explicite de l'utilisateur (audit avant publication) : 1.21.11
-     * et 26.1.2 ajoutés à cette liste — jusque-là ABSENTS, alors que le même
-     * raisonnement (réglages vanilla déjà natifs) s'y applique tout autant ;
-     * gap probablement jamais comblé faute d'y avoir pensé lors des ajouts
-     * successifs de brackets. Seul effet notable pour le groupe "Confort
-     * visuel" : {@code ZoomModule} n'est PAS dans cette liste d'exclusion
-     * (aucun équivalent vanilla, jamais concerné) — reste donc le SEUL membre
-     * actif du groupe sur ces deux brackets.
-     */
-    private static final boolean IS_1_16 = System.getProperty("launcheragent.mcVersion", "").startsWith("1.16")
-        || "1.20.4".equals(System.getProperty("launcheragent.mcVersion", ""))
-        || "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""))
-        || "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""))
-        || "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
-
-    /**
-     * Sans citrouille / Vision claire / Sans flou de mouvement : implémentés
-     * via des Mixins qui n'existent QUE pour le bracket 26.1 pour l'instant
-     * (voir {@code mixin/client/v26_1} et leur javadoc respective) — cartes
-     * gatées pour ne pas afficher 3 toggles sans le moindre effet sur les
-     * autres brackets (même principe que le masquage du groupe
-     * "Optimisations", demande explicite de l'utilisateur lors de cet
-     * audit-là).
+     * Sans citrouille / Vision claire : implémentés via des mixins qui
+     * n'existent que pour 26.1.2 et 1.21.11 ({@code apimixin/v26_1},
+     * {@code apimixin/v1_21_11}) — cartes gatées pour ne pas afficher des
+     * toggles sans le moindre effet sur la 1.8.9 (même principe que le
+     * masquage du groupe "Optimisations", demande explicite de l'utilisateur
+     * lors de cet audit-là).
      */
     private static final boolean IS_26_1 = "26.1.2".equals(System.getProperty("launcheragent.mcVersion", ""));
 
@@ -144,50 +99,23 @@ public final class ModuleRegistry {
      * nomme autrement ({@code FogModifier.applyStartEndModifier}). Passe par
      * {@code apimixin/v1_21_11/fog/} (contrat neutre, voir {@code FogOverride})
      * et {@code HudExtractTextureOverlayMixin1211} pour le givre.
-     * 1.16.5/1.20.4/1.21.4/1.8.9 pas encore commencés du tout pour ces
-     * 4 modules.
+     * 1.8.9 pas encore commencée pour ces modules.
      */
     private static final boolean IS_1_21_11 = "1.21.11".equals(System.getProperty("launcheragent.mcVersion", ""));
 
     /**
-     * Portage 1.21.4 (bracket "D", ~1.21-1.21.5, voir VersionProfileRegistry)
-     * — architecture Camera/Mouse/InGameHud.renderOverlay VÉRIFIÉE IDENTIQUE
-     * à 1.21.11 par désassemblage complet (javap sur le vrai jar 1.21.4 :
-     * mêmes IDs intermediary EXACTS pour Camera.update/moveBy/setRotation,
-     * même structure bytecode — deux call sites de moveBy(FFF)V aux offsets
-     * 309/368) — {@code NoPumpkinOverlayModule}/{@code FreelookModule}
-     * portés en conséquence (voir {@code ClearOverlaysMixin1214}/{@code
-     * MouseHandlerFreelookMixin1214}/{@code CameraFreelookMixin1214}).
-     *
-     * ⚠️ {@code ShulkerPreviewModule} SUPPRIMÉ le 2026-08-31 (décision
-     * utilisateur : « trop de boulot à faire pour ce qu'un mod peut faire de
-     * façon optimisée »). Tout ce qui existait UNIQUEMENT pour lui dans le
-     * moteur est devenu du code mort mais reste en place, faute d'être
-     * dangereux : {@code UiRenderer.drawVanillaContainerTexture} et son
-     * chemin "Immediate" 1.21.4, plus le HookPoint
-     * {@code CONTAINER_SCREEN_EXTRACT_TOOLTIP} et son mixin — que plus aucun
-     * module ne réclame, donc que le filtre de {@code MixinHookPointRegistry}
-     * ne tisse plus.
-     *
-     * <p>EXCEPTION (2026-08-31, audit final) : {@code
-     * HandledScreenBlitFlushMixin1214} a bel et bien été SUPPRIMÉ, lui. Le
-     * laisser n'était pas neutre — contrairement aux autres reliquats, il
-     * s'injectait dans {@code HandledScreen.render()} et tournait donc à
-     * chaque frame, sur tout écran de conteneur, pour vider une file
-     * désormais toujours vide.
-     *
-     * {@code ClearVisionModule}/{@code NoFogModule} (refonte FogEnvironment) :
-     * même statut que 1.21.11 pour Vision claire (jamais tenté, architecture
-     * de brouillard classique pré-refonte toujours active sur ce bracket —
-     * voir {@code NoFogModule}, fonctionne déjà via l'ancien flag sans
-     * portage nécessaire).
-     */
-    private static final boolean IS_1_21_4 = "1.21.4".equals(System.getProperty("launcheragent.mcVersion", ""));
-
-    /**
      * 1.8.9 — seule version où les animations 1.7, les bascules sneak/sprint,
      * la hurt cam et le FOV fixe ont des mixins (apimixin/v1_8_9, portés le
-     * 2026-09-15). Utilisé pour la macro, ajoutée à cette version à la même date.
+     * 2026-09-15). Utilisé aussi pour la macro, ajoutée à cette version à la
+     * même date.
+     *
+     * <p>Remplace (2026-09-16) le drapeau {@code IS_1_16}, qui malgré son nom
+     * valait vrai sur TOUTES les versions sauf 1.8.9 et excluait ces modules
+     * ailleurs : ToggleSprint/ToggleSneak/Fov/HurtCam y sont redondants avec
+     * des réglages vanilla natifs depuis ~1.13, et les animations 1.7 n'y ont
+     * pas de mixin. {@code ZoomModule} n'est pas concerné (aucun équivalent
+     * vanilla). Avec les seules versions supportées (1.8.9, 1.21.11, 26.1.2),
+     * « pas 1.16 » et « 1.8.9 » désignent exactement les mêmes lancements.
      */
     private static final boolean IS_1_8_9 = "1.8.9".equals(System.getProperty("launcheragent.mcVersion", ""));
 
@@ -202,7 +130,7 @@ public final class ModuleRegistry {
         safeRegister(() -> new PotionEffectsModule());
         safeRegister(() -> new ArmorDurabilityModule());
         safeRegister(() -> new LowHealthTintModule());
-        if (!IS_1_16) safeRegister(() -> new FovModule());
+        if (IS_1_8_9) safeRegister(() -> new FovModule());
         // Enregistré JUSTE APRÈS FovModule — tickAll() itère MODULES dans
         // l'ordre d'enregistrement, donc si les deux sont actifs, le zoom
         // s'applique EN DERNIER chaque frame et n'est jamais écrasé par le
@@ -216,12 +144,10 @@ public final class ModuleRegistry {
         safeRegister(() -> new SaturationModule());
         safeRegister(() -> new NoDarknessModule());
         safeRegister(() -> new NoFogModule());
-        // 26.1.2/1.21.11/1.21.4 pour l'instant (voir IS_26_1/IS_1_21_11/
-        // IS_1_21_4 plus haut + javadoc de ces 3 modules) — implémentés via
-        // des Mixins qui n'existent pas encore pour 1.8.9/1.16.5/1.20.4,
-        // contrairement aux 3 modules ci-dessus qui fonctionnent partout via
-        // McReflect seul.
-        if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
+        // 26.1.2/1.21.11 pour l'instant (voir IS_26_1/IS_1_21_11 plus haut +
+        // javadoc de ces modules) — implémentés via des mixins qui n'existent
+        // pas encore pour 1.8.9.
+        if (IS_26_1 || IS_1_21_11) {
             safeRegister(() -> new NoPumpkinOverlayModule());
         }
         if (IS_26_1 || IS_1_21_11) {
@@ -232,30 +158,30 @@ public final class ModuleRegistry {
         // façon optimisée »). Il restait le dernier gros consommateur de
         // réflexion de l'agent (22 appels) et le seul rendu à devoir
         // s'intercaler dans un écran de conteneur vanilla.
-        // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11/
-        // 1.21.4) + rappelle Camera.setRotation (voir sa javadoc) — aucun
-        // équivalent 1.8.9/1.16.5/1.20.4 pour l'instant.
-        if (IS_26_1 || IS_1_21_11 || IS_1_21_4) {
+        // Annule MouseHandler.turnPlayer(26.1.2)/Mouse.updateMouse(1.21.11)
+        // + rappelle Camera.setRotation (voir sa javadoc) — aucun équivalent
+        // 1.8.9 pour l'instant.
+        if (IS_26_1 || IS_1_21_11) {
             safeRegister(() -> new FreelookModule());
         }
-        // Exclu depuis 1.13+ (voir IS_1_16 plus haut) sur demande explicite de
+        // 1.8.9 seulement (voir IS_1_8_9 plus haut), sur demande explicite de
         // l'utilisateur : l'effet de secousse caméra à la prise de dégâts est
-        // désormais natif en vanilla à partir de ce bracket — carte redondante sinon.
-        if (!IS_1_16) safeRegister(() -> new HurtCamModule());
-        if (!IS_1_16) safeRegister(() -> new ToggleSprintModule());
-        if (!IS_1_16) safeRegister(() -> new ToggleSneakModule());
-        if (!IS_1_16) safeRegister(() -> new SwingSpeedModule());
-        if (!IS_1_16) safeRegister(() -> new DiagonalSwordModule());
-        if (!IS_1_16) safeRegister(() -> new OldItemRotationsModule());
-        if (!IS_1_16) safeRegister(() -> new SwingWhileBlockingModule());
-        if (!IS_1_16) safeRegister(() -> new OldBowModule());
-        if (!IS_1_16) safeRegister(() -> new OldConsumeModule());
-        // Ajouté à la liste d'exclusion 1.16.5 sur demande explicite de
+        // natif en vanilla depuis ~1.13 — carte redondante sinon.
+        if (IS_1_8_9) safeRegister(() -> new HurtCamModule());
+        if (IS_1_8_9) safeRegister(() -> new ToggleSprintModule());
+        if (IS_1_8_9) safeRegister(() -> new ToggleSneakModule());
+        if (IS_1_8_9) safeRegister(() -> new SwingSpeedModule());
+        if (IS_1_8_9) safeRegister(() -> new DiagonalSwordModule());
+        if (IS_1_8_9) safeRegister(() -> new OldItemRotationsModule());
+        if (IS_1_8_9) safeRegister(() -> new SwingWhileBlockingModule());
+        if (IS_1_8_9) safeRegister(() -> new OldBowModule());
+        if (IS_1_8_9) safeRegister(() -> new OldConsumeModule());
+        // Réservé à la 1.8.9 comme les autres, sur demande explicite de
         // l'utilisateur ("enlève-les TOUS") — initialement laissé de côté
         // lors de l'audit (recrée juste une sensation, pas un vrai portage
         // 1.7), mais reste visuellement groupé sous "Animations 1.7" dans
         // l'UI, donc traité pareil que les 6 autres.
-        if (!IS_1_16) safeRegister(() -> new SneakRampModule());
+        if (IS_1_8_9) safeRegister(() -> new SneakRampModule());
         safeRegister(() -> new CrosshairModule());
         safeRegister(() -> new FullbrightModule());
         safeRegister(() -> new WorldTimeModule());
@@ -303,8 +229,8 @@ public final class ModuleRegistry {
         // individuellement juste au-dessus (tickAll/renderOverlayAll/persistance
         // inchangés), seul UiMainMenuScreen les affiche fusionnés sous une
         // carte au lieu d'une par module.
-        // nonNull() — certains membres ci-dessous ne sont PAS enregistrés sur
-        // 1.16.5 (voir IS_1_16 plus haut) : get(id) renvoie alors null, qu'il
+        // nonNull() — certains membres ci-dessous ne sont enregistrés que sur
+        // une version (voir IS_1_8_9/IS_1_21_11 plus haut) : get(id) renvoie alors null, qu'il
         // faut filtrer avant de construire le groupe (sinon carte "vide"
         // cassée dans l'UI).
         // 2026-08-30, demande explicite : le Freelook PUIS le Zoom SORTENT du
@@ -323,8 +249,8 @@ public final class ModuleRegistry {
             comfortGroup.iconUrl = LauncherModule.icons8("visible");
             GROUPS.add(comfortGroup);
         }
-        // Groupe entièrement exclu sur 1.16.5 (les 7 membres y sont tous
-        // exclus, voir IS_1_16) — pas de carte vide affichée dans ce cas.
+        // Groupe absent hors 1.8.9 (les 7 membres n'y sont enregistrés que là,
+        // voir IS_1_8_9) — pas de carte vide affichée dans ce cas.
         List<LauncherModule> legacyMembers = nonNull(get("swing-speed-1-7"), get("diagonal-sword"), get("old-item-rotations"),
             get("swing-while-blocking"), get("old-bow"), get("old-consume"), get("sneak-ramp-1-7"));
         if (!legacyMembers.isEmpty()) {
@@ -556,7 +482,7 @@ public final class ModuleRegistry {
         return BY_ID.get(id);
     }
 
-    /** Filtre les {@code null} — voir IS_1_16, certains {@code get(id)} n'ont pas de résultat selon le bracket. */
+    /** Filtre les {@code null} — voir IS_1_8_9, certains {@code get(id)} n'ont pas de résultat selon la version. */
     private static List<LauncherModule> nonNull(LauncherModule... modules) {
         List<LauncherModule> result = new ArrayList<>(modules.length);
         for (LauncherModule m : modules) if (m != null) result.add(m);
