@@ -4,7 +4,7 @@ import type { Instance, JvmVendor, Version, Account } from '@/types'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 
 export type YuyuPlan = 'free' | 'premium' | 'ultimate'
-export type Lang = 'fr' | 'en'
+export type Lang = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'pl' | 'ru'
 
 interface Store {
   // ── Session YuyuFrame ──

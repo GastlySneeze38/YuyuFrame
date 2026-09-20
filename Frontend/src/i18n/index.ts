@@ -2,10 +2,14 @@ import { useStore } from '@/stores/useStore'
 import type { Lang } from '@/stores/useStore'
 import { fr } from './translations/fr'
 import { en } from './translations/en'
+import { es } from './translations/es'
+import { de } from './translations/de'
 
 export type { Lang }
 
-const DICTS: Record<Lang, Record<string, unknown>> = { fr, en }
+// Une langue absente d'ici planterait à la lecture : le type `Lang` et cette
+// table doivent être modifiés ensemble.
+const DICTS: Record<Lang, Record<string, unknown>> = { fr, en, es, de, it: fr, pt: fr, pl: fr, ru: fr }
 
 function getPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
@@ -38,7 +42,10 @@ export function useT() {
   return t
 }
 
+/** Langues proposées dans les réglages, dans leur propre langue. */
 export const LANGUAGES: { code: Lang; nativeLabel: string }[] = [
   { code: 'fr', nativeLabel: 'Français' },
   { code: 'en', nativeLabel: 'English' },
+  { code: 'es', nativeLabel: 'Español' },
+  { code: 'de', nativeLabel: 'Deutsch' },
 ]

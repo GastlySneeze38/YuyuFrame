@@ -491,17 +491,31 @@ export default function Settings() {
               <p className="text-[11px] text-white/35 -mt-2">
                 {t('settings.langue.desc')}
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              {/* Trois colonnes : la liste s'allonge à chaque langue ajoutée,
+                  deux colonnes donnaient une colonne interminable. */}
+              <div className="grid grid-cols-3 gap-2">
                 {LANGUAGES.map(({ code, nativeLabel }) => {
                   const active = language === code
                   return (
-                    <button
+                    <motion.button
                       key={code}
                       onClick={() => setLanguage(code)}
-                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-left transition-all duration-150 ${active ? 'bg-[rgba(75,63,207,0.2)] border border-[rgba(75,63,207,0.55)]' : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)]'}`}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ type: 'spring', stiffness: 700, damping: 28, mass: 0.4 }}
+                      className="relative flex items-center justify-center gap-2 rounded-xl p-3 text-center"
                     >
-                      <span className="font-semibold text-white text-[12px]">{nativeLabel}</span>
-                    </button>
+                      {active ? (
+                        <motion.span
+                          layoutId="settings-language-active"
+                          transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                          className="absolute inset-0 rounded-xl border border-accent/55 bg-accent/20"
+                        />
+                      ) : (
+                        <span className="absolute inset-0 rounded-xl border border-line bg-white/[0.03]" />
+                      )}
+                      <span className="relative text-[12px] font-semibold text-white">{nativeLabel}</span>
+                    </motion.button>
                   )
                 })}
               </div>
