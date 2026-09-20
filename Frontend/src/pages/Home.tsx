@@ -11,6 +11,8 @@ import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
+import { WelcomeSequence } from '@/components/home/WelcomeSequence'
+import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
@@ -130,13 +132,23 @@ export default function Home() {
     setCancellingByInstance((prev) => withEntry(prev, id, value ? true : null))
   const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
-  const [bannerAnimating, setBannerAnimating] = useState(false)
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
   const [customFaceUri, setCustomFaceUri] = useState<string | null>(null)
 
   const instance = selectedInstance()
+
+  // Bannière publiée depuis le back-office : c'est elle qui décide si le
+  // panneau passe en habillage festif.
+  const banner = useHomeBanner()
+  const festive = banner?.theme === 'festive'
+  const [bannerReady, setBannerReady] = useState(false)
+  useEffect(() => {
+    setBannerReady(false)
+    const timer = setTimeout(() => setBannerReady(true), 3350)
+    return () => clearTimeout(timer)
+  }, [username])
 
   // Avatar d'un compte hors ligne : mc-heads.net n'a rien pour un UUID inventé
   // (voir Login.tsx pour le même souci sur l'aperçu 3D), donc les deux avatars
@@ -300,10 +312,6 @@ export default function Home() {
     } catch (e) { showError(e) }
   }
 
-  const handleBannerPlay = () => {
-    setBannerAnimating((v) => !v)
-  }
-
   const launch = async (connectServer?: string) => {
     // Figé ici : l'utilisateur peut changer d'instance pendant l'appel.
     const instanceId = selectedInstanceId
@@ -389,13 +397,22 @@ export default function Home() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgba(75,63,207,0.09)_0%,transparent_55%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_68%_58%,rgba(80,210,80,0.06)_0%,transparent_38%)]" />
 
-          {/* Aurora — pulse infinie quand animating */}
-          {bannerAnimating && (
-            <div className="absolute inset-0 pointer-events-none animate-banner-glow bg-[radial-gradient(ellipse_at_38%_60%,rgba(90,70,255,0.7)_0%,rgba(75,63,207,0.35)_40%,transparent_70%)]" />
-          )}
+          {/* Ciel de fête : le dégradé chaud se fond par-dessus la nuit plutôt
+              que de la remplacer, sinon les étoiles et le relief sauteraient
+              le temps de la bascule. */}
+          <motion.div
+            animate={{ opacity: festive ? 1 : 0 }}
+            transition={{ duration: 1.1 }}
+            className="absolute inset-0 bg-[linear-gradient(180deg,#160a14_0%,#3a1230_38%,#7a2340_72%,#c2543c_100%)]"
+          />
+          {festive && <Confetti />}
 
-          {/* Stars — scintillent en continu quand animating */}
-          <div className={`absolute inset-0 ${bannerAnimating ? 'animate-star-pulse' : ''}`}>
+          {/* Aurore et étoiles : le panneau respire en permanence. Il n'y a
+              plus d'interrupteur — un fond vivant n'est pas une option qu'on
+              va chercher, c'est l'état normal de l'écran. */}
+          <div className="absolute inset-0 pointer-events-none animate-banner-glow bg-[radial-gradient(ellipse_at_38%_60%,rgba(90,70,255,0.7)_0%,rgba(75,63,207,0.35)_40%,transparent_70%)]" />
+
+          <div className="absolute inset-0 animate-star-pulse">
             {STARS.map((s, i) => (
               <div key={i} className="absolute rounded-full" style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.r, height: s.r, background: `rgba(255,255,255,${s.o})` }} />
             ))}
@@ -406,33 +423,13 @@ export default function Home() {
             <div className="absolute inset-0 pointer-events-none animate-banner-flash rounded-[20px] z-10 bg-[radial-gradient(ellipse_at_50%_50%,rgba(160,130,255,0.95)_0%,rgba(90,70,255,0.6)_35%,transparent_72%)]" />
           )}
 
-          <div className={`absolute bottom-0 left-0 right-0 h-[38%] ${bannerAnimating ? 'animate-terrain-float' : ''}`}>
+          <div className="absolute bottom-0 left-0 right-0 h-[38%] animate-terrain-float">
             <svg viewBox="0 0 800 220" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
               <path d="M0 220 L0 110 L16 110 L16 90 L32 90 L32 110 L48 110 L48 130 L64 130 L64 100 L80 100 L80 78 L96 78 L96 100 L112 100 L112 120 L128 120 L128 95 L144 95 L144 78 L160 78 L160 95 L176 95 L176 115 L192 115 L192 135 L208 135 L208 115 L224 115 L224 98 L240 98 L240 78 L256 78 L256 95 L272 95 L272 115 L288 115 L288 100 L304 100 L304 82 L320 82 L320 100 L336 100 L336 120 L352 120 L352 100 L368 100 L368 82 L384 82 L384 100 L400 100 L400 118 L416 118 L416 135 L432 135 L432 115 L448 115 L448 95 L464 95 L464 78 L480 78 L480 92 L496 92 L496 110 L512 110 L512 128 L528 128 L528 108 L544 108 L544 88 L560 88 L560 108 L576 108 L576 125 L592 125 L592 140 L608 140 L608 120 L624 120 L624 100 L640 100 L640 80 L656 80 L656 98 L672 98 L672 115 L688 115 L688 100 L704 100 L704 82 L720 82 L720 100 L736 100 L736 118 L752 118 L752 105 L768 105 L768 120 L784 120 L784 140 L800 140 L800 220 Z" fill="rgba(4,3,12,0.88)" />
             </svg>
           </div>
 
           <div className="absolute bottom-0 left-0 right-0 h-24 bg-[linear-gradient(to_top,rgba(9,9,13,0.95),transparent)]" />
-
-          {/* Play capsule — top left (animation only) */}
-          <motion.button
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.35, ease: EASE_OUT, delay: 0.15 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleBannerPlay}
-            className={`absolute left-4 top-4 flex items-center gap-2 h-[30px] pl-[10px] pr-[14px] rounded-[20px] backdrop-blur-[10px] transition-[background,border-color] duration-300 hover:bg-[rgba(75,63,207,0.32)] hover:border-[rgba(255,255,255,0.45)] ${bannerAnimating ? 'bg-[rgba(75,63,207,0.45)] border border-[rgba(120,100,255,0.6)]' : 'bg-[rgba(18,15,38,0.78)] border border-[rgba(255,255,255,0.22)]'}`}
-          >
-            {bannerAnimating ? (
-              <svg viewBox="0 0 10 10" fill="white" width={9} height={9}><rect x="1" y="1" width="3" height="8" /><rect x="6" y="1" width="3" height="8" /></svg>
-            ) : (
-              <svg viewBox="0 0 10 10" fill="white" width={9} height={9}><polygon points="1,1 9,5 1,9" /></svg>
-            )}
-            <span className="text-xs font-medium text-white">
-              {bannerAnimating ? t('home.stop') : t('home.play')}
-            </span>
-          </motion.button>
 
           {/* Instance badge — bottom right. Change d'instance : l'ancien
               badge s'efface pendant que le nouveau monte. */}
@@ -451,6 +448,16 @@ export default function Home() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          <WelcomeSequence
+            username={username}
+            avatarUrl={username ? (customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/108`) : null}
+            greeting={username ? t('home.welcomeBack', { name: username }) : t('home.welcomeNew')}
+          />
+
+          {/* La bannière attend que le badge soit posé : deux choses qui
+              entrent en même temps, on ne regarde ni l'une ni l'autre. */}
+          <HomeBanner banner={banner} visible={bannerReady} />
         </motion.div>
 
         {/* RIGHT: Launcher panel — pas de scroll : tout est dimensionné en

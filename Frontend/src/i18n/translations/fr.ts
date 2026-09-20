@@ -430,8 +430,6 @@ export const fr = {
     launchCancelled: 'Lancement annulé',
     launchError: 'Erreur de lancement',
     maxPinnedServers: "Maximum 3 serveurs épinglés — désépingle-en un d'abord",
-    play: 'Play',
-    stop: 'Stop',
     instance: 'Instance',
     manage: 'Gérer',
     createInstance: 'Créer une instance',
@@ -452,6 +450,9 @@ export const fr = {
     brandTagline: 'Le launcher Minecraft open-source.',
     proTagline: 'Sync illimité · Stats avancées',
     proSeePlans: 'Voir les plans',
+    welcomeBack: 'Content de te revoir, {{name}}',
+    welcomeNew: 'Bienvenue sur YuyuFrame',
+    welcomeGuest: 'Invité',
     proSeePlansTitle: 'Voir les plans Pro',
     features: {
       syncTitle: 'Sync P2P',
@@ -688,6 +689,8 @@ export const fr = {
     statsText: 'Temps de jeu par instance, sessions et évolution semaine après semaine.',
     jvmTitle: 'Configurations JVM',
     jvmText: 'Des réglages Java réutilisables, à relier à autant d’instances que tu veux.',
+    skinsTitle: 'Skins',
+    skinsText: 'Changer de skin et de cape depuis le launcher, sans passer par le site de Mojang.',
     moreComing: 'D’autres fonctionnalités arrivent — elles apparaîtront sur cette page.',
   },
   planGate: {

@@ -42,7 +42,9 @@ export function FleetNotices() {
     )
   }
 
-  const announcements = config.announcements.filter((a) => !dismissed.includes(a.id))
+  // Les bannières d'accueil ne passent pas par le bandeau : elles vivent
+  // dans le panneau de la page d'accueil (`HomeBanner`).
+  const announcements = config.announcements.filter((a) => a.placement !== 'home' && !dismissed.includes(a.id))
   const showUpdate = config.update_required
   const showGrace = licenseState === 'grace'
 

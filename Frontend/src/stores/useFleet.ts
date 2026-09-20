@@ -61,8 +61,8 @@ export const useFleet = create<FleetStore>((set, get) => ({
   flagMessage: (key) => get().config.flags.find((f) => f.key === key)?.message ?? null,
 }))
 
-/** Bannières encore à afficher (non fermées par l'utilisateur). */
+/** Bannières du bandeau encore à afficher (non fermées par l'utilisateur). */
 export function visibleAnnouncements() {
   const { config, dismissed } = useFleet.getState()
-  return config.announcements.filter((a) => !dismissed.includes(a.id))
+  return config.announcements.filter((a) => a.placement !== 'home' && !dismissed.includes(a.id))
 }

@@ -31,8 +31,16 @@ export interface FleetFlag {
 
 export interface FleetAnnouncement {
   id: string
+  /** Ligne de détail ; seul texte d'une annonce de bandeau. */
   message: string
   level: 'info' | 'warning' | 'critical'
+  /** notice : bandeau en haut du launcher. home : bannière du tableau d'accueil. */
+  placement: 'notice' | 'home'
+  /** Étiquette courte avant le titre (« ÉVÉNEMENT »). */
+  kicker: string | null
+  title: string | null
+  /** none | festive — habillage du panneau d'accueil. */
+  theme: 'none' | 'festive'
   ends_at: string | null
 }
 

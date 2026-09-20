@@ -35,10 +35,31 @@ pub struct ConfigFlag {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Announcement {
     pub id: String,
+    /// Ligne de détail ; seul texte d'une annonce de bandeau.
     pub message: String,
     /// info | warning | critical
     pub level: String,
+    /// notice (bandeau) | home (bannière du tableau d'accueil). Une valeur
+    /// inconnue d'un serveur plus récent doit être traitée comme un bandeau,
+    /// d'où le repli plutôt qu'une énumération.
+    #[serde(default = "notice")]
+    pub placement: String,
+    #[serde(default)]
+    pub kicker: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    /// none | festive
+    #[serde(default = "none")]
+    pub theme: String,
     pub ends_at: Option<String>,
+}
+
+fn notice() -> String {
+    "notice".into()
+}
+
+fn none() -> String {
+    "none".into()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
