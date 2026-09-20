@@ -1,10 +1,12 @@
 import { memo, useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
+import { listItemVariants } from '@/lib/motion'
 import { MenuItem } from './MenuItem'
 
 /** Mémoïsé : rendu en liste — les callbacks reçoivent l'id/l'instance pour
@@ -50,9 +52,20 @@ export const InstanceCard = memo(function InstanceCard({
   }, [menuOpen])
 
   return (
-    <div
+    // `layout` : quand une carte part (suppression) ou change de section
+    // (mise en favori), les voisines glissent à leur nouvelle place au lieu
+    // de sauter. `listItemVariants` la fait entrer avec ses sœurs.
+    <motion.div
+      layout
+      variants={listItemVariants}
+      initial="initial"
+      animate="animate"
+      exit={{ opacity: 0, x: -12, scale: 0.97, transition: { duration: 0.18 } }}
+      whileHover={{ x: 3 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ type: 'spring', stiffness: 600, damping: 30, mass: 0.5 }}
       onClick={() => onSelect(instance.id)}
-      className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-all duration-150 relative border ${menuOpen ? 'z-40' : 'z-auto'} ${
+      className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-colors duration-150 relative border ${menuOpen ? 'z-40' : 'z-auto'} ${
         selected
           ? 'bg-[rgba(75,63,207,0.18)] border-[rgba(75,63,207,0.55)] shadow-[0_0_20px_rgba(75,63,207,0.18)]'
           : hovered
@@ -188,6 +201,6 @@ export const InstanceCard = memo(function InstanceCard({
           </p>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 })

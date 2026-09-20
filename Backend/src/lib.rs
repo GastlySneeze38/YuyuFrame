@@ -195,6 +195,12 @@ pub fn run() {
             // 15 minutes. Jamais bloquant — sans réponse, rien n'est coupé.
             api::fleet::spawn_refresh(app_state);
 
+            // Manifeste Mojang réchauffé en tâche de fond : l'écran des
+            // instances le demandait à chaque ouverture et attendait le
+            // réseau. Ici c'est fait pendant que la personne regarde
+            // l'accueil, et le cache répond ensuite tout de suite.
+            tauri::async_runtime::spawn(minecraft::versions::prefetch_version_list());
+
             // Garantit que .minecraft/agent/p2p existent tous, même vides —
             // voir Settings.tsx section Stockage : avant ça, `p2p/`
             // n'apparaissait qu'à la toute première session P2P.

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -10,7 +11,8 @@ import { CreateInstanceModal } from '@/components/instances/CreateInstanceModal'
 import { EditInstanceModal } from '@/components/instances/EditInstanceModal'
 import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstanceModal'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { InstanceCardSkeleton } from '@/components/ui/Skeleton'
+import { listItemVariants, listVariants } from '@/lib/motion'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 
@@ -36,18 +38,34 @@ export default function Instances() {
   const favorites = instances.filter((i) => i.favorite)
   const others = instances.filter((i) => !i.favorite)
 
+  // Deux chargements indépendants, volontairement PAS dans un `Promise.all`.
+  //
+  // La liste des instances vient de SQLite : elle est là en quelques
+  // millisecondes. La liste des versions vient de Mojang, par le réseau.
+  // Les attendre ensemble faisait payer à toute la page le temps du
+  // téléchargement, alors que les versions ne servent qu'aux fenêtres de
+  // création et d'édition. Désormais la page s'affiche dès la base lue, et
+  // les versions arrivent derrière sans rien bloquer (le backend les garde
+  // en cache et les précharge au démarrage, donc elles sont souvent déjà
+  // prêtes).
   useEffect(() => {
     if (loaded.current) return
     loaded.current = true
 
-    Promise.all([
-      api.instances.list(),
-      versions.length === 0 ? api.versions.list() : Promise.resolve(null),
-    ]).then(([insts, vers]) => {
-      setInstances(insts)
-      if (vers) setVersions(vers)
-      if (insts.some((i) => i.favorite)) setOthersExpanded(false)
-    }).catch(showError).finally(() => setLoading(false))
+    api.instances
+      .list()
+      .then((insts) => {
+        setInstances(insts)
+        if (insts.some((i) => i.favorite)) setOthersExpanded(false)
+      })
+      .catch(showError)
+      .finally(() => setLoading(false))
+
+    if (versions.length === 0) {
+      // Échec silencieux : une liste de versions manquante se signale dans
+      // la fenêtre de création, pas par une alerte sur un écran qui marche.
+      api.versions.list().then(setVersions).catch(() => {})
+    }
   }, [])
 
   const releaseVersions = versions
@@ -97,12 +115,15 @@ export default function Instances() {
         {/* Seul point d'entrée vers la bibliothèque de configs en dehors de la
             modal d'édition — les configs sont transverses aux instances, elles
             n'appartiennent à aucune en particulier. */}
-        <button
+        <motion.button
           onClick={() => navigate('/jvm')}
-          className="h-[28px] flex-shrink-0 rounded-lg border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.06)] px-2.5 text-[11px] font-semibold text-[rgba(255,255,255,0.6)] transition-colors hover:border-white/25 hover:text-[rgba(255,255,255,0.85)]"
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 700, damping: 30, mass: 0.4 }}
+          className="h-[28px] flex-shrink-0 rounded-lg border border-line-strong bg-white/[0.06] px-2.5 text-[11px] font-semibold text-txt-secondary transition-colors hover:border-accent/40 hover:text-txt-primary"
         >
-          Configurations JVM
-        </button>
+          {t('settings.lancement.jvmLabel')}
+        </motion.button>
       </PageHeader>
 
       {/* Body: sidebar + mods panel */}
@@ -115,14 +136,22 @@ export default function Instances() {
           {/* Scrollable list */}
           <div className="flex flex-1 flex-col overflow-y-auto p-3">
             {loading ? (
-              <div className="flex h-40 items-center justify-center">
-                <ButtonSpinner size={28} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.08)" />
+              // Quatre silhouettes aux dimensions des vraies cartes : la liste
+              // se remplit sur place au lieu de pousser le reste vers le bas.
+              <div className="flex flex-col gap-2">
+                {[0, 1, 2, 3].map((i) => (
+                  <InstanceCardSkeleton key={i} />
+                ))}
               </div>
             ) : instances.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2">
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex h-full flex-col items-center justify-center gap-2"
+              >
                 <div className="text-[32px]">🧱</div>
                 <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">{t('instancesPage.noInstance')}</p>
-              </div>
+              </motion.div>
             ) : (
               <>
                 {favorites.length > 0 && (
@@ -130,9 +159,11 @@ export default function Instances() {
                     <p className="px-1 pb-1.5 text-xs font-semibold text-[#facc15] tracking-[0.08em] uppercase">
                       ★ {t('instancesPage.favorites')}
                     </p>
-                    <div className="flex flex-col gap-2">
-                      {favorites.map(renderCard)}
-                    </div>
+                    <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">
+                      <AnimatePresence mode="popLayout">
+                        {favorites.map(renderCard)}
+                      </AnimatePresence>
+                    </motion.div>
                   </div>
                 )}
 
@@ -142,21 +173,35 @@ export default function Instances() {
                       onClick={() => setOthersExpanded((v) => !v)}
                       className="flex w-full items-center gap-1.5 px-1 pb-1.5"
                     >
-                      <svg
+                      <motion.svg
                         viewBox="0 0 24 24" fill="currentColor" width={10} height={10}
-                        className={`text-[rgba(255,255,255,0.3)] transition-transform duration-150 ${othersExpanded ? 'rotate-90' : 'rotate-0'}`}
+                        animate={{ rotate: othersExpanded ? 90 : 0 }}
+                        transition={{ type: 'spring', stiffness: 700, damping: 30, mass: 0.4 }}
+                        className="text-[rgba(255,255,255,0.3)]"
                       >
                         <path d="M8 5v14l11-7z" />
-                      </svg>
+                      </motion.svg>
                       <p className="text-xs font-semibold text-[rgba(255,255,255,0.3)] tracking-[0.08em] uppercase">
                         {t('instancesPage.others', { count: others.length })}
                       </p>
                     </button>
-                    {othersExpanded && (
-                      <div className="flex flex-col gap-2">
-                        {others.map(renderCard)}
-                      </div>
-                    )}
+                    <AnimatePresence initial={false}>
+                      {othersExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2 pb-1">
+                            <AnimatePresence mode="popLayout">
+                              {others.map(renderCard)}
+                            </AnimatePresence>
+                          </motion.div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
               </>
@@ -165,24 +210,45 @@ export default function Instances() {
 
           {/* Fixed bottom button */}
           <div className="flex-shrink-0 flex flex-col gap-2 p-3 border-t border-[rgba(255,255,255,0.06)]">
-            <button
+            {/* Le + tourne et grossit au survol, le bouton se soulève : ce sont
+                les deux actions principales de l'écran, elles peuvent le dire. */}
+            <motion.button
               onClick={() => setShowCreate(true)}
-              className="w-full flex items-center justify-center gap-2 font-bold text-white transition-all duration-200 active:scale-95 h-[44px] rounded-xl text-[13px] bg-[#4B3FCF] shadow-[0_4px_20px_rgba(75,63,207,0.3)] hover:bg-[#6155e8]"
+              whileHover="hover"
+              animate="rest"
+              whileTap={{ scale: 0.97 }}
+              variants={{ rest: { y: 0, boxShadow: '0 4px 20px rgba(75,63,207,0.3)' }, hover: { y: -2, boxShadow: '0 8px 28px rgba(75,63,207,0.45)' } }}
+              transition={{ type: 'spring', stiffness: 600, damping: 28, mass: 0.5 }}
+              className="flex h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#4B3FCF] text-[13px] font-bold text-white hover:bg-[#6155e8]"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}>
+              <motion.svg
+                viewBox="0 0 24 24" fill="currentColor" width={15} height={15}
+                variants={{ rest: { rotate: 0, scale: 1 }, hover: { rotate: 90, scale: 1.15 } }}
+                transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+              >
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-              </svg>
+              </motion.svg>
               {t('instancesPage.newInstance')}
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               onClick={() => setShowImport(true)}
-              className="w-full flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-95 h-[38px] rounded-xl text-[12px] bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.6)] hover:bg-[rgba(255,255,255,0.1)]"
+              whileHover="hover"
+              animate="rest"
+              whileTap={{ scale: 0.97 }}
+              variants={{ rest: { y: 0 }, hover: { y: -2 } }}
+              transition={{ type: 'spring', stiffness: 600, damping: 28, mass: 0.5 }}
+              className="flex h-[38px] w-full items-center justify-center gap-2 rounded-xl bg-white/[0.05] text-[12px] font-semibold text-txt-secondary transition-colors hover:bg-white/10 hover:text-txt-primary"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+              {/* La flèche plonge vers le bac : le geste dit ce que fait le bouton. */}
+              <motion.svg
+                viewBox="0 0 24 24" fill="currentColor" width={13} height={13}
+                variants={{ rest: { y: 0 }, hover: { y: 2 } }}
+                transition={{ type: 'spring', stiffness: 500, damping: 16 }}
+              >
                 <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-              </svg>
+              </motion.svg>
               {t('instancesPage.importInstance')}
-            </button>
+            </motion.button>
           </div>
         </div>
 

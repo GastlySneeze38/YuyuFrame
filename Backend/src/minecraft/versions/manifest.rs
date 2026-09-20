@@ -3,6 +3,9 @@
 use anyhow::Result;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, RwLock};
 
 const VERSION_MANIFEST: &str =
     "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json";
@@ -20,7 +23,66 @@ pub struct VersionInfo {
     pub url: String,
 }
 
+/// Durée de validité du manifeste en mémoire. Mojang publie une version par
+/// semaine au mieux : une demi-heure est large, et l'écran des instances
+/// n'attend plus le réseau à chaque ouverture.
+const MANIFEST_TTL: Duration = Duration::from_secs(30 * 60);
+
+/// Manifeste en cache + verrou de téléchargement.
+///
+/// Le verrou évite le troupeau : ouvrir l'écran des instances pendant que le
+/// préchargement du démarrage tourne encore lançait un second
+/// téléchargement des mêmes 100 Ko. Le second appelant attend le premier et
+/// repart avec son résultat.
+static MANIFEST: LazyLock<RwLock<Option<(Instant, Arc<Vec<VersionInfo>>)>>> =
+    LazyLock::new(|| RwLock::new(None));
+static MANIFEST_FETCH: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+/// Liste des versions jouables, depuis le cache quand il est frais.
+///
+/// En cas d'échec réseau, un cache périmé est préféré à une erreur : une
+/// liste d'il y a deux heures reste utilisable pour créer une instance, une
+/// liste vide non.
 pub async fn fetch_version_list() -> Result<Vec<VersionInfo>> {
+    if let Some((at, list)) = MANIFEST.read().await.as_ref() {
+        if at.elapsed() < MANIFEST_TTL {
+            return Ok(list.as_ref().clone());
+        }
+    }
+
+    let _guard = MANIFEST_FETCH.lock().await;
+    // Quelqu'un d'autre a pu le rafraîchir pendant l'attente du verrou.
+    if let Some((at, list)) = MANIFEST.read().await.as_ref() {
+        if at.elapsed() < MANIFEST_TTL {
+            return Ok(list.as_ref().clone());
+        }
+    }
+
+    match download_version_list().await {
+        Ok(list) => {
+            let list = Arc::new(list);
+            *MANIFEST.write().await = Some((Instant::now(), list.clone()));
+            Ok(list.as_ref().clone())
+        }
+        Err(e) => match MANIFEST.read().await.as_ref() {
+            Some((_, stale)) => {
+                tracing::warn!("Manifeste Mojang injoignable ({e}) — liste de versions périmée réutilisée");
+                Ok(stale.as_ref().clone())
+            }
+            None => Err(e),
+        },
+    }
+}
+
+/// Réchauffe le cache au démarrage, sans jamais faire échouer quoi que ce
+/// soit : quand l'écran des instances s'ouvre, la liste est déjà là.
+pub async fn prefetch_version_list() {
+    if let Err(e) = fetch_version_list().await {
+        tracing::debug!("Préchargement du manifeste Mojang échoué : {e}");
+    }
+}
+
+async fn download_version_list() -> Result<Vec<VersionInfo>> {
     let client = crate::minecraft::http::short_lived_client();
     let manifest: VersionManifest = client
         .get(VERSION_MANIFEST)
