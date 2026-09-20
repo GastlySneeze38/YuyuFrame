@@ -235,6 +235,7 @@ pub fn run() {
             commands::account::yuyu::yuyu_set_email,
             commands::account::yuyu::yuyu_list_devices,
             commands::account::yuyu::yuyu_revoke_device,
+            commands::account::yuyu::yuyu_sync_minecraft_accounts,
             commands::fleet::fleet_config,
             commands::fleet::fleet_refresh,
             commands::fleet::fleet_flag,

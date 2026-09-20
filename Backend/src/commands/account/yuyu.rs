@@ -241,6 +241,19 @@ async fn finish_sign_in(
     })
 }
 
+/// À appeler après l'ajout ou le retrait d'un compte Minecraft : le serveur
+/// garde la liste complète, qui sert au support (recherche par pseudo ou
+/// UUID Minecraft). Sans session YuyuFrame, il n'y a rien à envoyer.
+#[tauri::command]
+pub async fn yuyu_sync_minecraft_accounts(state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    if state.read().await.yuyu_session.is_none() {
+        return Ok(());
+    }
+    let accounts = super::list_accounts(&state).await?;
+    push_minecraft_accounts(&state, &accounts).await;
+    Ok(())
+}
+
 /// Liste complète des comptes Minecraft liés (remplace la précédente).
 /// Silencieux : un échec ici ne doit jamais empêcher de se connecter.
 pub async fn push_minecraft_accounts(state: &tauri::State<'_, SharedState>, accounts: &[AccountInfo]) {

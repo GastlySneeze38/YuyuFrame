@@ -194,6 +194,8 @@ export const api = {
     setEmail: (email: string) => invoke<void>('yuyu_set_email', { email }),
     listDevices: () => invoke<YuyuDevice[]>('yuyu_list_devices'),
     revokeDevice: (id: string) => invoke<void>('yuyu_revoke_device', { id }),
+    /** Après ajout/retrait d'un compte Minecraft (sert au support). */
+    syncMinecraftAccounts: () => invoke<void>('yuyu_sync_minecraft_accounts'),
   },
 
   /** Réglages poussés par le back-office (voir stores/useFleet.ts). */

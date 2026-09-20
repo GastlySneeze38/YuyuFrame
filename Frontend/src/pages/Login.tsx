@@ -9,7 +9,13 @@ import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { showError } from '@/stores/useErrorToast'
 import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
+import { AddAccountModal } from '@/components/account/AddAccountModal'
+import { YuyuAccountPanel } from '@/components/account/YuyuAccountPanel'
 import { SkinPickerModal } from '@/components/account/SkinPickerModal'
+import { SectionTitle } from '@/components/ui/Field'
+import { ModalShell } from '@/components/ui/ModalShell'
+import { fadeVariants, fastTransition, listItemVariants, listVariants, pressable } from '@/lib/motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useT } from '@/i18n'
 
 type Step = 'idle' | 'loading' | 'polling' | 'confirmed' | 'error'
@@ -24,6 +30,10 @@ export default function Login() {
   const navigate = useNavigate()
   const { uuid, username, accounts, setAccounts, setUser, clearUser, removeAccount, addAccount } = useStore()
   const [showOfflineModal, setShowOfflineModal] = useState(false)
+  // Choix Microsoft / hors ligne : un seul bouton d'ajout dans la liste.
+  const [showAddModal, setShowAddModal] = useState(false)
+  // Liste complète des comptes, quand ils ne tiennent plus tous à l'écran.
+  const [showAllAccounts, setShowAllAccounts] = useState(false)
   const [skins, setSkins] = useState<Record<string, string>>({})
   const [step, setStep] = useState<Step>('idle')
   const [userCode, setUserCode] = useState('')
@@ -240,6 +250,8 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
       removeAccount(acc.uuid)
       if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
       else clearUser()
+      // Le serveur garde la liste des comptes liés (recherche du support).
+      api.yuyu.syncMinecraftAccounts().catch(() => {})
     } catch (e) { showError(e) }
   }
 
@@ -251,6 +263,17 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
   }, [])
 
   const displayAccount = accounts.find((a) => a.uuid === (previewUuid ?? uuid))
+
+  // La grille des comptes ne dépasse jamais 3 lignes, pour que la page tienne
+  // dans la fenêtre : une colonne tant que tout rentre, deux ensuite. Quand
+  // même deux colonnes ne suffisent plus, la dernière case devient « + N » et
+  // le bouton d'ajout déménage dans la modale.
+  const MAX_ROWS = 3
+  const twoColumns = accounts.length + 1 > MAX_ROWS
+  const capacity = MAX_ROWS * (twoColumns ? 2 : 1)
+  const addFitsInGrid = accounts.length + 1 <= capacity
+  const visibleAccounts = addFitsInGrid ? accounts : accounts.slice(0, capacity - 1)
+  const hiddenCount = accounts.length - visibleAccounts.length
 
   if (overlayActive) {
     return (
@@ -355,107 +378,124 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
       <PageHeader>
         <PageHeaderSeparator />
         <div>
-          <h1 className="font-black text-white text-[16px] tracking-[-0.01em] leading-[1.2]">
-            {t('login.title')}
+          <h1 className="font-black text-txt-primary text-[16px] tracking-[-0.01em] leading-[1.2]">
+            {t('account.title')}
           </h1>
-          <p className="text-[10px] text-[rgba(255,255,255,0.28)] mt-px">
-            {t('login.subtitle')}
+          <p className="mt-px text-[10px] text-txt-muted">
+            {t('account.subtitle')}
           </p>
         </div>
       </PageHeader>
 
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Corps : deux colonnes qui tiennent dans la hauteur de la fenêtre.
+          À gauche le compte YuyuFrame, à droite le skin puis les comptes
+          Minecraft. Aucune colonne ne défile : `min-h-0` laisse les blocs se
+          comprimer au lieu de déborder. */}
+      <motion.div
+        variants={listVariants}
+        initial="initial"
+        animate="animate"
+        className="grid min-h-0 flex-1 grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-5 overflow-hidden px-6 py-5"
+      >
+        {/* Colonne gauche — compte YuyuFrame */}
+        <motion.div variants={listItemVariants} className="flex min-h-0 flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded-sm bg-accent" />
+            <span className="text-[20px] font-black tracking-[-0.01em] text-txt-primary">YuyuFrame</span>
+          </div>
+          {/* Tout tient sans défilement une fois replié ; déplier les
+              appareils peut demander un peu de place, d'où le `min-h-0`. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-0.5">
+            <YuyuAccountPanel />
+          </div>
+        </motion.div>
 
-        {/* Left — 3D skin viewer */}
-        <div className="relative flex flex-shrink-0 flex-col w-[38%] bg-[radial-gradient(ellipse_at_50%_58%,rgba(75,63,207,0.22)_0%,transparent_72%)] border-r border-r-[rgba(255,255,255,0.05)]">
-          {/* shadow under feet */}
-          <div className="absolute bottom-[18%] left-1/2 -translate-x-1/2 w-[28%] h-[14px] bg-[rgba(75,63,207,0.55)] rounded-full blur-[20px]" />
-
-          {/* Canvas fills all available height */}
-          <div ref={canvasContainerRef} className="relative z-10 min-h-0 flex-1">
-            <canvas
-              ref={canvasRef}
-              className="bg-transparent block"
-            />
+        {/* Colonne droite — le skin en grand, puis les comptes Minecraft */}
+        <motion.div variants={listItemVariants} className="flex min-h-0 flex-col gap-3">
+          {/* Le skin prend toute la place qui reste au-dessus des comptes. */}
+          <div className="relative flex min-h-[220px] flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-[radial-gradient(ellipse_at_50%_58%,rgba(75,63,207,0.22)_0%,transparent_72%)]">
+            <div className="absolute bottom-[16%] left-1/2 h-[12px] w-[28%] -translate-x-1/2 rounded-full bg-accent/50 blur-[20px]" />
+            <div ref={canvasContainerRef} className="relative z-10 min-h-0 flex-1">
+              <canvas ref={canvasRef} className="block bg-transparent" />
+            </div>
+            <div className="relative z-10 flex flex-shrink-0 flex-col items-center gap-0.5 pb-2.5">
+              {displayAccount ? (
+                <>
+                  <p className="text-[12px] font-bold text-txt-primary">{displayAccount.username}</p>
+                  <p className={`text-[10px] ${displayAccount.uuid === uuid ? 'text-success' : 'text-txt-muted'}`}>
+                    {displayAccount.uuid === uuid ? t('login.active') : t('login.preview')}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[10px] text-txt-muted">{t('login.noAccount')}</p>
+              )}
+            </div>
           </div>
 
-          <div className="relative z-10 flex flex-shrink-0 flex-col items-center gap-0.5 py-3">
-            {displayAccount ? (
-              <>
-                <p className="font-bold text-white text-[13px]">
-                  {displayAccount.username}
-                </p>
-                <p className={`text-[10px] ${displayAccount.uuid === uuid ? 'text-[rgba(74,222,128,0.75)]' : 'text-[rgba(255,255,255,0.3)]'}`}>
-                  {displayAccount.uuid === uuid ? t('login.active') : t('login.preview')}
-                </p>
-              </>
-            ) : (
-              <p className="text-[10px] text-[rgba(255,255,255,0.2)]">{t('login.noAccount')}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Right — account management */}
-        <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-8 py-7">
-
-          {/* Branding */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded-sm bg-[#4B3FCF]" />
-              <span className="font-black text-white text-[22px] tracking-[-0.01em]">
-                YuyuFrame
-              </span>
-            </div>
-            <p className="text-[11px] text-[rgba(255,255,255,0.28)]">
-              {accounts.length === 0
-                ? t('login.connectToPlay')
-                : accounts.length < 2
-                ? t('login.addSecondAccount')
-                : t('login.selectAccountToPlay')}
-            </p>
-            </div>
-
-            <button
-              onClick={() => { setShowOfflineModal(true); api.analytics.track('offline_account_modal_opened') }}
-              title={t('login.offlineAccount')}
-              className="flex h-8 flex-shrink-0 items-center justify-center rounded-full border border-[rgba(255,255,255,0.15)] px-3.5 text-[rgba(255,255,255,0.35)] transition-colors hover:border-[rgba(255,255,255,0.4)] hover:text-white"
+          {/* Comptes Minecraft — jamais de défilement : une colonne tant
+              qu'il y a peu de comptes, deux au-delà, et une tuile « + N »
+              qui ouvre la liste complète quand ça ne tient plus. Une seule
+              porte d'entrée pour en ajouter un, Microsoft ou hors ligne. */}
+          <div className="flex flex-shrink-0 flex-col gap-2">
+            <SectionTitle
+              action={
+                accounts.length > visibleAccounts.length ? (
+                  <button
+                    onClick={() => setShowAllAccounts(true)}
+                    className="text-[11px] text-txt-muted transition-colors duration-150 hover:text-txt-primary"
+                  >
+                    {t('login.allAccounts', { count: accounts.length })}
+                  </button>
+                ) : undefined
+              }
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" width={13} height={13}>
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+              {t('login.minecraftAccounts')}
+            </SectionTitle>
+            <motion.div
+              layout
+              className={`grid gap-2 ${twoColumns ? 'grid-cols-2' : 'grid-cols-1'}`}
+            >
+              <AnimatePresence initial={false}>
+                {visibleAccounts.map((acc) => (
+                  <AccountRow
+                    key={acc.uuid}
+                    acc={acc}
+                    compact={twoColumns}
+                    isActive={acc.uuid === uuid}
+                    skin={skins[acc.uuid]}
+                    onSelect={() => handleSelect(acc)}
+                    onRemove={() => handleRemove(acc)}
+                    onHover={() => setPreviewUuid(acc.uuid)}
+                    onLeave={() => setPreviewUuid(null)}
+                    onSkinChange={(dataUri) => setSkins((s) => ({ ...s, [acc.uuid]: dataUri }))}
+                  />
+                ))}
+              </AnimatePresence>
+
+              {hiddenCount > 0 && (
+                <MoreTile count={hiddenCount} onClick={() => setShowAllAccounts(true)} />
+              )}
+              {/* Le bouton d'ajout ne reste dans la grille que s'il y tient :
+                  sinon il attend dans la modale « tous les comptes ». */}
+              {step === 'idle' && addFitsInGrid && (
+                <AddRow compact={twoColumns} onClick={() => setShowAddModal(true)} />
+              )}
+            </motion.div>
           </div>
 
-          {/* Account rows */}
-          <div className="flex flex-col gap-2">
-            {accounts.map((acc) => (
-              <AccountRow
-                key={acc.uuid}
-                acc={acc}
-                isActive={acc.uuid === uuid}
-                skin={skins[acc.uuid]}
-                onSelect={() => handleSelect(acc)}
-                onRemove={() => handleRemove(acc)}
-                onHover={() => setPreviewUuid(acc.uuid)}
-                onLeave={() => setPreviewUuid(null)}
-                onSkinChange={(dataUri) => setSkins((s) => ({ ...s, [acc.uuid]: dataUri }))}
-              />
-            ))}
-
-            {step === 'idle' && (
-              <AddRow onClick={startLogin} />
-            )}
-          </div>
-
-          {/* Auth flow panel */}
+          {/* Connexion Microsoft en cours (le gros de ce parcours se passe
+              dans la fenêtre compacte `overlayActive`, voir plus haut). */}
           {(step === 'loading' || step === 'polling' || step === 'error') && (
-            <div className="rounded-2xl p-5 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]">
+            <motion.div
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              className="flex-shrink-0 rounded-2xl border border-line bg-surface-1 p-4"
+            >
               {step === 'loading' && (
                 <div className="flex items-center justify-center gap-3 py-2">
-                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-[rgba(255,255,255,0.15)] border-t-[#4B3FCF]" />
-                  <span className="text-[13px] text-[rgba(255,255,255,0.5)]">{t('login.connecting')}</span>
+                  <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-line-strong border-t-accent" />
+                  <span className="text-[13px] text-txt-secondary">{t('login.connecting')}</span>
                 </div>
               )}
 
@@ -520,27 +560,80 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
-      {showOfflineModal && (
-        <OfflineAccountModal
-          onClose={() => setShowOfflineModal(false)}
-          onAdded={(acc) => { addAccount(acc.username, acc.uuid, acc.is_offline); navigate('/home') }}
-        />
-      )}
+      <AnimatePresence>
+        {showAllAccounts && (
+          <ModalShell
+            title={t('login.allAccountsTitle')}
+            onClose={() => setShowAllAccounts(false)}
+            maxWidth="max-w-xl"
+          >
+            <motion.div
+              variants={listVariants}
+              initial="initial"
+              animate="animate"
+              className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-0.5"
+            >
+              {/* Quand la grille est pleine, c'est ici qu'on ajoute un compte. */}
+              {!addFitsInGrid && (
+                <AddRow onClick={() => { setShowAllAccounts(false); setShowAddModal(true) }} />
+              )}
+              <AnimatePresence initial={false}>
+                {accounts.map((acc) => (
+                  <AccountRow
+                    key={acc.uuid}
+                    acc={acc}
+                    isActive={acc.uuid === uuid}
+                    skin={skins[acc.uuid]}
+                    onSelect={() => handleSelect(acc)}
+                    onRemove={() => handleRemove(acc)}
+                    onHover={() => setPreviewUuid(acc.uuid)}
+                    onLeave={() => setPreviewUuid(null)}
+                    onSkinChange={(dataUri) => setSkins((s) => ({ ...s, [acc.uuid]: dataUri }))}
+                  />
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          </ModalShell>
+        )}
+        {showAddModal && (
+          <AddAccountModal
+            onClose={() => setShowAddModal(false)}
+            onMicrosoft={startLogin}
+            onOffline={() => { setShowOfflineModal(true); api.analytics.track('offline_account_modal_opened') }}
+          />
+        )}
+        {showOfflineModal && (
+          <OfflineAccountModal
+            onClose={() => setShowOfflineModal(false)}
+            onAdded={(acc) => {
+              addAccount(acc.username, acc.uuid, acc.is_offline)
+              api.yuyu.syncMinecraftAccounts().catch(() => {})
+              navigate('/home')
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
+/**
+ * Une ligne de compte Minecraft. En mode `compact` (deux colonnes), les
+ * libellés des boutons laissent la place aux icônes : la carte est deux fois
+ * moins large, mais on peut toujours tout faire.
+ */
 function AccountRow({
-  acc, isActive, skin, onSelect, onRemove, onHover, onLeave, onSkinChange,
+  acc, isActive, skin, compact, onSelect, onRemove, onHover, onLeave, onSkinChange,
 }: {
   acc: Account
   isActive: boolean
   skin?: string
+  compact?: boolean
   onSelect: () => void
   onRemove: () => void
   onHover: () => void
@@ -553,13 +646,19 @@ function AccountRow({
   const offline = acc.is_offline
 
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl p-3 transition-all duration-150 border ${
+    <motion.div
+      layout
+      variants={listItemVariants}
+      // La ligne s'en va sur le côté : on voit clairement quel compte part.
+      exit={{ opacity: 0, x: -12, transition: fastTransition }}
+      whileHover={{ y: -1 }}
+      transition={fastTransition}
+      className={`flex items-center gap-3 rounded-xl border p-3 transition-colors duration-150 ease-out ${
         isActive
-          ? 'bg-[rgba(75,63,207,0.08)] border-[rgba(75,63,207,0.35)] shadow-[0_0_24px_rgba(75,63,207,0.1)]'
+          ? 'border-accent/35 bg-accent/10 shadow-[0_0_24px_rgba(75,63,207,0.1)]'
           : hovered
-            ? 'bg-[rgba(255,255,255,0.03)] border-[rgba(255,255,255,0.09)] shadow-none'
-            : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.06)] shadow-none'
+            ? 'border-line-strong bg-surface-2'
+            : 'border-line bg-surface-1'
       }`}
       onMouseEnter={() => { setHovered(true); onHover() }}
       onMouseLeave={() => { setHovered(false); onLeave() }}
@@ -608,8 +707,8 @@ function AccountRow({
 
       {/* Info */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <p className="truncate font-semibold text-white text-[13px]">{acc.username}</p>
-        <p className={`text-[10px] mt-px ${isActive ? 'text-[rgba(74,222,128,0.7)]' : 'text-[rgba(255,255,255,0.3)]'}`}>
+        <p className="truncate text-[13px] font-semibold text-txt-primary">{acc.username}</p>
+        <p className={`mt-px text-[10px] ${isActive ? 'text-success' : 'text-txt-muted'}`}>
           {isActive ? t('login.active') : t('login.savedAccount')}
         </p>
       </div>
@@ -619,16 +718,18 @@ function AccountRow({
         {isActive ? (
           <button
             onClick={onSelect}
-            className="rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-150 bg-[rgba(75,63,207,0.25)] border border-[rgba(75,63,207,0.45)] hover:bg-[rgba(75,63,207,0.42)]"
+            title={t('login.play')}
+            className="rounded-lg border border-accent/45 bg-accent/25 px-3 py-1.5 text-[13px] font-medium text-txt-primary transition-colors duration-150 ease-out hover:bg-accent/40"
           >
-            {t('login.play')}
+            {compact ? '▶' : t('login.play')}
           </button>
         ) : (
           <button
             onClick={onSelect}
-            className="rounded-lg px-3 py-1.5 text-sm transition-all duration-150 text-[rgba(255,255,255,0.45)] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(75,63,207,0.45)] hover:text-[rgba(255,255,255,0.9)]"
+            title={t('login.select')}
+            className="rounded-lg border border-line px-3 py-1.5 text-[13px] text-txt-secondary transition-colors duration-150 ease-out hover:border-accent/45 hover:text-txt-primary"
           >
-            {t('login.select')}
+            {compact ? '▶' : t('login.select')}
           </button>
         )}
         {offline && (
@@ -653,33 +754,61 @@ function AccountRow({
         </button>
       </div>
 
-      {showSkinPicker && (
-        <SkinPickerModal
-          uuid={acc.uuid}
-          onClose={() => setShowSkinPicker(false)}
-          onApplied={onSkinChange}
-        />
-      )}
-    </div>
+      <AnimatePresence>
+        {showSkinPicker && (
+          <SkinPickerModal
+            uuid={acc.uuid}
+            onClose={() => setShowSkinPicker(false)}
+            onApplied={onSkinChange}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 
-function AddRow({ onClick }: { onClick: () => void }) {
+/** Unique bouton d'ajout : il ouvre le choix Microsoft / hors ligne. */
+function AddRow({ onClick, compact }: { onClick: () => void; compact?: boolean }) {
   const t = useT()
   return (
-    <button
+    <motion.button
+      layout
+      variants={listItemVariants}
+      {...pressable}
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl p-3 transition-all duration-200 bg-[rgba(255,255,255,0.015)] border-[1.5px] border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(140,130,240,0.8)] hover:bg-[rgba(75,63,207,0.05)]"
+      className="flex w-full items-center gap-3 rounded-xl border-[1.5px] border-dashed border-line bg-surface-1 p-3 text-txt-muted transition-colors duration-150 ease-out hover:border-accent/40 hover:bg-accent/5 hover:text-txt-secondary"
     >
-      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2">
         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path d="M12 5v14M5 12h14" strokeLinecap="round" />
         </svg>
       </div>
-      <div className="text-left">
-        <p className="text-[13px] font-semibold">{t('login.addAccount')}</p>
-        <p className="text-[10px] mt-0.5 text-[rgba(255,255,255,0.2)]">{t('login.connectViaMicrosoft')}</p>
+      <div className="min-w-0 text-left">
+        <p className="truncate text-[13px] font-semibold">{t('login.addAccount')}</p>
+        {!compact && <p className="mt-0.5 text-[10px] text-txt-muted">{t('login.connectViaMicrosoft')}</p>}
       </div>
-    </button>
+    </motion.button>
+  )
+}
+
+/** Tuile « + N » : les comptes qui ne tiennent pas à l'écran, sur un clic. */
+function MoreTile({ count, onClick }: { count: number; onClick: () => void }) {
+  const t = useT()
+  return (
+    <motion.button
+      layout
+      variants={listItemVariants}
+      {...pressable}
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface-1 p-3 text-txt-secondary transition-colors duration-150 ease-out hover:border-accent/40 hover:bg-surface-2 hover:text-txt-primary"
+    >
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-surface-3 text-[15px] font-black text-txt-primary">
+        +{count}
+      </div>
+      <div className="min-w-0 text-left">
+        <p className="truncate text-[13px] font-semibold">{t('login.showMore')}</p>
+        <p className="mt-0.5 truncate text-[10px] text-txt-muted">{t('login.otherAccounts', { count })}</p>
+      </div>
+    </motion.button>
   )
 }
