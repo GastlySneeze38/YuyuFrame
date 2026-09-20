@@ -10,7 +10,7 @@ import { UpgradeModal } from '@/components/plans/UpgradeModal'
 import { HeaderAccountBadge } from '@/components/ui/HeaderAccountBadge'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showApiError } from '@/stores/useErrorToast'
-import { isNetworkError } from '@/lib/apiError'
+import { errorMessage, isNetworkError } from '@/lib/apiError'
 import { useT } from '@/i18n'
 
 export default function Plans() {
@@ -75,7 +75,7 @@ export default function Plans() {
       }
       setCheckoutState('timeout')
     } catch (e) {
-      setCheckoutError(isNetworkError(e) ? t('common.serverUnreachable') : String(e))
+      setCheckoutError(isNetworkError(e) ? t('common.serverUnreachable') : errorMessage(e))
       setCheckoutState('error')
     }
   }

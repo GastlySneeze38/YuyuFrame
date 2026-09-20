@@ -4,63 +4,26 @@
 // proxy ; le téléchargement du fichier lui-même se fait ensuite en direct
 // vers le CDN CurseForge (`downloadUrl` dans la réponse de
 // `curseforge_mod_files`), sans repasser par le serveur.
-use super::{api_base, network_err};
+// Les routes /v1/curseforge/* exigent une session valide côté serveur (pour
+// éviter qu'un appelant anonyme consomme le quota partagé, ce n'est pas une
+// histoire d'abonnement) : `crate::api` s'occupe du jeton et de sa rotation.
+use crate::api;
 use crate::state::SharedState;
 
-/// Récupère le token YuyuFrame courant — toutes les routes /curseforge/*
-/// exigent une session valide côté serveur (juste pour éviter qu'un appelant
-/// anonyme cram le quota partagé, pas une histoire de plan payant).
-pub(crate) async fn require_token(state: &tauri::State<'_, SharedState>) -> Result<(String, reqwest::Client), String> {
-    let s = state.read().await;
-    let token = s
-        .yuyu_session
-        .as_ref()
-        .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
-        .token
-        .clone();
-    Ok((token, s.http.clone()))
-}
-
 async fn get_json(
-    client: &reqwest::Client,
-    token: &str,
-    url: String,
+    state: &tauri::State<'_, SharedState>,
+    path: &str,
     query: &[(&str, String)],
 ) -> Result<serde_json::Value, String> {
-    let resp = client
-        .get(url)
-        .bearer_auth(token)
-        .query(query)
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        return Err(crate::commands::bearer_call_error(resp).await);
-    }
-
-    resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+    api::get(state, path, query).await.map_err(Into::into)
 }
 
 pub(crate) async fn post_json(
-    client: &reqwest::Client,
-    token: &str,
-    url: String,
-    body: &serde_json::Value,
+    state: &tauri::State<'_, SharedState>,
+    path: &str,
+    body: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let resp = client
-        .post(url)
-        .bearer_auth(token)
-        .json(body)
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        return Err(crate::commands::bearer_call_error(resp).await);
-    }
-
-    resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
+    api::post(state, path, body).await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -76,8 +39,6 @@ pub async fn curseforge_search(
     sort_order: Option<String>,
     mod_loader_type: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (token, client) = require_token(&state).await?;
-
     let mut params: Vec<(&str, String)> = vec![("query", query)];
     if let Some(gv) = game_version { params.push(("game_version", gv)); }
     if let Some(cid) = class_id { params.push(("class_id", cid)); }
@@ -88,7 +49,7 @@ pub async fn curseforge_search(
     if let Some(so) = sort_order { params.push(("sort_order", so)); }
     if let Some(mlt) = mod_loader_type { params.push(("mod_loader_type", mlt)); }
 
-    get_json(&client, &token, format!("{}/curseforge/search", api_base()), &params).await
+    get_json(&state, "/curseforge/search", &params).await
 }
 
 #[tauri::command]
@@ -96,8 +57,7 @@ pub async fn curseforge_mod_details(
     state: tauri::State<'_, SharedState>,
     mod_id: u64,
 ) -> Result<serde_json::Value, String> {
-    let (token, client) = require_token(&state).await?;
-    get_json(&client, &token, format!("{}/curseforge/mods/{}", api_base(), mod_id), &[]).await
+    get_json(&state, &format!("/curseforge/mods/{mod_id}"), &[]).await
 }
 
 #[tauri::command]
@@ -106,16 +66,14 @@ pub async fn curseforge_mod_files(
     mod_id: u64,
     game_version: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (token, client) = require_token(&state).await?;
     let mut params: Vec<(&str, String)> = vec![];
     if let Some(gv) = game_version { params.push(("game_version", gv)); }
-    get_json(&client, &token, format!("{}/curseforge/mods/{}/files", api_base(), mod_id), &params).await
+    get_json(&state, &format!("/curseforge/mods/{mod_id}/files"), &params).await
 }
 
 #[tauri::command]
 pub async fn curseforge_categories(state: tauri::State<'_, SharedState>) -> Result<serde_json::Value, String> {
-    let (token, client) = require_token(&state).await?;
-    get_json(&client, &token, format!("{}/curseforge/categories", api_base()), &[]).await
+    get_json(&state, "/curseforge/categories", &[]).await
 }
 
 /// Fait correspondre des fingerprints locaux à des mods/fichiers CurseForge
@@ -127,9 +85,8 @@ pub async fn curseforge_fingerprint_matches(
     state: tauri::State<'_, SharedState>,
     fingerprints: Vec<u32>,
 ) -> Result<serde_json::Value, String> {
-    let (token, client) = require_token(&state).await?;
     let body = serde_json::json!({ "fingerprints": fingerprints });
-    post_json(&client, &token, format!("{}/curseforge/fingerprints", api_base()), &body).await
+    post_json(&state, "/curseforge/fingerprints", body).await
 }
 
 // ── Fingerprint CurseForge (murmur2, seed=1, whitespace filtré) ────────────────

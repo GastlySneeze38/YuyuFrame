@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { isNetworkError, isSessionExpiredError } from '@/lib/apiError'
+import { errorMessage, isNetworkError, isSessionExpiredError } from '@/lib/apiError'
 import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
 
@@ -32,10 +32,13 @@ export const useErrorToast = create<ErrorToastStore>((set) => ({
   },
 }))
 
-/** Formate n'importe quelle erreur attrapée et l'affiche dans le popup global. */
+/**
+ * Formate n'importe quelle erreur attrapée et l'affiche dans le popup global.
+ * Une erreur de la LauncherAPI arrive en JSON (`{ code, message }`) : on
+ * n'affiche que son message, jamais le JSON brut.
+ */
 export function showError(e: unknown): void {
-  const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e)
-  useErrorToast.getState().show(message, 'error')
+  useErrorToast.getState().show(errorMessage(e), 'error')
 }
 
 /** Affiche une notice neutre (pas une erreur) dans le même popup global, en gris. */

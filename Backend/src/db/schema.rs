@@ -92,6 +92,16 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN yuyu_user_id INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'", []);
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN plan_expires_at INTEGER", []);
+    // Refonte LauncherAPI /v1 : jeton d'accès de 15 min + refresh token à
+    // rotation, e-mail du compte, licence signée vérifiable hors ligne et
+    // mot de passe provisoire (voir crate::api). Les sessions d'avant n'ont
+    // pas de refresh token : `load_yuyu_session` les ignore.
+    let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN refresh_token TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN access_token TEXT NOT NULL DEFAULT ''", []);
+    let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN access_expires_at INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN email TEXT", []);
+    let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN license TEXT", []);
+    let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN password_reset_required INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN description TEXT NOT NULL DEFAULT ''", []);
     // P1-6 (audit launcher, Phase 6) : vendeur JVM + policy GC par instance.

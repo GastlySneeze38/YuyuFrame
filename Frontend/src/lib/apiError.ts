@@ -1,28 +1,75 @@
 /**
- * Distingue une panne de transport vers la LauncherAPI (DNS, timeout,
- * connexion refusée) d'une erreur métier (401, quota, validation...) — les
- * deux arrivent en JS comme un simple `string` rejeté par `invoke()`, donc ce
- * préfixe est le seul moyen de les différencier sans changer la convention
- * `Result<T, String>` de toutes les commandes Tauri. Doit rester identique à
- * `network_err()` dans `Backend/src/commands/mod.rs`.
+ * Erreurs de la LauncherAPI /v1.
+ *
+ * Le backend Rust renvoie ses erreurs en JSON à travers la convention
+ * `Result<T, String>` des commandes Tauri : `{ code, message, ...extra }`
+ * (voir `Backend/src/api/error.rs`, qui doit rester d'accord avec ce fichier).
+ * Le `code` est la seule chose stable — le texte, lui, peut changer.
+ *
+ * Une erreur qui ne vient pas de l'API (message brut d'une commande locale)
+ * est rendue telle quelle, avec le code « unknown ».
  */
-const NETWORK_ERROR_PREFIX = 'Serveur inaccessible : '
 
+export interface ApiError {
+  code: string
+  message: string
+  /** Champs propres à certaines erreurs : min_version, reason, until… */
+  extra: Record<string, unknown>
+}
+
+export function parseApiError(e: unknown): ApiError {
+  const raw = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e)
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && typeof parsed.code === 'string') {
+      const { code, message, extra, ...rest } = parsed
+      return {
+        code,
+        message: typeof message === 'string' ? message : raw,
+        extra: { ...(extra ?? {}), ...rest },
+      }
+    }
+  } catch {
+    // Pas du JSON : erreur locale, on garde le texte.
+  }
+  return { code: 'unknown', message: raw, extra: {} }
+}
+
+export function errorCode(e: unknown): string {
+  return parseApiError(e).code
+}
+
+export function errorMessage(e: unknown): string {
+  return parseApiError(e).message
+}
+
+/** Panne de transport (DNS, timeout, connexion refusée). */
 export function isNetworkError(e: unknown): boolean {
-  const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e)
-  return message.startsWith(NETWORK_ERROR_PREFIX)
+  return errorCode(e) === 'network'
+}
+
+/** La session est perdue : il faut revenir à l'écran de connexion. */
+export function isSessionExpiredError(e: unknown): boolean {
+  const code = errorCode(e)
+  return code === 'session_revoked' || code === 'not_signed_in'
 }
 
 /**
- * Un 401 renvoyé par la LauncherAPI sur un appel authentifié (Bearer token) —
- * la session YuyuFrame doit être vidée et l'utilisateur invité à se
- * reconnecter, plutôt que de laisser chaque appel suivant échouer en boucle
- * avec le même message brut. Doit rester identique à `SESSION_EXPIRED_PREFIX`
- * (`bearer_call_error()` dans `Backend/src/commands/mod.rs`).
+ * Erreurs que l'interface doit traiter par un écran dédié plutôt que par un
+ * simple message : mise à jour obligatoire, version bloquée, compte suspendu
+ * ou banni, mot de passe provisoire à changer.
  */
-const SESSION_EXPIRED_PREFIX = 'Session expirée : '
+export const BLOCKING_CODES = [
+  'update_required',
+  'version_blocked',
+  'account_suspended',
+  'account_banned',
+  'password_change_required',
+] as const
 
-export function isSessionExpiredError(e: unknown): boolean {
-  const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e)
-  return message.startsWith(SESSION_EXPIRED_PREFIX)
+export type BlockingCode = (typeof BLOCKING_CODES)[number]
+
+export function blockingCode(e: unknown): BlockingCode | null {
+  const code = errorCode(e)
+  return (BLOCKING_CODES as readonly string[]).includes(code) ? (code as BlockingCode) : null
 }

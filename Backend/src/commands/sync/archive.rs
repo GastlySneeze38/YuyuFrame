@@ -74,11 +74,15 @@ pub struct ModManifest {
 
 // ── Auth helpers ───────────────────────────────────────────────────────────────
 
+/// ⚠ Provisoire : renvoie le jeton d'accès tel quel, sans le rafraîchir. La
+/// cloud sync est coupée (`SYNC_ENABLED = false` côté frontend) en attendant
+/// sa réécriture sur le protocole par morceaux de /v1, qui passera comme le
+/// reste par `crate::api` (rotation des jetons comprise).
 pub(super) fn get_token(state: &crate::state::AppState) -> Result<String, String> {
     state
         .yuyu_session
         .as_ref()
-        .map(|s| s.token.clone())
+        .map(|s| s.access_token.clone())
         .ok_or_else(|| "Non connecté à YuyuFrame".into())
 }
 

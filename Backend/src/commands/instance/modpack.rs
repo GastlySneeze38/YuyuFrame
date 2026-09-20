@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 
 use super::crud::instance_dir;
-use crate::commands::api_base;
-use crate::commands::curseforge::{post_json, require_token};
+use crate::commands::curseforge::post_json;
 use crate::minecraft::mod_files::is_jar_file;
 use crate::minecraft::versions::predicate::read_fabric_mod_json;
 use crate::state::SharedState;
@@ -288,9 +287,8 @@ async fn resolve_cf_files(
     if file_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let (token, client) = require_token(state).await?;
     let body = serde_json::json!({ "file_ids": file_ids });
-    let value = post_json(&client, &token, format!("{}/curseforge/files", api_base()), &body).await?;
+    let value = post_json(state, "/curseforge/files", body).await?;
     let parsed: CfFilesResponse = serde_json::from_value(value).map_err(|e| e.to_string())?;
     Ok(parsed.data)
 }

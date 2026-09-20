@@ -7,15 +7,26 @@ export type YuyuPlan = 'free' | 'premium' | 'ultimate'
 export type Lang = 'fr' | 'en'
 
 interface Store {
-  // ── YuyuFrame session (persisté — le JWT dure 30 jours côté serveur, pas
-  // besoin de se reconnecter à chaque lancement ; un token invalide/expiré
-  // est détecté au premier appel API et la session est vidée automatiquement,
-  // voir showApiError/isSessionExpiredError) ──
-  yuyuToken: string | null
+  // ── Session YuyuFrame ──
+  // Les jetons vivent côté Rust (base locale + mémoire) et ne passent plus
+  // jamais par le frontend : depuis la refonte /v1, le jeton d'accès ne dure
+  // que 15 minutes et se renouvelle tout seul. Ici on ne garde que de quoi
+  // afficher. Une session fermée côté serveur est détectée au premier appel
+  // et vidée automatiquement (voir showApiError/isSessionExpiredError).
+  yuyuSignedIn: boolean
   yuyuUsername: string | null
+  yuyuEmail: string | null
   yuyuPlan: YuyuPlan
   yuyuPlanExpiresAt: number | null
-  setYuyuSession: (token: string, username: string, plan: YuyuPlan, planExpiresAt: number | null) => void
+  /** Licence hors ligne : « grace » déclenche le bandeau d'information. */
+  yuyuLicenseState: 'valid' | 'grace' | 'expired'
+  setYuyuSession: (session: {
+    username: string
+    email?: string | null
+    plan: YuyuPlan
+    planExpiresAt: number | null
+    licenseState?: 'valid' | 'grace' | 'expired'
+  }) => void
   setYuyuPlan: (plan: YuyuPlan, planExpiresAt: number | null) => void
   clearYuyuSession: () => void
   isPremium: () => boolean
@@ -171,18 +182,34 @@ export const useStore = create<Store>()(
   persist(
     (set, get) => ({
       // YuyuFrame session
-      yuyuToken: null,
+      yuyuSignedIn: false,
       yuyuUsername: null,
+      yuyuEmail: null,
       yuyuPlan: 'free',
       yuyuPlanExpiresAt: null,
-      setYuyuSession: (token, username, plan, planExpiresAt) =>
-        set({ yuyuToken: token, yuyuUsername: username, yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
+      yuyuLicenseState: 'valid',
+      setYuyuSession: (session) =>
+        set({
+          yuyuSignedIn: true,
+          yuyuUsername: session.username,
+          yuyuEmail: session.email ?? null,
+          yuyuPlan: session.plan,
+          yuyuPlanExpiresAt: session.planExpiresAt,
+          yuyuLicenseState: session.licenseState ?? 'valid',
+        }),
       setYuyuPlan: (plan, planExpiresAt) =>
         set({ yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
       // Les comptes Minecraft appartiennent au PC (voir db::mc_account côté
       // backend) : quitter YuyuFrame ne les retire pas.
       clearYuyuSession: () =>
-        set({ yuyuToken: null, yuyuUsername: null, yuyuPlan: 'free', yuyuPlanExpiresAt: null }),
+        set({
+          yuyuSignedIn: false,
+          yuyuUsername: null,
+          yuyuEmail: null,
+          yuyuPlan: 'free',
+          yuyuPlanExpiresAt: null,
+          yuyuLicenseState: 'valid',
+        }),
       isPremium: () => {
         const { yuyuPlan, yuyuPlanExpiresAt } = get()
         const active = yuyuPlan === 'premium' || yuyuPlan === 'ultimate'
@@ -396,8 +423,9 @@ export const useStore = create<Store>()(
     {
       name: 'yuyuframe-store',
       partialize: (s) => ({
-        yuyuToken: s.yuyuToken,
+        yuyuSignedIn: s.yuyuSignedIn,
         yuyuUsername: s.yuyuUsername,
+        yuyuEmail: s.yuyuEmail,
         yuyuPlan: s.yuyuPlan,
         yuyuPlanExpiresAt: s.yuyuPlanExpiresAt,
         selectedInstanceId: s.selectedInstanceId,

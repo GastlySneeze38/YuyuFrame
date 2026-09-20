@@ -15,13 +15,25 @@ pub struct MinecraftSession {
     pub expires_at: i64,
 }
 
+/// Session YuyuFrame (LauncherAPI /v1). Le jeton d'accès ne vit que 15
+/// minutes : c'est `refresh_token` qui porte la session, et il est remplacé à
+/// chaque rafraîchissement. Voir `crate::api`.
 #[derive(Debug, Clone)]
 pub struct YuyuSession {
     pub user_id: i64,
     pub username: String,
-    pub token: String,
+    pub email: Option<String>,
     pub plan: String,
     pub plan_expires_at: Option<i64>,
+    /// Mot de passe provisoire donné par le support : à changer avant tout le
+    /// reste (le serveur refuse les autres routes).
+    pub password_reset_required: bool,
+    /// Licence signée, vérifiable sans réseau (`crate::api::license`).
+    pub license: Option<String>,
+    pub access_token: String,
+    /// Date (secondes Unix) au-delà de laquelle `access_token` est périmé.
+    pub access_expires_at: i64,
+    pub refresh_token: String,
 }
 
 impl YuyuSession {
@@ -65,6 +77,10 @@ pub struct AppState {
     /// depuis que l'API tourne en `https://` sur le VPS et plus en local).
     pub http: reqwest::Client,
     pub yuyu_session: Option<YuyuSession>,
+    /// Sérialise les rafraîchissements de jeton : le refresh token est à
+    /// usage unique, deux appels concurrents le consommeraient deux fois et
+    /// le serveur fermerait la session (réutilisation = vol présumé).
+    pub yuyu_refresh: Arc<Mutex<()>>,
     pub session: Option<MinecraftSession>,
     pub running_instances: std::collections::HashSet<String>,
     /// Un `watch::Sender` par instance en cours de lancement — `cancel_launch`

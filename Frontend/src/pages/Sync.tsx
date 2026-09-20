@@ -17,7 +17,7 @@ import { useT } from '@/i18n'
 
 function SyncContent() {
   const t = useT()
-  const { instances, yuyuToken, isUltimate, addInstance } = useStore()
+  const { instances, yuyuSignedIn, isUltimate, addInstance } = useStore()
   const userIsUltimate = isUltimate()
   const QUOTA_SAVES = userIsUltimate ? 10 : 3
 
@@ -30,7 +30,7 @@ function SyncContent() {
   }, [])
 
   useEffect(() => {
-    if (!yuyuToken || cloudLoaded.current) return
+    if (!yuyuSignedIn || cloudLoaded.current) return
     cloudLoaded.current = true
     setCloudLoading(true)
     api.sync.list()
@@ -41,7 +41,7 @@ function SyncContent() {
       // remontées normalement.
       .catch((e) => { if (!isNetworkError(e)) showError(e) })
       .finally(() => setCloudLoading(false))
-  }, [yuyuToken])
+  }, [yuyuSignedIn])
 
   const totalCloudSaves = cloudInstances.reduce((sum, ci) => sum + ci.save_count, 0)
 
@@ -149,7 +149,7 @@ function SyncContent() {
 export default function Sync() {
   const t = useT()
   const navigate = useNavigate()
-  const { yuyuToken, isPremium } = useStore()
+  const { yuyuSignedIn, isPremium } = useStore()
 
   if (!SYNC_ENABLED) {
     return (
@@ -180,7 +180,7 @@ export default function Sync() {
       </PageHeader>
 
       <div className="flex-1 overflow-y-auto p-5">
-        {!yuyuToken ? (
+        {!yuyuSignedIn ? (
           <div className="flex flex-col items-center justify-center gap-3 py-10">
             <div className="text-[28px] opacity-20">🔒</div>
             <p className="text-[13px] text-[rgba(255,255,255,0.3)] font-semibold text-center">

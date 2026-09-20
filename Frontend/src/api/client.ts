@@ -7,12 +7,27 @@ export interface YuyuStatusResp {
   has_account: boolean
 }
 
-export interface YuyuLoginResp {
-  token: string
+/** Session ouverte : les jetons restent côté Rust, jamais exposés ici. */
+export interface YuyuSessionResp {
   username: string
+  email: string | null
   plan: string
   plan_expires_at: number | null
+  /** Mot de passe provisoire du support : changement imposé. */
+  password_reset_required: boolean
+  /** valid | grace | expired — bandeau quand la licence hors ligne s'épuise. */
+  license_state: 'valid' | 'grace' | 'expired'
   accounts: McAccountInfo[]
+}
+
+/** Un appareil connecté au compte (écran « Ma sécurité »). */
+export interface YuyuDevice {
+  id: string
+  device_name: string | null
+  os: string | null
+  launcher_version: string | null
+  last_used_at: string | null
+  current: boolean
 }
 
 export interface SavedServer {
@@ -137,14 +152,21 @@ export const api = {
   yuyu: {
     status: () => invoke<YuyuStatusResp>('yuyu_status'),
     ping: () => invoke<boolean>('yuyu_ping'),
-    register: (username: string, password: string) =>
-      invoke<YuyuLoginResp>('yuyu_register', { username, password }),
-    login: (username: string, password: string) =>
-      invoke<YuyuLoginResp>('yuyu_login', { username, password }),
+    register: (username: string, password: string, email?: string) =>
+      invoke<YuyuSessionResp>('yuyu_register', { username, password, email: email || null }),
+    /** `login` accepte le pseudo ou l'e-mail. */
+    login: (login: string, password: string) =>
+      invoke<YuyuSessionResp>('yuyu_login', { login, password }),
     logout: () => invoke<void>('yuyu_logout'),
     refreshPlan: () => invoke<YuyuPlanResp>('yuyu_refresh_plan'),
     createCheckout: (plan: string) =>
       invoke<YuyuCheckoutResp>('yuyu_create_checkout', { plan }),
+    /** Lève aussi le mot de passe provisoire et ferme les autres appareils. */
+    changePassword: (current: string, newPassword: string) =>
+      invoke<void>('yuyu_change_password', { current, newPassword }),
+    setEmail: (email: string) => invoke<void>('yuyu_set_email', { email }),
+    listDevices: () => invoke<YuyuDevice[]>('yuyu_list_devices'),
+    revokeDevice: (id: string) => invoke<void>('yuyu_revoke_device', { id }),
   },
 
   auth: {

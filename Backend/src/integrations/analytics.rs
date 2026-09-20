@@ -77,6 +77,10 @@ fn device_id_path() -> PathBuf {
 /// YuyuFrame ni le compte Minecraft) — généré une seule fois par poste,
 /// réutilisé à chaque lancement pour que PostHog puisse relier les
 /// événements d'une même installation entre deux sessions.
+pub fn install_id() -> &'static str {
+    distinct_id()
+}
+
 fn distinct_id() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {

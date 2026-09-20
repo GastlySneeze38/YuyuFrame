@@ -1,3 +1,4 @@
+mod api;
 mod commands;
 mod db;
 mod integrations;
@@ -150,21 +151,11 @@ pub fn run() {
             let conn = db::init_db(&db_path).expect("Impossible d'initialiser la base de données");
             tracing::info!("Base de données : {}", db_path.display());
 
-            let yuyu_session = db::load_yuyu_jwt(&conn)
-                .ok()
-                .flatten()
-                .map(|row| {
-                    tracing::info!("Session YuyuFrame restaurée pour {}", row.username);
-                    // Adopte les instances orphelines (yuyu_user_id = 0) au redémarrage
-                    db::instance_claim_unclaimed(&conn, row.user_id).ok();
-                    state::YuyuSession {
-                        user_id: row.user_id,
-                        username: row.username,
-                        token: row.jwt,
-                        plan: row.plan,
-                        plan_expires_at: row.plan_expires_at,
-                    }
-                });
+            let yuyu_session = db::load_yuyu_session(&conn).ok().flatten().inspect(|session| {
+                tracing::info!("Session YuyuFrame restaurée pour {}", session.username);
+                // Adopte les instances orphelines (yuyu_user_id = 0) au redémarrage
+                db::instance_claim_unclaimed(&conn, session.user_id).ok();
+            });
 
             // Comptes Minecraft propres au PC, restaurés avec ou sans session
             // YuyuFrame (voir db::mc_account).
@@ -189,6 +180,7 @@ pub fn run() {
                 db: Arc::new(Mutex::new(conn)),
                 http,
                 yuyu_session,
+                yuyu_refresh: Arc::new(Mutex::new(())),
                 session: mc_session,
                 running_instances: std::collections::HashSet::new(),
                 launch_cancel: std::collections::HashMap::new(),
@@ -234,6 +226,10 @@ pub fn run() {
             commands::account::yuyu::yuyu_logout,
             commands::account::yuyu::yuyu_refresh_plan,
             commands::account::yuyu::yuyu_create_checkout,
+            commands::account::yuyu::yuyu_change_password,
+            commands::account::yuyu::yuyu_set_email,
+            commands::account::yuyu::yuyu_list_devices,
+            commands::account::yuyu::yuyu_revoke_device,
             commands::account::microsoft::auth_start_device,
             commands::account::microsoft::auth_poll,
             commands::account::microsoft::auth_status,

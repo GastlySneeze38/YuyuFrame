@@ -43,13 +43,14 @@ export default function YuyuLogin() {
         ? await api.yuyu.register(username, password)
         : await api.yuyu.login(username, password)
 
-      // Store token in-memory (NOT in localStorage)
-      setYuyuSession(
-        resp.token,
-        resp.username,
-        (resp.plan ?? 'free') as import('@/stores/useStore').YuyuPlan,
-        resp.plan_expires_at ?? null,
-      )
+      // Les jetons restent côté Rust : ici, seulement de quoi afficher.
+      setYuyuSession({
+        username: resp.username,
+        email: resp.email,
+        plan: (resp.plan ?? 'free') as import('@/stores/useStore').YuyuPlan,
+        planExpiresAt: resp.plan_expires_at ?? null,
+        licenseState: resp.license_state,
+      })
 
       // Populate MC accounts from backend response
       const accs: Account[] = resp.accounts.map((a) => ({

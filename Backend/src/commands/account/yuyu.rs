@@ -1,7 +1,15 @@
-use serde::{Deserialize, Serialize};
+// Compte YuyuFrame — LauncherAPI /v1.
+//
+// Les jetons ne sont plus manipulés ici : `crate::api` garde la session,
+// rafraîchit le jeton d'accès quand il expire et remonte des erreurs à
+// `code` stable, que le frontend traduit en écran (mise à jour obligatoire,
+// compte suspendu, mot de passe à changer…).
 
-use crate::commands::{api_base, network_err};
-use crate::{db, state::SharedState};
+use serde::Serialize;
+use serde_json::json;
+
+use crate::api::{self, error::ApiError, license};
+use crate::state::SharedState;
 use super::minecraft::AccountInfo;
 
 // ── Types retournés au frontend ───────────────────────────────────────────────
@@ -12,11 +20,16 @@ pub struct StatusResp {
 }
 
 #[derive(Serialize)]
-pub struct LoginResp {
-    pub token: String,
+pub struct SessionResp {
     pub username: String,
+    pub email: Option<String>,
     pub plan: String,
     pub plan_expires_at: Option<i64>,
+    /// Mot de passe provisoire : le frontend doit imposer le changement.
+    pub password_reset_required: bool,
+    /// « valid », « grace » ou « expired » — sert au bandeau d'information
+    /// quand le launcher tourne sur une licence périmée (serveur injoignable).
+    pub license_state: String,
     pub accounts: Vec<AccountInfo>,
 }
 
@@ -31,21 +44,17 @@ pub struct CheckoutResp {
     pub checkout_url: String,
 }
 
-// ── Réponse de la LauncherAPI ─────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct ApiAuthResponse {
-    token: String,
-    user_id: i64,
-    username: String,
-    #[serde(default = "default_plan")]
-    plan: String,
-    plan_expires_at: Option<i64>,
+#[derive(Serialize)]
+pub struct DeviceResp {
+    pub id: String,
+    pub device_name: Option<String>,
+    pub os: Option<String>,
+    pub launcher_version: Option<String>,
+    pub last_used_at: Option<String>,
+    pub current: bool,
 }
 
-fn default_plan() -> String { "free".into() }
-
-// ── Commands ──────────────────────────────────────────────────────────────────
+// ── Commandes ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn yuyu_status(state: tauri::State<'_, SharedState>) -> Result<StatusResp, String> {
@@ -53,17 +62,14 @@ pub async fn yuyu_status(state: tauri::State<'_, SharedState>) -> Result<StatusR
     Ok(StatusResp { has_account: s.yuyu_session.is_some() })
 }
 
-/// Ping léger de la LauncherAPI (`GET /health`) pour l'indicateur de
-/// connectivité du frontend — ne renvoie jamais d'erreur (une panne réseau
-/// donne juste `false`), volontairement : ce check ne doit jamais déclencher
-/// de toast d'erreur, juste un petit badge discret côté UI. Timeout court
-/// (5s, largement sous celui du client partagé) pour ne pas retarder le
-/// prochain check périodique si l'API traîne à répondre.
+/// Ping léger (`GET /health`) pour l'indicateur de connectivité — ne renvoie
+/// jamais d'erreur : une panne réseau donne juste `false`, pour un badge
+/// discret et surtout aucun toast d'erreur.
 #[tauri::command]
 pub async fn yuyu_ping(state: tauri::State<'_, SharedState>) -> Result<bool, ()> {
     let client = state.read().await.http.clone();
     let ok = client
-        .get(format!("{}/health", api_base()))
+        .get(format!("{}/health", api::root()))
         .timeout(std::time::Duration::from_secs(5))
         .send()
         .await
@@ -77,192 +83,199 @@ pub async fn yuyu_register(
     state: tauri::State<'_, SharedState>,
     username: String,
     password: String,
-) -> Result<LoginResp, String> {
-    let client = state.read().await.http.clone();
-    let resp = client
-        .post(format!("{}/auth/register", api_base()))
-        .json(&serde_json::json!({ "username": username, "password": password }))
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        let msg = resp.text().await.unwrap_or_default();
-        return Err(msg);
-    }
-
-    let data: ApiAuthResponse = resp.json().await.map_err(|e| e.to_string())?;
-    save_session(&state, data.user_id, &data.username, &data.token, &data.plan, data.plan_expires_at).await?;
-    let accounts = super::list_accounts(&state).await?;
-
-    Ok(LoginResp { token: data.token, username: data.username, plan: data.plan, plan_expires_at: data.plan_expires_at, accounts })
+    email: Option<String>,
+) -> Result<SessionResp, String> {
+    let body = json!({
+        "username": username,
+        "password": password,
+        "email": email,
+        "device": api::device_info(),
+    });
+    let value = api::post_public(&state, "/auth/register", body).await?;
+    finish_sign_in(&state, &value).await
 }
 
+/// `login` accepte le pseudo **ou** l'e-mail depuis la refonte.
 #[tauri::command]
 pub async fn yuyu_login(
     state: tauri::State<'_, SharedState>,
-    username: String,
+    login: String,
     password: String,
-) -> Result<LoginResp, String> {
-    let client = state.read().await.http.clone();
-    let resp = client
-        .post(format!("{}/auth/login", api_base()))
-        .json(&serde_json::json!({ "username": username, "password": password }))
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        let msg = resp.text().await.unwrap_or_default();
-        return Err(msg);
-    }
-
-    let data: ApiAuthResponse = resp.json().await.map_err(|e| e.to_string())?;
-    save_session(&state, data.user_id, &data.username, &data.token, &data.plan, data.plan_expires_at).await?;
-
-    // Les comptes Minecraft appartiennent au PC : la connexion YuyuFrame ne
-    // change ni la liste ni le compte actif, elle les renvoie simplement.
-    let accounts = super::list_accounts(&state).await?;
-
-    Ok(LoginResp { token: data.token, username: data.username, plan: data.plan, plan_expires_at: data.plan_expires_at, accounts })
+) -> Result<SessionResp, String> {
+    let body = json!({ "login": login, "password": password, "device": api::device_info() });
+    let value = api::post_public(&state, "/auth/login", body).await?;
+    finish_sign_in(&state, &value).await
 }
 
 #[tauri::command]
 pub async fn yuyu_logout(state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    {
-        let s = state.read().await;
-        let conn = s.db.lock().await;
-        db::delete_yuyu_jwt(&conn).ok();
+    // Ferme la session côté serveur pour qu'elle disparaisse de la liste des
+    // appareils ; si le réseau manque, on oublie quand même la session ici.
+    if let Err(e) = api::post(&state, "/auth/logout", json!({})).await {
+        tracing::debug!("déconnexion côté serveur impossible : {}", e.message);
     }
+    api::clear_session(&state).await;
     // Le compte Minecraft actif reste connecté : il ne dépend pas de YuyuFrame.
-    state.write().await.yuyu_session = None;
     Ok(())
 }
 
-// ── Plan refresh ─────────────────────────────────────────────────────────────
-
+/// Profil à jour (`GET /v1/me`) : plan réellement actif, licence renouvelée.
 #[tauri::command]
 pub async fn yuyu_refresh_plan(state: tauri::State<'_, SharedState>) -> Result<PlanResp, String> {
-    let (token, client) = {
-        let s = state.read().await;
-        let token = s.yuyu_session
-            .as_ref()
-            .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
-            .token
-            .clone();
-        (token, s.http.clone())
+    let before = current_plan(&state).await;
+
+    let profile = match api::get(&state, "/me", &[]).await {
+        Ok(profile) => profile,
+        // Hors ligne : la licence signée fait foi (30 jours + 7 de grâce).
+        Err(e) if e.code == api::error::CODE_NETWORK => {
+            let (plan, expires) = offline_plan(&state).await.ok_or_else(|| String::from(e))?;
+            return Ok(PlanResp { plan, plan_expires_at: expires });
+        }
+        Err(e) => return Err(e.into()),
     };
 
-    let resp = client
-        .get(format!("{}/auth/me", api_base()))
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await
-        .map_err(network_err)?;
+    let session = api::store_profile(&state, &profile).await.ok_or_else(|| String::from(ApiError::not_signed_in()))?;
 
-    if !resp.status().is_success() {
-        return Err(crate::commands::bearer_call_error(resp).await);
+    // Passage gratuit → payant : le paiement vient d'aboutir (le webhook
+    // arrive sur le serveur, jamais ici — on ne peut qu'observer après coup).
+    let now_paid = session.plan == "premium" || session.plan == "ultimate";
+    if now_paid && !matches!(before.as_deref(), Some("premium") | Some("ultimate")) {
+        crate::integrations::analytics::capture("checkout_completed", json!({ "plan": &session.plan }));
     }
 
-    #[derive(Deserialize)]
-    struct MeResp {
-        plan: String,
-        plan_expires_at: Option<i64>,
-    }
-
-    let data: MeResp = resp.json().await.map_err(|e| e.to_string())?;
-
-    {
-        let s = state.read().await;
-        let conn = s.db.lock().await;
-        db::update_yuyu_plan(&conn, &data.plan, data.plan_expires_at)
-            .map_err(|e| e.to_string())?;
-    }
-
-    {
-        let mut s = state.write().await;
-        if let Some(session) = s.yuyu_session.as_mut() {
-            // Détecte une transition free → premium/ultimate pour approximer
-            // "checkout terminé" côté client — le webhook Lemon Squeezy qui
-            // confirme réellement le paiement arrive sur LauncherAPI, pas ici,
-            // donc ce launcher ne peut qu'observer le résultat après coup, au
-            // prochain refresh_plan (polling déjà en place côté Plans.tsx).
-            let was_free = session.plan != "premium" && session.plan != "ultimate";
-            let now_paid = data.plan == "premium" || data.plan == "ultimate";
-            if was_free && now_paid {
-                crate::integrations::analytics::capture("checkout_completed", serde_json::json!({ "plan": &data.plan }));
-            }
-            session.plan = data.plan.clone();
-            session.plan_expires_at = data.plan_expires_at;
-        }
-    }
-
-    Ok(PlanResp { plan: data.plan, plan_expires_at: data.plan_expires_at })
+    Ok(PlanResp { plan: session.plan, plan_expires_at: session.plan_expires_at })
 }
-
-// ── Checkout Lemon Squeezy ────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn yuyu_create_checkout(
     state: tauri::State<'_, SharedState>,
     plan: String,
 ) -> Result<CheckoutResp, String> {
-    let (token, client) = {
-        let s = state.read().await;
-        let token = s.yuyu_session
-            .as_ref()
-            .ok_or_else(|| "Non connecté à YuyuFrame".to_string())?
-            .token
-            .clone();
-        (token, s.http.clone())
-    };
-
-    let resp = client
-        .post(format!("{}/payments/create-checkout", api_base()))
-        .header("Authorization", format!("Bearer {}", token))
-        .json(&serde_json::json!({ "plan": plan }))
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        return Err(crate::commands::bearer_call_error(resp).await);
-    }
-
-    #[derive(Deserialize)]
-    struct ApiCheckoutResp {
-        checkout_url: String,
-    }
-
-    let data: ApiCheckoutResp = resp.json().await.map_err(|e| e.to_string())?;
-    crate::integrations::analytics::capture("checkout_started", serde_json::json!({ "plan": &plan }));
-    Ok(CheckoutResp { checkout_url: data.checkout_url })
+    let value = api::post(&state, "/payments/checkout", json!({ "plan": plan })).await?;
+    let checkout_url = value
+        .get("checkout_url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| String::from(ApiError::new("internal", "Réponse de paiement inattendue")))?
+        .to_string();
+    crate::integrations::analytics::capture("checkout_started", json!({ "plan": &plan }));
+    Ok(CheckoutResp { checkout_url })
 }
 
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-async fn save_session(
-    state: &tauri::State<'_, SharedState>,
-    user_id: i64,
-    username: &str,
-    jwt: &str,
-    plan: &str,
-    plan_expires_at: Option<i64>,
+/// Change le mot de passe. Lève aussi le mot de passe provisoire donné par le
+/// support, et ferme les autres appareils.
+#[tauri::command]
+pub async fn yuyu_change_password(
+    state: tauri::State<'_, SharedState>,
+    current: String,
+    new_password: String,
 ) -> Result<(), String> {
+    api::post(&state, "/me/password", json!({ "current": current, "new": new_password })).await?;
+    // Le serveur renvoie une nouvelle session : on relit le profil pour
+    // retomber sur nos pieds (drapeau de mot de passe provisoire levé).
+    if let Ok(profile) = api::get(&state, "/me", &[]).await {
+        api::store_profile(&state, &profile).await;
+    }
+    Ok(())
+}
+
+/// E-mail du compte (facturation, support). Chaîne vide = retirer.
+#[tauri::command]
+pub async fn yuyu_set_email(state: tauri::State<'_, SharedState>, email: String) -> Result<(), String> {
+    let profile = api::patch(&state, "/me", json!({ "email": email })).await?;
+    api::store_profile(&state, &profile).await;
+    Ok(())
+}
+
+/// Appareils connectés au compte.
+#[tauri::command]
+pub async fn yuyu_list_devices(state: tauri::State<'_, SharedState>) -> Result<Vec<DeviceResp>, String> {
+    let value = api::get(&state, "/me/sessions", &[]).await?;
+    let list = value.as_array().cloned().unwrap_or_default();
+    Ok(list
+        .iter()
+        .map(|s| DeviceResp {
+            id: s.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            device_name: text(s, "device_name"),
+            os: text(s, "os"),
+            launcher_version: text(s, "launcher_version"),
+            last_used_at: text(s, "last_used_at"),
+            current: s.get("current").and_then(|v| v.as_bool()).unwrap_or(false),
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn yuyu_revoke_device(state: tauri::State<'_, SharedState>, id: String) -> Result<(), String> {
+    api::delete(&state, &format!("/me/sessions/{id}")).await?;
+    Ok(())
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn text(value: &serde_json::Value, key: &str) -> Option<String> {
+    value.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+async fn current_plan(state: &tauri::State<'_, SharedState>) -> Option<String> {
+    state.read().await.yuyu_session.as_ref().map(|s| s.plan.clone())
+}
+
+/// Après une connexion ou une inscription : session enregistrée, comptes
+/// Minecraft envoyés au serveur (le support les cherche par pseudo ou UUID).
+async fn finish_sign_in(
+    state: &tauri::State<'_, SharedState>,
+    value: &serde_json::Value,
+) -> Result<SessionResp, String> {
+    let session = api::store_token_response(state, value).await?;
+    let accounts = super::list_accounts(state).await?;
+    push_minecraft_accounts(state, &accounts).await;
+
+    Ok(SessionResp {
+        username: session.username,
+        email: session.email,
+        plan: session.plan,
+        plan_expires_at: session.plan_expires_at,
+        password_reset_required: session.password_reset_required,
+        license_state: license_state(state).await,
+        accounts,
+    })
+}
+
+/// Liste complète des comptes Minecraft liés (remplace la précédente).
+/// Silencieux : un échec ici ne doit jamais empêcher de se connecter.
+pub async fn push_minecraft_accounts(state: &tauri::State<'_, SharedState>, accounts: &[AccountInfo]) {
+    let payload: Vec<_> = accounts.iter().map(|a| json!({ "uuid": a.mc_uuid, "name": a.mc_username })).collect();
+    if let Err(e) = api::put(state, "/me/minecraft-accounts", json!({ "accounts": payload })).await {
+        tracing::debug!("comptes Minecraft non transmis : {}", e.message);
+    }
+}
+
+/// Plan déduit de la licence signée, sans réseau.
+async fn offline_plan(state: &tauri::State<'_, SharedState>) -> Option<(String, Option<i64>)> {
+    let session = state.read().await.yuyu_session.clone()?;
+    let payload = license::verify(session.license.as_deref()?)?;
+    let (plan, _) = license::plan_at(&payload, chrono::Utc::now().timestamp());
     {
         let s = state.read().await;
         let conn = s.db.lock().await;
-        db::save_yuyu_jwt(&conn, user_id, username, jwt, plan, plan_expires_at)
-            .map_err(|e| e.to_string())?;
-        // Adopte les instances créées avant la connexion (yuyu_user_id = 0)
-        db::instance_claim_unclaimed(&conn, user_id).ok();
+        crate::db::update_yuyu_plan(&conn, &plan, payload.plan_ends_at).ok();
     }
-    state.write().await.yuyu_session = Some(crate::state::YuyuSession {
-        user_id,
-        username: username.to_string(),
-        token: jwt.to_string(),
-        plan: plan.to_string(),
-        plan_expires_at,
-    });
-    Ok(())
+    if let Some(s) = state.write().await.yuyu_session.as_mut() {
+        s.plan = plan.clone();
+    }
+    Some((plan, payload.plan_ends_at))
+}
+
+async fn license_state(state: &tauri::State<'_, SharedState>) -> String {
+    let Some(session) = state.read().await.yuyu_session.clone() else { return "expired".into() };
+    let Some(payload) = session.license.as_deref().and_then(license::verify) else {
+        // Pas de licence (serveur sans clé de signature) : rien à signaler,
+        // le plan vient alors du serveur à chaque démarrage.
+        return "valid".into();
+    };
+    match license::plan_at(&payload, chrono::Utc::now().timestamp()).1 {
+        license::LicenseState::Valid => "valid".into(),
+        license::LicenseState::Grace => "grace".into(),
+        license::LicenseState::Expired => "expired".into(),
+    }
 }
