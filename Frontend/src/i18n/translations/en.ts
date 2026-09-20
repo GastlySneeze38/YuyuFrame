@@ -184,11 +184,6 @@ export const en: TranslationSchema = {
   },
 
   stats: {
-    gateDescription: 'Detailed stats & analytics are reserved for Premium and Ultimate subscribers.',
-    gateFeature1: 'Total playtime & per modpack',
-    gateFeature2: 'History of the last 20 sessions',
-    gateFeature3: 'Activity over the last 14 days',
-    gateFeature4: 'Favorite modpack and session',
     cannotLoadStats: 'Could not load statistics',
     totalPlaytime: 'Total playtime',
     noSession: 'No session',
@@ -476,6 +471,8 @@ export const en: TranslationSchema = {
       instances: 'Instances',
       settings: 'Settings',
       sync: 'Sync',
+      features: 'Features',
+      support: 'Support',
       plans: 'Plans',
       stats: 'Stats',
       account: 'Account',
@@ -677,6 +674,37 @@ export const en: TranslationSchema = {
     chartBlocksSentPerSec: 'Blocks sent / s',
     chartBlocksAppliedPerSec: 'Blocks applied / s',
   },
+  features: {
+    title: 'Features',
+    subtitle: 'Everything the launcher can do, in one place',
+    paidBadge: 'Premium',
+    soonBadge: 'Soon',
+    pausedBadge: 'Paused',
+    syncTitle: 'Cloud sync',
+    syncText: 'Find your instances, mods and worlds again on every one of your PCs.',
+    backupTitle: 'Backups',
+    backupText: 'Dated copies of your worlds and instances, to restore when things go wrong.',
+    statsTitle: 'Play statistics',
+    statsText: 'Playtime per instance, sessions and week-by-week trends.',
+    jvmTitle: 'JVM profiles',
+    jvmText: 'Reusable Java settings, linked to as many instances as you like.',
+    moreComing: 'More features are coming — they will show up on this page.',
+  },
+  planGate: {
+    title: 'Subscribers only',
+    text: 'This page is part of the {plan} plan. Have a look at the plans to see what it brings.',
+    seePlans: 'See the plans',
+    back: 'Back',
+  },
+
+  support: {
+    title: 'Support',
+    subtitle: 'Ask the team a question',
+    emptyTitle: 'Coming soon',
+    emptyText:
+      'You will soon be able to open a ticket straight from the launcher and follow the answer here. In the meantime, use Discord.',
+  },
+
   plans: {
     back: 'Back',
     loginCta: 'Log in',
@@ -721,16 +749,13 @@ export const en: TranslationSchema = {
     sell: {
       kicker: 'Subscription',
       title: 'What the subscription gives you',
-      subtitle: 'Four concrete things, all tied to your account rather than your PC.',
+      subtitle: 'Three concrete things, all tied to your account rather than your PC.',
       syncTitle: 'Your instances follow you',
       syncText:
         'Switch PC, reinstall Windows, sign in on your second computer: your instances, mods and settings come back exactly as they were.',
       restoreTitle: 'Your worlds kept safe',
       restoreText:
         'Your saves are copied to the cloud. A failing drive or an unlucky deletion is no longer final.',
-      statsTitle: 'Your play statistics',
-      statsText:
-        'Playtime per instance, sessions, week-by-week trends. The free plan shows the broad strokes, the subscription the details.',
       badgeTitle: 'An in-game badge',
       badgeText: 'A decorative badge other players can see. No gameplay advantage at all: it is a wink, not a bonus.',
     },
@@ -786,7 +811,7 @@ export const en: TranslationSchema = {
       freeCloudSync: 'Cloud sync',
       premiumAllFree: 'Everything in Free +',
       premiumCloudSync: 'Cloud sync (3 saves)',
-      premiumStats: 'Advanced in-game statistics',
+      premiumBackup: 'Backups of your worlds (soon)',
       premiumBadge: 'Decorative in-game rank visible to other players',
       premiumOneClickServer: 'One-click server',
       ultimateAllPremium: 'Everything in Premium',

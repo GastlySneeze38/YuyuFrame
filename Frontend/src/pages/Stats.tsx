@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
-import { useStore } from '@/stores/useStore'
 import type { StatsData } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatDuration, formatShortDate, formatTime, getLast14Days, formatDayLabel } from '@/lib/format'
-import { PremiumGate } from '@/components/ui/PremiumGate'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
@@ -14,10 +11,6 @@ import { useT } from '@/i18n'
 
 export default function Stats() {
   const t = useT()
-  const navigate = useNavigate()
-  const { isPremium } = useStore()
-  const premium = isPremium()
-
   const [stats, setStats] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -47,19 +40,9 @@ export default function Stats() {
       <div className="flex-1 overflow-auto">
       <div className="mx-auto w-full max-w-5xl px-6 py-8 flex flex-col gap-8">
 
-        {/* Premium gate */}
-        {!premium ? (
-          <PremiumGate
-            onUpgrade={() => navigate('/plans')}
-            description={t('stats.gateDescription')}
-            features={[
-              t('stats.gateFeature1'),
-              t('stats.gateFeature2'),
-              t('stats.gateFeature3'),
-              t('stats.gateFeature4'),
-            ]}
-          />
-        ) : loading ? (
+        {/* Les stats sont ouvertes à tout le monde : elles décrivent le jeu
+            de la personne, pas une fonctionnalité vendue. */}
+        {loading ? (
           <div className="flex items-center justify-center py-20">
             <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
           </div>

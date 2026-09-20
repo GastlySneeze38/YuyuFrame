@@ -52,7 +52,7 @@ export function getPlans(t: typeof tFn): PlanMeta[] {
       features: [
         { label: t('plans.features.premiumAllFree'), ok: true },
         { label: t('plans.features.premiumCloudSync'), ok: true },
-        { label: t('plans.features.premiumStats'), ok: true },
+        { label: t('plans.features.premiumBackup'), ok: false },
         { label: t('plans.features.premiumBadge'), ok: true },
         { label: t('plans.features.premiumOneClickServer'), ok: false },
       ],

@@ -108,6 +108,23 @@ impl AppState {
     pub fn current_yuyu_user_id(&self) -> Option<i64> {
         self.yuyu_session.as_ref().map(|y| y.user_id)
     }
+
+    /// Contrôle de plan unique du launcher : les commandes payantes et la
+    /// garde d'écran (`commands::plan`) passent toutes par là, donc elles ne
+    /// peuvent pas diverger. Pas de session = pas d'abonnement.
+    pub fn require_plan(&self, plan: &str) -> Result<(), crate::api::error::ApiError> {
+        use crate::api::error::ApiError;
+        let session = self.yuyu_session.as_ref().ok_or_else(ApiError::not_signed_in)?;
+        let granted = match plan {
+            "ultimate" => session.is_ultimate(),
+            _ => session.is_premium(),
+        };
+        if granted {
+            Ok(())
+        } else {
+            Err(ApiError::plan_required(plan))
+        }
+    }
 }
 
 pub type SharedState = Arc<RwLock<AppState>>;

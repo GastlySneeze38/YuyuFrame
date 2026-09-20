@@ -239,6 +239,7 @@ pub fn run() {
             commands::fleet::fleet_config,
             commands::fleet::fleet_refresh,
             commands::fleet::fleet_flag,
+            commands::plan::plan_guard,
             commands::account::microsoft::auth_start_device,
             commands::account::microsoft::auth_poll,
             commands::account::microsoft::auth_status,

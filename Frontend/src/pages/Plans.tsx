@@ -209,7 +209,10 @@ export default function Plans() {
             <p className="max-w-xl text-[14px] leading-relaxed text-txt-secondary">{t('plans.sell.subtitle')}</p>
           </Reveal>
 
-          <div className="grid grid-cols-2 gap-x-10 gap-y-9">
+          {/* Trois colonnes depuis que les statistiques sont ouvertes à tout
+              le monde : mieux vaut trois arguments vrais qu'un quatrième qui
+              vend ce qui est déjà gratuit. */}
+          <div className="grid grid-cols-3 gap-x-10 gap-y-9">
             {ARGUMENTS.map((arg, i) => (
               // Les colonnes arrivent de leur propre côté, en quinconce.
               <motion.div
@@ -618,6 +621,5 @@ function Check() {
 const ARGUMENTS = [
   { key: 'sync', path: 'M7 18a5 5 0 01-.5-9.97A6 6 0 0118 8.5 4.5 4.5 0 0117.5 18H7z' },
   { key: 'restore', path: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.3M3 4v4h4' },
-  { key: 'stats', path: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
   { key: 'badge', path: 'M12 3l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.3l6-.8L12 3z' },
 ] as const

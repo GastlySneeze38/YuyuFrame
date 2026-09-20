@@ -182,11 +182,6 @@ export const fr = {
   },
 
   stats: {
-    gateDescription: 'Les stats & analytics détaillées sont réservées aux abonnés Premium et Ultimate.',
-    gateFeature1: 'Temps de jeu total & par modpack',
-    gateFeature2: 'Historique des 20 dernières sessions',
-    gateFeature3: 'Activité sur les 14 derniers jours',
-    gateFeature4: 'Modpack et session favorites',
     cannotLoadStats: 'Impossible de charger les statistiques',
     totalPlaytime: 'Temps de jeu total',
     noSession: 'Aucune session',
@@ -474,6 +469,8 @@ export const fr = {
       instances: 'Instances',
       settings: 'Réglages',
       sync: 'Sync',
+      features: 'Outils',
+      support: 'Support',
       plans: 'Plans',
       stats: 'Stats',
       account: 'Compte',
@@ -675,6 +672,37 @@ export const fr = {
     chartBlocksSentPerSec: 'Blocs envoyés / s',
     chartBlocksAppliedPerSec: 'Blocs appliqués / s',
   },
+  features: {
+    title: 'Fonctionnalités',
+    subtitle: 'Tout ce que le launcher sait faire, au même endroit',
+    paidBadge: 'Premium',
+    soonBadge: 'Bientôt',
+    pausedBadge: 'En pause',
+    syncTitle: 'Sync cloud',
+    syncText: 'Retrouve tes instances, tes mods et tes mondes sur chacun de tes PC.',
+    backupTitle: 'Sauvegardes',
+    backupText: 'Des copies datées de tes mondes et de tes instances, à restaurer quand ça tourne mal.',
+    statsTitle: 'Statistiques de jeu',
+    statsText: 'Temps de jeu par instance, sessions et évolution semaine après semaine.',
+    jvmTitle: 'Configurations JVM',
+    jvmText: 'Des réglages Java réutilisables, à relier à autant d’instances que tu veux.',
+    moreComing: 'D’autres fonctionnalités arrivent — elles apparaîtront sur cette page.',
+  },
+  planGate: {
+    title: 'Fonctionnalité réservée',
+    text: 'Cette page fait partie de l’abonnement {plan}. Jette un œil aux offres pour voir ce qu’elle apporte.',
+    seePlans: 'Voir les offres',
+    back: 'Retour',
+  },
+
+  support: {
+    title: 'Support',
+    subtitle: 'Poser une question à l’équipe',
+    emptyTitle: 'Bientôt disponible',
+    emptyText:
+      'Tu pourras bientôt ouvrir un ticket directement depuis le launcher et suivre la réponse ici. En attendant, passe par le Discord.',
+  },
+
   plans: {
     back: 'Retour',
     loginCta: 'Se connecter',
@@ -719,16 +747,13 @@ export const fr = {
     sell: {
       kicker: 'Abonnement',
       title: 'Ce que l’abonnement t’apporte',
-      subtitle: 'Quatre choses concrètes, toutes liées au compte plutôt qu’au PC.',
+      subtitle: 'Trois choses concrètes, toutes liées au compte plutôt qu’au PC.',
       syncTitle: 'Tes instances te suivent',
       syncText:
         'Change de PC, réinstalle Windows, prête ton compte à ton deuxième ordinateur : tes instances, tes mods et tes réglages reviennent tels quels.',
       restoreTitle: 'Tes mondes à l’abri',
       restoreText:
         'Tes sauvegardes sont copiées dans le cloud. Un disque qui lâche ou une suppression malheureuse ne sont plus définitifs.',
-      statsTitle: 'Tes statistiques de jeu',
-      statsText:
-        'Temps de jeu par instance, sessions, évolution semaine après semaine. Le gratuit en montre les grandes lignes, l’abonnement le détail.',
       badgeTitle: 'Un grade en jeu',
       badgeText: 'Un grade décoratif visible par les autres joueurs. Zéro avantage en jeu : c’est un clin d’œil, pas un bonus.',
     },
@@ -784,7 +809,7 @@ export const fr = {
       freeCloudSync: 'Sync cloud',
       premiumAllFree: 'Tout Free +',
       premiumCloudSync: 'Sync cloud (3 saves)',
-      premiumStats: 'Statistiques avancées sur le jeu',
+      premiumBackup: 'Sauvegardes de tes mondes (bientôt)',
       premiumBadge: 'Grade décoratif visible en jeu',
       premiumOneClickServer: 'Serveur en 1 clic',
       ultimateAllPremium: 'Tout Premium',

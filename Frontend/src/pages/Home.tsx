@@ -862,14 +862,17 @@ export default function Home() {
             <NavLink label={t('home.nav.settings')} path="/settings" onClick={() => navigate('/settings')} currentPath={location.pathname} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.sync')} path="/sync" onClick={() => navigate('/sync')} currentPath={location.pathname} distance={1} accent>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
+            {/* Sync et Stats ne sont plus dans la barre : elles vivent
+                désormais dans la page Fonctionnalités, qui les regroupe avec
+                celles à venir. */}
+            <NavLink label={t('home.nav.features')} path="/features" onClick={() => navigate('/features')} currentPath={location.pathname} distance={1} accent>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" /></svg>
             </NavLink>
             <NavLink label={t('home.nav.plans')} path="/plans" onClick={() => navigate('/plans')} currentPath={location.pathname} distance={0} plans>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.stats')} path="/stats" onClick={() => navigate('/stats')} currentPath={location.pathname} distance={1} accent>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" /></svg>
+            <NavLink label={t('home.nav.support')} path="/support" onClick={() => navigate('/support')} currentPath={location.pathname} distance={1} accent>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 00-9 9v5a3 3 0 003 3h1a1 1 0 001-1v-5a1 1 0 00-1-1H5v-1a7 7 0 1114 0v1h-2a1 1 0 00-1 1v5a1 1 0 001 1h1a3 3 0 003-3v-5a9 9 0 00-9-9z" /></svg>
             </NavLink>
             <NavLink label={t('home.nav.account')} path="/login" onClick={() => navigate('/login')} currentPath={location.pathname} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" /></svg>
@@ -1011,7 +1014,9 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
       onClick={onClick}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 460, damping: 26 }}
+      // Ressort raide et léger : le survol d'un lien de nav doit répondre
+      // tout de suite, pas accompagner le curseur.
+      transition={{ type: 'spring', stiffness: 900, damping: 32, mass: 0.4 }}
       className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} opacity-100 ${hoverClasses}`}
     >
       <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>

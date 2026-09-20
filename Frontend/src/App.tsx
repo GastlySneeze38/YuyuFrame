@@ -7,6 +7,7 @@ import { ErrorToast } from '@/components/ui/ErrorToast'
 import { FleetNotices } from '@/components/FleetNotices'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { PageTransition } from '@/components/PageTransition'
+import { PlanGate } from '@/components/PlanGate'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
@@ -31,6 +32,8 @@ const Legal = lazy(() => import('@/pages/Legal'))
 const YuyuLogin = lazy(() => import('@/pages/YuyuLogin'))
 const Console = lazy(() => import('@/pages/Console'))
 const Sync = lazy(() => import('@/pages/Sync'))
+const Features = lazy(() => import('@/pages/Features'))
+const Support = lazy(() => import('@/pages/Support'))
 const Plans = lazy(() => import('@/pages/Plans'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Server = lazy(() => import('@/pages/Server'))
@@ -235,7 +238,13 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/information" element={<Information />} />
             <Route path="/legal" element={<Legal />} />
-            <Route path="/sync" element={<Sync />} />
+            {/* Sync et Stats restent accessibles par leur URL : elles ne
+                sont plus dans la barre de l'accueil, mais dans /features. */}
+            {/* La sync est payante : c'est le Rust qui tranche (PlanGate),
+                pas le plan affiché par le store. */}
+            <Route path="/sync" element={<PlanGate feature="sync"><Sync /></PlanGate>} />
+            <Route path="/features" element={<Features />} />
+            <Route path="/support" element={<Support />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/server" element={<Server />} />

@@ -206,6 +206,12 @@ export const api = {
     refresh: () => invoke<FleetConfig>('fleet_refresh'),
   },
 
+  plan: {
+    /** Le Rust dit si la session peut ouvrir un écran payant. Rejette avec le
+     *  code `plan_required` et `extra.required_plan` (voir PlanGate). */
+    guard: (feature: string) => invoke<void>('plan_guard', { feature }),
+  },
+
   auth: {
     status: () => invoke<AuthStatus>('auth_status'),
     startDevice: () => invoke<DeviceAuthResponse>('auth_start_device'),

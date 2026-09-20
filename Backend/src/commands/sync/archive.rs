@@ -86,27 +86,16 @@ pub(super) fn get_token(state: &crate::state::AppState) -> Result<String, String
         .ok_or_else(|| "Non connecté à YuyuFrame".into())
 }
 
+// Le contrôle lui-même vit dans `AppState::require_plan` : la garde d'écran
+// (`commands::plan`) s'appuie dessus aussi, et l'erreur part avec le code
+// stable `plan_required` que l'interface transforme en fenêtre vers les offres.
 pub(super) fn require_premium(state: &crate::state::AppState) -> Result<(), String> {
-    let session = state
-        .yuyu_session
-        .as_ref()
-        .ok_or_else(|| String::from("Non connecté à YuyuFrame"))?;
-    if !session.is_premium() {
-        return Err(String::from("Abonnement Premium requis pour la synchronisation"));
-    }
-    Ok(())
+    state.require_plan("premium").map_err(String::from)
 }
 
 #[allow(dead_code)]
 pub(super) fn require_ultimate(state: &crate::state::AppState) -> Result<(), String> {
-    let session = state
-        .yuyu_session
-        .as_ref()
-        .ok_or_else(|| String::from("Non connecté à YuyuFrame"))?;
-    if !session.is_ultimate() {
-        return Err(String::from("Abonnement Ultimate requis pour cette fonctionnalité"));
-    }
-    Ok(())
+    state.require_plan("ultimate").map_err(String::from)
 }
 
 // ── Save listing ───────────────────────────────────────────────────────────────

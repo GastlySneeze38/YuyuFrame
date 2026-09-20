@@ -17,6 +17,9 @@ pub const CODE_NOT_SIGNED_IN: &str = "not_signed_in";
 /// Session fermée côté serveur (refresh refusé, appareil déconnecté, vol de
 /// jeton détecté) : il faut revenir à l'écran de connexion.
 pub const CODE_SESSION_REVOKED: &str = "session_revoked";
+/// Le plan de la session ne suffit pas pour cette fonctionnalité. `extra`
+/// porte `required_plan` : le frontend y renvoie la page des offres.
+pub const CODE_PLAN_REQUIRED: &str = "plan_required";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiError {
@@ -41,6 +44,17 @@ impl ApiError {
 
     pub fn not_signed_in() -> Self {
         Self::new(CODE_NOT_SIGNED_IN, "Connecte-toi à ton compte YuyuFrame")
+    }
+
+    /// Plan insuffisant. Le nom du plan attendu voyage dans `extra` pour que
+    /// l'interface sache quelle offre mettre en avant.
+    pub fn plan_required(plan: &str) -> Self {
+        let mut e = Self::new(
+            CODE_PLAN_REQUIRED,
+            format!("Cette fonctionnalité est réservée à l'abonnement {plan}"),
+        );
+        e.extra.insert("required_plan".into(), serde_json::Value::String(plan.into()));
+        e
     }
 
     /// Lit la réponse d'erreur du serveur. Une réponse illisible (proxy en
