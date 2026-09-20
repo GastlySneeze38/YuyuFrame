@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
+import type { ModConflict } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { formatBytes } from '@/lib/format'
 import type { Instance, Mod, ModInstallProgress, ModpackInstallProgress, ModpackMeta } from '@/types'
@@ -14,6 +15,7 @@ import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { ImportChoiceModal } from '@/components/import/ImportChoiceModal'
 import { InstalledTab } from '@/components/mods/InstalledTab'
 import { ModpackBanner } from '@/components/mods/ModpackBanner'
+import { ConflictBanner } from '@/components/mods/ConflictBanner'
 import { ModpackBrowseTab, type MergedModpackHit } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab, type MergedHit } from '@/components/mods/BrowseTab'
 import {
@@ -228,6 +230,25 @@ export function ModsContent({ instance }: { instance: Instance }) {
         .map((k) => Number(k.slice(prefix.length))),
     )
   }, [pinnedMods, instanceId])
+
+  // Incompatibilités déjà installées. Relues à chaque changement de `mods` :
+  // installer, supprimer, activer ou désactiver un mod peut en créer ou en
+  // résoudre une, et c'est justement à ce moment-là qu'il faut le dire.
+  const [conflicts, setConflicts] = useState<ModConflict[]>([])
+  useEffect(() => {
+    if (!instanceId || mods.length === 0) {
+      setConflicts([])
+      return
+    }
+    let cancelled = false
+    api.mods
+      .checkConflicts(instanceId, mcVersion, loader)
+      .then((c) => { if (!cancelled) setConflicts(c) })
+      // Silencieux : une vérification qui échoue ne doit pas empêcher de
+      // gérer ses mods, elle n'a rien à dire de plus qu'avant.
+      .catch(() => { if (!cancelled) setConflicts([]) })
+    return () => { cancelled = true }
+  }, [instanceId, mods, mcVersion, loader])
 
   const [modSearch, setModSearch] = useState('')
   const [logoCache, setLogoCache] = useState<Record<string, string | null>>({})
@@ -1137,6 +1158,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
             onUpdatePackVersion={handleUpdatePackVersion}
           />
         )}
+
+        {tab === 'installed' && <ConflictBanner conflicts={conflicts} />}
 
         {tab === 'installed' ? (
           <InstalledTab

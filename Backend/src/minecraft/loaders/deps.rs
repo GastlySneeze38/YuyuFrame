@@ -72,13 +72,14 @@ async fn scan_installed(mods_dir: &Path) -> HashMap<String, InstalledMod> {
             if !is_enabled_jar(&name) {
                 continue;
             }
-            if let Some((meta, nested_ids)) = read_fabric_mod_json_with_nested(&path) {
-                // Jars imbriqués (jar-in-jar) : toujours considérés compatibles,
-                // comme fabric-api lui-même — voir doc de `read_fabric_mod_json_with_nested`.
-                for nested_id in nested_ids {
+            if let Some((meta, nested)) = read_fabric_mod_json_with_nested(&path) {
+                // Jars imbriqués (jar-in-jar) : enregistrés avec leur vraie
+                // version, pour qu'une contrainte portée sur un module de
+                // Fabric API puisse être évaluée au lieu d'être supposée.
+                for (nested_id, nested_version) in nested {
                     installed
                         .entry(nested_id)
-                        .or_insert_with(|| InstalledMod { version: String::new(), path: path.clone() });
+                        .or_insert_with(|| InstalledMod { version: nested_version, path: path.clone() });
                 }
                 installed.insert(meta.id, InstalledMod { version: meta.version, path });
             }

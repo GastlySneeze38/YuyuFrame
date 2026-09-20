@@ -192,7 +192,7 @@ pub struct NestedJarEntry {
 /// le télécharger séparément depuis Modrinth (échec systématique → cooldown).
 pub fn read_fabric_mod_json_with_nested(
     jar_path: &std::path::Path,
-) -> Option<(FabricModJson, Vec<String>)> {
+) -> Option<(FabricModJson, Vec<(String, String)>)> {
     use std::io::Read;
     let bytes = std::fs::read(jar_path).ok()?;
     let cursor = std::io::Cursor::new(bytes);
@@ -225,9 +225,189 @@ pub fn read_fabric_mod_json_with_nested(
         }
         drop(nested_mod_json);
         if let Ok(nested_meta) = serde_json::from_str::<FabricModJson>(&nested_content) {
-            nested_ids.push(nested_meta.id);
+            // La VERSION du module imbriqué compte autant que son identifiant :
+            // sans elle, une contrainte comme `fabric-networking-api-v1 >=6.3.0`
+            // était évaluée contre une version vide, donc jamais satisfaite.
+            nested_ids.push((nested_meta.id, nested_meta.version));
         }
     }
 
     Some((meta, nested_ids))
+}
+
+// ── Métadonnées unifiées Fabric / Quilt / Forge / NeoForge ───────────────────
+
+/// Ce qu'un mod déclare sur un autre mod, ramené à une forme commune.
+///
+/// Fabric et Forge ne décrivent pas leurs dépendances de la même façon : le
+/// premier en prédicats semver, le second en plages Maven. Les comparer avec
+/// deux moteurs séparés voulait dire maintenir deux fois la même logique —
+/// tout est donc converti ici vers les groupes de jetons de `token_satisfied`.
+#[derive(Debug, Clone)]
+pub struct ModRequirement {
+    /// Identifiant du mod visé.
+    pub id: String,
+    /// Versions acceptées. Vide = aucune contrainte.
+    pub depends: Vec<Vec<String>>,
+    /// Versions explicitement cassées. Vide = rien n'est cassé.
+    pub breaks: Vec<Vec<String>>,
+}
+
+/// Un mod installé, quel que soit son loader.
+#[derive(Debug, Clone, Default)]
+pub struct ModMeta {
+    pub id: String,
+    pub version: String,
+    /// Jars imbriqués (jar-in-jar) embarqués : identifiant et version.
+    pub nested: Vec<(String, String)>,
+    pub requirements: Vec<ModRequirement>,
+}
+
+/// Convertit une plage Maven (`[1.0,2.0)`, `[43,)`, `(,2.0]`, `[1.0]`) en
+/// jetons compréhensibles par `token_satisfied`. Une valeur nue (« 1.0 ») est
+/// une préférence en Maven, pas une exigence : elle ne contraint donc rien.
+pub fn maven_range_to_tokens(range: &str) -> Vec<String> {
+    let range = range.trim();
+    if range.is_empty() {
+        return Vec::new();
+    }
+    let opens = range.starts_with('[') || range.starts_with('(');
+    if !opens {
+        return Vec::new();
+    }
+    let inclusive_low = range.starts_with('[');
+    let inclusive_high = range.ends_with(']');
+    let inner = range
+        .trim_start_matches(['[', '('])
+        .trim_end_matches([']', ')'])
+        .trim();
+
+    // Pas de virgule : version unique, « [1.0] » = exactement 1.0.
+    let Some((low, high)) = inner.split_once(',') else {
+        return if inner.is_empty() { Vec::new() } else { vec![format!("={inner}")] };
+    };
+
+    let mut tokens = Vec::new();
+    let low = low.trim();
+    if !low.is_empty() {
+        tokens.push(format!("{}{low}", if inclusive_low { ">=" } else { ">" }));
+    }
+    let high = high.trim();
+    if !high.is_empty() {
+        tokens.push(format!("{}{high}", if inclusive_high { "<=" } else { "<" }));
+    }
+    tokens
+}
+
+/// Lit les métadonnées d'un jar, quel que soit son loader.
+///
+/// Ordre d'essai : `fabric.mod.json` (Fabric, Quilt), puis
+/// `META-INF/neoforge.mods.toml` (NeoForge ≥ 1.20.5), puis
+/// `META-INF/mods.toml` (Forge, NeoForge plus anciens).
+pub fn read_mod_meta(jar_path: &std::path::Path) -> Option<ModMeta> {
+    if let Some((fabric, nested)) = read_fabric_mod_json_with_nested(jar_path) {
+        // Les deux tables sont parcourues séparément : un `breaks` visant un
+        // mod dont on ne dépend PAS est le cas normal d'une incompatibilité
+        // (Sodium en déclare une trentaine), et il était jusqu'ici ignoré.
+        let mut by_id: std::collections::HashMap<String, ModRequirement> =
+            std::collections::HashMap::new();
+        for (id, value) in &fabric.depends {
+            by_id
+                .entry(id.clone())
+                .or_insert_with(|| ModRequirement { id: id.clone(), depends: Vec::new(), breaks: Vec::new() })
+                .depends = parse_predicate_groups(value);
+        }
+        for (id, value) in &fabric.breaks {
+            by_id
+                .entry(id.clone())
+                .or_insert_with(|| ModRequirement { id: id.clone(), depends: Vec::new(), breaks: Vec::new() })
+                .breaks = parse_predicate_groups(value);
+        }
+        return Some(ModMeta {
+            id: fabric.id,
+            version: fabric.version,
+            nested,
+            requirements: by_id.into_values().collect(),
+        });
+    }
+
+    read_mods_toml(jar_path)
+}
+
+/// Forge et NeoForge : `[[mods]]` pour l'identité, `[[dependencies.<modid>]]`
+/// pour les contraintes. Pas d'équivalent de `breaks` dans ce format — une
+/// incompatibilité s'y exprime par une plage de versions exclue.
+fn read_mods_toml(jar_path: &std::path::Path) -> Option<ModMeta> {
+    use std::io::Read;
+    let bytes = std::fs::read(jar_path).ok()?;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).ok()?;
+
+    let mut content = String::new();
+    let mut found = false;
+    for candidate in ["META-INF/neoforge.mods.toml", "META-INF/mods.toml"] {
+        if let Ok(mut entry) = archive.by_name(candidate) {
+            content.clear();
+            if entry.read_to_string(&mut content).is_ok() {
+                found = true;
+                break;
+            }
+        }
+    }
+    if !found {
+        return None;
+    }
+
+    let root: toml::Value = toml::from_str(&content).ok()?;
+    let first_mod = root.get("mods")?.as_array()?.first()?;
+    let id = first_mod.get("modId")?.as_str()?.to_string();
+    let version = first_mod.get("version").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+
+    let requirements = root
+        .get("dependencies")
+        .and_then(|d| d.get(&id))
+        .and_then(|d| d.as_array())
+        .map(|deps| {
+            deps.iter()
+                .filter_map(|dep| {
+                    let dep_id = dep.get("modId")?.as_str()?.to_string();
+                    let tokens = dep
+                        .get("versionRange")
+                        .and_then(|r| r.as_str())
+                        .map(maven_range_to_tokens)
+                        .unwrap_or_default();
+                    if tokens.is_empty() {
+                        return None;
+                    }
+                    Some(ModRequirement { id: dep_id, depends: vec![tokens], breaks: Vec::new() })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Some(ModMeta { id, version, nested: Vec::new(), requirements })
+}
+
+#[cfg(test)]
+mod meta_tests {
+    use super::*;
+
+    #[test]
+    fn maven_ranges_become_tokens() {
+        assert_eq!(maven_range_to_tokens("[1.0,2.0)"), vec![">=1.0", "<2.0"]);
+        assert_eq!(maven_range_to_tokens("[43,)"), vec![">=43"]);
+        assert_eq!(maven_range_to_tokens("(,2.0]"), vec!["<=2.0"]);
+        assert_eq!(maven_range_to_tokens("[1.0]"), vec!["=1.0"]);
+        // Valeur nue : préférence Maven, pas une exigence.
+        assert!(maven_range_to_tokens("1.0").is_empty());
+        assert!(maven_range_to_tokens("").is_empty());
+    }
+
+    #[test]
+    fn maven_bounds_are_respected() {
+        let tokens = maven_range_to_tokens("[1.0,2.0)");
+        let groups = vec![tokens];
+        assert!(version_allowed("1.5", &groups, &[]));
+        assert!(!version_allowed("2.0", &groups, &[]));
+        assert!(!version_allowed("0.9", &groups, &[]));
+    }
 }

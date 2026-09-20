@@ -289,6 +289,7 @@ pub fn run() {
             commands::instance::mods::mods_upload,
             commands::instance::mods::mod_icon,
             commands::instance::mods::mods_check_update_safety,
+            commands::instance::mods::mods_check_conflicts,
             commands::modrinth::mods_search_advanced,
             commands::curseforge::curseforge_search,
             commands::curseforge::curseforge_mod_details,

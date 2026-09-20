@@ -7,7 +7,7 @@ use std::sync::{Mutex, LazyLock};
 
 use super::crud::instance_mods_dir;
 use crate::minecraft::mod_files::{is_disabled_jar, is_enabled_jar};
-use crate::minecraft::versions::predicate::{normalize_version, parse_predicate_groups, read_fabric_mod_json, version_allowed};
+use crate::minecraft::versions::predicate::{normalize_version, read_mod_meta, version_allowed};
 
 #[derive(Serialize, Clone)]
 pub struct ModInfo {
@@ -350,13 +350,56 @@ pub struct UpdateSafety {
     pub blocked_by: Vec<String>,
 }
 
-/// Vérifie, pour chaque mise à jour candidate, si la nouvelle version respecte
-/// les contraintes de version (`depends`) déclarées par les *autres* mods
-/// installés dans l'instance — pour ne pas proposer une mise à jour qui
-/// casserait un mod dépendant (ex: Voxy exige Sodium &lt;0.8.13).
-/// (nom du mod déclarant, id visé, depends, breaks)
-type ModConstraint = (String, String, Vec<Vec<String>>, Vec<Vec<String>>);
+/// Un mod installé et actif, avec ce qu'il exige des autres.
+struct Installed {
+    /// Nom du fichier .jar — c'est lui qu'on montre à la personne.
+    file: String,
+    meta: crate::minecraft::versions::predicate::ModMeta,
+    /// Version normalisée, comparable à celles annoncées par Modrinth.
+    version: String,
+}
 
+/// Lit tous les mods actifs d'une instance, Fabric comme Forge, jars
+/// imbriqués compris.
+fn read_installed(dir: &std::path::Path, mc_version: &str, loader: &str) -> Vec<Installed> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let file = path.file_name()?.to_string_lossy().to_string();
+            if !is_enabled_jar(&file) {
+                return None;
+            }
+            let meta = read_mod_meta(&path)?;
+            let version = normalize_version(&meta.version, mc_version, loader);
+            Some(Installed { file, meta, version })
+        })
+        .collect()
+}
+
+/// Index identifiant -> fichier, jars imbriqués inclus.
+///
+/// Sans les imbriqués, une contrainte visant `fabric-resource-loader-v0` ne
+/// trouvait personne alors que le module est bien là, empaqueté dans Fabric
+/// API ou dans Sodium.
+fn index_ids(installed: &[Installed], mc_version: &str, loader: &str) -> HashMap<String, (String, String)> {
+    let mut by_id: HashMap<String, (String, String)> = HashMap::new();
+    for m in installed {
+        by_id.insert(m.meta.id.clone(), (m.file.clone(), m.version.clone()));
+        for (id, version) in &m.meta.nested {
+            by_id
+                .entry(id.clone())
+                .or_insert_with(|| (m.file.clone(), normalize_version(version, mc_version, loader)));
+        }
+    }
+    by_id
+}
+
+/// Vérifie, pour chaque mise à jour candidate, que la nouvelle version
+/// respecte ce que les *autres* mods installés exigent d'elle — pour ne pas
+/// proposer une mise à jour qui casserait un mod dépendant (ex : Iris exige
+/// Sodium en 0.8.x, Sodium déclare casser Iris ≤ 1.10.8).
 #[tauri::command]
 pub async fn mods_check_update_safety(
     instance_id: String,
@@ -367,49 +410,27 @@ pub async fn mods_check_update_safety(
     let dir = instance_mods_dir(&instance_id);
 
     tokio::task::spawn_blocking(move || {
-        // id fabric -> nom de fichier, pour retrouver le candidat par son id
-        let mut id_by_name: HashMap<String, String> = HashMap::new();
-        // mods déclarant des contraintes
-        let mut constraints: Vec<ModConstraint> = Vec::new();
-
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                if !is_enabled_jar(&name) {
-                    continue;
-                }
-                let Some(meta) = read_fabric_mod_json(&path) else { continue };
-                id_by_name.insert(name.clone(), meta.id.clone());
-                for (dep_id, predicate_value) in &meta.depends {
-                    let depends_groups = parse_predicate_groups(predicate_value);
-                    let breaks_groups = meta
-                        .breaks
-                        .get(dep_id)
-                        .map(parse_predicate_groups)
-                        .unwrap_or_default();
-                    if !depends_groups.is_empty() || !breaks_groups.is_empty() {
-                        constraints.push((name.clone(), dep_id.clone(), depends_groups, breaks_groups));
-                    }
-                }
-            }
-        }
+        let installed = read_installed(&dir, &mc_version, &loader);
+        let id_by_file: HashMap<String, String> =
+            installed.iter().map(|m| (m.file.clone(), m.meta.id.clone())).collect();
 
         candidates
             .into_iter()
             .map(|c| {
-                let target_id = id_by_name.get(&c.name).cloned();
-                let normalized_new_version = normalize_version(&c.new_version, &mc_version, &loader);
+                let target_id = id_by_file.get(&c.name).cloned();
+                let new_version = normalize_version(&c.new_version, &mc_version, &loader);
                 let blocked_by: Vec<String> = match &target_id {
-                    Some(id) => constraints
+                    Some(id) => installed
                         .iter()
-                        .filter(|(declaring_mod, dep_id, _, _)| {
-                            dep_id == id && declaring_mod != &c.name
+                        .filter(|m| m.file != c.name)
+                        .filter(|m| {
+                            m.meta
+                                .requirements
+                                .iter()
+                                .filter(|r| &r.id == id)
+                                .any(|r| !version_allowed(&new_version, &r.depends, &r.breaks))
                         })
-                        .filter(|(_, _, depends_groups, breaks_groups)| {
-                            !version_allowed(&normalized_new_version, depends_groups, breaks_groups)
-                        })
-                        .map(|(declaring_mod, _, _, _)| declaring_mod.clone())
+                        .map(|m| m.file.clone())
                         .collect(),
                     None => Vec::new(),
                 };
@@ -419,4 +440,79 @@ pub async fn mods_check_update_safety(
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// Une incompatibilité constatée entre deux mods déjà installés.
+#[derive(serde::Serialize)]
+pub struct ModConflict {
+    /// Fichier du mod qui déclare la contrainte.
+    pub declared_by: String,
+    /// Fichier du mod visé, s'il est installé.
+    pub target: String,
+    /// Version installée du mod visé.
+    pub target_version: String,
+    /// `breaks` = incompatibilité déclarée, `depends` = version hors plage.
+    pub kind: String,
+    /// La contrainte telle qu'écrite, pour l'afficher.
+    pub expected: String,
+}
+
+/// Passe en revue TOUT ce qui est installé et signale les incompatibilités
+/// déjà présentes.
+///
+/// `mods_check_update_safety` ne regarde que dans un sens : « les autres
+/// acceptent-ils cette nouvelle version ? ». Il ne dit rien d'un conflit qui
+/// existe déjà — typiquement un mod installé à la main, ou resté en arrière
+/// pendant qu'un autre avançait. Ce sont précisément ceux-là que Fabric
+/// découvre au démarrage, une fois qu'il est trop tard.
+#[tauri::command]
+pub async fn mods_check_conflicts(
+    instance_id: String,
+    mc_version: String,
+    loader: String,
+) -> Result<Vec<ModConflict>, String> {
+    let dir = instance_mods_dir(&instance_id);
+
+    tokio::task::spawn_blocking(move || {
+        let installed = read_installed(&dir, &mc_version, &loader);
+        let by_id = index_ids(&installed, &mc_version, &loader);
+
+        let mut conflicts = Vec::new();
+        for m in &installed {
+            for req in &m.meta.requirements {
+                // Un mod absent n'est pas un conflit : Fabric le signalera
+                // comme dépendance manquante, et le résolveur d'installation
+                // s'en occupe déjà. Ici on ne parle que de ce qui est là.
+                let Some((target_file, version)) = by_id.get(&req.id) else { continue };
+                if target_file == &m.file {
+                    continue;
+                }
+                // Version inconnue : on ne sait pas juger, et une comparaison
+                // contre une chaîne vide échoue toujours — ce serait accuser
+                // au hasard. Mieux vaut se taire.
+                if version.is_empty() {
+                    continue;
+                }
+                if version_allowed(version, &req.depends, &req.breaks) {
+                    continue;
+                }
+                let breaks_it = !req.breaks.is_empty() && !version_allowed(version, &[], &req.breaks);
+                conflicts.push(ModConflict {
+                    declared_by: m.file.clone(),
+                    target: target_file.clone(),
+                    target_version: version.clone(),
+                    kind: if breaks_it { "breaks".into() } else { "depends".into() },
+                    expected: format_groups(if breaks_it { &req.breaks } else { &req.depends }),
+                });
+            }
+        }
+        conflicts
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Remet des groupes de jetons sous une forme lisible (« >=1.0 <2.0 »).
+fn format_groups(groups: &[Vec<String>]) -> String {
+    groups.iter().map(|g| g.join(" ")).collect::<Vec<_>>().join(" ou ")
 }

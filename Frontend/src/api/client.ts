@@ -112,6 +112,19 @@ export interface ModrinthAdvancedSearchInput {
   projectType?: string
 }
 
+/** Une incompatibilité constatée entre deux mods installés. */
+export interface ModConflict {
+  /** Fichier du mod qui déclare la contrainte. */
+  declared_by: string
+  /** Fichier du mod visé. */
+  target: string
+  target_version: string
+  /** breaks = incompatibilité déclarée, depends = version hors plage. */
+  kind: 'breaks' | 'depends'
+  /** La contrainte telle qu'écrite par le mod. */
+  expected: string
+}
+
 export interface ModrinthSearchResponse {
   // Champs bruts Modrinth (project_id, slug, title, categories, client_side,
   // server_side, license, downloads, icon_url...) — pas de type strict ici,
@@ -344,6 +357,11 @@ export const api = {
     ) => invoke<Array<{ name: string; safe: boolean; blockedBy: string[] }>>(
       'mods_check_update_safety', { instanceId, mcVersion, loader, candidates },
     ),
+
+    /** Incompatibilités déjà présentes entre les mods installés, dans les
+     *  deux sens (`depends` hors plage et `breaks` déclarés). */
+    checkConflicts: (instanceId: string, mcVersion: string, loader: string) =>
+      invoke<ModConflict[]>('mods_check_conflicts', { instanceId, mcVersion, loader }),
 
     searchAdvanced: (input: ModrinthAdvancedSearchInput) =>
       invoke<ModrinthSearchResponse>('mods_search_advanced', { input }),
