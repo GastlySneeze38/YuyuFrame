@@ -12,6 +12,7 @@ import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError, showNotice } from '@/stores/useErrorToast'
 import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
+import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
@@ -139,16 +140,31 @@ export default function Home() {
 
   const instance = selectedInstance()
 
+  // Phrase d'accueil : tirée au sort une fois par lancement du launcher, pas
+  // à chaque passage sur l'accueil (voir `lib/greeting.ts`). `playIntro` dit
+  // s'il reste la séquence d'arrivée à jouer.
+  const language = useStore((st) => st.language)
+  const [welcome, setWelcome] = useState({ phrase: '', playIntro: false })
+  useEffect(() => {
+    if (username) setWelcome(homeGreeting(language, username))
+  }, [username, language])
+
   // Bannière publiée depuis le back-office : c'est elle qui décide si le
   // panneau passe en habillage festif.
   const banner = useHomeBanner()
   const festive = banner?.theme === 'festive'
+  // La bannière attend la fin de la séquence — sauf quand il n'y a plus de
+  // séquence à attendre, auquel cas elle est là tout de suite.
   const [bannerReady, setBannerReady] = useState(false)
   useEffect(() => {
+    if (!welcome.playIntro) {
+      setBannerReady(true)
+      return
+    }
     setBannerReady(false)
     const timer = setTimeout(() => setBannerReady(true), 3350)
     return () => clearTimeout(timer)
-  }, [username])
+  }, [welcome])
 
   // Avatar d'un compte hors ligne : mc-heads.net n'a rien pour un UUID inventé
   // (voir Login.tsx pour le même souci sur l'aperçu 3D), donc les deux avatars
@@ -452,7 +468,8 @@ export default function Home() {
           <WelcomeSequence
             username={username}
             avatarUrl={username ? (customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/108`) : null}
-            greeting={username ? t('home.welcomeBack', { name: username }) : t('home.welcomeNew')}
+            greeting={username && welcome.phrase ? welcome.phrase : t('home.welcomeNew')}
+            playIntro={welcome.playIntro}
           />
 
           {/* La bannière attend que le badge soit posé : deux choses qui

@@ -452,7 +452,6 @@ export const en: TranslationSchema = {
     brandTagline: 'The open-source Minecraft launcher.',
     proTagline: 'Unlimited sync · Advanced stats',
     proSeePlans: 'See plans',
-    welcomeBack: 'Good to see you again, {{name}}',
     welcomeNew: 'Welcome to YuyuFrame',
     welcomeGuest: 'Guest',
     proSeePlansTitle: 'See Pro plans',

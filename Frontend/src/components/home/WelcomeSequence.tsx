@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { markIntroPlayed } from '@/lib/greeting'
 import { useT } from '@/i18n'
 
 /**
@@ -19,6 +20,10 @@ import { useT } from '@/i18n'
  * Quatre temps : 0 le salut attend en haut, invisible · 1 il descend au
  * centre, en grand · 2 il se range et l'avatar surgit · 3 le badge prend son
  * fond et le pseudo s'affiche.
+ *
+ * `playIntro` à faux monte directement au dernier temps : la séquence a
+ * déjà été vue depuis l'ouverture du launcher, la rejouer à chaque retour
+ * sur l'accueil serait pénible (voir `lib/greeting.ts`).
  */
 
 /** Taille du salut une fois rangé dans le badge, en pixels. */
@@ -38,13 +43,15 @@ export function WelcomeSequence({
   username,
   avatarUrl,
   greeting,
+  playIntro,
 }: {
   username: string | null
   avatarUrl: string | null
   greeting: string
+  playIntro: boolean
 }) {
   const t = useT()
-  const [phase, setPhase] = useState(0)
+  const [phase, setPhase] = useState(playIntro ? 0 : 3)
   const [flight, setFlight] = useState<Flight | null>(null)
   const slotRef = useRef<HTMLDivElement>(null)
   const boardRef = useRef<HTMLDivElement>(null)
@@ -74,10 +81,14 @@ export function WelcomeSequence({
   }, [measure])
 
   useEffect(() => {
+    if (!playIntro) return
     setPhase(0)
     const timers = PHASE_MS.map((ms, i) => setTimeout(() => setPhase(i + 1), ms))
+    // Marquée jouée seulement une fois arrivée au bout : une page quittée en
+    // plein vol rejouera la séquence, plutôt que d'avoir été vue à moitié.
+    timers.push(setTimeout(markIntroPlayed, PHASE_MS[PHASE_MS.length - 1]))
     return () => timers.forEach(clearTimeout)
-  }, [username])
+  }, [playIntro, username])
 
   const big = phase === 1
   const parked = phase >= 2

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
@@ -7,6 +7,7 @@ import { ErrorToast } from '@/components/ui/ErrorToast'
 import { FleetNotices } from '@/components/FleetNotices'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { PageTransition } from '@/components/PageTransition'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { PlanGate } from '@/components/PlanGate'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
@@ -22,6 +23,38 @@ import { parseJoinUrl } from '@/lib/joinLink'
 // Chargées à la demande — évite de tout regrouper dans un seul chunk JS au
 // premier chargement (pages secondaires comme Legal/Information/Stats
 // n'ont pas besoin d'être prêtes avant que l'utilisateur les visite).
+//
+// Chaque page garde son import dans `PAGE_IMPORTS` : une fois la première
+// page à l'écran, on les charge toutes en tâche de fond (`preloadPages`).
+// Sans ça, chaque première visite suspendait le rendu le temps d'aller
+// chercher son morceau de JS, et l'écran d'attente clignotait 50 ms — assez
+// pour se voir, pas assez pour vouloir le montrer.
+const PAGE_IMPORTS = [
+  () => import('@/pages/Login'),
+  () => import('@/pages/Home'),
+  () => import('@/pages/Instances'),
+  () => import('@/pages/Mods'),
+  () => import('@/pages/Settings'),
+  () => import('@/pages/Information'),
+  () => import('@/pages/Legal'),
+  () => import('@/pages/YuyuLogin'),
+  () => import('@/pages/Sync'),
+  () => import('@/pages/Features'),
+  () => import('@/pages/Support'),
+  () => import('@/pages/Plans'),
+  () => import('@/pages/Stats'),
+  () => import('@/pages/Server'),
+  () => import('@/pages/JvmProfiles'),
+  () => import('@/pages/JvmProfileEditor'),
+]
+
+/** Charge les pages restantes quand le navigateur n'a rien de mieux à faire. */
+function preloadPages() {
+  const run = () => PAGE_IMPORTS.forEach((load) => void load().catch(() => {}))
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 })
+  else setTimeout(run, 1500)
+}
+
 const Login = lazy(() => import('@/pages/Login'))
 const Home = lazy(() => import('@/pages/Home'))
 const Instances = lazy(() => import('@/pages/Instances'))
@@ -40,9 +73,9 @@ const Server = lazy(() => import('@/pages/Server'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 
-function RouteFallback() {
-  return <div className="flex h-full w-full bg-[#09090D]" />
-}
+// Rien à montrer : une page qui n'est pas encore là laisse sa place vide le
+// temps d'un souffle. Un aplat sombre, lui, se voyait passer.
+const RouteFallback = null
 
 const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
@@ -193,9 +226,16 @@ export default function App() {
     return () => clearInterval(interval)
   }, [])
 
+  // Les autres écrans se chargent en tâche de fond une fois le premier
+  // affiché : la navigation n'a plus rien à attendre.
+  useEffect(preloadPages, [])
+
+  // Sert à remettre la barrière d'erreur à zéro d'une page à l'autre.
+  const location = useLocation()
+
   if (isConsoleWindow) {
     return (
-      <Suspense fallback={<RouteFallback />}>
+      <Suspense fallback={RouteFallback}>
         <ErrorToast />
         <Console />
       </Suspense>
@@ -226,8 +266,17 @@ export default function App() {
       <FleetNotices />
       {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
-        <Suspense fallback={<RouteFallback />}>
-          <PageTransition>
+        {/* Suspense À L'INTÉRIEUR de la transition, jamais au-dessus : une
+            page chargée à la demande suspend le rendu, et un Suspense placé
+            au-dessus remplacerait tout l'arbre — AnimatePresence compris —
+            par son écran d'attente, en plein milieu d'une sortie de page. Au
+            retour, la présence reprenait avec une sortie qu'elle attendait
+            toujours, et plus rien ne s'affichait jusqu'au rechargement.
+            C'est le bug de la page blanche quand on enchaîne vite les
+            écrans. */}
+        <PageTransition>
+          <ErrorBoundary resetKey={location.pathname}>
+          <Suspense fallback={RouteFallback}>
           <Routes>
             <Route path="/yuyu" element={<YuyuLogin />} />
             <Route path="/" element={<Navigate to="/home" replace />} />
@@ -251,8 +300,9 @@ export default function App() {
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
           </Routes>
-          </PageTransition>
-        </Suspense>
+          </Suspense>
+          </ErrorBoundary>
+        </PageTransition>
       </div>
     </div>
   )

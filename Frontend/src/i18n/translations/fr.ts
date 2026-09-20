@@ -450,7 +450,6 @@ export const fr = {
     brandTagline: 'Le launcher Minecraft open-source.',
     proTagline: 'Sync illimité · Stats avancées',
     proSeePlans: 'Voir les plans',
-    welcomeBack: 'Content de te revoir, {{name}}',
     welcomeNew: 'Bienvenue sur YuyuFrame',
     welcomeGuest: 'Invité',
     proSeePlansTitle: 'Voir les plans Pro',
