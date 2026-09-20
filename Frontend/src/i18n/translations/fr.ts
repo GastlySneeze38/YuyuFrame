@@ -673,7 +673,9 @@ export const fr = {
     chartBlocksAppliedPerSec: 'Blocs appliqués / s',
   },
   features: {
-    title: 'Fonctionnalités',
+    // Même mot que dans la barre de l'accueil : « Fonctionnalités » y
+    // débordait, et deux noms pour une même page égarent.
+    title: 'Outils',
     subtitle: 'Tout ce que le launcher sait faire, au même endroit',
     paidBadge: 'Premium',
     soonBadge: 'Bientôt',
