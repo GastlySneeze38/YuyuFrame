@@ -566,7 +566,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       } else {
         fetchVersionsByHash(loaded.map((m) => m.sha1)).then((vd) => {
           mergeVersions(vd)
-          checkForUpdates(instanceId, loaded, vd, mcVersion, loader, avoidBetaDependencies, pinnedProjectIds).then((upd) => {
+          checkForUpdates(instanceId, loaded, vd, mcVersion, loader, avoidBetaDependencies).then((upd) => {
             setUpdates(upd)
             _modrinthCache[instanceId] = { versionMap: vd, updates: upd }
           })
@@ -579,7 +579,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
         setCfMatchByModName(cfCached.matchByModName)
         setCfUpdates(cfCached.updates)
       } else if (loaded.length > 0) {
-        fetchCurseforgeInstalled(instanceId, loaded, mcVersion, loader, pinnedCfModIds).then((result) => {
+        fetchCurseforgeInstalled(instanceId, loaded, mcVersion, loader).then((result) => {
           setCfInstalledModIds(result.installedModIds)
           setCfMatchByModName(result.matchByModName)
           setCfUpdates(result.updates)
@@ -687,7 +687,23 @@ export function ModsContent({ instance }: { instance: Instance }) {
   // Mises à jour Modrinth + CurseForge fusionnées dans une seule liste — le
   // mécanisme d'installation (`api.mods.install`) est source-agnostique, donc
   // la même UI (badge, bouton par mod, "tout mettre à jour") sert les deux.
-  const allUpdates = useMemo(() => [...updates, ...cfUpdates], [updates, cfUpdates])
+  //
+  // Les mods épinglés (« ignorer les mises à jour ») sont retirés ICI, et non
+  // au calcul : la liste calculée est mise en cache par instance, alors que
+  // l'épinglage se change à tout moment. En filtrant à l'affichage, cocher
+  // ou décocher l'interrupteur se voit immédiatement, dans les deux sens,
+  // sans rien avoir à recalculer ni à invalider.
+  const allUpdates = useMemo(
+    () =>
+      [...updates, ...cfUpdates].filter((u) => {
+        const projectId = versionMap[u.mod.sha1]?.projectId
+        if (projectId && pinnedProjectIds.has(projectId)) return false
+        const cfModId = cfMatchByModName[u.mod.name]?.modId
+        if (cfModId !== undefined && pinnedCfModIds.has(cfModId)) return false
+        return true
+      }),
+    [updates, cfUpdates, versionMap, cfMatchByModName, pinnedProjectIds, pinnedCfModIds],
+  )
 
   const handleUpdateAll = async () => {
     if (updatingAll) return
@@ -835,7 +851,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       // Rafraîchit tout de suite la détection "déjà installé" pour CE mod, sans attendre un
       // rechargement complet de l'instance — sinon le mod qu'on vient d'installer continue
       // d'apparaître "non installé" dans la recherche tant qu'on n'a pas changé d'onglet/instance.
-      fetchCurseforgeInstalled(instanceId, updatedMods, mcVersion, loader, pinnedCfModIds).then((result) => {
+      fetchCurseforgeInstalled(instanceId, updatedMods, mcVersion, loader).then((result) => {
         setCfInstalledModIds(result.installedModIds)
         setCfMatchByModName(result.matchByModName)
         setCfUpdates(result.updates)
@@ -888,7 +904,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
     // Même raison que dans handleCfInstall : sans ce refetch immédiat, le fichier tout juste
     // choisi dans le panneau de switch resterait affiché comme "non installé" jusqu'au
     // prochain rechargement complet.
-    fetchCurseforgeInstalled(instanceId, updatedMods, mcVersion, loader, pinnedCfModIds).then((result) => {
+    fetchCurseforgeInstalled(instanceId, updatedMods, mcVersion, loader).then((result) => {
       setCfInstalledModIds(result.installedModIds)
       setCfMatchByModName(result.matchByModName)
       setCfUpdates(result.updates)

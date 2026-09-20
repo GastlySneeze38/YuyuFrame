@@ -261,12 +261,17 @@ export const _curseforgeCache: Record<string, {
 /// Les mises à jour trouvées sont renvoyées au format `ModUpdate` pour pouvoir être fusionnées
 /// telles quelles dans le même état/la même UI que les mises à jour Modrinth (le mécanisme
 /// d'installation, `api.mods.install(url, filename)`, est déjà source-agnostique).
+/**
+ * Les épinglages (« ignorer les mises à jour ») ne filtrent PAS ici : le
+ * résultat est mis en cache par instance, alors que l'état des épinglages
+ * change à tout moment sans vider ce cache. C'est l'affichage qui les retire
+ * (voir `allUpdates` dans pages/Mods.tsx).
+ */
 export async function fetchCurseforgeInstalled(
   instanceId: string,
   mods: Mod[],
   mcVersion: string,
   loader: string,
-  pinnedModIds: Set<number> = new Set(),
 ): Promise<{ installedModIds: Set<number>; matchByModName: Record<string, CurseforgeMatch>; updates: ModUpdate[] }> {
   const locals = await api.curseforge.localFingerprints(instanceId)
   if (locals.length === 0) return { installedModIds: new Set(), matchByModName: {}, updates: [] }
@@ -299,7 +304,6 @@ export async function fetchCurseforgeInstalled(
 
     matchByModName[mod.name] = { modId: m.id, fileId: m.file.id, fileName: m.file.displayName || m.file.fileName }
 
-    if (pinnedModIds.has(m.id)) continue // downgrade délibéré via l'écran de switch — ne pas re-proposer
     const candidates = (m.latestFiles ?? []).map(toCurseforgeFile)
     const best = findExactUpdateCandidate(candidates, mcVersion, loader)
     if (best && best.downloadUrl && best.id !== m.file.id) {

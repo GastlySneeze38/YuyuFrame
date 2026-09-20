@@ -214,11 +214,20 @@ export async function checkForUpdates(
   mcVersion: string,
   loader: string,
   avoidBeta: boolean,
-  pinnedProjectIds: Set<string> = new Set(),
 ): Promise<ModUpdate[]> {
-  // Un mod épinglé = on a délibérément basculé sur une version plus ancienne
-  // via le sélecteur de version — ne pas le re-proposer en mise à jour.
-  const eligible = mods.filter((m) => m.sha1 && !pinnedProjectIds.has(versionData[m.sha1]?.projectId ?? ''))
+  // Les mods épinglés ne sont PAS écartés ici, volontairement.
+  //
+  // Ils l'étaient, et le résultat était mis en cache par instance. Épingler
+  // un mod après coup ne vidait pas ce cache : la mise à jour continuait
+  // d'être proposée. Désépingler ne la ramenait pas davantage, puisqu'elle
+  // n'avait jamais été calculée. D'où l'impression que le réglage était
+  // oublié une fois sur deux.
+  //
+  // La liste rendue est donc complète et ne dépend que de l'instance ; c'est
+  // l'affichage qui retire les mods épinglés, avec l'état du moment (voir
+  // `allUpdates` dans pages/Mods.tsx). La requête est groupée de toute
+  // façon : n'y envoyer qu'une partie des empreintes ne faisait rien gagner.
+  const eligible = mods.filter((m) => m.sha1)
   if (eligible.length === 0) return []
   try {
     const body: Record<string, unknown> = {
