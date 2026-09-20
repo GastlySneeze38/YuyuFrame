@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { AnimatePresence, motion } from 'framer-motion'
+import type { Variants } from 'framer-motion'
+import { EASE_OUT } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -13,6 +16,34 @@ import { ServerManageModal } from '@/components/servers/ServerManageModal'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
 import { useT } from '@/i18n'
 import type { SavedServer } from '@/api/client'
+
+// ── Animations d'entrée de l'accueil ────────────────────────────────────────
+// Le panneau de droite glisse depuis le bord, puis ses éléments se posent
+// l'un après l'autre. Les trois cartes du pied de page font de même.
+
+const panelVariants: Variants = {
+  initial: { opacity: 0, x: 24 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.4, ease: EASE_OUT, staggerChildren: 0.07, delayChildren: 0.08 },
+  },
+}
+
+const panelItem: Variants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.32, ease: EASE_OUT } },
+}
+
+const cardsVariants: Variants = {
+  initial: {},
+  animate: { transition: { staggerChildren: 0.06, delayChildren: 0.2 } },
+}
+
+const cardItem: Variants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.34, ease: EASE_OUT } },
+}
 
 interface LaunchProgress {
   current: number
@@ -346,7 +377,14 @@ export default function Home() {
       <div className="flex gap-4 overflow-hidden p-4 flex-[1_1_0] min-h-0">
 
         {/* LEFT: Cinematic Minecraft banner */}
-        <div className="relative flex-1 overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]">
+        <motion.div
+          // La bannière s'installe : elle arrive légèrement réduite puis se
+          // pose, comme un écran qu'on allume.
+          initial={{ opacity: 0, scale: 0.985 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.45, ease: EASE_OUT }}
+          className="relative flex-1 overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
+        >
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgba(75,63,207,0.09)_0%,transparent_55%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_68%_58%,rgba(80,210,80,0.06)_0%,transparent_38%)]" />
@@ -377,7 +415,12 @@ export default function Home() {
           <div className="absolute bottom-0 left-0 right-0 h-24 bg-[linear-gradient(to_top,rgba(9,9,13,0.95),transparent)]" />
 
           {/* Play capsule — top left (animation only) */}
-          <button
+          <motion.button
+            initial={{ opacity: 0, x: -12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.35, ease: EASE_OUT, delay: 0.15 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleBannerPlay}
             className={`absolute left-4 top-4 flex items-center gap-2 h-[30px] pl-[10px] pr-[14px] rounded-[20px] backdrop-blur-[10px] transition-[background,border-color] duration-300 hover:bg-[rgba(75,63,207,0.32)] hover:border-[rgba(255,255,255,0.45)] ${bannerAnimating ? 'bg-[rgba(75,63,207,0.45)] border border-[rgba(120,100,255,0.6)]' : 'bg-[rgba(18,15,38,0.78)] border border-[rgba(255,255,255,0.22)]'}`}
           >
@@ -389,36 +432,68 @@ export default function Home() {
             <span className="text-xs font-medium text-white">
               {bannerAnimating ? t('home.stop') : t('home.play')}
             </span>
-          </button>
+          </motion.button>
 
-          {/* Instance badge — bottom right */}
-          {instance && (
-            <div className="absolute bottom-4 right-4 flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>
-              <span className="text-[11px] text-[rgba(255,255,255,0.18)] font-medium">{instance.mc_version}</span>
-            </div>
-          )}
-        </div>
+          {/* Instance badge — bottom right. Change d'instance : l'ancien
+              badge s'efface pendant que le nouveau monte. */}
+          <AnimatePresence mode="wait">
+            {instance && (
+              <motion.div
+                key={instance.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.22, ease: EASE_OUT }}
+                className="absolute bottom-4 right-4 flex items-center gap-1.5"
+              >
+                <span className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>
+                <span className="text-[11px] text-[rgba(255,255,255,0.18)] font-medium">{instance.mc_version}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
 
         {/* RIGHT: Launcher panel — pas de scroll : tout est dimensionné en
             clamp(vh) pour rétrécir avec la HAUTEUR de fenêtre (pas vw comme
             avant — ce panneau empile ses éléments verticalement, c'est la
             hauteur disponible qui le contraint, pas la largeur). */}
-        <div className="relative flex w-[28%] min-w-[220px] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-[clamp(6px,2.5vh,20px)]">
+        <motion.div
+          // Le panneau arrive de la droite, ses éléments se posent ensuite
+          // l'un après l'autre (variantes `panelItem` ci-dessous).
+          variants={panelVariants}
+          initial="initial"
+          animate="animate"
+          className="relative flex w-[28%] min-w-[220px] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-[clamp(6px,2.5vh,20px)]"
+        >
 
-          <button
+          <motion.button
+            variants={panelItem}
+            whileHover={{ scale: 1.12, rotate: 8 }}
+            whileTap={{ scale: 0.92 }}
             onClick={() => navigate('/information')}
             className="absolute top-[8px] right-[8px] w-[clamp(24px,4.8vh,36px)] h-[clamp(24px,4.8vh,36px)] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-[55%] h-[55%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
-          </button>
+          </motion.button>
 
-          <h1 className="text-center font-black text-white leading-none text-[clamp(16px,6vh,64px)] [text-shadow:0_0_40px_rgba(75,63,207,0.60)] tracking-[-0.01em]">
+          {/* Le titre respire : sa lueur enfle et retombe lentement. */}
+          <motion.h1
+            variants={panelItem}
+            animate={{
+              textShadow: [
+                '0 0 40px rgba(75,63,207,0.60)',
+                '0 0 56px rgba(75,63,207,0.85)',
+                '0 0 40px rgba(75,63,207,0.60)',
+              ],
+            }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+            className="text-center font-black text-white leading-none text-[clamp(16px,6vh,64px)] tracking-[-0.01em]"
+          >
             YuyuFrame
-          </h1>
+          </motion.h1>
 
           {/* Avatar */}
-          <div className="flex flex-col items-center gap-2">
+          <motion.div variants={panelItem} className="flex flex-col items-center gap-2">
             {username ? (
               <button onClick={() => navigate('/login')} className="flex flex-col items-center gap-2 group" title={t('home.manageAccounts')}>
                 <div className="relative">
@@ -467,15 +542,21 @@ export default function Home() {
                 <span className="text-[clamp(8px,1.3vh,10px)] tracking-[0.1em] font-semibold">{t('home.connect')}</span>
               </button>
             )}
-          </div>
+          </motion.div>
 
-          <div className="w-full h-px bg-[rgba(255,255,255,0.06)]" />
+          {/* Le trait se déploie depuis le centre à l'ouverture. */}
+          <motion.div
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.25 }}
+            className="w-full h-px bg-[rgba(255,255,255,0.06)]"
+          />
 
           {/* Instance + lancement — groupés avec un gap fixe pour que le bouton
               ne flotte pas dans un espace résiduel géré par le justify-between
               du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
               pour former une pyramide inversée. */}
-          <div className="w-full flex flex-col gap-[clamp(6px,2.1vh,16px)]">
+          <motion.div variants={panelItem} className="w-full flex flex-col gap-[clamp(6px,2.1vh,16px)]">
 
           {/* Instance selector */}
           <div className="w-full flex flex-col gap-[clamp(3px,1.05vh,8px)]">
@@ -513,9 +594,18 @@ export default function Home() {
               </button>
             )}
 
-            {/* Instance info pill */}
+            {/* Instance info pill — se replie/déplie et change de contenu en
+                douceur quand on passe d'une instance à l'autre. */}
+            <AnimatePresence mode="wait" initial={false}>
             {instance && (
-              <div className="w-[92%] mx-auto flex flex-col gap-[clamp(3px,0.8vh,6px)] px-3 py-[clamp(4px,1vh,6px)] rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
+              <motion.div
+                key={instance.id}
+                initial={{ opacity: 0, height: 0, y: -4 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -4 }}
+                transition={{ duration: 0.24, ease: EASE_OUT }}
+                className="w-[92%] mx-auto flex flex-col gap-[clamp(3px,0.8vh,6px)] px-3 py-[clamp(4px,1vh,6px)] rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] overflow-hidden"
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-[clamp(8px,1.3vh,10px)] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
                   <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.25)]">·</span>
@@ -538,8 +628,9 @@ export default function Home() {
                     <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />
                   </span>
                 </button>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
 
           {/* Launch button — l'annulation devient une pastille "Annuler"
@@ -569,10 +660,20 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <button
+              <motion.button
                 onClick={username ? handleLaunch : () => navigate('/login')}
                 disabled={!!username && !selectedInstanceId}
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 active:scale-95 h-[clamp(34px,7vh,52px)] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
+                // Le bouton le plus important de l'app : il respire quand il
+                // est prêt, se soulève au survol et s'enfonce au clic.
+                animate={
+                  username && selectedInstanceId && !progress
+                    ? { boxShadow: ['0 0 0 rgba(75,63,207,0)', '0 0 34px rgba(75,63,207,0.5)', '0 0 0 rgba(75,63,207,0)'] }
+                    : undefined
+                }
+                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(34px,7vh,52px)] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -592,12 +693,12 @@ export default function Home() {
                       : t('home.launch', { name: instance?.name ?? '' })}
                   </span>
                 )}
-              </button>
+              </motion.button>
             )}
           </div>
 
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
 
       {/* ── Footer ── plus de scrollbar : hauteur dictée par son propre
@@ -605,7 +706,13 @@ export default function Home() {
           rétrécit lui-même via les clamp() vh ci-dessous. C'est la zone
           principale (banner + panneau de lancement, au-dessus) qui absorbe
           l'espace restant et scrolle si besoin — jamais le footer. */}
-      <div className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]">
+      <motion.div
+        // Le pied de page monte après la zone principale.
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.12 }}
+        className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]"
+      >
 
         {/* Zone principale — s'étire pour remplir l'espace disponible */}
         <div className="flex flex-1 flex-col gap-[clamp(8px,1.6vh,16px)]">
@@ -614,20 +721,36 @@ export default function Home() {
             si l'utilisateur a activé "Afficher mes serveurs sur l'accueil"
             (voir Settings.tsx) : même gabarit (3 cartes flex-1), juste le
             contenu qui change. */}
-        <div className="flex items-stretch gap-2">
+        {/* Les trois cartes arrivent l'une après l'autre. */}
+        <motion.div
+          variants={cardsVariants}
+          initial="initial"
+          animate="animate"
+          className="flex items-stretch gap-2"
+        >
           {showHomeServers ? (
             <>
               {serverSlots.map((server, i) =>
                 server ? (
-                  <ServerCard
+                  // Enveloppe animée : la carte garde son propre rendu, on
+                  // ne fait qu'ajouter son entrée en cascade et le survol.
+                  <motion.div
                     key={server.ip}
-                    server={server}
-                    className="flex-1"
-                    onClick={() => handleServerClick(server)}
-                  />
+                    variants={cardItem}
+                    whileHover={{ y: -3 }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+                    className="flex flex-1"
+                  >
+                    <ServerCard
+                      server={server}
+                      className="flex-1"
+                      onClick={() => handleServerClick(server)}
+                    />
+                  </motion.div>
                 ) : (
-                  <div
+                  <motion.div
                     key={`empty-${i}`}
+                    variants={cardItem}
                     onClick={savedServers.length > 3 ? () => setShowServerManage(true) : undefined}
                     className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] text-center border-2 border-dashed border-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.2)] text-[clamp(8px,1.15vh,10px)] transition-all duration-200 ${savedServers.length > 3 ? 'cursor-pointer hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(120,110,230,0.6)]' : ''}`}
                   >
@@ -636,7 +759,7 @@ export default function Home() {
                       : savedServers.length > 3
                         ? t('home.noServerPinned')
                         : t('home.noOtherServer')}
-                  </div>
+                  </motion.div>
                 )
               )}
               {savedServers.length > 3 && (
@@ -653,8 +776,11 @@ export default function Home() {
             </>
           ) : (
             FEATURES.map((f, i) => (
-              <div
+              <motion.div
                 key={i}
+                variants={cardItem}
+                whileHover={f.path ? { y: -3 } : undefined}
+                transition={{ type: 'spring', stiffness: 420, damping: 26 }}
                 onClick={f.path ? () => navigate(f.path!) : undefined}
                 className={`flex flex-1 flex-col gap-1.5 rounded-xl px-[clamp(8px,1.4vh,12px)] py-[clamp(6px,1.1vh,10px)] transition-all duration-150 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)] ${f.path ? 'cursor-pointer opacity-100' : 'cursor-default opacity-100'} ${f.path ? 'hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]' : ''}`}
               >
@@ -667,10 +793,10 @@ export default function Home() {
                 <p className="text-[clamp(8px,1.15vh,10px)] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
                   {f.desc}
                 </p>
-              </div>
+              </motion.div>
             ))
           )}
-        </div>
+        </motion.div>
 
         {/* Brand | Nav | Promo — 3 colonnes égales, alignées en haut.
             overflow-x-auto en filet de sécurité : si les 7 liens de nav ne
@@ -761,9 +887,16 @@ export default function Home() {
             <span className="text-right text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-[1.6]">
               {t('home.proTagline')}
             </span>
-            {/* Pill pleine largeur : bouton | séparateur | -50% */}
-            <div className="flex items-center overflow-hidden mt-1 h-8 rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]">
-              <button
+            {/* Pill pleine largeur : bouton | séparateur | -50%.
+                Une lueur violette très lente attire l'œil sans clignoter. */}
+            <motion.div
+              animate={{ boxShadow: ['0 0 0 rgba(120,100,255,0)', '0 0 18px rgba(120,100,255,0.25)', '0 0 0 rgba(120,100,255,0)'] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+              className="flex items-center overflow-hidden mt-1 h-8 rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]"
+            >
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => navigate('/plans')}
                 className="flex items-center gap-2 h-full pl-3 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.2)]"
                 title={t('home.proSeePlansTitle')}
@@ -772,12 +905,12 @@ export default function Home() {
                 <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.82)] whitespace-nowrap">
                   {t('home.proSeePlans')}
                 </span>
-              </button>
+              </motion.button>
               <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] flex-shrink-0" />
               <div className="flex items-center justify-center h-full px-3">
                 <span className="text-[10px] font-bold text-[#a78bfa] whitespace-nowrap">-50%</span>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
 
@@ -808,7 +941,7 @@ export default function Home() {
           </div>
         </div>
 
-      </div>
+      </motion.div>
 
       {showInstanceSwitch && (
         <InstanceSwitchModal
@@ -874,15 +1007,24 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
       : 'hover:text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.06)]'
 
   return (
-    <button
+    <motion.button
       onClick={onClick}
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.95 }}
+      transition={{ type: 'spring', stiffness: 460, damping: 26 }}
       className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} opacity-100 ${hoverClasses}`}
     >
       <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
       {label}
       {isActive && (
-        <span className={`absolute bottom-[5px] left-1/2 -translate-x-1/2 w-[14px] h-0.5 rounded-[1px] ${plans ? 'bg-[#a78bfa]' : 'bg-[#818cf8]'}`} />
+        // Le soulignement glisse d'un onglet à l'autre : c'est le même
+        // élément, partagé par `layoutId`, qui se déplace.
+        <motion.span
+          layoutId="nav-active-underline"
+          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+          className={`absolute bottom-[5px] left-1/2 -translate-x-1/2 w-[14px] h-0.5 rounded-[1px] ${plans ? 'bg-[#a78bfa]' : 'bg-[#818cf8]'}`}
+        />
       )}
-    </button>
+    </motion.button>
   )
 }
