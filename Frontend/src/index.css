@@ -23,7 +23,11 @@
   --surface-3: 255 255 255 / 0.08;
   --surface-4: 255 255 255 / 0.12;
 
-  /* Traits */
+  /* Traits. ⚠ Ces jetons portent déjà leur opacité : écrire `border-line/60`
+   * produit une couleur invalide, que le navigateur remplace par la couleur
+   * du texte (donc un trait blanc bien visible). Utiliser le niveau voulu
+   * — `line-soft`, `line`, `line-strong` — jamais un suffixe d'opacité. */
+  --line-soft: 255 255 255 / 0.05;
   --line: 255 255 255 / 0.08;
   --line-strong: 255 255 255 / 0.15;
 
@@ -124,6 +128,18 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease,
       box-shadow 0.3s ease;
   }
+}
+
+/* Grille de fond des pages « vitrine » (offres…), reprise telle quelle du
+ * site (Server/Website/Frontend/src/index.css) : un quadrillage très discret,
+ * effacé en dégradé sur les bords pour qu'il ne cerne jamais le contenu. */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
 }
 
 @keyframes errorToastIn {

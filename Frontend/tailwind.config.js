@@ -19,7 +19,11 @@ module.exports = {
           3: 'rgb(var(--surface-3))',
           4: 'rgb(var(--surface-4))',
         },
+        // Trois niveaux de trait plutôt qu'un suffixe d'opacité : ces jetons
+        // portent déjà leur alpha, donc `border-line/60` donnerait une
+        // couleur invalide (et un trait blanc à l'écran).
         line: {
+          soft: 'rgb(var(--line-soft))',
           DEFAULT: 'rgb(var(--line))',
           strong: 'rgb(var(--line-strong))',
         },

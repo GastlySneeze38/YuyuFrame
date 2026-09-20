@@ -704,6 +704,57 @@ export const en: TranslationSchema = {
     advanced: 'Advanced',
     premiumSyncQuota: '3 with saves / 4 without',
     footerNote: 'YuyuFrame is an open-source project under development.',
+    heroCta: 'See the plans',
+    heroPriceLine: 'From €3.99/month — no commitment, cancel whenever you want.',
+    compareKicker: 'The plans',
+    compareTitle: 'What each plan includes',
+    quotaLine: '{{instances}} synced instances · {{saves}} saves',
+    quotaFree: 'Cloud backup not included',
+    finalTitle: 'Ready to take your instances everywhere?',
+    finalText: 'You can stop whenever you want: everything on your PC stays there.',
+    finalCta: 'Go Premium',
+    heroBadgeFree: 'You are on the free plan',
+    heroBadgeSubscriber: 'Thanks for your support',
+    heroTitle: 'The launcher is complete. The subscription follows you everywhere.',
+    heroSubtitle:
+      'Nothing is held back on the free plan: play, mod, run as many instances as you like. The subscription adds what needs servers — and pays for them.',
+    sell: {
+      kicker: 'Subscription',
+      title: 'What the subscription gives you',
+      subtitle: 'Four concrete things, all tied to your account rather than your PC.',
+      syncTitle: 'Your instances follow you',
+      syncText:
+        'Switch PC, reinstall Windows, sign in on your second computer: your instances, mods and settings come back exactly as they were.',
+      restoreTitle: 'Your worlds kept safe',
+      restoreText:
+        'Your saves are copied to the cloud. A failing drive or an unlucky deletion is no longer final.',
+      statsTitle: 'Your play statistics',
+      statsText:
+        'Playtime per instance, sessions, week-by-week trends. The free plan shows the broad strokes, the subscription the details.',
+      badgeTitle: 'An in-game badge',
+      badgeText: 'A decorative badge other players can see. No gameplay advantage at all: it is a wink, not a bonus.',
+    },
+    funding: {
+      kicker: 'Transparency',
+      title: 'Why it costs money',
+      text:
+        'The cloud, the infrastructure and development time have a real cost. Rather than limiting the game or showing ads, those who can afford it fund the project for everyone. The free plan stays complete, and will.',
+    },
+    faq: {
+      title: 'Frequently asked questions',
+      stopQ: 'What happens if I stop subscribing?',
+      stopA:
+        'You go back to the free plan at the end of the period you already paid for. Everything on your PC stays on your PC: instances, mods, worlds. Only cloud features stop.',
+      limitedQ: 'Is the game limited on the free plan?',
+      limitedA:
+        'No. Launching, loaders, mods, instances and the console are identical. The subscription only adds services, never performance.',
+      devicesQ: 'On how many computers?',
+      devicesA:
+        'As many as you like, as long as it is your account. You can see and sign out your devices from the Account page.',
+      cancelQ: 'How do I cancel?',
+      cancelA:
+        'From the management link sent by email when you paid. If anything goes wrong, message us on Discord and we will sort it out.',
+    },
     upgradeModal: {
       activated: 'Plan activated!',
       planName: '{{name}} Plan',

@@ -702,6 +702,57 @@ export const fr = {
     advanced: 'Avancées',
     premiumSyncQuota: '3 avec saves / 4 sans',
     footerNote: 'YuyuFrame est un projet open-source en cours de développement.',
+    heroCta: 'Voir les offres',
+    heroPriceLine: 'À partir de 3,99 €/mois — sans engagement, résiliable quand tu veux.',
+    compareKicker: 'Les formules',
+    compareTitle: 'Ce que chaque formule contient',
+    quotaLine: '{{instances}} instances synchronisées · {{saves}} sauvegardes',
+    quotaFree: 'Sauvegarde cloud non incluse',
+    finalTitle: 'Prêt à emporter tes instances partout ?',
+    finalText: 'Tu peux arrêter quand tu veux : tout ce qui est sur ton PC y reste.',
+    finalCta: 'Passer à Premium',
+    heroBadgeFree: 'Tu es en gratuit',
+    heroBadgeSubscriber: 'Merci pour ton soutien',
+    heroTitle: 'Le launcher est complet. L’abonnement, lui, te suit partout.',
+    heroSubtitle:
+      'Rien n’est bridé en gratuit : tu joues, tu modes, tu lances autant d’instances que tu veux. L’abonnement ajoute ce qui demande des serveurs — et c’est lui qui les paie.',
+    sell: {
+      kicker: 'Abonnement',
+      title: 'Ce que l’abonnement t’apporte',
+      subtitle: 'Quatre choses concrètes, toutes liées au compte plutôt qu’au PC.',
+      syncTitle: 'Tes instances te suivent',
+      syncText:
+        'Change de PC, réinstalle Windows, prête ton compte à ton deuxième ordinateur : tes instances, tes mods et tes réglages reviennent tels quels.',
+      restoreTitle: 'Tes mondes à l’abri',
+      restoreText:
+        'Tes sauvegardes sont copiées dans le cloud. Un disque qui lâche ou une suppression malheureuse ne sont plus définitifs.',
+      statsTitle: 'Tes statistiques de jeu',
+      statsText:
+        'Temps de jeu par instance, sessions, évolution semaine après semaine. Le gratuit en montre les grandes lignes, l’abonnement le détail.',
+      badgeTitle: 'Un grade en jeu',
+      badgeText: 'Un grade décoratif visible par les autres joueurs. Zéro avantage en jeu : c’est un clin d’œil, pas un bonus.',
+    },
+    funding: {
+      kicker: 'Transparence',
+      title: 'Pourquoi c’est payant',
+      text:
+        'Le cloud, l’infrastructure et le temps de développement ont un coût réel. Plutôt que de brider le jeu ou d’afficher de la publicité, ceux qui peuvent participer financent le projet pour tout le monde. Le gratuit reste complet, et le restera.',
+    },
+    faq: {
+      title: 'Questions fréquentes',
+      stopQ: 'Que se passe-t-il si j’arrête l’abonnement ?',
+      stopA:
+        'Tu repasses en gratuit à la fin de la période déjà payée. Tout ce qui est sur ton PC reste sur ton PC : instances, mods, mondes. Seules les fonctions liées au cloud s’arrêtent.',
+      limitedQ: 'Le jeu est-il bridé en gratuit ?',
+      limitedA:
+        'Non. Le lancement, les loaders, les mods, les instances et la console sont identiques. L’abonnement n’ajoute que des services, jamais des performances.',
+      devicesQ: 'Sur combien d’ordinateurs ?',
+      devicesA:
+        'Autant que tu veux, du moment que c’est ton compte. Tu peux voir et déconnecter tes appareils depuis la page Compte.',
+      cancelQ: 'Comment résilier ?',
+      cancelA:
+        'Depuis le lien de gestion reçu par e-mail au moment du paiement. En cas de souci, écris-nous sur Discord : on s’en occupe.',
+    },
     upgradeModal: {
       activated: 'Plan activé !',
       planName: 'Plan {{name}}',
