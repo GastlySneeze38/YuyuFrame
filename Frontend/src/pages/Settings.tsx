@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
@@ -6,7 +8,9 @@ import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
-import { JvmAdvancedSection } from '@/components/instances/JvmAdvancedSection'
+import { SettingsNav, useSectionSpy } from '@/components/settings/SettingsNav'
+import { PageGlow } from '@/components/PageGlow'
+import { Button } from '@/components/ui/Button'
 import { useT, LANGUAGES } from '@/i18n'
 
 /** Valeurs courantes proposées en puces pour la RAM personnalisée (>8 Go) —
@@ -16,9 +20,9 @@ const CUSTOM_RAM_PRESETS_GO = [9, 10, 12, 16, 24, 32]
 
 export default function Settings() {
   const t = useT()
+  const navigate = useNavigate()
   const {
     brightness, setBrightness, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
-    defaultJvmVendor, setDefaultJvmVendor, defaultJvmCustomPath, setDefaultJvmCustomPath, defaultGcPolicy, setDefaultGcPolicy,
     closeOnLaunch, setCloseOnLaunch,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
@@ -28,20 +32,20 @@ export default function Settings() {
 
   const [showRamInfo, setShowRamInfo] = useState(false)
 
-  const CATEGORIES = [
-    { id: 'lancement', label: t('settings.categories.lancement') },
-    { id: 'instances', label: t('settings.categories.instances') },
-    { id: 'stockage', label: t('settings.categories.stockage') },
-    { id: 'langue', label: t('settings.categories.langue') },
-    { id: 'serveurs', label: t('settings.categories.serveurs') },
-    { id: 'confidentialite', label: t('settings.categories.confidentialite') },
-    { id: 'apparence', label: t('settings.categories.apparence') },
-    { id: 'apropos', label: t('settings.categories.apropos') },
-  ] as const
+  // Mémorisées : le repérage de section s'abonne au défilement à partir de
+  // cette liste, une nouvelle à chaque rendu le réabonnerait sans arrêt.
+  const CATEGORIES = useMemo(() => [
+    { id: 'lancement', label: t('settings.categories.lancement'), icon: 'M5 3l14 9-14 9V3z' },
+    { id: 'instances', label: t('settings.categories.instances'), icon: 'M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01' },
+    { id: 'stockage', label: t('settings.categories.stockage'), icon: 'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7' },
+    { id: 'langue', label: t('settings.categories.langue'), icon: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.5 3.5 5.6 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.6-3.5-9s1-6.5 3.5-9z' },
+    { id: 'serveurs', label: t('settings.categories.serveurs'), icon: 'M4 5h16v5H4zM4 14h16v5H4zM8 7.5h.01M8 16.5h.01' },
+    { id: 'confidentialite', label: t('settings.categories.confidentialite'), icon: 'M12 3l8 3.5v5c0 4.6-3.4 8.7-8 9.5-4.6-.8-8-4.9-8-9.5v-5L12 3z' },
+    { id: 'apparence', label: t('settings.categories.apparence'), icon: 'M12 3a9 9 0 000 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 005-5c0-4.1-4-7.6-9-7.6zM7.5 12.5h.01M9.5 8.5h.01M14.5 8.5h.01' },
+    { id: 'apropos', label: t('settings.categories.apropos'), icon: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v5M12 7.5h.01' },
+  ], [t])
 
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const [activeId, setActiveId] = useState<string>(CATEGORIES[0].id)
+  const { scrollRef, sectionRefs, activeId, goTo } = useSectionSpy(CATEGORIES)
 
   const [analyticsDisabled, setAnalyticsDisabledState] = useState(false)
   useEffect(() => {
@@ -80,29 +84,9 @@ export default function Settings() {
     }
   }
 
-  const scrollToCategory = (id: string) => {
-    setActiveId(id)
-    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  useEffect(() => {
-    const root = scrollRef.current
-    if (!root) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting)
-        if (visible.length === 0) return
-        const top = visible.reduce((a, b) => (a.boundingClientRect.top < b.boundingClientRect.top ? a : b))
-        setActiveId(top.target.id)
-      },
-      { root, rootMargin: '0px 0px -70% 0px', threshold: 0 }
-    )
-    Object.values(sectionRefs.current).forEach((el) => el && observer.observe(el))
-    return () => observer.disconnect()
-  }, [])
-
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#09090D]">
+      <PageGlow />
 
       <PageHeader>
         <PageHeaderSeparator />
@@ -119,34 +103,18 @@ export default function Settings() {
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Sidebar de navigation — pleine hauteur, fixe (ne scrolle pas avec le contenu) */}
-        <div className="flex w-[220px] shrink-0 flex-col border-r border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)]">
-          <div className="px-5 py-4 text-[10px] uppercase tracking-[0.8px] text-[rgba(255,255,255,0.35)]">
-            {t('settings.sidebarTitle')}
-          </div>
-          {CATEGORIES.map(({ id, label }) => {
-            const active = activeId === id
-            return (
-              <button
-                key={id}
-                onClick={() => scrollToCategory(id)}
-                className={
-                  active
-                    ? 'flex w-full items-center text-left px-5 py-3 text-[14px] font-semibold cursor-pointer bg-[rgba(75,63,207,0.16)] border-l-2 border-l-[#7b72e9] text-white'
-                    : 'flex w-full items-center text-left px-5 py-3 text-[14px] font-semibold cursor-pointer bg-transparent border-l-2 border-l-transparent text-[rgba(255,255,255,0.5)] transition-colors duration-150 hover:bg-white/[0.03] hover:text-white/70'
-                }
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        <SettingsNav
+          categories={CATEGORIES}
+          activeId={activeId}
+          onPick={goTo}
+          title={t('settings.sidebarTitle')}
+        />
 
         <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto p-8">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
 
           {/* Lancement */}
-          <div id="lancement" ref={(el) => { sectionRefs.current.lancement = el }}>
+          <div id="lancement" ref={(el) => { sectionRefs.current.lancement = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.lancement.title')}
             icon={
@@ -192,45 +160,94 @@ export default function Settings() {
               <div className="h-px bg-white/6" />
 
               {/* RAM personnalisée (>8 Go) — remplace le palier "8 Go" des
-                  fenêtres de création/édition d'instance (voir RamPicker) */}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-white">{t('settings.lancement.customRamLabel')}</p>
-                  <button
-                    onClick={() => setShowRamInfo((v) => !v)}
-                    title={t('settings.lancement.ramInfoTooltip')}
-                    className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white/35 border border-white/20 transition-colors hover:text-white/70 hover:border-white/40"
-                  >
-                    i
-                  </button>
-                </div>
-                <p className="text-[11px] text-white/35">{t('settings.lancement.customRamDesc')}</p>
+                  fenêtres de création/édition d'instance (voir RamPicker).
+                  Présentée dans son propre encadré : c'est un réglage à part,
+                  qui prend le pas sur le curseur juste au-dessus. */}
+              <div className="rounded-xl border border-line bg-surface-2 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium text-white">{t('settings.lancement.customRamLabel')}</p>
+                      <button
+                        onClick={() => setShowRamInfo((v) => !v)}
+                        title={t('settings.lancement.ramInfoTooltip')}
+                        className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${
+                          showRamInfo
+                            ? 'border-accent/60 bg-accent/20 text-accent-hover'
+                            : 'border-line-strong text-txt-muted hover:border-white/40 hover:text-txt-secondary'
+                        }`}
+                      >
+                        i
+                      </button>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-txt-muted">{t('settings.lancement.customRamDesc')}</p>
+                  </div>
 
-                {/* Puces de valeurs courantes (>8 Go) — choix direct sans
-                    taper, la précision reste possible via le champ Mo
-                    juste en dessous pour qui veut une valeur exacte. */}
-                <div className="flex flex-wrap gap-1.5">
+                  {/* La valeur retenue, en gros : c'est la seule chose à
+                      vérifier d'un coup d'œil en revenant sur la page. */}
+                  <AnimatePresence mode="popLayout">
+                    {customRamMb !== null && customRamMb >= 1024 && (
+                      <motion.span
+                        key={customRamMb}
+                        initial={{ opacity: 0, y: -6, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.9 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 30 }}
+                        className="flex-none rounded-lg bg-accent/15 px-2.5 py-1 text-[13px] font-bold text-accent-hover"
+                      >
+                        {formatRam(customRamMb)}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <AnimatePresence initial={false}>
+                  {showRamInfo && (
+                    <motion.p
+                      initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                      animate={{ height: 'auto', opacity: 1, marginTop: 12 }}
+                      exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                      className="overflow-hidden rounded-lg bg-black/25 p-3 text-[11px] leading-relaxed text-txt-secondary"
+                    >
+                      {t('settings.lancement.ramInfoText')}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
+                {/* Puces de valeurs courantes : choix direct sans taper, le
+                    champ juste en dessous reste là pour une valeur exacte. */}
+                <div className="mt-3 flex flex-wrap gap-1.5">
                   {CUSTOM_RAM_PRESETS_GO.map((go) => {
                     const mb = go * 1024
                     const active = customRamMb === mb
                     return (
-                      <button
+                      <motion.button
                         key={go}
-                        onClick={() => setCustomRamMb(mb)}
-                        className={`rounded-lg text-[11px] font-semibold transition-all duration-150 h-[26px] px-2.5 border ${
-                          active
-                            ? 'bg-[rgba(75,63,207,0.35)] border-[rgba(75,63,207,0.7)] text-white'
-                            : 'bg-[rgba(0,0,0,0.35)] border-[rgba(255,255,255,0.08)] text-white/45 hover:border-white/25 hover:text-white/70'
+                        onClick={() => setCustomRamMb(active ? null : mb)}
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 700, damping: 28, mass: 0.4 }}
+                        className={`relative h-8 rounded-lg px-3 text-[12px] font-semibold transition-colors duration-150 ${
+                          active ? 'text-white' : 'border border-line bg-black/25 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
                         }`}
                       >
-                        {go} Go
-                      </button>
+                        {/* Le fond de la puce choisie glisse de l'une à l'autre. */}
+                        {active && (
+                          <motion.span
+                            layoutId="custom-ram-active"
+                            transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                            className="absolute inset-0 rounded-lg border border-accent/60 bg-accent/30"
+                          />
+                        )}
+                        <span className="relative">{go} Go</span>
+                      </motion.button>
                     )
                   })}
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 rounded-xl pl-3 pr-2.5 h-[40px] bg-[rgba(0,0,0,0.4)] border border-[rgba(255,255,255,0.1)] transition-colors focus-within:border-[rgba(75,63,207,0.6)]">
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-line bg-black/30 pl-3 pr-2.5 transition-colors focus-within:border-accent/60">
                     <input
                       type="number"
                       inputMode="numeric"
@@ -243,45 +260,58 @@ export default function Settings() {
                         setCustomRamMb(raw === '' ? null : Math.max(1024, Number(raw)))
                       }}
                       // Masque les flèches natives du input[type=number] —
-                      // très inégales/moches d'un thème système à l'autre,
-                      // et déjà accessible au clavier (↑/↓) sans elles.
-                      className="w-24 bg-transparent text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      // très inégales d'un thème système à l'autre, et déjà
+                      // accessibles au clavier (↑/↓) sans elles.
+                      className="w-full bg-transparent text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
-                    <span className="text-[11px] text-white/35 flex-shrink-0">Mo</span>
+                    <span className="flex-shrink-0 text-[11px] text-txt-muted">Mo</span>
                   </div>
-                  {customRamMb !== null && customRamMb >= 1024 && (
-                    <span className="text-[11px] font-semibold text-[#7b72e9]">≈ {formatRam(customRamMb)}</span>
-                  )}
-                  {customRamMb !== null && (
-                    <button
-                      onClick={() => setCustomRamMb(null)}
-                      className="text-[11px] text-white/35 underline transition-colors hover:text-white/70"
-                    >
-                      {t('settings.lancement.customRamClear')}
-                    </button>
-                  )}
+                  <AnimatePresence>
+                    {customRamMb !== null && (
+                      <motion.button
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: 'auto' }}
+                        exit={{ opacity: 0, width: 0 }}
+                        onClick={() => setCustomRamMb(null)}
+                        className="h-10 flex-none overflow-hidden whitespace-nowrap rounded-xl border border-line px-3 text-[12px] font-semibold text-txt-muted transition-colors hover:border-danger/40 hover:text-danger"
+                      >
+                        {t('settings.lancement.customRamClear')}
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
                 </div>
-                {showRamInfo && (
-                  <div className="rounded-xl p-3 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-[11px] text-white/50 leading-relaxed">
-                    {t('settings.lancement.ramInfoText')}
-                  </div>
-                )}
               </div>
 
               <div className="h-px bg-white/6" />
 
-              {/* JVM par défaut — valeur de départ pour les nouvelles
-                  instances (voir CreateInstanceModal), pas de bouton de
-                  prévisualisation ici : aucune instance concrète à résoudre. */}
-              <div>
-                <p className="text-sm font-medium text-white mb-2">{t('settings.lancement.jvmLabel')}</p>
-                <JvmAdvancedSection
-                  vendor={defaultJvmVendor} onVendorChange={setDefaultJvmVendor}
-                  customPath={defaultJvmCustomPath} onCustomPathChange={setDefaultJvmCustomPath}
-                  gcPolicy={defaultGcPolicy} onGcPolicyChange={setDefaultGcPolicy}
-                  ramMb={defaultRam}
-                />
-              </div>
+              {/* JVM par défaut — le réglage détaillé vit désormais sur
+                  l'écran des configurations JVM, qui sait les réutiliser d'une
+                  instance à l'autre. Ici on montre ce qui s'applique et on y
+                  renvoie, plutôt que de recopier un formulaire complet dans un
+                  tiroir repliable. */}
+              <motion.div
+                whileHover="hover"
+                className="flex items-center gap-4 rounded-xl border border-line bg-surface-2 p-4 transition-colors duration-200 hover:border-accent/30"
+              >
+                <motion.div
+                  variants={{ hover: { scale: 1.08, rotate: -6 } }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+                  className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent-hover"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <path d="M4 6h16M4 12h16M4 18h10" />
+                  </svg>
+                </motion.div>
+
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <p className="text-sm font-medium text-white">{t('settings.lancement.jvmLabel')}</p>
+                  <p className="text-[11px] leading-relaxed text-txt-muted">{t('settings.lancement.jvmProfilesDesc')}</p>
+                </div>
+
+                <Button size="sm" variant="secondary" onClick={() => navigate('/jvm')}>
+                  {t('settings.lancement.jvmOpen')}
+                </Button>
+              </motion.div>
 
               <div className="h-px bg-white/6" />
 
@@ -313,7 +343,7 @@ export default function Settings() {
           </div>
 
           {/* Instances */}
-          <div id="instances" ref={(el) => { sectionRefs.current.instances = el }}>
+          <div id="instances" ref={(el) => { sectionRefs.current.instances = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.instances.title')}
             icon={
@@ -381,7 +411,7 @@ export default function Settings() {
           </div>
 
           {/* Stockage */}
-          <div id="stockage" ref={(el) => { sectionRefs.current.stockage = el }}>
+          <div id="stockage" ref={(el) => { sectionRefs.current.stockage = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.stockage.title')}
             icon={
@@ -447,7 +477,7 @@ export default function Settings() {
           </div>
 
           {/* Langue */}
-          <div id="langue" ref={(el) => { sectionRefs.current.langue = el }}>
+          <div id="langue" ref={(el) => { sectionRefs.current.langue = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.langue.title')}
             icon={
@@ -480,7 +510,7 @@ export default function Settings() {
           </div>
 
           {/* Serveurs */}
-          <div id="serveurs" ref={(el) => { sectionRefs.current.serveurs = el }}>
+          <div id="serveurs" ref={(el) => { sectionRefs.current.serveurs = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.serveurs.title')}
             icon={
@@ -521,7 +551,7 @@ export default function Settings() {
           </div>
 
           {/* Confidentialité */}
-          <div id="confidentialite" ref={(el) => { sectionRefs.current.confidentialite = el }}>
+          <div id="confidentialite" ref={(el) => { sectionRefs.current.confidentialite = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.confidentialite.title')}
             icon={
@@ -546,7 +576,7 @@ export default function Settings() {
           </div>
 
           {/* Apparence */}
-          <div id="apparence" ref={(el) => { sectionRefs.current.apparence = el }}>
+          <div id="apparence" ref={(el) => { sectionRefs.current.apparence = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.apparence.title')}
             icon={
@@ -613,7 +643,7 @@ export default function Settings() {
           </div>
 
           {/* À propos */}
-          <div id="apropos" ref={(el) => { sectionRefs.current.apropos = el }}>
+          <div id="apropos" ref={(el) => { sectionRefs.current.apropos = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.apropos.title')}
             icon={
@@ -637,23 +667,34 @@ export default function Settings() {
   )
 }
 
+/**
+ * Carte de réglages. Elle entre quand elle arrive à l'écran plutôt qu'au
+ * chargement : sur une page aussi longue, tout animer d'un coup ferait
+ * s'agiter des cartes que personne ne regarde. `once: false` pour que la
+ * page reste vivante quand on la reparcourt.
+ */
 function SCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-2xl p-6 bg-[rgba(255,255,255,0.025)] border border-[rgba(255,255,255,0.07)]"
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: false, margin: '0px 0px -10% 0px' }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      whileHover="hover"
+      className="rounded-2xl border border-line bg-surface-1 p-6 transition-colors duration-200 hover:border-accent/25"
     >
       <div className="mb-5 flex items-center gap-3">
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(75,63,207,0.2)] text-[#7b72e9]"
+        <motion.div
+          variants={{ hover: { scale: 1.08, rotate: -5 } }}
+          transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+          className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20 text-accent-hover"
         >
           {icon}
-        </div>
-        <h2 className="font-bold text-white text-[14px] tracking-[0.02em]">
-          {title}
-        </h2>
+        </motion.div>
+        <h2 className="text-[14px] font-bold tracking-[0.02em] text-white">{title}</h2>
       </div>
       {children}
-    </div>
+    </motion.section>
   )
 }
 

@@ -361,6 +361,8 @@ export const en: TranslationSchema = {
       ramInfoTooltip: 'Why these tiers?',
       ramInfoText: "Too little RAM crashes the game from out-of-memory (OOM). Too much RAM doesn't help either: above 6 GB the launcher uses ZGC, a garbage collector built for large heaps — below that, its structural overhead (~1.5x the memory actually in use) eats a disproportionate share of a small heap, so below 6 GB the launcher stays on G1GC, which fits better. The proposed tiers (2 / 3-4 / 5-6-7 / 8 GB) match these tested thresholds, not arbitrary values.",
       jvmLabel: 'Default JVM',
+      jvmProfilesDesc: 'Reusable Java settings, linked to the instances that need them.',
+      jvmOpen: 'Open',
       hideOnLaunchLabel: 'Hide on launch',
       hideOnLaunchDesc: 'Hides the launcher while the game is running',
       consoleLabel: 'Launch with console',

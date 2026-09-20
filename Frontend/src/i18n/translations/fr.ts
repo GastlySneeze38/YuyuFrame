@@ -359,6 +359,8 @@ export const fr = {
       ramInfoTooltip: 'Pourquoi ces paliers ?',
       ramInfoText: "Trop peu de RAM fait planter le jeu par manque de mémoire (OOM). Trop de RAM n'aide pas non plus : au-delà de 6 Go, le launcher utilise ZGC, un ramasse-miettes fait pour les gros tas — en dessous, son overhead structurel (~1.5x la mémoire vraiment utilisée) grignote une part disproportionnée d'un petit tas, donc en dessous de 6 Go le launcher reste sur G1GC, mieux adapté. Les paliers proposés (2 / 3-4 / 5-6-7 / 8 Go) correspondent à ces seuils testés, pas à des valeurs arbitraires.",
       jvmLabel: 'JVM par défaut',
+      jvmProfilesDesc: 'Réglages Java réutilisables, à relier aux instances qui en ont besoin.',
+      jvmOpen: 'Ouvrir',
       hideOnLaunchLabel: 'Masquer au lancement',
       hideOnLaunchDesc: 'Cache le launcher pendant que le jeu tourne',
       consoleLabel: 'Lancer avec la console',
