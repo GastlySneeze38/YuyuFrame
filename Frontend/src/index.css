@@ -2,16 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Jetons de l'interface ───────────────────────────────────────────────────
+ * Une seule source pour toute la palette. Les écrans utilisent les classes
+ * Tailwind correspondantes (bg-surface-2, text-txt-muted, border-line…) et
+ * n'écrivent plus de `rgba(...)` à la main : changer une teinte se fait ici.
+ *
+ * Valeurs reprises de ce qui était écrit en dur partout : fond #09090D,
+ * accent #4B3FCF, et une échelle de blancs transparents pour les surfaces.
+ * Format « R G B » (sans rgb()) : Tailwind y ajoute l'opacité.
+ */
 :root {
-  --bg-primary: 12 12 14;
-  --bg-secondary: 19 19 21;
-  --bg-card: 30 30 35;
-  --accent: 68 62 185;
-  --accent-hover: 88 82 220;
-  --txt-primary: 248 250 252;
-  --txt-secondary: 148 163 184;
+  /* Fonds */
+  --bg-primary: 9 9 13;
+  --bg-secondary: 14 14 20;
+  --bg-card: 17 17 24;
+
+  /* Surfaces posées par-dessus : du plus discret au plus marqué. */
+  --surface-1: 255 255 255 / 0.03;
+  --surface-2: 255 255 255 / 0.05;
+  --surface-3: 255 255 255 / 0.08;
+  --surface-4: 255 255 255 / 0.12;
+
+  /* Traits */
+  --line: 255 255 255 / 0.08;
+  --line-strong: 255 255 255 / 0.15;
+
+  /* Accent */
+  --accent: 75 63 207;
+  --accent-hover: 96 84 230;
+  --glow: 75 63 207;
+
+  /* Textes : primaire, secondaire, atténué. */
+  --txt-primary: 255 255 255;
+  --txt-secondary: 255 255 255 / 0.6;
+  --txt-muted: 255 255 255 / 0.35;
+
+  /* États */
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+
+  /* Compat : l'ancien jeton `border`, le temps de convertir les écrans. */
   --border: 50 45 90;
-  --glow: 68 62 185;
+
+  /* Mouvement (voir lib/motion.ts) */
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 380ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Respect du réglage système « animations réduites » : plus aucun mouvement,
+ * mais l'interface reste utilisable (Framer Motion a son propre garde-fou,
+ * voir lib/motion.ts). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 * {

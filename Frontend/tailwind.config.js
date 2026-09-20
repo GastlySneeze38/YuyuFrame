@@ -3,11 +3,25 @@ module.exports = {
   content: ['./src/**/*.{ts,tsx}', './index.html'],
   theme: {
     extend: {
+      // Toutes les couleurs viennent des jetons de src/index.css : aucun
+      // `rgba(...)` en dur dans les écrans (voir l'audit des interfaces).
       colors: {
         bg: {
           primary: 'rgb(var(--bg-primary) / <alpha-value>)',
           secondary: 'rgb(var(--bg-secondary) / <alpha-value>)',
           card: 'rgb(var(--bg-card) / <alpha-value>)',
+        },
+        // Surfaces empilées (cartes, champs, survols) : l'opacité est déjà
+        // dans le jeton, d'où `rgb(var(--…))` sans <alpha-value>.
+        surface: {
+          1: 'rgb(var(--surface-1))',
+          2: 'rgb(var(--surface-2))',
+          3: 'rgb(var(--surface-3))',
+          4: 'rgb(var(--surface-4))',
+        },
+        line: {
+          DEFAULT: 'rgb(var(--line))',
+          strong: 'rgb(var(--line-strong))',
         },
         accent: {
           DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
@@ -15,9 +29,17 @@ module.exports = {
         },
         txt: {
           primary: 'rgb(var(--txt-primary) / <alpha-value>)',
-          secondary: 'rgb(var(--txt-secondary) / <alpha-value>)',
+          secondary: 'rgb(var(--txt-secondary))',
+          muted: 'rgb(var(--txt-muted))',
         },
+        success: 'rgb(var(--success) / <alpha-value>)',
+        warning: 'rgb(var(--warning) / <alpha-value>)',
+        danger: 'rgb(var(--danger) / <alpha-value>)',
+        // Ancien jeton, le temps de convertir les écrans un par un.
         border: 'rgb(var(--border) / <alpha-value>)',
+      },
+      transitionTimingFunction: {
+        out: 'var(--ease-out)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

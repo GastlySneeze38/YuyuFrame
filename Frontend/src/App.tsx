@@ -6,6 +6,7 @@ import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
 import { FleetNotices } from '@/components/FleetNotices'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
+import { PageTransition } from '@/components/PageTransition'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
@@ -223,6 +224,7 @@ export default function App() {
       {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         <Suspense fallback={<RouteFallback />}>
+          <PageTransition>
           <Routes>
             <Route path="/yuyu" element={<YuyuLogin />} />
             <Route path="/" element={<Navigate to="/home" replace />} />
@@ -240,6 +242,7 @@ export default function App() {
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
           </Routes>
+          </PageTransition>
         </Suspense>
       </div>
     </div>
