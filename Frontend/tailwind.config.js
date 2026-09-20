@@ -54,9 +54,6 @@ module.exports = {
         'float': 'float 5s ease-in-out infinite',
         'float-slow': 'float 8s ease-in-out infinite',
         'banner-flash': 'bannerFlash 1.1s ease-out forwards',
-        'banner-glow': 'bannerGlow 2s ease-in-out infinite',
-        'terrain-float': 'terrainFloat 3s ease-in-out infinite',
-        'star-pulse': 'starPulse 2s ease-in-out infinite',
         'fade-in-up': 'fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
         'grow-x': 'growX 0.6s cubic-bezier(0.16, 1, 0.3, 1) both',
         'grow-y': 'growY 0.6s cubic-bezier(0.16, 1, 0.3, 1) both',
@@ -82,18 +79,6 @@ module.exports = {
           '0%': { opacity: '0' },
           '12%': { opacity: '1' },
           '100%': { opacity: '0' },
-        },
-        bannerGlow: {
-          '0%, 100%': { opacity: '0.2' },
-          '50%': { opacity: '1' },
-        },
-        terrainFloat: {
-          '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-14px)' },
-        },
-        starPulse: {
-          '0%, 100%': { filter: 'brightness(0.6)' },
-          '50%': { filter: 'brightness(5)' },
         },
       },
     },

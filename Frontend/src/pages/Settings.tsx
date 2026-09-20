@@ -34,6 +34,11 @@ export default function Settings() {
 
   // Mémorisées : le repérage de section s'abonne au défilement à partir de
   // cette liste, une nouvelle à chaque rendu le réabonnerait sans arrêt.
+  //
+  // ⚠ Dépend de `language`, PAS seulement de `t` : `t` est une fonction
+  // stable qui lit la langue au moment de l'appel, donc sa référence ne
+  // change jamais. Avec `[t]` seul, les libellés restaient figés dans la
+  // langue du premier rendu pendant que le reste de la page se traduisait.
   const CATEGORIES = useMemo(() => [
     { id: 'lancement', label: t('settings.categories.lancement'), icon: 'M5 3l14 9-14 9V3z' },
     { id: 'instances', label: t('settings.categories.instances'), icon: 'M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01' },
@@ -43,7 +48,7 @@ export default function Settings() {
     { id: 'confidentialite', label: t('settings.categories.confidentialite'), icon: 'M12 3l8 3.5v5c0 4.6-3.4 8.7-8 9.5-4.6-.8-8-4.9-8-9.5v-5L12 3z' },
     { id: 'apparence', label: t('settings.categories.apparence'), icon: 'M12 3a9 9 0 000 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 005-5c0-4.1-4-7.6-9-7.6zM7.5 12.5h.01M9.5 8.5h.01M14.5 8.5h.01' },
     { id: 'apropos', label: t('settings.categories.apropos'), icon: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v5M12 7.5h.01' },
-  ], [t])
+  ], [t, language])
 
   const { scrollRef, sectionRefs, activeId, goTo } = useSectionSpy(CATEGORIES)
 
