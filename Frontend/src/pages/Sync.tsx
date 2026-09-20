@@ -10,7 +10,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError, showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
-import { SYNC_ENABLED } from '@/config/features'
+import { SYNC_ENABLED, SYNC_FLAG } from '@/config/features'
+import { useFleet } from '@/stores/useFleet'
 import { useT } from '@/i18n'
 
 // ── Sync content ──────────────────────────────────────────────────────────────
@@ -150,8 +151,12 @@ export default function Sync() {
   const t = useT()
   const navigate = useNavigate()
   const { yuyuSignedIn, isPremium } = useStore()
+  // Deux verrous : celui du code (réécriture en cours) et celui du
+  // back-office, qui permet de couper la sync à distance en cas d'incident.
+  const allowedByFleet = useFleet((s) => s.isEnabled(SYNC_FLAG))
+  const fleetMessage = useFleet((s) => s.flagMessage(SYNC_FLAG))
 
-  if (!SYNC_ENABLED) {
+  if (!SYNC_ENABLED || !allowedByFleet) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D]">
         <div className="text-[32px] opacity-[0.15]">
@@ -159,7 +164,8 @@ export default function Sync() {
         </div>
         <p className="text-[14px] font-bold text-[rgba(255,255,255,0.5)]">{t('sync.comingSoon')}</p>
         <p className="text-[11px] text-[rgba(255,255,255,0.2)] text-center max-w-[280px]">
-          {t('sync.comingSoonDesc')}
+          {/* Message du back-office s'il a coupé la sync, sinon le texte par défaut. */}
+          {(!allowedByFleet && fleetMessage) || t('sync.comingSoonDesc')}
         </p>
         <button
           onClick={() => navigate('/home')}

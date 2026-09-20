@@ -20,12 +20,17 @@ interface Store {
   yuyuPlanExpiresAt: number | null
   /** Licence hors ligne : « grace » déclenche le bandeau d'information. */
   yuyuLicenseState: 'valid' | 'grace' | 'expired'
+  /** Mot de passe provisoire donné par le support : changement imposé avant
+   * toute autre action (le serveur refuse le reste). */
+  yuyuPasswordResetRequired: boolean
+  setYuyuPasswordResetRequired: (required: boolean) => void
   setYuyuSession: (session: {
     username: string
     email?: string | null
     plan: YuyuPlan
     planExpiresAt: number | null
     licenseState?: 'valid' | 'grace' | 'expired'
+    passwordResetRequired?: boolean
   }) => void
   setYuyuPlan: (plan: YuyuPlan, planExpiresAt: number | null) => void
   clearYuyuSession: () => void
@@ -188,6 +193,8 @@ export const useStore = create<Store>()(
       yuyuPlan: 'free',
       yuyuPlanExpiresAt: null,
       yuyuLicenseState: 'valid',
+      yuyuPasswordResetRequired: false,
+      setYuyuPasswordResetRequired: (required) => set({ yuyuPasswordResetRequired: required }),
       setYuyuSession: (session) =>
         set({
           yuyuSignedIn: true,
@@ -196,6 +203,7 @@ export const useStore = create<Store>()(
           yuyuPlan: session.plan,
           yuyuPlanExpiresAt: session.planExpiresAt,
           yuyuLicenseState: session.licenseState ?? 'valid',
+          yuyuPasswordResetRequired: session.passwordResetRequired ?? false,
         }),
       setYuyuPlan: (plan, planExpiresAt) =>
         set({ yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
@@ -209,6 +217,7 @@ export const useStore = create<Store>()(
           yuyuPlan: 'free',
           yuyuPlanExpiresAt: null,
           yuyuLicenseState: 'valid',
+          yuyuPasswordResetRequired: false,
         }),
       isPremium: () => {
         const { yuyuPlan, yuyuPlanExpiresAt } = get()

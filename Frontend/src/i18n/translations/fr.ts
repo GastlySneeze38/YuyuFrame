@@ -699,6 +699,29 @@ export const fr = {
       ultimateOneClickServer: 'Serveur 1 clic',
     },
   },
+
+  password: {
+    title: 'Changer de mot de passe',
+    forcedTitle: 'Choisis un nouveau mot de passe',
+    forcedDescription:
+      'Le support t’a donné un mot de passe provisoire. Choisis-en un nouveau pour retrouver l’accès à ton compte.',
+    current: 'Mot de passe actuel',
+    new: 'Nouveau mot de passe',
+    confirm: 'Confirme le nouveau mot de passe',
+    mismatch: 'Les deux mots de passe ne correspondent pas',
+    tooShort: 'Au moins 8 caractères',
+    otherDevicesNotice: 'Tes autres appareils seront déconnectés.',
+    submit: 'Changer',
+  },
+
+  // Messages pilotés depuis le back-office (GET /v1/config).
+  fleet: {
+    blockedTitle: 'Cette version du launcher ne peut plus être utilisée',
+    blockedHint: 'Installe la dernière version depuis yuyuframe.eu pour continuer à jouer.',
+    updateRequired: 'Une mise à jour du launcher est nécessaire pour continuer à utiliser ton compte.',
+    licenseGrace:
+      'Impossible de joindre nos serveurs depuis un moment : ton abonnement reste actif encore quelques jours, reconnecte-toi dès que possible.',
+  },
 }
 
 export type TranslationSchema = typeof fr

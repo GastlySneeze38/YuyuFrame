@@ -11,6 +11,7 @@
 // fois même si dix appels partent en même temps (verrou `yuyu_refresh`).
 
 pub mod error;
+pub mod fleet;
 pub mod license;
 
 use error::{ApiError, ApiResult};
@@ -131,7 +132,7 @@ async fn authed(
     unreachable!("la boucle rend la main aux deux tours")
 }
 
-async fn read_json(resp: reqwest::Response) -> ApiResult<Value> {
+pub(crate) async fn read_json(resp: reqwest::Response) -> ApiResult<Value> {
     if !resp.status().is_success() {
         return Err(ApiError::from_response(resp).await);
     }

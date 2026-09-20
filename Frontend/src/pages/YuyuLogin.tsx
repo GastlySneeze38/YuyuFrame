@@ -50,6 +50,7 @@ export default function YuyuLogin() {
         plan: (resp.plan ?? 'free') as import('@/stores/useStore').YuyuPlan,
         planExpiresAt: resp.plan_expires_at ?? null,
         licenseState: resp.license_state,
+        passwordResetRequired: resp.password_reset_required,
       })
 
       // Populate MC accounts from backend response

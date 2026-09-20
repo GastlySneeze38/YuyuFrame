@@ -20,6 +20,33 @@ export interface YuyuSessionResp {
   accounts: McAccountInfo[]
 }
 
+// ── Pilotage depuis le back-office (GET /v1/config) ──────────────────────────
+
+export interface FleetFlag {
+  key: string
+  enabled: boolean
+  message: string | null
+}
+
+export interface FleetAnnouncement {
+  id: string
+  message: string
+  level: 'info' | 'warning' | 'critical'
+  ends_at: string | null
+}
+
+export interface FleetConfig {
+  min_launcher_version: string | null
+  min_version_message: string | null
+  /** Ce launcher est sous la version minimale imposée. */
+  update_required: boolean
+  /** Cette version est interdite : motif affiché, jeu non lançable. */
+  launcher_blocked: string | null
+  blocked_agent_versions: { version: string; reason: string }[]
+  flags: FleetFlag[]
+  announcements: FleetAnnouncement[]
+}
+
 /** Un appareil connecté au compte (écran « Ma sécurité »). */
 export interface YuyuDevice {
   id: string
@@ -167,6 +194,14 @@ export const api = {
     setEmail: (email: string) => invoke<void>('yuyu_set_email', { email }),
     listDevices: () => invoke<YuyuDevice[]>('yuyu_list_devices'),
     revokeDevice: (id: string) => invoke<void>('yuyu_revoke_device', { id }),
+  },
+
+  /** Réglages poussés par le back-office (voir stores/useFleet.ts). */
+  fleet: {
+    /** Dernière configuration connue, sans appel réseau. */
+    config: () => invoke<FleetConfig>('fleet_config'),
+    /** Force une relecture depuis le serveur. */
+    refresh: () => invoke<FleetConfig>('fleet_refresh'),
   },
 
   auth: {

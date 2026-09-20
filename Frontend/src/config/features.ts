@@ -4,8 +4,14 @@
  * n'en dépend pas. */
 export const P2P_ENABLED = false
 
-/** Sync cloud désactivée le temps de câbler la limite de concurrence côté
- * LauncherAPI (voir audit résilience serveur — un petit VPS sans
- * ConcurrencyLimitLayer + des uploads jusqu'à 200 Mo, ça ne pardonne pas).
- * À remettre à true une fois le correctif serveur fait. */
+/** Sync cloud désactivée le temps de la réécrire sur le protocole par
+ * morceaux de /v1 (l'ancien envoi d'un zip entier saturait le VPS).
+ *
+ * Interrupteur LOCAL, posé dans le code : il s'ajoute à celui du back-office
+ * (clé `cloud_sync` de `GET /v1/config`, voir stores/useFleet.ts), qui permet
+ * lui de couper la sync à distance sans publier de version. Les deux doivent
+ * être au vert pour que l'écran s'ouvre. */
 export const SYNC_ENABLED = false
+
+/** Clé de l'interrupteur correspondant côté back-office. */
+export const SYNC_FLAG = 'cloud_sync'

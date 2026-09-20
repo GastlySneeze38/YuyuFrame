@@ -701,4 +701,26 @@ export const en: TranslationSchema = {
       ultimateOneClickServer: 'One-click server',
     },
   },
+
+  password: {
+    title: 'Change password',
+    forcedTitle: 'Choose a new password',
+    forcedDescription:
+      'Support gave you a temporary password. Choose a new one to get your account back.',
+    current: 'Current password',
+    new: 'New password',
+    confirm: 'Confirm new password',
+    mismatch: 'Both passwords must match',
+    tooShort: 'At least 8 characters',
+    otherDevicesNotice: 'Your other devices will be signed out.',
+    submit: 'Change',
+  },
+
+  fleet: {
+    blockedTitle: 'This launcher version can no longer be used',
+    blockedHint: 'Install the latest version from yuyuframe.eu to keep playing.',
+    updateRequired: 'A launcher update is required to keep using your account.',
+    licenseGrace:
+      'We have not been able to reach our servers for a while: your subscription stays active for a few more days, please reconnect soon.',
+  },
 }

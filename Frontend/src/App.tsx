@@ -4,6 +4,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
+import { FleetNotices } from '@/components/FleetNotices'
+import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
@@ -43,6 +45,9 @@ const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
   const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline } = useStore()
+  // Mot de passe provisoire donné par le support : la modale s'impose tant
+  // qu'il n'est pas changé (le serveur refuse tout le reste).
+  const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
   const [showPatchNotes, setShowPatchNotes] = useState(false)
   const [showOfflineReminder, setShowOfflineReminder] = useState(false)
   const [showReconnect, setShowReconnect] = useState(false)
@@ -214,6 +219,8 @@ export default function App() {
       {joinRequest && (
         <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
       )}
+      <FleetNotices />
+      {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         <Suspense fallback={<RouteFallback />}>
           <Routes>

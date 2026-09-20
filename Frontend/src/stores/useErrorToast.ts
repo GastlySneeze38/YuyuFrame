@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { errorMessage, isNetworkError, isSessionExpiredError } from '@/lib/apiError'
+import { errorCode, errorMessage, isNetworkError, isSessionExpiredError } from '@/lib/apiError'
 import { useStore } from '@/stores/useStore'
 import { t } from '@/i18n'
 
@@ -63,6 +63,12 @@ export function showApiError(e: unknown, unreachableMessage: string): void {
   // vide tout de suite plutôt que de laisser chaque appel suivant échouer en
   // boucle avec le même message brut ; l'UI retombe naturellement sur l'état
   // "non connecté" (bouton de connexion) dès le prochain rendu.
+  // Mot de passe provisoire du support : le serveur refuse tout le reste
+  // tant qu'il n'est pas changé. On lève le drapeau, App.tsx ouvre la modale.
+  if (errorCode(e) === 'password_change_required') {
+    useStore.getState().setYuyuPasswordResetRequired(true)
+    return
+  }
   if (isSessionExpiredError(e)) {
     useStore.getState().clearYuyuSession()
     useErrorToast.getState().show(t('common.sessionExpired'), 'notice')

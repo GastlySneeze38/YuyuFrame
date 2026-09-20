@@ -2,6 +2,7 @@ pub mod account;
 pub mod analytics;
 pub mod curseforge;
 pub mod deep_link;
+pub mod fleet;
 pub mod instance;
 pub mod jvm_profile;
 pub mod launch;

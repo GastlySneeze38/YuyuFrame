@@ -188,7 +188,12 @@ pub fn run() {
                 instance_id_migrations,
             }));
 
-            app.manage(app_state);
+            app.manage(app_state.clone());
+
+            // Pilotage par le back-office (version minimale, interrupteurs,
+            // bannières) : première lecture tout de suite, puis toutes les
+            // 15 minutes. Jamais bloquant — sans réponse, rien n'est coupé.
+            api::fleet::spawn_refresh(app_state);
 
             // Garantit que .minecraft/agent/p2p existent tous, même vides —
             // voir Settings.tsx section Stockage : avant ça, `p2p/`
@@ -230,6 +235,9 @@ pub fn run() {
             commands::account::yuyu::yuyu_set_email,
             commands::account::yuyu::yuyu_list_devices,
             commands::account::yuyu::yuyu_revoke_device,
+            commands::fleet::fleet_config,
+            commands::fleet::fleet_refresh,
+            commands::fleet::fleet_flag,
             commands::account::microsoft::auth_start_device,
             commands::account::microsoft::auth_poll,
             commands::account::microsoft::auth_status,
