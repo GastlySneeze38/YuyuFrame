@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -204,6 +205,21 @@ export const api = {
     config: () => invoke<FleetConfig>('fleet_config'),
     /** Force une relecture depuis le serveur. */
     refresh: () => invoke<FleetConfig>('fleet_refresh'),
+  },
+
+  support: {
+    categories: () => invoke<SupportCategory[]>('support_categories'),
+    list: () => invoke<TicketSummary[]>('support_list'),
+    /** Ouvre la conversation, et marque au passage les réponses comme lues. */
+    get: (id: string) => invoke<TicketDetail>('support_get', { id }),
+    create: (input: { category: string; subject: string; message: string; diagnostic?: string | null }) =>
+      invoke<TicketDetail>('support_create', input),
+    reply: (id: string, message: string) => invoke<TicketDetail>('support_reply', { id, message }),
+    /** Retire un ticket clos de la liste ; l'équipe garde la conversation. */
+    hide: (id: string) => invoke<void>('support_hide', { id }),
+    /** Rapport montré à la personne avant l'envoi — jamais joint sans accord. */
+    diagnostic: (instanceId?: string | null) =>
+      invoke<string>('support_diagnostic', { instanceId: instanceId ?? null }),
   },
 
   plan: {

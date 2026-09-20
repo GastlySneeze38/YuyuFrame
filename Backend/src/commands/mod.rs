@@ -8,6 +8,7 @@ pub mod jvm_profile;
 pub mod launch;
 pub mod modrinth;
 pub mod plan;
+pub mod support;
 pub mod sync;
 pub mod system;
 

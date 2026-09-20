@@ -699,10 +699,77 @@ export const en: TranslationSchema = {
 
   support: {
     title: 'Support',
-    subtitle: 'Ask the team a question',
-    emptyTitle: 'Coming soon',
-    emptyText:
-      'You will soon be able to open a ticket straight from the launcher and follow the answer here. In the meantime, use Discord.',
+    subtitle: 'Ask the team a question or file a request',
+    myRequests: 'My requests',
+    emptyTitle: 'No request yet',
+    emptyText: 'Pick one of the entries above: the team answers you right here.',
+    pickTicket: 'Pick a request to read the conversation.',
+    discordNote:
+      'The team’s answers land here, whether they are written from the back office or from Discord.',
+    attachmentsNote:
+      'Screenshots, logs, receipts: use the private Discord channel opened for your request — nothing can be attached from the launcher.',
+    team: 'YuyuFrame team',
+    replyPlaceholder: 'Write your reply…',
+    reopenPlaceholder: 'This request is closed — write to reopen it…',
+    send: 'Send',
+    remove: 'Delete',
+    confirmRemove: 'Confirm',
+    category: 'Category',
+    subject: 'Subject',
+    subjectPlaceholder: 'E.g.: crash when launching a Forge instance',
+    message: 'Message',
+    referenceLabel: 'Payment reference',
+    referencePlaceholder: 'E.g.: Stripe receipt, order number',
+    referenceHint: 'The number shown on the receipt you got by e-mail.',
+    currentPlan: 'Current plan on the account',
+    attachDiagnostic: 'Attach a technical report',
+    diagnosticNote:
+      'Launcher version, system, memory and the mods of your instance. Visible to the team only, without your address or your tokens.',
+    showReport: 'Show the report',
+    hideReport: 'Hide the report',
+    deletionHeader: 'Request to delete the account and the data attached to it (GDPR).',
+    deletionWarnTitle: 'This is final',
+    deletionWarnText:
+      'Account, synced instances, cloud saves and statistics are erased. A running subscription is not refunded automatically: ask for it separately first.',
+    deletionConsent: 'I request the deletion of my account and understand it cannot be undone.',
+    signInTitle: 'Log in to write to the team',
+    signInText:
+      'A request belongs to your YuyuFrame account: that is what lets the team answer you and lets you read the conversation again.',
+    signIn: 'Log in',
+    status: {
+      open: 'Open',
+      answered: 'Answered',
+      waiting: 'Waiting',
+      closed: 'Closed',
+    },
+    kind: {
+      questionTitle: 'Ask a question',
+      questionText: 'An issue, a bug, a question',
+      questionIntro: 'Describe what happens: the more precise, the faster the answer.',
+      questionPlaceholder: 'Tell us what happens, and what you already tried.',
+      questionSubmit: 'Send',
+      refundTitle: 'Ask for a refund',
+      refundText: 'A payment to cancel',
+      refundIntro:
+        'Give the payment concerned and the reason. The team checks the transaction then answers here.',
+      refundPlaceholder: 'Why are you asking for this refund?',
+      refundSubject: 'Refund request',
+      refundSubmit: 'Send the request',
+      planTitle: 'Plan not activated',
+      planText: 'Paid but still on free',
+      planIntro:
+        'Payment went through but the plan does not show? Give the reference and the team attaches the payment to the account.',
+      planPlaceholder: 'Payment date, method used, what you see on your side.',
+      planSubject: 'Activation of a paid plan',
+      planSubmit: 'Send the request',
+      deletionTitle: 'Delete my account',
+      deletionText: 'Erasure of your data (GDPR)',
+      deletionIntro:
+        'Your request opens a conversation with the team, who performs the erasure and confirms here once it is done.',
+      deletionPlaceholder: 'Anything to add?',
+      deletionSubject: 'Account deletion (GDPR)',
+      deletionSubmit: 'Request deletion',
+    },
   },
 
   plans: {

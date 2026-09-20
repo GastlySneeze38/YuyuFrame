@@ -699,10 +699,77 @@ export const fr = {
 
   support: {
     title: 'Support',
-    subtitle: 'Poser une question à l’équipe',
-    emptyTitle: 'Bientôt disponible',
-    emptyText:
-      'Tu pourras bientôt ouvrir un ticket directement depuis le launcher et suivre la réponse ici. En attendant, passe par le Discord.',
+    subtitle: 'Poser une question ou faire une demande à l’équipe',
+    myRequests: 'Mes demandes',
+    emptyTitle: 'Aucune demande',
+    emptyText: 'Choisis une entrée ci-dessus : l’équipe te répond ici même.',
+    pickTicket: 'Choisis une demande pour lire la conversation.',
+    discordNote:
+      'Les réponses de l’équipe arrivent ici, qu’elles soient écrites depuis le back-office ou depuis Discord.',
+    attachmentsNote:
+      'Captures d’écran, journaux, justificatifs : passe par le salon Discord privé ouvert pour ta demande — on ne peut rien joindre depuis le launcher.',
+    team: 'Équipe YuyuFrame',
+    replyPlaceholder: 'Écris ta réponse…',
+    reopenPlaceholder: 'Cette demande est close — écris pour la rouvrir…',
+    send: 'Envoyer',
+    remove: 'Supprimer',
+    confirmRemove: 'Confirmer',
+    category: 'Catégorie',
+    subject: 'Sujet',
+    subjectPlaceholder: 'Ex : crash au lancement d’une instance Forge',
+    message: 'Message',
+    referenceLabel: 'Référence du paiement',
+    referencePlaceholder: 'Ex : reçu Stripe, numéro de commande',
+    referenceHint: 'Le numéro qui figure sur le reçu reçu par e-mail.',
+    currentPlan: 'Plan actuel du compte',
+    attachDiagnostic: 'Joindre un rapport technique',
+    diagnosticNote:
+      'Version du launcher, système, mémoire et mods de ton instance. Visible de l’équipe seulement, sans ton adresse ni tes jetons.',
+    showReport: 'Voir le rapport',
+    hideReport: 'Masquer le rapport',
+    deletionHeader: 'Demande de suppression de compte et des données associées (RGPD).',
+    deletionWarnTitle: 'C’est définitif',
+    deletionWarnText:
+      'Compte, instances synchronisées, sauvegardes cloud et statistiques sont effacés. Un abonnement en cours n’est pas remboursé automatiquement : demande-le séparément avant.',
+    deletionConsent: 'Je demande la suppression de mon compte et je comprends qu’elle est irréversible.',
+    signInTitle: 'Connecte-toi pour écrire à l’équipe',
+    signInText:
+      'La demande est rattachée à ton compte YuyuFrame : c’est ce qui permet à l’équipe de te répondre et à toi de relire la conversation.',
+    signIn: 'Se connecter',
+    status: {
+      open: 'Ouvert',
+      answered: 'Répondu',
+      waiting: 'En attente',
+      closed: 'Clos',
+    },
+    kind: {
+      questionTitle: 'Poser une question',
+      questionText: 'Un souci, un bug, une question',
+      questionIntro: 'Décris ce qui se passe : plus c’est précis, plus la réponse arrive vite.',
+      questionPlaceholder: 'Raconte ce qui se passe, et ce que tu as déjà essayé.',
+      questionSubmit: 'Envoyer',
+      refundTitle: 'Demander un remboursement',
+      refundText: 'Un paiement à annuler',
+      refundIntro:
+        'Indique le paiement concerné et la raison. L’équipe vérifie la transaction puis te répond ici.',
+      refundPlaceholder: 'Pourquoi demandes-tu ce remboursement ?',
+      refundSubject: 'Demande de remboursement',
+      refundSubmit: 'Envoyer la demande',
+      planTitle: 'Plan non activé',
+      planText: 'Payé mais toujours en gratuit',
+      planIntro:
+        'Le paiement est passé mais le plan n’apparaît pas ? Donne la référence, l’équipe rattache le paiement au compte.',
+      planPlaceholder: 'Date du paiement, moyen utilisé, ce que tu vois de ton côté.',
+      planSubject: 'Activation d’un plan payé',
+      planSubmit: 'Envoyer la demande',
+      deletionTitle: 'Supprimer mon compte',
+      deletionText: 'Effacement des données (RGPD)',
+      deletionIntro:
+        'Ta demande ouvre une conversation avec l’équipe, qui procède à l’effacement et te confirme ici quand c’est fait.',
+      deletionPlaceholder: 'Une précision à ajouter ?',
+      deletionSubject: 'Suppression de compte (RGPD)',
+      deletionSubmit: 'Demander la suppression',
+    },
   },
 
   plans: {
