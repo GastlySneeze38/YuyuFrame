@@ -1,6 +1,6 @@
 import { memo, useState } from 'react'
 import { SNAP, listItemVariants, press, pressIf } from '@/lib/motion'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { Mod } from '@/types'
 import { formatBytes } from '@/lib/format'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
@@ -13,10 +13,12 @@ import { useT } from '@/i18n'
  * callbacks reçoivent l'identifiant du mod pour que le parent puisse passer
  * des références stables (useCallback) au lieu d'une closure par ligne. */
 export const ModRow = memo(function ModRow({
-  mod, version, modrinthName, projectId, cfModId, update, updating, switchingVersion, logoUrl,
+  mod, version, modrinthName, projectId, cfModId, pinned, update, updating, switchingVersion, logoUrl,
   onToggle, onDelete, onUpdate, onSwitchVersion,
 }: {
   mod: Mod
+  /** Ses mises à jour sont ignorées (interrupteur de la fiche du mod). */
+  pinned: boolean
   version: string | null
   modrinthName: string | null
   projectId: string | null
@@ -60,12 +62,37 @@ export const ModRow = memo(function ModRow({
             : <PlugIcon size={18} color={mod.enabled ? 'rgba(120,110,230,0.8)' : 'rgba(255,255,255,0.2)'} />
           }
         </motion.div>
-        <div className="min-w-0 flex-1">
+        {/* Ne grandit pas : le badge se pose juste après le bloc nom + taille
+            au lieu d'être renvoyé à l'autre bout de la ligne. Le `min-w-0`
+            laisse le nom se tronquer quand il est trop long. */}
+        <div className="min-w-0">
           <p className={`truncate font-semibold text-[13px] ${mod.enabled ? 'text-[rgba(255,255,255,0.9)]' : 'text-[rgba(255,255,255,0.4)]'}`}>
             {modrinthName || displayName(mod.name)}
           </p>
-          <p className="text-[11px] text-[rgba(255,255,255,0.22)] mt-px">{formatBytes(mod.size)}</p>
+          <p className="mt-px text-[11px] text-[rgba(255,255,255,0.22)]">{formatBytes(mod.size)}</p>
         </div>
+
+        {/* À côté du nom et de sa taille, pas en dessous : l'état « mises à
+            jour ignorées » ne se voyait que dans la fiche du mod, qu'il faut
+            ouvrir. Sans repère dans la liste, un mod figé volontairement
+            ressemble à un mod à jour. */}
+        <AnimatePresence>
+          {pinned && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8, x: -4 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.8, x: -4 }}
+              transition={SNAP}
+              title={t('mods.ignoreUpdatesDesc')}
+              className="flex flex-none items-center gap-1.5 rounded-md bg-[rgba(255,255,255,0.07)] px-2 py-[3px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[rgba(255,255,255,0.45)]"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" width={11} height={11}>
+                <path d="M12 5v9M8 10l4 4 4-4M5 19h14" />
+              </svg>
+              {t('mods.updatesIgnored')}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Section centre : version (vraiment au milieu car flanquée de 2 flex-1) */}

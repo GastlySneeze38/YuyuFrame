@@ -11,7 +11,7 @@ import { useT } from '@/i18n'
 
 export function InstalledTab({
   mods, modpackMeta, showPackContent, loading, error, isPlugin, modSearch, onModSearch, logoCache, versionMap,
-  cfModIdByName, cfVersionByName, updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod,
+  cfModIdByName, cfVersionByName, pinnedProjectIds, pinnedCfModIds, updates, updatingMods, updatingAll, onReload, onToggle, onDelete, onUpdateMod,
   onSwitchVersion, switchingModName, onBrowseExtra, onUploadExtra,
 }: {
   mods: Mod[]
@@ -26,6 +26,9 @@ export function InstalledTab({
   versionMap: Record<string, ModrinthInfo>
   cfModIdByName: Record<string, number>
   cfVersionByName: Record<string, string>
+  /** Mods dont les mises à jour sont ignorées, par identifiant de projet. */
+  pinnedProjectIds: Set<string>
+  pinnedCfModIds: Set<number>
   updates: ModUpdate[]
   updatingMods: Set<string>
   updatingAll: boolean
@@ -72,10 +75,19 @@ export function InstalledTab({
   // qui remplace ce mécanisme.
   const renderRow = (mod: Mod, isPack: boolean) => {
     const update = isPack ? null : updates.find((u) => u.mod.sha1 === mod.sha1) ?? null
+    const projectId = versionMap[mod.sha1]?.projectId ?? null
+    const cfModId = cfModIdByName[mod.name] ?? null
+    // Un mod d'un modpack n'a jamais de mise à jour proposée (l'ensemble est
+    // curé par son auteur) : dire « ignorées » là n'aurait aucun sens.
+    const pinned =
+      !isPack &&
+      ((projectId !== null && pinnedProjectIds.has(projectId)) ||
+        (cfModId !== null && pinnedCfModIds.has(cfModId)))
     return (
       <ModRow
         key={mod.name}
         mod={mod}
+        pinned={pinned}
         version={versionMap[mod.sha1]?.version ?? cfVersionByName[mod.name] ?? null}
         modrinthName={versionMap[mod.sha1]?.modrinthName || null}
         projectId={versionMap[mod.sha1]?.projectId ?? null}

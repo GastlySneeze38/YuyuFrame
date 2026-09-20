@@ -98,6 +98,7 @@ export const fr = {
     switchButton: 'Basculer',
     ignoreUpdates: 'Ignorer les mises à jour',
     ignoreUpdatesDesc: "Ne propose plus de mise à jour pour ce mod tant que c'est activé",
+    updatesIgnored: 'Figé',
     filtersToggle: 'Filtres',
     filtersCategories: 'Catégories',
     filtersEnvironment: 'Environnement',

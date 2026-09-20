@@ -100,6 +100,7 @@ export const en: TranslationSchema = {
     switchButton: 'Switch',
     ignoreUpdates: 'Ignore updates',
     ignoreUpdatesDesc: 'No longer suggests an update for this mod while enabled',
+    updatesIgnored: 'Pinned',
     filtersToggle: 'Filters',
     filtersCategories: 'Categories',
     filtersEnvironment: 'Environment',

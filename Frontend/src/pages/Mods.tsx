@@ -1151,6 +1151,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
             logoCache={logoCache}
             versionMap={versionMap}
             cfModIdByName={cfModIdByName}
+            pinnedProjectIds={pinnedProjectIds}
+            pinnedCfModIds={pinnedCfModIds}
             cfVersionByName={cfVersionByName}
             updates={allUpdates}
             updatingMods={updatingMods}
