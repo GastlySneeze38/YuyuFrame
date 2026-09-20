@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import type { CSSProperties, ReactNode } from 'react'
 import { CloseButton } from './CloseButton'
@@ -17,7 +18,10 @@ export function ModalShell({
   onClose,
   children,
   maxWidth = 'max-w-md',
-  closeOnBackdrop = true,
+  // Un clic à côté ne ferme plus : trop de saisies perdues d'un geste
+  // involontaire. On ferme par la croix, par Échap ou par un bouton.
+  closeOnBackdrop = false,
+  closeOnEscape = true,
   overlay = 'rgba(0,0,0,0.6)',
   blur = 4,
   cardStyle,
@@ -27,10 +31,24 @@ export function ModalShell({
   children: ReactNode
   maxWidth?: string
   closeOnBackdrop?: boolean
+  /** Échap ferme la modale. À couper pour une modale imposée (mot de passe
+   * provisoire, par exemple), qui passe déjà un `onClose` sans effet. */
+  closeOnEscape?: boolean
   overlay?: string
   blur?: number
   cardStyle?: CSSProperties
 }) {
+  // Échap ferme : c'est la sortie attendue maintenant que le clic à côté ne
+  // fait plus rien. `capture` pour passer avant les champs de saisie.
+  useEffect(() => {
+    if (!closeOnEscape) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [closeOnEscape, onClose])
+
   return (
     <motion.div
       variants={backdropVariants}

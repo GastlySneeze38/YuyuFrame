@@ -59,7 +59,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
     <ModalShell
       title={forced ? t('password.forcedTitle') : t('password.title')}
       onClose={forced ? () => {} : onClose}
-      closeOnBackdrop={!forced}
+      closeOnEscape={!forced}
     >
       {forced && <p className="text-[12px] text-txt-secondary">{t('password.forcedDescription')}</p>}
       <div className="flex flex-col gap-2">

@@ -7,10 +7,13 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showError } from '@/stores/useErrorToast'
+import { clearDraft, useDraftState } from '@/stores/useDrafts'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
 import { JvmAdvancedSection } from './JvmAdvancedSection'
 import { PresetCard } from './PresetCard'
 import { useT } from '@/i18n'
+
+const DRAFT_KEY = 'create-instance'
 
 /// Trouve le fichier de la dernière version Modrinth d'un mod compatible avec
 /// la version MC + loader donnés. Best-effort : un slug introuvable est ignoré.
@@ -77,11 +80,14 @@ export function CreateInstanceModal({
   const [mode, setMode] = useState<'blank' | 'preset'>('blank')
   const [selectedPreset, setSelectedPreset] = useState<InstancePreset | null>(null)
 
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [mcVersion, setMcVersion] = useState(versions[0] ?? '')
-  const [loader, setLoader] = useState<Loader>('vanilla')
-  const [ram, setRam] = useState(defaultRam)
+  // Brouillon conservé tant que l'instance n'est pas créée : on peut fermer
+  // la modale, aller vérifier une version ailleurs, et revenir sans retaper
+  // (voir stores/useDrafts.ts).
+  const [name, setName] = useDraftState(DRAFT_KEY, 'name', '')
+  const [description, setDescription] = useDraftState(DRAFT_KEY, 'description', '')
+  const [mcVersion, setMcVersion] = useDraftState(DRAFT_KEY, 'mcVersion', versions[0] ?? '')
+  const [loader, setLoader] = useDraftState<Loader>(DRAFT_KEY, 'loader', 'vanilla')
+  const [ram, setRam] = useDraftState(DRAFT_KEY, 'ram', defaultRam)
   const [jvmVendor, setJvmVendor] = useState<JvmVendor>(defaultJvmVendor)
   const [jvmCustomPath, setJvmCustomPath] = useState(defaultJvmCustomPath)
   const [gcPolicy, setGcPolicy] = useState(defaultGcPolicy)
@@ -163,6 +169,8 @@ export function CreateInstanceModal({
           setLoadingLabel(t('instancesPage.installingModsProgress', { done, total }))
         })
       }
+      // Instance créée : le formulaire repart vierge la prochaine fois.
+      clearDraft(DRAFT_KEY)
       onCreate(instance)
       onClose()
     } catch (e) {

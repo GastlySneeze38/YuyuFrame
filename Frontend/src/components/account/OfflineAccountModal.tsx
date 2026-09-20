@@ -3,9 +3,11 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { SkinSourceInput, applySkinSource, type SkinSource } from '@/components/account/SkinSourceInput'
+import { clearDraft, useDraftState } from '@/stores/useDrafts'
 import { useT } from '@/i18n'
 
 const USERNAME_RE = /^[A-Za-z0-9_]{1,16}$/
+const DRAFT_KEY = 'offline-account'
 
 /** Compte local sans authentification Microsoft (mode hors ligne, pour les
  * serveurs online-mode=false) — voir mc_add_offline côté Rust, qui génère un
@@ -19,8 +21,10 @@ export function OfflineAccountModal({
   onAdded: (acc: { username: string; uuid: string; is_offline: boolean }) => void
 }) {
   const t = useT()
-  const [username, setUsername] = useState('')
-  const [skinSource, setSkinSource] = useState<SkinSource | null>(null)
+  // Brouillon : fermer la modale, aller voir autre chose puis revenir ne
+  // fait pas retaper le pseudo (voir stores/useDrafts.ts).
+  const [username, setUsername] = useDraftState(DRAFT_KEY, 'username', '')
+  const [skinSource, setSkinSource] = useDraftState<SkinSource | null>(DRAFT_KEY, 'skinSource', null)
   const [submitting, setSubmitting] = useState(false)
 
   const valid = USERNAME_RE.test(username)
@@ -37,6 +41,8 @@ export function OfflineAccountModal({
           showError(e)
         }
       }
+      // Compte créé : le brouillon n'a plus lieu d'être.
+      clearDraft(DRAFT_KEY)
       onAdded({ username: acc.mc_username, uuid: acc.mc_uuid, is_offline: acc.is_offline })
       onClose()
     } catch (e) {
