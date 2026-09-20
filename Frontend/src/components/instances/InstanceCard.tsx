@@ -1,12 +1,12 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
-import { listItemVariants } from '@/lib/motion'
+import { SNAP, listItemVariants } from '@/lib/motion'
 import { MenuItem } from './MenuItem'
 
 /** Mémoïsé : rendu en liste — les callbacks reçoivent l'id/l'instance pour
@@ -63,7 +63,7 @@ export const InstanceCard = memo(function InstanceCard({
       exit={{ opacity: 0, x: -12, scale: 0.97, transition: { duration: 0.18 } }}
       whileHover={{ x: 3 }}
       whileTap={{ scale: 0.99 }}
-      transition={{ type: 'spring', stiffness: 600, damping: 30, mass: 0.5 }}
+      transition={SNAP}
       onClick={() => onSelect(instance.id)}
       className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-colors duration-150 relative border ${menuOpen ? 'z-40' : 'z-auto'} ${
         selected
@@ -77,11 +77,15 @@ export const InstanceCard = memo(function InstanceCard({
     >
       {/* Partie haute : icône + nom + infos */}
       <div className="flex items-start gap-3 relative">
-        <div
+        {/* Le bloc bascule quand la carte est choisie : un repère de plus que
+            la couleur, utile quand la liste est longue. */}
+        <motion.div
+          animate={selected ? { rotate: [0, -8, 6, 0], scale: 1.06 } : { rotate: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 16 }}
           className={`flex items-center justify-center rounded-xl flex-shrink-0 w-[36px] h-[36px] text-[15px] ${selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}`}
         >
           🧱
-        </div>
+        </motion.div>
 
         <div className="flex flex-col flex-1 min-w-0">
           {/* Nom + étoile + menu */}
@@ -91,9 +95,15 @@ export const InstanceCard = memo(function InstanceCard({
             </p>
 
             <div ref={menuRef} className="absolute flex flex-col items-center gap-0.5 flex-shrink-0 top-1/2 right-0 -translate-y-1/2">
-              <button
+              <motion.button
                 onClick={(e) => { e.stopPropagation(); onToggleFavorite(instance.id) }}
-                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 bg-transparent ${
+                whileHover={{ scale: 1.25, rotate: 12 }}
+                whileTap={{ scale: 0.8 }}
+                // L'étoile fait un tour sur elle-même quand elle s'allume :
+                // c'est une action sans confirmation, elle doit se voir.
+                animate={instance.favorite ? { rotate: [0, 360], scale: [1, 1.35, 1] } : {}}
+                transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-transparent transition-colors duration-150 ${
                   instance.favorite
                     ? 'text-[#facc15] hover:text-[#fde047]'
                     : 'text-[rgba(255,255,255,0.18)] hover:text-[rgba(255,255,255,0.5)]'
@@ -103,11 +113,16 @@ export const InstanceCard = memo(function InstanceCard({
                 <svg viewBox="0 0 24 24" fill={instance.favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={instance.favorite ? 0 : 1.8} width={13} height={13}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
                 </svg>
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); setConfirm(false) }}
-                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-all duration-150 ${
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.88 }}
+                // Les trois points se redressent quand le menu s'ouvre.
+                animate={{ rotate: menuOpen ? 90 : 0 }}
+                transition={SNAP}
+                className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${
                   menuOpen
                     ? 'text-[rgba(255,255,255,0.85)] bg-[rgba(255,255,255,0.1)]'
                     : 'text-[rgba(255,255,255,0.25)] bg-transparent hover:text-[rgba(255,255,255,0.6)]'
@@ -117,11 +132,19 @@ export const InstanceCard = memo(function InstanceCard({
                 <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}>
                   <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
                 </svg>
-              </button>
+              </motion.button>
 
+              <AnimatePresence>
               {menuOpen && (
-                <div
+                <motion.div
                   onClick={(e) => e.stopPropagation()}
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.97, transition: { duration: 0.12 } }}
+                  transition={SNAP}
+                  // Le menu s'ouvre depuis son coin haut droit, sous le bouton
+                  // qui l'a appelé, au lieu de grandir depuis son centre.
+                  style={{ transformOrigin: 'top right' }}
                   className="absolute flex flex-col gap-0.5 rounded-xl p-1 top-full right-0 mt-1 w-[190px] z-30 bg-[#1a1a24] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                 >
                   {!confirm ? (
@@ -175,17 +198,31 @@ export const InstanceCard = memo(function InstanceCard({
                       </div>
                     </div>
                   )}
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </div>
           </div>
 
           {/* Infos */}
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[11px] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>
-            <span className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>
-            <span className="text-[10px] text-[rgba(255,255,255,0.2)]">{formatRam(instance.ram_mb)}</span>
-          </div>
+          <motion.div
+            variants={{ initial: {}, animate: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } } }}
+            className="flex items-center gap-2 mt-0.5"
+          >
+            {[
+              <span key="v" className="text-[11px] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>,
+              <span key="l" className="text-[10px] font-semibold" style={{ color: loaderColor(instance.loader) }}>{instance.loader}</span>,
+              <span key="r" className="text-[10px] text-[rgba(255,255,255,0.2)]">{formatRam(instance.ram_mb)}</span>,
+            ].map((child, i) => (
+              <motion.span
+                key={i}
+                variants={{ initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 } }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {child}
+              </motion.span>
+            ))}
+          </motion.div>
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { SNAP } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
@@ -232,7 +233,7 @@ export default function Settings() {
                         onClick={() => setCustomRamMb(active ? null : mb)}
                         whileHover={{ y: -2 }}
                         whileTap={{ scale: 0.95 }}
-                        transition={{ type: 'spring', stiffness: 700, damping: 28, mass: 0.4 }}
+                        transition={SNAP}
                         className={`relative h-8 rounded-lg px-3 text-[12px] font-semibold transition-colors duration-150 ${
                           active ? 'text-white' : 'border border-line bg-black/25 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
                         }`}
@@ -507,7 +508,7 @@ export default function Settings() {
                       onClick={() => setLanguage(code)}
                       whileHover={{ y: -2 }}
                       whileTap={{ scale: 0.97 }}
-                      transition={{ type: 'spring', stiffness: 700, damping: 28, mass: 0.4 }}
+                      transition={SNAP}
                       className="relative flex items-center justify-center gap-2 rounded-xl p-3 text-center"
                     >
                       {active ? (

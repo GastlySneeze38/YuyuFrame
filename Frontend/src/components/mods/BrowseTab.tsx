@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { press } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
@@ -93,7 +95,7 @@ export function BrowseTab({
             <ButtonSpinner size={16} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.1)" className="absolute right-3 top-1/2 -translate-y-1/2" />
           )}
         </div>
-        <button
+        <motion.button {...press}
           onClick={() => setShowFilters((v) => !v)}
           className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-[12px] font-semibold h-10 border transition-colors ${
             showFilters || isFiltersActive(filters)
@@ -105,7 +107,7 @@ export function BrowseTab({
             <path d="M4 6h16v2H4zm3 5h10v2H7zm4 5h2v2h-2z" />
           </svg>
           {t('mods.filtersToggle')}
-        </button>
+        </motion.button>
       </div>
 
       {showFilters && (
@@ -117,9 +119,9 @@ export function BrowseTab({
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {CONTENT_CATEGORIES.map((c) => (
-                  <button key={c} onClick={() => toggleCategory(c)} className={chipClass((filters.categories ?? []).includes(c))}>
+                  <motion.button {...press} key={c} onClick={() => toggleCategory(c)} className={chipClass((filters.categories ?? []).includes(c))}>
                     {c}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
@@ -132,13 +134,13 @@ export function BrowseTab({
               </label>
               <div className="flex gap-1.5">
                 {([undefined, 'client', 'server'] as const).map((env) => (
-                  <button
+                  <motion.button {...press}
                     key={env ?? 'any'}
                     onClick={() => onFiltersChange({ ...filters, environment: env })}
                     className={chipClass(filters.environment === env)}
                   >
                     {env === 'client' ? t('mods.filtersEnvironmentClient') : env === 'server' ? t('mods.filtersEnvironmentServer') : t('mods.filtersEnvironmentAny')}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
@@ -181,12 +183,12 @@ export function BrowseTab({
             </label>
 
             {isFiltersActive(filters) && (
-              <button
+              <motion.button {...press}
                 onClick={() => onFiltersChange(EMPTY_FILTERS)}
                 className="text-[11px] font-semibold text-[rgba(179,163,255,0.9)] h-7"
               >
                 {t('mods.filtersReset')}
-              </button>
+              </motion.button>
             )}
           </div>
         </div>

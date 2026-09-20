@@ -1,4 +1,6 @@
 import type { Mod, ModpackMeta } from '@/types'
+import { listVariants, press } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -120,7 +122,7 @@ export function InstalledTab({
           <div className="mb-5">
             <p className={sectionHdrClass}>{t('mods.modpackContent', { count: packMods.length })}</p>
             {renderHeader()}
-            <div className="flex flex-col gap-2">{packMods.map((m) => renderRow(m, true))}</div>
+            <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">{packMods.map((m) => renderRow(m, true))}</motion.div>
           </div>
         )}
 
@@ -136,26 +138,26 @@ export function InstalledTab({
                 <p className="text-[rgba(255,255,255,0.2)] text-[12px] mt-1">{t('mods.addContentBeyondModpack')}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button
+                <motion.button {...press}
                   onClick={onUploadExtra}
                   className="flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 h-[34px] px-[14px] text-[12px] bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.7)] border border-[rgba(255,255,255,0.1)]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
                   {t('mods.importFile')}
-                </button>
-                <button
+                </motion.button>
+                <motion.button {...press}
                   onClick={onBrowseExtra}
                   className="flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 h-[34px] px-[14px] text-[12px] bg-[rgba(75,63,207,0.3)] text-white border border-[rgba(75,63,207,0.5)]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>
                   {t('mods.browseContent')}
-                </button>
+                </motion.button>
               </div>
             </div>
           ) : (
             <>
               {renderHeader()}
-              <div className="flex flex-col gap-2">{extraMods.map((m) => renderRow(m, false))}</div>
+              <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">{extraMods.map((m) => renderRow(m, false))}</motion.div>
             </>
           )}
         </div>
@@ -185,7 +187,7 @@ export function InstalledTab({
 
       {filtered.length > 0 && renderHeader()}
 
-      <div className="flex flex-col gap-2">{filtered.map((m) => renderRow(m, false))}</div>
+      <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">{filtered.map((m) => renderRow(m, false))}</motion.div>
     </div>
   )
 }

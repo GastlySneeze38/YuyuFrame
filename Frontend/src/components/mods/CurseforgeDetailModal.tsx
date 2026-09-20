@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { press, pressIf } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import type { Mod } from '@/types'
 import { formatBytes, formatDownloadCount } from '@/lib/format'
 import { Spinner } from '@/components/ui/Spinner'
@@ -111,14 +113,14 @@ export function CurseforgeDetailModal({
           <p className="text-[11px] font-bold text-[rgba(255,255,255,0.4)] uppercase tracking-[0.06em]">
             {t('mods.availableVersions')}
           </p>
-          <button
+          <motion.button {...press}
             onClick={() => setShowAllVersions((v) => !v)}
             className={`rounded-lg px-2.5 py-1 font-semibold text-[10.5px] border border-[rgba(255,255,255,0.08)] ${
               showAllVersions ? 'bg-[rgba(75,63,207,0.3)] text-white' : 'bg-[rgba(255,255,255,0.05)] text-[rgba(255,255,255,0.45)]'
             }`}
           >
             {showAllVersions ? t('mods.allVersions') : t('mods.compatibleWith', { version: mcVersion })}
-          </button>
+          </motion.button>
         </div>
 
         <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto">
@@ -159,7 +161,7 @@ export function CurseforgeDetailModal({
                       MC {formatGameVersions(mcVersionsOnly(file.gameVersions))} · {formatBytes(file.fileLength)}
                     </p>
                   </div>
-                  <button
+                  <motion.button {...pressIf(!(isInstalledVersion || installing || !file.downloadUrl))}
                     onClick={() => handleInstall(file)}
                     disabled={isInstalledVersion || installing || !file.downloadUrl}
                     className={`flex-shrink-0 flex items-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-95 h-7 px-3 text-[11px] border ${
@@ -173,7 +175,7 @@ export function CurseforgeDetailModal({
                     {installing ? (
                       <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
                     ) : isInstalledVersion ? t('mods.installedBadge') : installedMod ? t('mods.switchButton') : t('mods.installButton')}
-                  </button>
+                  </motion.button>
                 </div>
               )
             })

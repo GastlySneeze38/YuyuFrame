@@ -12,7 +12,7 @@ import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { useDraftState, clearDraft } from '@/stores/useDrafts'
-import { listItemVariants, listVariants } from '@/lib/motion'
+import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
 import { useT } from '@/i18n'
 import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from '@/types/support'
 
@@ -190,7 +190,7 @@ function KindBar({ onPick }: { onPick: (kind: Kind) => void }) {
           variants={listItemVariants}
           whileHover={{ y: -3 }}
           whileTap={{ scale: 0.99 }}
-          transition={{ type: 'spring', stiffness: 700, damping: 30, mass: 0.5 }}
+          transition={SNAP}
           onClick={() => onPick(k.kind)}
           className={`flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-colors duration-150 ${
             k.danger
@@ -298,7 +298,7 @@ function TicketList({
                   title={confirmId === ticket.id ? t('support.confirmRemove') : t('support.remove')}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.92 }}
-                  transition={{ type: 'spring', stiffness: 700, damping: 28, mass: 0.4 }}
+                  transition={SNAP}
                   animate={confirmId === ticket.id ? { opacity: 1 } : {}}
                   className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
                     confirmId === ticket.id

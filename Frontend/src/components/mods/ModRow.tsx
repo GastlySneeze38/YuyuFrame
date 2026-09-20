@@ -1,4 +1,6 @@
 import { memo, useState } from 'react'
+import { SNAP, listItemVariants, press, pressIf } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import type { Mod } from '@/types'
 import { formatBytes } from '@/lib/format'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
@@ -31,21 +33,33 @@ export const ModRow = memo(function ModRow({
   const t = useT()
   const [confirm, setConfirm] = useState(false)
   return (
-    <div
-      className={`flex items-center rounded-2xl px-4 py-3 transition-all duration-150 border border-[rgba(255,255,255,0.06)] ${
+    // La ligne entière réagit au survol : elle se décale de trois pixels et
+    // son fond s'éclaircit. Dans une liste de cinquante mods tous bâtis
+    // pareil, c'est ce qui dit lequel on est en train de viser — surtout au
+    // moment d'aller cliquer sur la corbeille, tout à droite de la ligne.
+    <motion.div
+      variants={{ ...listItemVariants, row: { x: 3, backgroundColor: 'rgba(255,255,255,0.075)' } }}
+      whileHover="row"
+      transition={SNAP}
+      className={`flex items-center rounded-2xl px-4 py-3 border border-[rgba(255,255,255,0.06)] transition-[opacity,border-color] duration-150 hover:border-[rgba(255,255,255,0.14)] ${
         mod.enabled ? 'bg-[rgba(255,255,255,0.04)] opacity-100' : 'bg-[rgba(255,255,255,0.018)] opacity-60'
       }`}
     >
       {/* Section gauche : icône + nom (flex-1) */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className={`w-9 h-9 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center ${
+        {/* L'icône du mod avance un peu plus que la ligne : ça donne de la
+            profondeur au geste sans déformer la grille. */}
+        <motion.div
+          variants={{ row: { scale: 1.08, rotate: -3 } }}
+          transition={SNAP}
+          className={`w-9 h-9 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center ${
           mod.enabled ? 'bg-[rgba(75,63,207,0.15)]' : 'bg-[rgba(255,255,255,0.05)]'
         }`}>
           {logoUrl
             ? <img src={logoUrl} alt="" className="w-full h-full object-cover" />
             : <PlugIcon size={18} color={mod.enabled ? 'rgba(120,110,230,0.8)' : 'rgba(255,255,255,0.2)'} />
           }
-        </div>
+        </motion.div>
         <div className="min-w-0 flex-1">
           <p className={`truncate font-semibold text-[13px] ${mod.enabled ? 'text-[rgba(255,255,255,0.9)]' : 'text-[rgba(255,255,255,0.4)]'}`}>
             {modrinthName || displayName(mod.name)}
@@ -68,7 +82,7 @@ export const ModRow = memo(function ModRow({
         {update && (() => {
           const blocked = update.blockedBy.length > 0
           return (
-            <button
+            <motion.button {...pressIf(!(updating || blocked))}
               onClick={() => onUpdate(update)}
               disabled={updating || blocked}
               title={
@@ -96,11 +110,11 @@ export const ModRow = memo(function ModRow({
                 </svg>
               )}
               {update.newVersion}
-            </button>
+            </motion.button>
           )
         })()}
         {(projectId || cfModId) && (
-          <button
+          <motion.button {...pressIf(!(switchingVersion))}
             onClick={() => onSwitchVersion(mod)}
             disabled={switchingVersion}
             title={t('mods.switchVersion')}
@@ -117,23 +131,23 @@ export const ModRow = memo(function ModRow({
                 <path d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm-6 7c0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6z" />
               </svg>
             )}
-          </button>
+          </motion.button>
         )}
         <Toggle checked={mod.enabled} onChange={() => onToggle(mod)} size="sm" title={mod.enabled ? t('mods.disable') : t('mods.enable')} />
         {confirm ? (
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={() => { onDelete(mod.name); setConfirm(false) }} className="text-[10px] font-semibold text-[rgb(248,113,113)] bg-[rgba(200,50,50,0.15)] rounded-[7px] py-[3px] px-[7px]">{t('mods.deleteShort')}</button>
-            <button onClick={() => setConfirm(false)} className="text-[10px] text-[rgba(255,255,255,0.4)] bg-[rgba(255,255,255,0.06)] rounded-[7px] py-[3px] px-[7px]">{t('mods.cancelShort')}</button>
+            <motion.button {...press} onClick={() => { onDelete(mod.name); setConfirm(false) }} className="text-[10px] font-semibold text-[rgb(248,113,113)] bg-[rgba(200,50,50,0.15)] rounded-[7px] py-[3px] px-[7px]">{t('mods.deleteShort')}</motion.button>
+            <motion.button {...press} onClick={() => setConfirm(false)} className="text-[10px] text-[rgba(255,255,255,0.4)] bg-[rgba(255,255,255,0.06)] rounded-[7px] py-[3px] px-[7px]">{t('mods.cancelShort')}</motion.button>
           </div>
         ) : (
-          <button onClick={() => setConfirm(true)}
+          <motion.button {...press} onClick={() => setConfirm(true)}
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150 text-[rgba(255,255,255,0.2)] hover:text-[rgb(248,113,113)] hover:bg-[rgba(200,50,50,0.12)]">
             <svg viewBox="0 0 24 24" fill="currentColor" width={16} height={16}>
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
             </svg>
-          </button>
+          </motion.button>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 })

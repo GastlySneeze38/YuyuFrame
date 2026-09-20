@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { press, pressIf } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { ModpackIndexInfo } from '@/types'
 import { resolveModpackFile } from '@/lib/modrinthModpacks'
@@ -159,7 +161,7 @@ export function ModpackDetailModal({
         </div>
 
         {/* Install */}
-        <button
+        <motion.button {...pressIf(!(installing))}
           onClick={onInstall}
           disabled={installing}
           className={`flex-shrink-0 flex items-center justify-center gap-1.5 rounded-xl font-bold text-white transition-all duration-150 active:scale-95 h-10 text-[13px] ${
@@ -167,7 +169,7 @@ export function ModpackDetailModal({
           }`}
         >
           {installing ? <ButtonSpinner size={14} trackColor="rgba(255,255,255,0.15)" /> : t('mods.installButton')}
-        </button>
+        </motion.button>
         {installing && installProgress && (
           <div className="flex flex-shrink-0 items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">

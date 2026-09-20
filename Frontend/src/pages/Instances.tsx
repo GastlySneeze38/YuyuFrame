@@ -12,7 +12,7 @@ import { EditInstanceModal } from '@/components/instances/EditInstanceModal'
 import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstanceModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { InstanceCardSkeleton } from '@/components/ui/Skeleton'
-import { listItemVariants, listVariants } from '@/lib/motion'
+import { SNAP, listItemVariants, listVariants, press } from '@/lib/motion'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 
@@ -110,7 +110,14 @@ export default function Instances() {
     <div className="flex h-full flex-col bg-[#09090D] text-white">
 
       <PageHeader px={5}>
-        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">{t('instancesPage.title')}</h1>
+        <motion.h1
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="font-black text-white text-[16px] tracking-[-0.01em]"
+        >
+          {t('instancesPage.title')}
+        </motion.h1>
         <div className="flex-1" />
         {/* Seul point d'entrée vers la bibliothèque de configs en dehors de la
             modal d'édition — les configs sont transverses aux instances, elles
@@ -119,7 +126,7 @@ export default function Instances() {
           onClick={() => navigate('/jvm')}
           whileHover={{ y: -2 }}
           whileTap={{ scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 700, damping: 30, mass: 0.4 }}
+          transition={SNAP}
           className="h-[28px] flex-shrink-0 rounded-lg border border-line-strong bg-white/[0.06] px-2.5 text-[11px] font-semibold text-txt-secondary transition-colors hover:border-accent/40 hover:text-txt-primary"
         >
           {t('settings.lancement.jvmLabel')}
@@ -156,8 +163,14 @@ export default function Instances() {
               <>
                 {favorites.length > 0 && (
                   <div className="mb-1">
-                    <p className="px-1 pb-1.5 text-xs font-semibold text-[#facc15] tracking-[0.08em] uppercase">
-                      ★ {t('instancesPage.favorites')}
+                    <p className="flex items-center gap-1.5 px-1 pb-1.5 text-xs font-semibold text-[#facc15] tracking-[0.08em] uppercase">
+                      <motion.span
+                        animate={{ scale: [1, 1.18, 1], opacity: [0.75, 1, 0.75] }}
+                        transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                      >
+                        ★
+                      </motion.span>
+                      {t('instancesPage.favorites')}
                     </p>
                     <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">
                       <AnimatePresence mode="popLayout">
@@ -169,14 +182,14 @@ export default function Instances() {
 
                 {others.length > 0 && (
                   <div>
-                    <button
+                    <motion.button {...press}
                       onClick={() => setOthersExpanded((v) => !v)}
                       className="flex w-full items-center gap-1.5 px-1 pb-1.5"
                     >
                       <motion.svg
                         viewBox="0 0 24 24" fill="currentColor" width={10} height={10}
                         animate={{ rotate: othersExpanded ? 90 : 0 }}
-                        transition={{ type: 'spring', stiffness: 700, damping: 30, mass: 0.4 }}
+                        transition={SNAP}
                         className="text-[rgba(255,255,255,0.3)]"
                       >
                         <path d="M8 5v14l11-7z" />
@@ -184,7 +197,7 @@ export default function Instances() {
                       <p className="text-xs font-semibold text-[rgba(255,255,255,0.3)] tracking-[0.08em] uppercase">
                         {t('instancesPage.others', { count: others.length })}
                       </p>
-                    </button>
+                    </motion.button>
                     <AnimatePresence initial={false}>
                       {othersExpanded && (
                         <motion.div
@@ -218,7 +231,7 @@ export default function Instances() {
               animate="rest"
               whileTap={{ scale: 0.97 }}
               variants={{ rest: { y: 0, boxShadow: '0 4px 20px rgba(75,63,207,0.3)' }, hover: { y: -2, boxShadow: '0 8px 28px rgba(75,63,207,0.45)' } }}
-              transition={{ type: 'spring', stiffness: 600, damping: 28, mass: 0.5 }}
+              transition={SNAP}
               className="flex h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#4B3FCF] text-[13px] font-bold text-white hover:bg-[#6155e8]"
             >
               <motion.svg
@@ -236,7 +249,7 @@ export default function Instances() {
               animate="rest"
               whileTap={{ scale: 0.97 }}
               variants={{ rest: { y: 0 }, hover: { y: -2 } }}
-              transition={{ type: 'spring', stiffness: 600, damping: 28, mass: 0.5 }}
+              transition={SNAP}
               className="flex h-[38px] w-full items-center justify-center gap-2 rounded-xl bg-white/[0.05] text-[12px] font-semibold text-txt-secondary transition-colors hover:bg-white/10 hover:text-txt-primary"
             >
               {/* La flèche plonge vers le bac : le geste dit ce que fait le bouton. */}
@@ -257,15 +270,28 @@ export default function Instances() {
           {selectedInstance ? (
             <ModsContent key={`${selectedInstance.id}-${selectedInstance.mc_version}`} instance={selectedInstance} />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3">
-              <div className="text-[32px] opacity-40">←</div>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="flex flex-1 flex-col items-center justify-center gap-3"
+            >
+              {/* La flèche va et vient vers la liste : elle désigne où cliquer
+                  plutôt que de rester plantée là. */}
+              <motion.div
+                animate={{ x: [0, -8, 0] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="text-[32px] opacity-40"
+              >
+                ←
+              </motion.div>
               <p className="text-[14px] text-[rgba(255,255,255,0.3)] font-semibold">
                 {t('instancesPage.selectInstance')}
               </p>
               <p className="text-[12px] text-[rgba(255,255,255,0.15)]">
                 {t('instancesPage.modsWillAppearHere')}
               </p>
-            </div>
+            </motion.div>
           )}
         </div>
       </div>

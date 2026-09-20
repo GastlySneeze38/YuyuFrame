@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { listItemVariants, listVariants } from '@/lib/motion'
+import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
 
 /**
  * Navigation des réglages : la liste de gauche et le repérage de la section
@@ -120,7 +120,7 @@ export function SettingsNav({
               onClick={() => onPick(id)}
               whileHover={{ x: active ? 0 : 3 }}
               whileTap={{ scale: 0.99 }}
-              transition={{ type: 'spring', stiffness: 700, damping: 30, mass: 0.4 }}
+              transition={SNAP}
               className={`relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold transition-colors duration-150 ${
                 active ? 'text-white' : 'text-txt-secondary hover:text-txt-primary'
               }`}

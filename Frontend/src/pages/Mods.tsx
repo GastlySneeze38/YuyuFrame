@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { press, pressIf } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
@@ -943,7 +945,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
       >
         {/* Gauche : tab Installés + badge mises à jour */}
         <div className="flex flex-1 items-center gap-1 min-w-max">
-          <button
+          <motion.button {...press}
             onClick={() => setTab('installed')}
             className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150 border border-[rgba(75,63,207,0.35)] ${
               tab === 'installed'
@@ -952,9 +954,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
             }`}
           >
             {t('mods.installedCount', { count: mods.length })}
-          </button>
+          </motion.button>
           {tab === 'installed' && extraUpdatesCount > 0 && (
-            <button
+            <motion.button {...pressIf(!(updatingAll))}
               onClick={handleUpdateAll}
               disabled={updatingAll}
               title={t('mods.updateAllTitle')}
@@ -968,13 +970,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
                 <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
               </svg>
               {updatingAll ? '...' : extraUpdatesCount}
-            </button>
+            </motion.button>
           )}
         </div>
 
         {/* Centre : boutons d'ajout groupés */}
         <div className="flex flex-shrink-0 items-center border border-[rgba(75,63,207,0.35)] rounded-[10px] overflow-hidden">
-          <button
+          <motion.button {...press}
             onClick={() => setTab('browse')}
             className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
               tab === 'browse'
@@ -986,8 +988,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
               <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
             {isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth')}
-          </button>
-          <button
+          </motion.button>
+          <motion.button {...press}
             onClick={() => setTab('modpack')}
             className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
               tab === 'modpack'
@@ -999,8 +1001,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
               <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
             </svg>
             {modpackMeta ? t('mods.replaceModpack') : t('mods.installModpack')}
-          </button>
-          <button
+          </motion.button>
+          <motion.button {...pressIf(!(uploading))}
             onClick={() => setShowImportChoice(true)}
             disabled={uploading}
             className={`flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer ${
@@ -1013,7 +1015,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
             </svg>
             {uploading ? t('mods.importing') : t('mods.import')}
-          </button>
+          </motion.button>
         </div>
 
         {/* Droite : informations de l'instance — min-w-0 + truncate pour que
@@ -1219,12 +1221,12 @@ export default function Mods() {
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#09090D] text-white">
         <div className="text-[36px]">🧱</div>
         <p className="text-[14px] text-[rgba(255,255,255,0.4)] font-semibold">{t('mods.noInstanceSelected')}</p>
-        <button
+        <motion.button {...press}
           onClick={() => navigate('/instances')}
           className="font-semibold transition-all duration-200 active:scale-95 h-[38px] px-5 rounded-[10px] text-[13px] bg-[#4B3FCF] text-white"
         >
           {t('mods.manageInstances')}
-        </button>
+        </motion.button>
       </div>
     )
   }

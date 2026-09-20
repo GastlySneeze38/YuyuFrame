@@ -1,4 +1,6 @@
 import type { ModpackMeta } from '@/types'
+import { press, pressIf } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import type { ResolvedModpackFile } from '@/lib/modrinthModpacks'
 import { formatRelativeDate } from '@/lib/modrinthModpacks'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
@@ -47,7 +49,7 @@ export function ModpackBanner({
               <span key={c} className="rounded-full px-2 py-0.5 text-[10px] bg-[rgba(255,255,255,0.06)] text-[rgba(255,255,255,0.4)]">{c}</span>
             ))}
             {packVersionUpdate && (
-              <button
+              <motion.button {...pressIf(!(updatingPackVersion))}
                 onClick={onUpdatePackVersion}
                 disabled={updatingPackVersion}
                 className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold transition-colors ${
@@ -61,28 +63,28 @@ export function ModpackBanner({
                 ) : (
                   t('mods.packNewVersion', { version: packVersionUpdate.versionNumber })
                 )}
-              </button>
+              </motion.button>
             )}
           </div>
         </div>
         <div className="relative flex-shrink-0">
-          <button
+          <motion.button {...press}
             onClick={onToggleMenu}
             className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.3)] bg-[rgba(255,255,255,0.05)]"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 2a2 2 0 100 4 2 2 0 000-4zm0 8a2 2 0 100 4 2 2 0 000-4z" /></svg>
-          </button>
+          </motion.button>
           {menuOpen && (
             <div className="absolute right-0 top-9 z-20 flex flex-col gap-0.5 rounded-xl p-1 w-[190px] bg-[#191923] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_30px_rgba(0,0,0,0.5)]">
-              <button onClick={onToggleShowContent} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
+              <motion.button {...press} onClick={onToggleShowContent} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
                 {showPackContent ? t('mods.hidePackContent') : t('mods.showPackContent')}
-              </button>
-              <button onClick={onReplace} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
+              </motion.button>
+              <motion.button {...press} onClick={onReplace} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]">
                 {t('mods.replaceModpack')}
-              </button>
-              <button onClick={onRemove} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgb(248,113,113)] hover:bg-[rgba(200,50,50,0.12)]">
+              </motion.button>
+              <motion.button {...press} onClick={onRemove} className="rounded-lg px-3 py-2 text-left transition-all duration-150 text-[12px] text-[rgb(248,113,113)] hover:bg-[rgba(200,50,50,0.12)]">
                 {t('mods.removeModpack')}
-              </button>
+              </motion.button>
             </div>
           )}
         </div>

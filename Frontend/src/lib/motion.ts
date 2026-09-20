@@ -24,6 +24,17 @@ export const EASE_OUT = [0.16, 1, 0.3, 1] as const
 export const transition: Transition = { duration: DURATION.base, ease: EASE_OUT }
 export const fastTransition: Transition = { duration: DURATION.fast, ease: EASE_OUT }
 
+/**
+ * Réponse d'un bouton au survol et au clic : ~70 ms, posée net.
+ *
+ * Ni `transition` ni `fastTransition` ne conviennent ici. Leur courbe
+ * `EASE_OUT` atteint 90 % du chemin très vite puis traîne sur la fin —
+ * excellent pour une page qui s'installe, mollasson sur un bouton qu'on
+ * survole une demi-seconde. Un ressort très raide et très léger arrive et
+ * s'arrête, sans traîne.
+ */
+export const SNAP: Transition = { type: 'spring', stiffness: 1100, damping: 30, mass: 0.18 }
+
 /** Changement de page : léger glissement vers le haut. */
 export const pageVariants: Variants = {
   initial: { opacity: 0, y: 8 },
@@ -70,5 +81,29 @@ export const fadeVariants: Variants = {
 export const pressable = {
   whileHover: { y: -1 },
   whileTap: { scale: 0.98 },
-  transition: fastTransition,
+  transition: SNAP,
 } as const
+
+/**
+ * Bouton qui réagit franchement : il se soulève et grossit un peu au survol,
+ * s'enfonce nettement au clic. À étaler sur les boutons des écrans denses
+ * (instances, mods), où `pressable` — un pixel de déplacement — passe
+ * inaperçu au milieu des cartes et des listes.
+ *
+ * Ressort raide et léger : la réponse doit être immédiate, pas accompagner
+ * le curseur.
+ */
+export const press = {
+  whileHover: { y: -2, scale: 1.04 },
+  whileTap: { scale: 0.94 },
+  transition: SNAP,
+} as const
+
+/**
+ * `press`, sauf quand le bouton ne répond pas. Un bouton désactivé qui se
+ * soulève au survol promet une action qui n'arrivera pas — même raison que
+ * dans `components/ui/Button`.
+ */
+export function pressIf(enabled: boolean) {
+  return enabled ? press : {}
+}

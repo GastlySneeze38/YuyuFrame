@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
-import { EASE_OUT } from '@/lib/motion'
+import { EASE_OUT, SNAP } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -1064,7 +1064,7 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
       whileTap={{ scale: 0.95 }}
       // Ressort raide et léger : le survol d'un lien de nav doit répondre
       // tout de suite, pas accompagner le curseur.
-      transition={{ type: 'spring', stiffness: 900, damping: 32, mass: 0.4 }}
+      transition={SNAP}
       className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} opacity-100 ${hoverClasses}`}
     >
       <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>

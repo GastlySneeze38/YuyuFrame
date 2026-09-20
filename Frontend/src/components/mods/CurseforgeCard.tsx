@@ -1,4 +1,6 @@
 import { formatDownloadCount } from '@/lib/format'
+import { press, pressIf } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { PlugIcon } from '@/components/ui/icons/PlugIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
@@ -36,7 +38,7 @@ export function CurseforgeCard({ hit, installed, loading, progress, onInstall, o
           <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)] mt-0.5">{hit.summary}</p>
           <p className="text-[10px] text-[rgba(255,255,255,0.2)] mt-[3px]">{formatDownloadCount(hit.downloadCount)} {t('mods.downloads')}</p>
         </div>
-        <button
+        <motion.button {...pressIf(!(installed || loading))}
           onClick={(e) => { e.stopPropagation(); onInstall() }}
           disabled={installed || loading}
           className={`flex-shrink-0 flex items-center gap-1.5 rounded-xl font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] border ${
@@ -50,7 +52,7 @@ export function CurseforgeCard({ hit, installed, loading, progress, onInstall, o
           {loading ? (
             <ButtonSpinner size={12} trackColor="rgba(255,255,255,0.15)" />
           ) : installed ? t('mods.installedButton') : t('mods.installButton')}
-        </button>
+        </motion.button>
       </div>
 
       {loading && progress && (

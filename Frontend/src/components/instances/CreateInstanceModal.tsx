@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { press } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { Instance, JvmVendor, Loader } from '@/types'
 import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
@@ -187,7 +189,7 @@ export function CreateInstanceModal({
           <>
             <div className="flex gap-1 rounded-xl p-1 bg-[rgba(0,0,0,0.3)]">
               {(['blank', 'preset'] as const).map((m) => (
-                <button
+                <motion.button {...press}
                   key={m}
                   onClick={() => handleSwitchMode(m)}
                   className={`flex-1 rounded-lg text-xs font-semibold transition-all duration-150 h-[32px] ${
@@ -195,7 +197,7 @@ export function CreateInstanceModal({
                   }`}
                 >
                   {m === 'blank' ? t('instancesPage.blank') : 'Modpack'}
-                </button>
+                </motion.button>
               ))}
             </div>
 
@@ -216,13 +218,13 @@ export function CreateInstanceModal({
           </>
         ) : (
           <>
-            <button
+            <motion.button {...press}
               onClick={() => setStep('choose')}
               className="flex items-center gap-1.5 self-start text-[12px] font-medium text-[rgba(255,255,255,0.35)] transition-colors hover:text-[rgba(255,255,255,0.7)]"
             >
               <BackArrowIcon size={12} />
               {t('instancesPage.backButton')}
-            </button>
+            </motion.button>
 
             {mode === 'blank' ? (
               <div className="flex flex-col gap-4">

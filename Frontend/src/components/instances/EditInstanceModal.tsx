@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { press } from '@/lib/motion'
+import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import type { Instance, Loader } from '@/types'
@@ -92,7 +94,7 @@ export function EditInstanceModal({
             arguments JVM y sont le sujet principal (champ multi-lignes, jeux
             de drapeaux, aperçu de la ligne de commande réelle), ce qu'une
             section repliable de modal ne pouvait pas porter. */}
-        <button
+        <motion.button {...press}
           onClick={() => { onClose(); navigate(instance.jvm_profile_id ? `/jvm/${instance.jvm_profile_id}` : '/jvm') }}
           className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5 text-left transition-colors hover:border-white/20"
         >
@@ -105,7 +107,7 @@ export function EditInstanceModal({
           <span className="flex-shrink-0 text-[11px] font-semibold text-[rgba(150,140,240,0.9)]">
             {jvmProfileName ? 'Ouvrir →' : 'Choisir →'}
           </span>
-        </button>
+        </motion.button>
 
         {mcVersion !== instance.mc_version && (
           <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-[rgba(75,63,207,0.08)] border border-[rgba(75,63,207,0.25)]">
