@@ -5,7 +5,9 @@ mod integrations;
 mod minecraft;
 mod paths;
 mod process;
+mod recovery;
 mod state;
+mod stats;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -107,8 +109,17 @@ pub fn run() {
             if let Some(url) = argv.iter().find(|a| a.starts_with("yuyuframe://")) {
                 let _ = app.emit("deep_link_join", url.clone());
             }
+            // `show()` avant `set_focus()` : la fenêtre peut être seulement
+            // masquée (réglage « masquer au lancement »), et donner le focus à
+            // une fenêtre cachée ne la fait pas réapparaître — relancer
+            // l'exécutable semblait alors ne rien faire du tout.
             if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
                 let _ = w.set_focus();
+            } else {
+                // Fenêtre fermée pendant une partie : le launcher vit encore
+                // sans elle (voir `install_tray`), on la reconstruit.
+                reopen_main_window(app);
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -176,8 +187,9 @@ pub fn run() {
                 .build()
                 .expect("Impossible de construire le client HTTP");
 
+            let shared_db = Arc::new(Mutex::new(conn));
             let app_state: state::SharedState = Arc::new(RwLock::new(state::AppState {
-                db: Arc::new(Mutex::new(conn)),
+                db: shared_db.clone(),
                 http,
                 yuyu_session,
                 yuyu_refresh: Arc::new(Mutex::new(())),
@@ -189,6 +201,12 @@ pub fn run() {
             }));
 
             app.manage(app_state.clone());
+
+            // Sessions de jeu laissées ouvertes par un launcher qui n'a pas
+            // vu la fin de la partie : reprises en charge si le jeu tourne
+            // encore, closes à leur dernière trace de vie sinon, et un rapport
+            // de plantage reconstruit s'il y en avait un (voir recovery.rs).
+            recovery::run(shared_db, app.handle().clone());
 
             // Pilotage par le back-office (version minimale, interrupteurs,
             // bannières) : première lecture tout de suite, puis toutes les
@@ -336,11 +354,125 @@ pub fn run() {
             commands::sync::push_pull::sync_pull_instance,
             commands::sync::push_pull::sync_delete_instance,
             commands::sync::stats::stats_get,
+            commands::sync::stats::stats_clear,
             commands::system::info::system_memory_info,
             commands::system::storage::data_root_get,
             commands::system::storage::data_root_set,
             commands::system::storage::open_folder,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // Fermer la fenêtre pendant une partie ne doit pas emporter le
+        // launcher avec elle : c'est lui qui lit la sortie du jeu, qui tient
+        // le compteur de la session et qui construira le rapport si ça plante.
+        // On laisse la fenêtre se détruire — c'est la webview qui pèse, et sa
+        // destruction rend la mémoire — et on garde le cœur Rust, quelques
+        // mégaoctets et un fil en attente.
+        .on_window_event(|window, event| {
+            if !matches!(event, tauri::WindowEvent::CloseRequested { .. }) || window.label() != "main" {
+                return;
+            }
+            if state::any_game_running() {
+                install_tray(window.app_handle());
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                if state::any_game_running() {
+                    api.prevent_exit();
+                }
+            }
+        });
+}
+
+/// Éteint le launcher s'il ne lui reste plus rien à faire : aucune fenêtre
+/// ouverte et aucune partie en cours. Appelée à la fin de chaque partie —
+/// c'est le moment où un launcher resté en vie uniquement pour la surveiller
+/// n'a plus de raison d'être.
+pub fn exit_if_headless(app: &tauri::AppHandle) {
+    if state::any_game_running() || app.webview_windows().values().any(|w| w.label() == "main") {
+        return;
+    }
+    tracing::info!("Partie terminée et aucune fenêtre ouverte — arrêt du launcher");
+    if let Some(tray) = TRAY.get() {
+        let _ = tray.set_visible(false);
+    }
+    app.exit(0);
+}
+
+/// L'icône reste en mémoire après sa création : la recréer à chaque fermeture
+/// en empilerait plusieurs dans la zone de notification.
+static TRAY: std::sync::OnceLock<tauri::tray::TrayIcon> = std::sync::OnceLock::new();
+
+/// Pose l'icône dans la zone de notification. C'est le seul moyen de revenir
+/// dans le launcher une fois sa fenêtre fermée — sans elle, un processus
+/// tournerait sans que personne puisse ni le voir ni l'arrêter.
+fn install_tray(app: &tauri::AppHandle) {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    if let Some(tray) = TRAY.get() {
+        let _ = tray.set_visible(true);
+        return;
+    }
+
+    let build = || -> tauri::Result<tauri::tray::TrayIcon> {
+        let open = MenuItem::with_id(app, "open", "Ouvrir YuyuFrame", true, None::<&str>)?;
+        let quit = MenuItem::with_id(app, "quit", "Quitter", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&open, &quit])?;
+        let mut builder = TrayIconBuilder::with_id("yuyuframe")
+            .tooltip("YuyuFrame — partie en cours")
+            .menu(&menu)
+            // Un clic gauche rouvre : c'est le geste attendu, le menu n'est
+            // qu'un recours.
+            .show_menu_on_left_click(false)
+            .on_menu_event(|app, event| match event.id().as_ref() {
+                "open" => reopen_main_window(app),
+                "quit" => app.exit(0),
+                _ => {}
+            })
+            .on_tray_icon_event(|tray, event| {
+                if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
+                    reopen_main_window(tray.app_handle());
+                }
+            });
+        if let Some(icon) = app.default_window_icon() {
+            builder = builder.icon(icon.clone());
+        }
+        builder.build(app)
+    };
+
+    match build() {
+        Ok(tray) => {
+            let _ = TRAY.set(tray);
+        }
+        // Sans icône, on ne peut plus rouvrir : mieux vaut alors s'éteindre
+        // normalement que laisser un processus invisible derrière soi.
+        Err(e) => tracing::warn!("Icône de notification impossible à créer, le launcher s'arrêtera normalement : {e}"),
+    }
+}
+
+/// Reconstruit la fenêtre principale à l'identique de `tauri.conf.json`.
+fn reopen_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+        .title("YuyuFrame")
+        .inner_size(1280.0, 760.0)
+        .min_inner_size(900.0, 560.0)
+        .decorations(false)
+        .background_color(tauri::window::Color(9, 9, 13, 255))
+        .build();
+    match built {
+        Ok(window) => {
+            let _ = window.set_focus();
+            if let Some(tray) = TRAY.get() {
+                let _ = tray.set_visible(false);
+            }
+        }
+        Err(e) => tracing::warn!("Réouverture de la fenêtre impossible : {e}"),
+    }
 }

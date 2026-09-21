@@ -4,6 +4,24 @@ import type { Instance, JvmVendor, Version, Account } from '@/types'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
 
 export type YuyuPlan = 'free' | 'premium' | 'ultimate'
+
+/** Cartes proposées en haut de la page Stats. */
+export const STAT_CARD_IDS = [
+  'time',
+  'sessions',
+  'average',
+  'longest',
+  'streak',
+  'activeDays',
+  'crashRate',
+  'favorite',
+] as const
+export type StatCardId = (typeof STAT_CARD_IDS)[number]
+
+/** Les quatre montrées à quelqu'un qui n'a rien choisi. */
+export const DEFAULT_STAT_CARDS: StatCardId[] = ['time', 'sessions', 'average', 'streak']
+
+export type StatsSort = 'time' | 'sessions' | 'recent' | 'crashes'
 export type Lang = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'pl' | 'ru'
 
 interface Store {
@@ -123,6 +141,17 @@ interface Store {
 
   language: Lang
   setLanguage: (l: Lang) => void
+
+  // ── Page Stats (persisté) ─────────────────────────────────────────────────
+  /** Période affichée, en jours. `0` = tout l'historique. */
+  statsRangeDays: number
+  setStatsRangeDays: (d: number) => void
+  /** Cartes du haut, dans l'ordre choisi. Vide = les quatre par défaut. */
+  statsCards: StatCardId[]
+  setStatsCards: (cards: StatCardId[]) => void
+  /** Critère de classement des instances. */
+  statsInstanceSort: StatsSort
+  setStatsInstanceSort: (s: StatsSort) => void
 
   // ── Game state (par instance) ─────────────────────────────────────────────
   runningInstances: string[]
@@ -336,6 +365,13 @@ export const useStore = create<Store>()(
       language: 'fr',
       setLanguage: (language) => set({ language }),
 
+      statsRangeDays: 30,
+      setStatsRangeDays: (statsRangeDays) => set({ statsRangeDays }),
+      statsCards: DEFAULT_STAT_CARDS,
+      setStatsCards: (statsCards) => set({ statsCards }),
+      statsInstanceSort: 'time',
+      setStatsInstanceSort: (statsInstanceSort) => set({ statsInstanceSort }),
+
       // Game (multi-instance)
       runningInstances: [],
       isInstanceRunning: (id) => get().runningInstances.includes(id),
@@ -453,6 +489,9 @@ export const useStore = create<Store>()(
         showHomeServers: s.showHomeServers,
         confirmServerLaunch: s.confirmServerLaunch,
         language: s.language,
+        statsRangeDays: s.statsRangeDays,
+        statsCards: s.statsCards,
+        statsInstanceSort: s.statsInstanceSort,
         username: s.username,
         uuid: s.uuid,
         isOffline: s.isOffline,

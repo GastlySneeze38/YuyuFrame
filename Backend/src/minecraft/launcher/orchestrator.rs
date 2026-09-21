@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::io::BufReader;
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinSet;
@@ -68,6 +68,10 @@ pub async fn download_and_launch(
     // Nom affiché de l'instance — sert au rapport de plantage, qui doit
     // rester lisible même une fois l'instance supprimée.
     instance_name: &str,
+    // Ligne de session ouverte par `launch_game` : c'est ici qu'on sait quoi
+    // y écrire (le processus à surveiller, la JVM réellement appliquée) et
+    // quand la fermer, plantage compris.
+    session_id: Option<i64>,
     connect_server: Option<&str>,
     cancel: watch::Receiver<bool>,
     jvm_vendor: &str,
@@ -656,6 +660,13 @@ pub async fn download_and_launch(
     tracing::info!("[MC launch] {} {}", java, redact_secrets(&args.join(" ")));
     let mut child = java_cmd.spawn()?;
 
+    // La session de jeu reçoit de quoi survivre à ce processus : le PID à
+    // surveiller si le launcher disparaît, et la configuration JVM appliquée,
+    // qui n'existe nulle part ailleurs une fois la commande partie.
+    if let Some(id) = session_id {
+        attach_and_beat(id, child.id(), &watch, app.clone(), stop_flag.clone());
+    }
+
     let stdout = child.stdout.take().map(BufReader::new);
     let stderr = child.stderr.take().map(BufReader::new);
 
@@ -771,9 +782,59 @@ pub async fn download_and_launch(
     // Une fermeture demandée n'est pas un plantage : c'est la seule sortie
     // dont on soit certain qu'elle est voulue. Tout le reste passe par
     // `crash::build`, qui décide.
-    report_crash_if_any(&watch, exit_code, &app).await;
+    let report = report_crash_if_any(&watch, exit_code, &app).await;
+
+    // La session est close ICI et pas dans `launch_game` : c'est le seul
+    // endroit qui sait si la partie s'est terminée par un plantage, et cette
+    // information appartient à la ligne de session.
+    if let Some(id) = session_id {
+        let ended_at = chrono::Utc::now().timestamp();
+        let started_at = watch.started_at.timestamp();
+        let state = app.state::<crate::state::SharedState>();
+        let db = state.read().await.db.clone();
+        let conn = db.lock().await;
+        if let Err(e) = crate::db::session_end(&conn, id, ended_at, ended_at - started_at, "normal", report.as_deref()) {
+            tracing::warn!("[Stats] session {id} non close : {e}");
+        }
+    }
 
     Ok(launch_warnings)
+}
+
+/// Complète la ligne de session et entretient son battement de cœur.
+///
+/// Le battement est ce qui permet de ne pas perdre une partie entière quand
+/// le launcher meurt sans prévenir (arrêt de Windows, processus tué). Une
+/// ligne, un entier, toutes les trente secondes : à cette fréquence,
+/// l'écriture ne se voit sur aucune mesure.
+fn attach_and_beat(
+    session_id: i64,
+    pid: Option<u32>,
+    watch: &Arc<crash::LaunchWatch>,
+    app: tauri::AppHandle,
+    stop: Arc<AtomicBool>,
+) {
+    let java_version = watch.java_version.clone().unwrap_or_default();
+    let jvm_args = watch.jvm_args.join("\n");
+    let ram_mb = watch.ram_alloc_mb;
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<crate::state::SharedState>();
+        let db = state.read().await.db.clone();
+        {
+            let conn = db.lock().await;
+            if let Err(e) = crate::db::session_attach_launch(&conn, session_id, pid, &java_version, &jvm_args, ram_mb) {
+                tracing::warn!("[Stats] session {session_id} : contexte de lancement non enregistré : {e}");
+            }
+        }
+        while !stop.load(Ordering::Relaxed) {
+            tokio::time::sleep(std::time::Duration::from_secs(crate::recovery::HEARTBEAT_SECS)).await;
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
+            let conn = db.lock().await;
+            let _ = crate::db::session_heartbeat(&conn, session_id);
+        }
+    });
 }
 
 /// Construit et enregistre le rapport si la sortie en est une. Lecture de
@@ -781,7 +842,7 @@ pub async fn download_and_launch(
 /// runtime. Aucun échec ici n'est remonté à l'appelant — le lancement est
 /// terminé, et on ne va pas transformer un plantage du jeu en erreur du
 /// launcher.
-async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<i32>, app: &tauri::AppHandle) {
+async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<i32>, app: &tauri::AppHandle) -> Option<String> {
     let watch = watch.clone();
     let version = app.package_info().version.to_string();
     let built = tokio::task::spawn_blocking(move || {
@@ -793,7 +854,7 @@ async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<
     })
     .await;
 
-    let Ok(Some(report)) = built else { return };
+    let Ok(Some(report)) = built else { return None };
     tracing::warn!("[Crash] {} — {} ({})", report.instance_id, report.title, report.signature);
     crate::integrations::analytics::capture("game_crashed", serde_json::json!({
         "instance_id": &report.instance_id,
@@ -812,6 +873,7 @@ async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<
         "title": &report.title,
         "kind": &report.kind,
     }));
+    Some(report.id)
 }
 
 /// P1-6 (audit launcher, Phase 6, item "voir la configuration appliquée") :

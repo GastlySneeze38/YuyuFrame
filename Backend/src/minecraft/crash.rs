@@ -452,6 +452,81 @@ pub fn build(watch: &LaunchWatch, exit_code: Option<i32>, launcher_version: &str
     })
 }
 
+/// Ce qu'on sait d'une session dont le launcher n'a pas vu la fin.
+pub struct Recovered {
+    pub instance_id: String,
+    pub instance_name: String,
+    pub mc_version: String,
+    pub loader: String,
+    pub java_version: Option<String>,
+    pub jvm_args: Vec<String>,
+    pub ram_alloc_mb: Option<i32>,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: DateTime<Utc>,
+}
+
+/// Reconstruit un rapport après coup, quand le launcher n'était plus là au
+/// moment du plantage (fermé, tué, coupure de courant).
+///
+/// Il est forcément incomplet : le journal vivait dans la mémoire du launcher
+/// et est parti avec lui. Ce qui reste — la trace que le jeu a écrite lui-même,
+/// les mods, la machine, la configuration JVM relue en base — suffit le plus
+/// souvent. Le rapport le dit au lieu de faire comme si de rien n'était : un
+/// journal vide et un journal perdu ne se lisent pas pareil.
+///
+/// Rend `None` quand le jeu n'a laissé aucune trace : une session orpheline
+/// n'est pas un plantage, c'est le plus souvent quelqu'un qui a fermé son PC.
+pub fn build_recovered(info: Recovered, launcher_version: &str) -> Option<CrashReport> {
+    let game_dir = crate::commands::instance::crud::instance_dir(&info.instance_id);
+    let trace = game_crash_report(&game_dir, info.started_at)?;
+
+    let kind = if is_oom(&trace) {
+        "oom"
+    } else if is_loader_failure(&trace) {
+        "loader"
+    } else {
+        "crash_report"
+    };
+
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu_usage();
+
+    Some(CrashReport {
+        id: uuid::Uuid::new_v4().to_string(),
+        instance_id: info.instance_id.clone(),
+        instance_name: info.instance_name,
+        signature: signature(&info.loader, kind, Some(&trace), None),
+        title: title_for(kind, Some(&trace), "", None),
+        kind: kind.to_string(),
+        exit_code: None,
+        launcher_version: launcher_version.to_string(),
+        os: std::env::consts::OS.to_string(),
+        os_version: sysinfo::System::long_os_version(),
+        arch: std::env::consts::ARCH.to_string(),
+        cpu: sys.cpus().first().map(|c| format!("{} ({} cœurs logiques)", c.brand().trim(), sys.cpus().len())),
+        gpu: gpu("", Some(&trace)),
+        ram_total_mb: Some((sys.total_memory() / 1024 / 1024) as i64),
+        mc_version: info.mc_version,
+        loader: info.loader,
+        java_version: info.java_version,
+        java_path: None,
+        ram_alloc_mb: info.ram_alloc_mb,
+        jvm_args: info.jvm_args,
+        mods: mods_of(&info.instance_id),
+        uptime_ms: (info.ended_at - info.started_at).num_milliseconds().max(0),
+        stack_trace: Some(trace),
+        log_tail: "[Le launcher était fermé au moment du plantage : le journal \
+                   de la session n'a pas pu être conservé. La trace ci-dessus \
+                   vient du rapport écrit par le jeu lui-même.]"
+            .to_string(),
+        occurred_at: info.ended_at,
+        sent_id: None,
+        sent_public_id: None,
+        sent_at: None,
+    })
+}
+
 // ── Stockage local ───────────────────────────────────────────────────────────
 
 pub fn dir() -> PathBuf {

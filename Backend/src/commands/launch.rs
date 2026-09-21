@@ -144,6 +144,7 @@ pub async fn launch_game(
         let mut s = state.write().await;
         s.running_instances.insert(instance_id.clone());
         s.launch_cancel.insert(instance_id.clone(), cancel_tx);
+        crate::state::RUNNING_GAMES.store(s.running_instances.len(), std::sync::atomic::Ordering::Relaxed);
     }
     let _ = app.emit("game_state", serde_json::json!({
         "running": true,
@@ -217,6 +218,7 @@ pub async fn launch_game(
             &window_label,
             &instance_id,
             &instance.name,
+            session_id,
             connect_server.as_deref(),
             cancel_rx,
             &jvm_vendor,
@@ -261,17 +263,23 @@ pub async fn launch_game(
             }
         }
 
+        // Filet, pas règle : la fin est normalement écrite par
+        // l'orchestrateur, seul à savoir si la partie s'est terminée par un
+        // plantage. Ici on ne rattrape que les lancements qui ont échoué avant
+        // même que la JVM démarre — `session_end_if_open` n'écrase jamais une
+        // fin déjà écrite.
         if let Some(sid) = session_id {
-            let duration = chrono::Utc::now().timestamp() - started_at;
+            let ended_at = chrono::Utc::now().timestamp();
             let s = state_clone.read().await;
             let db = s.db.lock().await;
-            let _ = db::session_end(&db, sid, duration);
+            let _ = db::session_end_if_open(&db, sid, ended_at, ended_at - started_at);
         }
 
         {
             let mut s = state_clone.write().await;
             s.running_instances.remove(&instance_id);
             s.launch_cancel.remove(&instance_id);
+            crate::state::RUNNING_GAMES.store(s.running_instances.len(), std::sync::atomic::Ordering::Relaxed);
             // Discord Rich Presence — retour "dans le launcher" SEULEMENT si
             // plus AUCUNE instance ne tourne (any_running(), voir state.rs) :
             // plusieurs instances peuvent tourner en parallèle
@@ -285,6 +293,12 @@ pub async fn launch_game(
             "running": false,
             "instance_id": &instance_id,
         }));
+
+        // Le launcher pouvait avoir été fermé pendant la partie : il ne
+        // s'était alors pas éteint, justement pour voir cette fin-là (voir
+        // `lib.rs`, fermeture sans sortie). Sa raison de vivre vient de
+        // disparaître.
+        crate::exit_if_headless(&app);
     });
 
     Ok(())

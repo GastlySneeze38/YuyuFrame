@@ -1,232 +1,230 @@
-import { useEffect, useState } from 'react'
-import { api } from '@/api/client'
-import type { StatsData } from '@/types'
-import { loaderColor } from '@/lib/loader'
-import { formatDuration, formatShortDate, formatTime, getLast14Days, formatDayLabel } from '@/lib/format'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
+import { PageGlow } from '@/components/PageGlow'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { Button } from '@/components/ui/Button'
+import { ModalShell } from '@/components/ui/ModalShell'
+import { StatsToolbar, EMPTY_FILTERS, toQuery, type StatsFilters } from '@/components/stats/StatsToolbar'
+import { StatCards } from '@/components/stats/StatCards'
+import { ActivityCalendar } from '@/components/stats/ActivityCalendar'
+import { HourlyChart } from '@/components/stats/HourlyChart'
+import { InstanceRanking } from '@/components/stats/InstanceRanking'
+import { SessionList } from '@/components/stats/SessionList'
+import { Breakdown } from '@/components/stats/Breakdown'
+import { api } from '@/api/client'
+import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
+import { useStore, DEFAULT_STAT_CARDS, type StatCardId } from '@/stores/useStore'
+import { SNAP, press } from '@/lib/motion'
 import { useT } from '@/i18n'
+import type { StatsData } from '@/types/stats'
+
+/**
+ * Statistiques de jeu.
+ *
+ * Refonte complète du 2026-09-21, interface et calcul. Ce qui a changé au
+ * fond, et qui ne se voit pas :
+ *
+ * - les données sont **locales** : se déconnecter ne les fait plus
+ *   disparaître, alors qu'elles n'ont jamais quitté ce PC ;
+ * - une partie à cheval sur minuit est répartie sur les deux jours ;
+ * - une partie **en cours** est comptée pendant qu'on joue ;
+ * - une partie dont le launcher n'a pas vu la fin n'est plus perdue.
+ *
+ * Et ce qui se voit : une période, des filtres, des tris, et des cartes qu'on
+ * choisit soi-même.
+ */
+
+/** Une partie en cours fait monter le compteur : on rafraîchit doucement. */
+const LIVE_REFRESH_MS = 30_000
 
 export default function Stats() {
   const t = useT()
-  const [stats, setStats] = useState<StatsData | null>(null)
+  const rangeDays = useStore((s) => s.statsRangeDays)
+  const setRangeDays = useStore((s) => s.setStatsRangeDays)
+  const cards = useStore((s) => s.statsCards)
+  const setCards = useStore((s) => s.setStatsCards)
+  const sort = useStore((s) => s.statsInstanceSort)
+  const setSort = useStore((s) => s.setStatsInstanceSort)
+
+  const [data, setData] = useState<StatsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<StatsFilters>(EMPTY_FILTERS)
+  const [customizing, setCustomizing] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
+  // Première session connue : mémorisée pour que « Tout » ne reparte pas de
+  // l'époque Unix à chaque changement de filtre.
+  const firstSeen = useRef<number | null>(null)
+
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true)
+      try {
+        const next = await api.stats.get(toQuery(rangeDays, filters, firstSeen.current))
+        firstSeen.current = next.first_session_at
+        setData(next)
+      } catch (e) {
+        showError(errorMessage(e))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [rangeDays, filters],
+  )
 
   useEffect(() => {
-    api.stats.get()
-      .then(setStats)
-      .catch(showError)
-      .finally(() => setLoading(false))
-  }, [])
+    load()
+  }, [load])
 
-  const days = getLast14Days()
-  const dailyMap = new Map(stats?.daily.map((d) => [d.date, d.secs]) ?? [])
-  const maxDaySecs = Math.max(...days.map((d) => dailyMap.get(d) ?? 0), 1)
+  // Rafraîchissement discret tant qu'une partie tourne — et seulement dans ce
+  // cas : sonder la base toutes les trente secondes pour des chiffres qui ne
+  // bougent pas serait du gaspillage pur.
+  const live = (data?.running.length ?? 0) > 0
+  useEffect(() => {
+    if (!live) return
+    const timer = setInterval(() => load(true), LIVE_REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [live, load])
 
-  const maxInstanceSecs = Math.max(...(stats?.per_instance.map((i) => i.total_secs) ?? []), 1)
+  function toggleCard(id: StatCardId) {
+    const next = cards.includes(id) ? cards.filter((c) => c !== id) : [...cards, id]
+    // Jamais zéro carte : une rangée vide ne ressemble pas à un choix, elle
+    // ressemble à un bug.
+    setCards(next.length > 0 ? next : DEFAULT_STAT_CARDS)
+  }
+
+  async function clearHistory() {
+    try {
+      await api.stats.clear()
+      firstSeen.current = null
+      setConfirmClear(false)
+      await load()
+    } catch (e) {
+      showError(errorMessage(e))
+    }
+  }
+
+  const empty = data !== null && data.totals.sessions === 0 && data.known_instances.length === 0
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
+    <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
+      <PageGlow />
 
       <PageHeader>
         <PageHeaderSeparator />
-        <h1 className="font-black text-white text-[16px] tracking-[-0.01em]">
-          Stats & Analytics
-        </h1>
+        <div>
+          <h1 className="text-[16px] font-black leading-[1.2] tracking-[-0.01em]">{t('stats.title')}</h1>
+          <p className="mt-px text-[10px] text-txt-muted">{t('stats.subtitle')}</p>
+        </div>
       </PageHeader>
 
-      <div className="flex-1 overflow-auto">
-      <div className="mx-auto w-full max-w-5xl px-6 py-8 flex flex-col gap-8">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-6 py-6">
+          <StatsToolbar
+            rangeDays={rangeDays}
+            onRange={setRangeDays}
+            filters={filters}
+            onFilters={setFilters}
+            data={data}
+            customizing={customizing}
+            onCustomize={() => setCustomizing((v) => !v)}
+          />
 
-        {/* Les stats sont ouvertes à tout le monde : elles décrivent le jeu
-            de la personne, pas une fonctionnalité vendue. */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
-          </div>
-        ) : !stats ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <p className="text-[13px] text-white/30">{t('stats.cannotLoadStats')}</p>
-          </div>
-        ) : (
-          <>
-            {/* Top stat cards */}
-            <div className="grid grid-cols-3 gap-4">
-              <StatCard
-                delay={0}
-                label={t('stats.totalPlaytime')}
-                value={formatDuration(stats.total_secs)}
-                sub={stats.total_sessions === 0 ? t('stats.noSession') : t('stats.sessionsCount', { count: stats.total_sessions, s: stats.total_sessions > 1 ? 's' : '' })}
-                color="#818cf8"
-              />
-              <StatCard
-                delay={70}
-                label={t('stats.averagePerSession')}
-                value={stats.total_sessions > 0 ? formatDuration(Math.round(stats.total_secs / stats.total_sessions)) : '—'}
-                sub={t('stats.averageDuration')}
-                color="#818cf8"
-              />
-              <StatCard
-                delay={140}
-                compact
-                label={t('stats.favoriteModpack')}
-                value={stats.per_instance[0]?.instance_name ?? '—'}
-                sub={stats.per_instance[0] ? formatDuration(stats.per_instance[0].total_secs) : t('stats.noData')}
-                color="#f59e0b"
-              />
+          {loading && data === null ? (
+            <div className="flex items-center justify-center py-24">
+              <ButtonSpinner size={32} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
             </div>
-
-            {/* 14-day activity */}
-            <div
-              className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-colors duration-200 hover:border-[rgba(255,255,255,0.12)] animate-fade-in-up"
-              style={{ animationDelay: '210ms' }}
-            >
-              <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.activity14Days')}</span>
-              <div className="flex items-end gap-1.5 h-20">
-                {days.map((day, i) => {
-                  const secs = dailyMap.get(day) ?? 0
-                  const heightPct = secs > 0 ? Math.max(8, Math.round((secs / maxDaySecs) * 100)) : 0
-                  const isToday = day === new Date().toISOString().split('T')[0]
-                  const barClasses = isToday
-                    ? 'bg-gradient-to-b from-[#818cf8] to-[rgba(75,63,207,0.6)]'
-                    : secs > 0
-                    ? 'bg-[rgba(129,140,248,0.45)] group-hover/bar:bg-[rgba(129,140,248,0.7)]'
-                    : 'bg-[rgba(255,255,255,0.04)]'
-                  return (
-                    <div key={day} className="group/bar flex flex-1 flex-col items-center gap-1" title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}>
-                      <div className="w-full flex items-end h-16">
-                        <div
-                          className={`w-full origin-bottom animate-grow-y rounded-sm transition-colors duration-200 ${secs > 0 ? 'min-h-1' : 'min-h-0'} ${barClasses}`}
-                          style={{ height: `${heightPct}%`, animationDelay: `${260 + i * 25}ms` }}
-                        />
-                      </div>
-                      <span className={`text-[8px] ${isToday ? 'text-[#818cf8] font-bold' : 'text-white/20 font-normal'}`}>
-                        {formatDayLabel(day)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
+          ) : !data ? (
+            <p className="py-24 text-center text-[13px] text-txt-muted">{t('stats.cannotLoadStats')}</p>
+          ) : empty ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
+              <p className="text-[13px] font-semibold">{t('stats.emptyTitle')}</p>
+              <p className="max-w-md text-[11.5px] leading-relaxed text-txt-secondary">{t('stats.emptyText')}</p>
             </div>
-
-            {/* Bottom two columns */}
-            <div className="grid grid-cols-2 gap-5">
-
-              {/* Per-instance breakdown */}
-              <div
-                className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-colors duration-200 hover:border-[rgba(255,255,255,0.12)] animate-fade-in-up"
-                style={{ animationDelay: '280ms' }}
-              >
-                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.byModpack')}</span>
-                {stats.per_instance.length === 0 ? (
-                  <EmptyState
-                    compact
-                    icon={
-                      <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.1)" width={28} height={28}>
-                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z" />
-                      </svg>
-                    }
-                    title={t('stats.noSessionRecorded')}
-                    subtitle={t('stats.launchToStart')}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    {stats.per_instance.map((inst, i) => (
-                      <div key={inst.instance_id} className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="truncate text-[12px] font-semibold text-white/80" title={inst.instance_name}>{inst.instance_name}</span>
-                            <span className="flex-shrink-0 text-[9px] font-bold" style={{ color: loaderColor(inst.loader) }}>{inst.loader}</span>
-                            <span className="flex-shrink-0 text-[9px] text-white/25">{inst.mc_version}</span>
-                          </div>
-                          <span className="flex-shrink-0 text-[11px] font-semibold text-[#818cf8]">{formatDuration(inst.total_secs)}</span>
-                        </div>
-                        <div className="h-1.5 w-full rounded-full overflow-hidden bg-[rgba(255,255,255,0.06)]">
-                          <div
-                            className="h-full origin-left animate-grow-x rounded-full bg-gradient-to-r from-[rgba(75,63,207,0.8)] to-[#818cf8]"
-                            style={{ width: `${Math.round((inst.total_secs / maxInstanceSecs) * 100)}%`, animationDelay: `${340 + i * 60}ms` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-white/25">
-                          {t('stats.sessionsCount', { count: inst.sessions, s: inst.sessions > 1 ? 's' : '' })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+          ) : (
+            <>
+              {/* Ce qui tourne maintenant, en premier : c'est la seule ligne
+                  de la page qui change pendant qu'on la regarde. */}
+              <AnimatePresence initial={false}>
+                {data.running.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={SNAP}
+                    className="flex items-center gap-2.5 rounded-xl border border-success/30 bg-success/[0.07] px-3.5 py-2.5"
+                  >
+                    <motion.span
+                      className="h-1.5 w-1.5 rounded-full bg-success"
+                      animate={{ opacity: [1, 0.3, 1] }}
+                      transition={{ duration: 1.6, repeat: Infinity }}
+                    />
+                    <span className="text-[12px] font-semibold text-success">
+                      {t('stats.liveNow', { names: data.running.map((r) => r.instance_name).join(', ') })}
+                    </span>
+                  </motion.div>
                 )}
+              </AnimatePresence>
+
+              <StatCards data={data} selected={cards} customizing={customizing} onToggle={toggleCard} />
+
+              <ActivityCalendar daily={data.daily} />
+
+              {/* Le classement prend plus large que les deux graphiques :
+                  ses lignes portent un nom d'instance, un loader, une version
+                  et une durée, là où une barre horaire n'a besoin que de sa
+                  hauteur. */}
+              <div className="grid grid-cols-[1.4fr_1fr] gap-5">
+                <InstanceRanking
+                  instances={data.per_instance}
+                  sort={sort}
+                  onSort={setSort}
+                  onPick={(instanceId) =>
+                    setFilters((f) => ({ ...f, instanceId: f.instanceId === instanceId ? '' : instanceId }))
+                  }
+                />
+                <div className="flex min-w-0 flex-col gap-5">
+                  <HourlyChart hourly={data.hourly} />
+                  <Breakdown loaders={data.per_loader} versions={data.per_version} />
+                </div>
               </div>
 
-              {/* Recent sessions */}
-              <div
-                className="rounded-2xl p-6 flex flex-col gap-4 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-colors duration-200 hover:border-[rgba(255,255,255,0.12)] animate-fade-in-up"
-                style={{ animationDelay: '280ms' }}
-              >
-                <span className="text-[11px] font-bold text-white/40 tracking-[0.08em]">{t('stats.recentSessions')}</span>
-                {stats.recent_sessions.length === 0 ? (
-                  <EmptyState
-                    compact
-                    icon={
-                      <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.1)" width={28} height={28}>
-                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z" />
-                      </svg>
-                    }
-                    title={t('stats.noSessionRecorded')}
-                    subtitle={t('stats.launchToStart')}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-2 overflow-auto max-h-[280px]">
-                    {stats.recent_sessions.map((s, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between rounded-xl px-3 py-2.5 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] transition-all duration-150 hover:bg-[rgba(255,255,255,0.05)] hover:border-[rgba(129,140,248,0.25)] hover:translate-x-0.5"
-                      >
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="truncate text-[12px] font-semibold text-white/75" title={s.instance_name}>{s.instance_name}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="flex-shrink-0 text-[9px] font-bold" style={{ color: loaderColor(s.loader) }}>{s.loader}</span>
-                            <span className="flex-shrink-0 text-[9px] text-white/20">·</span>
-                            <span className="truncate text-[9px] text-white/30">{t('stats.dateAtTime', { date: formatShortDate(s.started_at), time: formatTime(s.started_at) })}</span>
-                          </div>
-                        </div>
-                        <span
-                          className="rounded-lg px-2 py-0.5 text-[11px] font-bold text-[#818cf8] bg-[rgba(75,63,207,0.15)] flex-shrink-0"
-                        >
-                          {formatDuration(s.duration_secs)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <SessionList sessions={data.recent} />
 
+              {/* En bas, discret : effacer son historique est un droit, pas
+                  une action qu'on met sous le nez. */}
+              <div className="flex justify-end pb-2">
+                <motion.button
+                  {...press}
+                  onClick={() => setConfirmClear(true)}
+                  className="text-[11px] text-txt-muted transition-colors duration-150 hover:text-danger"
+                >
+                  {t('stats.clear.action')}
+                </motion.button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {confirmClear && (
+          <ModalShell onClose={() => setConfirmClear(false)} title={t('stats.clear.title')}>
+            <div className="flex flex-col gap-4">
+              <p className="text-[12px] leading-relaxed text-txt-secondary">{t('stats.clear.text')}</p>
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setConfirmClear(false)}>
+                  {t('common.cancel')}
+                </Button>
+                <Button size="sm" variant="danger" onClick={clearHistory}>
+                  {t('stats.clear.confirm')}
+                </Button>
+              </div>
             </div>
-          </>
+          </ModalShell>
         )}
-      </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub, color, delay = 0, compact = false }: { label: string; value: string; sub: string; color: string; delay?: number; compact?: boolean }) {
-  return (
-    <div
-      className="flex min-w-0 flex-col gap-2 rounded-2xl p-5 bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.07)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[rgba(255,255,255,0.14)] animate-fade-in-up"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <span className="text-[10px] font-bold text-white/35 tracking-[0.08em] uppercase truncate">{label}</span>
-      <span
-        className={`block truncate font-black tracking-[-0.02em] leading-tight ${compact ? 'text-[19px]' : 'text-[28px] leading-none'}`}
-        style={{ color }}
-        title={value}
-      >
-        {value}
-      </span>
-      <span className="text-[11px] text-white/30 truncate">{sub}</span>
+      </AnimatePresence>
     </div>
   )
 }

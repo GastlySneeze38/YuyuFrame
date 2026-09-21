@@ -132,5 +132,35 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
     super::mc_account::migrate_to_pc_scope(&conn)?;
 
+    // ── Sessions de jeu : survivre à la fermeture du launcher ───────────────
+    // Jusqu'ici la durée n'était écrite qu'à la fin de la partie, par une
+    // tâche vivant DANS le launcher. Fermer le launcher pendant qu'on joue
+    // laissait `duration_secs` à NULL, et comme toutes les requêtes de stats
+    // filtrent dessus, la session n'était pas mal comptée : elle disparaissait.
+    //
+    // `last_seen_at` est le battement de cœur écrit pendant la partie : au
+    // démarrage suivant, une session restée ouverte est close à sa dernière
+    // trace de vie. On perd au pire l'intervalle du battement, jamais tout.
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN last_seen_at INTEGER", []);
+    // Identifiant du processus Java, et l'instant où il a démarré. Les deux
+    // ensemble : un PID seul est réattribué par Windows, et on retomberait
+    // sur un processus sans rapport.
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN pid INTEGER", []);
+    // normal : fin observée · recovered : réparée au démarrage suivant ·
+    // running : partie en cours.
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN end_reason TEXT", []);
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN crashed INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN crash_report_id TEXT", []);
+    // Recopiés du lancement : ils permettent de reconstruire un rapport de
+    // plantage même quand le launcher n'était plus là pour les capturer.
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN java_version TEXT", []);
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN jvm_args TEXT", []);
+    let _ = conn.execute("ALTER TABLE play_sessions ADD COLUMN ram_mb INTEGER", []);
+    // Les sessions d'avant cette migration ont une durée mais pas de raison :
+    // sans ça elles apparaîtraient comme « en cours » dans les nouveaux écrans.
+    let _ = conn.execute("UPDATE play_sessions SET end_reason = 'normal' WHERE end_reason IS NULL AND duration_secs IS NOT NULL", []);
+    // Toutes les lectures de stats partent d'une plage de dates.
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_play_sessions_started ON play_sessions (started_at)", []);
+
     Ok(conn)
 }

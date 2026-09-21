@@ -95,6 +95,21 @@ pub struct AppState {
     pub instance_id_migrations: Vec<(String, String)>,
 }
 
+/// Nombre de parties en cours, lisible sans `await`.
+///
+/// Double bien sûr `running_instances`, mais la boucle d'événements de Tauri
+/// (fermeture de fenêtre, demande de sortie) est synchrone : elle ne peut pas
+/// prendre le `RwLock` du state, et c'est pourtant là qu'il faut savoir si le
+/// launcher a le droit de s'éteindre. Toujours mis à jour au même endroit que
+/// le `HashSet` (voir `commands::launch`).
+pub static RUNNING_GAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Une partie tourne-t-elle ? Utilisable depuis n'importe où, y compris hors
+/// contexte asynchrone.
+pub fn any_game_running() -> bool {
+    RUNNING_GAMES.load(std::sync::atomic::Ordering::Relaxed) > 0
+}
+
 impl AppState {
     pub fn is_instance_running(&self, id: &str) -> bool {
         self.running_instances.contains(id)

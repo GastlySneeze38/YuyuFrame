@@ -224,35 +224,19 @@ export interface ModpackInstallProgress {
   label: string
 }
 
-export interface InstanceStat {
-  instance_id: string
-  instance_name: string
-  mc_version: string
-  loader: string
-  sessions: number
-  total_secs: number
-}
-
-export interface RecentSession {
-  instance_name: string
-  mc_version: string
-  loader: string
-  started_at: number
-  duration_secs: number
-}
-
-export interface DailyStat {
-  date: string
-  secs: number
-}
-
-export interface StatsData {
-  total_sessions: number
-  total_secs: number
-  per_instance: InstanceStat[]
-  recent_sessions: RecentSession[]
-  daily: DailyStat[]
-}
+// Les statistiques de jeu vivent dans `types/stats.ts` depuis la refonte du
+// 2026-09-21 : elles ont assez de formes (périodes, filtres, répartitions,
+// sessions en cours) pour mériter leur propre fichier.
+export type {
+  DayStat,
+  InstanceStat,
+  InstanceRef,
+  SessionEntry,
+  StatBucket,
+  StatsData,
+  StatsQuery,
+  StatsTotals,
+} from './stats'
 
 export interface SystemMemoryInfo {
   total_mb: number

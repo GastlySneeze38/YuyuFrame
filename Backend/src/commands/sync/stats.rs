@@ -1,87 +1,72 @@
-use serde::Serialize;
+//! Lecture des statistiques de jeu.
+//!
+//! Les stats sont **locales**. Elles décrivent ce qui a été joué sur ce PC, et
+//! plus rien ne les rattache au compte YuyuFrame : avant, elles étaient
+//! filtrées par `yuyu_user_id`, si bien que se déconnecter faisait disparaître
+//! tout l'historique. Personne ne s'attend à ça de données qui n'ont jamais
+//! quitté sa machine.
+//!
+//! Le calcul lui-même est dans `crate::stats` (fonctions pures, testées). Ici
+//! on ne fait que lire la base et passer les filtres.
 
-use crate::{db, state::SharedState};
+use crate::{
+    db,
+    state::SharedState,
+    stats::{compute, Filters, StatsPayload},
+};
 
-#[derive(Serialize)]
-pub struct InstanceStat {
-    pub instance_id: String,
-    pub instance_name: String,
-    pub mc_version: String,
-    pub loader: String,
-    pub sessions: i64,
-    pub total_secs: i64,
+/// Période demandée. `from`/`to` en secondes Unix ; `to` absent = maintenant.
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsQuery {
+    #[serde(default)]
+    pub from: Option<i64>,
+    #[serde(default)]
+    pub to: Option<i64>,
+    #[serde(default)]
+    pub instance_id: Option<String>,
+    #[serde(default)]
+    pub loader: Option<String>,
+    #[serde(default)]
+    pub mc_version: Option<String>,
 }
 
-#[derive(Serialize)]
-pub struct RecentSession {
-    pub instance_name: String,
-    pub mc_version: String,
-    pub loader: String,
-    pub started_at: i64,
-    pub duration_secs: i64,
-}
-
-#[derive(Serialize)]
-pub struct DailyStat {
-    pub date: String,
-    pub secs: i64,
-}
-
-#[derive(Serialize)]
-pub struct StatsPayload {
-    pub total_sessions: i64,
-    pub total_secs: i64,
-    pub per_instance: Vec<InstanceStat>,
-    pub recent_sessions: Vec<RecentSession>,
-    pub daily: Vec<DailyStat>,
-}
+/// Période par défaut quand rien n'est demandé.
+const DEFAULT_DAYS: i64 = 30;
 
 #[tauri::command]
-pub async fn stats_get(state: tauri::State<'_, SharedState>) -> Result<StatsPayload, String> {
-    let s = state.read().await;
-    let user_id = s.current_yuyu_user_id().unwrap_or(0);
-    let db = s.db.lock().await;
+pub async fn stats_get(query: Option<StatsQuery>, state: tauri::State<'_, SharedState>) -> Result<StatsPayload, String> {
+    let query = query.unwrap_or_default();
+    let now = chrono::Utc::now().timestamp();
+    let to = query.to.unwrap_or(now);
+    let from = query.from.unwrap_or(to - DEFAULT_DAYS * 86_400).min(to);
 
-    let (total_sessions, total_secs) =
-        db::stats_totals(&db, user_id).map_err(|e| e.to_string())?;
+    let db = state.read().await.db.clone();
+    // `spawn_blocking` : SQLite est synchrone, et une lecture de plusieurs
+    // milliers de lignes n'a rien à faire sur le fil du runtime async.
+    let conn = db.lock().await;
+    let sessions = db::sessions_in_range(&conn, from, to).map_err(|e| e.to_string())?;
+    // Les listes de filtres doivent couvrir tout l'historique, pas la seule
+    // période affichée : sinon choisir « 7 jours » ferait disparaître les
+    // instances auxquelles on n'a pas touché cette semaine, et donc
+    // l'impossibilité de les sélectionner.
+    let all_known = db::sessions_in_range(&conn, 0, now).map_err(|e| e.to_string())?;
+    let first_session_at = db::first_session_at(&conn).map_err(|e| e.to_string())?;
+    drop(conn);
 
-    let per_instance = db::stats_per_instance(&db, user_id)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|r| InstanceStat {
-            instance_id: r.instance_id,
-            instance_name: r.instance_name,
-            mc_version: r.mc_version,
-            loader: r.loader,
-            sessions: r.sessions,
-            total_secs: r.total_secs,
-        })
-        .collect();
+    let filters = Filters {
+        instance_id: query.instance_id.filter(|v| !v.is_empty()),
+        loader: query.loader.filter(|v| !v.is_empty()),
+        mc_version: query.mc_version.filter(|v| !v.is_empty()),
+    };
+    Ok(compute(&sessions, &all_known, &filters, from, to, now, first_session_at))
+}
 
-    let since_14d = chrono::Utc::now().timestamp() - 14 * 24 * 3600;
-    let daily = db::stats_daily(&db, user_id, since_14d)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|r| DailyStat { date: r.date, secs: r.secs })
-        .collect();
-
-    let recent_sessions = db::stats_recent_sessions(&db, user_id, 20)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|r| RecentSession {
-            instance_name: r.instance_name,
-            mc_version: r.mc_version,
-            loader: r.loader,
-            started_at: r.started_at,
-            duration_secs: r.duration_secs.unwrap_or(0),
-        })
-        .collect();
-
-    Ok(StatsPayload {
-        total_sessions,
-        total_secs,
-        per_instance,
-        recent_sessions,
-        daily,
-    })
+/// Efface tout l'historique de jeu de ce PC. Irréversible, et demandé depuis
+/// la page Stats avec une confirmation.
+#[tauri::command]
+pub async fn stats_clear(state: tauri::State<'_, SharedState>) -> Result<usize, String> {
+    let db = state.read().await.db.clone();
+    let conn = db.lock().await;
+    db::sessions_clear(&conn).map_err(|e| e.to_string())
 }

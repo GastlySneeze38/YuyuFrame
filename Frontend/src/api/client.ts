@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -335,8 +335,12 @@ export const api = {
       invoke<void>('sync_delete_instance', { syncId }),
   },
 
+  /** Statistiques de jeu, entièrement locales (voir `types/stats.ts`). */
   stats: {
-    get: () => invoke<StatsData>('stats_get'),
+    /** `query` absent : les 30 derniers jours, sans filtre. */
+    get: (query?: StatsQuery) => invoke<StatsData>('stats_get', { query: query ?? null }),
+    /** Efface tout l'historique de jeu de ce PC. Irréversible. */
+    clear: () => invoke<number>('stats_clear'),
   },
 
   system: {
