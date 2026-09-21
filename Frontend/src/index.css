@@ -12,6 +12,14 @@
  * Format « R G B » (sans rgb()) : Tailwind y ajoute l'opacité.
  */
 :root {
+  /* Le moteur ne devine pas qu'une page est sombre : sans ça, il dessine
+   * tous les contrôles natifs en clair. Le menu d'un `<select>` s'ouvrait
+   * donc sur un panneau BLANC, dont les options héritaient de la couleur de
+   * texte du select — du blanc sur blanc, illisible, seule la ligne
+   * survolée apparaissant. Une ligne ici répare toutes les listes
+   * déroulantes du launcher, et au passage les ascenseurs et les champs. */
+  color-scheme: dark;
+
   /* Fonds */
   --bg-primary: 9 9 13;
   --bg-secondary: 14 14 20;
@@ -54,6 +62,17 @@
   --motion-base: 220ms;
   --motion-slow: 380ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Le menu déroulant d'un `<select>` est dessiné par le système, hors de la
+ * page : aucune classe posée sur le select ne le traverse. `color-scheme`
+ * ci-dessus lui donne déjà un fond sombre ; ces deux règles fixent les
+ * options elles-mêmes, qui sinon héritent de la couleur de texte du select
+ * (souvent atténuée) et deviennent illisibles. Couleur OPAQUE obligatoire :
+ * un fond transparent n'a rien derrière lui dans un menu natif. */
+option {
+  background-color: rgb(var(--bg-card));
+  color: rgb(var(--txt-primary));
 }
 
 /* Respect du réglage système « animations réduites » : plus aucun mouvement,
