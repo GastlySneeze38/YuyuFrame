@@ -10,6 +10,7 @@ use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinSet;
 
 use crate::state::MinecraftSession;
+use crate::minecraft::crash;
 use crate::minecraft::versions::{fetch_version_list, AssetIndexFile, VersionDetails};
 use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
@@ -64,6 +65,9 @@ pub async fn download_and_launch(
     avoid_beta: bool,
     console_label: &str,
     instance_id: &str,
+    // Nom affiché de l'instance — sert au rapport de plantage, qui doit
+    // rester lisible même une fois l'instance supprimée.
+    instance_name: &str,
     connect_server: Option<&str>,
     cancel: watch::Receiver<bool>,
     jvm_vendor: &str,
@@ -617,6 +621,26 @@ pub async fn download_and_launch(
     let ready_sent_file = ready_sent.clone();
     let ready_sent_event = ready_sent.clone();
 
+    // Boîte noire du lancement (voir minecraft::crash) : tout ce qu'on
+    // redemanderait après un plantage est capturé MAINTENANT, pendant que le
+    // jeu tourne. Elle ne coûte rien tant qu'il n'y a pas de plantage — une
+    // fenêtre glissante de lignes et un contexte figé — et elle est la seule
+    // occasion de saisir les drapeaux réellement passés à la JVM, qui
+    // n'existent nulle part ailleurs une fois le processus parti.
+    let watch = Arc::new(crash::LaunchWatch::new(
+        instance_id.to_string(),
+        instance_name.to_string(),
+        version_id.to_string(),
+        loader.unwrap_or("vanilla").to_string(),
+        mc_game_dir.clone(),
+        java.clone(),
+        Some(format!("Java {java_major} ({})", jvm_vendor.as_str())),
+        ram_mb,
+        args.clone(),
+    ));
+    let watch_out = watch.clone();
+    let watch_err = watch.clone();
+
     let mut java_cmd = crate::process::hidden_command(&java);
     java_cmd
         .args(&args)
@@ -668,6 +692,7 @@ pub async fn download_and_launch(
                 }
             },
             move |line| {
+                watch_out.record(&line);
                 log_to_console(&app_out, &label_out, &line, "out");
                 // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
                 // lib.rs) — la fenêtre console (webview) ne garde rien après
@@ -683,6 +708,7 @@ pub async fn download_and_launch(
             reader,
             |_| {},
             move |line| {
+                watch_err.record(&line);
                 log_to_console(&app_err, &label_err, &line, "err");
                 tracing::error!("[MC stderr] {}", redact_secrets(&line));
             },
@@ -716,9 +742,12 @@ pub async fn download_and_launch(
     }
 
     let mut cancel_wait = cancel;
+    let mut exit_code = None;
     let cancelled_while_running = tokio::select! {
         status = child.wait() => {
-            tracing::info!("Minecraft terminé — code de sortie : {}", status?);
+            let status = status?;
+            tracing::info!("Minecraft terminé — code de sortie : {}", status);
+            exit_code = status.code();
             false
         }
         _ = cancel_wait.changed() => {
@@ -739,7 +768,50 @@ pub async fn download_and_launch(
         return Err(anyhow!(LAUNCH_CANCELLED_MSG));
     }
 
+    // Une fermeture demandée n'est pas un plantage : c'est la seule sortie
+    // dont on soit certain qu'elle est voulue. Tout le reste passe par
+    // `crash::build`, qui décide.
+    report_crash_if_any(&watch, exit_code, &app).await;
+
     Ok(launch_warnings)
+}
+
+/// Construit et enregistre le rapport si la sortie en est une. Lecture de
+/// fichiers et parcours du dossier mods : sur `spawn_blocking`, pas sur le
+/// runtime. Aucun échec ici n'est remonté à l'appelant — le lancement est
+/// terminé, et on ne va pas transformer un plantage du jeu en erreur du
+/// launcher.
+async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<i32>, app: &tauri::AppHandle) {
+    let watch = watch.clone();
+    let version = app.package_info().version.to_string();
+    let built = tokio::task::spawn_blocking(move || {
+        let report = crash::build(&watch, exit_code, &version)?;
+        if let Err(e) = crash::store(&report) {
+            tracing::warn!("[Crash] rapport non enregistré : {e}");
+        }
+        Some(report)
+    })
+    .await;
+
+    let Ok(Some(report)) = built else { return };
+    tracing::warn!("[Crash] {} — {} ({})", report.instance_id, report.title, report.signature);
+    crate::integrations::analytics::capture("game_crashed", serde_json::json!({
+        "instance_id": &report.instance_id,
+        "kind": &report.kind,
+        "signature": &report.signature,
+        "exit_code": report.exit_code,
+        "mc_version": &report.mc_version,
+        "loader": &report.loader,
+        "uptime_ms": report.uptime_ms,
+    }));
+    // L'accueil affiche une invitation à ouvrir le rapport : c'est là que la
+    // personne regarde quand sa fenêtre de jeu vient de disparaître.
+    let _ = app.emit("game_crashed", serde_json::json!({
+        "instance_id": &report.instance_id,
+        "report_id": &report.id,
+        "title": &report.title,
+        "kind": &report.kind,
+    }));
 }
 
 /// P1-6 (audit launcher, Phase 6, item "voir la configuration appliquée") :

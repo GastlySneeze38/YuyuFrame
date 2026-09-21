@@ -12,6 +12,7 @@ import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { useDraftState, clearDraft } from '@/stores/useDrafts'
+import { CrashPanel } from '@/components/support/CrashPanel'
 import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
 import { useT } from '@/i18n'
 import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from '@/types/support'
@@ -33,6 +34,7 @@ import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from 
 
 const DRAFT_KEY = 'support-ticket'
 
+type Tab = 'requests' | 'crashes'
 type Kind = 'question' | 'refund' | 'plan' | 'deletion'
 
 interface KindSpec {
@@ -70,6 +72,7 @@ export default function Support() {
   const [categories, setCategories] = useState<SupportCategory[]>([])
   const [composing, setComposing] = useState<Kind | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [tab, setTab] = useState<Tab>('requests')
 
   useEffect(() => {
     if (!signedIn) return
@@ -131,7 +134,14 @@ export default function Support() {
         </div>
       </PageHeader>
 
-      {!signedIn ? (
+      <TabBar tab={tab} onPick={setTab} />
+
+      {tab === 'crashes' ? (
+        // Accessible sans compte : un plantage peut très bien arriver avant
+        // d'en avoir un, et le rapport est déjà sur le disque. Seul l'envoi
+        // demande d'être connecté.
+        <CrashPanel signedIn={signedIn} />
+      ) : !signedIn ? (
         <SignInFirst onSignIn={() => navigate('/yuyu')} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -169,6 +179,37 @@ export default function Support() {
           />
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Les deux volets ──────────────────────────────────────────────────────────
+
+/**
+ * Demandes d'un côté, rapports de plantage de l'autre.
+ *
+ * Les deux appartiennent au support, mais rien d'autre ne les rapproche : une
+ * demande, on l'écrit ; un rapport, on le trouve déjà écrit. Les mélanger dans
+ * une même liste rendrait les deux illisibles.
+ */
+function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
+  const t = useT()
+  return (
+    <div className="flex shrink-0 gap-1 border-b border-line-soft px-6">
+      {(['requests', 'crashes'] as Tab[]).map((key) => (
+        <button
+          key={key}
+          onClick={() => onPick(key)}
+          className={`relative px-3 py-2.5 text-[12px] font-semibold transition-colors duration-150 ${
+            tab === key ? 'text-txt-primary' : 'text-txt-muted hover:text-txt-secondary'
+          }`}
+        >
+          {t(`support.tab.${key}`)}
+          {tab === key && (
+            <motion.span layoutId="support-tab" transition={SNAP} className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-hover" />
+          )}
+        </button>
+      ))}
     </div>
   )
 }

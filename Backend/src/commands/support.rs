@@ -184,7 +184,11 @@ fn list_mods(dir: &std::path::Path) -> Vec<(String, bool)> {
 /// jetons. Le rapport ci-dessus n'en contient pas, mais il finit dans un salon
 /// Discord partagé par l'équipe — le filtre reste, au cas où un nom de fichier
 /// ou un champ ajouté plus tard en amènerait.
-fn redact(text: &str) -> String {
+///
+/// Partagé avec les rapports de plantage (`minecraft::crash`), qui emportent
+/// des journaux bruts : deux définitions de « ce qui ne doit jamais sortir »
+/// finiraient par ne plus dire la même chose.
+pub(crate) fn redact(text: &str) -> String {
     text.split_inclusive(|c: char| c.is_whitespace())
         .map(|word| {
             let trimmed = word.trim();

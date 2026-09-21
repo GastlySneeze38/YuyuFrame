@@ -1,5 +1,6 @@
 pub mod account;
 pub mod analytics;
+pub mod crash;
 pub mod curseforge;
 pub mod deep_link;
 pub mod fleet;

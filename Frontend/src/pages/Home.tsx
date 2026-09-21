@@ -303,6 +303,13 @@ export default function Home() {
     resetLaunchUi(instance_id)
   })
 
+  // Le jeu s'est fermé tout seul. Le rapport est déjà écrit sur le disque
+  // (voir minecraft::crash) — sans ce mot, la fenêtre disparaît et personne ne
+  // saurait qu'il existe.
+  useTauriEvent<{ instance_id: string; title: string }>('game_crashed', () => {
+    showNotice(t('home.crashNotice'))
+  })
+
   useTauriEvent<string>('launch_cancelled', (instanceId) => {
     showNotice(t('home.launchCancelled'))
     resetLaunchUi(instanceId)

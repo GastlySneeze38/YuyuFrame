@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
+import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -241,6 +242,24 @@ export const api = {
     /** Rapport montré à la personne avant l'envoi — jamais joint sans accord. */
     diagnostic: (instanceId?: string | null) =>
       invoke<string>('support_diagnostic', { instanceId: instanceId ?? null }),
+  },
+
+  /** Rapports de plantage. Rien ne part sans un clic : `send` est le seul
+   *  appel qui sorte du poste. */
+  crashes: {
+    /** Les rapports gardés sur ce PC, envoyés ou non. */
+    list: () => invoke<LocalCrashSummary[]>('crash_list'),
+    get: (id: string) => invoke<LocalCrashReport>('crash_get', { id }),
+    /** Efface le fichier local. Ce qui est déjà envoyé reste chez l'équipe. */
+    delete: (id: string) => invoke<void>('crash_delete', { id }),
+    send: (id: string) => invoke<RemoteCrashSummary>('crash_send', { id }),
+    /** Les rapports envoyés par ce compte, avec le statut de l'équipe. */
+    remote: () => invoke<RemoteCrashSummary[]>('crash_remote_list'),
+    /** Retire un rapport envoyé de sa liste (et le fichier local avec). */
+    hide: (id: string, localId?: string | null) =>
+      invoke<void>('crash_remote_hide', { id, localId: localId ?? null }),
+    /** Le rapport mis en forme, à coller ailleurs (Discord, auteur d'un mod). */
+    asText: (id: string) => invoke<string>('crash_as_text', { id }),
   },
 
   plan: {

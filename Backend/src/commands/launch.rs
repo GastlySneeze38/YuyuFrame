@@ -216,6 +216,7 @@ pub async fn launch_game(
             avoid_beta.unwrap_or(true),
             &window_label,
             &instance_id,
+            &instance.name,
             connect_server.as_deref(),
             cancel_rx,
             &jvm_vendor,
