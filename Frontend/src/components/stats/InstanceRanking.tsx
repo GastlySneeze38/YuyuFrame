@@ -91,7 +91,9 @@ export function InstanceRanking({
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={SNAP}
+                // `press` porte déjà sa transition : la poser après écrasait
+                // celle-ci, et l'entrée de la ligne jouait sur la courbe du
+                // survol au lieu de la sienne.
                 {...press}
                 onClick={() => onPick(inst.instance_id)}
                 title={t('stats.ranking.filterBy')}

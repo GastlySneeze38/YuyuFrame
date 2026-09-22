@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -12,7 +13,12 @@ import { showError, showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
 import { SYNC_ENABLED, SYNC_FLAG } from '@/config/features'
 import { useFleet } from '@/stores/useFleet'
+import { SNAP, listItemVariants, listVariants, press } from '@/lib/motion'
 import { useT } from '@/i18n'
+
+/// Au-delà de ce nombre d'instances, la liste se replie et une recherche
+/// apparaît. Six tient dans un écran sans dérouler.
+const COLLAPSE_ABOVE = 6
 
 // ── Sync content ──────────────────────────────────────────────────────────────
 
@@ -23,6 +29,8 @@ function SyncContent() {
 
   const [cloudInstances, setCloudInstances] = useState<SyncInstance[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(false)
   const cloudLoaded = useRef(false)
 
   useEffect(() => {
@@ -79,6 +87,33 @@ function SyncContent() {
     (ci) => !instances.some((i) => i.name === ci.instance_name)
   )
 
+  // Ordre et repliage. Avec vingt instances, la liste d'avant demandait de
+  // dérouler tout l'écran pour retrouver celle qu'on synchronise vraiment.
+  // On remonte donc ce qui compte — les favorites d'abord, puis ce qui est
+  // déjà sur le serveur — et on replie le reste.
+  const { shown, hidden } = useMemo(() => {
+    const synced = new Set(cloudInstances.map((ci) => ci.instance_name))
+    const needle = query.trim().toLowerCase()
+    const matching = needle
+      ? instances.filter((i) => i.name.toLowerCase().includes(needle) || i.mc_version.includes(needle))
+      : instances
+
+    const rank = (i: Instance) => (i.favorite ? 0 : synced.has(i.name) ? 1 : 2)
+    const ordered = [...matching].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+
+    // Une recherche en cours montre tout ce qu'elle trouve : replier des
+    // résultats qu'on vient de demander serait absurde.
+    if (needle || expanded || ordered.length <= COLLAPSE_ABOVE) {
+      return { shown: ordered, hidden: 0 }
+    }
+    // On ne coupe jamais au milieu de ce qui est mis en avant : si les
+    // favorites et les instances déjà synchronisées dépassent le seuil, elles
+    // restent toutes visibles.
+    const promoted = ordered.filter((i) => rank(i) < 2).length
+    const cut = Math.max(COLLAPSE_ABOVE, promoted)
+    return { shown: ordered.slice(0, cut), hidden: ordered.length - cut }
+  }, [instances, cloudInstances, query, expanded])
+
   if (cloudLoading) {
     return (
       <div className="flex justify-center py-8">
@@ -100,32 +135,66 @@ function SyncContent() {
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Local instances */}
-      {instances.map((inst) => (
-        <InstanceSyncCard
-          key={inst.id}
-          instance={inst}
-          cloudEntry={cloudInstances.find((ci) => ci.instance_name === inst.name)}
-          onCloudUpdate={handleCloudUpdate}
-          onCloudDelete={handleCloudDelete}
-        />
-      ))}
+      {/* Instances locales, rangées et repliées (voir `arrange`). */}
+      {instances.length > COLLAPSE_ABOVE && (
+        <div className="relative mb-1">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-txt-muted"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('sync.searchPlaceholder')}
+            className="h-9 w-full rounded-xl border border-line bg-surface-1 pl-9 pr-3 text-[12px] text-txt-primary outline-none transition-colors duration-150 placeholder:text-txt-muted focus:border-accent/45"
+          />
+        </div>
+      )}
+
+      <motion.div variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2">
+        <AnimatePresence initial={false} mode="popLayout">
+          {shown.map((inst) => (
+            <motion.div key={inst.id} variants={listItemVariants} layout initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} transition={SNAP}>
+              <InstanceSyncCard
+                instance={inst}
+                cloudEntry={cloudInstances.find((ci) => ci.instance_name === inst.name)}
+                onCloudUpdate={handleCloudUpdate}
+                onCloudDelete={handleCloudDelete}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </motion.div>
+
+      {hidden > 0 && (
+        <motion.button
+          {...press}
+          onClick={() => setExpanded((v) => !v)}
+          className="self-center py-1 text-[11px] font-semibold text-txt-muted transition-colors duration-150 hover:text-accent-hover"
+        >
+          {expanded ? t('sync.showLess') : t('sync.showAll', { count: hidden })}
+        </motion.button>
+      )}
 
       {/* Orphan cloud entries */}
       {orphanCloud.length > 0 && (
-        <div className="flex flex-col gap-2 mt-2">
-          <p className="text-[10px] font-bold text-[rgba(255,255,255,0.18)] tracking-[0.1em] uppercase">
+        <motion.div variants={listVariants} initial="initial" animate="animate" className="mt-2 flex flex-col gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.18)]">
             {t('sync.cloudNoLocalInstance')}
           </p>
           {orphanCloud.map((ci) => (
-            <OrphanCloudCard
-              key={ci.id}
-              ci={ci}
-              onRestore={handleRestore}
-              onDelete={handleOrphanDelete}
-            />
+            <motion.div key={ci.id} variants={listItemVariants} layout>
+              <OrphanCloudCard ci={ci} onRestore={handleRestore} onDelete={handleOrphanDelete} />
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
       <p className="mt-1 text-center text-[10px] text-[rgba(255,255,255,0.1)]">

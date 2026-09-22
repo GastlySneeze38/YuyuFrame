@@ -72,7 +72,11 @@ export function JvmAdvancedSection({
   const gcOptions = vendor === 'openj9' ? OPENJ9_GC_OPTIONS : HOTSPOT_GC_OPTIONS
   const autoVendor = autoVendorFor(ramMb)
   const isAuto = vendor === 'auto'
-  const isManualDeviation = !isAuto && (vendor !== autoVendor || (gcPolicy !== 'auto' && vendor !== 'custom' && vendor !== 'graal'))
+  // On n'atteint la droite du `||` que si `vendor === autoVendor`, donc si le
+  // vendeur est temurin ou openj9 : les garde-fous « ni custom ni graal » qui
+  // s'y trouvaient ne pouvaient jamais être faux. Retirés — ils laissaient
+  // croire à une condition qui n'existait pas.
+  const isManualDeviation = !isAuto && (vendor !== autoVendor || gcPolicy !== 'auto')
 
   return (
     <div className="flex flex-col gap-2">

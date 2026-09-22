@@ -4,7 +4,8 @@
   "description": "YuyuFrame Minecraft Launcher",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "preview": "vite preview",
     "tauri": "tauri"
   },

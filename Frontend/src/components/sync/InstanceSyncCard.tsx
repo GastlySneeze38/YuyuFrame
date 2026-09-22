@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import type { Instance, SyncInstance, SyncProgress } from '@/types'
@@ -9,6 +10,7 @@ import { showError, showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
+import { SNAP, pressIf } from '@/lib/motion'
 import { useT } from '@/i18n'
 
 interface InstanceSyncCardProps {
@@ -140,17 +142,27 @@ export function InstanceSyncCard({
         </div>
 
         {/* Chevron */}
-        <div
-          className={`flex items-center justify-center flex-shrink-0 rounded-lg transition-all duration-200 w-7 h-7 ${expanded ? 'bg-[rgba(75,63,207,0.2)] rotate-180' : 'bg-[rgba(255,255,255,0.04)] rotate-0'}`}
+        <motion.div
+          animate={{ rotate: expanded ? 180 : 0, backgroundColor: expanded ? 'rgba(75,63,207,0.2)' : 'rgba(255,255,255,0.04)' }}
+          transition={SNAP}
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className={expanded ? 'text-[rgba(180,170,255,0.8)]' : 'text-[rgba(255,255,255,0.3)]'}>
             <path d="M7 10l5 5 5-5z" />
           </svg>
-        </div>
+        </motion.div>
       </button>
 
       {/* ── Expanded panel ── */}
-      {expanded && (
+      <AnimatePresence initial={false}>
+        {expanded && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          className="overflow-hidden"
+        >
         <div
           className="flex flex-col gap-4 px-4 pb-4 border-t border-[rgba(255,255,255,0.06)] pt-4"
         >
@@ -182,7 +194,8 @@ export function InstanceSyncCard({
           <div className="flex gap-2">
             {/* Restore */}
             {hasSynced && (
-              <button
+              <motion.button
+                {...pressIf(!busy)}
                 onClick={handlePull}
                 disabled={busy}
                 className={`flex-1 flex items-center justify-center gap-1.5 font-semibold transition-all duration-150 h-[38px] rounded-[10px] text-[12px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] ${busy ? 'text-[rgba(255,255,255,0.2)] cursor-not-allowed' : 'text-[rgba(255,255,255,0.55)] cursor-pointer hover:bg-[rgba(255,255,255,0.09)]'}`}
@@ -192,30 +205,28 @@ export function InstanceSyncCard({
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="rotate-180 flex-shrink-0"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
                 }
                 {t('sync.restore')}
-              </button>
+              </motion.button>
             )}
 
-            {/* Push */}
-            <button
+            {/* Push. Plus de décompte de mondes dans le libellé : ce qui part
+                est fixe (mods, configs, packs) et se lit au-dessus. */}
+            <motion.button
+              {...pressIf(!pushing)}
               onClick={handlePush}
-              disabled={pushing || savesLoading}
-              className={`flex items-center justify-center gap-1.5 font-bold text-white transition-all duration-150 active:scale-95 h-[38px] rounded-[10px] text-[12px] ${hasSynced ? 'flex-[2]' : 'flex-1'} ${(pushing || savesLoading) ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed' : 'bg-[#4B3FCF] shadow-[0_4px_16px_rgba(75,63,207,0.28)] cursor-pointer hover:bg-[#6155e8]'}`}
+              disabled={pushing}
+              className={`flex items-center justify-center gap-1.5 font-bold text-white transition-colors duration-150 h-[38px] rounded-[10px] text-[12px] ${hasSynced ? 'flex-[2]' : 'flex-1'} ${pushing ? 'bg-[rgba(40,38,65,0.7)] shadow-none cursor-not-allowed' : 'bg-[#4B3FCF] shadow-[0_4px_16px_rgba(75,63,207,0.28)] cursor-pointer hover:bg-[#6155e8]'}`}
             >
               {pushing
                 ? <ButtonSpinner size={14} />
                 : <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="flex-shrink-0"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
               }
-              {pushing
-                ? t('sync.saving')
-                : hasSynced
-                  ? `${t('sync.updateLabel')}${selectedSaves.size > 0 ? t('sync.saveCountParen', { count: selectedSaves.size, s: selectedSaves.size > 1 ? 's' : '' }) : ''}`
-                  : `${t('sync.saveLabel')}${selectedSaves.size > 0 ? t('sync.saveCountParen', { count: selectedSaves.size, s: selectedSaves.size > 1 ? 's' : '' }) : ''}`
-              }
-            </button>
+              {pushing ? t('sync.saving') : hasSynced ? t('sync.updateLabel') : t('sync.saveLabel')}
+            </motion.button>
 
             {/* Delete cloud */}
             {cloudEntry && (
-              <button
+              <motion.button
+                {...pressIf(!busy)}
                 onClick={handleDelete}
                 disabled={busy}
                 title={t('sync.deleteCloudBackup')}
@@ -225,23 +236,31 @@ export function InstanceSyncCard({
                   ? <ButtonSpinner size={14} color="rgb(248,113,113)" trackColor="rgba(255,255,255,0.15)" />
                   : <svg viewBox="0 0 24 24" fill="currentColor" width={14} height={14}><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
                 }
-              </button>
+              </motion.button>
             )}
           </div>
         </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Success toast ── */}
-      {success && (
-        <div
-          className="flex items-center gap-2 px-4 py-2 border-t border-[rgba(74,222,128,0.12)] bg-[rgba(74,222,128,0.05)]"
-        >
-          <svg viewBox="0 0 24 24" fill="rgb(74,222,128)" width={12} height={12}>
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-          </svg>
-          <p className="text-[11px] text-[rgb(74,222,128)] font-semibold">{success}</p>
-        </div>
-      )}
+      <AnimatePresence>
+        {success && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-center gap-2 overflow-hidden border-t border-[rgba(74,222,128,0.12)] bg-[rgba(74,222,128,0.05)] px-4 py-2"
+          >
+            <svg viewBox="0 0 24 24" fill="rgb(74,222,128)" width={12} height={12}>
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+            </svg>
+            <p className="text-[11px] font-semibold text-[rgb(74,222,128)]">{success}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
