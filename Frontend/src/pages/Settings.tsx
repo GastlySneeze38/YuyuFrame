@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { open as openDirPicker } from '@tauri-apps/plugin-dialog'
 import { useStore } from '@/stores/useStore'
 import { api } from '@/api/client'
+import { BackgroundOffModal } from '@/components/settings/BackgroundOffModal'
 import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -25,6 +26,7 @@ export default function Settings() {
   const {
     brightness, setBrightness, defaultRam, setDefaultRam, customRamMb, setCustomRamMb,
     closeOnLaunch, setCloseOnLaunch,
+    allowBackground, setAllowBackground,
     instanceSyncMode, setInstanceSyncMode, avoidBetaDependencies, setAvoidBetaDependencies,
     syncGameSettings, setSyncGameSettings, showConsole, setShowConsole,
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
@@ -32,6 +34,15 @@ export default function Settings() {
   } = useStore()
 
   const [showRamInfo, setShowRamInfo] = useState(false)
+  const [confirmBackgroundOff, setConfirmBackgroundOff] = useState(false)
+
+  /// Le réglage vit dans le magasin ET dans un booléen atomique côté Rust :
+  /// la boucle d'événements de Tauri décide de s'éteindre ou non sans pouvoir
+  /// lire quoi que ce soit. Les deux bougent toujours ensemble.
+  const applyBackground = (allowed: boolean) => {
+    setAllowBackground(allowed)
+    api.window.setBackgroundAllowed(allowed).catch(() => {})
+  }
 
   // Mémorisées : le repérage de section s'abonne au défilement à partir de
   // cette liste, une nouvelle à chaque rendu le réabonnerait sans arrêt.
@@ -330,6 +341,27 @@ export default function Settings() {
                   </p>
                 </div>
                 <Toggle checked={closeOnLaunch} onChange={() => setCloseOnLaunch(!closeOnLaunch)} />
+              </div>
+
+              <div className="h-px bg-white/6" />
+
+              {/* Arrière-plan pendant une partie */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">{t('settings.lancement.backgroundLabel')}</p>
+                  <p className="mt-0.5 text-[11px] text-white/35">
+                    {allowBackground ? t('settings.lancement.backgroundDesc') : t('settings.lancement.backgroundOffDesc')}
+                  </p>
+                </div>
+                <Toggle
+                  checked={allowBackground}
+                  onChange={() => {
+                    // Le réactiver ne casse rien : pas de confirmation. Le
+                    // couper débranche trois systèmes, et ça se dit avant.
+                    if (allowBackground) setConfirmBackgroundOff(true)
+                    else applyBackground(true)
+                  }}
+                />
               </div>
 
               <div className="h-px bg-white/6" />
@@ -683,6 +715,18 @@ export default function Settings() {
         </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {confirmBackgroundOff && (
+          <BackgroundOffModal
+            onCancel={() => setConfirmBackgroundOff(false)}
+            onConfirm={() => {
+              applyBackground(false)
+              setConfirmBackgroundOff(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

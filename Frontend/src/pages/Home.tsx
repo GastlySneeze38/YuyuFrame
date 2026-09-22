@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
 import { EASE_OUT, SNAP } from '@/lib/motion'
@@ -346,7 +345,11 @@ export default function Home() {
       else await api.launch.start(instanceId, avoidBetaDependencies, showConsole, connectServer)
       setInstanceRunning(instanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
-      if (closeOnLaunch) getCurrentWindow().hide()
+      // Confié au Rust : il ferme la fenêtre quand l'arrière-plan est
+      // autorisé — ce qui rend vraiment la mémoire de la webview — et se
+      // contente de réduire sinon, puisque fermer couperait la surveillance
+      // de la partie. Masquer côté interface laissait la webview entière.
+      api.window.hideForLaunch(closeOnLaunch).catch(() => {})
     } catch (e) {
       // invoke() de Tauri rejette avec une simple chaîne (pas un Error JS)
       // quand une commande Rust renvoie Err(String) — sans ce cas, le vrai

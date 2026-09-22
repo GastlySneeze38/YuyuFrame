@@ -110,6 +110,53 @@ pub fn any_game_running() -> bool {
     RUNNING_GAMES.load(std::sync::atomic::Ordering::Relaxed) > 0
 }
 
+/// Le launcher a-t-il le droit de rester en vie sans fenêtre pendant une
+/// partie ? Réglable (« Continuer en arrière-plan »), poussé par l'interface
+/// au démarrage. Vrai par défaut : c'est ce qui permet de compter la session
+/// et de construire un rapport si le jeu plante.
+static BACKGROUND_ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn background_allowed() -> bool {
+    BACKGROUND_ALLOWED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_background_allowed(allowed: bool) {
+    BACKGROUND_ALLOWED.store(allowed, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Le launcher doit s'effacer dès que le jeu est réellement là.
+///
+/// Sans arrière-plan autorisé, fermer la fenêtre au clic sur « Jouer »
+/// tuerait le processus — et avec lui le téléchargement en cours, donc le
+/// lancement lui-même. On garde donc le processus en vie le temps que la JVM
+/// démarre, puis on s'éteint : la personne a demandé à ne rien laisser
+/// derrière, pas à ne pas pouvoir jouer.
+static EXIT_WHEN_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn exit_when_ready() -> bool {
+    EXIT_WHEN_READY.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_exit_when_ready(pending: bool) {
+    EXIT_WHEN_READY.store(pending, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Une fenêtre principale est-elle ouverte ?
+///
+/// Sert à taire tout ce qui ne sert qu'à l'afficher : sans elle, émettre des
+/// événements, sérialiser des lignes de journal ou rafraîchir la
+/// configuration de flotte, c'est du travail pour personne. C'est le cœur de
+/// « le moins de poids possible » pendant une partie.
+static WINDOW_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn window_open() -> bool {
+    WINDOW_OPEN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_window_open(open: bool) {
+    WINDOW_OPEN.store(open, std::sync::atomic::Ordering::Relaxed);
+}
+
 impl AppState {
     pub fn is_instance_running(&self, id: &str) -> bool {
         self.running_instances.contains(id)

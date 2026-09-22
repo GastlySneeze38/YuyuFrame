@@ -301,11 +301,11 @@ pub async fn launch_game(
             "instance_id": &instance_id,
         }));
 
-        // Le launcher pouvait avoir été fermé pendant la partie : il ne
-        // s'était alors pas éteint, justement pour voir cette fin-là (voir
-        // `lib.rs`, fermeture sans sortie). Sa raison de vivre vient de
-        // disparaître.
-        crate::exit_if_headless(&app);
+        // La fenêtre a pu être fermée ou réduite au lancement : la partie
+        // finie, elle revient. Le veilleur d'arrière-plan n'avait de raison
+        // d'être que le temps de la partie — il s'efface avec elle, icône de
+        // notification comprise.
+        crate::restore_after_game(&app);
     });
 
     Ok(())

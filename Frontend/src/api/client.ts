@@ -345,6 +345,17 @@ export const api = {
     referencedMods: (syncId: number) => invoke<ReferencedMod[]>('sync_referenced_mods', { syncId }),
   },
 
+  /** Fenêtre principale et arrière-plan. */
+  window: {
+    /** Efface la fenêtre après un lancement. Ferme (et rend la mémoire de la
+     *  webview) quand l'arrière-plan est autorisé, réduit sinon. */
+    hideForLaunch: (enabled: boolean) => invoke<{ mode: 'closed' | 'minimized' | 'kept' }>('window_hide_for_launch', { enabled }),
+    /** Pousse le réglage vers le Rust : la boucle d'événements de Tauri décide
+     *  de s'éteindre ou non sans pouvoir lire la base. */
+    setBackgroundAllowed: (allowed: boolean) => invoke<void>('window_set_background_allowed', { allowed }),
+    backgroundStatus: () => invoke<{ allowed: boolean; game_running: boolean }>('window_background_status'),
+  },
+
   /** Sauvegardes d'instance (voir `types/backup.ts`). Locales par défaut ;
    *  les morceaux sont partagés entre sauvegardes, donc dix versions d'un
    *  monde coûtent à peine plus qu'une. */

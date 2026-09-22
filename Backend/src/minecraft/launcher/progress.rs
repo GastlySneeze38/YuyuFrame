@@ -189,13 +189,25 @@ pub(super) fn redact_secrets(line: &str) -> String {
 /// Émet un game_log vers la fenêtre console dédiée à cette instance.
 /// Fallback sur broadcast global si la fenêtre n'existe plus.
 pub(super) fn log_to_console(app: &tauri::AppHandle, console_label: &str, line: &str, level: &str) {
+    let console = app.get_webview_window(console_label);
+    // Minecraft écrit des milliers de lignes par partie. Quand ni la console
+    // ni la fenêtre principale ne sont là pour les recevoir, chacune coûtait
+    // un masquage des secrets, une sérialisation JSON et une diffusion
+    // d'événement — un travail continu, pour personne. C'est le gros du poids
+    // d'une partie launcher fermé.
+    if console.is_none() && !crate::state::window_open() {
+        return;
+    }
     let short_id = console_label.strip_prefix("mc-console-").unwrap_or(console_label);
     let line = redact_secrets(line);
     let payload = serde_json::json!({ "line": line, "level": level, "instance_id": short_id });
-    if let Some(win) = app.get_webview_window(console_label) {
-        let _ = win.emit("game_log", &payload);
-    } else {
-        let _ = app.emit("game_log", &payload);
+    match console {
+        Some(win) => {
+            let _ = win.emit("game_log", &payload);
+        }
+        None => {
+            let _ = app.emit("game_log", &payload);
+        }
     }
 }
 

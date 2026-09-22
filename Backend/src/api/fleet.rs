@@ -159,7 +159,14 @@ async fn anonymous_get(
 pub fn spawn_refresh(state: SharedState) {
     tauri::async_runtime::spawn(async move {
         loop {
-            reload(&state).await;
+            // Rien à rafraîchir sans fenêtre : cette configuration ne sert
+            // qu'à l'affichage (version minimale, interrupteurs, bannières).
+            // Pendant une partie, launcher fermé, c'était une requête réseau
+            // toutes les quinze minutes pour personne — la première chose à
+            // taire quand on veut ne rien peser.
+            if crate::state::window_open() {
+                reload(&state).await;
+            }
             tokio::time::sleep(REFRESH_EVERY).await;
         }
     });

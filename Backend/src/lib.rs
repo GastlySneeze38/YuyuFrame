@@ -210,6 +210,21 @@ pub fn run() {
             // de plantage reconstruit s'il y en avait un (voir recovery.rs).
             recovery::run(shared_db, app.handle().clone());
 
+            // Arrière-plan refusé : on attendait que le jeu soit réellement
+            // là pour s'effacer. Écouté ici plutôt que sur les trois canaux
+            // qui peuvent signaler « prêt » (événement Win32, sortie standard,
+            // journal de l'agent) — un seul d'entre eux gagne, mais aucun ne
+            // devrait avoir à connaître ce réglage.
+            {
+                use tauri::Listener;
+                let handle = app.handle().clone();
+                app.listen("game_ready", move |_| {
+                    if state::exit_when_ready() {
+                        quit_now(&handle);
+                    }
+                });
+            }
+
             // Sauvegardes quotidiennes dont l'échéance est passée : passées en
             // revue une fois au démarrage. Pas de minuterie qui tourne toute
             // la journée — le launcher n'est pas ouvert en permanence, et une
@@ -379,6 +394,9 @@ pub fn run() {
             commands::system::storage::data_root_get,
             commands::system::storage::data_root_set,
             commands::system::storage::open_folder,
+            commands::window::window_hide_for_launch,
+            commands::window::window_set_background_allowed,
+            commands::window::window_background_status,
         ])
         // Fermer la fenêtre pendant une partie ne doit pas emporter le
         // launcher avec elle : c'est lui qui lit la sortie du jeu, qui tient
@@ -387,18 +405,36 @@ pub fn run() {
         // destruction rend la mémoire — et on garde le cœur Rust, quelques
         // mégaoctets et un fil en attente.
         .on_window_event(|window, event| {
-            if !matches!(event, tauri::WindowEvent::CloseRequested { .. }) || window.label() != "main" {
+            if window.label() != "main" {
                 return;
             }
-            if state::any_game_running() {
-                install_tray(window.app_handle());
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    // Dit tout de suite que la fenêtre s'en va : tout ce qui
+                    // ne sert qu'à l'afficher se tait à partir d'ici (journal
+                    // du jeu, configuration de flotte).
+                    state::set_window_open(false);
+                    if state::any_game_running() && state::background_allowed() {
+                        install_tray(window.app_handle());
+                    }
+                }
+                // Une fenêtre reconstruite (icône de notification, second
+                // lancement) remet tout en route.
+                tauri::WindowEvent::Focused(_) => state::set_window_open(true),
+                _ => {}
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                if state::any_game_running() {
+                // Deux raisons de rester : surveiller une partie quand
+                // l'arrière-plan est autorisé, ou attendre que le jeu démarre
+                // avant de s'effacer quand il ne l'est pas. Sans la seconde,
+                // fermer la fenêtre au clic sur « Jouer » tuerait le
+                // téléchargement en cours.
+                let watching = state::any_game_running() && state::background_allowed();
+                if watching || state::exit_when_ready() {
                     api.prevent_exit();
                 }
             }
@@ -409,14 +445,44 @@ pub fn run() {
 /// ouverte et aucune partie en cours. Appelée à la fin de chaque partie —
 /// c'est le moment où un launcher resté en vie uniquement pour la surveiller
 /// n'a plus de raison d'être.
-pub fn exit_if_headless(app: &tauri::AppHandle) {
-    if state::any_game_running() || app.webview_windows().values().any(|w| w.label() == "main") {
+pub fn restore_after_game(app: &tauri::AppHandle) {
+    // Une autre partie tourne encore : le veilleur a toujours une raison
+    // d'être, et personne n'a demandé à revoir le launcher.
+    if state::any_game_running() {
         return;
     }
-    tracing::info!("Partie terminée et aucune fenêtre ouverte — arrêt du launcher");
+    // L'arrière-plan est refusé et le lancement s'est terminé sans que le jeu
+    // démarre (échec, annulation) : on s'efface comme promis plutôt que de
+    // rouvrir une fenêtre que personne n'attend.
+    if state::exit_when_ready() {
+        quit_now(app);
+        return;
+    }
+    // Fenêtre seulement réduite (arrière-plan refusé, ou fermeture jamais
+    // demandée) : on la remonte sans la reconstruire.
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        state::set_window_open(true);
+        return;
+    }
+    tracing::info!("Partie terminée — le launcher revient au premier plan");
+    // L'icône de notification n'avait de sens que pendant la partie :
+    // `reopen_main_window` la retire en même temps qu'elle rend la fenêtre.
+    reopen_main_window(app);
+}
+
+/// Éteint le launcher pour de bon.
+///
+/// Le drapeau est levé AVANT `exit` : il fait justement refuser les demandes
+/// de sortie, et le garder ici empêcherait celle-ci d'aboutir.
+pub fn quit_now(app: &tauri::AppHandle) {
+    state::set_exit_when_ready(false);
     if let Some(tray) = TRAY.get() {
         let _ = tray.set_visible(false);
     }
+    tracing::info!("Arrière-plan refusé — le launcher s'efface");
     app.exit(0);
 }
 
@@ -488,11 +554,20 @@ fn reopen_main_window(app: &tauri::AppHandle) {
         .build();
     match built {
         Ok(window) => {
+            state::set_window_open(true);
             let _ = window.set_focus();
             if let Some(tray) = TRAY.get() {
                 let _ = tray.set_visible(false);
             }
         }
-        Err(e) => tracing::warn!("Réouverture de la fenêtre impossible : {e}"),
+        Err(e) => {
+            tracing::warn!("Réouverture de la fenêtre impossible : {e}");
+            // Sans fenêtre ni partie à surveiller, le processus n'aurait plus
+            // aucun moyen d'être vu ni arrêté : mieux vaut s'éteindre que de
+            // laisser un fantôme dans le gestionnaire des tâches.
+            if !state::any_game_running() {
+                app.exit(0);
+            }
+        }
     }
 }

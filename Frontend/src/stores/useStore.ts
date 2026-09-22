@@ -142,6 +142,11 @@ interface Store {
   language: Lang
   setLanguage: (l: Lang) => void
 
+  /** Le launcher reste en vie sans fenêtre pendant une partie, pour compter
+   *  la session et construire un rapport si le jeu plante. */
+  allowBackground: boolean
+  setAllowBackground: (v: boolean) => void
+
   // ── Page Stats (persisté) ─────────────────────────────────────────────────
   /** Période affichée, en jours. `0` = tout l'historique. */
   statsRangeDays: number
@@ -365,6 +370,9 @@ export const useStore = create<Store>()(
       language: 'fr',
       setLanguage: (language) => set({ language }),
 
+      allowBackground: true,
+      setAllowBackground: (allowBackground) => set({ allowBackground }),
+
       statsRangeDays: 30,
       setStatsRangeDays: (statsRangeDays) => set({ statsRangeDays }),
       statsCards: DEFAULT_STAT_CARDS,
@@ -480,6 +488,7 @@ export const useStore = create<Store>()(
         defaultJvmCustomPath: s.defaultJvmCustomPath,
         defaultGcPolicy: s.defaultGcPolicy,
         closeOnLaunch: s.closeOnLaunch,
+        allowBackground: s.allowBackground,
         p2pEnabled: s.p2pEnabled,
         brightness: s.brightness,
         instanceSyncMode: s.instanceSyncMode,

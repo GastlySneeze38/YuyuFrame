@@ -13,6 +13,7 @@ pub mod plan;
 pub mod support;
 pub mod sync;
 pub mod system;
+pub mod window;
 
 // Plus aucun helper d'accès serveur ici : la synchronisation était le dernier
 // appelant à parler à la LauncherAPI sans passer par `crate::api` (URL montée

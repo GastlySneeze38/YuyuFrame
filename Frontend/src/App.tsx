@@ -85,7 +85,7 @@ const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground } = useStore()
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
@@ -107,7 +107,10 @@ export default function App() {
   // "EN JEU..." restait bloqué jusqu'à un F5 complet qui réinitialise le store.
   useTauriEvent<{ running: boolean; instance_id: string }>('game_state', ({ running, instance_id }) => {
     setInstanceRunning(instance_id, running)
-    if (!running) getCurrentWindow().show()
+    // Le Rust remonte déjà la fenêtre à la fin d'une partie (voir
+    // `restore_after_game`) : cet appel n'est qu'un filet pour les fenêtres
+    // masquées autrement, et il ne coûte rien quand elle est déjà visible.
+    if (!running) getCurrentWindow().show().catch(() => {})
   })
 
   // Lien yuyuframe://join?... — bouton "Rejoindre" de la Rich Presence
@@ -125,6 +128,15 @@ export default function App() {
       if (url) setJoinRequest(parseJoinUrl(url))
     }).catch(() => {})
   }, [])
+
+  // Le réglage « continuer en arrière-plan » vit dans le magasin persisté,
+  // mais c'est la boucle d'événements de Tauri qui décide de laisser ou non
+  // le processus s'éteindre — elle est synchrone et ne peut rien lire. On le
+  // lui pousse donc dès le démarrage, puis à chaque changement (Settings).
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.window.setBackgroundAllowed(allowBackground).catch(() => {})
+  }, [allowBackground])
 
   useTauriEvent<string>('deep_link_join', (url) => {
     setJoinRequest(parseJoinUrl(url))
