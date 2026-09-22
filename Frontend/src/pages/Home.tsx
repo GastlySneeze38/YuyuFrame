@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
 import { EASE_OUT, SNAP } from '@/lib/motion'
@@ -100,7 +100,6 @@ const STARS = Array.from({ length: 55 }, (_, i) => ({
 
 export default function Home() {
   const navigate = useNavigate()
-  const location = useLocation()
   const t = useT()
   const FEATURES = useFeatures(t)
   const {
@@ -925,28 +924,28 @@ export default function Home() {
 
           {/* CENTER — Nav pyramid */}
           <div className="flex min-w-0 items-center justify-center gap-2 w-full [container-type:inline-size]">
-            <NavLink label={t('home.nav.instances')} path="/instances" onClick={() => navigate('/instances')} currentPath={location.pathname} distance={3}>
+            <NavLink label={t('home.nav.instances')} onClick={() => navigate('/instances')} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.settings')} path="/settings" onClick={() => navigate('/settings')} currentPath={location.pathname} distance={2}>
+            <NavLink label={t('home.nav.settings')} onClick={() => navigate('/settings')} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
             </NavLink>
             {/* Sync et Stats ne sont plus dans la barre : elles vivent
                 désormais dans la page Fonctionnalités, qui les regroupe avec
                 celles à venir. */}
-            <NavLink label={t('home.nav.features')} path="/features" onClick={() => navigate('/features')} currentPath={location.pathname} distance={1} accent>
+            <NavLink label={t('home.nav.features')} onClick={() => navigate('/features')} distance={1} accent>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.plans')} path="/plans" onClick={() => navigate('/plans')} currentPath={location.pathname} distance={0} plans>
+            <NavLink label={t('home.nav.plans')} onClick={() => navigate('/plans')} distance={0} plans>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.support')} path="/support" onClick={() => navigate('/support')} currentPath={location.pathname} distance={1} accent>
+            <NavLink label={t('home.nav.support')} onClick={() => navigate('/support')} distance={1} accent>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 00-9 9v5a3 3 0 003 3h1a1 1 0 001-1v-5a1 1 0 00-1-1H5v-1a7 7 0 1114 0v1h-2a1 1 0 00-1 1v5a1 1 0 001 1h1a3 3 0 003-3v-5a9 9 0 00-9-9z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.account')} path="/login" onClick={() => navigate('/login')} currentPath={location.pathname} distance={2}>
+            <NavLink label={t('home.nav.account')} onClick={() => navigate('/login')} distance={2}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.server')} path="/server" onClick={() => navigate('/server')} currentPath={location.pathname} distance={3}>
+            <NavLink label={t('home.nav.server')} onClick={() => navigate('/server')} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" /></svg>
             </NavLink>
           </div>
@@ -1060,15 +1059,16 @@ const NAV_ICON_CLASSES = [
   'w-[clamp(11px,1.7cqw,14px)] h-[clamp(11px,1.7cqw,14px)]',
 ]
 
-function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPath, children }: {
-  label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number; path?: string; currentPath?: string; children: React.ReactNode
+/** Temps passé sur un même lien avant que le repère ne s'étire. */
+function NavLink({ label, onClick, plans, accent, distance = 0, children }: {
+  label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number
+  children: React.ReactNode
 }) {
   // Tailles relatives à la fenêtre via clamp — s'adaptent à toutes les largeurs
   // Unités cqw : relatives à la largeur réellement disponible pour la nav (container query),
   // plutôt qu'à la largeur de toute la fenêtre — la nav s'adapte donc à la place qui lui est laissée.
   const d = Math.min(distance, 3)
-  const isActive = path ? currentPath === path : false
-  const baseColorClass = plans ? 'text-[#c4b5fd]' : isActive ? 'text-[#a5b4fc]' : 'text-[rgba(255,255,255,0.9)]'
+  const baseColorClass = plans ? 'text-[#c4b5fd]' : 'text-[rgba(255,255,255,0.9)]'
   const bgBorderShadow = plans
     ? 'bg-[rgba(75,63,207,0.1)] border border-[rgba(120,100,255,0.22)] shadow-[0_0_18px_rgba(75,63,207,0.12)_inset]'
     : 'bg-transparent border border-transparent shadow-none'
@@ -1081,24 +1081,24 @@ function NavLink({ label, onClick, plans, accent, distance = 0, path, currentPat
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ y: -2 }}
+      // La pyramide se monte depuis son sommet : le lien central d'abord, les
+      // autres en s'écartant. C'est la forme de la barre qui donne l'ordre,
+      // pas celui du code.
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.36, ease: EASE_OUT, delay: 0.08 + d * 0.05 } }}
+      whileHover={{ y: -3 }}
       whileTap={{ scale: 0.95 }}
       // Ressort raide et léger : le survol d'un lien de nav doit répondre
       // tout de suite, pas accompagner le curseur.
       transition={SNAP}
-      className={`relative flex items-center gap-1 rounded-xl transition-all duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} opacity-100 ${hoverClasses}`}
+      // `transition-colors`, surtout pas `transition-all` : celui-ci animait
+      // aussi `transform`, la propriété que le ressort ci-dessus pilote déjà.
+      // Les deux se disputaient la même valeur à chaque image et le survol
+      // répondait mou. Le CSS ne garde que ce que framer ne touche pas.
+      className={`group relative flex items-center gap-1 rounded-xl transition-colors duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${hoverClasses}`}
     >
-      <span className={`flex flex-shrink-0 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
+      <span className={`flex flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
       {label}
-      {isActive && (
-        // Le soulignement glisse d'un onglet à l'autre : c'est le même
-        // élément, partagé par `layoutId`, qui se déplace.
-        <motion.span
-          layoutId="nav-active-underline"
-          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-          className={`absolute bottom-[5px] left-1/2 -translate-x-1/2 w-[14px] h-0.5 rounded-[1px] ${plans ? 'bg-[#a78bfa]' : 'bg-[#818cf8]'}`}
-        />
-      )}
     </motion.button>
   )
 }
