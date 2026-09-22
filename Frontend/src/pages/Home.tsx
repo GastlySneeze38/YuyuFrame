@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
@@ -143,10 +143,21 @@ export default function Home() {
   // à chaque passage sur l'accueil (voir `lib/greeting.ts`). `playIntro` dit
   // s'il reste la séquence d'arrivée à jouer.
   const language = useStore((st) => st.language)
-  const [welcome, setWelcome] = useState({ phrase: '', playIntro: false })
-  useEffect(() => {
-    if (username) setWelcome(homeGreeting(language, username))
-  }, [username, language])
+  //
+  // Calculée PENDANT le rendu, pas dans un effet. Un effet ne s'exécute
+  // qu'après la première peinture : le temps de celle-ci, `playIntro` valait
+  // faux, donc la séquence se croyait déjà jouée et affichait le badge
+  // terminé — cadre, pseudo, et un avatar encore en cours de chargement.
+  // L'effet passait ensuite `playIntro` à vrai et tout repartait de zéro. On
+  // voyait donc l'arrivée avant le départ, à chaque ouverture du launcher.
+  //
+  // `homeGreeting` retient déjà son tirage par langue et par pseudo : deux
+  // appels de suite rendent la même phrase, elle est donc sûre à appeler
+  // pendant le rendu.
+  const welcome = useMemo(
+    () => (username ? homeGreeting(language, username) : { phrase: '', playIntro: false }),
+    [language, username],
+  )
 
   // Bannière publiée depuis le back-office : c'est elle qui décide si le
   // panneau passe en habillage festif.

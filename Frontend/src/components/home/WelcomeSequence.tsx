@@ -102,12 +102,25 @@ export function WelcomeSequence({
       <motion.div
         // Le badge ne prend son fond qu'une fois le salut rangé : avant, il
         // n'y a rien à encadrer.
+        //
+        // `initial={false}` : sans lui, le badge se monte à la couleur de sa
+        // classe puis saute à celle d'`animate` à la deuxième image. Deux
+        // conséquences visibles — un cadre clair qui clignote avant le salut
+        // (la classe `border` seule vaut le gris par défaut de Tailwind), et
+        // ce même cadre qui se rejoue à chaque retour sur l'accueil alors que
+        // la séquence, elle, ne se rejoue pas. On part donc directement à
+        // l'état courant : rien à l'arrivée, le cadre ne s'anime plus que
+        // lorsque le salut se range vraiment.
+        //
+        // `border-transparent` en plus de ça : la classe ne doit jamais
+        // pouvoir retomber sur le gris clair de Tailwind, même une image.
+        initial={false}
         animate={{
           backgroundColor: phase >= 3 ? 'rgba(14,13,24,0.66)' : 'rgba(14,13,24,0)',
-          borderColor: phase >= 3 ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0)',
+          borderColor: phase >= 3 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0)',
         }}
         transition={{ duration: 0.5 }}
-        className="absolute left-4 top-4 flex h-[56px] items-center gap-2.5 rounded-xl border p-1.5 pr-4"
+        className="absolute left-4 top-4 flex h-[56px] items-center gap-2.5 rounded-xl border border-transparent p-1.5 pr-4"
       >
         <AnimatePresence>
           {parked && avatarUrl && (
@@ -125,6 +138,11 @@ export function WelcomeSequence({
 
         <div className="flex flex-col justify-center gap-0.5">
           <motion.div
+            // Même raison que le cadre ci-dessus : sans `initial={false}`, le
+            // pseudo se monte à son opacité CSS (1) et n'est masqué qu'à
+            // l'image suivante — il s'affichait donc en clair, seul dans le
+            // badge, avant que la séquence ne commence.
+            initial={false}
             animate={{ opacity: phase >= 3 ? 1 : 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             className="whitespace-nowrap text-[14px] font-bold leading-[18px] tracking-[-0.015em] text-white"
@@ -145,6 +163,12 @@ export function WelcomeSequence({
               // l'image, d'où un texte flou une fois agrandi. En changeant la
               // taille, le navigateur redessine les glyphes à leur vraie
               // taille et le texte reste net du début à la fin.
+              //
+              // `initial={false}` : le salut doit être hors champ dès la
+              // première image, pas à la deuxième — sinon il apparaît une
+              // fraction de seconde à sa place de repos avant de sauter en
+              // haut pour commencer son vol.
+              initial={false}
               animate={{
                 x: big ? f.dx : 0,
                 y: big ? f.dy : phase === 0 ? f.dy - 340 : 0,
