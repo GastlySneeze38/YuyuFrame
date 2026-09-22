@@ -17,7 +17,7 @@
 //! rafraîchit de lui-même — indispensable sur un envoi qui dure plus de
 //! quinze minutes.
 
-use serde_json::json;
+use serde_json::{json, Value};
 use tauri::Emitter;
 
 use super::super::instance::crud::instance_dir;
@@ -259,6 +259,99 @@ fn prune(root: &std::path::Path, kept: &std::collections::HashSet<String>) -> us
         }
     }
     removed
+}
+
+// ── Ce qui est réellement sauvegardé ─────────────────────────────────────────
+
+/// Le contenu exact d'une instance synchronisée : chaque fichier, sa taille,
+/// et la révision à laquelle il appartient.
+///
+/// Sans ça, la sync est une boîte noire : on clique « Envoyer », un chiffre
+/// change, et personne ne sait ce qu'il y a dedans. Le manifeste existe déjà
+/// côté serveur — le montrer ne coûte qu'un appel.
+#[tauri::command]
+pub async fn sync_manifest(state: tauri::State<'_, SharedState>, sync_id: i64) -> Result<Value, String> {
+    api::get(&state, &format!("/sync/instances/{sync_id}/manifest"), &[]).await.map_err(String::from)
+}
+
+/// Un fichier qui diffère entre le PC et le serveur.
+#[derive(serde::Serialize)]
+pub struct DiffEntry {
+    pub path: String,
+    /// added | modified | removed
+    pub kind: String,
+    /// Taille locale pour un ajout ou une modification, taille distante pour
+    /// une suppression.
+    pub size: i64,
+}
+
+/// Ce qui changerait si on envoyait maintenant.
+#[derive(serde::Serialize)]
+pub struct SyncDiff {
+    pub revision: i64,
+    pub entries: Vec<DiffEntry>,
+    pub unchanged: usize,
+    /// Octets réellement à téléverser — pas la taille des fichiers modifiés,
+    /// mais celle des morceaux que le serveur n'a pas encore. Un mod remis à
+    /// sa place à l'identique ne pèse rien.
+    pub upload_bytes: i64,
+    pub local_files: usize,
+    pub local_bytes: i64,
+}
+
+/// Compare le dossier local au manifeste du serveur, sans rien envoyer.
+///
+/// C'est ce que le protocole par morceaux permet et que personne ne montre :
+/// annoncer « 3 mods ajoutés, 1 modifié, 12 Mo à envoyer » **avant** de
+/// cliquer, au lieu de lancer un transfert en espérant.
+#[tauri::command]
+pub async fn sync_diff(state: tauri::State<'_, SharedState>, sync_id: i64, instance_id: String) -> Result<SyncDiff, String> {
+    let root = instance_dir(&instance_id);
+    let scan_root = root.clone();
+    let local: Vec<FileEntry> = tokio::task::spawn_blocking(move || chunks::scan(&scan_root, &SYNCED.map(String::from), &NEVER))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Lecture de l'instance impossible : {e}"))?;
+
+    let value = api::get(&state, &format!("/sync/instances/{sync_id}/manifest"), &[]).await.map_err(String::from)?;
+    let remote: Manifest = serde_json::from_value(value).map_err(|e| e.to_string())?;
+
+    let remote_by_path: std::collections::HashMap<&str, &FileEntry> = remote.files.iter().map(|f| (f.path.as_str(), f)).collect();
+    let local_by_path: std::collections::HashMap<&str, &FileEntry> = local.iter().map(|f| (f.path.as_str(), f)).collect();
+
+    let mut entries = Vec::new();
+    let mut unchanged = 0;
+    for file in &local {
+        match remote_by_path.get(file.path.as_str()) {
+            None => entries.push(DiffEntry { path: file.path.clone(), kind: "added".into(), size: file.size }),
+            // Les empreintes, pas la taille : deux fichiers de même longueur
+            // au contenu différent sont bien une modification.
+            Some(r) if r.chunks != file.chunks => entries.push(DiffEntry { path: file.path.clone(), kind: "modified".into(), size: file.size }),
+            Some(_) => unchanged += 1,
+        }
+    }
+    for file in &remote.files {
+        if !local_by_path.contains_key(file.path.as_str()) {
+            entries.push(DiffEntry { path: file.path.clone(), kind: "removed".into(), size: file.size });
+        }
+    }
+    entries.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.path.cmp(&b.path)));
+
+    // Le serveur seul sait ce qu'il a déjà : on le lui demande plutôt que de
+    // l'estimer.
+    let missing = api::post(&state, &format!("/sync/instances/{sync_id}/missing"), json!({ "files": local }))
+        .await
+        .map_err(String::from)?;
+    let upload_bytes = missing.get("total_bytes").and_then(Value::as_i64).unwrap_or(0);
+
+    Ok(SyncDiff {
+        revision: remote.revision,
+        entries,
+        unchanged,
+        upload_bytes,
+        local_files: local.len(),
+        local_bytes: local.iter().map(|f| f.size).sum(),
+    })
 }
 
 #[tauri::command]

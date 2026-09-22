@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, SyncInstance, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -336,6 +336,11 @@ export const api = {
       invoke<void>('sync_pull_instance', { syncId, instanceId }),
     delete: (syncId: number) =>
       invoke<void>('sync_delete_instance', { syncId }),
+    /** Le contenu exact stocké sur le serveur — ce que la sync gardait
+     *  jusqu'ici invisible. */
+    manifest: (syncId: number) => invoke<SyncManifest>('sync_manifest', { syncId }),
+    /** Ce qui changerait si on envoyait maintenant, sans rien envoyer. */
+    diff: (syncId: number, instanceId: string) => invoke<SyncDiff>('sync_diff', { syncId, instanceId }),
   },
 
   /** Sauvegardes d'instance (voir `types/backup.ts`). Locales par défaut ;

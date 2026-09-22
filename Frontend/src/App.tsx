@@ -39,6 +39,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Legal'),
   () => import('@/pages/YuyuLogin'),
   () => import('@/pages/Sync'),
+  () => import('@/pages/SyncInstance'),
   () => import('@/pages/Features'),
   () => import('@/pages/Support'),
   () => import('@/pages/Plans'),
@@ -71,6 +72,7 @@ const Support = lazy(() => import('@/pages/Support'))
 const Plans = lazy(() => import('@/pages/Plans'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const Backup = lazy(() => import('@/pages/Backup'))
+const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
 const Server = lazy(() => import('@/pages/Server'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
@@ -299,6 +301,7 @@ export default function App() {
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/backup" element={<Backup />} />
+            <Route path="/sync/:syncId" element={<SyncInstance />} />
             <Route path="/server" element={<Server />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />

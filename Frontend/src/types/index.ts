@@ -188,6 +188,37 @@ export interface Account {
   is_offline: boolean
 }
 
+/** Un fichier du manifeste : son chemin, sa taille, ses morceaux. */
+export interface SyncFile {
+  path: string
+  size: number
+  chunks: string[]
+}
+
+export interface SyncManifest {
+  revision: number
+  files: SyncFile[]
+}
+
+/** Un fichier qui diffère entre le PC et le serveur. */
+export interface SyncDiffEntry {
+  path: string
+  kind: 'added' | 'modified' | 'removed'
+  size: number
+}
+
+/** Ce qui changerait si on envoyait maintenant. */
+export interface SyncDiff {
+  revision: number
+  entries: SyncDiffEntry[]
+  unchanged: number
+  /** Octets réellement à téléverser — pas la taille des fichiers modifiés,
+   *  mais celle des morceaux que le serveur n'a pas encore. */
+  upload_bytes: number
+  local_files: number
+  local_bytes: number
+}
+
 /** Forme de référence : `SyncInstance` de `LauncherAPI/src/routes/sync.rs`. */
 export interface SyncInstance {
   id: number

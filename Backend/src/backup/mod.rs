@@ -108,11 +108,70 @@ fn manifests_dir(instance_id: &str) -> PathBuf {
 
 // ── Création ─────────────────────────────────────────────────────────────────
 
+/// Ce qu'on retient d'un fichier d'une sauvegarde à l'autre, pour ne pas
+/// avoir à le relire quand il n'a pas bougé.
+#[derive(Serialize, Deserialize, Clone)]
+struct Known {
+    /// Date de modification, en secondes Unix.
+    mtime: i64,
+    size: i64,
+    chunks: Vec<String>,
+}
+
+type Index = std::collections::HashMap<String, Known>;
+
+fn index_path(instance_id: &str) -> PathBuf {
+    manifests_dir(instance_id).join("index.json")
+}
+
+/// Index de la sauvegarde précédente. Vide s'il est absent ou illisible : on
+/// relira tout, ce qui est lent mais jamais faux.
+fn load_index(instance_id: &str) -> Index {
+    std::fs::read(index_path(instance_id)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+fn save_index(instance_id: &str, index: &Index) -> std::io::Result<()> {
+    let path = index_path(instance_id);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, serde_json::to_vec(index)?)
+}
+
+/// Peut-on réutiliser les empreintes connues de ce fichier, sans le relire ?
+///
+/// Deux conditions, et la seconde compte autant que la première : une
+/// sauvegarde élaguée entre-temps a pu emporter ses morceaux du dépôt, et
+/// réutiliser ses empreintes donnerait un manifeste qui ne restaure pas —
+/// une sauvegarde qui ment, découverte le jour où elle sert.
+fn reusable<'a>(known: Option<&'a Known>, mtime: i64, size: i64, present: impl Fn(&str) -> bool) -> Option<&'a Known> {
+    known.filter(|k| k.mtime == mtime && k.size == size).filter(|k| k.chunks.iter().all(|c| present(c)))
+}
+
+fn mtime_of(meta: &std::fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 /// Prend un instantané de l'instance.
 ///
 /// Rend `None` quand il n'y a rien à sauvegarder — une instance sans monde, ou
 /// dont aucun dossier n'a été retenu. Créer une sauvegarde vide ne rendrait
 /// service à personne et remplirait la liste de lignes trompeuses.
+///
+/// Deux économies, qui changent tout sur un monde de plusieurs centaines de
+/// mégaoctets :
+///
+/// - **un fichier inchangé n'est pas relu.** Sa date et sa taille suffisent à
+///   réutiliser les empreintes de la sauvegarde précédente. Sur un monde où
+///   trois régions ont bougé, on lit trois régions au lieu du monde entier ;
+/// - **un fichier changé n'est lu qu'une fois.** La version d'avant le lisait
+///   pour calculer les empreintes, puis relisait chaque morceau depuis le
+///   disque pour l'écrire dans le dépôt — deux fois le monde à chaque
+///   sauvegarde.
 pub fn create(
     instance_id: &str,
     instance_name: &str,
@@ -124,24 +183,47 @@ pub fn create(
     if includes.is_empty() {
         return Ok(None);
     }
-    let files = chunks::scan(game_dir, &includes, &NEVER)?;
+
+    let known = load_index(instance_id);
+    let mut fresh: Index = Index::new();
+    let mut files: Vec<FileEntry> = Vec::new();
+    // Morceaux déjà traités pendant CETTE sauvegarde : deux copies du même
+    // fichier ne s'écrivent pas deux fois.
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for (path, source, meta) in walk_selected(game_dir, &includes)? {
+        let (mtime, size) = (mtime_of(&meta), meta.len() as i64);
+
+        // Chemin rapide : rien n'a bougé, et les morceaux sont encore dans le
+        // dépôt.
+        let reused = reusable(known.get(&path), mtime, size, |sha| object_path(sha).exists());
+        if let Some(k) = reused {
+            seen.extend(k.chunks.iter().cloned());
+            files.push(FileEntry { path: path.clone(), size, chunks: k.chunks.clone() });
+            fresh.insert(path, k.clone());
+            continue;
+        }
+
+        // Une seule lecture, et les morceaux partent de ce qu'on a déjà en
+        // mémoire.
+        let data = std::fs::read(&source)?;
+        let hashes = chunks::hash_chunks(&data);
+        for (index, sha) in hashes.iter().enumerate() {
+            if !seen.insert(sha.clone()) {
+                continue;
+            }
+            let start = index * chunks::CHUNK_SIZE;
+            let end = (start + chunks::CHUNK_SIZE).min(data.len());
+            store_chunk(sha, &data[start..end])?;
+        }
+        files.push(FileEntry { path: path.clone(), size: data.len() as i64, chunks: hashes.clone() });
+        fresh.insert(path, Known { mtime, size: data.len() as i64, chunks: hashes });
+    }
+
     if files.is_empty() {
         return Ok(None);
     }
-
-    // Écrire les morceaux AVANT le manifeste : un manifeste qui référence un
-    // morceau absent est une sauvegarde qui ne restaure pas, et on ne le
-    // découvrirait que le jour où on en a besoin.
-    let mut written = HashSet::new();
-    for file in &files {
-        let source = game_dir.join(file.path.replace('/', std::path::MAIN_SEPARATOR_STR));
-        for (index, sha) in file.chunks.iter().enumerate() {
-            if !written.insert(sha.clone()) {
-                continue;
-            }
-            store_chunk(&source, index, sha)?;
-        }
-    }
+    files.sort_by(|a, b| a.path.cmp(&b.path));
 
     let backup = Backup {
         id: uuid::Uuid::new_v4().to_string(),
@@ -155,15 +237,77 @@ pub fn create(
         files,
         cloud_id: None,
     };
+    // Le manifeste après les morceaux : un manifeste qui en référence un
+    // absent est une sauvegarde qui ne restaure pas, et on ne le découvrirait
+    // que le jour où on en a besoin.
     write_manifest(&backup)?;
+    // L'index après le manifeste, et sans bloquer : le perdre ne coûte qu'une
+    // sauvegarde lente, pas une sauvegarde fausse.
+    if let Err(e) = save_index(instance_id, &fresh) {
+        tracing::warn!("[Backup] index non écrit, la prochaine sauvegarde relira tout : {e}");
+    }
     prune(instance_id, settings.keep)?;
     Ok(Some(backup))
 }
 
-/// Copie un morceau dans le dépôt, s'il n'y est pas déjà. L'écriture passe par
+/// Parcourt les dossiers retenus et rend, pour chaque fichier, son chemin de
+/// manifeste, son chemin réel et ses métadonnées — sans jamais lire son
+/// contenu. C'est ce qui permet de décider quoi relire.
+#[allow(clippy::type_complexity)]
+fn walk_selected(root: &Path, includes: &[String]) -> std::io::Result<Vec<(String, PathBuf, std::fs::Metadata)>> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf, std::fs::Metadata)>) -> std::io::Result<()> {
+        let Ok(entries) = std::fs::read_dir(dir) else { return Ok(()) };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // Jamais de lien symbolique : à la restauration, il écrirait hors
+            // du dossier de l'instance.
+            let meta = std::fs::symlink_metadata(&path)?;
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if NEVER.iter().any(|s| s.eq_ignore_ascii_case(&name)) {
+                continue;
+            }
+            if meta.is_dir() {
+                walk(root, &path, out)?;
+            } else if meta.is_file() {
+                if let Some(rel) = relative_path(root, &path) {
+                    out.push((rel, path, meta));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    let mut out = Vec::new();
+    for dir in includes {
+        let start = root.join(dir);
+        if start.is_dir() {
+            walk(root, &start, &mut out)?;
+        }
+    }
+    Ok(out)
+}
+
+/// Chemin de manifeste (« saves/Monde/level.dat »), ou `None` si le chemin
+/// sort de la racine ou n'est pas représentable.
+fn relative_path(root: &Path, file: &Path) -> Option<String> {
+    let mut parts = Vec::new();
+    for part in file.strip_prefix(root).ok()?.components() {
+        match part {
+            std::path::Component::Normal(p) => parts.push(p.to_str()?.to_string()),
+            _ => return None,
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+/// Écrit un morceau dans le dépôt, s'il n'y est pas déjà. L'écriture passe par
 /// un fichier temporaire : un morceau à moitié écrit porterait le nom d'une
 /// empreinte qu'il ne respecte pas, et serait pris pour bon à jamais.
-fn store_chunk(source: &Path, index: usize, sha: &str) -> std::io::Result<()> {
+fn store_chunk(sha: &str, data: &[u8]) -> std::io::Result<()> {
     let target = object_path(sha);
     if target.exists() {
         return Ok(());
@@ -171,26 +315,19 @@ fn store_chunk(source: &Path, index: usize, sha: &str) -> std::io::Result<()> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let data = read_chunk(source, index)?;
-    let temp = target.with_extension("part");
-    std::fs::write(&temp, &data)?;
-    std::fs::rename(&temp, &target)
-}
-
-fn read_chunk(file: &Path, index: usize) -> std::io::Result<Vec<u8>> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut handle = std::fs::File::open(file)?;
-    handle.seek(SeekFrom::Start((index * chunks::CHUNK_SIZE) as u64))?;
-    let mut buffer = vec![0u8; chunks::CHUNK_SIZE];
-    let mut filled = 0;
-    while filled < chunks::CHUNK_SIZE {
-        match handle.read(&mut buffer[filled..])? {
-            0 => break,
-            n => filled += n,
+    // Nom temporaire unique : deux sauvegardes d'instances différentes peuvent
+    // écrire le même morceau en même temps, et se marcher dessus.
+    let temp = target.with_extension(format!("part{}", std::process::id()));
+    std::fs::write(&temp, data)?;
+    match std::fs::rename(&temp, &target) {
+        // L'autre l'a posé entre-temps : le contenu est identique par
+        // construction, il n'y a rien à réparer.
+        Err(_) if target.exists() => {
+            let _ = std::fs::remove_file(&temp);
+            Ok(())
         }
+        other => other,
     }
-    buffer.truncate(filled);
-    Ok(buffer)
 }
 
 fn write_manifest(backup: &Backup) -> std::io::Result<()> {
@@ -286,6 +423,12 @@ pub fn restore(backup: &Backup, game_dir: &Path, replace: bool) -> std::io::Resu
 
 /// Ne garde que les `keep` sauvegardes les plus récentes de l'instance.
 /// `keep = 0` ne supprime rien : c'est « garder tout », pas « tout jeter ».
+///
+/// Ne fait **pas** le ménage du dépôt. C'est délibéré : `prune` est appelé à
+/// chaque sauvegarde, y compris juste avant un lancement, et un ramassage
+/// relit tous les manifestes de toutes les instances. On paierait ce prix à
+/// chaque partie pour libérer quelques morceaux qui ne gênent personne. Le
+/// ménage se fait à la suppression explicite et par le bouton dédié.
 pub fn prune(instance_id: &str, keep: u32) -> std::io::Result<usize> {
     if keep == 0 {
         return Ok(0);
@@ -299,7 +442,6 @@ pub fn prune(instance_id: &str, keep: u32) -> std::io::Result<usize> {
         std::fs::remove_file(manifests_dir(instance_id).join(format!("{}.json", old.id)))?;
         removed += 1;
     }
-    collect_garbage();
     Ok(removed)
 }
 
@@ -318,7 +460,16 @@ pub fn delete(instance_id: &str, backup_id: &str) -> std::io::Result<()> {
 /// Lancé après chaque suppression : sans lui, le dépôt ne ferait que grossir,
 /// et l'intérêt du partage de morceaux se retournerait contre la personne.
 pub fn collect_garbage() -> u64 {
-    let referenced: HashSet<String> = list_all().iter().flat_map(|b| b.files.iter().flat_map(|f| f.chunks.clone())).collect();
+    // Les index comptent autant que les manifestes : ils réutilisent les
+    // morceaux d'une sauvegarde à l'autre, et les effacer sous leurs pieds
+    // ferait relire tout le monde à la sauvegarde suivante.
+    let mut referenced: HashSet<String> = list_all().iter().flat_map(|b| b.files.iter().flat_map(|f| f.chunks.clone())).collect();
+    if let Ok(dirs) = std::fs::read_dir(root().join("instances")) {
+        for dir in dirs.flatten().filter(|e| e.path().is_dir()) {
+            let index = load_index(&dir.file_name().to_string_lossy());
+            referenced.extend(index.into_values().flat_map(|k| k.chunks));
+        }
+    }
     let mut freed = 0;
     let Ok(prefixes) = std::fs::read_dir(objects_dir()) else { return 0 };
     for prefix in prefixes.flatten() {
@@ -403,6 +554,50 @@ mod tests {
         for noise in ["logs", "crash-reports", "cache"] {
             assert!(NEVER.contains(&noise));
         }
+    }
+
+    fn known(mtime: i64, size: i64) -> Known {
+        Known { mtime, size, chunks: vec!["a".repeat(64), "b".repeat(64)] }
+    }
+
+    #[test]
+    fn an_untouched_file_is_never_read_again() {
+        let k = known(1000, 42);
+        assert!(reusable(Some(&k), 1000, 42, |_| true).is_some(), "même date, même taille, morceaux présents");
+    }
+
+    #[test]
+    fn a_touched_file_is_read_again() {
+        let k = known(1000, 42);
+        assert!(reusable(Some(&k), 1001, 42, |_| true).is_none(), "la date a bougé");
+        assert!(reusable(Some(&k), 1000, 43, |_| true).is_none(), "la taille a bougé");
+        assert!(reusable(None, 1000, 42, |_| true).is_none(), "jamais vu");
+    }
+
+    #[test]
+    fn a_pruned_chunk_forces_a_reread() {
+        // Le cas dangereux : le fichier n'a pas bougé, mais l'élagage a
+        // emporté ses morceaux. Réutiliser ses empreintes écrirait un
+        // manifeste irrestaurable.
+        let k = known(1000, 42);
+        let missing_second = |sha: &str| sha.starts_with('a');
+        assert!(reusable(Some(&k), 1000, 42, missing_second).is_none());
+    }
+
+    #[test]
+    fn the_index_survives_a_round_trip() {
+        let mut index = Index::new();
+        index.insert("saves/Monde/level.dat".into(), known(1700, 512));
+        let json = serde_json::to_vec(&index).unwrap();
+        let back: Index = serde_json::from_slice(&json).unwrap();
+        assert_eq!(back["saves/Monde/level.dat"].chunks.len(), 2);
+    }
+
+    #[test]
+    fn manifest_paths_stay_inside_the_instance() {
+        let root = Path::new("C:/instances/coco");
+        assert_eq!(relative_path(root, Path::new("C:/instances/coco/saves/M/level.dat")).as_deref(), Some("saves/M/level.dat"));
+        assert!(relative_path(root, Path::new("C:/instances/autre/level.dat")).is_none());
     }
 
     #[test]

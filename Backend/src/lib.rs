@@ -361,6 +361,8 @@ pub fn run() {
             commands::sync::push_pull::sync_push_instance,
             commands::sync::push_pull::sync_pull_instance,
             commands::sync::push_pull::sync_delete_instance,
+            commands::sync::push_pull::sync_manifest,
+            commands::sync::push_pull::sync_diff,
             commands::sync::stats::stats_get,
             commands::sync::stats::stats_clear,
             commands::backup::backup_list,

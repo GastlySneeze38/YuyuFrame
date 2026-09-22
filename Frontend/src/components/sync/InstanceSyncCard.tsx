@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
@@ -10,7 +11,7 @@ import { showError, showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
-import { SNAP, pressIf } from '@/lib/motion'
+import { SNAP, press, pressIf } from '@/lib/motion'
 import { useT } from '@/i18n'
 
 interface InstanceSyncCardProps {
@@ -24,6 +25,7 @@ export function InstanceSyncCard({
   instance, cloudEntry, onCloudUpdate, onCloudDelete,
 }: InstanceSyncCardProps) {
   const t = useT()
+  const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
   const [pushing, setPushing] = useState(false)
   const [pulling, setPulling] = useState(false)
@@ -170,6 +172,19 @@ export function InstanceSyncCard({
           {hasSynced && cloudEntry && (
             <>
               <CloudContentSummary cloudEntry={cloudEntry} />
+              {/* Le résumé dit combien ; la page dit quoi. Un panneau
+                  dépliant ne peut pas montrer deux mille chemins, et
+                  personne ne devrait avoir à deviner ce qu'il a envoyé. */}
+              <motion.button
+                {...press}
+                onClick={() => navigate(`/sync/${cloudEntry.id}`)}
+                className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2 text-left transition-colors duration-150 hover:border-accent/40 hover:bg-accent/5"
+              >
+                <span className="text-[11.5px] font-semibold text-txt-secondary">{t('sync.openDetail')}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-3.5 w-3.5 text-txt-muted">
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </motion.button>
               <div className="h-px bg-[rgba(255,255,255,0.05)]" />
             </>
           )}
