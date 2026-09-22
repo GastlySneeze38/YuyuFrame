@@ -27,8 +27,9 @@ use crate::state::SharedState;
 use crate::sync::chunks::{self, FileEntry, Manifest, Progress};
 
 /// Ce qui part dans la sync. Volontairement court : la configuration d'un
-/// modpack et ses mods, rien d'autre.
-const SYNCED: [&str; 4] = ["mods", "config", "resourcepacks", "shaderpacks"];
+/// modpack et ses mods, rien d'autre. `.yuyuframe` porte le document des mods
+/// référencés (voir `crate::sync::mods`).
+const SYNCED: [&str; 5] = ["mods", "config", "resourcepacks", "shaderpacks", ".yuyuframe"];
 
 /// Jamais synchronisé, même à l'intérieur d'un dossier ci-dessus : ce sont
 /// des fichiers que chaque PC régénère, et qui changent à chaque lancement.
@@ -111,23 +112,43 @@ pub async fn sync_push_instance(
     let (name, mc_version, loader, ram_mb) = instance_meta(&state, &instance_id).await?;
     let root = instance_dir(&instance_id);
 
-    // 1. Le manifeste local. Lire et hacher toute une instance prend du temps :
-    //    sur un fil bloquant, jamais sur le runtime.
-    progress(&app, "scanning", 2, "Analyse des fichiers…".into());
+    // 1. Les mods reconnus par Modrinth partent en référence, pas en contenu :
+    //    un dossier de modpack de 2 Gio devient quelques dizaines de kilo-
+    //    octets. Ce qui n'est reconnu nulle part reste envoyé tel quel — sinon
+    //    on le perdrait (voir `crate::sync::mods`).
+    progress(&app, "scanning", 2, "Identification des mods…".into());
+    let http = state.read().await.http.clone();
+    let (doc, referenced) = crate::sync::mods::resolve(&http, &root).await;
+    let referenced_count = doc.mods.len();
+    {
+        let (root, doc) = (root.clone(), doc.clone());
+        tokio::task::spawn_blocking(move || crate::sync::mods::write_doc(&root, &doc))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("Écriture du document des mods impossible : {e}"))?;
+    }
+
+    // 2. Le manifeste local, moins les mods référencés. Lire et hacher toute
+    //    une instance prend du temps : sur un fil bloquant, jamais sur le
+    //    runtime.
+    progress(&app, "scanning", 4, "Analyse des fichiers…".into());
     let scan_root = root.clone();
     let files: Vec<FileEntry> = tokio::task::spawn_blocking(move || {
         chunks::scan(&scan_root, &SYNCED.map(String::from), &NEVER)
     })
     .await
     .map_err(|e| e.to_string())?
-    .map_err(|e| format!("Lecture de l'instance impossible : {e}"))?;
+    .map_err(|e| format!("Lecture de l'instance impossible : {e}"))?
+    .into_iter()
+    .filter(|f| !referenced.contains(&f.path))
+    .collect();
 
     if files.is_empty() {
         return Err("Rien à synchroniser : cette instance n'a ni mods ni configuration.".into());
     }
     let total: i64 = files.iter().map(|f| f.size).sum();
 
-    // 2. L'instance côté serveur (quotas vérifiés là-bas). Zéro sauvegarde :
+    // 3. L'instance côté serveur (quotas vérifiés là-bas). Zéro sauvegarde :
     //    les mondes ne passent pas par ici.
     let created = api::post(
         &state,
@@ -145,14 +166,14 @@ pub async fn sync_push_instance(
     .map_err(String::from)?;
     let remote: SyncInstance = serde_json::from_value(created).map_err(|e| e.to_string())?;
 
-    // 3. Ce qui manque au serveur.
+    // 4. Ce qui manque au serveur.
     progress(&app, "comparing", 6, format!("{} fichiers, {} au total", files.len(), human(total)));
     let missing_resp = api::post(&state, &format!("/sync/instances/{}/missing", remote.id), json!({ "files": files }))
         .await
         .map_err(String::from)?;
     let missing: Vec<String> = serde_json::from_value(missing_resp.get("missing").cloned().unwrap_or_default()).map_err(|e| e.to_string())?;
 
-    // 4. Les morceaux manquants seulement.
+    // 5. Les morceaux manquants seulement.
     if missing.is_empty() {
         progress(&app, "uploading", 90, "Déjà à jour sur le serveur".into());
     } else {
@@ -168,7 +189,7 @@ pub async fn sync_push_instance(
         chunks::upload_missing(&state, &root, &files, &missing, &report).await.map_err(String::from)?;
     }
 
-    // 5. Valider. `base_revision` : si un autre PC a envoyé entre-temps, le
+    // 6. Valider. `base_revision` : si un autre PC a envoyé entre-temps, le
     //    serveur refuse (409) plutôt que d'écraser son travail.
     progress(&app, "uploading", 99, "Finalisation…".into());
     let committed = api::put(
@@ -179,7 +200,16 @@ pub async fn sync_push_instance(
     .await
     .map_err(String::from)?;
 
-    progress(&app, "done", 100, format!("Instance synchronisée ({})", human(total)));
+    progress(
+        &app,
+        "done",
+        100,
+        if referenced_count > 0 {
+            format!("Instance synchronisée — {} envoyés, {referenced_count} mods référencés", human(total))
+        } else {
+            format!("Instance synchronisée ({})", human(total))
+        },
+    );
     serde_json::from_value(committed).map_err(|e| e.to_string())
 }
 
@@ -219,12 +249,34 @@ pub async fn sync_pull_instance(
     };
     chunks::download(&state, &root, &manifest.files, &report).await.map_err(String::from)?;
 
+    // Les mods référencés se retéléchargent depuis leur source au lieu d'avoir
+    // occupé le quota. Le document vient d'arriver avec le manifeste.
+    let doc = {
+        let root = root.clone();
+        tokio::task::spawn_blocking(move || crate::sync::mods::read_doc(&root)).await.map_err(|e| e.to_string())?
+    };
+    let mut installed = 0;
+    if let Some(doc) = &doc {
+        if !doc.mods.is_empty() {
+            let http = state.read().await.http.clone();
+            let app_mods = app.clone();
+            let report = move |done: usize, total: usize, file: &str| {
+                let percent = if total > 0 { ((done * 99) / total).clamp(0, 99) as u8 } else { 99 };
+                progress(&app_mods, "installing_mods", percent, format!("Installation des mods — {done}/{total} · {file}"));
+            };
+            installed = crate::sync::mods::install(&http, &root, doc, &report).await.map_err(String::from)?;
+        }
+    }
+
     // Ce qui n'est plus dans le manifeste part : sans ça, un mod retiré sur
     // l'autre PC resterait ici et continuerait de casser le jeu. Limité aux
     // dossiers synchronisés — on ne touche jamais aux mondes.
     let removed = tokio::task::spawn_blocking({
         let root = root.clone();
-        let kept: std::collections::HashSet<String> = manifest.files.iter().map(|f| f.path.clone()).collect();
+        let mut kept: std::collections::HashSet<String> = manifest.files.iter().map(|f| f.path.clone()).collect();
+        // Les mods référencés ne sont PAS dans le manifeste : sans cette
+        // ligne, le ménage effacerait exactement ce qu'on vient d'installer.
+        kept.extend(doc.iter().flat_map(|d| d.mods.iter().map(|m| format!("mods/{}", m.file))));
         move || prune(&root, &kept)
     })
     .await
@@ -236,10 +288,15 @@ pub async fn sync_pull_instance(
         100,
         // La révision est affichée : c'est elle qu'on compare entre deux PC
         // quand quelqu'un se demande lequel est en retard.
-        if removed > 0 {
-            format!("{} fichiers récupérés, {removed} retiré(s) — révision {}", manifest.files.len(), manifest.revision)
-        } else {
-            format!("{} fichiers récupérés — révision {}", manifest.files.len(), manifest.revision)
+        {
+            let mut parts = vec![format!("{} fichiers récupérés", manifest.files.len())];
+            if installed > 0 {
+                parts.push(format!("{installed} mods installés"));
+            }
+            if removed > 0 {
+                parts.push(format!("{removed} retiré(s)"));
+            }
+            format!("{} — révision {}", parts.join(", "), manifest.revision)
         },
     );
     Ok(())
@@ -272,6 +329,44 @@ fn prune(root: &std::path::Path, kept: &std::collections::HashSet<String>) -> us
 #[tauri::command]
 pub async fn sync_manifest(state: tauri::State<'_, SharedState>, sync_id: i64) -> Result<Value, String> {
     api::get(&state, &format!("/sync/instances/{sync_id}/manifest"), &[]).await.map_err(String::from)
+}
+
+/// Un mod référencé, tel que la page de détail l'affiche.
+#[derive(serde::Serialize)]
+pub struct ReferencedMod {
+    pub file: String,
+    pub project_id: String,
+    pub size: i64,
+    pub enabled: bool,
+}
+
+/// Les mods que l'instance synchronisée référence sans les stocker.
+///
+/// Indispensable à la page de détail : depuis qu'ils voyagent en référence,
+/// ils ne sont plus dans l'arborescence des fichiers. Une page qui prétend
+/// montrer « tout ce qui est sauvegardé » en les cachant serait pire que
+/// l'ancien panneau.
+#[tauri::command]
+pub async fn sync_referenced_mods(state: tauri::State<'_, SharedState>, sync_id: i64) -> Result<Vec<ReferencedMod>, String> {
+    let value = api::get(&state, &format!("/sync/instances/{sync_id}/manifest"), &[]).await.map_err(String::from)?;
+    let manifest: Manifest = serde_json::from_value(value).map_err(|e| e.to_string())?;
+
+    let Some(entry) = manifest.files.iter().find(|f| f.path == crate::sync::mods::DOC_PATH) else {
+        // Instance envoyée par un launcher d'avant le référencement : ses mods
+        // sont dans le manifeste, la page les montrera dans l'arborescence.
+        return Ok(Vec::new());
+    };
+    let Some(sha) = entry.chunks.first() else { return Ok(Vec::new()) };
+
+    let bytes = api::get_bytes(&state, &format!("/sync/chunks/{sha}"), std::time::Duration::from_secs(60))
+        .await
+        .map_err(String::from)?;
+    let doc: crate::sync::mods::ModsDoc = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    Ok(doc
+        .mods
+        .iter()
+        .map(|m| ReferencedMod { file: m.file.clone(), project_id: m.project_id.clone(), size: m.size, enabled: m.enabled() })
+        .collect())
 }
 
 /// Un fichier qui diffère entre le PC et le serveur.

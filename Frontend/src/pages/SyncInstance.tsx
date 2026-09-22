@@ -16,7 +16,7 @@ import { formatBytes, formatRelativeTime } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
 import { SNAP, listItemVariants, listVariants, press } from '@/lib/motion'
 import { useT } from '@/i18n'
-import type { SyncDiff, SyncInstance as SyncInstanceType, SyncManifest, SyncProgress } from '@/types'
+import type { ReferencedMod, SyncDiff, SyncInstance as SyncInstanceType, SyncManifest, SyncProgress } from '@/types'
 
 /**
  * Une instance synchronisée, en détail.
@@ -58,6 +58,7 @@ export default function SyncInstancePage() {
 
   const [remote, setRemote] = useState<SyncInstanceType | null>(null)
   const [manifest, setManifest] = useState<SyncManifest | null>(null)
+  const [mods, setMods] = useState<ReferencedMod[]>([])
   const [diff, setDiff] = useState<SyncDiff | null>(null)
   const [loading, setLoading] = useState(true)
   const [comparing, setComparing] = useState(false)
@@ -71,9 +72,16 @@ export default function SyncInstancePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [list, m] = await Promise.all([api.sync.list(), api.sync.manifest(id)])
+      const [list, m, refs] = await Promise.all([
+        api.sync.list(),
+        api.sync.manifest(id),
+        // Une instance envoyée par un launcher d'avant le référencement n'en
+        // a pas : la liste vide est un cas normal, pas une erreur.
+        api.sync.referencedMods(id).catch(() => [] as ReferencedMod[]),
+      ])
       setRemote(list.find((x) => x.id === id) ?? null)
       setManifest(m)
+      setMods(refs)
     } catch (e) {
       showError(errorMessage(e))
     } finally {
@@ -246,6 +254,8 @@ export default function SyncInstancePage() {
                 )}
               </div>
 
+              {mods.length > 0 && <ReferencedMods mods={mods} />}
+
               <FileTree files={manifest.files} />
 
               <div className="flex items-center justify-between gap-3 pb-2">
@@ -258,6 +268,66 @@ export default function SyncInstancePage() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Mods référencés ──────────────────────────────────────────────────────────
+
+/**
+ * Les mods que le serveur ne stocke pas.
+ *
+ * Ils ne sont plus dans l'arborescence depuis qu'ils voyagent en référence :
+ * les cacher ferait mentir la page. Le poids affiché est celui qu'ils
+ * occuperaient — c'est la place qu'on ne prend pas sur le quota.
+ */
+function ReferencedMods({ mods }: { mods: ReferencedMod[] }) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const saved = mods.reduce((sum, m) => sum + m.size, 0)
+  const disabled = mods.filter((m) => !m.enabled).length
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[12.5px] font-semibold">{t('sync.referencedTitle', { count: mods.length })}</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-txt-muted">
+            {t('sync.referencedText', { size: formatBytes(saved) })}
+            {disabled > 0 && ` · ${t('sync.referencedDisabled', { count: disabled })}`}
+          </p>
+        </div>
+        <motion.button
+          {...press}
+          onClick={() => setOpen((v) => !v)}
+          className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-[11px] font-semibold text-txt-secondary transition-colors duration-150 hover:text-txt-primary"
+        >
+          {open ? t('sync.showLess') : t('sync.referencedSee')}
+        </motion.button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="max-h-64 overflow-y-auto border-t border-line-soft pt-2">
+              {mods.map((m) => (
+                <div key={m.file} className="flex items-center gap-2 px-1 py-1">
+                  <span className={`min-w-0 flex-1 truncate font-mono text-[10.5px] ${m.enabled ? 'text-txt-secondary' : 'text-txt-muted line-through'}`}>
+                    {m.file}
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-txt-muted">{formatBytes(m.size)}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

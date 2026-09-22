@@ -188,6 +188,15 @@ export interface Account {
   is_offline: boolean
 }
 
+/** Un mod synchronisé par référence : le serveur n'en stocke pas le contenu,
+ *  seulement de quoi le retélécharger. */
+export interface ReferencedMod {
+  file: string
+  project_id: string
+  size: number
+  enabled: boolean
+}
+
 /** Un fichier du manifeste : son chemin, sa taille, ses morceaux. */
 export interface SyncFile {
   path: string

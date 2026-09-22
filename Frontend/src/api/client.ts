@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -341,6 +341,8 @@ export const api = {
     manifest: (syncId: number) => invoke<SyncManifest>('sync_manifest', { syncId }),
     /** Ce qui changerait si on envoyait maintenant, sans rien envoyer. */
     diff: (syncId: number, instanceId: string) => invoke<SyncDiff>('sync_diff', { syncId, instanceId }),
+    /** Les mods référencés : stockés comme une liste, pas comme des jars. */
+    referencedMods: (syncId: number) => invoke<ReferencedMod[]>('sync_referenced_mods', { syncId }),
   },
 
   /** Sauvegardes d'instance (voir `types/backup.ts`). Locales par défaut ;

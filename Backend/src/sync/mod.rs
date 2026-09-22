@@ -13,3 +13,4 @@
 //! fusionner quoi que ce soit.
 
 pub mod chunks;
+pub mod mods;
