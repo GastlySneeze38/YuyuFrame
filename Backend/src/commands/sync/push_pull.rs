@@ -1,225 +1,189 @@
+//! Synchronisation d'une instance entre plusieurs PC.
+//!
+//! Réécrite le 2026-09-21 sur le protocole par morceaux de `/v1/sync`. Avant,
+//! le launcher compressait toute l'instance dans un zip et l'envoyait d'un
+//! bloc : la moindre coupure repartait de zéro, et un modpack de 2 Gio
+//! saturait le serveur à chaque petit changement. Maintenant seuls les
+//! morceaux que le serveur n'a pas encore partent — changer un mod envoie ce
+//! mod, pas l'instance.
+//!
+//! **Les mondes ne sont pas synchronisés.** C'est une décision, pas un oubli :
+//! deux PC sur lesquels on a joué donnent deux versions d'un même monde, et
+//! aucune fusion n'a de sens. Les mondes relèvent du backup (voir
+//! `crate::backup`), qui empile des versions datées au lieu de prétendre
+//! réconcilier.
+//!
+//! Aucun jeton n'est manipulé ici : tout passe par `crate::api`, qui
+//! rafraîchit de lui-même — indispensable sur un envoi qui dure plus de
+//! quinze minutes.
+
+use serde_json::json;
 use tauri::Emitter;
 
-use crate::commands::{bearer_call_error, network_err};
-use crate::state::SharedState;
 use super::super::instance::crud::instance_dir;
-use super::archive::{
-    api_base, build_instance_zip_with_progress, dir_size, extract_zip_to_instance, get_token,
-    list_mods_raw, modrinth_lookup_batch, read_modpack_ref, require_premium, ModManifest,
-    ModManifestEntry, SaveInfo, SyncInstance, SyncProgressEvent,
-};
+use super::archive::{dir_size, SaveInfo, SyncInstance, SyncProgressEvent};
+use crate::api;
+use crate::state::SharedState;
+use crate::sync::chunks::{self, FileEntry, Manifest, Progress};
 
+/// Ce qui part dans la sync. Volontairement court : la configuration d'un
+/// modpack et ses mods, rien d'autre.
+const SYNCED: [&str; 4] = ["mods", "config", "resourcepacks", "shaderpacks"];
+
+/// Jamais synchronisé, même à l'intérieur d'un dossier ci-dessus : ce sont
+/// des fichiers que chaque PC régénère, et qui changent à chaque lancement.
+const NEVER: [&str; 5] = ["logs", "crash-reports", "cache", ".git", "natives"];
+
+fn progress(app: &tauri::AppHandle, phase: &str, percent: u8, label: String) {
+    let _ = app.emit("sync_progress", SyncProgressEvent { phase: phase.into(), percent, label });
+}
+
+/// Pourcentage d'un transfert, borné à 99 : le 100 est réservé à la fin
+/// réelle, pas à la fin de l'envoi des octets.
+fn percent_of(p: Progress) -> u8 {
+    if p.total_bytes <= 0 {
+        return 99;
+    }
+    ((p.done_bytes * 99) / p.total_bytes).clamp(0, 99) as u8
+}
+
+fn human(bytes: i64) -> String {
+    const UNITS: [&str; 4] = ["o", "Ko", "Mo", "Go"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    format!("{value:.1} {}", UNITS[unit])
+}
+
+// ── Lecture ──────────────────────────────────────────────────────────────────
+
+/// Les mondes de l'instance. Toujours là malgré la sortie des mondes du
+/// périmètre : c'est le backup qui s'en sert désormais pour proposer quoi
+/// sauvegarder.
 #[tauri::command]
 pub async fn sync_list_saves(instance_id: String) -> Result<Vec<SaveInfo>, String> {
     let saves_dir = instance_dir(&instance_id).join("saves");
-    if !saves_dir.is_dir() {
-        return Ok(vec![]);
-    }
-
-    let mut saves: Vec<SaveInfo> = std::fs::read_dir(&saves_dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .filter_map(|e| {
-            let path = e.path();
-            let name = path.file_name()?.to_str()?.to_string();
-            let meta = std::fs::metadata(&path).ok()?;
-            let updated_at = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-            let size_bytes = dir_size(&path);
-            Some(SaveInfo { name, updated_at, size_bytes })
-        })
-        .collect();
-
-    saves.sort_by_key(|s| std::cmp::Reverse(s.updated_at));
-    Ok(saves)
+    tokio::task::spawn_blocking(move || {
+        if !saves_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+        let mut saves: Vec<SaveInfo> = std::fs::read_dir(&saves_dir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| {
+                let path = e.path();
+                let name = path.file_name()?.to_str()?.to_string();
+                let updated_at = std::fs::metadata(&path)
+                    .ok()?
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                Some(SaveInfo { name, updated_at, size_bytes: dir_size(&path) })
+            })
+            .collect();
+        saves.sort_by_key(|s| std::cmp::Reverse(s.updated_at));
+        Ok(saves)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub async fn sync_list_instances(
-    state: tauri::State<'_, SharedState>,
-) -> Result<Vec<SyncInstance>, String> {
-    let (token, client) = {
-        let s = state.read().await;
-        require_premium(&s)?;
-        (get_token(&s)?, s.http.clone())
-    };
-
-    let resp = client
-        .get(format!("{}/sync/instances", api_base()))
-        .bearer_auth(&token)
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        return Err(bearer_call_error(resp).await);
-    }
-
-    resp.json::<Vec<SyncInstance>>().await.map_err(|e| e.to_string())
+pub async fn sync_list_instances(state: tauri::State<'_, SharedState>) -> Result<Vec<SyncInstance>, String> {
+    let value = api::get(&state, "/sync/instances", &[]).await.map_err(String::from)?;
+    serde_json::from_value(value).map_err(|e| e.to_string())
 }
+
+// ── Envoi ────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn sync_push_instance(
     state: tauri::State<'_, SharedState>,
     app: tauri::AppHandle,
     instance_id: String,
-    save_names: Vec<String>,
 ) -> Result<SyncInstance, String> {
-    use crate::db;
+    let (name, mc_version, loader, ram_mb) = instance_meta(&state, &instance_id).await?;
+    let root = instance_dir(&instance_id);
 
-    let (token, instance, client) = {
-        let s = state.read().await;
-        require_premium(&s)?;
-        let token = get_token(&s)?;
-        let user_id = s.current_yuyu_user_id().unwrap_or(0);
-        let conn = s.db.lock().await;
-        let row = db::instance_get(&conn, &instance_id, user_id)
-            .map_err(|e| e.to_string())?
-            .ok_or("Instance introuvable")?;
-        (token, row, s.http.clone())
-    };
+    // 1. Le manifeste local. Lire et hacher toute une instance prend du temps :
+    //    sur un fil bloquant, jamais sur le runtime.
+    progress(&app, "scanning", 2, "Analyse des fichiers…".into());
+    let scan_root = root.clone();
+    let files: Vec<FileEntry> = tokio::task::spawn_blocking(move || {
+        chunks::scan(&scan_root, &SYNCED.map(String::from), &NEVER)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("Lecture de l'instance impossible : {e}"))?;
 
-    // ── Étape 1 : Construire le manifest des mods ─────────────────────────────
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "resolving_mods".into(),
-        percent: 0,
-        label: "Analyse des mods...".into(),
-    }).ok();
+    if files.is_empty() {
+        return Err("Rien à synchroniser : cette instance n'a ni mods ni configuration.".into());
+    }
+    let total: i64 = files.iter().map(|f| f.size).sum();
 
-    let inst_dir = instance_dir(&instance_id);
-    let mods_dir = inst_dir.join("mods");
+    // 2. L'instance côté serveur (quotas vérifiés là-bas). Zéro sauvegarde :
+    //    les mondes ne passent pas par ici.
+    let created = api::post(
+        &state,
+        "/sync/instances",
+        json!({
+            "instance_name": name,
+            "mc_version": mc_version,
+            "loader": loader,
+            "ram_mb": ram_mb,
+            "save_count": 0,
+            "save_names": [],
+        }),
+    )
+    .await
+    .map_err(String::from)?;
+    let remote: SyncInstance = serde_json::from_value(created).map_err(|e| e.to_string())?;
 
-    let mods_raw = tokio::task::spawn_blocking({
-        let mods_dir = mods_dir.clone();
-        move || list_mods_raw(&mods_dir)
-    }).await.unwrap_or_default();
-
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "resolving_mods".into(),
-        percent: 5,
-        label: format!("Recherche de {} mods sur Modrinth...", mods_raw.len()),
-    }).ok();
-
-    let sha1s: Vec<String> = mods_raw.iter().map(|(_, sha1, _)| sha1.clone()).collect();
-    let modrinth_map = modrinth_lookup_batch(&client, &sha1s).await;
-
-    let modpack = read_modpack_ref(&inst_dir);
-
-    let manifest_entries: Vec<ModManifestEntry> = mods_raw.iter().map(|(clean_name, sha1, enabled)| {
-        let modrinth = modrinth_map.get(sha1).map(|(pid, vid, url)| super::archive::ModrinthRef {
-            project_id: pid.clone(),
-            version_id: vid.clone(),
-            download_url: url.clone(),
-        });
-        ModManifestEntry {
-            filename: clean_name.clone(),
-            sha1: sha1.clone(),
-            enabled: *enabled,
-            modrinth,
-        }
-    }).collect();
-
-    let modrinth_count = manifest_entries.iter().filter(|m| m.modrinth.is_some()).count();
-    let manual_count = manifest_entries.len() - modrinth_count;
-
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "resolving_mods".into(),
-        percent: 10,
-        label: format!("{} mods Modrinth · {} inclus dans le ZIP", modrinth_count, manual_count),
-    }).ok();
-
-    let manifest = ModManifest {
-        format_version: 1,
-        mc_version: instance.mc_version.clone(),
-        loader: instance.loader.clone(),
-        modpack,
-        mods: manifest_entries,
-    };
-
-    // ── Étape 2 : Enregistrer les métadonnées sur le serveur ──────────────────
-    let meta_resp = client
-        .post(format!("{}/sync/instances", api_base()))
-        .bearer_auth(&token)
-        .json(&serde_json::json!({
-            "instance_name": instance.name,
-            "mc_version":    instance.mc_version,
-            "loader":        instance.loader,
-            "ram_mb":        instance.ram_mb,
-            "save_count":    save_names.len() as u32,
-            "save_names":    save_names,
-        }))
-        .send()
+    // 3. Ce qui manque au serveur.
+    progress(&app, "comparing", 6, format!("{} fichiers, {} au total", files.len(), human(total)));
+    let missing_resp = api::post(&state, &format!("/sync/instances/{}/missing", remote.id), json!({ "files": files }))
         .await
-        .map_err(network_err)?;
+        .map_err(String::from)?;
+    let missing: Vec<String> = serde_json::from_value(missing_resp.get("missing").cloned().unwrap_or_default()).map_err(|e| e.to_string())?;
 
-    if !meta_resp.status().is_success() {
-        return Err(bearer_call_error(meta_resp).await);
+    // 4. Les morceaux manquants seulement.
+    if missing.is_empty() {
+        progress(&app, "uploading", 90, "Déjà à jour sur le serveur".into());
+    } else {
+        let app_progress = app.clone();
+        let report = move |p: Progress| {
+            progress(
+                &app_progress,
+                "uploading",
+                percent_of(p),
+                format!("Envoi — {} / {} · {} fichiers", human(p.done_bytes), human(p.total_bytes), p.total_files),
+            );
+        };
+        chunks::upload_missing(&state, &root, &files, &missing, &report).await.map_err(String::from)?;
     }
 
-    let sync_inst: SyncInstance = meta_resp.json().await.map_err(|e| e.to_string())?;
-    let sync_id = sync_inst.id;
+    // 5. Valider. `base_revision` : si un autre PC a envoyé entre-temps, le
+    //    serveur refuse (409) plutôt que d'écraser son travail.
+    progress(&app, "uploading", 99, "Finalisation…".into());
+    let committed = api::put(
+        &state,
+        &format!("/sync/instances/{}/manifest", remote.id),
+        json!({ "base_revision": remote.revision, "files": files }),
+    )
+    .await
+    .map_err(String::from)?;
 
-    // ── Étape 3 : Compression avec progression ────────────────────────────────
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<SyncProgressEvent>(128);
-    let dir = inst_dir.clone();
-    let save_names_clone = save_names.clone();
-    let manifest_clone = manifest.clone();
-
-    let zip_task = tokio::task::spawn_blocking(move || {
-        build_instance_zip_with_progress(dir, save_names_clone, manifest_clone, tx)
-    });
-
-    let app_progress = app.clone();
-    let forward = tokio::spawn(async move {
-        while let Some(ev) = rx.recv().await {
-            app_progress.emit("sync_progress", ev).ok();
-        }
-    });
-
-    let zip_bytes = zip_task.await.map_err(|e| e.to_string())??;
-    forward.await.ok();
-
-    // ── Étape 4 : Upload ──────────────────────────────────────────────────────
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "uploading".into(),
-        percent: 55,
-        label: "Envoi vers le cloud...".into(),
-    }).ok();
-
-    // Timeout par requête plus large que le défaut du client partagé (30s) :
-    // ce transfert peut atteindre 200 Mo, largement au-delà de ce qu'un appel
-    // API classique (auth, métadonnées) doit jamais prendre.
-    let data_resp = client
-        .post(format!("{}/sync/instances/{}/data", api_base(), sync_id))
-        .bearer_auth(&token)
-        .header("Content-Type", "application/octet-stream")
-        .timeout(std::time::Duration::from_secs(300))
-        .body(zip_bytes)
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !data_resp.status().is_success() {
-        return Err(bearer_call_error(data_resp).await);
-    }
-
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "done".into(),
-        percent: 100,
-        label: "Synchronisé !".into(),
-    }).ok();
-
-    let result: SyncInstance = data_resp.json().await.map_err(|e| e.to_string())?;
-    crate::integrations::analytics::capture("sync_push_succeeded", serde_json::json!({
-        "instance_id": &instance_id,
-    }));
-    Ok(result)
+    progress(&app, "done", 100, format!("Instance synchronisée ({})", human(total)));
+    serde_json::from_value(committed).map_err(|e| e.to_string())
 }
+
+// ── Récupération ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn sync_pull_instance(
@@ -228,166 +192,119 @@ pub async fn sync_pull_instance(
     sync_id: i64,
     instance_id: String,
 ) -> Result<(), String> {
-    let (token, client) = {
-        let s = state.read().await;
-        require_premium(&s)?;
-        (get_token(&s)?, s.http.clone())
+    let root = instance_dir(&instance_id);
+    tokio::fs::create_dir_all(&root).await.map_err(|e| e.to_string())?;
+
+    progress(&app, "comparing", 4, "Lecture du manifeste…".into());
+    let value = api::get(&state, &format!("/sync/instances/{sync_id}/manifest"), &[]).await.map_err(String::from)?;
+    let manifest: Manifest = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    if manifest.files.is_empty() {
+        return Err("Cette instance n'a encore rien de synchronisé.".into());
+    }
+
+    let app_progress = app.clone();
+    let report = move |p: Progress| {
+        progress(
+            &app_progress,
+            "downloading",
+            percent_of(p),
+            format!(
+                "Téléchargement — {} / {} · fichier {}/{}",
+                human(p.done_bytes),
+                human(p.total_bytes),
+                p.done_files + 1,
+                p.total_files
+            ),
+        );
     };
+    chunks::download(&state, &root, &manifest.files, &report).await.map_err(String::from)?;
 
-    // ── Étape 1 : Télécharger le ZIP ─────────────────────────────────────────
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "downloading".into(),
-        percent: 5,
-        label: "Téléchargement depuis le cloud...".into(),
-    }).ok();
+    // Ce qui n'est plus dans le manifeste part : sans ça, un mod retiré sur
+    // l'autre PC resterait ici et continuerait de casser le jeu. Limité aux
+    // dossiers synchronisés — on ne touche jamais aux mondes.
+    let removed = tokio::task::spawn_blocking({
+        let root = root.clone();
+        let kept: std::collections::HashSet<String> = manifest.files.iter().map(|f| f.path.clone()).collect();
+        move || prune(&root, &kept)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
-    // Timeout par requête plus large que le défaut du client partagé (30s) —
-    // même raison que sync_push_instance : jusqu'à 200 Mo à transférer.
-    let resp = client
-        .get(format!("{}/sync/instances/{}/data", api_base(), sync_id))
-        .bearer_auth(&token)
-        .timeout(std::time::Duration::from_secs(300))
-        .send()
-        .await
-        .map_err(network_err)?;
-
-    if !resp.status().is_success() {
-        return Err(bearer_call_error(resp).await);
-    }
-
-    let zip_bytes = resp.bytes().await.map_err(|e| e.to_string())?.to_vec();
-
-    // ── Étape 2 : Extraction ──────────────────────────────────────────────────
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "downloading".into(),
-        percent: 35,
-        label: "Extraction des fichiers...".into(),
-    }).ok();
-
-    let dir = instance_dir(&instance_id);
-    let dir_clone = dir.clone();
-
-    tokio::task::spawn_blocking(move || extract_zip_to_instance(zip_bytes, dir_clone))
-        .await
-        .map_err(|e| e.to_string())??;
-
-    // ── Étape 3 : Installer les mods depuis le manifest ───────────────────────
-    let mut failed_mods: Vec<String> = Vec::new();
-    let manifest_path = dir.join("mods.json");
-    if manifest_path.exists() {
-        let manifest_json = tokio::fs::read_to_string(&manifest_path)
-            .await
-            .map_err(|e| e.to_string())?;
-        tokio::fs::remove_file(&manifest_path).await.ok();
-
-        let manifest: ModManifest = serde_json::from_str(&manifest_json)
-            .map_err(|e| format!("Manifest invalide : {e}"))?;
-
-        let modrinth_mods: Vec<&ModManifestEntry> = manifest.mods.iter()
-            .filter(|m| m.modrinth.is_some())
-            .collect();
-
-        let total = modrinth_mods.len();
-        if total > 0 {
-            let mods_dir = dir.join("mods");
-            tokio::fs::create_dir_all(&mods_dir).await.ok();
-
-            for (i, entry) in modrinth_mods.iter().enumerate() {
-                let modrinth = entry.modrinth.as_ref().unwrap();
-                let percent = 45u8.saturating_add((i * 50 / total.max(1)) as u8);
-
-                app.emit("sync_progress", SyncProgressEvent {
-                    phase: "installing_mods".into(),
-                    percent,
-                    label: format!("Mods {}/{} — {}", i + 1, total, entry.filename),
-                }).ok();
-
-                // Validation URL (CDN Modrinth uniquement)
-                if !modrinth.download_url.starts_with("https://cdn.modrinth.com/") {
-                    tracing::warn!("[Sync] URL non-Modrinth ignorée pour {} : {}", entry.filename, modrinth.download_url);
-                    failed_mods.push(entry.filename.clone());
-                    continue;
-                }
-
-                let dl_resp = match client.get(&modrinth.download_url).send().await {
-                    Ok(r) => r,
-                    Err(e) => {
-                        tracing::warn!("[Sync] téléchargement de {} échoué : {}", entry.filename, e);
-                        failed_mods.push(entry.filename.clone());
-                        continue;
-                    }
-                };
-                if !dl_resp.status().is_success() {
-                    tracing::warn!("[Sync] téléchargement de {} échoué : HTTP {}", entry.filename, dl_resp.status());
-                    failed_mods.push(entry.filename.clone());
-                    continue;
-                }
-                let bytes = match dl_resp.bytes().await {
-                    Ok(b) => b,
-                    Err(e) => {
-                        tracing::warn!("[Sync] lecture du corps de réponse pour {} échouée : {}", entry.filename, e);
-                        failed_mods.push(entry.filename.clone());
-                        continue;
-                    }
-                };
-
-                let dest_name = if entry.enabled {
-                    entry.filename.clone()
-                } else {
-                    format!("{}.disabled", entry.filename)
-                };
-                if let Err(e) = tokio::fs::write(mods_dir.join(&dest_name), &bytes).await {
-                    tracing::warn!("[Sync] écriture de {} échouée : {}", entry.filename, e);
-                    failed_mods.push(entry.filename.clone());
-                }
-            }
-        }
-    }
-
-    let done_label = if failed_mods.is_empty() {
-        "Restauré !".to_string()
-    } else {
-        format!("Restauré — {} mod(s) n'ont pas pu être retéléchargés", failed_mods.len())
-    };
-    app.emit("sync_progress", SyncProgressEvent {
-        phase: "done".into(),
-        percent: 100,
-        label: done_label,
-    }).ok();
-    if !failed_mods.is_empty() {
-        let _ = app.emit("sync_pull_warning", serde_json::json!({
-            "instance_id": &instance_id,
-            "failed_mods": failed_mods,
-        }));
-    }
-
-    crate::integrations::analytics::capture("sync_pull_succeeded", serde_json::json!({
-        "instance_id": &instance_id,
-    }));
+    progress(
+        &app,
+        "done",
+        100,
+        // La révision est affichée : c'est elle qu'on compare entre deux PC
+        // quand quelqu'un se demande lequel est en retard.
+        if removed > 0 {
+            format!("{} fichiers récupérés, {removed} retiré(s) — révision {}", manifest.files.len(), manifest.revision)
+        } else {
+            format!("{} fichiers récupérés — révision {}", manifest.files.len(), manifest.revision)
+        },
+    );
     Ok(())
 }
 
+/// Supprime, dans les dossiers synchronisés, ce qui n'est plus au manifeste.
+fn prune(root: &std::path::Path, kept: &std::collections::HashSet<String>) -> usize {
+    let Ok(local) = chunks::scan(root, &SYNCED.map(String::from), &NEVER) else { return 0 };
+    let mut removed = 0;
+    for file in local {
+        if kept.contains(&file.path) {
+            continue;
+        }
+        let path = root.join(file.path.replace('/', std::path::MAIN_SEPARATOR_STR));
+        if std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[tauri::command]
-pub async fn sync_delete_instance(
-    state: tauri::State<'_, SharedState>,
-    sync_id: i64,
-) -> Result<(), String> {
-    let (token, client) = {
-        let s = state.read().await;
-        require_premium(&s)?;
-        (get_token(&s)?, s.http.clone())
-    };
+pub async fn sync_delete_instance(state: tauri::State<'_, SharedState>, sync_id: i64) -> Result<(), String> {
+    api::delete(&state, &format!("/sync/instances/{sync_id}")).await.map(|_| ()).map_err(String::from)
+}
 
-    let resp = client
-        .delete(format!("{}/sync/instances/{}", api_base(), sync_id))
-        .bearer_auth(&token)
-        .send()
-        .await
-        .map_err(network_err)?;
+// ── Détails de l'instance locale ─────────────────────────────────────────────
 
-    if !resp.status().is_success() {
-        return Err(bearer_call_error(resp).await);
+async fn instance_meta(state: &tauri::State<'_, SharedState>, instance_id: &str) -> Result<(String, String, String, u32), String> {
+    let s = state.read().await;
+    let user_id = s.current_yuyu_user_id().unwrap_or(0);
+    let db = s.db.lock().await;
+    let row = crate::db::instance_get(&db, instance_id, user_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Instance introuvable")?;
+    Ok((row.name, row.mc_version, row.loader, row.ram_mb))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worlds_are_never_part_of_the_sync() {
+        assert!(!SYNCED.contains(&"saves"), "les mondes relèvent du backup, pas de la sync");
     }
 
-    Ok(())
+    #[test]
+    fn regenerated_folders_are_left_out() {
+        for noise in ["logs", "crash-reports", "cache"] {
+            assert!(NEVER.contains(&noise), "{noise} change à chaque lancement et n'a rien à faire dans un manifeste");
+        }
+    }
+
+    #[test]
+    fn sizes_are_readable() {
+        assert_eq!(human(512), "512.0 o");
+        assert_eq!(human(1536), "1.5 Ko");
+        assert_eq!(human(3 * 1024 * 1024 * 1024), "3.0 Go");
+    }
+
+    #[test]
+    fn the_bar_never_claims_to_be_finished_early() {
+        let full = Progress { done_bytes: 100, total_bytes: 100, done_files: 1, total_files: 1 };
+        assert_eq!(percent_of(full), 99, "100 % est réservé à la fin réelle");
+        assert_eq!(percent_of(Progress { done_bytes: 0, total_bytes: 0, done_files: 0, total_files: 0 }), 99);
+    }
 }

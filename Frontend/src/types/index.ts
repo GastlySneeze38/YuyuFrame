@@ -188,16 +188,22 @@ export interface Account {
   is_offline: boolean
 }
 
+/** Forme de référence : `SyncInstance` de `LauncherAPI/src/routes/sync.rs`. */
 export interface SyncInstance {
   id: number
   instance_name: string
   mc_version: string
   loader: string
   ram_mb: number
+  /** Toujours 0 depuis que les mondes relèvent du backup et non de la sync. */
   save_count: number
   save_names: string[]
-  has_data: boolean
-  updated_at: number
+  /** Augmente à chaque envoi validé : c'est elle qui détecte un conflit. */
+  revision: number
+  total_bytes: number
+  file_count: number
+  /** ISO 8601. */
+  updated_at: string
 }
 
 export interface SaveInfo {

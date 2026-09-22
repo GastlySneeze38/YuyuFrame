@@ -29,7 +29,7 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   { key: 'sync', path: '/sync', status: 'ready', paid: true, icon: 'M7 18a5 5 0 01-.5-9.97A6 6 0 0118 8.5 4.5 4.5 0 0117.5 18H7z' },
-  { key: 'backup', status: 'soon', paid: true, icon: 'M3 7h18v4H3zM5 11v8h14v-8M10 15h4' },
+  { key: 'backup', path: '/backup', status: 'ready', icon: 'M3 7h18v4H3zM5 11v8h14v-8M10 15h4' },
   { key: 'stats', path: '/stats', status: 'ready', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
   { key: 'jvm', path: '/jvm', status: 'ready', icon: 'M4 6h16M4 12h16M4 18h10' },
   { key: 'skins', status: 'soon', icon: 'M8 3l4 2 4-2 4 3-2.5 4H16v11H8V10H5.5L3 6z' },

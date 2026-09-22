@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { SyncInstance } from '@/types'
-import { formatDateTime } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { CloudContentSummary } from './CloudContentSummary'
@@ -37,7 +36,7 @@ export function OrphanCloudCard({ ci, onRestore, onDelete }: {
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[11px] font-semibold" style={{ color: loaderColor(ci.loader) }}>{ci.loader}</span>
             <span className="text-[11px] text-[rgba(255,255,255,0.2)]">{ci.mc_version}</span>
-            <span className="text-[11px] text-[rgba(255,255,255,0.15)]">{formatDateTime(ci.updated_at)}</span>
+            <span className="text-[11px] text-[rgba(255,255,255,0.15)]">{new Date(ci.updated_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
           </div>
         </div>
         <div
@@ -56,7 +55,7 @@ export function OrphanCloudCard({ ci, onRestore, onDelete }: {
           <CloudContentSummary cloudEntry={ci} />
 
           <div className="flex gap-2">
-            {ci.has_data && (
+            {ci.file_count > 0 && (
               <button
                 onClick={async () => { setRestoring(true); await onRestore(ci); setRestoring(false) }}
                 disabled={busy}

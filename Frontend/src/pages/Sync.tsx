@@ -20,7 +20,6 @@ function SyncContent() {
   const t = useT()
   const { instances, yuyuSignedIn, isUltimate, addInstance } = useStore()
   const userIsUltimate = isUltimate()
-  const QUOTA_SAVES = userIsUltimate ? 10 : 3
 
   const [cloudInstances, setCloudInstances] = useState<SyncInstance[]>([])
   const [cloudLoading, setCloudLoading] = useState(false)
@@ -43,14 +42,6 @@ function SyncContent() {
       .catch((e) => { if (!isNetworkError(e)) showError(e) })
       .finally(() => setCloudLoading(false))
   }, [yuyuSignedIn])
-
-  const totalCloudSaves = cloudInstances.reduce((sum, ci) => sum + ci.save_count, 0)
-
-  const maxSavesForInstance = (inst: Instance) => {
-    const cloudEntry = cloudInstances.find((ci) => ci.instance_name === inst.name)
-    const ownedSaves = cloudEntry?.save_count ?? 0
-    return Math.max(0, Math.min(QUOTA_SAVES, QUOTA_SAVES - totalCloudSaves + ownedSaves))
-  }
 
   const handleCloudUpdate = (updated: SyncInstance) => {
     setCloudInstances((prev) => {
@@ -115,7 +106,6 @@ function SyncContent() {
           key={inst.id}
           instance={inst}
           cloudEntry={cloudInstances.find((ci) => ci.instance_name === inst.name)}
-          maxSaves={maxSavesForInstance(inst)}
           onCloudUpdate={handleCloudUpdate}
           onCloudDelete={handleCloudDelete}
         />
@@ -138,8 +128,8 @@ function SyncContent() {
         </div>
       )}
 
-      <p className="text-[10px] text-[rgba(255,255,255,0.1)] text-center mt-1">
-        {t('sync.quotaFooter', { quota: QUOTA_SAVES })}
+      <p className="mt-1 text-center text-[10px] text-[rgba(255,255,255,0.1)]">
+        {t('sync.quotaFooter', { quota: userIsUltimate ? 20 : 5 })}
       </p>
     </div>
   )

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
-import type { Instance, SaveInfo, SyncInstance, SyncProgress } from '@/types'
+import type { Instance, SyncInstance, SyncProgress } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
 import { loaderColor } from '@/lib/loader'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
@@ -9,26 +9,20 @@ import { showError, showApiError } from '@/stores/useErrorToast'
 import { isNetworkError } from '@/lib/apiError'
 import { ProgressBar } from './ProgressBar'
 import { CloudContentSummary } from './CloudContentSummary'
-import { SaveSelector } from './SaveSelector'
 import { useT } from '@/i18n'
 
 interface InstanceSyncCardProps {
   instance: Instance
   cloudEntry: SyncInstance | undefined
-  maxSaves: number
   onCloudUpdate: (updated: SyncInstance) => void
   onCloudDelete: (id: number) => void
 }
 
 export function InstanceSyncCard({
-  instance, cloudEntry, maxSaves, onCloudUpdate, onCloudDelete,
+  instance, cloudEntry, onCloudUpdate, onCloudDelete,
 }: InstanceSyncCardProps) {
   const t = useT()
   const [expanded, setExpanded] = useState(false)
-  const [saves, setSaves] = useState<SaveInfo[]>([])
-  const [selectedSaves, setSelectedSaves] = useState<Set<string>>(new Set())
-  const [savesLoaded, setSavesLoaded] = useState(false)
-  const [savesLoading, setSavesLoading] = useState(false)
   const [pushing, setPushing] = useState(false)
   const [pulling, setPulling] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -37,48 +31,7 @@ export function InstanceSyncCard({
   const unlistenRef = useRef<(() => void) | null>(null)
 
   const busy = pushing || pulling || deleting
-  const hasSynced = !!cloudEntry?.has_data
-
-  // Load saves when first expanded
-  useEffect(() => {
-    if (!expanded || savesLoaded) return
-    setSavesLoading(true)
-    api.sync.listSaves(instance.id)
-      .then((list) => {
-        setSaves(list)
-        setSavesLoaded(true)
-        // Pre-select saves already in cloud, or the most recent ones
-        const inCloud = new Set(cloudEntry?.save_names ?? [])
-        const toSelect = list
-          .filter((s) => inCloud.has(s.name))
-          .map((s) => s.name)
-        const auto = toSelect.length > 0
-          ? toSelect.slice(0, maxSaves)
-          : list.slice(0, maxSaves).map((s) => s.name)
-        setSelectedSaves(new Set(auto))
-      })
-      // Chargement automatique à l'expansion de la carte — pas de toast pour
-      // une panne réseau (badge TitleBar déjà là), juste pour les vraies erreurs.
-      .catch((e) => { if (!isNetworkError(e)) showError(e); setSavesLoaded(true) })
-      .finally(() => setSavesLoading(false))
-  }, [expanded])
-
-  const toggleSave = (name: string) => {
-    setSelectedSaves((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) { next.delete(name) }
-      else if (next.size < maxSaves) { next.add(name) }
-      return next
-    })
-  }
-
-  const handleSelectAll = () => {
-    if (selectedSaves.size === Math.min(saves.length, maxSaves)) {
-      setSelectedSaves(new Set())
-    } else {
-      setSelectedSaves(new Set(saves.slice(0, maxSaves).map((s) => s.name)))
-    }
-  }
+  const hasSynced = (cloudEntry?.file_count ?? 0) > 0
 
   const flash = (msg: string) => {
     setSuccess(msg)
@@ -95,7 +48,7 @@ export function InstanceSyncCard({
     unlistenRef.current = unlisten
 
     try {
-      const updated = await api.sync.push(instance.id, Array.from(selectedSaves))
+      const updated = await api.sync.push(instance.id)
       onCloudUpdate(updated)
       flash(t('sync.savedToCloud'))
     } catch (e) {
@@ -174,14 +127,12 @@ export function InstanceSyncCard({
             </span>
           </div>
           <p className="text-[11px] mt-0.5">
-            {cloudEntry?.has_data
+            {hasSynced && cloudEntry
               ? <span className="text-[rgba(74,222,128,0.7)]">
-                  {t('sync.savedTimeAgo', { time: formatRelativeTime(cloudEntry.updated_at) })}
-                  {cloudEntry.save_names.length > 0 && (
-                    <span className="text-[rgba(255,255,255,0.2)] ml-1.5">
-                      {t('sync.saveCountSuffix', { count: cloudEntry.save_names.length, s: cloudEntry.save_names.length > 1 ? 's' : '' })}
-                    </span>
-                  )}
+                  {t('sync.savedTimeAgo', { time: formatRelativeTime(Math.floor(new Date(cloudEntry.updated_at).getTime() / 1000)) })}
+                  <span className="ml-1.5 text-txt-muted">
+                    {t('sync.fileCount', { count: cloudEntry.file_count })}
+                  </span>
                 </span>
               : <span className="text-[rgba(255,255,255,0.22)]">{t('sync.neverSaved')}</span>
             }
@@ -211,22 +162,14 @@ export function InstanceSyncCard({
             </>
           )}
 
-          {/* Save selector */}
-          {savesLoading ? (
-            <div className="flex items-center gap-2 py-1">
-              <ButtonSpinner size={14} color="rgba(75,63,207,0.8)" trackColor="rgba(255,255,255,0.08)" />
-              <span className="text-[12px] text-[rgba(255,255,255,0.25)]">{t('sync.loadingSaves')}</span>
-            </div>
-          ) : (
-            <SaveSelector
-              saves={saves}
-              selected={selectedSaves}
-              maxSaves={maxSaves}
-              disabled={pushing}
-              onToggle={toggleSave}
-              onSelectAll={handleSelectAll}
-            />
-          )}
+          {/* Ce qui part, et ce qui ne part pas. Dit ici plutôt que nulle
+              part : quelqu'un qui synchronise son instance suppose
+              naturellement que son monde suit, et découvrir le contraire
+              après un changement de PC serait une très mauvaise surprise. */}
+          <div className="flex flex-col gap-1.5 rounded-xl border border-line-soft bg-surface-1 px-3 py-2.5">
+            <span className="text-[11.5px] font-semibold text-txt-secondary">{t('sync.whatSyncs')}</span>
+            <span className="text-[11px] leading-relaxed text-txt-muted">{t('sync.worldsGoToBackup')}</span>
+          </div>
 
           {/* Progress */}
           {progress && (

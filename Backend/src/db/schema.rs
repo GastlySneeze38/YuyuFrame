@@ -132,6 +132,10 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
     super::mc_account::migrate_to_pc_scope(&conn)?;
 
+    // Réglages de sauvegarde : en base parce que les déclenchements
+    // automatiques ont lieu côté Rust (voir backup::settings).
+    crate::backup::settings::init(&conn)?;
+
     // ── Sessions de jeu : survivre à la fermeture du launcher ───────────────
     // Jusqu'ici la durée n'était écrite qu'à la fin de la partie, par une
     // tâche vivant DANS le launcher. Fermer le launcher pendant qu'on joue

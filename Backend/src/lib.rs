@@ -1,4 +1,5 @@
 mod api;
+mod backup;
 mod commands;
 mod db;
 mod integrations;
@@ -8,6 +9,7 @@ mod process;
 mod recovery;
 mod state;
 mod stats;
+mod sync;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -208,6 +210,12 @@ pub fn run() {
             // de plantage reconstruit s'il y en avait un (voir recovery.rs).
             recovery::run(shared_db, app.handle().clone());
 
+            // Sauvegardes quotidiennes dont l'échéance est passée : passées en
+            // revue une fois au démarrage. Pas de minuterie qui tourne toute
+            // la journée — le launcher n'est pas ouvert en permanence, et une
+            // échéance de 20 h suffit à ne jamais sauter un jour.
+            commands::backup::spawn_daily(app_state.clone());
+
             // Pilotage par le back-office (version minimale, interrupteurs,
             // bannières) : première lecture tout de suite, puis toutes les
             // 15 minutes. Jamais bloquant — sans réponse, rien n'est coupé.
@@ -355,6 +363,15 @@ pub fn run() {
             commands::sync::push_pull::sync_delete_instance,
             commands::sync::stats::stats_get,
             commands::sync::stats::stats_clear,
+            commands::backup::backup_list,
+            commands::backup::backup_get,
+            commands::backup::backup_create,
+            commands::backup::backup_restore,
+            commands::backup::backup_delete,
+            commands::backup::backup_collect_garbage,
+            commands::backup::backup_settings_get,
+            commands::backup::backup_settings_save,
+            commands::backup::backup_settings_reset,
             commands::system::info::system_memory_info,
             commands::system::storage::data_root_get,
             commands::system::storage::data_root_set,

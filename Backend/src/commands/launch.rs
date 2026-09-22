@@ -180,6 +180,13 @@ pub async fn launch_game(
             let _ = tokio::time::timeout(std::time::Duration::from_secs(5), console_ready.notified()).await;
         }
 
+        // Instantané avant de démarrer : c'est le moment où une sauvegarde
+        // sert, et celui auquel personne ne pense. Bloquant volontairement —
+        // sauvegarder pendant que le jeu écrit déjà dans le monde donnerait
+        // une copie incohérente — mais jamais fatal : une erreur ici
+        // n'empêche pas de jouer.
+        crate::commands::backup::before_launch(&state_clone, &instance.id, &instance.name).await;
+
         let started_at = chrono::Utc::now().timestamp();
 
         let session_id: Option<i64> = {

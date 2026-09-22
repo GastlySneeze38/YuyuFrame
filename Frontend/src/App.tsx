@@ -43,6 +43,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Support'),
   () => import('@/pages/Plans'),
   () => import('@/pages/Stats'),
+  () => import('@/pages/Backup'),
   () => import('@/pages/Server'),
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
@@ -69,6 +70,7 @@ const Features = lazy(() => import('@/pages/Features'))
 const Support = lazy(() => import('@/pages/Support'))
 const Plans = lazy(() => import('@/pages/Plans'))
 const Stats = lazy(() => import('@/pages/Stats'))
+const Backup = lazy(() => import('@/pages/Backup'))
 const Server = lazy(() => import('@/pages/Server'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
@@ -296,6 +298,7 @@ export default function App() {
             <Route path="/support" element={<Support />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />
+            <Route path="/backup" element={<Backup />} />
             <Route path="/server" element={<Server />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />

@@ -92,6 +92,79 @@ pub async fn delete(state: &SharedState, path: &str) -> ApiResult<Value> {
     authed(state, Method::DELETE, path, &[], None).await
 }
 
+// ── Corps binaires ───────────────────────────────────────────────────────────
+//
+// Les morceaux de la sync et des sauvegardes ne sont pas du JSON : ils
+// partent et reviennent tels quels, par paquets de 16 Mio. Ils passent par
+// les mêmes garde-fous que le reste (jeton valide, rafraîchissement, un seul
+// nouvel essai) — un envoi de plusieurs minutes traverse forcément une
+// expiration de jeton, et c'est exactement le cas qu'on ne veut pas gérer à
+// la main dans chaque appelant.
+
+/// Envoie un corps binaire brut. Le délai est propre à l'appel : un morceau
+/// de 16 Mio sur une connexion lente dépasse largement les 30 secondes du
+/// client partagé.
+pub async fn put_bytes(state: &SharedState, path: &str, body: Vec<u8>, timeout: std::time::Duration) -> ApiResult<()> {
+    let mut token = valid_access_token(state).await?;
+
+    for attempt in 0..2 {
+        let client = state.read().await.http.clone();
+        let resp = client
+            .put(format!("{}{path}", base()))
+            .bearer_auth(&token)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .timeout(timeout)
+            .body(body.clone())
+            .send()
+            .await
+            .map_err(ApiError::network)?;
+
+        if resp.status().is_success() {
+            return Ok(());
+        }
+        let e = ApiError::from_response(resp).await;
+        if attempt == 0 && e.is_expired_access() {
+            token = refresh(state).await?;
+            continue;
+        }
+        if e.is_session_lost() {
+            clear_session(state).await;
+        }
+        return Err(e);
+    }
+    unreachable!("la boucle rend la main aux deux tours")
+}
+
+/// Récupère un corps binaire brut.
+pub async fn get_bytes(state: &SharedState, path: &str, timeout: std::time::Duration) -> ApiResult<Vec<u8>> {
+    let mut token = valid_access_token(state).await?;
+
+    for attempt in 0..2 {
+        let client = state.read().await.http.clone();
+        let resp = client
+            .get(format!("{}{path}", base()))
+            .bearer_auth(&token)
+            .timeout(timeout)
+            .send()
+            .await
+            .map_err(ApiError::network)?;
+
+        if resp.status().is_success() {
+            return resp.bytes().await.map(|b| b.to_vec()).map_err(ApiError::network);
+        }
+        let e = ApiError::from_response(resp).await;
+        if attempt == 0 && e.is_expired_access() {
+            token = refresh(state).await?;
+            continue;
+        }
+        if e.is_session_lost() {
+            clear_session(state).await;
+        }
+        return Err(e);
+    }
+    unreachable!("la boucle rend la main aux deux tours")
+}
+
 /// Un appel authentifié, avec au plus un rafraîchissement puis un seul
 /// nouvel essai : si le second échoue encore en 401, la session est perdue.
 async fn authed(

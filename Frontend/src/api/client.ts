@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
+import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
 import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, SyncInstance, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -327,12 +328,37 @@ export const api = {
     list: () => invoke<SyncInstance[]>('sync_list_instances'),
     listSaves: (instanceId: string) =>
       invoke<SaveInfo[]>('sync_list_saves', { instanceId }),
-    push: (instanceId: string, saveNames: string[]) =>
-      invoke<SyncInstance>('sync_push_instance', { instanceId, saveNames }),
+    /** Mods, configurations, packs de ressources et shaders. Jamais les
+     *  mondes : ils relèvent du backup, qui empile des versions datées au
+     *  lieu de prétendre fusionner deux parties jouées en parallèle. */
+    push: (instanceId: string) => invoke<SyncInstance>('sync_push_instance', { instanceId }),
     pull: (syncId: number, instanceId: string) =>
       invoke<void>('sync_pull_instance', { syncId, instanceId }),
     delete: (syncId: number) =>
       invoke<void>('sync_delete_instance', { syncId }),
+  },
+
+  /** Sauvegardes d'instance (voir `types/backup.ts`). Locales par défaut ;
+   *  les morceaux sont partagés entre sauvegardes, donc dix versions d'un
+   *  monde coûtent à peine plus qu'une. */
+  backup: {
+    /** `instanceId` absent : toutes les instances. */
+    list: (instanceId?: string | null) => invoke<BackupOverview>('backup_list', { instanceId: instanceId ?? null }),
+    get: (instanceId: string, backupId: string) => invoke<BackupDetail>('backup_get', { instanceId, backupId }),
+    create: (instanceId: string) => invoke<BackupSummary>('backup_create', { instanceId }),
+    /** `replace` vide d'abord les dossiers couverts — le seul vrai retour en
+     *  arrière. Sans lui, on ajoute et on écrase sans rien retirer. */
+    restore: (instanceId: string, backupId: string, replace = false) =>
+      invoke<number>('backup_restore', { instanceId, backupId, options: { replace } }),
+    delete: (instanceId: string, backupId: string) => invoke<void>('backup_delete', { instanceId, backupId }),
+    /** Ménage du dépôt de morceaux ; rend les octets libérés. */
+    collectGarbage: () => invoke<number>('backup_collect_garbage'),
+    settings: (instanceId?: string | null) =>
+      invoke<InstanceBackupSettings>('backup_settings_get', { instanceId: instanceId ?? null }),
+    saveSettings: (settings: BackupSettings, instanceId?: string | null) =>
+      invoke<void>('backup_settings_save', { instanceId: instanceId ?? null, settings }),
+    /** Rend une instance au réglage général. */
+    resetSettings: (instanceId: string) => invoke<void>('backup_settings_reset', { instanceId }),
   },
 
   /** Statistiques de jeu, entièrement locales (voir `types/stats.ts`). */
