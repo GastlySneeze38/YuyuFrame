@@ -7,6 +7,9 @@ import { showError } from '@/stores/useErrorToast'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { OptionSearchBar } from './OptionSearchBar'
+import { LanguagePickerModal } from './LanguagePickerModal'
+import { LANGUAGE_BY_CODE } from './gameLanguages'
+import { Flag } from '@/components/ui/Flag'
 import type { SearchCandidate } from './optionSearch'
 import { tIn, useT } from '@/i18n'
 import type { Instance, McOption } from '@/types'
@@ -37,6 +40,8 @@ type Control =
   | { type: 'bool' }
   | { type: 'choice'; choices: Array<{ value: string; labelKey: string }> }
   | { type: 'text' }
+  /** Ouvre le sélecteur de langue plutôt que d'exiger le code exact. */
+  | { type: 'language' }
 
 interface KnownOption {
   key: string
@@ -83,7 +88,7 @@ const KNOWN: Array<{ groupKey: string; options: KnownOption[] }> = [
   {
     groupKey: 'options.groupGameplay',
     options: [
-      { key: 'lang', labelKey: 'options.lang', fallback: 'fr_fr', control: { type: 'text' } },
+      { key: 'lang', labelKey: 'options.lang', fallback: 'fr_fr', control: { type: 'language' } },
       { key: 'autoJump', labelKey: 'options.autoJump', fallback: 'false', control: { type: 'bool' } },
       { key: 'toggleCrouch', labelKey: 'options.toggleCrouch', fallback: 'false', control: { type: 'bool' } },
       { key: 'guiScale', labelKey: 'options.guiScale', fallback: '0', control: { type: 'choice', choices: [
@@ -398,6 +403,8 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
 }) {
   const t = useT()
   const { control } = option
+  const [pickingLanguage, setPickingLanguage] = useState(false)
+  const language = control.type === 'language' ? LANGUAGE_BY_CODE.get(value) : undefined
 
   return (
     <div
@@ -463,6 +470,37 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
           onChange={(e) => onChange(e.target.value)}
           className="ml-auto h-7 w-[140px] rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
         />
+      )}
+
+      {control.type === 'language' && (
+        <>
+          <button
+            onClick={() => setPickingLanguage(true)}
+            className="ml-auto flex h-7 items-center gap-2 rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-2 pr-2.5 transition-colors duration-150 hover:border-[rgba(75,63,207,0.5)]"
+          >
+            {language ? (
+              <>
+                <Flag spec={language.flag} size={16} />
+                <span className="text-[11.5px] text-white">{language.native}</span>
+              </>
+            ) : (
+              // Code hors de la liste proposée : montré tel quel plutôt que
+              // remplacé par un nom inventé.
+              <span className="font-mono text-[11.5px] text-white">{value || '—'}</span>
+            )}
+            <svg viewBox="0 0 10 6" fill="currentColor" width={9} height={6} className="opacity-40">
+              <path d="M0 0l5 6 5-6z" />
+            </svg>
+          </button>
+
+          {pickingLanguage && (
+            <LanguagePickerModal
+              current={value}
+              onPick={onChange}
+              onClose={() => setPickingLanguage(false)}
+            />
+          )}
+        </>
       )}
     </div>
   )
