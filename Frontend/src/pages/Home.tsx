@@ -509,7 +509,7 @@ export default function Home() {
                 ],
               }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-              className="font-black leading-none tracking-[-0.015em] text-white text-[clamp(18px,4vh,40px)]"
+              className="font-black leading-none tracking-[-0.015em] text-white text-[clamp(26px,6vh,58px)]"
             >
               YuyuFrame
             </motion.h1>
@@ -519,7 +519,9 @@ export default function Home() {
               transition={SNAP}
               onClick={() => navigate('/information')}
               title={t('information.title')}
-              className="flex h-[clamp(18px,2.6vh,24px)] w-[clamp(18px,2.6vh,24px)] items-center justify-center rounded-lg bg-transparent text-[rgba(255,255,255,0.3)] transition-colors duration-150 hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(255,255,255,0.8)]"
+              // Grandit avec le titre : posé à côté d'un mot devenu nettement
+              // plus gros, un bouton resté à sa taille aurait l'air perdu.
+              className="flex h-[clamp(22px,3.4vh,32px)] w-[clamp(22px,3.4vh,32px)] items-center justify-center rounded-lg bg-transparent text-[rgba(255,255,255,0.3)] transition-colors duration-150 hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(255,255,255,0.8)]"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-[70%] w-[70%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
             </motion.button>
@@ -527,10 +529,11 @@ export default function Home() {
 
           <WelcomeSequence
             username={username}
-            // Le skin complet, pas une vignette de visage : c'est un rendu 3D
-            // qui le reçoit. Un compte hors ligne n'a rien chez mc-heads
-            // (UUID inventé), d'où le skin local quand il existe.
-            skinUrl={username ? (customSkinUri ?? (isOffline ? null : `https://mc-heads.net/skin/${uuid}`)) : null}
+            // L'UUID sert à demander le rendu de la tête ; le skin local
+            // prend le relais pour un compte hors ligne, dont l'UUID est
+            // inventé et ne correspond à rien côté service.
+            uuid={username ? uuid : null}
+            localSkin={customSkinUri}
             greeting={username && welcome.phrase ? welcome.phrase : t('home.welcomeNew')}
             playIntro={welcome.playIntro}
             onAvatarClick={() => navigate('/login')}

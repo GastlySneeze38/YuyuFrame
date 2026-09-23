@@ -40,14 +40,17 @@ interface Flight {
 
 export function WelcomeSequence({
   username,
-  skinUrl,
+  uuid,
+  localSkin,
   greeting,
   playIntro,
   onAvatarClick,
 }: {
   username: string | null
-  /** Texture du skin, rendue en 3D. `null` = aucun compte connecté. */
-  skinUrl: string | null
+  /** UUID du compte actif. `null` = aucun compte connecté. */
+  uuid: string | null
+  /** PNG du skin d'un compte hors ligne, quand il en a défini un. */
+  localSkin: string | null
   greeting: string
   playIntro: boolean
   onAvatarClick: () => void
@@ -99,34 +102,52 @@ export function WelcomeSequence({
   const f = flight ?? { dx: 0, dy: 0, scale: 1 }
 
   return (
-    <div ref={boardRef} className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end">
+    // Plus de rangées qui se partagent la hauteur : le buste occupe TOUTE la
+    // bannière et le texte se pose par-dessus.
+    //
+    // C'est ce que demande le rendu visé : la coupe des épaules doit être
+    // plaquée au bord bas de la bannière. Tant que le texte prenait sa propre
+    // rangée, il repoussait le buste vers le haut et laissait une bande de
+    // ciel entre les épaules et le bord.
+    //
+    // Effet de bord bienvenu : il n'y a plus aucune hauteur à négocier. Le
+    // canevas fait la bannière, point — c'était la dernière source de
+    // positions imprévisibles.
+    <div ref={boardRef} className="pointer-events-none absolute inset-0">
 
-      {/* Le skin en 3D — il occupe le cœur de la bannière et descend jusqu'au
-          bloc de texte, qu'il touche presque. C'est le seul élément cliquable
-          de la bannière, d'où le rétablissement des événements de pointeur.
-          Le rendu WebGL ne démarre qu'une fois la séquence arrivée à son
-          temps 2 : pendant le vol du salut, on regarde le texte. */}
-      <AnimatePresence>
-        {parked && skinUrl && (
-          <motion.button
-            initial={{ scale: 0.55, y: 28, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 17, mass: 0.85 }}
-            onClick={onAvatarClick}
-            title={t('home.manageAccounts')}
-            className="pointer-events-auto absolute bottom-[clamp(40px,9vh,72px)] left-1/2 -translate-x-1/2 transition-[filter] duration-200 hover:brightness-110"
-          >
-            <SkinBust
-              skinUrl={skinUrl}
-              className="h-[clamp(92px,22vh,220px)] w-[clamp(92px,22vh,220px)]"
-            />
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {/* Le skin en 3D, sur toute la bannière. Il apparaît au temps 2,
+          pendant qu'on regarde le salut voler. Seul élément cliquable de la
+          bannière, d'où le rétablissement des événements de pointeur. */}
+      <div className="absolute inset-0">
+        <AnimatePresence>
+          {parked && (uuid || localSkin) && (
+            <motion.div
+              initial={{ scale: 0.55, y: 28, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 17, mass: 0.85 }}
+              // Posé sur toute la cellule, mais plus cliquable : le canevas
+              // remplit la bannière et n'est opaque que sur le modèle, donc
+              // un bouton à cet endroit rendait tout le ciel cliquable. C'est
+              // `SkinBust` qui pose sa propre zone, calculée sur le buste.
+              className="absolute inset-0"
+            >
+              <SkinBust
+                uuid={uuid}
+                localSkin={localSkin}
+                onClick={onAvatarClick}
+                title={t('home.manageAccounts')}
+                className="h-full w-full"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Bloc bas-centre : pseudo puis salut. Le dégradé sous lui détache le
           texte du relief de la bannière, quelle que soit sa couleur. */}
-      <div className="relative z-10 flex w-full flex-col items-center pb-[clamp(8px,1.6vh,16px)] pt-10 bg-[linear-gradient(to_top,rgba(9,9,13,0.92),rgba(9,9,13,0.55)_45%,transparent)]">
+      {/* Posé par-dessus le buste, ancré au bord bas. Le dégradé fait la
+          liaison : le texte se détache du skin sans qu'on voie une découpe. */}
+      <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center pb-[clamp(8px,1.6vh,16px)] pt-[clamp(20px,5vh,52px)] bg-[linear-gradient(to_top,rgba(9,9,13,0.94),rgba(9,9,13,0.72)_45%,transparent)]">
         <motion.div
           // Même raison qu'ailleurs : sans `initial={false}`, le pseudo se
           // monte à son opacité CSS et n'est masqué qu'à l'image suivante.
