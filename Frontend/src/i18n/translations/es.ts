@@ -31,6 +31,7 @@ export const es: TranslationSchema = {
     menuBrowseResourcepacks: 'Buscar packs de recursos',
     menuInstalledPacks: 'Packs instalados',
     menuOptions: 'Opciones',
+    playInstance: 'Jugar a {{name}}',
     packsImported: '{{count}} pack(s) añadido(s)',
     optionsApplied: 'Ajustes de Minecraft aplicados',
     optionsNoTemplate: 'Ningún modelo guardado — exporta primero los ajustes de una instancia',

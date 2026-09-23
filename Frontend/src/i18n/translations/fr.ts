@@ -29,6 +29,7 @@ export const fr = {
     menuBrowseResourcepacks: 'Chercher des packs de ressources',
     menuInstalledPacks: 'Packs installés',
     menuOptions: 'Options',
+    playInstance: 'Jouer à {{name}}',
     packsImported: '{{count}} pack(s) ajouté(s)',
     optionsApplied: 'Réglages Minecraft appliqués',
     optionsNoTemplate: 'Aucun modèle enregistré — exporte d’abord les réglages d’une instance',

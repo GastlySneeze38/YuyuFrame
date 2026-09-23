@@ -94,6 +94,7 @@ function onlyLicenseChanged(prev: ModrinthSearchFilters, next: ModrinthSearchFil
 
 export function ModsContent({ instance }: { instance: Instance }) {
   const t = useT()
+  const navigate = useNavigate()
   const instanceId = instance.id
   const mcVersion = instance.mc_version
   const loader = instance.loader
@@ -109,7 +110,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
     )
   }, [pinnedMods, instanceId])
 
-  const [tab, setTab] = useState<Tab>('installed')
+  // Une instance vanilla n'a pas de chargeur de mods : rien de ce que
+  // proposait le menu « Mods » ne s'y installe. Il est retiré de la barre
+  // (voir plus bas), donc l'écran d'arrivée ne peut pas être celui des mods —
+  // on tomberait sur une liste vide sans aucun moyen d'en repartir.
+  const [tab, setTab] = useState<Tab>(isPlugin ? 'packs-installed' : 'installed')
   const [mods, setMods] = useState<Mod[]>([])
   const [loadingMods, setLoadingMods] = useState(true)
   const [modsError, setModsError] = useState('')
@@ -1079,17 +1084,24 @@ export function ModsContent({ instance }: { instance: Instance }) {
             Sept boutons à plat ne se liraient pas ; le libellé dit la famille,
             le menu dit lequel de ses écrans est ouvert. */}
         <div className="flex flex-shrink-0 items-center divide-x divide-[rgba(75,63,207,0.35)] overflow-visible rounded-[10px] border border-[rgba(75,63,207,0.35)]">
-          <ToolbarMenu
-            label={t('mods.menuMods')}
-            icon={TOOLBAR_ICON.mods}
-            active={tab === 'installed' || tab === 'browse' || tab === 'modpack'}
-            activeId={tab}
-            items={[
-              { id: 'browse', icon: TOOLBAR_ICON.search, label: isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth'), onSelect: () => setTab('browse') },
-              { id: 'modpack', icon: TOOLBAR_ICON.modpack, label: modpackMeta ? t('mods.replaceModpack') : t('mods.installModpack'), onSelect: () => setTab('modpack') },
-              { id: 'installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledMods'), badge: mods.length, onSelect: () => setTab('installed') },
-            ]}
-          />
+          {/* Pas de menu « Mods » en vanilla : sans chargeur, aucun mod ni
+              modpack ne s'installe, et « chercher des plugins » désignait de
+              toute façon des greffons de serveur, qui n'ont rien à faire dans
+              une instance de jeu. Restent les packs et les options, qui, eux,
+              marchent en vanilla. */}
+          {!isPlugin && (
+            <ToolbarMenu
+              label={t('mods.menuMods')}
+              icon={TOOLBAR_ICON.mods}
+              active={tab === 'installed' || tab === 'browse' || tab === 'modpack'}
+              activeId={tab}
+              items={[
+                { id: 'browse', icon: TOOLBAR_ICON.search, label: t('mods.browseModrinth'), onSelect: () => setTab('browse') },
+                { id: 'modpack', icon: TOOLBAR_ICON.modpack, label: modpackMeta ? t('mods.replaceModpack') : t('mods.installModpack'), onSelect: () => setTab('modpack') },
+                { id: 'installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledMods'), badge: mods.length, onSelect: () => setTab('installed') },
+              ]}
+            />
+          )}
           <ToolbarMenu
             label={t('mods.menuPacks')}
             icon={TOOLBAR_ICON.grid}
@@ -1120,16 +1132,28 @@ export function ModsContent({ instance }: { instance: Instance }) {
           </motion.button>
         </div>
 
-        {/* Droite : informations de l'instance — min-w-0 + truncate pour que
-            le nom d'instance cède la place aux boutons plutôt que de forcer
-            un débordement (voir overflow-x-auto ci-dessus). */}
+        {/* Droite : retour au lancement.
+            C'était un simple rappel « nom · version · chargeur », sans action.
+            Or on vient ici pour préparer une partie, et le seul chemin pour
+            la lancer était le bouton retour de l'en-tête.
+            Le nom reste dans le bouton : c'est la seule mention de l'instance
+            sur cette page, et installer un mod dans la mauvaise instance sans
+            s'en apercevoir serait le pire des silences. La version et le
+            chargeur passent en infobulle. */}
         <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
           {importNotice && (
             <span className="flex-shrink-0 text-[10.5px] text-[rgba(179,163,255,0.9)]">{importNotice}</span>
           )}
-          <span className="truncate text-[11px] text-[rgba(255,255,255,0.25)]">
-            {instance.name} · {mcVersion} · {loader}
-          </span>
+          <motion.button {...press}
+            onClick={() => navigate('/home')}
+            title={`${instance.name} · ${mcVersion} · ${loader}`}
+            className="flex h-8 min-w-0 flex-shrink items-center gap-1.5 rounded-lg bg-[#4B3FCF] px-3.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-[#6155e8]"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="flex-shrink-0">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span className="truncate">{t('mods.playInstance', { name: instance.name })}</span>
+          </motion.button>
         </div>
       </div>
 
