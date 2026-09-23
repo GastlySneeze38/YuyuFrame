@@ -100,11 +100,12 @@ interface Store {
   customRamMb: number | null
   setCustomRamMb: (mb: number | null) => void
 
-  // ── JVM par défaut (P1-6, Phase 6) — mêmes réglages que ceux exposés par
-  // JvmAdvancedSection sur chaque instance, mais comme valeur de départ pour
-  // les nouvelles instances (voir CreateInstanceModal), pas une valeur
-  // appliquée directement au lancement (chaque instance garde son propre
-  // choix, modifiable indépendamment après création). ──
+  // ── JVM par défaut (P1-6, Phase 6) — valeurs de départ des nouvelles
+  // instances (voir CreateInstanceModal), pas des valeurs appliquées
+  // directement au lancement : chaque instance garde ensuite son propre
+  // choix, ajustable depuis l'écran des configurations JVM. Ces trois
+  // réglages ne sont plus saisis à la création, mais ils restent ce dont
+  // l'instance hérite à sa naissance. ──
   defaultJvmVendor: JvmVendor
   setDefaultJvmVendor: (v: JvmVendor) => void
   defaultJvmCustomPath: string
