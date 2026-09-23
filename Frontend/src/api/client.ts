@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,6 +179,13 @@ export const api = {
     startupSync: (mode: string) => invoke<void>('instance_startup_sync', { mode }),
     exportSettings: (instanceId: string) => invoke<void>('instance_export_settings', { instanceId }),
     applySettings: (instanceId: string) => invoke<boolean>('instance_apply_settings', { instanceId }),
+    /** État du modèle `shared_options.txt` — ce qui décide si « synchroniser
+     *  les paramètres Minecraft » a quelque chose à copier. */
+    sharedOptionsStatus: () => invoke<SharedOptionsStatus>('shared_options_status'),
+    /** Pousse le réglage vers le Rust, qui applique le modèle à la création
+     *  de chaque instance (voir App.tsx). */
+    setSyncGameSettings: (enabled: boolean) =>
+      invoke<void>('set_sync_game_settings', { enabled }),
     openFolder: (instanceId: string) => invoke<void>('instance_open_folder', { instanceId }),
     // P1-6 (audit launcher, Phase 6) — aperçu de la ligne de commande réelle,
     // recalculée côté Rust par les mêmes fonctions qu'un vrai lancement.

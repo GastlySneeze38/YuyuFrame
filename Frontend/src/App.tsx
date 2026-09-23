@@ -85,7 +85,7 @@ const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
@@ -137,6 +137,16 @@ export default function App() {
     if (isConsoleWindow) return
     api.window.setBackgroundAllowed(allowBackground).catch(() => {})
   }, [allowBackground])
+
+  // Même raison pour « synchroniser les paramètres Minecraft » : c'est le
+  // backend qui applique le modèle à chaque instance créée, quel que soit
+  // l'écran d'où vient la création. Il lui faut donc sa propre copie du
+  // réglage — avant, chaque appelant devait y penser, et celui de la
+  // restauration cloud ne le faisait pas.
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.instances.setSyncGameSettings(syncGameSettings).catch(() => {})
+  }, [syncGameSettings])
 
   useTauriEvent<string>('deep_link_join', (url) => {
     setJoinRequest(parseJoinUrl(url))

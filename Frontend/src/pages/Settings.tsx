@@ -10,6 +10,7 @@ import { showError } from '@/stores/useErrorToast'
 import { formatRam } from '@/lib/format'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { Toggle } from '@/components/ui/Toggle'
+import type { SharedOptionsStatus } from '@/types'
 import { SettingsNav, useSectionSpy } from '@/components/settings/SettingsNav'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
@@ -35,6 +36,13 @@ export default function Settings() {
 
   const [showRamInfo, setShowRamInfo] = useState(false)
   const [confirmBackgroundOff, setConfirmBackgroundOff] = useState(false)
+  /** État du modèle de réglages Minecraft — relu à chaque fois qu'on rallume
+   *  le réglage, puisqu'on a pu exporter un modèle entre-temps. */
+  const [sharedOptions, setSharedOptions] = useState<SharedOptionsStatus | null>(null)
+  useEffect(() => {
+    if (!syncGameSettings) return
+    api.instances.sharedOptionsStatus().then(setSharedOptions).catch(() => setSharedOptions(null))
+  }, [syncGameSettings])
 
   /// Le réglage vit dans le magasin ET dans un booléen atomique côté Rust :
   /// la boucle d'événements de Tauri décide de s'éteindre ou non sans pouvoir
@@ -404,13 +412,40 @@ export default function Settings() {
 
               <div className="h-px bg-white/6" />
 
-              {/* Sync paramètres Minecraft */}
+              {/* Sync paramètres Minecraft.
+                  L'état du modèle est affiché sous le réglage : sans modèle
+                  enregistré, l'interrupteur ne fait rien et ne le disait pas.
+                  C'était la première cause de « ça ne marche pas tout le
+                  temps » — on croyait le réglage cassé alors qu'il n'avait
+                  rien à copier. */}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-white">{t('settings.instances.syncGameSettingsLabel')}</p>
                   <p className="text-[11px] text-white/35 mt-0.5">
                     {t('settings.instances.syncGameSettingsDesc')}
                   </p>
+                  {syncGameSettings && sharedOptions && (
+                    sharedOptions.exists ? (
+                      <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[rgba(134,239,172,0.75)]">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}>
+                          <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+                        </svg>
+                        {t('settings.instances.syncTemplateReady', {
+                          count: sharedOptions.option_count,
+                          date: sharedOptions.saved_at
+                            ? new Date(sharedOptions.saved_at * 1000).toLocaleDateString()
+                            : '—',
+                        })}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[rgba(250,204,21,0.8)]">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" width={11} height={11}>
+                          <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
+                        </svg>
+                        {t('settings.instances.syncTemplateMissing')}
+                      </p>
+                    )
+                  )}
                 </div>
                 <Toggle checked={syncGameSettings} onChange={() => setSyncGameSettings(!syncGameSettings)} />
               </div>

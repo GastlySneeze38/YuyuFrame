@@ -521,6 +521,8 @@ export const de: TranslationSchema = {
       avoidBetaDesc: 'Installiert nie automatisch eine Beta-/Alpha-/RC-Version eines benötigten Mods (z. B. Sodium) — vermeidet Konflikte mit Mods, die sie noch nicht unterstützen',
       syncGameSettingsLabel: 'Minecraft-Einstellungen synchronisieren',
       syncGameSettingsDesc: 'Wendet deine options.txt (Tasten, Video…) automatisch auf jede neue Instanz an — exportiere sie aus der Instanz deiner Wahl über die Schaltfläche ··· in der Liste',
+      syncTemplateReady: 'Vorlage gespeichert: {{count}} Einstellungen, am {{date}}',
+      syncTemplateMissing: 'Keine Vorlage gespeichert — es wird nichts kopiert. Exportiere zuerst die Einstellungen einer Instanz über die Schaltfläche ··· in der Liste.',
       startupSyncLabel: 'Instanzen beim Start abgleichen',
       startupSyncDesc: 'Was tun, wenn Instanzordner nicht zur Datenbank passen',
       dbWinsLabel: 'Löschen',

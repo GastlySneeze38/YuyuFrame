@@ -48,6 +48,14 @@ export interface PackInfo {
   kind: PackKind
 }
 
+/** État du modèle de réglages partagé entre instances. */
+export interface SharedOptionsStatus {
+  exists: boolean
+  /** Horodatage de l'enregistrement, en secondes. `null` si absent. */
+  saved_at: number | null
+  option_count: number
+}
+
 /** Une ligne de `options.txt`. La valeur reste une chaîne brute : le fichier
  *  n'a pas de types, c'est l'éditeur qui interprète selon la clé. */
 export interface McOption {

@@ -519,6 +519,8 @@ export const fr = {
       avoidBetaDesc: "N'installe jamais automatiquement une version beta/alpha/RC d'un mod requis (ex: Sodium) — évite les incompatibilités avec les mods qui ne les supportent pas encore",
       syncGameSettingsLabel: 'Synchroniser les paramètres Minecraft',
       syncGameSettingsDesc: "Applique automatiquement ton options.txt (touches, vidéo…) à chaque nouvelle instance — exporte-le depuis l'instance de ton choix via le bouton ··· dans la liste",
+      syncTemplateReady: 'Modèle enregistré : {{count}} réglages, le {{date}}',
+      syncTemplateMissing: "Aucun modèle enregistré — rien ne sera copié. Exporte d'abord les réglages d'une instance via le bouton ··· dans la liste.",
       startupSyncLabel: 'Sync instances au démarrage',
       startupSyncDesc: "Que faire si des dossiers d'instances ne correspondent pas à la DB",
       dbWinsLabel: 'Supprimer',

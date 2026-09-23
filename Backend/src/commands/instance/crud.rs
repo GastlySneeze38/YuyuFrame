@@ -203,11 +203,18 @@ pub async fn instance_create(
         .await
         .map_err(|e| e.to_string())?;
     write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode);
-    let s = state.read().await;
-    let uid = user_id(&s);
-    let db = s.db.lock().await;
-    db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
-        .map_err(|e| e.to_string())?;
+    let sync_settings = {
+        let s = state.read().await;
+        let uid = user_id(&s);
+        let db = s.db.lock().await;
+        db::instance_insert(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
+            .map_err(|e| e.to_string())?;
+        db::prefs::get_bool(&db, db::prefs::SYNC_GAME_SETTINGS, false)
+    };
+    // Le verrou de la base est relâché avant de toucher au disque : la copie
+    // du modèle n'a rien à faire sous un verrou que toutes les autres
+    // commandes attendent.
+    super::options::apply_template_on_create(sync_settings, &id).await;
     crate::integrations::analytics::capture("instance_created", serde_json::json!({
         "mc_version": &mc_version,
         "loader": &loader,
@@ -326,6 +333,22 @@ pub async fn instance_duplicate(
         }
     }
 
+    // Les réglages Minecraft de la source suivent la copie.
+    //
+    // Seule la duplication les prend chez la source plutôt que dans le modèle
+    // global : dupliquer, c'est demander la même chose, y compris les
+    // touches et la distance d'affichage. Sans ça, une instance dupliquée
+    // repartait avec les réglages d'usine alors que ses mods étaient bien là
+    // — un écart d'autant plus déroutant qu'il ne concernait qu'un fichier.
+    let src_options = instance_dir(&source_id).join("options.txt");
+    if src_options.exists() {
+        if let Err(e) = tokio::fs::copy(&src_options, instance_dir(&new_id).join("options.txt")).await {
+            // Best-effort : une instance dupliquée sans son options.txt reste
+            // parfaitement jouable.
+            tracing::warn!("Copie des réglages Minecraft vers la copie {} échouée : {}", new_id, e);
+        }
+    }
+
     write_meta(&new_id, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode);
 
     let s = state.read().await;
@@ -340,33 +363,8 @@ pub async fn instance_duplicate(
     Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None })
 }
 
-/// Copie `options.txt` de l'instance vers un template global dans le dossier
-/// YuyuFrame — ce template sera appliqué aux nouvelles instances si le réglage
-/// "sync paramètres" est actif côté launcher.
-#[tauri::command]
-pub async fn instance_export_settings(instance_id: String) -> Result<(), String> {
-    let src = instance_dir(&instance_id).join("options.txt");
-    if !src.exists() {
-        return Err("Aucun fichier options.txt dans cette instance — lance le jeu au moins une fois pour le générer".into());
-    }
-    let dest = minecraft_dir().join("shared_options.txt");
-    tokio::fs::copy(&src, &dest).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Applique le template global `shared_options.txt` à une instance.
-/// Retourne `true` si le template existait et a été copié, `false` s'il est absent.
-#[tauri::command]
-pub async fn instance_apply_settings(instance_id: String) -> Result<bool, String> {
-    let src = minecraft_dir().join("shared_options.txt");
-    if !src.exists() {
-        return Ok(false);
-    }
-    tokio::fs::create_dir_all(instance_dir(&instance_id)).await.map_err(|e| e.to_string())?;
-    let dest = instance_dir(&instance_id).join("options.txt");
-    tokio::fs::copy(&src, &dest).await.map_err(|e| e.to_string())?;
-    Ok(true)
-}
+// Le modèle `shared_options.txt` (export, application, état) vit désormais
+// dans `options.rs`, avec tout ce qui touche aux réglages Minecraft.
 
 /// Ouvre le dossier de l'instance dans l'explorateur Windows — le crée
 /// d'abord si l'instance n'a encore jamais été lancée (ex: juste après

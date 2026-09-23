@@ -19,6 +19,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::minecraft::launcher::minecraft_dir;
 use super::crud::instance_dir;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -29,6 +30,13 @@ pub struct McOption {
 
 fn options_path(instance_id: &str) -> std::path::PathBuf {
     instance_dir(instance_id).join("options.txt")
+}
+
+/// Modèle global, copié dans les nouvelles instances quand le réglage est
+/// actif. Un seul pour tout le launcher : c'est « mes réglages », pas un jeu
+/// de préréglages.
+fn template_path() -> std::path::PathBuf {
+    minecraft_dir().join("shared_options.txt")
 }
 
 /// Découpe le contenu d'`options.txt` en réglages.
@@ -120,6 +128,126 @@ pub async fn mc_options_write(
         .map_err(|e| format!("Écriture de options.txt : {}", e))?;
 
     Ok(parse(&next))
+}
+
+/// Enregistre le réglage « synchroniser les paramètres Minecraft ».
+///
+/// Poussé par le frontend au démarrage et à chaque changement, comme pour
+/// l'autorisation d'arrière-plan. Le backend ne peut pas lire le stockage du
+/// frontend, et c'est lui qui applique la règle à la création — il faut donc
+/// qu'il en ait sa propre copie.
+#[tauri::command]
+pub async fn set_sync_game_settings(
+    state: tauri::State<'_, crate::state::SharedState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let s = state.read().await;
+    let db = s.db.lock().await;
+    crate::db::prefs::set_bool(&db, crate::db::prefs::SYNC_GAME_SETTINGS, enabled)
+        .map_err(|e| e.to_string())
+}
+
+// ── Modèle partagé entre instances ──────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct SharedOptionsStatus {
+    pub exists: bool,
+    /// Horodatage de l'enregistrement, en secondes. `None` si absent.
+    pub saved_at: Option<i64>,
+    /// Nombre de réglages qu'il contient — de quoi vérifier d'un coup d'œil
+    /// qu'on a bien exporté un vrai fichier et pas une coquille vide.
+    pub option_count: usize,
+}
+
+/// État du modèle.
+///
+/// Existe parce que le réglage « synchroniser les paramètres Minecraft »
+/// avait une condition invisible : sans modèle enregistré, il ne fait rien et
+/// ne le dit pas. C'était la première cause de « ça ne marche pas tout le
+/// temps » — l'interrupteur était sur oui, mais il n'y avait rien à copier.
+#[tauri::command]
+pub async fn shared_options_status() -> Result<SharedOptionsStatus, String> {
+    let path = template_path();
+    let Ok(meta) = tokio::fs::metadata(&path).await else {
+        return Ok(SharedOptionsStatus { exists: false, saved_at: None, option_count: 0 });
+    };
+    let saved_at = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+    let option_count = tokio::fs::read_to_string(&path)
+        .await
+        .map(|c| parse(&c).len())
+        .unwrap_or(0);
+    Ok(SharedOptionsStatus { exists: true, saved_at, option_count })
+}
+
+/// Enregistre l'`options.txt` d'une instance comme modèle.
+#[tauri::command]
+pub async fn instance_export_settings(instance_id: String) -> Result<(), String> {
+    let src = options_path(&instance_id);
+    if !src.exists() {
+        return Err("Aucun fichier options.txt dans cette instance — lance le jeu au moins une fois pour le générer".into());
+    }
+    tokio::fs::copy(&src, template_path()).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Applique le modèle à une instance, à la demande explicite de
+/// l'utilisateur. Écrase un `options.txt` existant — c'est le sens du geste.
+///
+/// Rend `false` quand aucun modèle n'a été enregistré.
+#[tauri::command]
+pub async fn instance_apply_settings(instance_id: String) -> Result<bool, String> {
+    copy_template(&instance_id, true).await
+}
+
+/// Pose le modèle dans une instance.
+///
+/// `overwrite` distingue les deux usages. À la demande de l'utilisateur, on
+/// écrase : il a cliqué pour ça. À la création d'une instance, non — un
+/// modpack ou un import peut avoir déposé son propre `options.txt`, et
+/// l'écraser reviendrait à défaire en silence ce que l'utilisateur vient
+/// d'installer.
+pub(super) async fn copy_template(instance_id: &str, overwrite: bool) -> Result<bool, String> {
+    let src = template_path();
+    if !src.exists() {
+        return Ok(false);
+    }
+    let dest = options_path(instance_id);
+    if !overwrite && dest.exists() {
+        return Ok(false);
+    }
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+    }
+    tokio::fs::copy(&src, &dest).await.map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+/// Applique le modèle à une instance qui vient d'être créée, si le réglage
+/// est actif.
+///
+/// Appelée par le backend lui-même, depuis chaque chemin de création. C'est
+/// tout l'objet du correctif : la règle ne peut plus être oubliée par un
+/// appelant, puisqu'aucun appelant n'en décide plus.
+///
+/// Best-effort par construction : une instance créée mais sans ses réglages
+/// reste utilisable, alors qu'une création annulée parce qu'un fichier
+/// d'options n'a pas pu être copié serait absurde.
+pub(super) async fn apply_template_on_create(conn_flag: bool, instance_id: &str) {
+    if !conn_flag {
+        return;
+    }
+    match copy_template(instance_id, false).await {
+        Ok(true) => tracing::info!("Réglages Minecraft appliqués à la nouvelle instance {}", instance_id),
+        Ok(false) => tracing::info!(
+            "Réglages Minecraft non appliqués à {} : aucun modèle enregistré, ou l'instance en a déjà un",
+            instance_id
+        ),
+        Err(e) => tracing::warn!("Copie des réglages Minecraft vers {} échouée : {}", instance_id, e),
+    }
 }
 
 #[cfg(test)]

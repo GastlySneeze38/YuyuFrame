@@ -23,7 +23,7 @@ export default function Instances() {
     versions, setVersions,
     instances, setInstances, addInstance, updateInstance, removeInstance,
     selectedInstanceId, setSelectedInstanceId,
-    defaultRam, defaultJvmVendor, defaultJvmCustomPath, defaultGcPolicy, syncGameSettings,
+    defaultRam, defaultJvmVendor, defaultJvmCustomPath, defaultGcPolicy,
   } = useStore()
 
   const [loading, setLoading] = useState(true)
@@ -305,10 +305,13 @@ export default function Instances() {
           defaultJvmCustomPath={defaultJvmCustomPath}
           defaultGcPolicy={defaultGcPolicy}
           onClose={() => setShowCreate(false)}
+          // Les réglages Minecraft ne sont plus appliqués ici : c'est
+          // `instance_create` qui s'en charge, pour que tout chemin de
+          // création en bénéficie — y compris la restauration d'une instance
+          // depuis la sauvegarde cloud, qui l'oubliait.
           onCreate={(inst) => {
             addInstance(inst)
             setSelectedInstanceId(inst.id)
-            if (syncGameSettings) api.instances.applySettings(inst.id).catch(() => {})
           }}
         />
       )}

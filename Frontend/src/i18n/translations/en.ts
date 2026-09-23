@@ -521,6 +521,8 @@ export const en: TranslationSchema = {
       avoidBetaDesc: "Never automatically installs a beta/alpha/RC version of a required mod (e.g. Sodium) — avoids incompatibilities with mods that don't support them yet",
       syncGameSettingsLabel: 'Sync Minecraft settings',
       syncGameSettingsDesc: "Automatically applies your options.txt (keybinds, video…) to every new instance — export it from the instance of your choice via the ··· button in the list",
+      syncTemplateReady: 'Template saved: {{count}} settings, on {{date}}',
+      syncTemplateMissing: 'No template saved — nothing will be copied. Export an instance’s settings first, via the ··· button in the list.',
       startupSyncLabel: 'Sync instances on startup',
       startupSyncDesc: "What to do if instance folders don't match the DB",
       dbWinsLabel: 'Delete',

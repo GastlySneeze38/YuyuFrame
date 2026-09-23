@@ -521,6 +521,8 @@ export const es: TranslationSchema = {
       avoidBetaDesc: 'Nunca instala automáticamente una versión beta/alfa/RC de un mod requerido (ej.: Sodium) — evita incompatibilidades con los mods que aún no las admiten',
       syncGameSettingsLabel: 'Sincronizar los ajustes de Minecraft',
       syncGameSettingsDesc: 'Aplica automáticamente tu options.txt (teclas, vídeo…) a cada nueva instancia — expórtalo desde la instancia que quieras con el botón ··· de la lista',
+      syncTemplateReady: 'Modelo guardado: {{count}} ajustes, el {{date}}',
+      syncTemplateMissing: 'Ningún modelo guardado — no se copiará nada. Exporta primero los ajustes de una instancia con el botón ··· de la lista.',
       startupSyncLabel: 'Sincronizar instancias al arrancar',
       startupSyncDesc: 'Qué hacer si hay carpetas de instancias que no coinciden con la base de datos',
       dbWinsLabel: 'Eliminar',
