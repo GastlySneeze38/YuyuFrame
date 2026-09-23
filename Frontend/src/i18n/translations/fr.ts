@@ -590,6 +590,7 @@ export const fr = {
     manage: 'Gérer',
     createInstance: 'Créer une instance',
     chooseInstance: 'Choisir une instance',
+    configureInstance: 'Mods, packs et options de cette instance',
     connect: 'SE CONNECTER',
     manageAccounts: 'Gérer les comptes',
     p2p: 'P2P',

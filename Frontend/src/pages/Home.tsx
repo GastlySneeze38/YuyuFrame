@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
-import { EASE_OUT, SNAP } from '@/lib/motion'
+import { EASE_OUT, SNAP, press } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
@@ -13,6 +13,7 @@ import { InstanceSwitchModal } from '@/components/instances/InstanceSwitchModal'
 import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
+import { ProCard } from '@/components/home/ProCard'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
 import { ServerConfirmModal } from '@/components/servers/ServerConfirmModal'
@@ -20,14 +21,18 @@ import { useT } from '@/i18n'
 import type { SavedServer } from '@/api/client'
 
 // ── Animations d'entrée de l'accueil ────────────────────────────────────────
-// Le panneau de droite glisse depuis le bord, puis ses éléments se posent
-// l'un après l'autre. Les trois cartes du pied de page font de même.
+// Le bloc de lancement monte sous la bannière, puis ses éléments se posent
+// l'un après l'autre. Les cartes du pied de page font de même.
+//
+// Il glissait depuis le bord droit quand il était une colonne latérale ;
+// empilé sous la bannière, un mouvement horizontal irait contre la
+// disposition et ferait déborder la page le temps de l'animation.
 
 const panelVariants: Variants = {
-  initial: { opacity: 0, x: 24 },
+  initial: { opacity: 0, y: 16 },
   animate: {
     opacity: 1,
-    x: 0,
+    y: 0,
     transition: { duration: 0.4, ease: EASE_OUT, staggerChildren: 0.07, delayChildren: 0.08 },
   },
 }
@@ -104,7 +109,6 @@ export default function Home() {
   const FEATURES = useFeatures(t)
   const {
     username, uuid, isOffline,
-    clearUser,
     instances, setInstances,
     selectedInstanceId, setSelectedInstanceId, selectedInstance,
     isInstanceRunning, setInstanceRunning,
@@ -134,7 +138,8 @@ export default function Home() {
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
-  const [customFaceUri, setCustomFaceUri] = useState<string | null>(null)
+  /** Texture complète du skin d'un compte hors ligne, pour le rendu 3D. */
+  const [customSkinUri, setCustomSkinUri] = useState<string | null>(null)
 
   const instance = selectedInstance()
 
@@ -175,34 +180,19 @@ export default function Home() {
     return () => clearTimeout(timer)
   }, [welcome])
 
-  // Avatar d'un compte hors ligne : mc-heads.net n'a rien pour un UUID inventé
-  // (voir Login.tsx pour le même souci sur l'aperçu 3D), donc les deux avatars
-  // ci-dessous restaient sur le rendu de repli (initiale/icône) même après
-  // avoir défini un skin custom. On recadre nous-mêmes la zone "visage" du PNG
-  // 64×64 (8,8)-(16,16) + son calque "hat" (40,8)-(48,16) — même position dans
-  // le template quel que soit le format (64×64 moderne ou 64×32 legacy, la
-  // tête ne change jamais) — pour obtenir un carré affichable comme
-  // `mc-heads.net/avatar` le ferait pour un vrai compte.
+  // Skin d'un compte hors ligne : mc-heads.net n'a rien pour un UUID inventé,
+  // donc la bannière n'aurait rien à rendre sans cette lecture locale.
+  //
+  // La texture part telle quelle au rendu 3D. Elle était auparavant recadrée
+  // ici sur la zone « visage » du gabarit pour en tirer une vignette carrée ;
+  // ce découpage n'a plus d'objet depuis que l'accueil montre le skin entier,
+  // et un rendu 3D veut de toute façon la texture complète.
   useEffect(() => {
-    if (!uuid || !isOffline) { setCustomFaceUri(null); return }
+    if (!uuid || !isOffline) { setCustomSkinUri(null); return }
     let cancelled = false
-    api.mc.getSkin(uuid).then((dataUri) => {
-      if (cancelled || !dataUri) { if (!cancelled) setCustomFaceUri(null); return }
-      const img = new Image()
-      img.onload = () => {
-        if (cancelled) return
-        const canvas = document.createElement('canvas')
-        canvas.width = 64
-        canvas.height = 64
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctx.imageSmoothingEnabled = false
-        ctx.drawImage(img, 8, 8, 8, 8, 0, 0, 64, 64)
-        ctx.drawImage(img, 40, 8, 8, 8, 0, 0, 64, 64)
-        setCustomFaceUri(canvas.toDataURL('image/png'))
-      }
-      img.src = dataUri
-    }).catch(() => { if (!cancelled) setCustomFaceUri(null) })
+    api.mc.getSkin(uuid)
+      .then((dataUri) => { if (!cancelled) setCustomSkinUri(dataUri ?? null) })
+      .catch(() => { if (!cancelled) setCustomSkinUri(null) })
     return () => { cancelled = true }
   }, [uuid, isOffline])
 
@@ -336,13 +326,9 @@ export default function Home() {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      await api.auth.logout()
-      clearUser()
-      navigate('/login', { replace: true })
-    } catch (e) { showError(e) }
-  }
+  // La déconnexion a quitté l'accueil avec la pastille de compte du pied de
+  // page : elle vit désormais uniquement sur l'écran des comptes, où l'on
+  // arrive par « Compte » dans la barre.
 
   const launch = async (connectServer?: string) => {
     // Figé ici : l'utilisateur peut changer d'instance pendant l'appel.
@@ -398,12 +384,6 @@ export default function Home() {
     ? Math.round(progress.current / progress.total * 100)
     : 0
 
-  const p2pToggleClasses = !P2P_ENABLED
-    ? 'bg-[rgba(255,255,255,0.01)] border border-[rgba(255,255,255,0.04)]'
-    : p2pEnabled
-      ? 'bg-[rgba(75,63,207,0.18)] border border-[rgba(120,100,255,0.35)]'
-      : 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]'
-
   const launchBtnBg = canLaunch
     ? 'bg-[#4B3FCF] hover:bg-[#6155e8]'
     : !username
@@ -417,17 +397,22 @@ export default function Home() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
 
-      {/* ── Main area ── */}
-      <div className="flex gap-4 overflow-hidden p-[clamp(8px,1.7vh,16px)] flex-[1_1_0] min-h-0">
+      {/* ── Zone principale ──
+          Une seule colonne, plus deux panneaux côte à côte. La bannière
+          prenait la largeur, le lancement prenait le reste, et sur un écran
+          étroit le second devenait une bande verticale où plus rien ne
+          tenait. Empilés et centrés, les deux blocs gardent la même forme
+          quelle que soit la largeur ; c'est la hauteur, elle, qui défile. */}
+      <div className="flex min-h-0 flex-[1_1_0] flex-col gap-[clamp(8px,1.8vh,18px)] overflow-y-auto p-[clamp(8px,1.7vh,16px)]">
 
-        {/* LEFT: Cinematic Minecraft banner */}
+        {/* Bannière — pleine largeur, hauteur bornée */}
         <motion.div
           // La bannière s'installe : elle arrive légèrement réduite puis se
           // pose, comme un écran qu'on allume.
           initial={{ opacity: 0, scale: 0.985 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.45, ease: EASE_OUT }}
-          className="relative flex-1 overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
+          className="relative h-[clamp(190px,40vh,360px)] flex-shrink-0 overflow-hidden rounded-[20px] border border-[rgba(200,200,220,0.08)] shadow-[0_8px_40px_rgba(0,0,0,0.7)]"
         >
           <div className="absolute inset-0 bg-[linear-gradient(180deg,#020208_0%,#06041a_18%,#0e0932_40%,#1c1250_58%,#130d35_76%,#070512_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_38%_55%,rgba(75,63,207,0.09)_0%,transparent_55%)]" />
@@ -509,11 +494,46 @@ export default function Home() {
             )}
           </AnimatePresence>
 
+          {/* Marque + information, en haut à gauche de la bannière.
+              Le titre vivait dans le panneau de droite, où il mangeait la
+              hauteur dont le bouton de lancement avait besoin. Posé sur la
+              bannière, il ne coûte rien : cette place était vide. */}
+          <div className="absolute left-[clamp(12px,2vw,22px)] top-[clamp(10px,1.8vh,18px)] z-10 flex items-center gap-2">
+            {/* Le titre respire : sa lueur enfle et retombe lentement. */}
+            <motion.h1
+              animate={{
+                textShadow: [
+                  '0 0 30px rgba(75,63,207,0.55)',
+                  '0 0 44px rgba(75,63,207,0.8)',
+                  '0 0 30px rgba(75,63,207,0.55)',
+                ],
+              }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+              className="font-black leading-none tracking-[-0.015em] text-white text-[clamp(18px,4vh,40px)]"
+            >
+              YuyuFrame
+            </motion.h1>
+            <motion.button
+              whileHover={{ scale: 1.12, rotate: 8 }}
+              whileTap={{ scale: 0.92 }}
+              transition={SNAP}
+              onClick={() => navigate('/information')}
+              title={t('information.title')}
+              className="flex h-[clamp(18px,2.6vh,24px)] w-[clamp(18px,2.6vh,24px)] items-center justify-center rounded-lg bg-transparent text-[rgba(255,255,255,0.3)] transition-colors duration-150 hover:bg-[rgba(255,255,255,0.08)] hover:text-[rgba(255,255,255,0.8)]"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-[70%] w-[70%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
+            </motion.button>
+          </div>
+
           <WelcomeSequence
             username={username}
-            avatarUrl={username ? (customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/108`) : null}
+            // Le skin complet, pas une vignette de visage : c'est un rendu 3D
+            // qui le reçoit. Un compte hors ligne n'a rien chez mc-heads
+            // (UUID inventé), d'où le skin local quand il existe.
+            skinUrl={username ? (customSkinUri ?? (isOffline ? null : `https://mc-heads.net/skin/${uuid}`)) : null}
             greeting={username && welcome.phrase ? welcome.phrase : t('home.welcomeNew')}
             playIntro={welcome.playIntro}
+            onAvatarClick={() => navigate('/login')}
           />
 
           {/* La bannière attend que le badge soit posé : deux choses qui
@@ -521,116 +541,23 @@ export default function Home() {
           <HomeBanner banner={banner} visible={bannerReady} />
         </motion.div>
 
-        {/* RIGHT: Launcher panel — pas de scroll : tout est dimensionné en
-            clamp(vh) pour rétrécir avec la HAUTEUR de fenêtre (pas vw comme
-            avant — ce panneau empile ses éléments verticalement, c'est la
-            hauteur disponible qui le contraint, pas la largeur). */}
+        {/* Bloc de lancement — sous la bannière, centré, largeur bornée.
+            Il ne s'étire plus sur toute la page : passé une certaine largeur,
+            un sélecteur et un bouton qui s'allongent indéfiniment se lisent
+            moins bien, pas mieux. */}
         <motion.div
-          // Le panneau arrive de la droite, ses éléments se posent ensuite
-          // l'un après l'autre (variantes `panelItem` ci-dessous).
+          // Le bloc monte après la bannière, ses éléments se posant l'un
+          // après l'autre (variantes `panelItem` ci-dessous).
           variants={panelVariants}
           initial="initial"
           animate="animate"
-          // `justify-between` en toutes circonstances : passer en empilement
-          // simple en fenêtre basse laissait tout le bas vide, avec le bouton
-          // de lancement flottant au milieu de rien. La répartition reste
-          // donc, et c'est le contenu qui rétrécit assez pour ne jamais
-          // déborder — plus aucune de ses pièces n'a de hauteur fixe. En
-          // dernier recours (fenêtre vraiment minuscule), `overflow-y-auto`
-          // rend le débordement atteignable au lieu de le rogner.
-          className="relative flex w-[28%] min-w-[220px] flex-shrink-0 flex-col items-center justify-between overflow-y-auto overflow-x-hidden px-1 py-[clamp(4px,2vh,20px)]"
+          className="mx-auto flex w-full max-w-[560px] flex-shrink-0 flex-col"
         >
 
-          <motion.button
-            variants={panelItem}
-            whileHover={{ scale: 1.12, rotate: 8 }}
-            whileTap={{ scale: 0.92 }}
-            onClick={() => navigate('/information')}
-            className="absolute top-[8px] right-[8px] w-[clamp(24px,4.8vh,36px)] h-[clamp(24px,4.8vh,36px)] flex items-center justify-center rounded-lg text-[rgba(255,255,255,0.3)] bg-transparent transition-all duration-150 hover:text-[rgba(255,255,255,0.8)] hover:bg-[rgba(255,255,255,0.06)]"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-[55%] h-[55%]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
-          </motion.button>
-
-          {/* Le titre respire : sa lueur enfle et retombe lentement. */}
-          <motion.h1
-            variants={panelItem}
-            animate={{
-              textShadow: [
-                '0 0 40px rgba(75,63,207,0.60)',
-                '0 0 56px rgba(75,63,207,0.85)',
-                '0 0 40px rgba(75,63,207,0.60)',
-              ],
-            }}
-            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            className="text-center font-black text-white leading-none text-[clamp(16px,6vh,64px)] tracking-[-0.01em]"
-          >
-            YuyuFrame
-          </motion.h1>
-
-          {/* Avatar */}
-          <motion.div variants={panelItem} className="flex flex-col items-center gap-[clamp(2px,0.8vh,8px)]">
-            {username ? (
-              <button onClick={() => navigate('/login')} className="flex flex-col items-center gap-2 group" title={t('home.manageAccounts')}>
-                <div className="relative">
-                  {uuid && (
-                    <img
-                      src={customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/150`}
-                      alt={username}
-                      // Pas de image-rendering:pixelated ici — l'avatar est
-                      // redimensionné en continu par clamp() entre 40 et 150px
-                      // (voir le panneau de droite, dimensionné en vh) : le
-                      // nearest-neighbor de "pixelated" produit des blocs de
-                      // taille inégale à un ratio de downscale non entier,
-                      // visible comme un rendu "mal scallé" à certaines tailles
-                      // de fenêtre. Un lissage classique reste net à toutes les
-                      // tailles ; demander la source à 150 (= le max du clamp)
-                      // évite aussi un downscale inutilement agressif.
-                      className="rounded-xl transition-all duration-200 group-hover:brightness-75 w-[clamp(45px,calc(-151px_+_35vh),150px)] h-[clamp(45px,calc(-151px_+_35vh),150px)] object-cover shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                        const fb = e.currentTarget.nextElementSibling as HTMLElement | null
-                        if (fb) fb.style.display = 'flex'
-                      }}
-                    />
-                  )}
-                  <div
-                    className={`items-center justify-center rounded-xl font-black text-white transition-all duration-200 group-hover:brightness-75 w-[clamp(45px,calc(-151px_+_35vh),150px)] h-[clamp(45px,calc(-151px_+_35vh),150px)] text-[clamp(14px,6.8vh,56px)] bg-[rgba(75,63,207,0.60)] [font-family:monospace] ${uuid ? 'hidden' : 'flex'}`}
-                  >
-                    {username[0].toUpperCase()}
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <svg viewBox="0 0 24 24" fill="white" className="w-[30%] h-[30%] opacity-90">
-                      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-                    </svg>
-                  </div>
-                </div>
-                <span className="text-[clamp(9px,1.4vh,11px)] text-[rgba(255,255,255,0.4)] font-medium">{username}</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => navigate('/login')}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl transition-all duration-200 w-[clamp(45px,calc(-151px_+_35vh),150px)] h-[clamp(45px,calc(-151px_+_35vh),150px)] border-2 border-dashed border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.25)] hover:border-[rgba(75,63,207,0.5)] hover:text-[rgba(120,110,230,0.7)]"
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-[28%] h-[28%]">
-                  <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" />
-                </svg>
-                <span className="text-[clamp(8px,1.3vh,10px)] tracking-[0.1em] font-semibold">{t('home.connect')}</span>
-              </button>
-            )}
-          </motion.div>
-
-          {/* Le trait se déploie depuis le centre à l'ouverture. */}
-          <motion.div
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.25 }}
-            className="w-full h-px bg-[rgba(255,255,255,0.06)]"
-          />
-
-          {/* Instance + lancement — groupés avec un gap fixe pour que le bouton
-              ne flotte pas dans un espace résiduel géré par le justify-between
-              du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
-              pour former une pyramide inversée. */}
+          {/* Le titre, le bouton d'information et l'avatar ont rejoint la
+              bannière : ils y occupent une place qui était vide, au lieu de
+              disputer sa hauteur au bouton de lancement. Ne reste ici que ce
+              pour quoi on vient — choisir une instance et jouer. */}
           <motion.div variants={panelItem} className="w-full flex flex-shrink-0 flex-col gap-[clamp(6px,2.1vh,16px)]">
 
           {/* Instance selector */}
@@ -656,68 +583,44 @@ export default function Home() {
                 {t('home.createInstance')}
               </button>
             ) : (
-              <button
-                onClick={() => setShowInstanceSwitch(true)}
-                className="relative w-full flex items-center justify-between rounded-xl px-3 text-sm font-medium text-white outline-none h-[clamp(30px,6vh,45px)] bg-[rgba(0,0,0,0.45)] border border-[rgba(255,255,255,0.1)] transition-all duration-150 hover:border-[rgba(75,63,207,0.4)]"
-              >
-                <span className="truncate">
-                  {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : t('home.chooseInstance')}
-                </span>
-                <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="flex-shrink-0 opacity-[0.45]">
-                  <path d="M0 0l5 6 5-6z" />
-                </svg>
-              </button>
-            )}
-
-            {/* Instance info pill — se replie/déplie et change de contenu en
-                douceur quand on passe d'une instance à l'autre.
-                Masquée en fenêtre basse : le chargeur et la version sont déjà
-                écrits dans le sélecteur juste au-dessus et dans le coin de la
-                bannière, et l'interrupteur P2P n'est pas encore actionnable.
-                Il ne reste donc, en propre, que la mémoire allouée — pas de
-                quoi garder un bloc quand la place manque pour le bouton de
-                lancement. */}
-            <AnimatePresence mode="wait" initial={false}>
-            {instance && (
-              <motion.div
-                key={instance.id}
-                initial={{ opacity: 0, height: 0, y: -4 }}
-                animate={{ opacity: 1, height: 'auto', y: 0 }}
-                exit={{ opacity: 0, height: 0, y: -4 }}
-                transition={{ duration: 0.24, ease: EASE_OUT }}
-                className="w-[92%] mx-auto flex flex-col gap-[clamp(3px,0.8vh,6px)] px-3 py-[clamp(4px,1vh,6px)] rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] overflow-hidden short:hidden"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-[clamp(8px,1.3vh,10px)] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
-                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.25)]">·</span>
-                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.3)]">{instance.mc_version}</span>
-                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.25)]">·</span>
-                  <span className="text-[clamp(8px,1.3vh,10px)] text-[rgba(255,255,255,0.3)]">{instance.ram_mb >= 1024 ? `${instance.ram_mb / 1024}Go` : `${instance.ram_mb}Mo`}</span>
-                </div>
-
+              // Le sélecteur et l'engrenage sur la même ligne : choisir une
+              // instance et aller la configurer sont deux gestes voisins, et
+              // la pastille d'informations qui suivait ne disait rien que le
+              // sélecteur ne dise déjà.
+              <div className="flex w-full items-center gap-2">
                 <button
-                  onClick={() => !gameRunning && P2P_ENABLED && setP2pEnabled(!p2pEnabled)}
-                  disabled={gameRunning || !P2P_ENABLED}
-                  title={!P2P_ENABLED ? t('home.p2pComingSoon') : undefined}
-                  className={`flex items-center justify-between transition-all duration-150 h-[clamp(18px,3.5vh,26px)] rounded-lg px-2 disabled:cursor-not-allowed cursor-pointer ${P2P_ENABLED ? 'opacity-100' : 'opacity-60'} ${p2pToggleClasses}`}
+                  onClick={() => setShowInstanceSwitch(true)}
+                  className="relative flex h-[clamp(34px,6.4vh,48px)] min-w-0 flex-1 items-center justify-between rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3.5 text-sm font-medium text-white outline-none transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)]"
                 >
-                  <span className="flex items-center gap-1.5 text-[clamp(8px,1.3vh,10px)] font-semibold text-[rgba(255,255,255,0.25)]">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>
-                    {t('home.p2p')} {!P2P_ENABLED && <span className="text-[9px] opacity-60">{t('home.p2pSoon')}</span>}
+                  <span className="truncate">
+                    {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : t('home.chooseInstance')}
                   </span>
-                  <span className="relative transition-all duration-200 w-[26px] h-[14px] rounded-[7px] bg-[rgba(255,255,255,0.12)] flex-shrink-0">
-                    <span className="absolute top-0.5 rounded-full bg-white transition-all duration-200 w-2.5 h-2.5 left-0.5 opacity-40" />
-                  </span>
+                  <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="ml-2 flex-shrink-0 opacity-[0.45]">
+                    <path d="M0 0l5 6 5-6z" />
+                  </svg>
                 </button>
-              </motion.div>
+
+                <motion.button {...press}
+                  onClick={() => navigate('/mods')}
+                  disabled={!instance}
+                  title={t('home.configureInstance')}
+                  className="flex h-[clamp(34px,6.4vh,48px)] w-[clamp(34px,6.4vh,48px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.45)] transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.85)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-[45%] w-[45%]">
+                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                  </svg>
+                </motion.button>
+              </div>
             )}
-            </AnimatePresence>
+
           </div>
 
-          {/* Launch button — l'annulation devient une pastille "Annuler"
-              intégrée sous le texte "EN JEU..." plutôt qu'un bouton rond
-              séparé, pour ne pas casser la forme du bouton principal. */}
-          <div className="flex w-[80%] mx-auto gap-2">
+          {/* Bouton de lancement — l'annulation est une pastille « Annuler »
+              intégrée sous le texte « EN JEU… » plutôt qu'un bouton rond
+              séparé, pour ne pas casser la forme du bouton principal.
+              Pleine largeur de la colonne : c'est le geste de l'écran, il n'a
+              pas à se faire plus petit que ce qui le précède. */}
+          <div className="mt-[clamp(8px,1.6vh,14px)] flex w-full gap-2">
             {gameRunning ? (
               <div
                 className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-[clamp(3px,0.8vh,6px)] rounded-2xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] py-[clamp(5px,1.4vh,10px)] ${launchBtnBg} ${launchBtnShadow}`}
@@ -754,7 +657,7 @@ export default function Home() {
                 transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(30px,7vh,52px)] flex-1 flex-shrink-0 rounded-2xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(42px,8.4vh,66px)] flex-1 flex-shrink-0 rounded-2xl text-[clamp(13px,2.3vh,20px)] tracking-[0.05em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -882,66 +785,31 @@ export default function Home() {
               </motion.div>
             ))
           )}
+
+          {/* L'offre ferme la rangée, au format des cartes voisines. Elle
+              occupait une colonne entière du pied de page, en face de la
+              marque : deux blocs de texte qui encadraient la barre de
+              navigation et l'écrasaient au centre. */}
+          <motion.div variants={cardItem} className="flex flex-1">
+            <ProCard onOpen={() => navigate('/plans')} />
+          </motion.div>
         </motion.div>
 
-        {/* Brand | Nav | Promo — 3 colonnes égales, alignées en haut.
-            overflow-x-auto en filet de sécurité : si les 7 liens de nav ne
-            tiennent plus même à leur taille clamp() minimale, la ligne
-            devient scrollable au lieu de couper les derniers liens. */}
-        <div className="grid gap-4 grid-cols-[auto_1fr_auto] items-center overflow-x-auto">
+        {/* Barre de navigation — seule occupante de sa ligne.
+            overflow-x-auto en filet de sécurité : si les 7 liens ne tiennent
+            plus même à leur taille clamp() minimale, la ligne devient
+            défilable au lieu de couper les derniers. */}
+        <div className="flex overflow-x-auto">
 
-          {/* LEFT — Brand + compte */}
-          <div className="flex flex-col gap-[clamp(3px,0.7vh,8px)]">
-            <span className="font-black text-white text-[clamp(13px,1.9vh,17px)] tracking-[-0.01em]">
-              YuyuFrame
-            </span>
-            <span className="text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-normal">
-              {t('home.brandTagline')}
-            </span>
-            <div className="flex items-center mt-[clamp(0px,0.3vh,4px)]">
-              {username ? (
-                <div className="flex items-center overflow-hidden h-[clamp(24px,3.5vh,32px)] rounded-[10px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.09)]">
-                  <button
-                    onClick={() => navigate('/login')}
-                    className="flex items-center gap-2 h-full pl-2.5 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.14)]"
-                    title={t('home.manageAccount')}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] flex-shrink-0 inline-block" />
-                    {uuid && (
-                      <img src={customFaceUri ?? `https://mc-heads.net/avatar/${uuid}/32`} alt={username}
-                        className="w-4 h-4 [image-rendering:pixelated] rounded-[3px] flex-shrink-0"
-                        onError={(e) => { e.currentTarget.style.display = 'none' }}
-                      />
-                    )}
-                    <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.82)] max-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap">
-                      {username}
-                    </span>
-                  </button>
-                  <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] flex-shrink-0" />
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center justify-center h-full px-2.5 transition-all duration-150 text-[rgba(255,255,255,0.28)] hover:bg-[rgba(200,50,50,0.14)] hover:text-[rgb(248,113,113)]"
-                    title={t('home.logout')}
-                  >
-                    <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
-                      <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => navigate('/login')}
-                  className="flex items-center gap-1.5 rounded-xl px-4 font-semibold transition-all duration-200 h-[clamp(24px,3.5vh,32px)] text-[clamp(10px,1.4vh,11px)] bg-[#4B3FCF] text-white hover:bg-[#6155e8]"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}><path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" /></svg>
-                  {t('home.login')}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* CENTER — Nav pyramid */}
-          <div className="flex min-w-0 items-center justify-center gap-2 w-full [container-type:inline-size]">
+          {/* La marque, l'accroche et la pastille de compte ont quitté cette
+              ligne : le nom est déjà sur la bannière, et « Compte » dans la
+              barre mène à l'écran qui gère les comptes, déconnexion comprise.
+              Le pied de page n'a plus qu'un rôle : naviguer. */}
+          {/* `w-full` obligatoire : `container-type: inline-size` rend la
+              largeur indépendante du contenu, donc sans largeur définie la
+              barre s'effondrerait. Elle la tenait de sa colonne de grille
+              avant, elle la tient de la ligne maintenant. */}
+          <div className="flex w-full min-w-0 items-center justify-center gap-2 [container-type:inline-size]">
             <NavLink label={t('home.nav.instances')} onClick={() => navigate('/instances')} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
             </NavLink>
@@ -968,39 +836,6 @@ export default function Home() {
             </NavLink>
           </div>
 
-          {/* RIGHT — YuyuFrame Pro, miroir du LEFT aligné à droite */}
-          <div className="flex flex-col gap-[clamp(3px,0.7vh,8px)] items-end">
-            <span className="font-black text-white text-right text-[clamp(13px,1.9vh,17px)] tracking-[-0.01em]">
-              YuyuFrame <span className="text-[#a78bfa]">Pro</span>
-            </span>
-            <span className="text-right text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-[1.6]">
-              {t('home.proTagline')}
-            </span>
-            {/* Pill pleine largeur : bouton | séparateur | -50%.
-                Une lueur violette très lente attire l'œil sans clignoter. */}
-            <motion.div
-              animate={{ boxShadow: ['0 0 0 rgba(120,100,255,0)', '0 0 18px rgba(120,100,255,0.25)', '0 0 0 rgba(120,100,255,0)'] }}
-              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-              className="flex items-center overflow-hidden mt-[clamp(0px,0.3vh,4px)] h-[clamp(24px,3.5vh,32px)] rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]"
-            >
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => navigate('/plans')}
-                className="flex items-center gap-2 h-full pl-3 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.2)]"
-                title={t('home.proSeePlansTitle')}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12} className="text-[#a78bfa] flex-shrink-0"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
-                <span className="text-[11px] font-semibold text-[rgba(255,255,255,0.82)] whitespace-nowrap">
-                  {t('home.proSeePlans')}
-                </span>
-              </motion.button>
-              <div className="w-px h-4 bg-[rgba(255,255,255,0.08)] flex-shrink-0" />
-              <div className="flex items-center justify-center h-full px-3">
-                <span className="text-[10px] font-bold text-[#a78bfa] whitespace-nowrap">-50%</span>
-              </div>
-            </motion.div>
-          </div>
         </div>
 
         </div>{/* fin zone principale */}

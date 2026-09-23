@@ -592,6 +592,7 @@ export const de: TranslationSchema = {
     manage: 'Verwalten',
     createInstance: 'Instanz erstellen',
     chooseInstance: 'Instanz wählen',
+    configureInstance: 'Mods, Packs und Optionen dieser Instanz',
     connect: 'ANMELDEN',
     manageAccounts: 'Konten verwalten',
     p2p: 'P2P',
