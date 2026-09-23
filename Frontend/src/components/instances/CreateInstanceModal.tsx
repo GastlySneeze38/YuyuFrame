@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { press } from '@/lib/motion'
 import { motion } from 'framer-motion'
 import { api } from '@/api/client'
@@ -11,7 +12,6 @@ import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { showError } from '@/stores/useErrorToast'
 import { clearDraft, useDraftState } from '@/stores/useDrafts'
 import { NameInput, DescriptionInput, SubmitButton, VersionSelect, LoaderPicker } from './InstanceFormFields'
-import { JvmAdvancedSection } from './JvmAdvancedSection'
 import { PresetCard } from './PresetCard'
 import { useT } from '@/i18n'
 
@@ -78,6 +78,7 @@ export function CreateInstanceModal({
   onCreate: (instance: Instance) => void
 }) {
   const t = useT()
+  const navigate = useNavigate()
   const [step, setStep] = useState<'choose' | 'configure'>('choose')
   const [mode, setMode] = useState<'blank' | 'preset'>('blank')
   const [selectedPreset, setSelectedPreset] = useState<InstancePreset | null>(null)
@@ -90,9 +91,13 @@ export function CreateInstanceModal({
   const [mcVersion, setMcVersion] = useDraftState(DRAFT_KEY, 'mcVersion', versions[0] ?? '')
   const [loader, setLoader] = useDraftState<Loader>(DRAFT_KEY, 'loader', 'vanilla')
   const [ram, setRam] = useDraftState(DRAFT_KEY, 'ram', defaultRam)
-  const [jvmVendor, setJvmVendor] = useState<JvmVendor>(defaultJvmVendor)
-  const [jvmCustomPath, setJvmCustomPath] = useState(defaultJvmCustomPath)
-  const [gcPolicy, setGcPolicy] = useState(defaultGcPolicy)
+  // Les réglages JVM ne se saisissent plus ici, mais l'instance doit quand
+  // même naître avec ceux que l'utilisateur a choisis comme valeurs par
+  // défaut dans les paramètres — sinon créer une instance les perdrait
+  // silencieusement.
+  const jvmVendor = defaultJvmVendor
+  const jvmCustomPath = defaultJvmCustomPath
+  const gcPolicy = defaultGcPolicy
   // Optimiste par défaut (true/true) pour ne pas griser le bouton "Créer"
   // pendant le premier rendu, avant que RamPicker n'ait pu calculer son
   // premier statut réel (retour utilisateur : bloquer la création tant
@@ -132,9 +137,8 @@ export function CreateInstanceModal({
       setMcVersion(versions[0] ?? '')
       setLoader('vanilla')
       setRam(defaultRam)
-      setJvmVendor(defaultJvmVendor)
-      setJvmCustomPath(defaultJvmCustomPath)
-      setGcPolicy(defaultGcPolicy)
+      // Plus rien à remettre à zéro côté JVM : ces valeurs ne sont plus
+      // modifiables ici, elles valent toujours les réglages par défaut.
       api.analytics.track('instance_create_from_scratch_selected', { flow_id: flowId.current })
     }
   }
@@ -251,14 +255,31 @@ export function CreateInstanceModal({
 
             <DescriptionInput value={description} onChange={setDescription} />
 
-            {/* Pas de prévisualisation ici (`preview` omis) : l'instance
-                n'existe pas encore, rien à résoudre tant qu'elle n'est pas créée. */}
-            <JvmAdvancedSection
-              vendor={jvmVendor} onVendorChange={setJvmVendor}
-              customPath={jvmCustomPath} onCustomPathChange={setJvmCustomPath}
-              gcPolicy={gcPolicy} onGcPolicyChange={setGcPolicy}
-              ramMb={ram}
-            />
+            {/* La JVM a quitté cette modale pour son propre écran, comme dans
+                la modale de modification.
+                Dépliée ici, la section faisait sortir le formulaire de
+                l'écran, et demandait un arbitrage sur le vendeur et le
+                ramasse-miettes avant même que l'instance existe — alors que
+                l'écran dédié, lui, montre l'aperçu de la vraie ligne de
+                commande, ce qu'une section repliable ne pouvait pas porter.
+                L'instance part donc sur les réglages par défaut, et se relie
+                à une configuration quand on le souhaite. */}
+            <motion.button {...press}
+              onClick={() => { onClose(); navigate('/jvm') }}
+              className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5 text-left transition-colors hover:border-white/20"
+            >
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-[rgba(255,255,255,0.75)]">
+                  {t('instancesPage.jvmConfigTitle')}
+                </p>
+                <p className="truncate text-[11px] text-[rgba(255,255,255,0.35)]">
+                  {t('instancesPage.jvmConfigAfterCreate')}
+                </p>
+              </div>
+              <span className="flex-shrink-0 text-[11px] font-semibold text-[rgba(150,140,240,0.9)]">
+                {t('instancesPage.jvmConfigOpen')}
+              </span>
+            </motion.button>
 
             {!ramStatus.isKnownTier ? (
               <p className="text-[11px] text-[rgba(240,180,90,0.75)] -mt-2">

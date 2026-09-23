@@ -55,13 +55,22 @@ export function ModalShell({
       initial="initial"
       animate="animate"
       exit="exit"
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      // Défilement quand la carte dépasse l'écran.
+      //
+      // `items-center` seul ne suffit pas : une fois la carte plus haute que
+      // la fenêtre, le centrage la fait déborder des DEUX côtés, et ce qui
+      // sort par le haut devient inatteignable — le navigateur ne défile pas
+      // avant le début du conteneur. D'où `items-start` plus une marge
+      // automatique sur la carte : les marges automatiques centrent tant
+      // qu'il y a de la place et se réduisent au rembourrage sinon, sans
+      // jamais rogner le haut.
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
       style={{ background: overlay, backdropFilter: `blur(${blur}px)` }}
       onClick={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose() } : undefined}
     >
       <motion.div
         variants={modalVariants}
-        className={`w-full ${maxWidth} rounded-2xl p-6 flex flex-col gap-5 bg-bg-card border border-accent/30 shadow-[0_24px_80px_rgba(0,0,0,0.6)]`}
+        className={`my-auto w-full ${maxWidth} rounded-2xl p-6 flex flex-col gap-5 bg-bg-card border border-accent/30 shadow-[0_24px_80px_rgba(0,0,0,0.6)]`}
         style={cardStyle}
       >
         {title !== undefined && (
