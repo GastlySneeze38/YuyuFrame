@@ -102,7 +102,13 @@ export function ServerCard({
           : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.05)] hover:bg-[rgba(75,63,207,0.06)] hover:border-[rgba(120,100,255,0.25)]'
       } ${className}`}
     >
-      <div className="relative flex flex-col gap-[clamp(3px,1.2cqw,6px)] px-[clamp(6px,4cqw,12px)] py-[clamp(5px,3.5cqw,10px)]">
+      {/* `flex-1 justify-center` : la carte est étirée sur la hauteur de la
+          plus haute de sa rangée (l'offre, sur l'accueil), mais son contenu
+          gardait sa hauteur propre et restait collé en haut — d'où le vide
+          sous la dernière ligne de texte. Le bloc occupe maintenant toute la
+          carte et centre ses lignes dedans : le vide se répartit en haut et
+          en bas au lieu de tomber entièrement au pied. */}
+      <div className="relative flex flex-1 flex-col justify-center gap-[clamp(3px,1.2cqw,6px)] px-[clamp(6px,4cqw,12px)] py-[clamp(5px,3.5cqw,10px)]">
         <div className="flex items-center gap-[clamp(3px,1.5cqw,6px)] text-[rgba(255,255,255,0.35)]">
           {ping?.favicon ? (
             <img src={ping.favicon} alt="" className="w-[clamp(10px,5.5cqw,14px)] h-[clamp(10px,5.5cqw,14px)] rounded-[2px] [image-rendering:pixelated] flex-shrink-0" />

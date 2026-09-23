@@ -554,7 +554,7 @@ export default function Home() {
               bannière : ils y occupent une place qui était vide, au lieu de
               disputer sa hauteur au bouton de lancement. Ne reste ici que ce
               pour quoi on vient — choisir une instance et jouer. */}
-          <motion.div variants={panelItem} className="w-full flex flex-shrink-0 flex-col gap-[clamp(6px,2.1vh,16px)]">
+          <motion.div variants={panelItem} className="w-full flex flex-shrink-0 flex-col gap-[clamp(6px,1.3vh,10px)]">
 
           {/* Instance selector */}
           <div className="w-full flex flex-col gap-[clamp(3px,1.05vh,8px)]">
@@ -616,10 +616,16 @@ export default function Home() {
               séparé, pour ne pas casser la forme du bouton principal.
               Pleine largeur de la colonne : c'est le geste de l'écran, il n'a
               pas à se faire plus petit que ce qui le précède. */}
-          <div className="mt-[clamp(8px,1.6vh,14px)] flex w-full gap-2">
+          {/* Plus de marge propre ici : le `gap` du groupe ci-dessus espaçait
+              déjà le sélecteur du bouton, et les deux s'additionnaient — d'où
+              un vide deux fois trop grand entre les deux. */}
+          <div className="flex w-full gap-2">
             {gameRunning ? (
               <div
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-[clamp(3px,0.8vh,6px)] rounded-2xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] py-[clamp(5px,1.4vh,10px)] ${launchBtnBg} ${launchBtnShadow}`}
+                // Même rayon que le bouton de lancement : c'est le même
+                // emplacement, il ne doit pas changer de forme quand la
+                // partie démarre.
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-[clamp(3px,0.8vh,6px)] rounded-xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] py-[clamp(5px,1.4vh,10px)] ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -653,7 +659,7 @@ export default function Home() {
                 transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(42px,8.4vh,66px)] flex-1 flex-shrink-0 rounded-2xl text-[clamp(13px,2.3vh,20px)] tracking-[0.05em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(38px,6.6vh,52px)] flex-1 flex-shrink-0 rounded-xl text-[clamp(12px,1.8vh,16px)] tracking-[0.05em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -713,6 +719,11 @@ export default function Home() {
           animate="animate"
           className="flex items-stretch gap-2"
         >
+          {/* L'offre ouvre la rangée, au format des cartes voisines. */}
+          <motion.div variants={cardItem} className="flex flex-1">
+            <ProCard onOpen={() => navigate('/plans')} />
+          </motion.div>
+
           {showHomeServers ? (
             <>
               {serverSlots.map((server, i) =>
@@ -781,14 +792,6 @@ export default function Home() {
               </motion.div>
             ))
           )}
-
-          {/* L'offre ferme la rangée, au format des cartes voisines. Elle
-              occupait une colonne entière du pied de page, en face de la
-              marque : deux blocs de texte qui encadraient la barre de
-              navigation et l'écrasaient au centre. */}
-          <motion.div variants={cardItem} className="flex flex-1">
-            <ProCard onOpen={() => navigate('/plans')} />
-          </motion.div>
         </motion.div>
 
         {/* Barre de navigation — seule occupante de sa ligne.
@@ -805,7 +808,10 @@ export default function Home() {
               largeur indépendante du contenu, donc sans largeur définie la
               barre s'effondrerait. Elle la tenait de sa colonne de grille
               avant, elle la tient de la ligne maintenant. */}
-          <div className="flex w-full min-w-0 items-center justify-center gap-2 [container-type:inline-size]">
+          {/* L'écart suit la largeur disponible, au lieu des 8 px fixes qui
+              tassaient sept liens devenus plus grands. Il reste borné : au
+              delà, la barre se disloque en éléments isolés. */}
+          <div className="flex w-full min-w-0 items-center justify-center gap-[clamp(4px,0.65vw,16px)] py-[clamp(0px,0.8vh,10px)] [container-type:inline-size]">
             <NavLink label={t('home.nav.instances')} onClick={() => navigate('/instances')} distance={3}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z" /></svg>
             </NavLink>
@@ -904,16 +910,22 @@ export default function Home() {
  * minuscule dès que la fenêtre était large et basse, et une barre qui ne
  * remplissait jamais sa ligne.
  *
- * L'unité de référence est maintenant la largeur de la fenêtre — c'est elle
- * qui décide si sept liens tiennent côte à côte. Le plancher est haut
- * (11,5 px sur les liens extérieurs) : en dessous, la barre devient illisible
- * bien avant de manquer de place.
+ * L'unité de référence est la largeur de la fenêtre — c'est elle qui décide
+ * si sept liens tiennent côte à côte. Le plancher est haut (11,5 px sur les
+ * liens extérieurs) : en dessous, la barre devient illisible bien avant de
+ * manquer de place.
+ *
+ * `max(vw, vh)` et non `vw` seul : la bannière et le bouton de lancement ont
+ * été réduits, donc le pied de page dispose désormais de hauteur en trop. La
+ * barre s'en sert — sur une fenêtre haute mais étroite, c'est la hauteur qui
+ * commande, et les liens grossissent au lieu de laisser ce vide. Le plafond
+ * reste là pour qu'ils ne deviennent pas des pavés sur un grand écran.
  */
 const NAV_SIZE_CLASSES = [
-  'text-[clamp(13px,1.25vw,20px)] font-[700]',
-  'text-[clamp(12.5px,1.14vw,18px)] font-[650]',
-  'text-[clamp(12px,1.02vw,16.5px)] font-[600]',
-  'text-[clamp(11.5px,0.92vw,15px)] font-[550]',
+  'text-[clamp(13px,max(1.32vw,2.35vh),24px)] font-[700]',
+  'text-[clamp(12.5px,max(1.20vw,2.15vh),21.5px)] font-[650]',
+  'text-[clamp(12px,max(1.08vw,1.94vh),19.5px)] font-[600]',
+  'text-[clamp(11.5px,max(0.97vw,1.74vh),17.5px)] font-[550]',
 ]
 
 /** Temps passé sur un même lien avant que le repère ne s'étire. */
