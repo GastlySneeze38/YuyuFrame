@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { press } from '@/lib/motion'
@@ -6,7 +6,9 @@ import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
-import { useT } from '@/i18n'
+import { OptionSearchBar } from './OptionSearchBar'
+import type { SearchCandidate } from './optionSearch'
+import { tIn, useT } from '@/i18n'
 import type { Instance, McOption } from '@/types'
 
 /**
@@ -113,7 +115,10 @@ export function OptionsTab({ instance }: { instance: Instance }) {
   const [saved, setSaved] = useState<Record<string, string>>({})
   /** Les valeurs modifiées et pas encore écrites. */
   const [draft, setDraft] = useState<Record<string, string>>({})
-  const [filter, setFilter] = useState('')
+  /** Réglage visé par la recherche : mis en évidence puis amené à l'œil, et
+   *  relâché au bout de quelques secondes — c'est un repère, pas un état. */
+  const [highlight, setHighlight] = useState<string | null>(null)
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -138,6 +143,55 @@ export function OptionsTab({ instance }: { instance: Instance }) {
     () => Object.entries(draft).filter(([k, v]) => (saved[k] ?? '') !== v),
     [draft, saved],
   )
+
+  /** Tout ce que la recherche peut trouver : les réglages que l'on sait
+   *  nommer, plus les clés présentes dans le fichier que l'on ne connaît pas.
+   *  Les secondes n'ont ni libellé ni groupe — c'est exactement ce que la
+   *  recherche affiche, une clé brute, sans prétendre la traduire. */
+  const candidates = useMemo<SearchCandidate[]>(() => {
+    const known = KNOWN.flatMap((group) =>
+      group.options.map((o) => {
+        const label = t(o.labelKey)
+        const groupLabel = t(group.groupKey)
+        const english = tIn('en', o.labelKey)
+        const englishGroup = tIn('en', group.groupKey)
+        return {
+          key: o.key,
+          label,
+          group: groupLabel,
+          // L'anglais reste cherchable même quand l'interface est dans une
+          // autre langue : on désigne couramment une option par son nom
+          // anglais alors que le jeu tourne en français. Ajouté seulement
+          // s'il diffère, sinon on comparerait deux fois la même chaîne.
+          aliases: english === label ? undefined : [english],
+          groupAliases: englishGroup === groupLabel ? undefined : [englishGroup],
+        }
+      }),
+    )
+    const unknown = Object.keys(saved)
+      .filter((k) => !KNOWN_KEYS.has(k))
+      .map((key) => ({ key }))
+    return [...known, ...unknown]
+  }, [saved, t])
+
+  /** Amène le réglage choisi à l'œil : bascule vers la vue qui sait le
+   *  montrer, puis fait défiler jusqu'à lui. Une clé que la vue lisible ne
+   *  connaît pas n'existe que dans la vue avancée. */
+  const goToOption = (key: string) => {
+    setAdvanced(!KNOWN_KEYS.has(key))
+    setHighlight(key)
+  }
+
+  useEffect(() => {
+    if (!highlight) return
+    // Un cran d'attente : la bascule de vue doit être peinte avant qu'on
+    // puisse viser une ligne qui vient seulement d'exister.
+    const scroll = setTimeout(() => {
+      rowRefs.current[highlight]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 60)
+    const release = setTimeout(() => setHighlight(null), 2400)
+    return () => { clearTimeout(scroll); clearTimeout(release) }
+  }, [highlight, advanced])
 
   const save = async () => {
     if (dirty.length === 0 || saving) return
@@ -174,7 +228,6 @@ export function OptionsTab({ instance }: { instance: Instance }) {
   const rows = advanced
     ? Object.keys(saved)
       .concat(Object.keys(draft).filter((k) => !(k in saved)))
-      .filter((k) => k.toLowerCase().includes(filter.toLowerCase()))
       .sort()
     : []
 
@@ -197,16 +250,12 @@ export function OptionsTab({ instance }: { instance: Instance }) {
           ))}
         </div>
 
-        {advanced && (
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={t('options.filterPlaceholder')}
-            className="h-8 flex-1 rounded-lg border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3 text-[12px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
-          />
-        )}
+        {/* La recherche est offerte dans les deux vues, et c'est elle qui
+            décide où emmener : un réglage connu se montre mieux avec son
+            contrôle, une clé brute n'existe que dans la vue avancée. */}
+        <OptionSearchBar candidates={candidates} onPick={goToOption} />
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {dirty.length > 0 && (
             <span className="text-[11px] text-[rgba(179,163,255,0.9)]">
               {t('options.pending', { count: dirty.length })}
@@ -237,12 +286,20 @@ export function OptionsTab({ instance }: { instance: Instance }) {
         rows.length === 0 ? (
           <EmptyState compact
             icon={<svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.18)" width={22} height={22}><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z" /></svg>}
-            title={t('options.noMatch')}
+            title={t('options.emptyAdvanced')}
           />
         ) : (
           <div className="flex flex-col gap-1">
             {rows.map((key) => (
-              <div key={key} className="flex items-center gap-3 rounded-lg px-2.5 py-1.5 odd:bg-[rgba(255,255,255,0.02)]">
+              <div
+                key={key}
+                ref={(el) => { rowRefs.current[key] = el }}
+                className={`flex items-center gap-3 rounded-lg px-2.5 py-1.5 transition-colors duration-300 ${
+                  highlight === key
+                    ? 'bg-[rgba(75,63,207,0.28)] ring-1 ring-[rgba(139,92,246,0.6)]'
+                    : 'odd:bg-[rgba(255,255,255,0.02)]'
+                }`}
+              >
                 <span className="w-[42%] flex-shrink-0 truncate font-mono text-[11.5px] text-[rgba(255,255,255,0.55)]" title={key}>
                   {key}
                 </span>
@@ -274,6 +331,8 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                     option={opt}
                     value={value(opt.key, opt.fallback)}
                     changed={opt.key in draft && draft[opt.key] !== saved[opt.key]}
+                    highlighted={highlight === opt.key}
+                    rowRef={(el) => { rowRefs.current[opt.key] = el }}
                     onChange={(v) => set(opt.key, v)}
                   />
                 ))}
@@ -329,17 +388,28 @@ export function OptionsTab({ instance }: { instance: Instance }) {
   )
 }
 
-function OptionRow({ option, value, changed, onChange }: {
+function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
   option: KnownOption
   value: string
   changed: boolean
+  highlighted: boolean
+  rowRef: (el: HTMLDivElement | null) => void
   onChange: (v: string) => void
 }) {
   const t = useT()
   const { control } = option
 
   return (
-    <div className={`flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors duration-150 ${changed ? 'bg-[rgba(75,63,207,0.1)]' : 'odd:bg-[rgba(255,255,255,0.02)]'}`}>
+    <div
+      ref={rowRef}
+      className={`flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors duration-300 ${
+        highlighted
+          ? 'bg-[rgba(75,63,207,0.28)] ring-1 ring-[rgba(139,92,246,0.6)]'
+          : changed
+            ? 'bg-[rgba(75,63,207,0.1)]'
+            : 'odd:bg-[rgba(255,255,255,0.02)]'
+      }`}
+    >
       <span className="w-[40%] flex-shrink-0 text-[12px] text-[rgba(255,255,255,0.65)]">
         {t(option.labelKey)}
       </span>

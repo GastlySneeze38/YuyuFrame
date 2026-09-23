@@ -35,6 +35,19 @@ export function t(key: string, vars?: Record<string, string | number>): string {
   return interpolate(value, vars)
 }
 
+/** Traduit `key` dans une langue **choisie**, sans toucher à celle de
+ * l'interface.
+ *
+ * Sert à rendre cherchable ce qui n'est pas affiché : on désigne souvent une
+ * option de Minecraft par son nom anglais alors que le jeu et le launcher
+ * sont en français. La recherche des réglages compare donc aussi aux
+ * libellés anglais, sans jamais les montrer (voir OptionsTab). */
+export function tIn(lang: Lang, key: string, vars?: Record<string, string | number>): string {
+  const value = getPath(DICTS[lang], key) ?? getPath(DICTS.fr, key)
+  if (typeof value !== 'string') return key
+  return interpolate(value, vars)
+}
+
 /** Hook — s'abonne à `language` pour re-render le composant quand elle
  * change (t() seul ne le fait pas, il ne fait que lire l'état courant). */
 export function useT() {
