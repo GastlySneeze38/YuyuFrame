@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -432,6 +432,30 @@ export const api = {
 
     searchAdvanced: (input: ModrinthAdvancedSearchInput) =>
       invoke<ModrinthSearchResponse>('mods_search_advanced', { input }),
+  },
+
+  /** Packs de ressources et shaders de l'instance. Pas de `toggle` ici,
+   *  contrairement aux mods : c'est le jeu qui active un pack (options.txt
+   *  pour les ressources, configuration du mod de shaders pour les shaders),
+   *  pas un renommage de fichier. */
+  packs: {
+    list: (instanceId: string, kind: PackKind) =>
+      invoke<PackInfo[]>('packs_list', { instanceId, kind }),
+    install: (instanceId: string, kind: PackKind, url: string, filename: string) =>
+      invoke<PackInfo>('packs_install', { instanceId, kind, url, filename }),
+    delete: (instanceId: string, kind: PackKind, name: string) =>
+      invoke<void>('packs_delete', { instanceId, kind, name }),
+    importPaths: (instanceId: string, kind: PackKind, paths: string[]) =>
+      invoke<PackInfo[]>('packs_import_paths', { instanceId, kind, paths }),
+  },
+
+  /** `options.txt` de l'instance. `read` rend une liste vide tant que le jeu
+   *  n'a jamais été lancé — c'est Minecraft qui crée le fichier. `write`
+   *  n'applique que les clés fournies et rend le fichier relu. */
+  mcOptions: {
+    read: (instanceId: string) => invoke<McOption[]>('mc_options_read', { instanceId }),
+    write: (instanceId: string, changes: McOption[]) =>
+      invoke<McOption[]>('mc_options_write', { instanceId, changes }),
   },
 
   // Passe par le proxy LauncherAPI (voir Server/LauncherAPI/src/routes/curseforge.rs)

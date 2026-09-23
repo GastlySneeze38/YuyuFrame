@@ -418,7 +418,7 @@ export default function Home() {
     <div className="flex h-full flex-col overflow-hidden bg-[#09090D]">
 
       {/* ── Main area ── */}
-      <div className="flex gap-4 overflow-hidden p-4 flex-[1_1_0] min-h-0">
+      <div className="flex gap-4 overflow-hidden p-[clamp(8px,1.7vh,16px)] flex-[1_1_0] min-h-0">
 
         {/* LEFT: Cinematic Minecraft banner */}
         <motion.div
@@ -531,7 +531,14 @@ export default function Home() {
           variants={panelVariants}
           initial="initial"
           animate="animate"
-          className="relative flex w-[28%] min-w-[220px] flex-shrink-0 flex-col items-center justify-between overflow-hidden px-1 pt-[clamp(6px,2.5vh,20px)]"
+          // `justify-between` en toutes circonstances : passer en empilement
+          // simple en fenêtre basse laissait tout le bas vide, avec le bouton
+          // de lancement flottant au milieu de rien. La répartition reste
+          // donc, et c'est le contenu qui rétrécit assez pour ne jamais
+          // déborder — plus aucune de ses pièces n'a de hauteur fixe. En
+          // dernier recours (fenêtre vraiment minuscule), `overflow-y-auto`
+          // rend le débordement atteignable au lieu de le rogner.
+          className="relative flex w-[28%] min-w-[220px] flex-shrink-0 flex-col items-center justify-between overflow-y-auto overflow-x-hidden px-1 py-[clamp(4px,2vh,20px)]"
         >
 
           <motion.button
@@ -561,7 +568,7 @@ export default function Home() {
           </motion.h1>
 
           {/* Avatar */}
-          <motion.div variants={panelItem} className="flex flex-col items-center gap-2">
+          <motion.div variants={panelItem} className="flex flex-col items-center gap-[clamp(2px,0.8vh,8px)]">
             {username ? (
               <button onClick={() => navigate('/login')} className="flex flex-col items-center gap-2 group" title={t('home.manageAccounts')}>
                 <div className="relative">
@@ -624,7 +631,7 @@ export default function Home() {
               ne flotte pas dans un espace résiduel géré par le justify-between
               du panneau ; largeurs décroissantes (sélecteur > pastille > bouton)
               pour former une pyramide inversée. */}
-          <motion.div variants={panelItem} className="w-full flex flex-col gap-[clamp(6px,2.1vh,16px)]">
+          <motion.div variants={panelItem} className="w-full flex flex-shrink-0 flex-col gap-[clamp(6px,2.1vh,16px)]">
 
           {/* Instance selector */}
           <div className="w-full flex flex-col gap-[clamp(3px,1.05vh,8px)]">
@@ -663,7 +670,13 @@ export default function Home() {
             )}
 
             {/* Instance info pill — se replie/déplie et change de contenu en
-                douceur quand on passe d'une instance à l'autre. */}
+                douceur quand on passe d'une instance à l'autre.
+                Masquée en fenêtre basse : le chargeur et la version sont déjà
+                écrits dans le sélecteur juste au-dessus et dans le coin de la
+                bannière, et l'interrupteur P2P n'est pas encore actionnable.
+                Il ne reste donc, en propre, que la mémoire allouée — pas de
+                quoi garder un bloc quand la place manque pour le bouton de
+                lancement. */}
             <AnimatePresence mode="wait" initial={false}>
             {instance && (
               <motion.div
@@ -672,7 +685,7 @@ export default function Home() {
                 animate={{ opacity: 1, height: 'auto', y: 0 }}
                 exit={{ opacity: 0, height: 0, y: -4 }}
                 transition={{ duration: 0.24, ease: EASE_OUT }}
-                className="w-[92%] mx-auto flex flex-col gap-[clamp(3px,0.8vh,6px)] px-3 py-[clamp(4px,1vh,6px)] rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] overflow-hidden"
+                className="w-[92%] mx-auto flex flex-col gap-[clamp(3px,0.8vh,6px)] px-3 py-[clamp(4px,1vh,6px)] rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] overflow-hidden short:hidden"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-[clamp(8px,1.3vh,10px)] font-bold" style={{ color: loaderColor(instance.loader) }}>{instance.loader.toUpperCase()}</span>
@@ -707,7 +720,7 @@ export default function Home() {
           <div className="flex w-[80%] mx-auto gap-2">
             {gameRunning ? (
               <div
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-1.5 rounded-2xl text-[13px] tracking-[0.04em] py-2.5 ${launchBtnBg} ${launchBtnShadow}`}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 flex-1 flex flex-col items-center justify-center gap-[clamp(3px,0.8vh,6px)] rounded-2xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] py-[clamp(5px,1.4vh,10px)] ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -741,7 +754,7 @@ export default function Home() {
                 transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(34px,7vh,52px)] flex-1 rounded-2xl text-[13px] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
+                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(30px,7vh,52px)] flex-1 flex-shrink-0 rounded-2xl text-[clamp(11px,1.7vh,13px)] tracking-[0.04em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
                 {progress && (
                   <span
@@ -782,8 +795,13 @@ export default function Home() {
         className="flex flex-shrink-0 flex-col px-6 py-[clamp(8px,2vh,16px)] bg-[#09090D] border-t border-t-[rgba(255,255,255,0.06)] gap-[clamp(6px,1.2vh,12px)]"
       >
 
-        {/* Zone principale — s'étire pour remplir l'espace disponible */}
-        <div className="flex flex-1 flex-col gap-[clamp(8px,1.6vh,16px)]">
+        {/* Zone principale — sa hauteur est celle de son contenu.
+            `flex-1` la faisait s'étirer sur la hauteur du pied de page, qui
+            lui-même était dicté par les colonnes latérales et leurs pastilles
+            à hauteur fixe : le résultat ne suivait plus rien. Chaque élément
+            se met maintenant à l'échelle pour son compte, et le pied de page
+            fait la somme. */}
+        <div className="flex flex-col gap-[clamp(8px,1.6vh,16px)]">
 
         {/* Feature cards — explicatif — remplacées par les raccourcis serveurs
             si l'utilisateur a activé "Afficher mes serveurs sur l'accueil"
@@ -870,19 +888,19 @@ export default function Home() {
             overflow-x-auto en filet de sécurité : si les 7 liens de nav ne
             tiennent plus même à leur taille clamp() minimale, la ligne
             devient scrollable au lieu de couper les derniers liens. */}
-        <div className="my-auto grid gap-4 grid-cols-[auto_1fr_auto] items-center overflow-x-auto">
+        <div className="grid gap-4 grid-cols-[auto_1fr_auto] items-center overflow-x-auto">
 
           {/* LEFT — Brand + compte */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-[clamp(3px,0.7vh,8px)]">
             <span className="font-black text-white text-[clamp(13px,1.9vh,17px)] tracking-[-0.01em]">
               YuyuFrame
             </span>
             <span className="text-[clamp(9px,1.3vh,11px)] text-[rgba(255,255,255,0.22)] leading-normal">
               {t('home.brandTagline')}
             </span>
-            <div className="flex items-center mt-1">
+            <div className="flex items-center mt-[clamp(0px,0.3vh,4px)]">
               {username ? (
-                <div className="flex items-center overflow-hidden h-8 rounded-[10px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.09)]">
+                <div className="flex items-center overflow-hidden h-[clamp(24px,3.5vh,32px)] rounded-[10px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.09)]">
                   <button
                     onClick={() => navigate('/login')}
                     className="flex items-center gap-2 h-full pl-2.5 pr-3 transition-all duration-150 hover:bg-[rgba(75,63,207,0.14)]"
@@ -913,7 +931,7 @@ export default function Home() {
               ) : (
                 <button
                   onClick={() => navigate('/login')}
-                  className="flex items-center gap-1.5 rounded-xl px-4 font-semibold transition-all duration-200 h-8 text-[11px] bg-[#4B3FCF] text-white hover:bg-[#6155e8]"
+                  className="flex items-center gap-1.5 rounded-xl px-4 font-semibold transition-all duration-200 h-[clamp(24px,3.5vh,32px)] text-[clamp(10px,1.4vh,11px)] bg-[#4B3FCF] text-white hover:bg-[#6155e8]"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}><path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" /></svg>
                   {t('home.login')}
@@ -951,7 +969,7 @@ export default function Home() {
           </div>
 
           {/* RIGHT — YuyuFrame Pro, miroir du LEFT aligné à droite */}
-          <div className="flex flex-col gap-2 items-end">
+          <div className="flex flex-col gap-[clamp(3px,0.7vh,8px)] items-end">
             <span className="font-black text-white text-right text-[clamp(13px,1.9vh,17px)] tracking-[-0.01em]">
               YuyuFrame <span className="text-[#a78bfa]">Pro</span>
             </span>
@@ -963,7 +981,7 @@ export default function Home() {
             <motion.div
               animate={{ boxShadow: ['0 0 0 rgba(120,100,255,0)', '0 0 18px rgba(120,100,255,0.25)', '0 0 0 rgba(120,100,255,0)'] }}
               transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-              className="flex items-center overflow-hidden mt-1 h-8 rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]"
+              className="flex items-center overflow-hidden mt-[clamp(0px,0.3vh,4px)] h-[clamp(24px,3.5vh,32px)] rounded-[10px] bg-[rgba(75,63,207,0.08)] border border-[rgba(120,100,255,0.2)]"
             >
               <motion.button
                 whileHover={{ scale: 1.03 }}
@@ -1045,18 +1063,26 @@ export default function Home() {
 }
 
 
+/**
+ * Les quatre étages de la pyramide, taille de police seulement.
+ *
+ * Un lien n'a plus de hauteur imposée : sa police décide de tout le reste —
+ * marges intérieures, écart texte/icône et icône sont exprimés en `em` dans
+ * le composant. Avant, la hauteur venait de `vh` et la police de `cqw` : deux
+ * mesures sans rapport l'une avec l'autre, d'où des boutons hauts au texte
+ * minuscule dès que la fenêtre était large et basse, et une barre qui ne
+ * remplissait jamais sa ligne.
+ *
+ * L'unité de référence est maintenant la largeur de la fenêtre — c'est elle
+ * qui décide si sept liens tiennent côte à côte. Le plancher est haut
+ * (11,5 px sur les liens extérieurs) : en dessous, la barre devient illisible
+ * bien avant de manquer de place.
+ */
 const NAV_SIZE_CLASSES = [
-  'h-[clamp(52px,6vh,76px)] text-[clamp(13px,2.6cqw,21px)] font-[700] px-[clamp(7px,1.4cqw,12px)]',
-  'h-[clamp(46px,5.5vh,68px)] text-[clamp(12px,2.3cqw,19px)] font-[650] px-[clamp(6px,1.2cqw,11px)]',
-  'h-[clamp(40px,5vh,60px)] text-[clamp(11px,2cqw,17px)] font-[600] px-[clamp(5px,1.1cqw,9px)]',
-  'h-[clamp(36px,4.5vh,52px)] text-[clamp(10px,1.7cqw,14px)] font-[550] px-[clamp(4px,0.9cqw,8px)]',
-]
-
-const NAV_ICON_CLASSES = [
-  'w-[clamp(16px,2.6cqw,22px)] h-[clamp(16px,2.6cqw,22px)]',
-  'w-[clamp(14px,2.3cqw,19px)] h-[clamp(14px,2.3cqw,19px)]',
-  'w-[clamp(12px,2cqw,17px)] h-[clamp(12px,2cqw,17px)]',
-  'w-[clamp(11px,1.7cqw,14px)] h-[clamp(11px,1.7cqw,14px)]',
+  'text-[clamp(13px,1.25vw,20px)] font-[700]',
+  'text-[clamp(12.5px,1.14vw,18px)] font-[650]',
+  'text-[clamp(12px,1.02vw,16.5px)] font-[600]',
+  'text-[clamp(11.5px,0.92vw,15px)] font-[550]',
 ]
 
 /** Temps passé sur un même lien avant que le repère ne s'étire. */
@@ -1095,9 +1121,12 @@ function NavLink({ label, onClick, plans, accent, distance = 0, children }: {
       // aussi `transform`, la propriété que le ressort ci-dessus pilote déjà.
       // Les deux se disputaient la même valeur à chaque image et le survol
       // répondait mou. Le CSS ne garde que ce que framer ne touche pas.
-      className={`group relative flex items-center gap-1 rounded-xl transition-colors duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${hoverClasses}`}
+      // Marges, écart et icône en `em` : tout suit la police de l'étage, donc
+      // la hauteur du bouton est celle de son contenu et jamais un nombre posé
+      // à côté.
+      className={`group relative flex items-center gap-[0.45em] rounded-xl px-[0.85em] py-[0.62em] transition-colors duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${hoverClasses}`}
     >
-      <span className={`flex flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${NAV_ICON_CLASSES[d]} ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
+      <span className={`flex h-[1.35em] w-[1.35em] flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
       {label}
     </motion.button>
   )

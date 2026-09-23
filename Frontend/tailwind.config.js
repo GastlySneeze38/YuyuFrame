@@ -3,6 +3,19 @@ module.exports = {
   content: ['./src/**/*.{ts,tsx}', './index.html'],
   theme: {
     extend: {
+      // Le launcher est une fenêtre redimensionnable, pas une page web : sa
+      // hauteur descend très bas et c'est elle, pas la largeur, qui contraint
+      // le panneau de lancement (titre, avatar, sélecteur, bouton empilés).
+      // Les clamp(vh) rétrécissent bien chaque élément, mais rétrécir ne
+      // suffit plus en dessous d'un certain point — il faut en retirer. D'où
+      // ce palier, exprimé en requête brute puisque Tailwind ne propose que
+      // des paliers de largeur.
+      // Volontairement bas : au-dessus, tout tient déjà en rétrécissant, et
+      // faire disparaître un bloc alors qu'il reste de la place se voit comme
+      // un saut. Ce palier n'est franchi que là où la place manque vraiment.
+      screens: {
+        short: { raw: '(max-height: 600px)' },
+      },
       // Toutes les couleurs viennent des jetons de src/index.css : aucun
       // `rgba(...)` en dur dans les écrans (voir l'audit des interfaces).
       colors: {

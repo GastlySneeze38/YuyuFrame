@@ -18,6 +18,9 @@ import { ModpackBanner } from '@/components/mods/ModpackBanner'
 import { ConflictBanner } from '@/components/mods/ConflictBanner'
 import { ModpackBrowseTab, type MergedModpackHit } from '@/components/mods/ModpackBrowseTab'
 import { BrowseTab, type MergedHit } from '@/components/mods/BrowseTab'
+import { ToolbarMenu } from '@/components/mods/ToolbarMenu'
+import { PacksTab } from '@/components/mods/PacksTab'
+import { OptionsTab } from '@/components/mods/OptionsTab'
 import {
   fetchCurseforgeSearch, fetchCurseforgeFiles, findFileForLoader, fetchCurseforgeInstalled, fetchCurseforgeModDetail,
   _curseforgeCache, type CurseforgeHit, type CurseforgeMatch,
@@ -37,6 +40,18 @@ import {
 import { useSearchRunner } from '@/hooks/useSearchRunner'
 
 export { updateModsForNewVersion } from '@/components/mods/modUtils'
+
+/** Chemins SVG 24×24 de la barre d'outils, rassemblés ici plutôt que recopiés
+ *  dans chaque entrée de menu — les mêmes servent au bouton et à son menu. */
+const TOOLBAR_ICON = {
+  mods: 'M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A1 1 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9z',
+  search: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+  modpack: 'M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z',
+  list: 'M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z',
+  grid: 'M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z',
+  star: 'M12 3l2.09 6.26L20.5 9.5l-5 3.8 1.9 6.2L12 15.8 6.6 19.5l1.9-6.2-5-3.8 6.41-.24L12 3z',
+  sliders: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
+} as const
 
 // ── Recherche — voir hooks/useSearchRunner.ts ─────────────────────────────────
 
@@ -106,6 +121,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [importNotice, setImportNotice] = useState('')
   const [showImportChoice, setShowImportChoice] = useState(false)
   const [showImportFolder, setShowImportFolder] = useState(false)
+  /** Nombre de packs installés, remonté par `PacksTab` pour le compteur du
+   *  menu. Gardé ici et non dans l'onglet : le menu doit l'afficher même
+   *  quand on est sur un autre écran. */
+  const [packCount, setPackCount] = useState(0)
 
   const mergeVersions = useCallback((fetched: Record<string, ModrinthInfo>) =>
     setVersionMap((prev) => ({ ...prev, ...fetched })), [])
@@ -772,6 +791,44 @@ export function ModsContent({ instance }: { instance: Instance }) {
     }
   }
 
+  /** Importe des archives locales vers `resourcepacks/` ou `shaderpacks/`.
+   *  La famille est demandée dans la fenêtre d'import plutôt que devinée :
+   *  les deux sont des `.zip` et rien ne les distingue de façon fiable. */
+  const handlePickPacks = async (kind: 'resourcepack' | 'shader') => {
+    if (uploading) return
+    const picked = await open({ multiple: true, filters: [{ name: 'Pack', extensions: ['zip'] }] })
+    if (!picked) return
+    const paths = Array.isArray(picked) ? picked : [picked]
+    if (paths.length === 0) return
+
+    setUploading(true)
+    setImportNotice('')
+    try {
+      const added = await api.packs.importPaths(instanceId, kind, paths)
+      setImportNotice(t('mods.packsImported', { count: added.length }))
+      // On atterrit sur la liste : sans ça, l'import serait invisible depuis
+      // l'écran où l'on se trouvait.
+      setTab('packs-installed')
+    } catch (e) {
+      showError(e)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  /** Applique le modèle `shared_options.txt` à cette instance (voir
+   *  `instance_apply_settings`). Rend `false` quand aucun modèle n'a encore
+   *  été enregistré depuis une autre instance. */
+  const handleImportOptions = async () => {
+    try {
+      const applied = await api.instances.applySettings(instanceId)
+      setImportNotice(t(applied ? 'mods.optionsApplied' : 'mods.optionsNoTemplate'))
+      if (applied) setTab('options')
+    } catch (e) {
+      showError(e)
+    }
+  }
+
   const handlePickJars = async () => {
     if (uploading) return
     const picked = await open({ multiple: true, filters: [{ name: 'Mod', extensions: ['jar'] }] })
@@ -980,17 +1037,24 @@ export function ModsContent({ instance }: { instance: Instance }) {
       <div
         className="flex flex-shrink-0 items-center gap-3 overflow-x-auto px-6 py-3 border-b border-b-[rgba(255,255,255,0.05)]"
       >
-        {/* Gauche : tab Installés + badge mises à jour */}
+        {/* Gauche : import + badge mises à jour.
+            Ce bouton remplace l'ancien onglet « Installés », qui a rejoint le
+            menu « Mods » au centre : tout ce qui entre dans l'instance depuis
+            le disque part désormais d'un seul endroit. */}
         <div className="flex flex-1 items-center gap-1 min-w-max">
-          <motion.button {...press}
-            onClick={() => setTab('installed')}
-            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all duration-150 border border-[rgba(75,63,207,0.35)] ${
-              tab === 'installed'
-                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)] border-[rgba(75,63,207,0.5)]'
-                : 'bg-transparent text-[rgba(255,255,255,0.35)]'
+          <motion.button {...pressIf(!uploading)}
+            onClick={() => setShowImportChoice(true)}
+            disabled={uploading}
+            className={`flex items-center gap-1.5 rounded-lg border border-[rgba(75,63,207,0.35)] px-3.5 py-1.5 text-xs font-semibold transition-colors duration-150 ${
+              uploading
+                ? 'cursor-not-allowed bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)]'
+                : 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.4)]'
             }`}
           >
-            {t('mods.installedCount', { count: mods.length })}
+            <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+            </svg>
+            {uploading ? t('mods.importing') : t('mods.import')}
           </motion.button>
           {tab === 'installed' && extraUpdatesCount > 0 && (
             <motion.button {...pressIf(!(updatingAll))}
@@ -1011,47 +1075,48 @@ export function ModsContent({ instance }: { instance: Instance }) {
           )}
         </div>
 
-        {/* Centre : boutons d'ajout groupés */}
-        <div className="flex flex-shrink-0 items-center border border-[rgba(75,63,207,0.35)] rounded-[10px] overflow-hidden">
+        {/* Centre : trois familles, chacune ouvrant ses écrans.
+            Sept boutons à plat ne se liraient pas ; le libellé dit la famille,
+            le menu dit lequel de ses écrans est ouvert. */}
+        <div className="flex flex-shrink-0 items-center divide-x divide-[rgba(75,63,207,0.35)] overflow-visible rounded-[10px] border border-[rgba(75,63,207,0.35)]">
+          <ToolbarMenu
+            label={t('mods.menuMods')}
+            icon={TOOLBAR_ICON.mods}
+            active={tab === 'installed' || tab === 'browse' || tab === 'modpack'}
+            activeId={tab}
+            items={[
+              { id: 'browse', icon: TOOLBAR_ICON.search, label: isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth'), onSelect: () => setTab('browse') },
+              { id: 'modpack', icon: TOOLBAR_ICON.modpack, label: modpackMeta ? t('mods.replaceModpack') : t('mods.installModpack'), onSelect: () => setTab('modpack') },
+              { id: 'installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledMods'), badge: mods.length, onSelect: () => setTab('installed') },
+            ]}
+          />
+          <ToolbarMenu
+            label={t('mods.menuPacks')}
+            icon={TOOLBAR_ICON.grid}
+            active={tab.startsWith('packs-')}
+            activeId={tab}
+            items={[
+              { id: 'packs-shader', icon: TOOLBAR_ICON.star, label: t('mods.menuBrowseShaders'), onSelect: () => setTab('packs-shader') },
+              { id: 'packs-resourcepack', icon: TOOLBAR_ICON.grid, label: t('mods.menuBrowseResourcepacks'), onSelect: () => setTab('packs-resourcepack') },
+              { id: 'packs-installed', icon: TOOLBAR_ICON.list, label: t('mods.menuInstalledPacks'), badge: packCount, onSelect: () => setTab('packs-installed') },
+            ]}
+          />
+          {/* Pas de menu ici : les réglages Minecraft et ceux de YuyuFrame
+              sont deux sections du même écran, pas deux destinations. Un
+              menu à deux entrées menant au même endroit promettrait un choix
+              qui n'existe pas. */}
           <motion.button {...press}
-            onClick={() => setTab('browse')}
-            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
-              tab === 'browse'
+            onClick={() => setTab('options')}
+            className={`flex h-8 items-center gap-1.5 px-[14px] text-[12px] font-semibold transition-colors duration-150 cursor-pointer ${
+              tab === 'options'
                 ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
                 : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
             }`}
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-              <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13} className="flex-shrink-0">
+              <path d={TOOLBAR_ICON.sliders} />
             </svg>
-            {isPlugin ? t('mods.browsePlugins') : t('mods.browseModrinth')}
-          </motion.button>
-          <motion.button {...press}
-            onClick={() => setTab('modpack')}
-            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer border-r border-r-[rgba(75,63,207,0.35)] ${
-              tab === 'modpack'
-                ? 'bg-[rgba(75,63,207,0.25)] text-[rgba(255,255,255,0.9)]'
-                : 'bg-transparent text-[rgba(255,255,255,0.55)] hover:bg-[rgba(75,63,207,0.12)]'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-              <path d="M12 2L1 9l11 7 9-5.73V17h2V9L12 2zM3 13.18v4.91L12 23l9-4.91v-4.91l-9 5.73-9-5.73z" />
-            </svg>
-            {modpackMeta ? t('mods.replaceModpack') : t('mods.installModpack')}
-          </motion.button>
-          <motion.button {...pressIf(!(uploading))}
-            onClick={() => setShowImportChoice(true)}
-            disabled={uploading}
-            className={`flex items-center gap-1.5 font-semibold transition-all duration-150 active:scale-95 h-8 pl-[14px] pr-[14px] text-[12px] cursor-pointer ${
-              uploading
-                ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
-                : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.5)]'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-            </svg>
-            {uploading ? t('mods.importing') : t('mods.import')}
+            {t('mods.menuOptions')}
           </motion.button>
         </div>
 
@@ -1075,6 +1140,8 @@ export function ModsContent({ instance }: { instance: Instance }) {
           onPickJars={handlePickJars}
           onPickFolder={() => setShowImportFolder(true)}
           onPickModpack={handleImportModpackFile}
+          onPickPacks={handlePickPacks}
+          onPickOptions={handleImportOptions}
         />
       )}
 
@@ -1208,6 +1275,15 @@ export function ModsContent({ instance }: { instance: Instance }) {
             isInstalledCurseforge={(hit) => cfInstalledModIds.has(hit.id)}
             onInstallCurseforge={handleCfInstall}
             onOpenDetailCurseforge={setCfDetailHit}
+          />
+        ) : tab === 'options' ? (
+          <OptionsTab instance={instance} />
+        ) : tab.startsWith('packs-') ? (
+          <PacksTab
+            instanceId={instanceId}
+            mcVersion={mcVersion}
+            mode={tab === 'packs-installed' ? 'installed' : tab === 'packs-shader' ? 'shader' : 'resourcepack'}
+            onInstalledCountChange={setPackCount}
           />
         ) : (
           <div className="flex flex-col gap-3">

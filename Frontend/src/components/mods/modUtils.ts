@@ -83,7 +83,16 @@ export interface ModrinthVersionEntry {
   files: ModrinthVersionFile[]
 }
 
-export type Tab = 'installed' | 'browse' | 'modpack'
+/** Écrans de la page instance.
+ *
+ *  Ils ne sont plus posés à plat dans la barre : les trois premiers
+ *  appartiennent à la famille « Mods », les trois suivants à « Packs », et
+ *  `options` est seul. Chaque famille est un bouton qui ouvre son menu —
+ *  sept boutons côte à côte ne se liraient pas (voir ToolbarMenu). */
+export type Tab =
+  | 'installed' | 'browse' | 'modpack'
+  | 'packs-installed' | 'packs-resourcepack' | 'packs-shader'
+  | 'options'
 
 // Cache module-level : évite de rappeler Modrinth à chaque ouverture du panel
 export const _modrinthCache: Record<string, {

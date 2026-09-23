@@ -37,6 +37,24 @@ export interface Mod {
   sha1: string
 }
 
+/** Les deux familles de packs d'une instance.
+ *  Mêmes chaînes que les `project_type` de Modrinth : la valeur sert autant à
+ *  chercher qu'à ranger le fichier (voir `commands/instance/packs.rs`). */
+export type PackKind = 'resourcepack' | 'shader'
+
+export interface PackInfo {
+  name: string
+  size: number
+  kind: PackKind
+}
+
+/** Une ligne de `options.txt`. La valeur reste une chaîne brute : le fichier
+ *  n'a pas de types, c'est l'éditeur qui interprète selon la clé. */
+export interface McOption {
+  key: string
+  value: string
+}
+
 export type Loader = 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt'
 
 export interface DetectedSource {
