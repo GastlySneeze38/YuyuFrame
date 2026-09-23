@@ -41,6 +41,11 @@ const BUST_FOV = 40
 //            de leur somme : pour la remonter sans retoucher la taille, on
 //            déplace de SHOULDERS vers MARGIN_TOP à somme constante.
 //
+//   ciel     l'air au-dessus du crâne vaut `MARGIN_TOP / somme`. Ici 26 %.
+//            Il ne dépend PAS de la hauteur de la bannière : le rendu la
+//            remplit, donc la rétrécir rapetisse tout dans les mêmes
+//            proportions et laisse ce rapport inchangé.
+//
 // Les deux réglages se lisent ainsi : la somme fait la taille, le partage
 // fait le cadrage. Les confondre mène à corriger l'un en cassant l'autre —
 // ça m'est arrivé deux fois, dans les deux sens.
