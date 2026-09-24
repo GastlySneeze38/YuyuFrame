@@ -117,6 +117,9 @@ const LAUNCH_HOVER_SHADOW = [
   '0 6px 32px rgba(75,63,207,0.55)',
 ].join(', ')
 
+/** Pourcentage à partir duquel on efface le launcher, faute d'agent. */
+const HIDE_AT_PERCENT = 90
+
 const STARS = Array.from({ length: 55 }, (_, i) => ({
   x: (i * 37 + ((i * 7 + 13) % 100) * 1.7) % 100,
   y: (i * 23 + ((i * 7 + 13) % 100) * 2.3) % 62,
@@ -231,6 +234,38 @@ export default function Home() {
   const phase2StartRef = useRef<Record<string, number>>({})
   const phase2TimerRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
+  // ── Effacement du launcher au lancement ──────────────────────────────────
+  //
+  // Le réglage « masquer au lancement » s'appliquait au clic sur « Jouer ».
+  // La fenêtre disparaissait donc alors que le téléchargement n'avait souvent
+  // même pas commencé : on se retrouvait devant un bureau vide pendant une
+  // minute, sans rien pour dire que quelque chose se passait.
+  //
+  // Elle attend maintenant que le jeu soit vraiment en train d'arriver. Le
+  // bon signal dépend de l'agent :
+  //
+  // - **avec agent** — il annonce lui-même le menu principal (`game_ready`).
+  //   C'est le signal exact : la fenêtre de Minecraft est là.
+  // - **sans agent** — aucun signal ne viendra jamais du jeu. On se rabat sur
+  //   la barre : à 90 %, la JVM tourne depuis un moment et la fenêtre du jeu
+  //   est sur le point de paraître.
+  //
+  // `armed` retient qu'un masquage a été demandé pour ce lancement-là : le
+  // réglage peut changer, la personne peut changer d'instance, et un
+  // lancement qui échoue ne doit rien masquer du tout.
+  const hideArmedRef = useRef<Record<string, boolean>>({})
+  const agentActiveRef = useRef<Record<string, boolean>>({})
+
+  /** Masque le launcher, une seule fois par lancement. */
+  const hideForLaunch = (instanceId: string) => {
+    if (!hideArmedRef.current[instanceId]) return
+    delete hideArmedRef.current[instanceId]
+    // Confié au Rust : il ferme la fenêtre quand l'arrière-plan est autorisé
+    // — ce qui rend vraiment la mémoire de la webview — et se contente de la
+    // réduire sinon, puisque fermer couperait la surveillance de la partie.
+    api.window.hideForLaunch(true).catch(() => {})
+  }
+
   const clearPhase2 = (instanceId: string) => {
     const timer = phase2TimerRef.current[instanceId]
     if (timer) clearInterval(timer)
@@ -244,12 +279,23 @@ export default function Home() {
     // Lu dans le store au moment du démarrage : les listeners d'événements
     // ci-dessous sont posés une seule fois, leur closure serait périmée.
     const remembered = useStore.getState().launchPhaseDurations[instanceId]
-    if (!remembered) return // pas encore de mesure — reste figé à 60%, rien à animer
+    if (!remembered) {
+      // Pas encore de mesure : la barre reste figée à 60 %, donc les 90 %
+      // n'arriveront jamais. Sans agent pour dire « c'est prêt », le seul
+      // repère qui reste est celui-ci — les téléchargements sont finis, la
+      // JVM démarre. C'est plus tôt que voulu, mais très loin du clic.
+      if (!agentActiveRef.current[instanceId]) hideForLaunch(instanceId)
+      return
+    }
     const previous = phase2TimerRef.current[instanceId]
     if (previous) clearInterval(previous)
     phase2TimerRef.current[instanceId] = setInterval(() => {
       const frac = Math.min(0.975, (Date.now() - start) / remembered)
-      setProgress(instanceId, { current: 60 + Math.round(frac * 40), total: 100, message: t('home.startingMinecraft') })
+      const percent = 60 + Math.round(frac * 40)
+      setProgress(instanceId, { current: percent, total: 100, message: t('home.startingMinecraft') })
+      // Sans agent, c'est ici — et nulle part ailleurs — que le masquage se
+      // décide : la barre est la seule chose qui avance.
+      if (percent >= HIDE_AT_PERCENT && !agentActiveRef.current[instanceId]) hideForLaunch(instanceId)
     }, 250)
   }
 
@@ -291,6 +337,10 @@ export default function Home() {
   })
 
   const resetLaunchUi = (instanceId: string) => {
+    // Un lancement qui s'arrête — erreur, annulation, fin de partie — ne doit
+    // rien masquer : la fenêtre est justement ce qu'on veut revoir.
+    delete hideArmedRef.current[instanceId]
+    delete agentActiveRef.current[instanceId]
     clearPhase2(instanceId)
     setProgress(instanceId, null)
     setCancelling(instanceId, false)
@@ -313,7 +363,15 @@ export default function Home() {
   // affiner l'animation des prochains lancements de cette instance.
   // Traité quelle que soit l'instance sélectionnée : ignorer celui d'une autre
   // instance laissait sa barre figée à ~97% pour toujours.
+  // Émis par le backend une fois l'agent préparé, juste avant le démarrage de
+  // la JVM : c'est ce qui dit à quel signal se fier pour masquer le launcher.
+  useTauriEvent<{ instance_id: string; active: boolean }>('launch_agent', ({ instance_id, active }) => {
+    agentActiveRef.current[instance_id] = active
+  })
+
   useTauriEvent<{ instance_id: string }>('game_ready', ({ instance_id }) => {
+    // Avec l'agent, c'est LE signal : le menu principal est à l'écran.
+    hideForLaunch(instance_id)
     const start = phase2StartRef.current[instance_id]
     if (start) recordLaunchPhaseDuration(instance_id, Date.now() - start)
     clearPhase2(instance_id)
@@ -363,11 +421,11 @@ export default function Home() {
       else await api.launch.start(instanceId, avoidBetaDependencies, showConsole, connectServer)
       setInstanceRunning(instanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
-      // Confié au Rust : il ferme la fenêtre quand l'arrière-plan est
-      // autorisé — ce qui rend vraiment la mémoire de la webview — et se
-      // contente de réduire sinon, puisque fermer couperait la surveillance
-      // de la partie. Masquer côté interface laissait la webview entière.
-      api.window.hideForLaunch(closeOnLaunch).catch(() => {})
+      // On arme, on ne masque pas : l'effacement attend que le jeu soit
+      // vraiment en train d'arriver (voir `hideForLaunch` plus haut). Le
+      // réglage est lu maintenant et pas plus tard, pour que le changer en
+      // cours de lancement n'ait pas d'effet rétroactif.
+      if (closeOnLaunch) hideArmedRef.current[instanceId] = true
     } catch (e) {
       // invoke() de Tauri rejette avec une simple chaîne (pas un Error JS)
       // quand une commande Rust renvoie Err(String) — sans ce cas, le vrai

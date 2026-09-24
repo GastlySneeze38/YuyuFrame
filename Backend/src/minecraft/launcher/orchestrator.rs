@@ -496,6 +496,18 @@ pub async fn download_and_launch(
     let launcher_agent = setup_launcher_agent(version_id, loader, java_major, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
     let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
+    // L'interface a besoin de savoir si l'agent tourne pour ce lancement :
+    // c'est lui, et lui seul, qui signalera `game_ready` (marqueur
+    // [YUYUFRAME_READY], voir plus bas). Sans agent — Java trop ancien, jar
+    // absent, mappings introuvables — ce signal n'arrivera jamais, et
+    // l'interface doit s'en remettre à autre chose. Elle ne peut pas le
+    // deviner : la décision est prise ici, à partir de conditions qu'elle ne
+    // voit pas.
+    let _ = app.emit("launch_agent", serde_json::json!({
+        "instance_id": instance_id,
+        "active": !launcher_agent_jvm_args.is_empty(),
+    }));
+
     // ── Attente des assets ────────────────────────────────────────────────────
     // Libs + loader terminés, on attend que les assets finissent avant de lancer.
     assets_task.await.map_err(|e| anyhow!("Tâche assets : {}", e))??;
