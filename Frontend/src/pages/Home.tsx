@@ -14,6 +14,7 @@ import { WelcomeSequence } from '@/components/home/WelcomeSequence'
 import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { ProCard } from '@/components/home/ProCard'
+import { LaunchSweep } from '@/components/home/LaunchSweep'
 import { Skyline } from '@/components/home/Skyline'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
@@ -97,6 +98,24 @@ function useFeatures(t: ReturnType<typeof useT>) {
   ] as const
 }
 
+/**
+ * Ombre décalée du bouton de lancement, au survol.
+ *
+ * Deux couches pleines posées en biais, façon impression mal calée — mais
+ * dans le violet de l'application, pas dans le rose et le mauve de l'exemple
+ * qui jureraient avec le reste des écrans. Le décalage reste court (3 puis
+ * 6 px) : le bouton est large, une ombre portée plus franche le ferait
+ * flotter au-dessus du pied de page.
+ *
+ * La lueur diffuse du repos est conservée en troisième couche, sinon le
+ * bouton perdrait son halo à l'instant où on le survole.
+ */
+const LAUNCH_HOVER_SHADOW = [
+  '3px 3px 0 rgba(139,92,246,0.55)',
+  '6px 6px 0 rgba(75,63,207,0.45)',
+  '0 6px 32px rgba(75,63,207,0.55)',
+].join(', ')
+
 const STARS = Array.from({ length: 55 }, (_, i) => ({
   x: (i * 37 + ((i * 7 + 13) % 100) * 1.7) % 100,
   y: (i * 23 + ((i * 7 + 13) % 100) * 2.3) % 62,
@@ -136,6 +155,8 @@ export default function Home() {
     setCancellingByInstance((prev) => withEntry(prev, id, value ? true : null))
   const [showInstanceSwitch, setShowInstanceSwitch] = useState(false)
   const [bannerPulse, setBannerPulse] = useState(false)
+  /** Survol du bouton de lancement — pilote la comète (voir LaunchSweep). */
+  const [launchHover, setLaunchHover] = useState(false)
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
@@ -646,21 +667,57 @@ export default function Home() {
                 </button>
               </div>
             ) : (
+              <span className="relative flex flex-1">
+
+              {/* La respiration du repos, sortie du bouton.
+                  Elle était jouée sur son `box-shadow` : une suite d'images
+                  clés de 3,2 s en boucle. Sortir du survol renvoyait donc
+                  l'ombre à cette boucle — et une suite d'images clés reprend
+                  toujours du début, pour sa durée entière. L'ombre colorée
+                  mettait trois secondes à s'effacer.
+                  Ici c'est une lueur posée DERRIÈRE le bouton, qui pulse dans
+                  son coin. Le `box-shadow` du bouton ne sert plus qu'au
+                  survol, et rien ne lui dispute sa valeur. */}
+              {canLaunch && !progress && (
+                <motion.span
+                  aria-hidden
+                  animate={{ opacity: [0.25, 0.7, 0.25] }}
+                  transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                  className="pointer-events-none absolute inset-x-3 inset-y-1.5 rounded-xl bg-[#4B3FCF] blur-[16px]"
+                />
+              )}
+
               <motion.button
                 onClick={username ? handleLaunch : () => navigate('/login')}
                 disabled={!!username && !selectedInstanceId}
-                // Le bouton le plus important de l'app : il respire quand il
-                // est prêt, se soulève au survol et s'enfonce au clic.
-                animate={
-                  username && selectedInstanceId && !progress
-                    ? { boxShadow: ['0 0 0 rgba(75,63,207,0)', '0 0 34px rgba(75,63,207,0.5)', '0 0 0 rgba(75,63,207,0)'] }
-                    : undefined
+                // Le bouton le plus important de l'app : il se soulève au
+                // survol et s'enfonce au clic.
+                transition={{ scale: SNAP, skewX: SNAP, boxShadow: { duration: 0.18, ease: 'easeOut' } }}
+                // Le penché de l'exemple, mais piloté par le ressort plutôt
+                // que par une transition CSS : les deux se disputeraient la
+                // même `transform` que l'échelle ci-dessus, et le survol
+                // répondrait mou.
+                whileHover={
+                  canLaunch
+                    ? { scale: 1.03, skewX: -8, boxShadow: LAUNCH_HOVER_SHADOW }
+                    : { scale: 1.03, skewX: -8 }
                 }
-                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                className={`relative overflow-hidden font-bold text-white transition-all duration-200 h-[clamp(38px,6.6vh,52px)] flex-1 flex-shrink-0 rounded-xl text-[clamp(12px,1.8vh,16px)] tracking-[0.05em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
+                whileTap={{ scale: 0.96, skewX: -8 }}
+                onHoverStart={() => setLaunchHover(true)}
+                onHoverEnd={() => setLaunchHover(false)}
+                // `transition-colors`, surtout pas `transition-all` : celui-ci
+                // faisait aussi transiter `transform` et `box-shadow` — les
+                // deux propriétés que framer écrit en ligne à chaque image.
+                // Le navigateur interpolait donc par-dessus l'interpolation,
+                // avec 200 ms de retard sur chaque valeur : d'où le survol
+                // qui traînait à l'aller comme au retour.
+                className={`relative overflow-hidden font-bold text-white transition-colors duration-200 h-[clamp(38px,6.6vh,52px)] flex-1 flex-shrink-0 rounded-xl text-[clamp(12px,1.8vh,16px)] tracking-[0.05em] disabled:cursor-not-allowed cursor-pointer ${launchBtnBg} ${launchBtnShadow}`}
               >
+                {/* Seulement quand le bouton lance vraiment : une comète sur
+                    un bouton désactivé ou déjà en cours promettrait une
+                    action qui n'arrivera pas. */}
+                {canLaunch && !progress && <LaunchSweep active={launchHover} />}
+
                 {progress && (
                   <span
                     className="absolute inset-y-0 left-0 z-0 bg-[rgba(255,255,255,0.22)] transition-all duration-300 ease-out"
@@ -680,6 +737,7 @@ export default function Home() {
                   </span>
                 )}
               </motion.button>
+              </span>
             )}
           </div>
 

@@ -410,7 +410,7 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
           lumière ne peut pas créer. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-0 left-1/2 h-[85%] w-[52%] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_50%_60%,rgba(120,105,225,0.42)_0%,rgba(80,70,170,0.18)_45%,transparent_72%)] blur-[2px]"
+        className="pointer-events-none absolute bottom-0 left-1/2 h-[85%] w-[52%] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_50%_60%,rgba(84,124,235,0.42)_0%,rgba(56,84,182,0.18)_45%,transparent_72%)] blur-[2px]"
       />
       {/* Le bouton précède le canevas pour que `peer-hover` l'atteigne — la
           règle CSS ne porte que sur les frères SUIVANTS. Son `z-10` le
@@ -428,7 +428,7 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
           serrée qui souligne l'arête, une large qui pose le halo. */}
       <canvas
         ref={canvasRef}
-        className="relative transition-[filter] duration-200 [filter:drop-shadow(0_0_2px_rgba(190,200,255,0.55))_drop-shadow(0_0_14px_rgba(110,95,230,0.5))] peer-hover:[filter:drop-shadow(0_0_3px_rgba(215,222,255,0.8))_drop-shadow(0_0_18px_rgba(140,125,255,0.65))]"
+        className="relative transition-[filter] duration-200 [filter:drop-shadow(0_0_2px_rgba(172,205,255,0.55))_drop-shadow(0_0_14px_rgba(72,118,240,0.5))] peer-hover:[filter:drop-shadow(0_0_3px_rgba(200,224,255,0.8))_drop-shadow(0_0_18px_rgba(100,150,255,0.65))]"
       />
     </div>
   )
