@@ -583,7 +583,6 @@ export const fr = {
     startingMinecraft: 'Démarrage de Minecraft...',
     minecraftReady: 'Minecraft prêt !',
     launchCancelled: 'Lancement annulé',
-    crashNotice: 'Le jeu a planté — le rapport t’attend dans Support.',
     launchError: 'Erreur de lancement',
     maxPinnedServers: "Maximum 3 serveurs épinglés — désépingle-en un d'abord",
     instance: 'Instance',

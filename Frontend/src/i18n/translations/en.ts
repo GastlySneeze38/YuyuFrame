@@ -585,7 +585,6 @@ export const en: TranslationSchema = {
     startingMinecraft: 'Starting Minecraft...',
     minecraftReady: 'Minecraft ready!',
     launchCancelled: 'Launch cancelled',
-    crashNotice: 'The game crashed — the report is waiting in Support.',
     launchError: 'Launch error',
     maxPinnedServers: 'Maximum 3 pinned servers — unpin one first',
     instance: 'Instance',

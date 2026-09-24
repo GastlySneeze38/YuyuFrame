@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { TitleBar } from '@/components/TitleBar'
 import { UpdateChecker } from '@/components/UpdateChecker'
@@ -81,6 +81,12 @@ const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
 const Server = lazy(() => import('@/pages/Server'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
+// Atelier des modales. Le `import()` est DANS la branche de développement,
+// pas seulement la route : écrit dehors, Vite voyait un module importable et
+// en sortait un morceau de JS livré à tout le monde — mort, mais livré.
+// Ici, `import.meta.env.DEV` vaut `false` à la compilation, la branche
+// disparaît, et le fichier avec elle.
+const DevModals = import.meta.env.DEV ? lazy(() => import('@/pages/DevModals')) : null
 
 // Rien à montrer : une page qui n'est pas encore là laisse sa place vide le
 // temps d'un souffle. Un aplat sombre, lui, se voyait passer.
@@ -98,6 +104,7 @@ export default function App() {
   // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
   // à la fois (voir stores/useModalQueue.ts).
   const pushModal = useModalQueue((s) => s.push)
+  const navigate = useNavigate()
   const yuyuSignedIn = useStore((s) => s.yuyuSignedIn)
   const refreshSupportWatch = useSupportWatch((s) => s.refresh)
   const clearSupportWatch = useSupportWatch((s) => s.clear)
@@ -330,6 +337,18 @@ export default function App() {
     return () => clearInterval(timer)
   }, [yuyuSignedIn])
 
+  // Ctrl+Maj+M → atelier des modales. Une fenêtre Tauri n'a pas de barre
+  // d'adresse : sans raccourci, une route de développement est inatteignable.
+  // Compilé hors de la version publiée en même temps que la route.
+  useEffect(() => {
+    if (!import.meta.env.DEV || isConsoleWindow) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'M' || e.key === 'm')) navigate('/dev/modals')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate])
+
   // Les autres écrans se chargent en tâche de fond une fois le premier
   // affiché : la navigation n'a plus rien à attendre.
   useEffect(preloadPages, [])
@@ -397,6 +416,8 @@ export default function App() {
             <Route path="/server" element={<Server />} />
             <Route path="/jvm" element={<JvmProfiles />} />
             <Route path="/jvm/:profileId" element={<JvmProfileEditor />} />
+            {/* Atelier des modales, uniquement en développement (Ctrl+Maj+M). */}
+            {DevModals && <Route path="/dev/modals" element={<DevModals />} />}
           </Routes>
           </Suspense>
           </ErrorBoundary>

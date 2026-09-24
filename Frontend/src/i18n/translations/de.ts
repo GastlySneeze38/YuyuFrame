@@ -585,7 +585,6 @@ export const de: TranslationSchema = {
     startingMinecraft: 'Minecraft wird gestartet...',
     minecraftReady: 'Minecraft bereit!',
     launchCancelled: 'Start abgebrochen',
-    crashNotice: 'Das Spiel ist abgestürzt — der Bericht wartet im Support.',
     launchError: 'Fehler beim Start',
     maxPinnedServers: 'Maximal 3 angeheftete Server — löse zuerst einen',
     instance: 'Instanz',
