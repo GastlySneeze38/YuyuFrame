@@ -33,13 +33,12 @@ export function UpdateChecker() {
           setStatus('installing')
         }
       })
-      // L'état mémoire ne survit pas à relaunch() (process complètement
-      // redémarré) — persisté ici pour qu'App.tsx puisse afficher les notes
-      // de version une fois de retour (voir pendingPatchNotes, useStore.ts).
-      useStore.getState().setPendingPatchNotes({
-        version: update.version,
-        notes: update.body ?? '',
-      })
+      // Plus rien à mettre de côté pour l'après-redémarrage : les notes de
+      // version ne viennent plus du manifeste de mise à jour mais du
+      // back-office (annonce de flotte à l'emplacement `modal`, voir
+      // App.tsx). Le manifeste figeait le texte à la publication de la
+      // release — ni corrigeable après coup, ni publiable sans sortir une
+      // version.
       await relaunch()
     } catch {
       setStatus('error')

@@ -36,8 +36,9 @@ export interface FleetAnnouncement {
   /** Ligne de détail ; seul texte d'une annonce de bandeau. */
   message: string
   level: 'info' | 'warning' | 'critical'
-  /** notice : bandeau en haut du launcher. home : bannière du tableau d'accueil. */
-  placement: 'notice' | 'home'
+  /** notice : bandeau en haut du launcher. home : bannière du tableau
+   *  d'accueil. modal : notes de version, déposées dans la file de modales. */
+  placement: 'notice' | 'home' | 'modal'
   /** Étiquette courte avant le titre (« ÉVÉNEMENT »). */
   kicker: string | null
   title: string | null

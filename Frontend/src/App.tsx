@@ -13,6 +13,7 @@ import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { useStore } from '@/stores/useStore'
 import { useModalQueue } from '@/stores/useModalQueue'
+import { useFleet } from '@/stores/useFleet'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
@@ -96,7 +97,7 @@ const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
@@ -283,15 +284,6 @@ export default function App() {
   // chaque lancement même une fois de retour sur un compte Microsoft en
   // ligne. On revalide contre le compte actif réel avant de décider.
   const queueStartupModals = (hasAccount: boolean) => {
-    if (pendingPatchNotes) {
-      // La clé porte la version : des notes déjà lues ne reviennent pas, mais
-      // celles de la mise à jour suivante ne sont pas confondues avec elles.
-      pushModal({
-        kind: 'patchNotes',
-        key: `patch-notes-${pendingPatchNotes.version}`,
-        data: pendingPatchNotes,
-      })
-    }
     if (needsReconnectRef.current && hasAccount) {
       pushModal({ kind: 'reconnect', key: `reconnect-${AUTH_SYSTEM_VERSION}`, data: null })
     }
@@ -370,6 +362,31 @@ export default function App() {
     const interval = setInterval(ping, 45 * 1000)
     return () => clearInterval(interval)
   }, [])
+
+  /**
+   * Notes de version — annonces de flotte à l'emplacement `modal`.
+   *
+   * Le serveur a déjà fait le tri (OS, plan, version, fenêtre de validité) et
+   * le backend relit la configuration toutes les quinze minutes ; on se
+   * contente de déposer ce qui arrive. La file refuse d'elle-même ce qui a
+   * déjà été lu, donc redéposer à chaque relecture ne coûte rien.
+   *
+   * La clé porte l'identifiant de l'annonce : une note corrigée dans le
+   * back-office garde le sien et ne réapparaît pas à ceux qui l'ont déjà vue,
+   * tandis qu'une nouvelle note est une nouvelle clé.
+   */
+  const announcements = useFleet((s) => s.config.announcements)
+  useEffect(() => {
+    if (isConsoleWindow) return
+    for (const a of announcements) {
+      if (a.placement !== 'modal' || !a.title) continue
+      pushModal({
+        kind: 'patchNotes',
+        key: `announcement-${a.id}`,
+        data: { title: a.title, kicker: a.kicker, body: a.message },
+      })
+    }
+  }, [announcements, pushModal])
 
   // Pastille du support : sans cette veille, une réponse de l'équipe n'était
   // visible qu'en allant soi-même sur l'écran Support. Relue au démarrage

@@ -1,16 +1,41 @@
 import { ModalShell } from '@/components/ui/ModalShell'
 import type { QueuedModalProps } from '@/stores/useModalQueue'
 
-/** Affichée au lancement suivant une mise à jour (voir pendingPatchNotes,
- * posé par UpdateChecker juste avant relaunch()) — les notes viennent
- * directement du manifeste de mise à jour (`Update.body`, voir
- * @tauri-apps/plugin-updater), aucune source séparée à maintenir. */
-export function PatchNotesModal({ version, notes, onClose, counter }: QueuedModalProps & { version: string; notes: string }) {
-  const lines = notes.split('\n').map((l) => l.trim()).filter(Boolean)
+/**
+ * Notes de version, publiées depuis le back-office.
+ *
+ * ── D'où vient le texte ───────────────────────────────────────────────────
+ * D'une annonce de flotte à l'emplacement `modal` (`GET /v1/config`), pas du
+ * manifeste de mise à jour comme avant. Le manifeste figeait le texte au
+ * moment de la release : impossible de corriger une note après coup,
+ * impossible d'en publier une sans sortir une version, et le contenu écrit
+ * dans le back-office n'atteignait jamais le launcher.
+ *
+ * Le ciblage — OS, plan, version, fenêtre de validité — est déjà fait côté
+ * serveur. Ici on ne fait qu'afficher.
+ *
+ * Le corps est une ligne par point. Les puces éventuellement tapées par
+ * l'auteur sont retirées : la liste en pose déjà une, et personne ne veut
+ * relire une note pour enlever des tirets en double.
+ */
+export function PatchNotesModal({
+  title,
+  kicker,
+  body,
+  onClose,
+  counter,
+}: QueuedModalProps & { title: string; kicker: string | null; body: string }) {
+  const lines = body.split('\n').map((l) => l.trim()).filter(Boolean)
 
   return (
-    <ModalShell title={`Nouveautés — v${version}`} onClose={onClose} maxWidth="max-w-md" counter={counter}>
+    <ModalShell title={title} onClose={onClose} maxWidth="max-w-md" counter={counter}>
       <div className="flex flex-col gap-4">
+        {kicker && (
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-accent-hover">
+            {kicker}
+          </span>
+        )}
+
         {lines.length > 0 ? (
           <ul className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1 text-[12px] leading-relaxed text-[rgba(255,255,255,0.6)]">
             {lines.map((line, i) => (
@@ -22,7 +47,7 @@ export function PatchNotesModal({ version, notes, onClose, counter }: QueuedModa
           </ul>
         ) : (
           <p className="text-[12px] text-[rgba(255,255,255,0.4)]">
-            Aucune note de version fournie pour cette mise à jour.
+            Aucune note de version fournie.
           </p>
         )}
 

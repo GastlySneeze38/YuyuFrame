@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { useModalQueue, type ModalKind } from '@/stores/useModalQueue'
-import { useStore } from '@/stores/useStore'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
@@ -44,22 +43,6 @@ export function ModalQueueHost() {
   const waiting = useModalQueue((s) => s.pending.length)
   const done = useModalQueue((s) => s.done)
   const counter = { index: done + 1, total: done + 1 + waiting }
-  const setPendingPatchNotes = useStore((s) => s.setPendingPatchNotes)
-
-  /**
-   * Fermeture des notes de patch : la file retient la clé, et le drapeau du
-   * magasin s'efface.
-   *
-   * À la FERMETURE, pas à l'affichage. Effacé dès qu'elles paraissent, un
-   * launcher quitté pendant leur lecture perdait les notes des deux côtés à
-   * la fois — le drapeau était parti, et la file ne les avait pas encore
-   * retenues comme vues, donc plus rien ne les redéposait. Elles
-   * disparaissaient sans avoir été lues.
-   */
-  function closePatchNotes() {
-    setPendingPatchNotes(null)
-    close()
-  }
 
   // Garde-fou : une demande d'un genre qu'on ne sait pas rendre resterait en
   // tête sans rien afficher — et sans rien pour la fermer, elle bloquerait
@@ -76,10 +59,11 @@ export function ModalQueueHost() {
       {current?.kind === 'patchNotes' && (
         <PatchNotesModal
           key={current.key}
-          version={current.data.version}
-          notes={current.data.notes}
+          title={current.data.title}
+          kicker={current.data.kicker}
+          body={current.data.body}
           counter={counter}
-          onClose={closePatchNotes}
+          onClose={close}
         />
       )}
       {current?.kind === 'reconnect' && (

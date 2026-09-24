@@ -193,13 +193,11 @@ interface Store {
   isServerFavorite: (instanceId: string, ip: string) => boolean
   toggleFavoriteServer: (instanceId: string, ip: string) => boolean
 
-  // ── Notes de patch en attente (persisté) — posé par UpdateChecker juste
-  // avant `relaunch()` (l'état mémoire ne survit pas au redémarrage complet
-  // du process), lu une fois par App.tsx au montage suivant puis effacé.
-  // Prend le pas sur le rappel compte hors ligne (voir App.tsx) : affiché
-  // en premier, le rappel ne s'affiche qu'une fois les notes fermées.
-  pendingPatchNotes: { version: string; notes: string } | null
-  setPendingPatchNotes: (v: { version: string; notes: string } | null) => void
+  // Les notes de patch ne transitent plus par ici : elles venaient du
+  // manifeste de mise à jour, mis de côté avant `relaunch()`. Elles sont
+  // maintenant publiées depuis le back-office et arrivent par la
+  // configuration de flotte (voir App.tsx), donc sans rien à faire survivre
+  // au redémarrage.
 
   // ── Version du système de connexion vue par cet utilisateur (persisté) —
   // comparée à AUTH_SYSTEM_VERSION (config/authVersion.ts) au démarrage par
@@ -434,10 +432,6 @@ export const useStore = create<Store>()(
         return true
       },
 
-      // Notes de patch en attente
-      pendingPatchNotes: null,
-      setPendingPatchNotes: (pendingPatchNotes) => set({ pendingPatchNotes }),
-
       // Version du système de connexion
       authSystemVersion: AUTH_SYSTEM_VERSION,
       setAuthSystemVersion: (authSystemVersion) => set({ authSystemVersion }),
@@ -509,7 +503,6 @@ export const useStore = create<Store>()(
         pinnedMods: s.pinnedMods,
         launchPhaseDurations: s.launchPhaseDurations,
         favoriteServers: s.favoriteServers,
-        pendingPatchNotes: s.pendingPatchNotes,
         authSystemVersion: s.authSystemVersion,
       }),
     }

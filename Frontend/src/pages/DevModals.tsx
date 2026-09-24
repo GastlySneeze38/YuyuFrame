@@ -27,13 +27,14 @@ import { useModalQueue, type QueuedModal } from '@/stores/useModalQueue'
 const SAMPLES: { label: string; hint: string; item: QueuedModal }[] = [
   {
     label: 'Notes de version',
-    hint: 'Après une mise à jour du launcher',
+    hint: 'Annonce publiée depuis le back-office',
     item: {
       kind: 'patchNotes',
       key: 'dev-patch-notes',
       data: {
-        version: '2.4.0',
-        notes: [
+        title: 'Nouveautés — v2.4.0',
+        kicker: 'NOUVEAUTÉS',
+        body: [
           '- Bannière d’accueil refaite, buste 3D du skin',
           '- Recherche d’options avec suggestions approchantes',
           '- Synchronisation des options Minecraft fiabilisée',
