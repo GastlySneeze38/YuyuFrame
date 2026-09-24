@@ -934,6 +934,17 @@ export const de: TranslationSchema = {
   },
 
   support: {
+    update: {
+      title: 'Deine Anfrage hat sich bewegt',
+      answered: 'Das Team hat auf „{{subject}}“ geantwortet.',
+      closed: 'Deine Anfrage „{{subject}}“ wurde geschlossen.',
+      waiting: 'Das Team wartet auf deine Antwort zu „{{subject}}“.',
+      changed: 'Es gibt Neues zu „{{subject}}“.',
+      ref: 'Referenz {{ref}}',
+      read: 'Lesen',
+      later: 'Später',
+      badgeStays: 'Der Punkt bleibt, solange die Nachricht ungelesen ist.',
+    },
     title: 'Support',
     subtitle: 'Stelle dem Team eine Frage oder eine Anfrage',
     myRequests: 'Meine Anfragen',
@@ -1075,7 +1086,28 @@ export const de: TranslationSchema = {
     },
   },
 
+  review: {
+    title: 'Deine Meinung zu YuyuFrame',
+    intro:
+      '{{count}} Partien in diesem Monat gestartet. Ob dir der Launcher zusagt oder nicht — deine Bewertung hilft den Nächsten bei der Entscheidung.',
+    open: 'Bewertung schreiben',
+    no: 'Nein danke',
+    note: 'Die Seite öffnet sich in deinem Browser.',
+  },
+
   crash: {
+    modal: {
+      title: 'Das Spiel ist abgestürzt',
+      intro:
+        '{{instance}} hat sich von selbst beendet. Der Bericht liegt schon auf deinem PC: Stacktrace, Mods, Rechner und das Ende des Protokolls.',
+      privacy: 'Ohne dein Einverständnis wird nichts gesendet. Adresse und Tokens wurden bereits aus dem Bericht entfernt.',
+      sending: 'Wird gesendet…',
+      sent: 'Gesendet — das Team hat den Bericht.',
+      sentWithRef: 'Gesendet — Referenz {{ref}}.',
+      review: 'Bericht lesen',
+      openSupport: 'Antwort verfolgen',
+      later: 'Später',
+    },
     listTitle: 'Berichte',
     emptyTitle: 'Keine Abstürze',
     emptyText:

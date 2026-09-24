@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
@@ -73,7 +73,11 @@ export default function Support() {
   const [categories, setCategories] = useState<SupportCategory[]>([])
   const [composing, setComposing] = useState<Kind | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
-  const [tab, setTab] = useState<Tab>('requests')
+  // `?tab=crashes` : la modale de plantage y renvoie directement, sinon on
+  // arrive sur « Mes demandes » et il faut deviner que le rapport est dans
+  // l'onglet d'à côté.
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(params.get('tab') === 'crashes' ? 'crashes' : 'requests')
 
   useEffect(() => {
     if (!signedIn) return
@@ -85,6 +89,16 @@ export default function Support() {
     // que le formulaire s'ouvre sans attente.
     api.support.categories().then(setCategories).catch(() => setCategories([]))
   }, [signedIn])
+
+  // `?ticket=…` : la modale « ta demande a bougé » ouvre le fil concerné
+  // plutôt que de déposer sur la liste, où il faudrait le retrouver
+  // soi-même. Une seule fois, au montage — rouvrir en boucle empêcherait de
+  // revenir à la liste.
+  const requestedTicket = params.get('ticket')
+  useEffect(() => {
+    if (requestedTicket) void open(requestedTicket)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const labelOf = useMemo(
     () => (code: string) => categories.find((c) => c.code === code)?.label ?? code,

@@ -327,12 +327,9 @@ export default function Home() {
     resetLaunchUi(instance_id)
   })
 
-  // Le jeu s'est fermé tout seul. Le rapport est déjà écrit sur le disque
-  // (voir minecraft::crash) — sans ce mot, la fenêtre disparaît et personne ne
-  // saurait qu'il existe.
-  useTauriEvent<{ instance_id: string; title: string }>('game_crashed', () => {
-    showNotice(t('home.crashNotice'))
-  })
+  // `game_crashed` est écouté dans App.tsx, pas ici : il ouvre désormais une
+  // modale qui propose d'envoyer le rapport, et cette modale doit s'afficher
+  // même si on a quitté l'accueil entre-temps.
 
   useTauriEvent<string>('launch_cancelled', (instanceId) => {
     showNotice(t('home.launchCancelled'))

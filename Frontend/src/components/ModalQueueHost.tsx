@@ -5,6 +5,9 @@ import { useStore } from '@/stores/useStore'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
+import { CrashReportModal } from '@/components/modals/CrashReportModal'
+import { SupportUpdateModal } from '@/components/modals/SupportUpdateModal'
+import { ReviewPromptModal } from '@/components/modals/ReviewPromptModal'
 
 /**
  * Rend la modale en tête de file, et elle seule.
@@ -20,8 +23,16 @@ import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurcha
  * apparaître une autre sous le curseur, exactement là où on venait de
  * cliquer : le deuxième clic partirait avant d'avoir rien lu.
  */
-/** Les genres que cet hôte sait rendre aujourd'hui. */
-const HANDLED: ModalKind[] = ['patchNotes', 'reconnect', 'offlineReminder']
+/** Les genres que cet hôte sait rendre. Le garde-fou plus bas s'en sert pour
+ *  retirer une demande orpheline au lieu de geler la file. */
+const HANDLED: ModalKind[] = [
+  'patchNotes',
+  'reconnect',
+  'crash',
+  'support',
+  'offlineReminder',
+  'review',
+]
 
 export function ModalQueueHost() {
   const current = useModalQueue((s) => s.current)
@@ -69,10 +80,36 @@ export function ModalQueueHost() {
       {current?.kind === 'offlineReminder' && (
         <OfflinePurchaseReminderModal key={current.key} counter={counter} onClose={close} />
       )}
-      {/* Les genres `crash`, `support` et `review` sont déjà déclarés dans la
-          file et ont leur rang : il ne leur manque que leur modale. Rien ne
-          les dépose encore, donc rien ne peut bloquer ici — et le jour où on
-          les écrit, il n'y a que ce bloc à compléter. */}
+      {current?.kind === 'crash' && (
+        <CrashReportModal
+          key={current.key}
+          reportId={current.data.reportId}
+          instanceId={current.data.instanceId}
+          title={current.data.title}
+          cause={current.data.cause}
+          counter={counter}
+          onClose={close}
+        />
+      )}
+      {current?.kind === 'support' && (
+        <SupportUpdateModal
+          key={current.key}
+          ticketId={current.data.ticketId}
+          publicId={current.data.publicId}
+          subject={current.data.subject}
+          status={current.data.status}
+          counter={counter}
+          onClose={close}
+        />
+      )}
+      {current?.kind === 'review' && (
+        <ReviewPromptModal
+          key={current.key}
+          sessions={current.data.sessions}
+          counter={counter}
+          onClose={close}
+        />
+      )}
     </AnimatePresence>
   )
 }

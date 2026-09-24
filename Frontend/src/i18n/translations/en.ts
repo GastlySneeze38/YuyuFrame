@@ -934,6 +934,17 @@ export const en: TranslationSchema = {
   },
 
   support: {
+    update: {
+      title: 'Your request moved',
+      answered: 'The team replied to “{{subject}}”.',
+      closed: 'Your request “{{subject}}” has been closed.',
+      waiting: 'The team is waiting on your reply about “{{subject}}”.',
+      changed: 'Something changed on “{{subject}}”.',
+      ref: 'Reference {{ref}}',
+      read: 'Read',
+      later: 'Later',
+      badgeStays: 'The dot stays until the message is read.',
+    },
     title: 'Support',
     subtitle: 'Ask the team a question or file a request',
     myRequests: 'My requests',
@@ -1075,7 +1086,28 @@ export const en: TranslationSchema = {
     },
   },
 
+  review: {
+    title: 'Your take on YuyuFrame',
+    intro:
+      '{{count}} sessions launched this month. Whether the launcher works for you or not, your review helps the next person decide.',
+    open: 'Write a review',
+    no: 'No thanks',
+    note: 'The page opens in your browser.',
+  },
+
   crash: {
+    modal: {
+      title: 'The game crashed',
+      intro:
+        '{{instance}} closed on its own. The report is already on your PC: stack trace, mods, machine and the tail of the log.',
+      privacy: 'Nothing is sent without your say-so. Your address and tokens have already been stripped from the report.',
+      sending: 'Sending…',
+      sent: 'Sent — the team has the report.',
+      sentWithRef: 'Sent — reference {{ref}}.',
+      review: 'Read the report',
+      openSupport: 'Follow the reply',
+      later: 'Later',
+    },
     listTitle: 'Reports',
     emptyTitle: 'No crashes',
     emptyText:

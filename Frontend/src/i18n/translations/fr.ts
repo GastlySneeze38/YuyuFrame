@@ -934,6 +934,17 @@ export const fr = {
   },
 
   support: {
+    update: {
+      title: 'Ta demande a bougé',
+      answered: 'L’équipe a répondu à « {{subject}} ».',
+      closed: 'Ta demande « {{subject}} » a été close.',
+      waiting: 'L’équipe attend ta réponse sur « {{subject}} ».',
+      changed: 'Il y a du nouveau sur « {{subject}} ».',
+      ref: 'Référence {{ref}}',
+      read: 'Lire',
+      later: 'Plus tard',
+      badgeStays: 'La pastille reste tant que le message n’est pas lu.',
+    },
     title: 'Support',
     subtitle: 'Poser une question ou faire une demande à l’équipe',
     myRequests: 'Mes demandes',
@@ -1076,7 +1087,28 @@ export const fr = {
     },
   },
 
+  review: {
+    title: 'Ton avis sur YuyuFrame',
+    intro:
+      '{{count}} parties lancées ce mois-ci. Si le launcher te convient — ou pas — ton avis aide les suivants à se décider.',
+    open: 'Donner mon avis',
+    no: 'Non merci',
+    note: 'La page s’ouvre dans ton navigateur.',
+  },
+
   crash: {
+    modal: {
+      title: 'Le jeu a planté',
+      intro:
+        '{{instance}} s’est fermé tout seul. Le rapport est déjà sur ton PC : trace, mods, machine et fin du journal.',
+      privacy: 'Rien ne part sans ton accord. Ton adresse et tes jetons ont déjà été retirés du rapport.',
+      sending: 'Envoi…',
+      sent: 'Envoyé — l’équipe a le rapport.',
+      sentWithRef: 'Envoyé — référence {{ref}}.',
+      review: 'Lire le rapport',
+      openSupport: 'Suivre la réponse',
+      later: 'Plus tard',
+    },
     listTitle: 'Rapports',
     emptyTitle: 'Aucun plantage',
     emptyText:

@@ -50,6 +50,11 @@ const PAGE_IMPORTS = [
   () => import('@/pages/JvmProfileEditor'),
 ]
 
+/** Parties (sur trente jours) à partir desquelles on ose demander un avis. */
+const REVIEW_MIN_SESSIONS = 10
+/** Délai après un plantage pendant lequel on ne demande rien à personne. */
+const REVIEW_CRASH_GRACE_MS = 20_000
+
 /** Charge les pages restantes quand le navigateur n'a rien de mieux à faire. */
 function preloadPages() {
   const run = () => PAGE_IMPORTS.forEach((load) => void load().catch(() => {}))
@@ -102,6 +107,38 @@ export default function App() {
   const needsReconnectRef = useRef(authSystemVersion < AUTH_SYSTEM_VERSION)
   // Décidé une fois la liste des comptes chargée (voir plus bas).
   const offlineReminderRef = useRef(false)
+  /** Horodatage du dernier plantage signalé — voir `considerReviewPrompt`. */
+  const lastCrashAt = useRef(0)
+
+  /**
+   * Demande d'avis, après une partie terminée normalement.
+   *
+   * Le délai n'est pas cosmétique : `game_crashed` et `game_state(false)`
+   * partent de la même fin de partie, dans un ordre que rien ne garantit. En
+   * décidant tout de suite, on demanderait son avis à quelqu'un dont le jeu
+   * vient de planter, une demi-seconde avant que le plantage ne soit connu.
+   */
+  const considerReviewPrompt = () => {
+    if (isConsoleWindow) return
+    window.setTimeout(() => {
+      if (Date.now() - lastCrashAt.current < REVIEW_CRASH_GRACE_MS) return
+      api.stats.get()
+        .then((stats) => {
+          // Le seuil porte sur les trente derniers jours : quelqu'un qui joue
+          // régulièrement en ce moment a un avis, celui qui a lancé dix
+          // parties il y a deux ans n'en a plus.
+          if (stats.totals.sessions < REVIEW_MIN_SESSIONS) return
+          pushModal({
+            kind: 'review',
+            // Clé fixe : la demande est posée une fois pour toutes, refus
+            // compris. C'est une question, pas un rappel.
+            key: 'review-prompt',
+            data: { sessions: stats.totals.sessions },
+          })
+        })
+        .catch(() => {})
+    }, 2500)
+  }
 
   // Monté pour toute la durée de vie de la fenêtre principale — contrairement
   // à l'ancien listener posé uniquement dans Home.tsx, qui se désabonnait dès
@@ -115,7 +152,28 @@ export default function App() {
     // `restore_after_game`) : cet appel n'est qu'un filet pour les fenêtres
     // masquées autrement, et il ne coûte rien quand elle est déjà visible.
     if (!running) getCurrentWindow().show().catch(() => {})
+    if (!running) considerReviewPrompt()
   })
+
+  // Le jeu s'est fermé tout seul. Le rapport est déjà écrit sur le disque
+  // (voir minecraft::crash) : la modale ne fait que demander quoi en faire.
+  //
+  // Écouté ici et non dans Home : la fenêtre peut être sur n'importe quel
+  // écran au moment du plantage — ou masquée, si « fermer au lancement » est
+  // actif. La file garde alors la demande jusqu'à ce qu'on revienne.
+  useTauriEvent<{ instance_id: string; report_id: string; title: string; kind: string }>(
+    'game_crashed',
+    ({ instance_id, report_id, title, kind }) => {
+      lastCrashAt.current = Date.now()
+      pushModal({
+        kind: 'crash',
+        // Un rapport donné ne se propose qu'une fois, même après un
+        // redémarrage : la clé est celle du rapport.
+        key: `crash-${report_id}`,
+        data: { reportId: report_id, instanceId: instance_id, title, cause: kind },
+      })
+    },
+  )
 
   // Lien yuyuframe://join?... — bouton "Rejoindre" de la Rich Presence
   // Discord d'un ami (voir discord.rs::build_join_url). Deux chemins

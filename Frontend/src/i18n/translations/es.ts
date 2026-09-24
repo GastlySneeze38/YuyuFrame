@@ -934,6 +934,17 @@ export const es: TranslationSchema = {
   },
 
   support: {
+    update: {
+      title: 'Tu solicitud ha cambiado',
+      answered: 'El equipo ha respondido a «{{subject}}».',
+      closed: 'Tu solicitud «{{subject}}» se ha cerrado.',
+      waiting: 'El equipo espera tu respuesta sobre «{{subject}}».',
+      changed: 'Hay novedades en «{{subject}}».',
+      ref: 'Referencia {{ref}}',
+      read: 'Leer',
+      later: 'Más tarde',
+      badgeStays: 'El punto permanece mientras el mensaje no se lea.',
+    },
     title: 'Soporte',
     subtitle: 'Haz una pregunta o una solicitud al equipo',
     myRequests: 'Mis solicitudes',
@@ -1075,7 +1086,28 @@ export const es: TranslationSchema = {
     },
   },
 
+  review: {
+    title: 'Tu opinión sobre YuyuFrame',
+    intro:
+      '{{count}} partidas lanzadas este mes. Te convenga o no el launcher, tu opinión ayuda a quien venga después.',
+    open: 'Dar mi opinión',
+    no: 'No, gracias',
+    note: 'La página se abre en tu navegador.',
+  },
+
   crash: {
+    modal: {
+      title: 'El juego se ha cerrado inesperadamente',
+      intro:
+        '{{instance}} se ha cerrado solo. El informe ya está en tu PC: traza, mods, equipo y final del registro.',
+      privacy: 'No se envía nada sin tu permiso. Tu dirección y tus tokens ya se han retirado del informe.',
+      sending: 'Enviando…',
+      sent: 'Enviado: el equipo tiene el informe.',
+      sentWithRef: 'Enviado: referencia {{ref}}.',
+      review: 'Leer el informe',
+      openSupport: 'Seguir la respuesta',
+      later: 'Más tarde',
+    },
     listTitle: 'Informes',
     emptyTitle: 'Ningún cierre inesperado',
     emptyText:
