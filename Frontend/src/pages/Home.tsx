@@ -605,17 +605,34 @@ export default function Home() {
               // la pastille d'informations qui suivait ne disait rien que le
               // sélecteur ne dise déjà.
               <div className="flex w-full items-center gap-2">
-                <button
+                {/* Le sélecteur répond en deux temps : il se soulève d'un
+                    pixel, et son chevron descend — le geste qu'on s'apprête à
+                    faire, annoncé avant le clic.
+                    Les états sont nommés (`rest` / `hover`) plutôt qu'écrits
+                    en objet : seuls les noms de variantes descendent aux
+                    enfants, et c'est ce qui permet au chevron de réagir au
+                    survol du bouton sans écouteur à lui. */}
+                <motion.button
                   onClick={() => setShowInstanceSwitch(true)}
+                  initial="rest"
+                  animate="rest"
+                  whileHover="hover"
+                  whileTap={{ scale: 0.99 }}
+                  variants={{ rest: { y: 0 }, hover: { y: -1 } }}
+                  transition={SNAP}
                   className="relative flex h-[clamp(34px,6.4vh,48px)] min-w-0 flex-1 items-center justify-between rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] px-3.5 text-sm font-medium text-white outline-none transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)]"
                 >
                   <span className="truncate">
                     {instance ? `${instance.name} — ${instance.mc_version} (${instance.loader})` : t('home.chooseInstance')}
                   </span>
-                  <svg viewBox="0 0 10 6" fill="white" width={10} height={6} className="ml-2 flex-shrink-0 opacity-[0.45]">
+                  <motion.svg
+                    variants={{ rest: { y: 0, opacity: 0.45 }, hover: { y: 2, opacity: 0.95 } }}
+                    transition={SNAP}
+                    viewBox="0 0 10 6" fill="white" width={10} height={6} className="ml-2 flex-shrink-0"
+                  >
                     <path d="M0 0l5 6 5-6z" />
-                  </svg>
-                </button>
+                  </motion.svg>
+                </motion.button>
 
                 <motion.button {...press}
                   onClick={() => navigate('/mods')}
