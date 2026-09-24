@@ -9,6 +9,7 @@ pub mod instance;
 pub mod jvm_profile;
 pub mod launch;
 pub mod modrinth;
+pub mod pending;
 pub mod plan;
 pub mod support;
 pub mod sync;

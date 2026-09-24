@@ -877,9 +877,13 @@ async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<
         "loader": &report.loader,
         "uptime_ms": report.uptime_ms,
     }));
-    // L'accueil affiche une invitation à ouvrir le rapport : c'est là que la
-    // personne regarde quand sa fenêtre de jeu vient de disparaître.
-    let _ = app.emit("game_crashed", serde_json::json!({
+    // Une modale propose d'envoyer le rapport : c'est là que la personne
+    // regarde quand sa fenêtre de jeu vient de disparaître.
+    //
+    // Déposée si la fenêtre a été fermée au lancement — sans quoi le seul
+    // moment où un plantage est certain d'arriver, la fenêtre fermée, est
+    // aussi le seul où personne ne peut l'entendre (voir commands::pending).
+    crate::commands::pending::emit_or_stash(&app, "game_crashed", serde_json::json!({
         "instance_id": &report.instance_id,
         "report_id": &report.id,
         "title": &report.title,

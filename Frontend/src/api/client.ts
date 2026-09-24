@@ -305,6 +305,12 @@ export const api = {
     takePending: () => invoke<string | null>('take_pending_deep_link'),
   },
 
+  /** Événements émis pendant que la fenêtre n'existait plus (fermée au
+   *  lancement) — récupérés au montage et rejoués. Voir commands::pending. */
+  pending: {
+    take: () => invoke<{ name: string; payload: unknown }[]>('take_pending_events'),
+  },
+
   analytics: {
     // Passerelle générique pour les événements sans contrepartie backend
     // (clic, ouverture de modal, recherche...) — voir track_event côté Rust.
@@ -325,6 +331,9 @@ export const api = {
       invoke<void>('reload_agent'),
     cancel: (instanceId: string) =>
       invoke<void>('cancel_launch', { instanceId }),
+    /** Les instances qui tournent, d'après le Rust — la seule source qui
+     *  survive à la fermeture de la fenêtre au lancement. */
+    running: () => invoke<string[]>('running_instances'),
     listSavedServers: (instanceId: string) =>
       invoke<SavedServer[]>('list_saved_servers', { instanceId }),
     pingServer: (address: string) =>

@@ -296,7 +296,11 @@ pub async fn launch_game(
                 tokio::task::spawn_blocking(crate::integrations::discord::set_idle);
             }
         }
-        let _ = app.emit("game_state", serde_json::json!({
+        // Déposée si la fenêtre a été fermée au lancement : c'est cet
+        // événement qui remet l'interface à zéro et déclenche la demande
+        // d'avis, et il tombe exactement pendant le seul moment où plus
+        // personne n'écoute (voir commands::pending).
+        super::pending::emit_or_stash(&app, "game_state", serde_json::json!({
             "running": false,
             "instance_id": &instance_id,
         }));
@@ -309,6 +313,22 @@ pub async fn launch_game(
     });
 
     Ok(())
+}
+
+/// Les instances qui tournent en ce moment.
+///
+/// L'interface tient sa propre liste, alimentée par les événements
+/// `game_state`. Elle vit en mémoire de la webview — donc elle disparaît avec
+/// elle quand « masquer au lancement » la ferme. La fenêtre recréée repartait
+/// alors d'une ardoise vide et proposait de relancer une instance déjà en
+/// train de tourner.
+///
+/// Le Rust, lui, n'a rien oublié : c'est lui qui tient la vérité (voir
+/// `AppState::running_instances`). L'interface vient la lui demander à son
+/// montage plutôt que de la déduire d'événements qu'elle n'a pas entendus.
+#[tauri::command]
+pub async fn running_instances(state: tauri::State<'_, SharedState>) -> Result<Vec<String>, String> {
+    Ok(state.read().await.running_instances.iter().cloned().collect())
 }
 
 /// Liste les serveurs multijoueur enregistrés dans `servers.dat` de

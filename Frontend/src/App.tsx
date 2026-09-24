@@ -153,14 +153,39 @@ export default function App() {
   // fermer pendant qu'on était sur une autre page : personne ne recevait
   // `game_state`, le store gardait `running: true` indéfiniment et le bouton
   // "EN JEU..." restait bloqué jusqu'à un F5 complet qui réinitialise le store.
-  useTauriEvent<{ running: boolean; instance_id: string }>('game_state', ({ running, instance_id }) => {
+  // Extraits des écouteurs pour être rejoués tels quels : une partie finie
+  // pendant que la fenêtre était fermée arrive par la boîte aux lettres
+  // plutôt que par un événement (voir `replayMissedEvents`). Deux chemins,
+  // un seul traitement — sinon l'un des deux finit par oublier une étape.
+  const onGameState = ({ running, instance_id }: { running: boolean; instance_id: string }) => {
     setInstanceRunning(instance_id, running)
     // Le Rust remonte déjà la fenêtre à la fin d'une partie (voir
     // `restore_after_game`) : cet appel n'est qu'un filet pour les fenêtres
     // masquées autrement, et il ne coûte rien quand elle est déjà visible.
     if (!running) getCurrentWindow().show().catch(() => {})
     if (!running) considerReviewPrompt()
-  })
+  }
+
+  const onGameCrashed = ({ instance_id, report_id, title, kind }: {
+    instance_id: string; report_id: string; title: string; kind: string
+  }) => {
+    lastCrashAt.current = Date.now()
+    pushModal({
+      kind: 'crash',
+      // Un rapport donné ne se propose qu'une fois, même après un
+      // redémarrage : la clé est celle du rapport.
+      key: `crash-${report_id}`,
+      data: { reportId: report_id, instanceId: instance_id, title, cause: kind },
+    })
+  }
+
+  // Monté pour toute la durée de vie de la fenêtre principale — contrairement
+  // à l'ancien listener posé uniquement dans Home.tsx, qui se désabonnait dès
+  // qu'on naviguait ailleurs (Instances, Réglages...). Le jeu pouvait alors se
+  // fermer pendant qu'on était sur une autre page : personne ne recevait
+  // `game_state`, le store gardait `running: true` indéfiniment et le bouton
+  // "EN JEU..." restait bloqué jusqu'à un F5 complet qui réinitialise le store.
+  useTauriEvent<{ running: boolean; instance_id: string }>('game_state', onGameState)
 
   // Le jeu s'est fermé tout seul. Le rapport est déjà écrit sur le disque
   // (voir minecraft::crash) : la modale ne fait que demander quoi en faire.
@@ -170,17 +195,41 @@ export default function App() {
   // actif. La file garde alors la demande jusqu'à ce qu'on revienne.
   useTauriEvent<{ instance_id: string; report_id: string; title: string; kind: string }>(
     'game_crashed',
-    ({ instance_id, report_id, title, kind }) => {
-      lastCrashAt.current = Date.now()
-      pushModal({
-        kind: 'crash',
-        // Un rapport donné ne se propose qu'une fois, même après un
-        // redémarrage : la clé est celle du rapport.
-        key: `crash-${report_id}`,
-        data: { reportId: report_id, instanceId: instance_id, title, cause: kind },
-      })
-    },
+    onGameCrashed,
   )
+
+  /**
+   * Rattrapage au montage : parties en cours et événements manqués.
+   *
+   * Deux trous se refermaient ici, tous deux dus au même fait — « masquer au
+   * lancement » ne cache pas la fenêtre, il la FERME, et la webview part avec
+   * elle :
+   *
+   * - la liste des instances en cours ne vivait que dans le magasin de la
+   *   page ; la fenêtre recréée repartait vide et proposait de relancer une
+   *   instance déjà en train de tourner. Le Rust, lui, n'a rien oublié ;
+   * - la fin de partie et le plantage étaient annoncés pendant que personne
+   *   n'écoutait, donc ni la modale de plantage ni la demande d'avis
+   *   n'arrivaient jamais. Le Rust les a mis de côté.
+   *
+   * L'ordre compte : les parties en cours d'abord, puis les événements, qui
+   * peuvent justement dire qu'une partie s'est terminée.
+   */
+  useEffect(() => {
+    if (isConsoleWindow) return
+    api.launch.running()
+      .then((ids) => ids.forEach((id) => setInstanceRunning(id, true)))
+      .catch(() => {})
+      .then(() => api.pending.take())
+      .then((events) => {
+        for (const event of events ?? []) {
+          if (event.name === 'game_state') onGameState(event.payload as Parameters<typeof onGameState>[0])
+          else if (event.name === 'game_crashed') onGameCrashed(event.payload as Parameters<typeof onGameCrashed>[0])
+        }
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Lien yuyuframe://join?... — bouton "Rejoindre" de la Rich Presence
   // Discord d'un ami (voir discord.rs::build_join_url). Deux chemins
