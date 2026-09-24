@@ -6,6 +6,7 @@ import { EASE_OUT, SNAP, press } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import { useSupportWatch } from '@/stores/useSupportWatch'
 import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError, showNotice } from '@/stores/useErrorToast'
@@ -157,6 +158,8 @@ export default function Home() {
   const [bannerPulse, setBannerPulse] = useState(false)
   /** Survol du bouton de lancement — pilote la comète (voir LaunchSweep). */
   const [launchHover, setLaunchHover] = useState(false)
+  /** Réponses du support non lues — pastille sur l'entrée « Support ». */
+  const supportUnread = useSupportWatch((s) => s.unread)
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
@@ -902,7 +905,7 @@ export default function Home() {
             <NavLink label={t('home.nav.plans')} onClick={() => navigate('/plans')} distance={0} plans>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.support')} onClick={() => navigate('/support')} distance={1} accent>
+            <NavLink label={t('home.nav.support')} onClick={() => navigate('/support')} distance={1} accent badge={supportUnread}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 00-9 9v5a3 3 0 003 3h1a1 1 0 001-1v-5a1 1 0 00-1-1H5v-1a7 7 0 1114 0v1h-2a1 1 0 00-1 1v5a1 1 0 001 1h1a3 3 0 003-3v-5a9 9 0 00-9-9z" /></svg>
             </NavLink>
             <NavLink label={t('home.nav.account')} onClick={() => navigate('/login')} distance={2}>
@@ -1004,8 +1007,10 @@ const NAV_SIZE_CLASSES = [
 ]
 
 /** Temps passé sur un même lien avant que le repère ne s'étire. */
-function NavLink({ label, onClick, plans, accent, distance = 0, children }: {
+function NavLink({ label, onClick, plans, accent, distance = 0, badge = 0, children }: {
   label: string; onClick: () => void; plans?: boolean; accent?: boolean; distance?: number
+  /** Nombre d'éléments en attente sur cet écran. 0 = rien à signaler. */
+  badge?: number
   children: React.ReactNode
 }) {
   // Tailles relatives à la fenêtre via clamp — s'adaptent à toutes les largeurs
@@ -1044,7 +1049,18 @@ function NavLink({ label, onClick, plans, accent, distance = 0, children }: {
       // à côté.
       className={`group relative flex items-center gap-[0.45em] rounded-xl px-[0.85em] py-[0.62em] transition-colors duration-150 whitespace-nowrap cursor-pointer ${NAV_SIZE_CLASSES[d]} ${baseColorClass} ${bgBorderShadow} ${hoverClasses}`}
     >
-      <span className={`flex h-[1.35em] w-[1.35em] flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>{children}</span>
+      <span className={`relative flex h-[1.35em] w-[1.35em] flex-shrink-0 transition-transform duration-150 ease-out group-hover:scale-110 ${plans ? 'text-[#a78bfa]' : 'text-inherit'}`}>
+        {children}
+        {/* Posée sur l'icône et non à côté du libellé : elle reste au même
+            endroit quelle que soit la longueur du mot, dans une barre dont
+            les sept entrées n'ont pas la même largeur. Dimensions en `em`,
+            comme le reste du bouton — elle suit la taille de la barre. */}
+        {badge > 0 && (
+          <span className="absolute -right-[0.35em] -top-[0.3em] flex h-[0.85em] min-w-[0.85em] items-center justify-center rounded-full bg-[#ef4444] px-[0.18em] text-[0.62em] font-bold leading-none text-white shadow-[0_0_0_0.12em_rgba(9,9,13,0.9)]">
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </span>
       {label}
     </motion.button>
   )

@@ -11,6 +11,7 @@ import { api } from '@/api/client'
 import { errorMessage } from '@/lib/apiError'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
+import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useDraftState, clearDraft } from '@/stores/useDrafts'
 import { CrashPanel } from '@/components/support/CrashPanel'
 import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
@@ -97,6 +98,10 @@ export default function Support() {
       setOpenTicket(detail)
       // La lecture efface la pastille côté serveur : la liste doit suivre.
       setTickets((list) => list?.map((x) => (x.id === id ? { ...x, has_unread: false } : x)) ?? null)
+      // Et la pastille de la barre de navigation aussi, sans attendre son
+      // prochain sondage — trois minutes d'un point rouge sur un message
+      // qu'on vient de lire.
+      useSupportWatch.getState().refresh()
     } catch (e) {
       showError(errorMessage(e))
     } finally {

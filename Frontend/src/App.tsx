@@ -13,6 +13,7 @@ import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { useStore } from '@/stores/useStore'
 import { useModalQueue } from '@/stores/useModalQueue'
+import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
@@ -92,6 +93,9 @@ export default function App() {
   // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
   // à la fois (voir stores/useModalQueue.ts).
   const pushModal = useModalQueue((s) => s.push)
+  const yuyuSignedIn = useStore((s) => s.yuyuSignedIn)
+  const refreshSupportWatch = useSupportWatch((s) => s.refresh)
+  const clearSupportWatch = useSupportWatch((s) => s.clear)
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
@@ -252,6 +256,21 @@ export default function App() {
     const interval = setInterval(ping, 45 * 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Pastille du support : sans cette veille, une réponse de l'équipe n'était
+  // visible qu'en allant soi-même sur l'écran Support. Relue au démarrage
+  // puis périodiquement, et remise à zéro dès qu'il n'y a plus de compte —
+  // une pastille qui survivrait à la déconnexion ne parlerait de personne.
+  useEffect(() => {
+    if (isConsoleWindow) return
+    if (!yuyuSignedIn) {
+      clearSupportWatch()
+      return
+    }
+    refreshSupportWatch()
+    const timer = setInterval(refreshSupportWatch, SUPPORT_POLL_MS)
+    return () => clearInterval(timer)
+  }, [yuyuSignedIn])
 
   // Les autres écrans se chargent en tâche de fond une fois le premier
   // affiché : la navigation n'a plus rien à attendre.
