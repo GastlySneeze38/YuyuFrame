@@ -46,12 +46,20 @@ export function ModalQueueHost() {
   const counter = { index: done + 1, total: done + 1 + waiting }
   const setPendingPatchNotes = useStore((s) => s.setPendingPatchNotes)
 
-  // Les notes de patch restent « en attente » dans le magasin persisté tant
-  // qu'on ne les a pas montrées : c'est ce drapeau qui les redépose au
-  // démarrage suivant. Il s'efface donc quand elles sont vues, pas avant.
-  useEffect(() => {
-    if (current?.kind === 'patchNotes') setPendingPatchNotes(null)
-  }, [current, setPendingPatchNotes])
+  /**
+   * Fermeture des notes de patch : la file retient la clé, et le drapeau du
+   * magasin s'efface.
+   *
+   * À la FERMETURE, pas à l'affichage. Effacé dès qu'elles paraissent, un
+   * launcher quitté pendant leur lecture perdait les notes des deux côtés à
+   * la fois — le drapeau était parti, et la file ne les avait pas encore
+   * retenues comme vues, donc plus rien ne les redéposait. Elles
+   * disparaissaient sans avoir été lues.
+   */
+  function closePatchNotes() {
+    setPendingPatchNotes(null)
+    close()
+  }
 
   // Garde-fou : une demande d'un genre qu'on ne sait pas rendre resterait en
   // tête sans rien afficher — et sans rien pour la fermer, elle bloquerait
@@ -71,7 +79,7 @@ export function ModalQueueHost() {
           version={current.data.version}
           notes={current.data.notes}
           counter={counter}
-          onClose={close}
+          onClose={closePatchNotes}
         />
       )}
       {current?.kind === 'reconnect' && (

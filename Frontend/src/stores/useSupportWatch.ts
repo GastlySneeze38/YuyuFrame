@@ -31,9 +31,9 @@ const WORTH_TELLING = ['answered', 'closed', 'waiting']
 interface SupportWatchStore {
   /** Nombre de tickets avec une réponse non lue. 0 = pas de pastille. */
   unread: number
-  /** Dernier statut connu par ticket, persisté : c'est la comparaison avec
-   *  lui qui fait la nouvelle. Sans mémoire, tout serait neuf à chaque
-   *  démarrage et la modale reviendrait sans fin. */
+  /** Dernier état connu par ticket (`statut|date`), persisté : c'est la
+   *  comparaison avec lui qui fait la nouvelle. Sans mémoire, tout serait
+   *  neuf à chaque démarrage et la modale reviendrait sans fin. */
   known: Record<string, string>
   refresh: () => Promise<void>
   /** À la déconnexion : la pastille ne parle plus de personne. */
@@ -61,20 +61,33 @@ export const useSupportWatch = create<SupportWatchStore>()(
         const next: Record<string, string> = {}
 
         for (const ticket of tickets) {
-          next[ticket.id] = ticket.status
+          const signature = `${ticket.status}|${ticket.updated_at}`
+          next[ticket.id] = signature
           const before = known[ticket.id]
           // Premier passage : on enregistre sans rien annoncer. Sinon, une
           // installation sur un deuxième PC ouvrirait une modale par ticket
           // de tout l'historique.
           if (!seenBefore) continue
-          if (before === ticket.status) continue
+          if (before === signature) continue
           if (!WORTH_TELLING.includes(ticket.status)) continue
+          // Le statut seul ne suffit pas à repérer une nouvelle : deux
+          // réponses d'affilée laissent le ticket « répondu » les deux fois.
+          // On regarde donc aussi la date, ce qui oblige à écarter les
+          // changements qui n'apprennent rien — relire un fil le fait bouger
+          // sans que personne n'ait écrit. D'où le `has_unread` : s'il n'y a
+          // rien à lire, il n'y a rien à annoncer. Un changement de statut,
+          // lui, se dit toujours — une clôture mérite d'être signalée même
+          // sans message joint.
+          const statusChanged = before?.split('|')[0] !== ticket.status
+          if (!statusChanged && !ticket.has_unread) continue
 
           useModalQueue.getState().push({
             kind: 'support',
-            // La clé porte le statut : la prochaine étape du même ticket
-            // sera une autre nouvelle, pas un doublon de celle-ci.
-            key: `support-${ticket.id}-${ticket.status}`,
+            // La clé porte la date : la prochaine étape du même ticket sera
+            // une autre nouvelle, pas un doublon de celle-ci. Avec le statut
+            // seul, une deuxième réponse retombait sur la clé de la première
+            // et la file la refusait comme « déjà vue ».
+            key: `support-${ticket.id}-${ticket.updated_at}`,
             data: {
               ticketId: ticket.id,
               publicId: ticket.public_id,
