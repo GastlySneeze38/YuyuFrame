@@ -9,11 +9,10 @@ import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { PageTransition } from '@/components/PageTransition'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { PlanGate } from '@/components/PlanGate'
-import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
-import { ReconnectModal } from '@/components/account/ReconnectModal'
-import { PatchNotesModal } from '@/components/PatchNotesModal'
+import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { useStore } from '@/stores/useStore'
+import { useModalQueue } from '@/stores/useModalQueue'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
@@ -85,13 +84,14 @@ const label = getCurrentWindow().label
 const isConsoleWindow = label.startsWith('mc-console-')
 
 export default function App() {
-  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, setPendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
+  const { brightness, instanceSyncMode, setInstances, uuid, pendingPatchNotes, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
-  const [showPatchNotes, setShowPatchNotes] = useState(false)
-  const [showOfflineReminder, setShowOfflineReminder] = useState(false)
-  const [showReconnect, setShowReconnect] = useState(false)
+  // Les trois modales de démarrage ne sont plus des drapeaux locaux : elles
+  // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
+  // à la fois (voir stores/useModalQueue.ts).
+  const pushModal = useModalQueue((s) => s.push)
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
@@ -152,10 +152,10 @@ export default function App() {
     setJoinRequest(parseJoinUrl(url))
   })
 
-  // Priorité aux notes de patch : si une mise à jour vient de se terminer
-  // (voir UpdateChecker → relaunch()), on les affiche d'abord — le rappel
-  // compte hors ligne, lui, n'apparaît qu'une fois les notes fermées
-  // (handleClosePatchNotes), jamais en même temps.
+  // Les trois demandes de démarrage sont déposées sans se soucier les unes
+  // des autres : l'ordre appartient à la file, plus à ce bloc. C'est le seul
+  // changement de fond ici — avant, chaque branche devait connaître les
+  // suivantes, et la chaîne se recopiait dans les `onClose`.
   //
   // `isOffline` du store est un instantané persisté (voir partialize dans
   // useStore.ts) qui n'est resynchronisé qu'en repassant par Login/YuyuLogin
@@ -164,6 +164,27 @@ export default function App() {
   // compte hors ligne, switch antérieur...) redéclenchait donc le rappel à
   // chaque lancement même une fois de retour sur un compte Microsoft en
   // ligne. On revalide contre le compte actif réel avant de décider.
+  const queueStartupModals = (hasAccount: boolean) => {
+    if (pendingPatchNotes) {
+      // La clé porte la version : des notes déjà lues ne reviennent pas, mais
+      // celles de la mise à jour suivante ne sont pas confondues avec elles.
+      pushModal({
+        kind: 'patchNotes',
+        key: `patch-notes-${pendingPatchNotes.version}`,
+        data: pendingPatchNotes,
+      })
+    }
+    if (needsReconnectRef.current && hasAccount) {
+      pushModal({ kind: 'reconnect', key: `reconnect-${AUTH_SYSTEM_VERSION}`, data: null })
+    }
+    if (offlineReminderRef.current) {
+      // `remember: false` : ce n'est pas une nouvelle à annoncer une fois mais
+      // un état à rappeler tant qu'il dure. Retenue pour toujours, la modale
+      // ne serait vue qu'au tout premier lancement en compte hors ligne.
+      pushModal({ kind: 'offlineReminder', key: 'offline-reminder', data: null, remember: false })
+    }
+  }
+
   useEffect(() => {
     if (isConsoleWindow) return
     // Marqué comme vu tout de suite (best-effort, comme pendingPatchNotes) —
@@ -178,36 +199,16 @@ export default function App() {
         // Un seul compte Microsoft enregistré prouve que le jeu est acheté :
         // pas de rappel d'achat, même si le compte actif est hors ligne.
         offlineReminderRef.current = !!active?.is_offline && !accs.some((a) => !a.is_offline)
-        if (pendingPatchNotes) {
-          setShowPatchNotes(true)
-        } else if (needsReconnectRef.current && active) {
-          setShowReconnect(true)
-        } else if (offlineReminderRef.current) {
-          setShowOfflineReminder(true)
-        }
+        queueStartupModals(!!active)
       })
       .catch((e) => {
         // Sans la liste des comptes, impossible de savoir si le jeu est
         // acheté : pas de rappel d'achat plutôt qu'un rappel à tort.
         console.error('[App] liste des comptes Minecraft :', e)
-        if (pendingPatchNotes) setShowPatchNotes(true)
-        else if (needsReconnectRef.current && uuid) setShowReconnect(true)
+        queueStartupModals(!!uuid)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const handleClosePatchNotes = () => {
-    setShowPatchNotes(false)
-    setPendingPatchNotes(null)
-    if (needsReconnectRef.current && uuid) setShowReconnect(true)
-    else if (offlineReminderRef.current) setShowOfflineReminder(true)
-  }
-
-  const handleCloseReconnect = () => {
-    setShowReconnect(false)
-    needsReconnectRef.current = false
-    if (offlineReminderRef.current) setShowOfflineReminder(true)
-  }
 
   useEffect(() => {
     if (isConsoleWindow) return
@@ -273,19 +274,11 @@ export default function App() {
       <ErrorToast />
       <TitleBar />
       <UpdateChecker />
-      {showPatchNotes && pendingPatchNotes && (
-        <PatchNotesModal
-          version={pendingPatchNotes.version}
-          notes={pendingPatchNotes.notes}
-          onClose={handleClosePatchNotes}
-        />
-      )}
-      {showReconnect && (
-        <ReconnectModal onClose={handleCloseReconnect} />
-      )}
-      {showOfflineReminder && (
-        <OfflinePurchaseReminderModal onClose={() => setShowOfflineReminder(false)} />
-      )}
+      {/* Une seule modale de communication à la fois, dans l'ordre décidé par
+          la file. Les invitations à rejoindre et le mot de passe imposé
+          restent en dehors : la première répond à un geste immédiat (un clic
+          sur le lien d'un ami), le second bloque tout le reste. */}
+      <ModalQueueHost />
       {joinRequest && (
         <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
       )}

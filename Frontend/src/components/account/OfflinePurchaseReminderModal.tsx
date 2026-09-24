@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { useT } from '@/i18n'
 import { api } from '@/api/client'
+import type { QueuedModalProps } from '@/stores/useModalQueue'
 
 const PURCHASE_URL = 'https://www.minecraft.net/fr-fr/store/minecraft-java-bedrock-edition-pc'
 
@@ -16,7 +17,7 @@ const PURCHASE_URL = 'https://www.minecraft.net/fr-fr/store/minecraft-java-bedro
  * construit côté PostHog : `offline_reminder_purchase_clicked` puis, plus
  * tard, `microsoft_account_added` sur le même distinct_id (device) = ce
  * poste crack a fini par ajouter un vrai compte Microsoft. */
-export function OfflinePurchaseReminderModal({ onClose }: { onClose: () => void }) {
+export function OfflinePurchaseReminderModal({ onClose, counter }: QueuedModalProps) {
   const t = useT()
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function OfflinePurchaseReminderModal({ onClose }: { onClose: () => void 
   }, [])
 
   return (
-    <ModalShell title={t('account.reminderTitle')} onClose={onClose} maxWidth="max-w-sm">
+    <ModalShell title={t('account.reminderTitle')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
       <div className="flex flex-col gap-4">
         <p className="text-[12px] leading-relaxed text-[rgba(255,255,255,0.6)]">
           {t('account.reminderText')}

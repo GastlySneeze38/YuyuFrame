@@ -25,6 +25,7 @@ export function ModalShell({
   overlay = 'rgba(0,0,0,0.6)',
   blur = 4,
   cardStyle,
+  counter,
 }: {
   title?: string
   onClose: () => void
@@ -37,6 +38,10 @@ export function ModalShell({
   overlay?: string
   blur?: number
   cardStyle?: CSSProperties
+  /** Rang dans une série de modales enchaînées (voir `useModalQueue`) : sans
+   * lui, trois messages d'affilée donnent l'impression d'une boucle sans fin
+   * plutôt que d'une liste qui se vide. */
+  counter?: { index: number; total: number }
 }) {
   // Échap ferme : c'est la sortie attendue maintenant que le clic à côté ne
   // fait plus rien. `capture` pour passer avant les champs de saisie.
@@ -74,9 +79,18 @@ export function ModalShell({
         style={cardStyle}
       >
         {title !== undefined && (
-          <div className="flex flex-shrink-0 items-center justify-between">
+          <div className="flex flex-shrink-0 items-center justify-between gap-3">
             <p className="font-bold text-txt-primary text-[15px]">{title}</p>
-            <CloseButton onClick={onClose} />
+            <div className="flex flex-shrink-0 items-center gap-2">
+              {/* Affiché seulement à partir de deux : « 1 sur 1 » n'apprend
+                  rien et laisse croire qu'il y a une suite. */}
+              {counter && counter.total > 1 && (
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-txt-secondary">
+                  {counter.index} / {counter.total}
+                </span>
+              )}
+              <CloseButton onClick={onClose} />
+            </div>
           </div>
         )}
         {children}

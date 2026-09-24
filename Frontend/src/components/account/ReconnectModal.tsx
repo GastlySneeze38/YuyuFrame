@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
+import type { QueuedModalProps } from '@/stores/useModalQueue'
 import { useT } from '@/i18n'
 
 /** Affichée au démarrage quand authSystemVersion (persisté) est en retard sur
@@ -10,7 +11,7 @@ import { useT } from '@/i18n'
  * Microsoft actif est délogué côté backend (session locale invalidée par le
  * changement) et l'utilisateur est renvoyé sur /login pour le reconnecter
  * via le flow device code déjà en place, plutôt que de dupliquer l'UI ici. */
-export function ReconnectModal({ onClose }: { onClose: () => void }) {
+export function ReconnectModal({ onClose, counter }: QueuedModalProps) {
   const t = useT()
   const navigate = useNavigate()
   const clearUser = useStore((s) => s.clearUser)
@@ -25,7 +26,7 @@ export function ReconnectModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <ModalShell title={t('reconnect.title')} onClose={onClose} maxWidth="max-w-sm">
+    <ModalShell title={t('reconnect.title')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
       <div className="flex flex-col gap-4">
         <p className="text-[12px] leading-relaxed text-[rgba(255,255,255,0.6)]">
           {t('reconnect.description')}

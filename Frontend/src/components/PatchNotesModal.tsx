@@ -1,14 +1,15 @@
 import { ModalShell } from '@/components/ui/ModalShell'
+import type { QueuedModalProps } from '@/stores/useModalQueue'
 
 /** Affichée au lancement suivant une mise à jour (voir pendingPatchNotes,
  * posé par UpdateChecker juste avant relaunch()) — les notes viennent
  * directement du manifeste de mise à jour (`Update.body`, voir
  * @tauri-apps/plugin-updater), aucune source séparée à maintenir. */
-export function PatchNotesModal({ version, notes, onClose }: { version: string; notes: string; onClose: () => void }) {
+export function PatchNotesModal({ version, notes, onClose, counter }: QueuedModalProps & { version: string; notes: string }) {
   const lines = notes.split('\n').map((l) => l.trim()).filter(Boolean)
 
   return (
-    <ModalShell title={`Nouveautés — v${version}`} onClose={onClose} maxWidth="max-w-md">
+    <ModalShell title={`Nouveautés — v${version}`} onClose={onClose} maxWidth="max-w-md" counter={counter}>
       <div className="flex flex-col gap-4">
         {lines.length > 0 ? (
           <ul className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1 text-[12px] leading-relaxed text-[rgba(255,255,255,0.6)]">
