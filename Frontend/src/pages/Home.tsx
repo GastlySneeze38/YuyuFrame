@@ -77,13 +77,25 @@ function withEntry<T>(map: Record<string, T>, id: string, value: T | null): Reco
   return next
 }
 
+/**
+ * Les trois cartes montrées à la place des serveurs épinglés, quand il n'y en
+ * a aucun.
+ *
+ * La première annonçait « Sync P2P — en connexion directe, aucun cloud, aucun
+ * serveur tiers », et menait à l'écran de synchronisation. Deux problèmes :
+ * elle décrivait une technique dont on ne parle pas, et elle contredisait la
+ * page des fonctionnalités, où la sync est depuis peu annoncée « bientôt » et
+ * fermée. Elle dit maintenant la même chose que l'autre écran, et n'emmène
+ * nulle part tant que ce n'est pas ouvert (`soon`).
+ */
 function useFeatures(t: ReturnType<typeof useT>) {
   return [
     {
       title: t('home.features.syncTitle'),
       desc: t('home.features.syncDesc'),
       icon: <svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" /></svg>,
-      path: '/sync',
+      path: null,
+      soon: true,
     },
     {
       title: t('home.features.statsTitle'),
@@ -955,6 +967,13 @@ export default function Home() {
                   <span className="text-[clamp(9px,1.3vh,11px)] font-bold text-[rgba(255,255,255,0.6)] whitespace-nowrap">
                     {f.title}
                   </span>
+                  {/* Même mot que la page des fonctionnalités : deux écrans
+                      qui parlent de la même chose doivent la dater pareil. */}
+                  {'soon' in f && f.soon && (
+                    <span className="flex-shrink-0 rounded-full bg-[rgba(255,255,255,0.06)] px-1.5 py-px text-[clamp(7px,0.95vh,8.5px)] font-bold uppercase tracking-wider text-[rgba(255,255,255,0.3)]">
+                      {t('features.soonBadge')}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[clamp(8px,1.15vh,10px)] text-[rgba(255,255,255,0.28)] leading-[1.55] m-0">
                   {f.desc}

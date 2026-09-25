@@ -1,6 +1,17 @@
 [package]
 name = "yuyuframe-backend"
-version = "0.1.0"
+# SEULE version du launcher — celle du paquet ET celle annoncée au serveur.
+#
+# Elle vivait en double : ici pour le code (`env!("CARGO_PKG_VERSION")`, qui
+# part à l'authentification, à chaque `/v1/config` et dans les statistiques)
+# et dans `tauri.conf.json` pour l'exécutable publié. Seule la seconde était
+# incrémentée à chaque sortie : toute la flotte se présentait donc au serveur
+# comme « 0.1.0 », ce qui rendait inopérants la version minimale, les versions
+# bloquées et le ciblage « versions antérieures à » des bannières.
+#
+# `tauri.conf.json` n'a plus de champ `version` : Tauri reprend celle-ci.
+# C'est donc ICI qu'on incrémente avant de publier.
+version = "0.1.0-27"
 edition = "2021"
 
 [lib]

@@ -611,8 +611,8 @@ export const en: TranslationSchema = {
     welcomeGuest: 'Guest',
     proSeePlansTitle: 'See Pro plans',
     features: {
-      syncTitle: 'P2P Sync',
-      syncDesc: 'Sync configs, mods and instances across all your machines with a direct connection. No cloud, no third-party server — your data stays with you.',
+      syncTitle: 'Cloud sync',
+      syncDesc: 'Find your instances, mods and configs again on every one of your PCs.',
       statsTitle: 'Advanced statistics',
       statsDesc: 'Session time tracking, detailed per-instance history and weekly charts. Visualize your play habits and compare your performance over time.',
       proTitle: 'Pro access',

@@ -609,8 +609,8 @@ export const fr = {
     welcomeGuest: 'Invité',
     proSeePlansTitle: 'Voir les plans Pro',
     features: {
-      syncTitle: 'Sync P2P',
-      syncDesc: 'Synchronise configurations, mods et instances entre toutes tes machines en connexion directe. Aucun cloud, aucun serveur tiers — tes données restent chez toi.',
+      syncTitle: 'Sync cloud',
+      syncDesc: 'Retrouve tes instances, tes mods et tes configurations sur chacun de tes PC.',
       statsTitle: 'Statistiques avancées',
       statsDesc: 'Suivi du temps de session, historique détaillé par instance et graphiques hebdomadaires. Visualise tes habitudes de jeu et compare tes performances dans le temps.',
       proTitle: 'Accès Pro',

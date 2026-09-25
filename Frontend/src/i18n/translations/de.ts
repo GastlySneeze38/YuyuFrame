@@ -611,8 +611,8 @@ export const de: TranslationSchema = {
     welcomeGuest: 'Gast',
     proSeePlansTitle: 'Pro-Tarife ansehen',
     features: {
-      syncTitle: 'Sync P2P',
-      syncDesc: 'Synchronisiert Konfigurationen, Mods und Instanzen über eine direkte Verbindung zwischen all deinen Rechnern. Keine Cloud, kein fremder Server — deine Daten bleiben bei dir.',
+      syncTitle: 'Cloud-Sync',
+      syncDesc: 'Finde deine Instanzen, Mods und Konfigurationen auf jedem deiner PCs wieder.',
       statsTitle: 'Erweiterte Statistiken',
       statsDesc: 'Sitzungsdauer, detaillierter Verlauf pro Instanz und Wochendiagramme. Sieh dir deine Spielgewohnheiten an und vergleiche sie über die Zeit.',
       proTitle: 'Pro-Zugang',

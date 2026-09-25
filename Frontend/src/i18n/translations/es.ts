@@ -611,8 +611,8 @@ export const es: TranslationSchema = {
     welcomeGuest: 'Invitado',
     proSeePlansTitle: 'Ver los planes Pro',
     features: {
-      syncTitle: 'Sync P2P',
-      syncDesc: 'Sincroniza configuraciones, mods e instancias entre todos tus equipos por conexión directa. Sin nube, sin servidor de terceros — tus datos se quedan contigo.',
+      syncTitle: 'Sync en la nube',
+      syncDesc: 'Recupera tus instancias, tus mods y tus configuraciones en cada uno de tus PC.',
       statsTitle: 'Estadísticas avanzadas',
       statsDesc: 'Seguimiento del tiempo de sesión, historial detallado por instancia y gráficos semanales. Observa tus hábitos de juego y compara tu evolución.',
       proTitle: 'Acceso Pro',
