@@ -719,7 +719,6 @@ export const es: TranslationSchema = {
     optionsTitle: 'Ajustes de Minecraft',
     optionsDesc: 'Aplica el modelo exportado desde otra instancia',
     title: 'Importar',
-    jarsPlugin: 'Archivos .jar (plugin)',
     jarsMod: 'Archivos .jar (mod)',
     jarsDesc: 'Selecciona uno o varios archivos directamente',
     folderTitle: 'Carpeta / otro launcher',

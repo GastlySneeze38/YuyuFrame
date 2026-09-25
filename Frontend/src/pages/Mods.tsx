@@ -1159,7 +1159,7 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
       {showImportChoice && (
         <ImportChoiceModal
-          isPlugin={isPlugin}
+          vanilla={isPlugin}
           onClose={() => setShowImportChoice(false)}
           onPickJars={handlePickJars}
           onPickFolder={() => setShowImportFolder(true)}

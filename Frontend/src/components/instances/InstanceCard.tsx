@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api } from '@/api/client'
 import type { Instance } from '@/types'
@@ -35,21 +36,71 @@ export const InstanceCard = memo(function InstanceCard({
   const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  /** Coin haut droit du menu, en coordonnées de fenêtre (voir `toggleMenu`). */
+  const [menuAt, setMenuAt] = useState({ top: 0, right: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  const closeMenu = () => {
+    setMenuOpen(false)
+    setConfirm(false)
+  }
 
   // Fermeture du menu au clic en dehors — évite de devoir le refermer manuellement
   // et empêche tout clic accidentel sur une action pendant que le menu se ferme.
+  //
+  // Deux zones à tester depuis que le menu vit à la racine du document : le
+  // bouton (`menuRef`) et le menu lui-même (`panelRef`), qui n'est plus un
+  // descendant du premier.
   useEffect(() => {
     if (!menuOpen) return
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-        setConfirm(false)
-      }
+      const target = e.target as Node
+      if (menuRef.current?.contains(target) || panelRef.current?.contains(target)) return
+      closeMenu()
     }
+    // Le menu est posé à une place calculée une fois : si la liste défile
+    // dessous, il resterait accroché au vide. On le referme — rouvrir est un
+    // clic, suivre le défilement à chaque image en coûterait bien plus.
+    // `capture` : le défilement d'un conteneur ne remonte pas jusqu'ici.
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('scroll', closeMenu, true)
+    window.addEventListener('resize', closeMenu)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('scroll', closeMenu, true)
+      window.removeEventListener('resize', closeMenu)
+    }
   }, [menuOpen])
+
+  /**
+   * Ouvre le menu, en notant où le poser.
+   *
+   * Le menu était posé DANS la carte (`position: absolute`), donc enfermé
+   * dans la colonne de la liste, qui rogne ce qui dépasse : sur la dernière
+   * carte, il n'en restait qu'une ligne — alors qu'il y avait toute la place
+   * voulue en dessous, simplement de l'autre côté du bord.
+   *
+   * Il est maintenant rendu à la racine du document, en coordonnées de
+   * fenêtre : plus aucun ancêtre ne peut le rogner, et aucune pile de
+   * contextes d'empilement ne peut le faire passer sous une carte voisine.
+   * Le prix est qu'il ne suit plus son bouton tout seul — d'où la mesure
+   * ici, et la fermeture au défilement.
+   */
+  function toggleMenu() {
+    if (menuOpen) {
+      closeMenu()
+      return
+    }
+    const button = menuRef.current?.getBoundingClientRect()
+    if (button) {
+      // Aligné à droite sur le bouton, 4 px en dessous : exactement ce que
+      // faisaient `right-0` et `mt-1` quand le menu vivait dans la carte.
+      setMenuAt({ top: button.bottom + 4, right: window.innerWidth - button.right })
+    }
+    setMenuOpen(true)
+    setConfirm(false)
+  }
 
   return (
     // `layout` : quand une carte part (suppression) ou change de section
@@ -65,7 +116,9 @@ export const InstanceCard = memo(function InstanceCard({
       whileTap={{ scale: 0.99 }}
       transition={SNAP}
       onClick={() => onSelect(instance.id)}
-      className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-colors duration-150 relative border ${menuOpen ? 'z-40' : 'z-auto'} ${
+      // Plus de `z-40` quand le menu est ouvert : il ne vit plus dans la
+      // carte, donc plus rien à faire passer au-dessus des voisines.
+      className={`flex flex-col rounded-2xl px-4 py-3.5 cursor-pointer transition-colors duration-150 relative border ${
         selected
           ? 'bg-[rgba(75,63,207,0.18)] border-[rgba(75,63,207,0.55)] shadow-[0_0_20px_rgba(75,63,207,0.18)]'
           : hovered
@@ -116,7 +169,7 @@ export const InstanceCard = memo(function InstanceCard({
               </motion.button>
 
               <motion.button
-                onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); setConfirm(false) }}
+                onClick={(e) => { e.stopPropagation(); toggleMenu() }}
                 whileHover={{ scale: 1.15 }}
                 whileTap={{ scale: 0.88 }}
                 // Les trois points se redressent quand le menu s'ouvre.
@@ -134,9 +187,15 @@ export const InstanceCard = memo(function InstanceCard({
                 </svg>
               </motion.button>
 
-              <AnimatePresence>
-              {menuOpen && (
+              {/* Rendu à la racine du document, hors de la colonne qui rogne
+                  ce qui dépasse et hors de toute pile d'empilement locale.
+                  C'est ce qui lui rend les deux choses qu'il perdait sur la
+                  dernière carte : la place, et le dessus. */}
+              {createPortal(
+                <AnimatePresence>
+                {menuOpen && (
                 <motion.div
+                  ref={panelRef}
                   onClick={(e) => e.stopPropagation()}
                   initial={{ opacity: 0, y: -6, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -144,8 +203,8 @@ export const InstanceCard = memo(function InstanceCard({
                   transition={SNAP}
                   // Le menu s'ouvre depuis son coin haut droit, sous le bouton
                   // qui l'a appelé, au lieu de grandir depuis son centre.
-                  style={{ transformOrigin: 'top right' }}
-                  className="absolute flex flex-col gap-0.5 rounded-xl p-1 top-full right-0 mt-1 w-[190px] z-30 bg-[#1a1a24] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                  style={{ transformOrigin: 'top right', top: menuAt.top, right: menuAt.right }}
+                  className="fixed flex flex-col gap-0.5 rounded-xl p-1 w-[190px] z-[60] bg-[#1a1a24] border border-[rgba(255,255,255,0.1)] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                 >
                   {!confirm ? (
                     <>
@@ -199,8 +258,10 @@ export const InstanceCard = memo(function InstanceCard({
                     </div>
                   )}
                 </motion.div>
+                )}
+                </AnimatePresence>,
+                document.body,
               )}
-              </AnimatePresence>
             </div>
           </div>
 

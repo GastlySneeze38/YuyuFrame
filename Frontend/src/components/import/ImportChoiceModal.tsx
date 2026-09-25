@@ -14,6 +14,13 @@ import { useT } from '@/i18n'
  * deviner : les deux sont des `.zip`, rien dans le fichier ne les distingue
  * de façon fiable, et se tromper range le pack dans un dossier où le jeu ne
  * le cherchera jamais.
+ *
+ * En vanilla, deux entrées disparaissent — les `.jar` et les modpacks. Sans
+ * chargeur, un mod déposé dans `mods/` n'est jamais lu, et installer un
+ * modpack ne change pas le chargeur de l'instance : on aurait donc rempli un
+ * dossier que le jeu ignore, sans rien qui le dise. Le menu « Mods » de la
+ * barre d'outils est absent pour la même raison ; cette fenêtre continuait,
+ * elle, à proposer les deux.
  */
 
 function ImportRow({ icon, title, desc, onClick }: {
@@ -56,7 +63,7 @@ export function ImportChoiceModal({
   onPickModpack,
   onPickPacks,
   onPickOptions,
-  isPlugin,
+  vanilla,
 }: {
   onClose: () => void
   onPickJars: () => void
@@ -66,7 +73,8 @@ export function ImportChoiceModal({
   onPickPacks: (kind: 'resourcepack' | 'shader') => void
   /** Applique le modèle `shared_options.txt` à cette instance. */
   onPickOptions: () => void
-  isPlugin: boolean
+  /** Instance sans chargeur de mods : ni `.jar`, ni modpack. */
+  vanilla: boolean
 }) {
   const t = useT()
   const pick = (fn: () => void) => () => { onClose(); fn() }
@@ -74,12 +82,14 @@ export function ImportChoiceModal({
   return (
     <ModalShell title={t('import.title')} onClose={onClose} maxWidth="max-w-md">
       <div className="flex flex-col gap-2">
-        <ImportRow
-          icon={ICON.plus}
-          title={isPlugin ? t('import.jarsPlugin') : t('import.jarsMod')}
-          desc={t('import.jarsDesc')}
-          onClick={pick(onPickJars)}
-        />
+        {!vanilla && (
+          <ImportRow
+            icon={ICON.plus}
+            title={t('import.jarsMod')}
+            desc={t('import.jarsDesc')}
+            onClick={pick(onPickJars)}
+          />
+        )}
         <ImportRow
           icon={ICON.grid}
           title={t('import.resourcepackTitle')}
@@ -92,12 +102,14 @@ export function ImportChoiceModal({
           desc={t('import.shaderDesc')}
           onClick={pick(() => onPickPacks('shader'))}
         />
-        <ImportRow
-          icon={ICON.modpack}
-          title={t('import.modpackTitle')}
-          desc={t('import.modpackDesc')}
-          onClick={pick(onPickModpack)}
-        />
+        {!vanilla && (
+          <ImportRow
+            icon={ICON.modpack}
+            title={t('import.modpackTitle')}
+            desc={t('import.modpackDesc')}
+            onClick={pick(onPickModpack)}
+          />
+        )}
         <ImportRow
           icon={ICON.sliders}
           title={t('import.optionsTitle')}

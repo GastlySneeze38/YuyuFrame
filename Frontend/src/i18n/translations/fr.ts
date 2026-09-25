@@ -717,7 +717,6 @@ export const fr = {
     optionsTitle: 'Réglages Minecraft',
     optionsDesc: 'Applique le modèle exporté depuis une autre instance',
     title: 'Importer',
-    jarsPlugin: 'Fichiers .jar (plugin)',
     jarsMod: 'Fichiers .jar (mod)',
     jarsDesc: 'Sélectionne un ou plusieurs fichiers directement',
     folderTitle: 'Dossier / autre launcher',

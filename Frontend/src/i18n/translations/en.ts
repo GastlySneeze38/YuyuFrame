@@ -719,7 +719,6 @@ export const en: TranslationSchema = {
     optionsTitle: 'Minecraft settings',
     optionsDesc: 'Apply the template exported from another instance',
     title: 'Import',
-    jarsPlugin: '.jar files (plugin)',
     jarsMod: '.jar files (mod)',
     jarsDesc: 'Select one or more files directly',
     folderTitle: 'Folder / other launcher',

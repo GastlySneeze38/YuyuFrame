@@ -719,7 +719,6 @@ export const de: TranslationSchema = {
     optionsTitle: 'Minecraft-Einstellungen',
     optionsDesc: 'Übernimmt die aus einer anderen Instanz exportierte Vorlage',
     title: 'Importieren',
-    jarsPlugin: '.jar-Dateien (Plugin)',
     jarsMod: '.jar-Dateien (Mod)',
     jarsDesc: 'Wähle direkt eine oder mehrere Dateien',
     folderTitle: 'Ordner / anderer Launcher',
