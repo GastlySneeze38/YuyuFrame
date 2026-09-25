@@ -11,6 +11,7 @@ pub mod launch;
 pub mod modrinth;
 pub mod pending;
 pub mod plan;
+pub mod reviews;
 pub mod support;
 pub mod sync;
 pub mod system;

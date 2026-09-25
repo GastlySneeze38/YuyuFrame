@@ -96,6 +96,14 @@ export interface AgentStatus {
   min_java: number
 }
 
+/** L'avis du compte connecté. `comment` vide = note seule, non publiée sur
+ *  le site mais comptée dans sa moyenne. */
+export interface MyReview {
+  rating: number
+  comment: string
+  created_at: string
+}
+
 export interface YuyuPlanResp {
   plan: string
   plan_expires_at: number | null
@@ -360,6 +368,18 @@ export const api = {
       invoke<SavedServer[]>('list_saved_servers', { instanceId }),
     pingServer: (address: string) =>
       invoke<ServerPingInfo>('ping_server', { address }),
+  },
+
+  /** Avis déposés depuis le launcher, sous le compte YuyuFrame. Un seul par
+   *  compte : on le remplace, on n'en empile pas. Le pseudo affiché sur le
+   *  site est celui du compte, ajouté côté serveur. */
+  reviews: {
+    mine: () => invoke<MyReview | null>('review_mine'),
+    /** `comment` vide (ou absent) = la note seule : elle compte dans la
+     *  moyenne du site sans y publier de carte. */
+    submit: (rating: number, comment?: string) =>
+      invoke<void>('review_submit', { rating, comment: comment ?? '' }),
+    remove: () => invoke<void>('review_delete'),
   },
 
   sync: {

@@ -1118,9 +1118,20 @@ export const fr = {
     title: 'Ton avis sur YuyuFrame',
     intro:
       '{{count}} parties lancées ce mois-ci. Si le launcher te convient — ou pas — ton avis aide les suivants à se décider.',
-    open: 'Donner mon avis',
     no: 'Non merci',
-    note: 'La page s’ouvre dans ton navigateur.',
+    // Connexion : un avis anonyme depuis un launcher installé n'importe où
+    // n'aurait aucune valeur.
+    needAccount: 'Il faut être connecté à ton compte YuyuFrame pour donner ton avis.',
+    signIn: 'Se connecter',
+    // Dit avant l'envoi, pas après : c'est ce qui rend la note facile à donner.
+    ratingOnly: 'Seule la note part : elle compte dans la moyenne affichée sur le site, sans y publier de message.',
+    sendRating: 'Envoyer la note',
+    addText: 'Écrire un avis',
+    thanks: 'Note enregistrée, merci. Si tu veux dire pourquoi, c’est le moment — c’est ce texte qui paraîtra sur le site.',
+    placeholder: 'Ce qui te plaît, ce qui manque, ce qui coince…',
+    published: 'Ce texte paraîtra sur le site, signé {{name}}.',
+    publish: 'Publier',
+    done: 'Fermer',
   },
 
   crash: {

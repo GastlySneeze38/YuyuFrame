@@ -141,6 +141,11 @@ export default function App() {
             // Clé fixe : la demande est posée une fois pour toutes, refus
             // compris. C'est une question, pas un rappel.
             key: 'review-prompt',
+            // …sauf sans compte connecté : la fenêtre ne peut alors rien
+            // proposer d'autre que d'aller se connecter (l'avis est signé du
+            // compte YuyuFrame). La retenir comme « posée » brûlerait
+            // l'unique demande sur une réponse qu'on n'a pas laissé donner.
+            remember: useStore.getState().yuyuSignedIn,
             data: { sessions: stats.totals.sessions },
           })
         })

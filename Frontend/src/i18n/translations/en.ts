@@ -1114,9 +1114,17 @@ export const en: TranslationSchema = {
     title: 'Your take on YuyuFrame',
     intro:
       '{{count}} sessions launched this month. Whether the launcher works for you or not, your review helps the next person decide.',
-    open: 'Write a review',
     no: 'No thanks',
-    note: 'The page opens in your browser.',
+    needAccount: 'You need to be signed in to your YuyuFrame account to leave a review.',
+    signIn: 'Sign in',
+    ratingOnly: 'Only the rating is sent: it counts towards the average shown on the site, without publishing a message there.',
+    sendRating: 'Send the rating',
+    addText: 'Write a review',
+    thanks: 'Rating saved, thank you. If you want to say why, now is the moment — that text is what appears on the site.',
+    placeholder: 'What you like, what is missing, what gets in the way…',
+    published: 'This text will appear on the site, signed {{name}}.',
+    publish: 'Publish',
+    done: 'Close',
   },
 
   crash: {
