@@ -591,7 +591,6 @@ export const de: TranslationSchema = {
     manage: 'Verwalten',
     createInstance: 'Instanz erstellen',
     chooseInstance: 'Instanz wählen',
-    configureInstance: 'Mods, Packs und Optionen dieser Instanz',
     connect: 'ANMELDEN',
     manageAccounts: 'Konten verwalten',
     p2p: 'P2P',
@@ -930,6 +929,32 @@ export const de: TranslationSchema = {
     text: 'Diese Seite gehört zum {plan}-Abonnement. Sieh dir die Tarife an, um zu erfahren, was sie bringt.',
     seePlans: 'Tarife ansehen',
     back: 'Zurück',
+  },
+
+  agent: {
+    title: 'Integrierter Client',
+    what: 'Der integrierte Client ist eine Schicht, die der Launcher beim Start in Minecraft einfügt. Im Spielordner wird nichts installiert, zu deinen Mods nichts hinzugefügt: Er lebt nur während der Sitzung und verschwindet mit ihr.',
+    feature: {
+      perf: 'Optimierungen in der Tiefe: Der Client arbeitet im Motor des Spiels — moderne Java-Maschine, neu gebaute Grafik- und Fensterschicht auf älteren Versionen — wo ein Mod sich nur obendrauf setzen kann.',
+      hud: 'Eine einstellbare Anzeige im Bild: FPS, Koordinaten, Ping, Effekte, Haltbarkeit.',
+      zoom: 'Zoom, Sichtfeld, freie Sicht, Helligkeit — was man von einem Client erwartet.',
+      packs: 'Ressourcenpakete direkt im Spiel suchen und installieren, ohne Neustart.',
+      clean: 'Keine Datei in der Instanz: ohne ihn ist das Spiel wieder genau es selbst.',
+    },
+    blocked: {
+      title: 'Nicht verfügbar unter Minecraft {{version}}',
+      version: 'Der Client hängt sich in den Code des Spiels ein, dessen interne Namen sich von Version zu Version ändern: Jede Version muss einzeln geprüft werden. {{version}} ist es noch nicht, also lädt der Launcher gar nichts.',
+      loader: 'Minecraft {{version}} mit {{loader}} läuft unter Java 8, der Client verlangt aber Java {{java}}. Ihn zu laden würde den Start der Java-Maschine verhindern: Der Launcher lässt ihn weg.',
+      files: 'Die Dateien des Clients fehlen in dieser Installation. Eine Neuinstallation des Launchers stellt sie wieder her.',
+      safe: 'Das ist kein Fehler: Das Spiel startet normal, nur eben ohne diese Funktionen.',
+    },
+    with: 'Mit dem Client',
+    withHint: 'Das Spiel, und diese Funktionen dazu.',
+    without: 'Ohne den Client',
+    withoutHint: 'Nur Minecraft, genau wie installiert. Nützlich auf einem Server, der veränderte Clients ablehnt.',
+    remembered: 'Diese Wahl gilt für diese Instanz; die anderen behalten ihre.',
+    keptForLater: 'Deine Wahl bleibt gespeichert: Sie gilt auf einer passenden Instanz.',
+    done: 'Verstanden',
   },
 
   support: {

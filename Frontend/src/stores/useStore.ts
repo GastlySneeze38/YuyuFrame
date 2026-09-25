@@ -193,6 +193,18 @@ interface Store {
   isServerFavorite: (instanceId: string, ip: string) => boolean
   toggleFavoriteServer: (instanceId: string, ip: string) => boolean
 
+  // ── Client intégré (LauncherAgent) par instance (persisté) ────────────────
+  // On ne garde que les REFUS : jouer avec le client est l'état normal, et un
+  // dictionnaire de « true » partout grossirait à chaque instance créée sans
+  // jamais rien dire. Une instance absente d'ici joue donc avec.
+  //
+  // Par instance et non globalement : le choix suit la partie qu'on veut
+  // faire — un serveur qui interdit les clients modifiés, une instance
+  // laissée strictement vanilla — pas l'utilisateur.
+  agentOptOut: Record<string, boolean>
+  isAgentEnabled: (instanceId: string) => boolean
+  setAgentEnabled: (instanceId: string, enabled: boolean) => void
+
   // Les notes de patch ne transitent plus par ici : elles venaient du
   // manifeste de mise à jour, mis de côté avant `relaunch()`. Elles sont
   // maintenant publiées depuis le back-office et arrivent par la
@@ -432,6 +444,17 @@ export const useStore = create<Store>()(
         return true
       },
 
+      // Client intégré par instance
+      agentOptOut: {},
+      isAgentEnabled: (instanceId) => !get().agentOptOut[instanceId],
+      setAgentEnabled: (instanceId, enabled) =>
+        set((s) => {
+          const next = { ...s.agentOptOut }
+          if (enabled) delete next[instanceId]
+          else next[instanceId] = true
+          return { agentOptOut: next }
+        }),
+
       // Version du système de connexion
       authSystemVersion: AUTH_SYSTEM_VERSION,
       setAuthSystemVersion: (authSystemVersion) => set({ authSystemVersion }),
@@ -443,6 +466,7 @@ export const useStore = create<Store>()(
           const pinnedMods = { ...s.pinnedMods }
           const launchPhaseDurations = { ...s.launchPhaseDurations }
           const favoriteServers = { ...s.favoriteServers }
+          const agentOptOut = { ...s.agentOptOut }
           let selectedInstanceId = s.selectedInstanceId
 
           for (const { oldId, newId } of migrations) {
@@ -461,10 +485,14 @@ export const useStore = create<Store>()(
               favoriteServers[newId] = favoriteServers[oldId]
               delete favoriteServers[oldId]
             }
+            if (oldId in agentOptOut) {
+              agentOptOut[newId] = agentOptOut[oldId]
+              delete agentOptOut[oldId]
+            }
             if (selectedInstanceId === oldId) selectedInstanceId = newId
           }
 
-          return { pinnedMods, launchPhaseDurations, favoriteServers, selectedInstanceId }
+          return { pinnedMods, launchPhaseDurations, favoriteServers, agentOptOut, selectedInstanceId }
         })
       },
     }),
@@ -503,6 +531,7 @@ export const useStore = create<Store>()(
         pinnedMods: s.pinnedMods,
         launchPhaseDurations: s.launchPhaseDurations,
         favoriteServers: s.favoriteServers,
+        agentOptOut: s.agentOptOut,
         authSystemVersion: s.authSystemVersion,
       }),
     }

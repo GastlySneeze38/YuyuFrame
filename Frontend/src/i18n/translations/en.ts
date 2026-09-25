@@ -591,7 +591,6 @@ export const en: TranslationSchema = {
     manage: 'Manage',
     createInstance: 'Create an instance',
     chooseInstance: 'Choose an instance',
-    configureInstance: 'Mods, packs and options for this instance',
     connect: 'SIGN IN',
     manageAccounts: 'Manage accounts',
     p2p: 'P2P',
@@ -930,6 +929,32 @@ export const en: TranslationSchema = {
     text: 'This page is part of the {plan} plan. Have a look at the plans to see what it brings.',
     seePlans: 'See the plans',
     back: 'Back',
+  },
+
+  agent: {
+    title: 'Built-in client',
+    what: 'The built-in client is a layer the launcher slips into Minecraft at startup. Nothing is installed in the game folder, nothing is added to your mods: it lives for the length of the session and leaves with it.',
+    feature: {
+      perf: 'Optimisation deep in the engine: the client works inside the game — a modern Java machine, a rebuilt graphics and window layer on older versions — where a mod can only add itself on top.',
+      hud: 'An adjustable on-screen display: FPS, coordinates, ping, effects, durability.',
+      zoom: 'Zoom, field of view, freelook, brightness — the settings you expect from a client.',
+      packs: 'Search and install resource packs from inside the game, without restarting it.',
+      clean: 'No file added to the instance: without it, the game is strictly itself again.',
+    },
+    blocked: {
+      title: 'Unavailable on Minecraft {{version}}',
+      version: 'The client hooks into the game’s code, whose internal names change from one version to the next: every version has to be checked one by one. {{version}} has not been yet, so the launcher loads nothing at all.',
+      loader: 'Minecraft {{version}} on {{loader}} runs on Java 8, while the client needs Java {{java}}. Loading it would stop the Java machine from starting: the launcher leaves it out of the command line.',
+      files: 'The client’s files are missing from this install. Reinstalling the launcher puts them back.',
+      safe: 'Nothing is broken: the game launches normally, just without those features.',
+    },
+    with: 'With the client',
+    withHint: 'The game, plus those features.',
+    without: 'Without the client',
+    withoutHint: 'Minecraft alone, exactly as installed. Useful on a server that refuses modified clients.',
+    remembered: 'This choice is kept for this instance; the others keep theirs.',
+    keptForLater: 'Your choice is saved: it will apply on a compatible instance.',
+    done: 'Got it',
   },
 
   support: {

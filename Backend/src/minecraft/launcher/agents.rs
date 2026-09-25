@@ -3,15 +3,13 @@ use std::path::{Path, PathBuf};
 
 use crate::minecraft::p2p;
 use crate::state::MinecraftSession;
+use super::agent_compat::{blocked_by, AgentBlock, MIN_JAVA as LAUNCHER_AGENT_MIN_JAVA};
 use super::agent_deploy::{launcher_agent_dir, launcher_agent_libs_dir};
 use super::progress::{log_to_console, ProgressFloor};
 
 /// Sortie commune à `setup_p2p` et `setup_launcher_agent` : arguments
 /// `-javaagent:...` à passer à la JVM et entrées de classpath associées
 /// (ASM/JNA...). Vide par défaut (P2P désactivé, ou agent indisponible).
-/// Version de Java minimale de launcher-agent.jar — celle de son `--release`
-/// dans `Launcher-Agent/build.bat`. Les deux doivent bouger ensemble.
-const LAUNCHER_AGENT_MIN_JAVA: u32 = 25;
 
 #[derive(Default)]
 pub(super) struct AgentSetup {
@@ -181,16 +179,45 @@ pub(super) async fn setup_launcher_agent(
     version_id: &str,
     loader: Option<&str>,
     java_major: u32,
+    // Choix de l'utilisateur pour CE lancement (fenêtre de l'agent sur
+    // l'accueil). `false` ne dégrade rien : le jeu part exactement comme si
+    // l'agent n'existait pas.
+    enabled: bool,
     client: &reqwest::Client,
     app: &tauri::AppHandle,
     console_label: &str,
     progress_floor: &ProgressFloor,
     ready_event_name: Option<&str>,
 ) -> AgentSetup {
+    if !enabled {
+        log_to_console(app, console_label, "[LauncherAgent] désactivé pour ce lancement (choix de l'utilisateur)", "out");
+        return AgentSetup::default();
+    }
+
+    // Version sans profil de mixins, ou 1.8.9 moddé (Java 8) : l'agent
+    // n'accrocherait rien, ou pire, la JVM refuserait de démarrer. Rien
+    // n'entre alors dans la ligne de commande — c'est la même réponse que
+    // celle donnée à l'interface par `launcher_agent_status`, elle vient du
+    // même endroit (voir agent_compat.rs).
+    if let Some(block) = blocked_by(version_id, loader) {
+        let raison = match block {
+            AgentBlock::Version => format!("aucun profil de mixins pour MC {}", version_id),
+            AgentBlock::Loader => format!("MC {} en {} tourne en Java 8", version_id, loader.unwrap_or("vanilla")),
+            AgentBlock::Files => "fichiers de l'agent absents de l'installation".to_string(),
+        };
+        log_to_console(app, console_label, &format!("[LauncherAgent] désactivé : {}", raison), "out");
+        return AgentSetup::default();
+    }
+
     // launcher-agent.jar est compilé en --release 25 (build.bat) : sur une JVM
     // plus ancienne, son Premain-Class lève UnsupportedClassVersionError et la
     // JVM refuse de démarrer (« processing of -javaagent failed ») — le jeu ne
     // se lancerait plus du tout. On lance donc sans agent plutôt que de planter.
+    //
+    // Garde conservée malgré `blocked_by` ci-dessus : celui-ci raisonne sur la
+    // version, celle-ci sur la JVM réellement retenue, qui dépend du manifeste
+    // Mojang et d'un éventuel chemin Java personnalisé — deux choses que
+    // l'interface ne peut pas connaître d'avance.
     if java_major < LAUNCHER_AGENT_MIN_JAVA {
         log_to_console(app, console_label, &format!(
             "[LauncherAgent] désactivé : MC {} tourne en Java {}, l'agent exige Java {}",

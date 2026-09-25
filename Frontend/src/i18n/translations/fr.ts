@@ -589,7 +589,6 @@ export const fr = {
     manage: 'Gérer',
     createInstance: 'Créer une instance',
     chooseInstance: 'Choisir une instance',
-    configureInstance: 'Mods, packs et options de cette instance',
     connect: 'SE CONNECTER',
     manageAccounts: 'Gérer les comptes',
     p2p: 'P2P',
@@ -930,6 +929,35 @@ export const fr = {
     text: 'Cette page fait partie de l’abonnement {plan}. Jette un œil aux offres pour voir ce qu’elle apporte.',
     seePlans: 'Voir les offres',
     back: 'Retour',
+  },
+
+  // Client intégré (LauncherAgent) — fenêtre ouverte par l’engrenage de
+  // l’accueil. C’est le seul endroit où on en parle : autant que ce soit dit
+  // en entier.
+  agent: {
+    title: 'Client intégré',
+    what: 'Le client intégré est une surcouche que le launcher glisse dans Minecraft au démarrage. Rien n’est installé dans le dossier du jeu, rien n’est ajouté à tes mods : il vit le temps de la partie et s’en va avec elle.',
+    feature: {
+      perf: 'Des optimisations en profondeur : le client travaille dans le moteur du jeu — machine Java moderne, couche graphique et fenêtre refaites sur les anciennes versions — là où un mod ne peut que s’ajouter par-dessus.',
+      hud: 'Un affichage à l’écran réglable : FPS, coordonnées, ping, effets, durabilité.',
+      zoom: 'Zoom, champ de vision, vue libre, luminosité — les réglages qu’on attend d’un client.',
+      packs: 'Recherche et installation de packs de ressources depuis le jeu, sans le relancer.',
+      clean: 'Aucun fichier ajouté à l’instance : sans lui, le jeu redevient strictement lui-même.',
+    },
+    blocked: {
+      title: 'Indisponible sur Minecraft {{version}}',
+      version: 'Le client s’accroche au code du jeu, dont les noms internes changent d’une version à l’autre : chaque version doit être vérifiée une par une. La {{version}} ne l’a pas encore été, donc le launcher ne charge rien du tout.',
+      loader: 'Minecraft {{version}} en {{loader}} tourne en Java 8, alors que le client exige Java {{java}}. Le charger empêcherait la machine Java de démarrer : le launcher ne l’ajoute pas à la ligne de commande.',
+      files: 'Les fichiers du client manquent à cette installation. Réinstaller le launcher les remet en place.',
+      safe: 'Ce n’est pas une panne : le jeu se lance normalement, simplement sans ces fonctionnalités.',
+    },
+    with: 'Avec le client',
+    withHint: 'Le jeu, et ces fonctionnalités en plus.',
+    without: 'Sans le client',
+    withoutHint: 'Minecraft seul, exactement comme à son installation. Utile sur un serveur qui refuse les clients modifiés.',
+    remembered: 'Ce choix est retenu pour cette instance ; les autres gardent le leur.',
+    keptForLater: 'Ton choix reste enregistré : il s’appliquera sur une instance compatible.',
+    done: 'C’est noté',
   },
 
   support: {

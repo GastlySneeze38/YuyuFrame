@@ -21,7 +21,7 @@ export interface JoinRequest {
  * discussion — étape volontairement laissée de côté pour l'instant). */
 export function JoinServerModal({ request, onClose }: { request: JoinRequest; onClose: () => void }) {
   const navigate = useNavigate()
-  const { instances, avoidBetaDependencies, showConsole, setSelectedInstanceId, setInstanceRunning } = useStore()
+  const { instances, avoidBetaDependencies, showConsole, setSelectedInstanceId, setInstanceRunning, isAgentEnabled } = useStore()
   const [launchingId, setLaunchingId] = useState<string | null>(null)
 
   const compatible = instances.filter(
@@ -31,7 +31,9 @@ export function JoinServerModal({ request, onClose }: { request: JoinRequest; on
   const handleJoin = async (instanceId: string) => {
     setLaunchingId(instanceId)
     try {
-      await api.launch.start(instanceId, avoidBetaDependencies, showConsole, request.ip)
+      // Le choix « avec / sans le client intégré » suit l'instance, quel que
+      // soit l'endroit d'où on la lance (voir AgentModal).
+      await api.launch.start(instanceId, avoidBetaDependencies, showConsole, request.ip, isAgentEnabled(instanceId))
       setSelectedInstanceId(instanceId)
       setInstanceRunning(instanceId, true)
       navigate('/home')

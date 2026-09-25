@@ -11,6 +11,10 @@ pub async fn launch_game(
     app: tauri::AppHandle,
     instance_id: String,
     p2p: Option<bool>,
+    // Jouer avec le client intégré (LauncherAgent) ou sans lui. Absent =
+    // avec : c'est le comportement de toujours, et l'agent se désactive de
+    // lui-même là où il ne peut pas se charger (voir `agent_compat`).
+    use_agent: Option<bool>,
     avoid_beta: Option<bool>,
     show_console: Option<bool>,
     connect_server: Option<String>,
@@ -94,6 +98,7 @@ pub async fn launch_game(
         "mc_version": &instance.mc_version,
         "loader": &instance.loader,
         "p2p": p2p.unwrap_or(false),
+        "launcher_agent": use_agent.unwrap_or(true),
         "avoid_beta_dependencies": avoid_beta.unwrap_or(true),
         "connect_server": connect_server.is_some(),
         // "offline" = compte hors ligne (crack), "microsoft" = compte authentifié
@@ -221,6 +226,7 @@ pub async fn launch_game(
             &game_dir,
             app.clone(),
             p2p.unwrap_or(false),
+            use_agent.unwrap_or(true),
             avoid_beta.unwrap_or(true),
             &window_label,
             &instance_id,
@@ -430,4 +436,34 @@ pub async fn reload_agent() -> Result<(), String> {
 
     tokio::fs::write(&trigger, ts).await.map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// État du client intégré (LauncherAgent) pour une instance — ce que la
+/// fenêtre de l'agent, sur l'accueil, a besoin de savoir pour ne pas mentir.
+///
+/// L'interface ne peut pas le déduire : la liste des versions tissables vit
+/// dans le code de l'agent, et la contrainte de JVM dans le launcher. Elle
+/// demande donc, et met des mots sur la réponse dans la langue de
+/// l'utilisateur.
+#[derive(serde::Serialize)]
+pub struct AgentStatus {
+    /// `true` si l'agent se chargera pour cette instance (sous réserve de la
+    /// JVM réellement obtenue au lancement, inconnue d'ici — voir
+    /// `agent_compat::blocked_by`).
+    pub available: bool,
+    /// Ce qui l'en empêche, `null` quand rien ne l'empêche.
+    pub block: Option<launcher::AgentBlock>,
+    /// Version de Java qu'exige l'agent, pour l'expliquer sans la coder en
+    /// dur dans l'interface.
+    pub min_java: u32,
+}
+
+#[tauri::command]
+pub fn launcher_agent_status(mc_version: String, loader: Option<String>) -> AgentStatus {
+    let block = launcher::agent_blocked_by(&mc_version, loader.as_deref());
+    AgentStatus {
+        available: block.is_none(),
+        block,
+        min_java: launcher::AGENT_MIN_JAVA,
+    }
 }

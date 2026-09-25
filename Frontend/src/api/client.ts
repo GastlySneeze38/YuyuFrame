@@ -83,6 +83,19 @@ export interface ServerPingInfo {
   latency_ms: number
 }
 
+/** Ce qui empêche le client intégré de se charger — `null` quand rien ne
+ *  l'empêche. Renvoyé brut par le Rust (`agent_compat.rs`) : c'est
+ *  l'interface qui met des mots dessus, dans la langue de l'utilisateur. */
+export type AgentBlock = 'version' | 'loader' | 'files'
+
+export interface AgentStatus {
+  available: boolean
+  block: AgentBlock | null
+  /** Version de Java exigée par l'agent, pour l'expliquer sans la coder en
+   *  dur ici. */
+  min_java: number
+}
+
 export interface YuyuPlanResp {
   plan: string
   plan_expires_at: number | null
@@ -324,10 +337,18 @@ export const api = {
   },
 
   launch: {
-    start: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string) =>
-      invoke<void>('launch_game', { instanceId, avoidBeta, showConsole, connectServer }),
-    startP2p: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string) =>
-      invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta, showConsole, connectServer }),
+    /** `useAgent` : jouer avec le client intégré ou sans lui (voir
+     *  `agentStatus`). Omis = avec, comme avant l'arrivée du choix. */
+    start: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string, useAgent = true) =>
+      invoke<void>('launch_game', { instanceId, avoidBeta, showConsole, connectServer, useAgent }),
+    startP2p: (instanceId: string, avoidBeta = true, showConsole = true, connectServer?: string, useAgent = true) =>
+      invoke<void>('launch_game', { instanceId, p2p: true, avoidBeta, showConsole, connectServer, useAgent }),
+    /** Ce que le client intégré peut faire sur cette version — et ce qui
+     *  l'en empêche, quand quelque chose l'en empêche. La réponse vient du
+     *  Rust : la liste des versions tissables vit dans le code de l'agent,
+     *  pas dans l'interface. */
+    agentStatus: (mcVersion: string, loader?: string | null) =>
+      invoke<AgentStatus>('launcher_agent_status', { mcVersion, loader: loader ?? null }),
     reloadAgent: () =>
       invoke<void>('reload_agent'),
     cancel: (instanceId: string) =>

@@ -16,6 +16,7 @@ import { homeGreeting } from '@/lib/greeting'
 import { HomeBanner, Confetti, useHomeBanner } from '@/components/home/HomeBanner'
 import { ProCard } from '@/components/home/ProCard'
 import { LaunchSweep } from '@/components/home/LaunchSweep'
+import { AgentModal, WarningIcon } from '@/components/home/AgentModal'
 import { Skyline } from '@/components/home/Skyline'
 import { ServerCard } from '@/components/servers/ServerCard'
 import { ServerManageModal } from '@/components/servers/ServerManageModal'
@@ -145,6 +146,7 @@ export default function Home() {
     showHomeServers,
     confirmServerLaunch,
     favoriteServers, toggleFavoriteServer,
+    isAgentEnabled, setAgentEnabled,
   } = useStore()
 
   const gameRunning = !!selectedInstanceId && isInstanceRunning(selectedInstanceId)
@@ -168,6 +170,10 @@ export default function Home() {
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
   /** Texture complète du skin d'un compte hors ligne, pour le rendu 3D. */
   const [customSkinUri, setCustomSkinUri] = useState<string | null>(null)
+  const [showAgentModal, setShowAgentModal] = useState(false)
+  /** `true` quand le client intégré ne peut pas se charger sur l'instance
+   *  choisie — pastille d'attention sur son bouton. */
+  const [agentBlocked, setAgentBlocked] = useState(false)
 
   const instance = selectedInstance()
 
@@ -223,6 +229,20 @@ export default function Home() {
       .catch(() => { if (!cancelled) setCustomSkinUri(null) })
     return () => { cancelled = true }
   }, [uuid, isOffline])
+
+  // Le client intégré ne sait pas se charger sur toutes les versions (voir
+  // `agent_compat.rs`, côté Rust, qui reste seul juge). L'accueil le demande
+  // pour l'instance choisie afin de poser — ou non — la pastille d'attention
+  // sur son bouton : sans elle, on ne découvrirait l'absence du client qu'une
+  // fois en jeu, en cherchant un menu qui n'existe pas.
+  useEffect(() => {
+    if (!instance) { setAgentBlocked(false); return }
+    let cancelled = false
+    api.launch.agentStatus(instance.mc_version, instance.loader)
+      .then((s) => { if (!cancelled) setAgentBlocked(!s.available) })
+      .catch(() => { if (!cancelled) setAgentBlocked(false) })
+    return () => { cancelled = true }
+  }, [instance?.mc_version, instance?.loader])
 
   // Phase 2 ("lancement", 60-100%) — les téléchargements (backend) s'arrêtent
   // pile à 60%, le reste (démarrage JVM + chargement interne Minecraft
@@ -417,8 +437,12 @@ export default function Home() {
     setBannerPulse(true)
     setTimeout(() => setBannerPulse(false), 900)
     try {
-      if (p2pEnabled && P2P_ENABLED) await api.launch.startP2p(instanceId, avoidBetaDependencies, showConsole, connectServer)
-      else await api.launch.start(instanceId, avoidBetaDependencies, showConsole, connectServer)
+      // Choix « avec / sans le client intégré », pris dans sa fenêtre et
+      // retenu par instance. Le Rust l'ignore là où l'agent ne peut pas se
+      // charger de toute façon.
+      const useAgent = isAgentEnabled(instanceId)
+      if (p2pEnabled && P2P_ENABLED) await api.launch.startP2p(instanceId, avoidBetaDependencies, showConsole, connectServer, useAgent)
+      else await api.launch.start(instanceId, avoidBetaDependencies, showConsole, connectServer, useAgent)
       setInstanceRunning(instanceId, true)
       if (instance) setLastSession({ instanceName: instance.name, at: new Date().toISOString() })
       // On arme, on ne masque pas : l'effacement attend que le jeu soit
@@ -692,15 +716,28 @@ export default function Home() {
                   </motion.svg>
                 </motion.button>
 
+                {/* Cet engrenage menait à la page des mods — un raccourci qui
+                    ne manquait à personne, la barre y mène déjà. Il ouvre
+                    maintenant la fenêtre du client intégré : c'était la seule
+                    fonctionnalité du launcher dont on ne parlait nulle part,
+                    elle s'injectait au lancement sans jamais se présenter. */}
                 <motion.button {...press}
-                  onClick={() => navigate('/mods')}
+                  onClick={() => setShowAgentModal(true)}
                   disabled={!instance}
-                  title={t('home.configureInstance')}
-                  className="flex h-[clamp(34px,6.4vh,48px)] w-[clamp(34px,6.4vh,48px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.45)] transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.85)] disabled:cursor-not-allowed disabled:opacity-40"
+                  title={t('agent.title')}
+                  className="relative flex h-[clamp(34px,6.4vh,48px)] w-[clamp(34px,6.4vh,48px)] flex-shrink-0 items-center justify-center rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.45)] transition-colors duration-150 hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.85)] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="h-[45%] w-[45%]">
                     <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
                   </svg>
+                  {/* Pastille d'attention : le client ne se chargera pas sur
+                      cette version. Posée sur le bouton qui l'explique, pour
+                      qu'il n'y ait qu'un geste à faire pour savoir pourquoi. */}
+                  {agentBlocked && (
+                    <span className="absolute -right-1 -top-1 flex h-[14px] w-[14px] items-center justify-center rounded-full bg-bg-primary">
+                      <WarningIcon className="h-full w-full text-warning" />
+                    </span>
+                  )}
                 </motion.button>
               </div>
             )}
@@ -1008,6 +1045,16 @@ export default function Home() {
           selectedInstanceId={selectedInstanceId}
           onClose={() => setShowInstanceSwitch(false)}
           onSelect={setSelectedInstanceId}
+        />
+      )}
+
+      {showAgentModal && instance && (
+        <AgentModal
+          mcVersion={instance.mc_version}
+          loader={instance.loader}
+          enabled={isAgentEnabled(instance.id)}
+          onChange={(value) => setAgentEnabled(instance.id, value)}
+          onClose={() => setShowAgentModal(false)}
         />
       )}
 

@@ -62,6 +62,9 @@ pub async fn download_and_launch(
     game_dir: &std::path::Path,
     app: tauri::AppHandle,
     p2p: bool,
+    // Jouer avec ou sans le client intégré (LauncherAgent) — choix pris dans
+    // sa fenêtre sur l'accueil, par instance.
+    use_agent: bool,
     avoid_beta: bool,
     console_label: &str,
     instance_id: &str,
@@ -493,7 +496,7 @@ pub async fn download_and_launch(
     // -javaagent, mais attendu seulement après le spawn (plus bas).
     let ready_event = create_ready_event(instance_id);
     let ready_event_name = ready_event.as_ref().map(|(name, _)| name.clone());
-    let launcher_agent = setup_launcher_agent(version_id, loader, java_major, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
+    let launcher_agent = setup_launcher_agent(version_id, loader, java_major, use_agent, &client, &app, &console_label, &progress_floor, ready_event_name.as_deref()).await;
     let (launcher_agent_jvm_args, launcher_agent_extra_cp) = (launcher_agent.jvm_args, launcher_agent.extra_classpath);
 
     // L'interface a besoin de savoir si l'agent tourne pour ce lancement :

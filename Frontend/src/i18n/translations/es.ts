@@ -591,7 +591,6 @@ export const es: TranslationSchema = {
     manage: 'Gestionar',
     createInstance: 'Crear una instancia',
     chooseInstance: 'Elegir una instancia',
-    configureInstance: 'Mods, packs y opciones de esta instancia',
     connect: 'INICIAR SESIÓN',
     manageAccounts: 'Gestionar las cuentas',
     p2p: 'P2P',
@@ -930,6 +929,32 @@ export const es: TranslationSchema = {
     text: 'Esta página forma parte de la suscripción {plan}. Echa un vistazo a los planes para ver qué aporta.',
     seePlans: 'Ver los planes',
     back: 'Volver',
+  },
+
+  agent: {
+    title: 'Cliente integrado',
+    what: 'El cliente integrado es una capa que el launcher introduce en Minecraft al arrancar. No se instala nada en la carpeta del juego ni se añade nada a tus mods: vive lo que dura la partida y se va con ella.',
+    feature: {
+      perf: 'Optimizaciones en profundidad: el cliente trabaja dentro del motor del juego — máquina Java moderna, capa gráfica y ventana rehechas en las versiones antiguas — donde un mod solo puede añadirse por encima.',
+      hud: 'Una pantalla superpuesta ajustable: FPS, coordenadas, ping, efectos, durabilidad.',
+      zoom: 'Zoom, campo de visión, vista libre, brillo: los ajustes que se esperan de un cliente.',
+      packs: 'Buscar e instalar paquetes de recursos desde el juego, sin reiniciarlo.',
+      clean: 'Ningún archivo añadido a la instancia: sin él, el juego vuelve a ser exactamente el de siempre.',
+    },
+    blocked: {
+      title: 'No disponible en Minecraft {{version}}',
+      version: 'El cliente se engancha al código del juego, cuyos nombres internos cambian de una versión a otra: cada versión debe comprobarse una por una. La {{version}} aún no lo está, así que el launcher no carga nada.',
+      loader: 'Minecraft {{version}} con {{loader}} funciona con Java 8, mientras que el cliente exige Java {{java}}. Cargarlo impediría que arrancara la máquina Java: el launcher no lo añade.',
+      files: 'Faltan los archivos del cliente en esta instalación. Reinstalar el launcher los repone.',
+      safe: 'No es un fallo: el juego se inicia con normalidad, solo que sin esas funciones.',
+    },
+    with: 'Con el cliente',
+    withHint: 'El juego, y estas funciones además.',
+    without: 'Sin el cliente',
+    withoutHint: 'Minecraft solo, tal cual se instala. Útil en un servidor que rechaza clientes modificados.',
+    remembered: 'Esta elección se guarda para esta instancia; las demás conservan la suya.',
+    keptForLater: 'Tu elección queda guardada: se aplicará en una instancia compatible.',
+    done: 'Entendido',
   },
 
   support: {

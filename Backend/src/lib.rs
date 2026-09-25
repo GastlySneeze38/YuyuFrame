@@ -325,6 +325,7 @@ pub fn run() {
             commands::deep_link::take_pending_deep_link,
             commands::pending::take_pending_events,
             commands::launch::running_instances,
+            commands::launch::launcher_agent_status,
             commands::launch::list_saved_servers,
             commands::launch::ping_server,
             commands::launch::preview_jvm_config,
