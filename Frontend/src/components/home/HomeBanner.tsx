@@ -9,9 +9,16 @@ import type { FleetAnnouncement } from '@/api/client'
  * début et de fin. Ici on n'affiche que la première encore valable — deux
  * bannières empilées dans un panneau de cette taille ne se liraient pas.
  *
- * Elle monte du bas en dépassant largement sa place avant de se poser : c'est
- * ce dépassement qui la fait remarquer, alors qu'un simple fondu passerait
- * inaperçu derrière le reste de la page.
+ * Elle descend du haut en dépassant largement sa place avant de se poser :
+ * c'est ce dépassement qui la fait remarquer, alors qu'un simple fondu
+ * passerait inaperçu derrière le reste de la page.
+ *
+ * ── Pourquoi en haut à droite ─────────────────────────────────────────────
+ * Elle arrivait du bas, posée à `bottom-5`. Or le bas du panneau appartient
+ * déjà à la bande du pseudo (`WelcomeSequence`, `inset-x-0 bottom-0`) et au
+ * repère de version de l'instance, dans le coin : la bannière se couchait
+ * par-dessus le nom du joueur. Le haut à droite, lui, est libre — le titre
+ * est à gauche, et le reste est du ciel.
  */
 
 /** La bannière d'accueil du moment, ou rien. */
@@ -26,7 +33,7 @@ export function HomeBanner({ banner, visible }: { banner: FleetAnnouncement | nu
       {banner && visible && (
         <motion.div
           key={banner.id}
-          initial={{ opacity: 0, y: 150, scale: 0.6 }}
+          initial={{ opacity: 0, y: -150, scale: 0.6 }}
           animate={{
             opacity: 1,
             y: 0,
@@ -42,8 +49,12 @@ export function HomeBanner({ banner, visible }: { banner: FleetAnnouncement | nu
               opacity: { duration: 0.35, delay: 0.35 },
             },
           }}
-          exit={{ opacity: 0, y: 120, scale: 0.82, transition: { duration: 0.42, ease: [0.4, 0, 1, 1] } }}
-          className="pointer-events-none absolute bottom-5 left-1/2 flex max-w-[min(92%,560px)] -translate-x-1/2 items-center gap-3 rounded-xl border px-5 py-3 backdrop-blur-[8px]"
+          exit={{ opacity: 0, y: -120, scale: 0.82, transition: { duration: 0.42, ease: [0.4, 0, 1, 1] } }}
+          // `z-10` comme le titre : sans lui, elle passerait derrière le rendu
+          // 3D, qui couvre tout le panneau.
+          // La largeur est bornée pour qu'elle ne vienne jamais toucher le
+          // titre, à gauche, même sur une fenêtre étroite.
+          className="pointer-events-none absolute right-[clamp(12px,2vw,22px)] top-[clamp(10px,1.8vh,18px)] z-10 flex max-w-[min(58%,420px)] items-center gap-3 rounded-xl border px-5 py-3 backdrop-blur-[8px]"
           style={
             banner.theme === 'festive'
               ? { background: 'rgba(28,10,20,0.72)', borderColor: 'rgba(255,183,77,0.38)', boxShadow: '0 12px 34px rgba(0,0,0,0.45)' }
