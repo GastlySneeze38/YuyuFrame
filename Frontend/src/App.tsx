@@ -482,7 +482,11 @@ export default function App() {
             <Route path="/support" element={<Support />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />
-            <Route path="/backup" element={<Backup />} />
+            {/* Les sauvegardes sont payantes, au même titre que la sync : le
+                Rust le déclarait déjà (`plan_guard`, clé « backup ») mais
+                cette route ne le lui demandait pas — l'écran s'ouvrait donc
+                pour tout le monde. */}
+            <Route path="/backup" element={<PlanGate feature="backup"><Backup /></PlanGate>} />
             <Route path="/sync/:syncId" element={<SyncInstance />} />
             <Route path="/server" element={<Server />} />
             <Route path="/jvm" element={<JvmProfiles />} />
