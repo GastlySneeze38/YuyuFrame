@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SNAP } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -33,6 +33,36 @@ export default function Settings() {
     showHomeServers, setShowHomeServers, confirmServerLaunch, setConfirmServerLaunch,
     language, setLanguage,
   } = useStore()
+
+  /* ── L'écriture de la table d'enchantement ───────────────────────────────
+   * Cinq clics d'affilée sur l'en-tête « Langue » découvrent une neuvième
+   * langue — voir `i18n/translations/sga.ts` et `docs/product/easter-eggs.md`.
+   * « D'affilée » se mesure au temps : une seconde et demie entre deux clics
+   * remet le compteur à zéro, pour qu'un clic distrait d'aujourd'hui et un
+   * autre de demain ne finissent pas par déclencher quelque chose que
+   * personne n'a demandé.
+   *
+   * Aucun indice à l'écran, pas même au quatrième clic : un easter egg qui
+   * s'annonce n'en est plus un. Une fois découverte, la langue reste dans la
+   * grille et se quitte comme n'importe quelle autre — les noms des langues
+   * sont des littéraux, ils restent lisibles.
+   */
+  const sgaUnlocked = useStore((s) => s.sgaUnlocked)
+  const unlockSga = useStore((s) => s.unlockSga)
+  const enchantClicks = useRef({ count: 0, last: 0 })
+  const countEnchantClick = () => {
+    const now = Date.now()
+    const { count, last } = enchantClicks.current
+    const next = now - last > 1500 ? 1 : count + 1
+    enchantClicks.current = { count: next, last: now }
+    if (next >= 5) {
+      enchantClicks.current = { count: 0, last: 0 }
+      // La carte apparaît ET la langue s'applique : sans le second geste, on
+      // aurait trouvé quelque chose sans rien voir se passer.
+      unlockSga()
+      setLanguage('sga')
+    }
+  }
 
   const [showRamInfo, setShowRamInfo] = useState(false)
   const [confirmBackgroundOff, setConfirmBackgroundOff] = useState(false)
@@ -132,6 +162,7 @@ export default function Settings() {
           categories={CATEGORIES}
           activeId={activeId}
           onPick={goTo}
+          onPress={(id) => { if (id === 'langue') countEnchantClick() }}
           title={t('settings.sidebarTitle')}
         />
 
@@ -553,6 +584,7 @@ export default function Settings() {
           <div id="langue" ref={(el) => { sectionRefs.current.langue = el }} className="scroll-mt-8">
           <SCard
             title={t('settings.langue.title')}
+            onTitleClick={countEnchantClick}
             icon={
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
                 <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.9 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.89-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z" />
@@ -567,7 +599,7 @@ export default function Settings() {
               {/* Trois colonnes : la liste s'allonge à chaque langue ajoutée,
                   deux colonnes donnaient une colonne interminable. */}
               <div className="grid grid-cols-3 gap-2">
-                {LANGUAGES.map(({ code, nativeLabel }) => {
+                {LANGUAGES.filter((l) => !l.secret || sgaUnlocked).map(({ code, nativeLabel }) => {
                   const active = language === code
                   return (
                     <motion.button
@@ -772,7 +804,14 @@ export default function Settings() {
  * s'agiter des cartes que personne ne regarde. `once: false` pour que la
  * page reste vivante quand on la reparcourt.
  */
-function SCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+function SCard({ title, icon, children, onTitleClick }: {
+  title: string
+  icon: React.ReactNode
+  children: React.ReactNode
+  /** Rend l'en-tête cliquable. Une seule carte s'en sert — voir l'easter egg
+   *  de la section Langue. Sans lui, l'en-tête reste un simple titre. */
+  onTitleClick?: () => void
+}) {
   return (
     <motion.section
       initial={{ opacity: 0, y: 14 }}
@@ -782,7 +821,14 @@ function SCard({ title, icon, children }: { title: string; icon: React.ReactNode
       whileHover="hover"
       className="rounded-2xl border border-line bg-surface-1 p-6 transition-colors duration-200 hover:border-accent/25"
     >
-      <div className="mb-5 flex items-center gap-3">
+      <div
+        // `pointerdown` et pas `click` : une rafale rapide passe par des
+        // doubles-clics, et un clic annulé par un léger déplacement du doigt
+        // ou de la souris n'émet jamais de `click`. L'appui, lui, est
+        // toujours là.
+        onPointerDown={onTitleClick}
+        className={`mb-5 flex items-center gap-3 ${onTitleClick ? 'cursor-default select-none' : ''}`}
+      >
         <motion.div
           variants={{ hover: { scale: 1.08, rotate: -5 } }}
           transition={{ type: 'spring', stiffness: 420, damping: 18 }}

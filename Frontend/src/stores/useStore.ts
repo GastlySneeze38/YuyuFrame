@@ -22,7 +22,10 @@ export type StatCardId = (typeof STAT_CARD_IDS)[number]
 export const DEFAULT_STAT_CARDS: StatCardId[] = ['time', 'sessions', 'average', 'streak']
 
 export type StatsSort = 'time' | 'sessions' | 'recent' | 'crashes'
-export type Lang = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'pl' | 'ru'
+/** `sga` = l'alphabet galactique standard, l'écriture de la table
+ *  d'enchantement : une langue à part entière, simplement cachée tant qu'on
+ *  ne l'a pas trouvée (voir `sgaUnlocked`). */
+export type Lang = 'fr' | 'en' | 'es' | 'de' | 'it' | 'pt' | 'pl' | 'ru' | 'sga'
 
 interface Store {
   // ── Session YuyuFrame ──
@@ -149,6 +152,12 @@ interface Store {
   languagePicked: boolean
   /** Pose la langue devinée sans rien décider à la place de l'utilisateur. */
   applyDetectedLanguage: (l: Lang) => void
+  /** L'écriture de la table d'enchantement (`sga`) est une langue comme une
+   *  autre, mais sa carte n'apparaît dans les réglages qu'une fois trouvée —
+   *  easter egg de la 0.1.0-27, voir `docs/product/easter-eggs.md`. Une fois
+   *  découverte, elle le reste. */
+  sgaUnlocked: boolean
+  unlockSga: () => void
 
   /** Le launcher reste en vie sans fenêtre pendant une partie, pour compter
    *  la session et construire un rapport si le jeu plante. */
@@ -389,6 +398,8 @@ export const useStore = create<Store>()(
       setLanguage: (language) => set({ language, languagePicked: true }),
       languagePicked: false,
       applyDetectedLanguage: (language) => set({ language }),
+      sgaUnlocked: false,
+      unlockSga: () => set({ sgaUnlocked: true }),
 
       allowBackground: true,
       setAllowBackground: (allowBackground) => set({ allowBackground }),
@@ -531,6 +542,7 @@ export const useStore = create<Store>()(
         confirmServerLaunch: s.confirmServerLaunch,
         language: s.language,
         languagePicked: s.languagePicked,
+        sgaUnlocked: s.sgaUnlocked,
         statsRangeDays: s.statsRangeDays,
         statsCards: s.statsCards,
         statsInstanceSort: s.statsInstanceSort,

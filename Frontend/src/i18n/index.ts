@@ -8,12 +8,13 @@ import { it } from './translations/it'
 import { pt } from './translations/pt'
 import { pl } from './translations/pl'
 import { ru } from './translations/ru'
+import { sga, SGA_LABEL } from './translations/sga'
 
 export type { Lang }
 
 // Une langue absente d'ici planterait à la lecture : le type `Lang` et cette
 // table doivent être modifiés ensemble.
-const DICTS: Record<Lang, Record<string, unknown>> = { fr, en, es, de, it, pt, pl, ru }
+const DICTS: Record<Lang, Record<string, unknown>> = { fr, en, es, de, it, pt, pl, ru, sga }
 
 function getPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
@@ -59,8 +60,13 @@ export function useT() {
   return t
 }
 
-/** Langues proposées dans les réglages, dans leur propre langue. */
-export const LANGUAGES: { code: Lang; nativeLabel: string }[] = [
+/** Langues proposées dans les réglages, dans leur propre langue.
+ *
+ *  `secret` : la carte n'apparaît qu'une fois la langue découverte (voir
+ *  `sgaUnlocked` et l'easter egg de la section Langue). Elle est une langue
+ *  comme les autres pour le reste du code — seule sa présence dans la grille
+ *  est conditionnelle. */
+export const LANGUAGES: { code: Lang; nativeLabel: string; secret?: boolean }[] = [
   { code: 'fr', nativeLabel: 'Français' },
   { code: 'en', nativeLabel: 'English' },
   { code: 'es', nativeLabel: 'Español' },
@@ -69,4 +75,5 @@ export const LANGUAGES: { code: Lang; nativeLabel: string }[] = [
   { code: 'pt', nativeLabel: 'Português' },
   { code: 'pl', nativeLabel: 'Polski' },
   { code: 'ru', nativeLabel: 'Русский' },
+  { code: 'sga', nativeLabel: SGA_LABEL, secret: true },
 ]

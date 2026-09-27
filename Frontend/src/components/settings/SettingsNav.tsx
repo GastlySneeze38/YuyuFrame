@@ -99,11 +99,16 @@ export function SettingsNav({
   categories,
   activeId,
   onPick,
+  onPress,
   title,
 }: {
   categories: readonly SettingsCategory[]
   activeId: string
   onPick: (id: string) => void
+  /** Appui sur une entrée, avant l'aller à la section. Sert au compteur de
+   *  l'easter egg de la section Langue : « le bouton Langue » désigne aussi
+   *  bien cette entrée que l'en-tête de la carte, les deux comptent. */
+  onPress?: (id: string) => void
   title: string
 }) {
   return (
@@ -117,6 +122,7 @@ export function SettingsNav({
             <motion.button
               key={id}
               variants={listItemVariants}
+              onPointerDown={() => onPress?.(id)}
               onClick={() => onPick(id)}
               whileHover={{ x: active ? 0 : 3 }}
               whileTap={{ scale: 0.99 }}
