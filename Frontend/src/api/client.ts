@@ -516,6 +516,17 @@ export const api = {
       invoke<McOption[]>('mc_options_write', { instanceId, changes }),
   },
 
+  // Réglages du client intégré : mêmes paires clé/valeur, mais dans le
+  // `.properties` que l'agent relit à chaque démarrage (voir
+  // `commands/instance/agent_options.rs`). Liste vide tant que l'agent n'a
+  // jamais tourné sur cette instance — l'interface affiche alors les valeurs
+  // par défaut des modules.
+  agentOptions: {
+    read: (instanceId: string) => invoke<McOption[]>('agent_options_read', { instanceId }),
+    write: (instanceId: string, changes: McOption[]) =>
+      invoke<McOption[]>('agent_options_write', { instanceId, changes }),
+  },
+
   // Passe par le proxy LauncherAPI (voir Server/LauncherAPI/src/routes/curseforge.rs)
   // — la clé CurseForge n'est jamais côté client. Réponses en JSON brut (pas
   // de type strict) : la forme exacte des payloads CurseForge sera affinée

@@ -351,6 +351,8 @@ pub fn run() {
             commands::instance::packs::packs_import_paths,
             commands::instance::options::mc_options_read,
             commands::instance::options::mc_options_write,
+            commands::instance::agent_options::agent_options_read,
+            commands::instance::agent_options::agent_options_write,
             commands::modrinth::mods_search_advanced,
             commands::curseforge::curseforge_search,
             commands::curseforge::curseforge_mod_details,

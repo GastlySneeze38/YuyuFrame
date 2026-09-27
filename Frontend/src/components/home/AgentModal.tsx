@@ -16,6 +16,10 @@ import { useT } from '@/i18n'
  * le menu en jeu, ou jamais. C'est donc ici qu'on en parle, et c'est ici qu'on
  * le refuse.
  *
+ * Deux portes y mènent : cet engrenage, pour l'instance sélectionnée, et la
+ * section YuyuFrame des réglages d'une instance (`mods/OptionsTab`), pour
+ * n'importe laquelle. Même fenêtre — il n'y a pas deux explications à tenir.
+ *
  * Le choix est retenu par instance (voir `agentOptOut` dans le store) : il
  * suit la partie qu'on veut faire — un serveur qui interdit les clients
  * modifiés, une instance laissée strictement vanilla — pas l'utilisateur.

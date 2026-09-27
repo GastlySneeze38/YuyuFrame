@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
 import { press } from '@/lib/motion'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
+import { WarningIcon } from '@/components/home/AgentModal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { OptionSearchBar } from './OptionSearchBar'
@@ -42,6 +42,8 @@ type Control =
   | { type: 'text' }
   /** Ouvre le sélecteur de langue plutôt que d'exiger le code exact. */
   | { type: 'language' }
+  /** Se règle en appuyant sur la touche voulue — voir `KeybindButton`. */
+  | { type: 'keybind' }
 
 interface KnownOption {
   key: string
@@ -103,15 +105,94 @@ const KNOWN: Array<{ groupKey: string; options: KnownOption[] }> = [
 
 const KNOWN_KEYS = new Set(KNOWN.flatMap((g) => g.options.map((o) => o.key)))
 
+/**
+ * Les réglages du client intégré que l'on présente ici.
+ *
+ * ── Pourquoi ceux-là et pas les modules ───────────────────────────────────
+ * Les modules ne sont pas les mêmes d'une version à l'autre : les animations
+ * 1.7, les bascules sprint/sneak et le FOV fixe n'existent qu'en 1.8.9, la
+ * vision claire et la citrouille qu'à partir de la 1.21.11 (voir
+ * `ModuleRegistry`, drapeaux `IS_1_8_9`/`IS_26_1`). Les lister ici
+ * obligerait le launcher à refaire ce tri version par version, et à le
+ * refaire à chaque module ajouté — pour finir par proposer des interrupteurs
+ * qui ne commandent rien sur la version choisie.
+ *
+ * Ce qui suit vient au contraire de `GlobalUiSettings` (module `ui-settings`),
+ * les préférences de l'agent lui-même : elles existent partout où l'agent se
+ * charge, quelle que soit la version, et ce sont des contrôles ordinaires —
+ * un curseur, un interrupteur, une liste. Les modules et leurs réglages
+ * propres se règlent en jeu, et restent visibles dans la vue avancée.
+ */
+const AGENT_KNOWN: Array<{ groupKey: string; options: KnownOption[] }> = [
+  {
+    groupKey: 'options.groupAgentLook',
+    options: [
+      { key: 'ui-settings.setting.themeMode', labelKey: 'options.agentTheme', fallback: '0', control: { type: 'choice', choices: [
+        { value: '0', labelKey: 'options.agentThemeDark' },
+        { value: '1', labelKey: 'options.agentThemeLight' },
+      ] } },
+      // Mêmes trois paliers que la taille d'interface de Minecraft : autant
+      // réutiliser les libellés déjà traduits.
+      { key: 'ui-settings.setting.uiSize', labelKey: 'options.agentUiSize', fallback: '1', control: { type: 'choice', choices: [
+        { value: '0', labelKey: 'options.guiScaleSmall' },
+        { value: '1', labelKey: 'options.guiScaleNormal' },
+        { value: '2', labelKey: 'options.guiScaleLarge' },
+      ] } },
+      { key: 'ui-settings.setting.cardLayout', labelKey: 'options.agentCards', fallback: '2', control: { type: 'choice', choices: [
+        { value: '0', labelKey: 'options.agentCardsDetailed' },
+        { value: '1', labelKey: 'options.agentCardsCompact' },
+        { value: '2', labelKey: 'options.agentCardsGrid' },
+      ] } },
+      { key: 'ui-settings.setting.separateFavorites', labelKey: 'options.agentSeparateFavorites', fallback: 'true', control: { type: 'bool' } },
+    ],
+  },
+  {
+    groupKey: 'options.groupAgentHud',
+    options: [
+      // 47 % = l'opacité de départ du panneau HUD (alpha 120/255).
+      { key: 'ui-settings.setting.hudOpacity', labelKey: 'options.agentHudOpacity', fallback: '47', control: { type: 'slider', min: 10, max: 100, suffix: ' %' } },
+      { key: 'ui-settings.setting.cornerRadius', labelKey: 'options.agentHudRadius', fallback: '2', control: { type: 'slider', min: 0, max: 16, suffix: ' px' } },
+      { key: 'ui-settings.setting.hudGlassBackground', labelKey: 'options.agentHudGlass', fallback: 'false', control: { type: 'bool' } },
+      { key: 'ui-settings.setting.showHudInInventory', labelKey: 'options.agentHudInInventory', fallback: 'true', control: { type: 'bool' } },
+      { key: 'ui-settings.setting.showHudInContainers', labelKey: 'options.agentHudInContainers', fallback: 'true', control: { type: 'bool' } },
+      { key: 'ui-settings.setting.showHudInChat', labelKey: 'options.agentHudInChat', fallback: 'true', control: { type: 'bool' } },
+    ],
+  },
+  {
+    groupKey: 'options.groupAgentGeneral',
+    options: [
+      // Les langues sont leurs propres noms : traduire « Deutsch » n'aiderait
+      // personne à le reconnaître. L'ordre est celui de `Lang.LANGUAGE_IDS`,
+      // l'agent persistant l'indice et non le code.
+      { key: 'ui-settings.setting.language', labelKey: 'options.agentLanguage', fallback: '0', control: { type: 'choice', choices: [
+        { value: '0', labelKey: 'options.agentLangFr' },
+        { value: '1', labelKey: 'options.agentLangEn' },
+        { value: '2', labelKey: 'options.agentLangEs' },
+        { value: '3', labelKey: 'options.agentLangDe' },
+        { value: '4', labelKey: 'options.agentLangPt' },
+        { value: '5', labelKey: 'options.agentLangRu' },
+      ] } },
+      { key: 'ui-settings.setting.menuKey', labelKey: 'options.agentMenuKey', fallback: 'RSHIFT', control: { type: 'keybind' } },
+    ],
+  },
+]
+
+/** Clé → valeur de départ, sous forme de texte : le fichier ne contient que
+ *  des chaînes, et une clé absente vaut ce défaut. */
+const AGENT_DEFAULTS: Record<string, string> = Object.fromEntries(
+  AGENT_KNOWN.flatMap((g) => g.options.map((o) => [o.key, o.fallback])),
+)
+
+/** L'agent écrit ses curseurs en flottant (`47.058823`). On l'arrondit pour
+ *  l'affichage seulement — la valeur du fichier n'est touchée que si on
+ *  déplace effectivement le curseur. */
+function agentSliderText(raw: string): string {
+  const n = Number(raw)
+  return Number.isFinite(n) ? String(Math.round(n * 10) / 10) : raw
+}
+
 export function OptionsTab({ instance }: { instance: Instance }) {
   const t = useT()
-  const navigate = useNavigate()
-  // Copie locale du favori : la page ne possède pas l'instance (elle la
-  // reçoit), et remonter ce seul champ jusqu'à son propriétaire pour une
-  // étoile ne vaut pas le fil à tirer. La source de vérité reste la base,
-  // relue au prochain chargement de la page.
-  const [favorite, setFavorite] = useState(instance.favorite)
-  useEffect(() => { setFavorite(instance.favorite) }, [instance.favorite])
   const [advanced, setAdvanced] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -125,13 +206,43 @@ export function OptionsTab({ instance }: { instance: Instance }) {
   const [highlight, setHighlight] = useState<string | null>(null)
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
+  /* ── Client intégré ──────────────────────────────────────────────────────
+   * Deuxième fichier, même écran. Les modules de l'agent vivent dans leur
+   * propre `.properties` (voir `agent_options.rs`) : deux états séparés, un
+   * seul bouton « Enregistrer » — pour qui règle son instance, c'est une
+   * seule page de réglages, pas deux fichiers.
+   *
+   * L'agent n'est pas tissable partout. L'état vient du Rust, seul détenteur
+   * de la liste des versions supportées ; ici il ne sert qu'à dire pourquoi
+   * la section est en lecture seule, c'est encore le Rust qui tranche au
+   * lancement. */
+  const [agentSaved, setAgentSaved] = useState<Record<string, string>>({})
+  const [agentDraft, setAgentDraft] = useState<Record<string, string>>({})
+  const [agentBlocked, setAgentBlocked] = useState(false)
+  useEffect(() => {
+    let alive = true
+    api.launch
+      .agentStatus(instance.mc_version, instance.loader)
+      .then((s) => { if (alive) setAgentBlocked(!s.available) })
+      .catch(() => { if (alive) setAgentBlocked(false) })
+    return () => { alive = false }
+  }, [instance.mc_version, instance.loader])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const entries = await api.mcOptions.read(instance.id)
+      // Les deux fichiers ensemble : un agent qui n'a jamais tourné rend une
+      // liste vide, ce n'est pas une erreur — les modules repartent alors de
+      // leurs valeurs par défaut.
+      const [entries, agentEntries] = await Promise.all([
+        api.mcOptions.read(instance.id),
+        api.agentOptions.read(instance.id),
+      ])
       setFileExists(entries.length > 0)
       setSaved(Object.fromEntries(entries.map((e) => [e.key, e.value])))
       setDraft({})
+      setAgentSaved(Object.fromEntries(agentEntries.map((e) => [e.key, e.value])))
+      setAgentDraft({})
     } catch (e) {
       showError(e)
     } finally {
@@ -144,9 +255,21 @@ export function OptionsTab({ instance }: { instance: Instance }) {
   const value = (key: string, fallback = '') => draft[key] ?? saved[key] ?? fallback
   const set = (key: string, next: string) => setDraft((d) => ({ ...d, [key]: next }))
 
+  const agentValue = (key: string, fallback = '') => agentDraft[key] ?? agentSaved[key] ?? fallback
+  const setAgent = (key: string, next: string) => setAgentDraft((d) => ({ ...d, [key]: next }))
+
   const dirty = useMemo(
     () => Object.entries(draft).filter(([k, v]) => (saved[k] ?? '') !== v),
     [draft, saved],
+  )
+  /** Même règle pour l'agent, mais avec le défaut du module en référence :
+   *  une clé absente du fichier vaut ce défaut, la remettre à cette valeur
+   *  n'est donc pas une modification. */
+  const agentDirty = useMemo(
+    () => Object.entries(agentDraft).filter(
+      ([k, v]) => (agentSaved[k] ?? AGENT_DEFAULTS[k] ?? '') !== v,
+    ),
+    [agentDraft, agentSaved],
   )
 
   /** Tout ce que la recherche peut trouver : les réglages que l'on sait
@@ -198,31 +321,30 @@ export function OptionsTab({ instance }: { instance: Instance }) {
     return () => { clearTimeout(scroll); clearTimeout(release) }
   }, [highlight, advanced])
 
+  /** Un seul geste pour les deux fichiers. Chacun n'est réécrit que s'il a
+   *  changé — enregistrer des réglages Minecraft n'a pas à créer un fichier
+   *  d'agent sur une instance qui n'en a jamais eu. */
   const save = async () => {
-    if (dirty.length === 0 || saving) return
+    if ((dirty.length === 0 && agentDirty.length === 0) || saving) return
     setSaving(true)
     try {
-      const changes: McOption[] = dirty.map(([key, value]) => ({ key, value }))
-      const entries = await api.mcOptions.write(instance.id, changes)
-      setSaved(Object.fromEntries(entries.map((e) => [e.key, e.value])))
-      setDraft({})
-      setFileExists(true)
+      if (dirty.length > 0) {
+        const changes: McOption[] = dirty.map(([key, value]) => ({ key, value }))
+        const entries = await api.mcOptions.write(instance.id, changes)
+        setSaved(Object.fromEntries(entries.map((e) => [e.key, e.value])))
+        setDraft({})
+        setFileExists(true)
+      }
+      if (agentDirty.length > 0) {
+        const changes: McOption[] = agentDirty.map(([key, value]) => ({ key, value }))
+        const entries = await api.agentOptions.write(instance.id, changes)
+        setAgentSaved(Object.fromEntries(entries.map((e) => [e.key, e.value])))
+        setAgentDraft({})
+      }
     } catch (e) {
       showError(e)
     } finally {
       setSaving(false)
-    }
-  }
-
-  // ── Réglages YuyuFrame ────────────────────────────────────────────────────
-  // Ils ne vivent pas dans options.txt mais en base, et se sauvegardent
-  // immédiatement : ce sont des actions franches (rendre favori, ouvrir le
-  // dossier), pas un formulaire à valider.
-  const toggleFavorite = async () => {
-    try {
-      setFavorite((await api.instances.toggleFavorite(instance.id)).favorite)
-    } catch (e) {
-      showError(e)
     }
   }
 
@@ -235,6 +357,18 @@ export function OptionsTab({ instance }: { instance: Instance }) {
       .concat(Object.keys(draft).filter((k) => !(k in saved)))
       .sort()
     : []
+
+  /** Les clés du fichier de l'agent, dans la vue avancée. Celles qu'on affiche
+   *  déjà plus haut avec leur interrupteur en sont retirées : les voir deux
+   *  fois, une fois nommées et une fois brutes, ne dirait rien de plus. */
+  const agentRows = advanced
+    ? Object.keys(agentSaved)
+      .concat(Object.keys(agentDraft).filter((k) => !(k in agentSaved)))
+      .filter((k) => !(k in AGENT_DEFAULTS))
+      .sort()
+    : []
+
+  const pending = dirty.length + agentDirty.length
 
   return (
     <div className="flex flex-col gap-4">
@@ -261,16 +395,16 @@ export function OptionsTab({ instance }: { instance: Instance }) {
         <OptionSearchBar candidates={candidates} onPick={goToOption} />
 
         <div className="flex items-center gap-2">
-          {dirty.length > 0 && (
+          {pending > 0 && (
             <span className="text-[11px] text-[rgba(179,163,255,0.9)]">
-              {t('options.pending', { count: dirty.length })}
+              {t('options.pending', { count: pending })}
             </span>
           )}
           <motion.button {...press}
             onClick={save}
-            disabled={dirty.length === 0 || saving}
+            disabled={pending === 0 || saving}
             className={`h-8 rounded-lg px-4 text-[12px] font-semibold transition-colors duration-150 ${
-              dirty.length === 0 || saving
+              pending === 0 || saving
                 ? 'cursor-not-allowed bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.3)]'
                 : 'bg-[#4B3FCF] text-white hover:bg-[#6155e8]'
             }`}
@@ -288,7 +422,7 @@ export function OptionsTab({ instance }: { instance: Instance }) {
 
       {/* ── Vue avancée : le fichier entier ─────────────────────────────── */}
       {advanced ? (
-        rows.length === 0 ? (
+        rows.length === 0 && agentRows.length === 0 ? (
           <EmptyState compact
             icon={<svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.18)" width={22} height={22}><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z" /></svg>}
             title={t('options.emptyAdvanced')}
@@ -319,6 +453,38 @@ export function OptionsTab({ instance }: { instance: Instance }) {
                 />
               </div>
             ))}
+
+            {/* Le fichier de l'agent à la suite, séparé et annoncé : ce sont
+                deux fichiers différents, et une clé `zoom.setting.niveau`
+                perdue au milieu des raccourcis de Minecraft ne se
+                comprendrait pas. */}
+            {agentRows.length > 0 && (
+              <>
+                <h3 className="mt-4 text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
+                  {t('options.groupAgent')}
+                </h3>
+                {agentRows.map((key) => (
+                  <div
+                    key={key}
+                    className="flex items-center gap-3 rounded-lg px-2.5 py-1.5 odd:bg-[rgba(255,255,255,0.02)]"
+                  >
+                    <span className="w-[42%] flex-shrink-0 truncate font-mono text-[11.5px] text-[rgba(255,255,255,0.55)]" title={key}>
+                      {key}
+                    </span>
+                    <input
+                      value={agentValue(key)}
+                      onChange={(e) => setAgent(key, e.target.value)}
+                      disabled={agentBlocked}
+                      className={`h-7 flex-1 rounded-md border bg-[rgba(0,0,0,0.4)] px-2 font-mono text-[11.5px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)] ${
+                        key in agentDraft && agentDraft[key] !== agentSaved[key]
+                          ? 'border-[rgba(139,92,246,0.55)]'
+                          : 'border-[rgba(255,255,255,0.08)]'
+                      }`}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )
       ) : (
@@ -355,38 +521,72 @@ export function OptionsTab({ instance }: { instance: Instance }) {
             {t('options.othersCount', { count: Object.keys(saved).filter((k) => !KNOWN_KEYS.has(k)).length })}
           </button>
 
-          {/* ── Réglages YuyuFrame ──────────────────────────────────────── */}
-          <section className="flex flex-col gap-2">
+          {/* ── Réglages du client intégré ──────────────────────────────── */}
+          <div className="flex flex-col gap-2 border-t border-[rgba(255,255,255,0.06)] pt-4">
             <h3 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
-              {t('options.groupYuyu')}
+              {t('options.groupAgent')}
             </h3>
-            <div className="flex flex-wrap gap-2">
-              <motion.button {...press} onClick={toggleFavorite}
-                className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[11.5px] font-semibold transition-colors duration-150 ${
-                  favorite
-                    ? 'border-[rgba(250,204,21,0.35)] bg-[rgba(250,204,21,0.12)] text-[rgba(250,204,21,0.9)]'
-                    : 'border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.03)] text-[rgba(255,255,255,0.5)]'
-                }`}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
-                  <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                </svg>
-                {t(favorite ? 'options.favoriteOn' : 'options.favoriteOff')}
-              </motion.button>
+            <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.4)]">
+              {t('options.agentIntro')}
+            </p>
 
-              <motion.button {...press} onClick={() => navigate('/jvm')}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.03)] px-3 text-[11.5px] font-semibold text-[rgba(255,255,255,0.5)] transition-colors duration-150 hover:text-[rgba(255,255,255,0.8)]"
-              >
-                {t('options.jvmConfig', { ram: instance.ram_mb >= 1024 ? `${instance.ram_mb / 1024} Go` : `${instance.ram_mb} Mo` })}
-              </motion.button>
+            {/* Dit avant de laisser toucher : sur une version non supportée,
+                rien n'est injecté, et ces interrupteurs ne changeraient rien
+                au jeu qui va se lancer. */}
+            {agentBlocked && (
+              <div className="flex items-start gap-2 rounded-xl border border-[rgba(250,204,21,0.25)] bg-[rgba(250,204,21,0.08)] px-3.5 py-2.5 text-[11.5px] leading-relaxed text-[rgba(250,204,21,0.85)]">
+                <WarningIcon className="mt-[2px] h-3.5 w-3.5 flex-shrink-0" />
+                {t('options.agentUnavailable', { version: instance.mc_version })}
+              </div>
+            )}
+          </div>
 
-              <motion.button {...press} onClick={() => api.instances.openFolder(instance.id).catch(showError)}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.03)] px-3 text-[11.5px] font-semibold text-[rgba(255,255,255,0.5)] transition-colors duration-150 hover:text-[rgba(255,255,255,0.8)]"
-              >
-                {t('options.openFolder')}
-              </motion.button>
-            </div>
-          </section>
+          {/* Les mêmes contrôles que pour Minecraft, sur l'autre fichier :
+              un réglage reste un réglage, et l'œil n'a pas à réapprendre
+              une ligne parce qu'elle vient d'ailleurs. */}
+          {AGENT_KNOWN.map((group) => (
+            <section
+              key={group.groupKey}
+              className={`flex flex-col gap-2 ${agentBlocked ? 'pointer-events-none opacity-45' : ''}`}
+            >
+              <h4 className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[rgba(255,255,255,0.3)]">
+                {t(group.groupKey)}
+              </h4>
+              <div className="flex flex-col gap-1">
+                {group.options.map((opt) => (
+                  <OptionRow
+                    key={opt.key}
+                    option={opt}
+                    value={opt.control.type === 'slider'
+                      ? agentSliderText(agentValue(opt.key, opt.fallback))
+                      : agentValue(opt.key, opt.fallback)}
+                    changed={opt.key in agentDraft && agentDraft[opt.key] !== (agentSaved[opt.key] ?? opt.fallback)}
+                    highlighted={false}
+                    rowRef={() => {}}
+                    onChange={(v) => setAgent(opt.key, v)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {/* Même honnêteté que pour options.txt : ce qui se règle en jeu
+              (couleurs, seuils, placement des HUD) existe et se voit, on dit
+              simplement où. */}
+          {agentRows.length === 0 && Object.keys(agentSaved).length === 0 ? (
+            <p className="text-[11px] leading-relaxed text-[rgba(255,255,255,0.35)]">
+              {t('options.agentNoFileYet')}
+            </p>
+          ) : (
+            <button
+              onClick={() => setAdvanced(true)}
+              className="self-start text-[11px] font-semibold text-[rgba(75,63,207,0.85)] transition-colors duration-150 hover:text-[#8b7ff0]"
+            >
+              {t('options.agentOthersCount', {
+                count: Object.keys(agentSaved).filter((k) => !(k in AGENT_DEFAULTS)).length,
+              })}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -464,6 +664,10 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
         </select>
       )}
 
+      {control.type === 'keybind' && (
+        <KeybindButton value={value} onChange={onChange} />
+      )}
+
       {control.type === 'text' && (
         <input
           value={value}
@@ -502,6 +706,118 @@ function OptionRow({ option, value, changed, highlighted, rowRef, onChange }: {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * Nom de touche attendu par l'agent, à partir du code physique du navigateur.
+ *
+ * Les deux désignent la **position** de la touche et non le caractère qu'elle
+ * produit : `KeyA` est la touche à gauche de la rangée du milieu, `Q` sur un
+ * clavier AZERTY, exactement comme `GLFW_KEY_A`. Une correspondance directe
+ * est donc juste, sans se préoccuper de la disposition du clavier.
+ *
+ * La table reprend `UiInputPollerModern.buildCapturableKeys` — seuls ces noms
+ * sont résolus par l'agent ; un nom absent y vaut « aucune touche ».
+ */
+const KEY_NAMES: Record<string, string> = {
+  Space: 'SPACE', Enter: 'ENTER', Tab: 'TAB', Escape: 'ESCAPE',
+  ShiftLeft: 'LSHIFT', ShiftRight: 'RSHIFT', ControlLeft: 'LCTRL', ControlRight: 'RCTRL',
+  AltLeft: 'LALT', AltRight: 'RALT', MetaLeft: 'LSUPER', MetaRight: 'RSUPER', ContextMenu: 'MENU',
+  ArrowLeft: 'LEFT', ArrowRight: 'RIGHT', ArrowUp: 'UP', ArrowDown: 'DOWN',
+  Backspace: 'BACKSPACE', Delete: 'DELETE', CapsLock: 'CAPSLOCK', Backquote: 'GRAVE',
+  Insert: 'INSERT', Home: 'HOME', End: 'END', PageUp: 'PAGEUP', PageDown: 'PAGEDOWN',
+  Minus: 'MINUS', Equal: 'EQUAL', BracketLeft: 'LBRACKET', BracketRight: 'RBRACKET',
+  Backslash: 'BACKSLASH', Semicolon: 'SEMICOLON', Quote: 'APOSTROPHE',
+  Comma: 'COMMA', Period: 'PERIOD', Slash: 'SLASH',
+  NumpadDecimal: 'NUMDECIMAL', NumpadDivide: 'NUMDIVIDE', NumpadMultiply: 'NUMMULTIPLY',
+  NumpadSubtract: 'NUMSUBTRACT', NumpadAdd: 'NUMADD', NumpadEnter: 'NUMENTER', NumpadEqual: 'NUMEQUAL',
+  ScrollLock: 'SCROLLLOCK', NumLock: 'NUMLOCK', PrintScreen: 'PRINTSCREEN', Pause: 'PAUSE',
+  // La touche en plus des claviers ISO, à gauche de W sur AZERTY.
+  IntlBackslash: 'WORLD2',
+}
+
+function agentKeyName(code: string): string | null {
+  if (KEY_NAMES[code]) return KEY_NAMES[code]
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  if (/^Numpad[0-9]$/.test(code)) return `NUM${code.slice(6)}`
+  if (/^F([1-9]|1[0-9]|2[0-5])$/.test(code)) return code
+  return null
+}
+
+const MODIFIER_NAMES = new Set(['LSHIFT', 'RSHIFT', 'LCTRL', 'RCTRL', 'LALT', 'RALT', 'LSUPER', 'RSUPER'])
+
+/**
+ * Touche d'ouverture du menu en jeu : on appuie dessus, on ne l'écrit pas.
+ *
+ * Taper « RSHIFT » à la main supposait de connaître le vocabulaire de GLFW,
+ * et une faute de frappe ne se voyait qu'en jeu, en constatant que le menu ne
+ * s'ouvrait plus. La capture supprime les deux problèmes.
+ *
+ * Les modificateurs maintenus sont conservés : `Ctrl` + `K` donne `LCTRL+K`,
+ * la combinaison que l'agent sait relire. Un modificateur seul reste une
+ * touche valable — c'est le cas du défaut, Maj droite.
+ */
+function KeybindButton({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT()
+  const [capturing, setCapturing] = useState(false)
+
+  useEffect(() => {
+    if (!capturing) return
+    const onKey = (e: KeyboardEvent) => {
+      // Sans ça, Tab quitterait le bouton et Espace le re-déclencherait :
+      // pendant la capture, aucune touche n'appartient plus à la page.
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.code === 'Escape') { setCapturing(false); return }
+      const name = agentKeyName(e.code)
+      // Touche hors de la table de l'agent : on ne l'enregistre pas, elle ne
+      // serait jamais résolue en jeu. La capture reste ouverte.
+      if (!name) return
+      const mods = MODIFIER_NAMES.has(name)
+        ? []
+        : [
+          e.ctrlKey && 'LCTRL',
+          e.shiftKey && 'LSHIFT',
+          e.altKey && 'LALT',
+          e.metaKey && 'LSUPER',
+        ].filter(Boolean) as string[]
+      onChange([...mods, name].join('+'))
+      setCapturing(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [capturing, onChange])
+
+  return (
+    <div className="ml-auto flex items-center gap-1.5">
+      <button
+        onClick={() => setCapturing((c) => !c)}
+        onBlur={() => setCapturing(false)}
+        className={`h-7 min-w-[120px] rounded-md border px-2.5 font-mono text-[11.5px] outline-none transition-colors duration-150 ${
+          capturing
+            ? 'border-[rgba(139,92,246,0.7)] bg-[rgba(75,63,207,0.25)] text-white'
+            : 'border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-white hover:border-[rgba(75,63,207,0.5)]'
+        }`}
+      >
+        {capturing
+          ? <span className="font-sans text-[11px] text-[rgba(199,190,255,0.9)]">{t('options.keybindPress')}</span>
+          : value && value !== 'NONE'
+            ? value
+            : <span className="font-sans text-[11px] text-[rgba(255,255,255,0.35)]">{t('options.keybindNone')}</span>}
+      </button>
+      <button
+        onClick={() => { setCapturing(false); onChange('NONE') }}
+        title={t('options.keybindClear')}
+        aria-label={t('options.keybindClear')}
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] text-[rgba(255,255,255,0.4)] transition-colors duration-150 hover:text-[rgba(255,255,255,0.8)]"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" width={11} height={11}>
+          <path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.88 18.3 9.17 12 2.88 5.71 4.3 4.29l6.29 6.3 6.3-6.3z" />
+        </svg>
+      </button>
     </div>
   )
 }
