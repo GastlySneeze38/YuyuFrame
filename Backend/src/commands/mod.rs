@@ -8,6 +8,7 @@ pub mod fleet;
 pub mod instance;
 pub mod jvm_profile;
 pub mod launch;
+pub mod locale;
 pub mod modrinth;
 pub mod pending;
 pub mod plan;

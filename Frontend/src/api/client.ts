@@ -516,6 +516,13 @@ export const api = {
       invoke<McOption[]>('mc_options_write', { instanceId, changes }),
   },
 
+  // Pays d'où l'on se connecte, demandé une seule fois au premier démarrage
+  // pour choisir la langue (voir `i18n/detect.ts`). `null` = question sans
+  // réponse : hors ligne, ou pays que Cloudflare ne sait pas situer.
+  locale: {
+    detectCountry: () => invoke<string | null>('detect_country'),
+  },
+
   // Réglages du client intégré : mêmes paires clé/valeur, mais dans le
   // `.properties` que l'agent relit à chaque démarrage (voir
   // `commands/instance/agent_options.rs`). Liste vide tant que l'agent n'a

@@ -142,6 +142,13 @@ interface Store {
 
   language: Lang
   setLanguage: (l: Lang) => void
+  /** Vrai dès que l'utilisateur a choisi sa langue lui-même. Tant qu'il ne
+   *  l'a pas fait, le launcher la devine à chaque démarrage (voir
+   *  `i18n/detect.ts`) : sans réseau au premier lancement, la détection
+   *  retentera plus tard au lieu de figer une langue par défaut. */
+  languagePicked: boolean
+  /** Pose la langue devinée sans rien décider à la place de l'utilisateur. */
+  applyDetectedLanguage: (l: Lang) => void
 
   /** Le launcher reste en vie sans fenêtre pendant une partie, pour compter
    *  la session et construire un rapport si le jeu plante. */
@@ -379,7 +386,9 @@ export const useStore = create<Store>()(
       setConfirmServerLaunch: (confirmServerLaunch) => set({ confirmServerLaunch }),
 
       language: 'fr',
-      setLanguage: (language) => set({ language }),
+      setLanguage: (language) => set({ language, languagePicked: true }),
+      languagePicked: false,
+      applyDetectedLanguage: (language) => set({ language }),
 
       allowBackground: true,
       setAllowBackground: (allowBackground) => set({ allowBackground }),
@@ -521,6 +530,7 @@ export const useStore = create<Store>()(
         showHomeServers: s.showHomeServers,
         confirmServerLaunch: s.confirmServerLaunch,
         language: s.language,
+        languagePicked: s.languagePicked,
         statsRangeDays: s.statsRangeDays,
         statsCards: s.statsCards,
         statsInstanceSort: s.statsInstanceSort,

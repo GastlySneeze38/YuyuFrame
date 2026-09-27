@@ -11,7 +11,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { PlanGate } from '@/components/PlanGate'
 import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
-import { useStore } from '@/stores/useStore'
+import { useStore, type Lang } from '@/stores/useStore'
+import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
 import { useFleet } from '@/stores/useFleet'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
@@ -100,6 +101,7 @@ export default function App() {
   const { brightness, instanceSyncMode, setInstances, uuid, authSystemVersion, setAuthSystemVersion, setUser, setInstanceRunning, applyInstanceIdMigrations, setApiOnline, allowBackground, syncGameSettings } = useStore()
   // Mot de passe provisoire donné par le support : la modale s'impose tant
   // qu'il n'est pas changé (le serveur refuse tout le reste).
+  const applyDetectedLanguage = useStore((s) => s.applyDetectedLanguage)
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
   // Les trois modales de démarrage ne sont plus des drapeaux locaux : elles
   // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
@@ -234,6 +236,32 @@ export default function App() {
         }
       })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /**
+   * Langue du premier démarrage — voir `i18n/detect.ts`.
+   *
+   * Deux temps volontairement : la langue du système s'applique tout de
+   * suite, puis le pays d'où l'on se connecte la corrige s'il dit autre
+   * chose. Sans ce premier temps, l'interface s'afficherait en français le
+   * temps d'un aller-retour réseau.
+   *
+   * Tourne à chaque démarrage tant que l'utilisateur n'a pas choisi sa langue
+   * dans les réglages : un premier lancement hors ligne ne doit pas le figer
+   * dans une langue qu'il n'a pas demandée.
+   */
+  useEffect(() => {
+    if (isConsoleWindow || useStore.getState().languagePicked) return
+    let alive = true
+    const apply = (lang: Lang | null) => {
+      // Une langue choisie entre-temps dans les réglages a toujours le
+      // dernier mot : la détection arrive après, elle ne doit pas l'écraser.
+      if (lang && alive && !useStore.getState().languagePicked) applyDetectedLanguage(lang)
+    }
+    apply(systemLanguage())
+    ipLanguage().then(apply)
+    return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

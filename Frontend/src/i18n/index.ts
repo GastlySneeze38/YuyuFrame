@@ -4,12 +4,16 @@ import { fr } from './translations/fr'
 import { en } from './translations/en'
 import { es } from './translations/es'
 import { de } from './translations/de'
+import { it } from './translations/it'
+import { pt } from './translations/pt'
+import { pl } from './translations/pl'
+import { ru } from './translations/ru'
 
 export type { Lang }
 
 // Une langue absente d'ici planterait à la lecture : le type `Lang` et cette
 // table doivent être modifiés ensemble.
-const DICTS: Record<Lang, Record<string, unknown>> = { fr, en, es, de, it: fr, pt: fr, pl: fr, ru: fr }
+const DICTS: Record<Lang, Record<string, unknown>> = { fr, en, es, de, it, pt, pl, ru }
 
 function getPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
@@ -61,4 +65,8 @@ export const LANGUAGES: { code: Lang; nativeLabel: string }[] = [
   { code: 'en', nativeLabel: 'English' },
   { code: 'es', nativeLabel: 'Español' },
   { code: 'de', nativeLabel: 'Deutsch' },
+  { code: 'it', nativeLabel: 'Italiano' },
+  { code: 'pt', nativeLabel: 'Português' },
+  { code: 'pl', nativeLabel: 'Polski' },
+  { code: 'ru', nativeLabel: 'Русский' },
 ]
