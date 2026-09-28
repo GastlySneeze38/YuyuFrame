@@ -533,6 +533,8 @@ export const api = {
   // site injoignable : dans les deux cas l'interface n'affiche rien.
   patchNotes: {
     latest: () => invoke<PatchNote | null>('patch_notes_latest'),
+    /** L'historique, plus récent d'abord — onglet « Notes de version ». */
+    list: () => invoke<PatchNote[]>('patch_notes_list'),
   },
 
   // Pays d'où l'on se connecte, demandé une seule fois au premier démarrage

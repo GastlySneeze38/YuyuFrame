@@ -1003,6 +1003,7 @@ export const it: TranslationSchema = {
     tab: {
       requests: 'Le mie richieste',
       crashes: 'Crash',
+      patchNotes: 'Note di versione',
     },
     emptyTitle: 'Ancora nessuna richiesta',
     emptyText: 'Scegli una delle voci qui sopra: il team ti risponde proprio qui.',
@@ -1158,7 +1159,10 @@ export const it: TranslationSchema = {
   patchNotes: {
     title: 'Note di versione',
     latest: 'Ultima versione',
+    latestShort: 'ultima',
     empty: 'Nessuna nota per questa versione.',
+    emptyTitle: 'Nessuna nota di versione',
+    emptyText: 'Appariranno qui alla prossima pubblicazione — le stesse del sito.',
     done: 'Ho capito',
   },
 

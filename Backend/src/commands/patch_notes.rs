@@ -44,8 +44,39 @@ pub struct PatchNote {
     pub published_at: String,
 }
 
-/// La note la plus récente, ou `None` s'il n'y en a pas — ou si le site n'a
-/// pas répondu.
+/// Combien de versions l'écran Support propose de relire. Au-delà, c'est de
+/// l'archéologie : le site garde l'historique complet.
+const HISTORY: &str = "30";
+
+/// Les notes les plus récentes d'abord. Liste vide si le site n'a pas
+/// répondu — un écran sans historique vaut mieux qu'un écran en erreur.
+async fn fetch(limit: &str) -> Vec<PatchNote> {
+    let client = match reqwest::Client::builder().timeout(TIMEOUT).build() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("client HTTP indisponible pour les notes de version : {e}");
+            return Vec::new();
+        }
+    };
+
+    let url = format!("{}/api/patch-notes", site_base());
+    match client.get(&url).query(&[("limit", limit)]).send().await {
+        Ok(resp) => match resp.json().await {
+            Ok(notes) => notes,
+            Err(e) => {
+                tracing::warn!("notes de version illisibles : {e}");
+                Vec::new()
+            }
+        },
+        Err(e) => {
+            // Hors ligne, site en maintenance : sans intérêt à signaler.
+            tracing::debug!("notes de version non chargées : {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// La note la plus récente, ou `None` s'il n'y en a pas.
 ///
 /// La plus récente seulement : quelqu'un qui revient après trois versions n'a
 /// pas besoin de fermer trois fenêtres au démarrage, et c'est la dernière qui
@@ -53,29 +84,11 @@ pub struct PatchNote {
 /// celles déjà lues (voir `useModalQueue`), pas cette commande.
 #[tauri::command]
 pub async fn patch_notes_latest() -> Result<Option<PatchNote>, String> {
-    let client = match reqwest::Client::builder().timeout(TIMEOUT).build() {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!("client HTTP indisponible pour les notes de version : {e}");
-            return Ok(None);
-        }
-    };
+    Ok(fetch("1").await.into_iter().next())
+}
 
-    let url = format!("{}/api/patch-notes", site_base());
-    let notes: Vec<PatchNote> = match client.get(&url).query(&[("limit", "1")]).send().await {
-        Ok(resp) => match resp.json().await {
-            Ok(notes) => notes,
-            Err(e) => {
-                tracing::warn!("notes de version illisibles : {e}");
-                return Ok(None);
-            }
-        },
-        Err(e) => {
-            // Hors ligne, site en maintenance : sans intérêt à signaler.
-            tracing::debug!("notes de version non chargées : {e}");
-            return Ok(None);
-        }
-    };
-
-    Ok(notes.into_iter().next())
+/// L'historique, pour l'onglet « Notes de version » de l'écran Support.
+#[tauri::command]
+pub async fn patch_notes_list() -> Result<Vec<PatchNote>, String> {
+    Ok(fetch(HISTORY).await)
 }

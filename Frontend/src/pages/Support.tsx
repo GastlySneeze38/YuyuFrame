@@ -14,6 +14,7 @@ import { useStore } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useDraftState, clearDraft } from '@/stores/useDrafts'
 import { CrashPanel } from '@/components/support/CrashPanel'
+import { PatchNotesPanel } from '@/components/support/PatchNotesPanel'
 import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
 import { useT } from '@/i18n'
 import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from '@/types/support'
@@ -35,7 +36,7 @@ import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from 
 
 const DRAFT_KEY = 'support-ticket'
 
-type Tab = 'requests' | 'crashes'
+type Tab = 'requests' | 'crashes' | 'patchNotes'
 type Kind = 'question' | 'refund' | 'plan' | 'deletion'
 
 interface KindSpec {
@@ -77,7 +78,10 @@ export default function Support() {
   // arrive sur « Mes demandes » et il faut deviner que le rapport est dans
   // l'onglet d'à côté.
   const [params] = useSearchParams()
-  const [tab, setTab] = useState<Tab>(params.get('tab') === 'crashes' ? 'crashes' : 'requests')
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = params.get('tab')
+    return asked === 'crashes' || asked === 'patchNotes' ? asked : 'requests'
+  })
 
   useEffect(() => {
     if (!signedIn) return
@@ -155,7 +159,11 @@ export default function Support() {
 
       <TabBar tab={tab} onPick={setTab} />
 
-      {tab === 'crashes' ? (
+      {tab === 'patchNotes' ? (
+        // Sans compte aussi : les notes de version sont publiques, c'est le
+        // même contenu que sur le site.
+        <PatchNotesPanel />
+      ) : tab === 'crashes' ? (
         // Accessible sans compte : un plantage peut très bien arriver avant
         // d'en avoir un, et le rapport est déjà sur le disque. Seul l'envoi
         // demande d'être connecté.
@@ -215,7 +223,7 @@ function TabBar({ tab, onPick }: { tab: Tab; onPick: (tab: Tab) => void }) {
   const t = useT()
   return (
     <div className="flex shrink-0 gap-1 border-b border-line-soft px-6">
-      {(['requests', 'crashes'] as Tab[]).map((key) => (
+      {(['requests', 'crashes', 'patchNotes'] as Tab[]).map((key) => (
         <button
           key={key}
           onClick={() => onPick(key)}

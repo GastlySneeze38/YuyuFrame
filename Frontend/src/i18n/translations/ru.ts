@@ -1003,6 +1003,7 @@ export const ru: TranslationSchema = {
     tab: {
       requests: 'Мои обращения',
       crashes: 'Вылеты',
+      patchNotes: 'Что нового',
     },
     emptyTitle: 'Обращений пока нет',
     emptyText: 'Выберите один из пунктов выше: команда отвечает прямо здесь.',
@@ -1158,7 +1159,10 @@ export const ru: TranslationSchema = {
   patchNotes: {
     title: 'Что нового',
     latest: 'Последняя версия',
+    latestShort: 'последняя',
     empty: 'Для этой версии заметок нет.',
+    emptyTitle: 'Заметок о версиях нет',
+    emptyText: 'Они появятся здесь со следующей публикацией — те же, что и на сайте.',
     done: 'Понятно',
   },
 

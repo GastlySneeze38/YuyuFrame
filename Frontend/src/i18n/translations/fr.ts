@@ -1006,6 +1006,7 @@ export const fr = {
     tab: {
       requests: 'Mes demandes',
       crashes: 'Plantages',
+      patchNotes: 'Notes de version',
     },
     emptyTitle: 'Aucune demande',
     emptyText: 'Choisis une entrée ci-dessus : l’équipe te répond ici même.',
@@ -1168,7 +1169,10 @@ export const fr = {
   patchNotes: {
     title: 'Notes de version',
     latest: 'Dernière version',
+    latestShort: 'dernière',
     empty: 'Aucune note pour cette version.',
+    emptyTitle: 'Aucune note de version',
+    emptyText: 'Elles apparaîtront ici dès la prochaine publication — les mêmes que sur le site.',
     done: 'Compris',
   },
 
