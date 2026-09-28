@@ -62,8 +62,9 @@ export function ModalQueueHost() {
         <PatchNotesModal
           key={current.key}
           title={current.data.title}
-          kicker={current.data.kicker}
+          version={current.data.version}
           body={current.data.body}
+          publishedAt={current.data.publishedAt}
           counter={counter}
           onClose={close}
         />

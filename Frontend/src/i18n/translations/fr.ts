@@ -1144,22 +1144,32 @@ export const fr = {
 
   review: {
     title: 'Ton avis sur YuyuFrame',
+    // Une phrase, une idée. L'ancienne version passait par une incise
+    // (« — ou pas — ») qui obligeait à relire pour comprendre ce qu'on
+    // demandait : mettre la demande d'abord, la nuance ensuite.
     intro:
-      '{{count}} parties lancées ce mois-ci. Si le launcher te convient — ou pas — ton avis aide les suivants à se décider.',
+      '{{count}} parties lancées ce mois-ci. Que tu aimes ou non, ton avis aide les prochains à choisir.',
     no: 'Non merci',
     // Connexion : un avis anonyme depuis un launcher installé n'importe où
     // n'aurait aucune valeur.
     needAccount: 'Il faut être connecté à ton compte YuyuFrame pour donner ton avis.',
     signIn: 'Se connecter',
     // Dit avant l'envoi, pas après : c'est ce qui rend la note facile à donner.
-    ratingOnly: 'Seule la note part : elle compte dans la moyenne affichée sur le site, sans y publier de message.',
+    ratingOnly: 'La note seule ne publie rien : elle compte dans la moyenne du site, sans ton nom.',
     sendRating: 'Envoyer la note',
     addText: 'Écrire un avis',
-    thanks: 'Note enregistrée, merci. Si tu veux dire pourquoi, c’est le moment — c’est ce texte qui paraîtra sur le site.',
+    thanks: 'Note enregistrée, merci. Tu peux dire pourquoi : ce texte-là paraîtra sur le site.',
     placeholder: 'Ce qui te plaît, ce qui manque, ce qui coince…',
     published: 'Ce texte paraîtra sur le site, signé {{name}}.',
     publish: 'Publier',
     done: 'Fermer',
+  },
+
+  patchNotes: {
+    title: 'Notes de version',
+    latest: 'Dernière version',
+    empty: 'Aucune note pour cette version.',
+    done: 'Compris',
   },
 
   crash: {

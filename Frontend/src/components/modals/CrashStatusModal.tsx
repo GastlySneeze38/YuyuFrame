@@ -44,9 +44,9 @@ export function CrashStatusModal({
   }
 
   return (
-    <ModalShell title={t('crash.update.title')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
-      <div className="flex flex-col gap-4">
-        <p className="text-[12px] leading-relaxed text-txt-secondary">
+    <ModalShell title={t('crash.update.title')} onClose={onClose} counter={counter}>
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">
           {t('crash.update.line', { title, status: label })}
         </p>
 
@@ -54,21 +54,21 @@ export function CrashStatusModal({
             liste des rapports — deux formulations pour la même chose
             obligeraient à les tenir en phase. */}
         {known && (
-          <p className="text-[11px] leading-relaxed text-txt-muted">{t(`crash.statusHint.${status}`)}</p>
+          <p className="text-[12px] leading-relaxed text-txt-muted">{t(`crash.statusHint.${status}`)}</p>
         )}
 
         {/* La réponse écrite par l'équipe, quand il y en a une : c'est la
             seule partie que personne d'autre ne peut deviner. */}
         {note && (
           <div className="rounded-xl border border-line bg-surface-1 p-3">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-txt-muted">
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-txt-muted">
               {t('crash.update.team')}
             </p>
-            <p className="text-[12px] leading-relaxed text-txt-secondary">{note}</p>
+            <p className="text-[13px] leading-relaxed text-txt-secondary">{note}</p>
           </div>
         )}
 
-        <p className="text-[11px] text-txt-muted">{t('crash.update.ref', { ref: publicId })}</p>
+        <p className="text-[12px] text-txt-muted">{t('crash.update.ref', { ref: publicId })}</p>
 
         <div className="flex items-center gap-2">
           <Button variant="primary" onClick={read} className="flex-1">
@@ -79,7 +79,7 @@ export function CrashStatusModal({
           </Button>
         </div>
 
-        <p className="text-[10px] text-txt-muted">{t('crash.update.badgeStays')}</p>
+        <p className="text-[11.5px] text-txt-muted">{t('crash.update.badgeStays')}</p>
       </div>
     </ModalShell>
   )

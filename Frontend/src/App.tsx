@@ -420,7 +420,7 @@ export default function App() {
         pushModal({
           kind: 'patchNotes',
           key: `patch-note-${note.id}`,
-          data: { title: note.title, kicker: note.version, body: note.body },
+          data: { title: note.title, version: note.version, body: note.body, publishedAt: note.published_at },
         })
       })
       .catch(() => {})

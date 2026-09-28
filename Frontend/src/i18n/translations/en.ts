@@ -1141,18 +1141,25 @@ export const en: TranslationSchema = {
   review: {
     title: 'Your take on YuyuFrame',
     intro:
-      '{{count}} sessions launched this month. Whether the launcher works for you or not, your review helps the next person decide.',
+      '{{count}} sessions launched this month. Good or bad, your review helps the next person choose.',
     no: 'No thanks',
     needAccount: 'You need to be signed in to your YuyuFrame account to leave a review.',
     signIn: 'Sign in',
-    ratingOnly: 'Only the rating is sent: it counts towards the average shown on the site, without publishing a message there.',
+    ratingOnly: 'A rating alone publishes nothing: it counts towards the site average, without your name.',
     sendRating: 'Send the rating',
     addText: 'Write a review',
-    thanks: 'Rating saved, thank you. If you want to say why, now is the moment — that text is what appears on the site.',
+    thanks: 'Rating saved, thank you. You can say why: that text is what appears on the site.',
     placeholder: 'What you like, what is missing, what gets in the way…',
     published: 'This text will appear on the site, signed {{name}}.',
     publish: 'Publish',
     done: 'Close',
+  },
+
+  patchNotes: {
+    title: 'Release notes',
+    latest: 'Latest version',
+    empty: 'No notes for this version.',
+    done: 'Got it',
   },
 
   crash: {

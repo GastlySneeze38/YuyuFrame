@@ -55,6 +55,8 @@ export interface PatchNote {
   title: string
   /** Markdown, rendu par `PatchNotesModal`. */
   body: string
+  /** ISO 8601. */
+  published_at: string
 }
 
 export interface FleetConfig {

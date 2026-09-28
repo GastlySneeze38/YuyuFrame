@@ -44,12 +44,12 @@ export function SupportUpdateModal({
   }
 
   return (
-    <ModalShell title={t('support.update.title')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
-      <div className="flex flex-col gap-4">
-        <p className="text-[12px] leading-relaxed text-txt-secondary">{line}</p>
-        <p className="text-[11px] text-txt-muted">{t('support.update.ref', { ref: publicId })}</p>
+    <ModalShell title={t('support.update.title')} onClose={onClose} counter={counter}>
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">{line}</p>
+        <p className="text-[12px] text-txt-muted">{t('support.update.ref', { ref: publicId })}</p>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <Button variant="primary" onClick={read} className="flex-1">
             {t('support.update.read')}
           </Button>
@@ -60,7 +60,7 @@ export function SupportUpdateModal({
 
         {/* La pastille reste : le dire évite de croire qu'on vient de perdre
             le fil en fermant la fenêtre. */}
-        <p className="text-[10px] text-txt-muted">{t('support.update.badgeStays')}</p>
+        <p className="text-[11.5px] text-txt-muted">{t('support.update.badgeStays')}</p>
       </div>
     </ModalShell>
   )

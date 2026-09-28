@@ -17,7 +17,11 @@ export function ModalShell({
   title,
   onClose,
   children,
-  maxWidth = 'max-w-md',
+  // Élargi le 2026-09-28 : les modales de communication tassaient trois
+  // paragraphes et deux boutons dans 28 rem, ce qui donnait des lignes de six
+  // mots et une impression d'écran encombré. Une modale n'a pas à être
+  // étroite, elle a à être lisible.
+  maxWidth = 'max-w-lg',
   // Un clic à côté ne ferme plus : trop de saisies perdues d'un geste
   // involontaire. On ferme par la croix, par Échap ou par un bouton.
   closeOnBackdrop = false,
@@ -75,17 +79,17 @@ export function ModalShell({
     >
       <motion.div
         variants={modalVariants}
-        className={`my-auto w-full ${maxWidth} rounded-2xl p-6 flex flex-col gap-5 bg-bg-card border border-accent/30 shadow-[0_24px_80px_rgba(0,0,0,0.6)]`}
+        className={`my-auto w-full ${maxWidth} rounded-2xl p-7 flex flex-col gap-5 bg-bg-card border border-accent/30 shadow-[0_24px_80px_rgba(0,0,0,0.6)]`}
         style={cardStyle}
       >
         {title !== undefined && (
           <div className="flex flex-shrink-0 items-center justify-between gap-3">
-            <p className="font-bold text-txt-primary text-[15px]">{title}</p>
+            <p className="font-bold text-txt-primary text-[17px] leading-snug">{title}</p>
             <div className="flex flex-shrink-0 items-center gap-2">
               {/* Affiché seulement à partir de deux : « 1 sur 1 » n'apprend
                   rien et laisse croire qu'il y a une suite. */}
               {counter && counter.total > 1 && (
-                <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-txt-secondary">
+                <span className="rounded-full border border-accent/40 bg-accent/15 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-txt-primary">
                   {counter.index} / {counter.total}
                 </span>
               )}

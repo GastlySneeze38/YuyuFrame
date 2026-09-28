@@ -12,16 +12,25 @@ import { pressable } from '@/lib/motion'
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 export type ButtonSize = 'sm' | 'md'
 
+/**
+ * ── Contrastes revus le 2026-09-28 ────────────────────────────────────────
+ * Le bouton principal était un aplat d'accent à 20 % : sur le fond sombre
+ * d'une modale, il se lisait comme un bouton *désactivé*, et rien ne
+ * distinguait au premier coup d'œil « Envoyer à l'équipe » de « Plus tard ».
+ * Il est maintenant plein — c'est l'action principale, elle doit se voir sans
+ * chercher. Le fantôme, lui, gagne un trait : sans aucune bordure il ne
+ * ressemblait pas à un bouton.
+ */
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent/20 border-accent/40 text-white hover:bg-accent/30',
-  secondary: 'bg-surface-2 border-line text-txt-primary hover:bg-surface-3',
-  ghost: 'bg-transparent border-transparent text-txt-secondary hover:text-txt-primary hover:bg-surface-1',
+  primary: 'bg-accent border-accent text-white hover:bg-accent-hover hover:border-accent-hover shadow-[0_2px_12px_rgba(75,63,207,0.35)]',
+  secondary: 'bg-surface-3 border-line-strong text-txt-primary hover:bg-surface-4 hover:border-accent/40',
+  ghost: 'bg-transparent border-line text-txt-primary hover:bg-surface-2 hover:border-line-strong',
   danger: 'bg-danger/15 border-danger/40 text-danger hover:bg-danger/25',
 }
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-[12px] rounded-lg gap-1.5',
-  md: 'h-10 px-5 text-[13px] rounded-xl gap-2',
+  sm: 'h-8 px-3.5 text-[12.5px] rounded-lg gap-1.5',
+  md: 'h-11 px-5 text-[13.5px] rounded-xl gap-2',
 }
 
 export function Button({

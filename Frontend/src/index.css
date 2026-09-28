@@ -44,10 +44,16 @@
   --accent-hover: 96 84 230;
   --glow: 75 63 207;
 
-  /* Textes : primaire, secondaire, atténué. */
+  /* Textes : primaire, secondaire, atténué.
+   *
+   * Remontés le 2026-09-28 (0.6 → 0.72 et 0.35 → 0.5). Aux anciennes valeurs,
+   * un texte secondaire de 12 px sur le fond d'une carte tombait à environ
+   * 7:1 de contraste et l'atténué à 2,6:1 — sous le minimum lisible, et ça se
+   * sentait : il fallait s'y reprendre à deux fois pour lire une modale. Les
+   * trois niveaux restent bien distincts, ils sont juste tous plus lisibles. */
   --txt-primary: 255 255 255;
-  --txt-secondary: 255 255 255 / 0.6;
-  --txt-muted: 255 255 255 / 0.35;
+  --txt-secondary: 255 255 255 / 0.72;
+  --txt-muted: 255 255 255 / 0.5;
 
   /* États */
   --success: 74 222 128;

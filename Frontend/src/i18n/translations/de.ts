@@ -1141,18 +1141,25 @@ export const de: TranslationSchema = {
   review: {
     title: 'Deine Meinung zu YuyuFrame',
     intro:
-      '{{count}} Partien in diesem Monat gestartet. Ob dir der Launcher zusagt oder nicht — deine Bewertung hilft den Nächsten bei der Entscheidung.',
+      '{{count}} Partien in diesem Monat gestartet. Ob gut oder schlecht: Deine Bewertung hilft den Nächsten bei der Wahl.',
     no: 'Nein danke',
     needAccount: 'Für eine Bewertung musst du in deinem YuyuFrame-Konto angemeldet sein.',
     signIn: 'Anmelden',
-    ratingOnly: 'Nur die Note geht raus: Sie zählt für den Durchschnitt auf der Website, ohne dort eine Nachricht zu veröffentlichen.',
+    ratingOnly: 'Die Note allein veröffentlicht nichts: Sie zählt für den Schnitt der Website, ohne deinen Namen.',
     sendRating: 'Note senden',
     addText: 'Bewertung schreiben',
-    thanks: 'Note gespeichert, danke. Wenn du sagen willst, warum: Jetzt ist der Moment — dieser Text erscheint auf der Website.',
+    thanks: 'Note gespeichert, danke. Du kannst sagen, warum: Dieser Text erscheint auf der Website.',
     placeholder: 'Was dir gefällt, was fehlt, was stört…',
     published: 'Dieser Text erscheint auf der Website, signiert mit {{name}}.',
     publish: 'Veröffentlichen',
     done: 'Schließen',
+  },
+
+  patchNotes: {
+    title: 'Versionshinweise',
+    latest: 'Neueste Version',
+    empty: 'Keine Hinweise zu dieser Version.',
+    done: 'Verstanden',
   },
 
   crash: {

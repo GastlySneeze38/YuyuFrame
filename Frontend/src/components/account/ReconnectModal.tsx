@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ModalShell } from '@/components/ui/ModalShell'
+import { Button } from '@/components/ui/Button'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import type { QueuedModalProps } from '@/stores/useModalQueue'
@@ -26,26 +27,23 @@ export function ReconnectModal({ onClose, counter }: QueuedModalProps) {
   }
 
   return (
-    <ModalShell title={t('reconnect.title')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
-      <div className="flex flex-col gap-4">
-        <p className="text-[12px] leading-relaxed text-[rgba(255,255,255,0.6)]">
+    <ModalShell title={t('reconnect.title')} onClose={onClose} counter={counter}>
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">
           {t('reconnect.description')}
         </p>
 
-        <button
-          onClick={handleReconnect}
-          disabled={reconnecting}
-          className="h-10 rounded-xl text-[13px] font-semibold text-white transition-colors bg-[#4B3FCF] hover:bg-[#6155e8] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {reconnecting ? t('reconnect.reconnecting') : t('reconnect.button')}
-        </button>
-
-        <button
-          onClick={onClose}
-          className="h-9 rounded-xl text-[12px] text-[rgba(255,255,255,0.4)] transition-colors hover:text-[rgba(255,255,255,0.7)]"
-        >
-          {t('reconnect.later')}
-        </button>
+        {/* Les deux boutons passent par `Button` : l'action principale y est
+            un aplat plein, le refus un bouton bordé. Écrits à la main, ils
+            étaient deux nuances de sombre qu'on ne distinguait pas. */}
+        <div className="flex items-center gap-2.5">
+          <Button variant="primary" onClick={handleReconnect} loading={reconnecting} className="flex-1">
+            {reconnecting ? t('reconnect.reconnecting') : t('reconnect.button')}
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            {t('reconnect.later')}
+          </Button>
+        </div>
       </div>
     </ModalShell>
   )

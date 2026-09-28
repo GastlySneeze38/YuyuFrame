@@ -58,7 +58,7 @@ const PRIORITY: ModalKind[] = [
 
 /** Les données dont chaque modale a besoin pour se rendre. */
 type ModalPayload =
-  | { kind: 'patchNotes'; data: { title: string; kicker: string | null; body: string } }
+  | { kind: 'patchNotes'; data: { title: string; version: string; body: string; publishedAt: string | null } }
   | { kind: 'reconnect'; data: null }
   | { kind: 'crash'; data: { reportId: string; instanceId: string; title: string; cause: string } }
   | { kind: 'crashStatus'; data: { reportId: string; publicId: string; title: string; status: string; note: string | null } }

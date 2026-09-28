@@ -71,30 +71,36 @@ export function CrashReportModal({
   }
 
   return (
-    <ModalShell title={t('crash.modal.title')} onClose={onClose} maxWidth="max-w-md" counter={counter}>
-      <div className="flex flex-col gap-4">
-        <p className="text-[12px] leading-relaxed text-txt-secondary">
+    <ModalShell title={t('crash.modal.title')} onClose={onClose} counter={counter}>
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">
           {t('crash.modal.intro', { instance: instanceName })}
         </p>
 
-        <div className="flex flex-col gap-1 rounded-xl border border-border bg-surface-2 px-3.5 py-3">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-txt-muted">
+        {/* La cause du plantage est la seule ligne technique de la fenêtre :
+            elle est dans un encadré, en police à chasse fixe, pour qu'on
+            puisse la recopier sans la confondre avec la prose autour. */}
+        <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface-2 px-4 py-3.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-txt-muted">
             {causeLabel}
           </span>
-          <span className="text-[13px] font-semibold text-txt-primary">{title}</span>
+          <span className="break-words font-mono text-[13px] font-semibold leading-relaxed text-txt-primary">{title}</span>
         </div>
 
         {sent !== null ? (
-          <p className="text-[12px] text-success">
+          <p className="text-[13px] font-medium text-success">
             {sent ? t('crash.modal.sentWithRef', { ref: sent }) : t('crash.modal.sent')}
           </p>
         ) : (
-          <p className="text-[11px] leading-relaxed text-txt-muted">
+          <p className="text-[12px] leading-relaxed text-txt-muted">
             {signedIn ? t('crash.modal.privacy') : t('crash.signInFirst')}
           </p>
         )}
 
-        <div className="flex items-center gap-2">
+        {/* Les trois boutons ne tiennent pas côte à côte sans se tasser dès
+            que la langue s'allonge : ils s'enroulent plutôt que de rétrécir
+            jusqu'à couper les mots. */}
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Envoyer reste l'action principale tant que rien n'est parti ;
               une fois le rapport envoyé, il n'y a plus qu'à aller lire la
               réponse, donc c'est ce bouton-là qui prend la place. */}

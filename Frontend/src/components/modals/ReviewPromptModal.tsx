@@ -84,11 +84,11 @@ export function ReviewPromptModal({ sessions, onClose, counter }: QueuedModalPro
   // page du site existe toujours pour qui préfère passer par Google.
   if (!signedIn) {
     return (
-      <ModalShell title={t('review.title')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
-        <div className="flex flex-col gap-4">
-          <p className="text-[12px] leading-relaxed text-txt-secondary">{t('review.intro', { count: sessions })}</p>
-          <p className="text-[11px] leading-relaxed text-txt-muted">{t('review.needAccount')}</p>
-          <div className="flex items-center gap-2">
+      <ModalShell title={t('review.title')} onClose={onClose} counter={counter}>
+        <div className="flex flex-col gap-5">
+          <p className="text-[13px] leading-relaxed text-txt-secondary">{t('review.intro', { count: sessions })}</p>
+          <p className="text-[12px] leading-relaxed text-txt-muted">{t('review.needAccount')}</p>
+          <div className="flex items-center gap-2.5">
             <Button variant="primary" className="flex-1" onClick={() => { onClose(); navigate('/yuyu') }}>
               {t('review.signIn')}
             </Button>
@@ -100,9 +100,9 @@ export function ReviewPromptModal({ sessions, onClose, counter }: QueuedModalPro
   }
 
   return (
-    <ModalShell title={t('review.title')} onClose={onClose} maxWidth="max-w-sm" counter={counter}>
-      <div className="flex flex-col gap-4">
-        <p className="text-[12px] leading-relaxed text-txt-secondary">
+    <ModalShell title={t('review.title')} onClose={onClose} counter={counter}>
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">
           {sent ? t('review.thanks') : t('review.intro', { count: sessions })}
         </p>
 
@@ -111,7 +111,7 @@ export function ReviewPromptModal({ sessions, onClose, counter }: QueuedModalPro
         {/* Dit AVANT d'envoyer, pas après : c'est ce qui rend la note facile
             à donner — rien de ce qu'on met là n'apparaîtra publiquement. */}
         {!writing && (
-          <p className="text-[10px] leading-relaxed text-txt-muted">{t('review.ratingOnly')}</p>
+          <p className="text-[12px] leading-relaxed text-txt-muted">{t('review.ratingOnly')}</p>
         )}
 
         {writing && (
@@ -122,15 +122,15 @@ export function ReviewPromptModal({ sessions, onClose, counter }: QueuedModalPro
               maxLength={1000}
               rows={4}
               placeholder={t('review.placeholder')}
-              className="w-full resize-none rounded-xl border border-line bg-surface-1 p-3 text-[12px] leading-relaxed text-txt-primary outline-none transition-colors focus:border-accent/50"
+              className="w-full resize-none rounded-xl border border-line bg-surface-1 p-3.5 text-[13px] leading-relaxed text-txt-primary outline-none transition-colors placeholder:text-txt-muted focus:border-accent/50"
             />
-            <p className="text-[10px] leading-relaxed text-txt-muted">
+            <p className="text-[12px] leading-relaxed text-txt-muted">
               {t('review.published', { name: username ?? '' })}
             </p>
           </div>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           {writing ? (
             <Button
               variant="primary"

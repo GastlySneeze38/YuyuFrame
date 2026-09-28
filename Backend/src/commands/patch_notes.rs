@@ -31,8 +31,8 @@ fn site_base() -> String {
     std::env::var("YUYU_SITE_URL").unwrap_or_else(|_| "https://yuyuframe.eu".into())
 }
 
-/// Une note telle que le site la sert. Les champs qu'on n'utilise pas
-/// (`published_at`) sont simplement ignorés par serde.
+/// Une note telle que le site la sert. Les champs qu'on n'utilise pas sont
+/// simplement ignorés par serde.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatchNote {
     pub id: String,
@@ -40,6 +40,8 @@ pub struct PatchNote {
     pub title: String,
     /// Markdown, le même que celui affiché sur le site.
     pub body: String,
+    /// ISO 8601 — affiché dans l'en-tête de la modale, comme sur le site.
+    pub published_at: String,
 }
 
 /// La note la plus récente, ou `None` s'il n'y en a pas — ou si le site n'a
