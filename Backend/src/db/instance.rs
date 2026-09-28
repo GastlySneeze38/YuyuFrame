@@ -140,6 +140,21 @@ pub fn instance_delete(conn: &Connection, id: &str, user_id: i64) -> Result<()> 
     Ok(())
 }
 
+/// Identifiants de **toutes** les instances connues, tous comptes confondus.
+///
+/// Sert uniquement à la synchronisation de démarrage, et c'est délibéré : un
+/// dossier n'est « inconnu » que s'il n'appartient à personne. Comparer à la
+/// seule liste du compte courant faisait passer pour orphelines les instances
+/// d'un autre compte — et celles de tout le monde quand on était déconnecté,
+/// puisque `yuyu_user_id` valait alors 0 et ne correspondait plus à rien.
+pub fn instance_all_ids(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT id FROM instances")?;
+    let rows = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
 /// Reassigne les instances orphelines (yuyu_user_id = 0) à l'utilisateur qui vient de se connecter.
 pub fn instance_claim_unclaimed(conn: &Connection, user_id: i64) -> Result<()> {
     conn.execute(

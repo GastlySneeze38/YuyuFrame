@@ -1,6 +1,8 @@
 // Racine de toutes les données YuyuFrame (agent LauncherAgent, P2P, .minecraft
-// partagé, skins offline) — PAS la base SQLite, qui reste résolue
-// indépendamment à côté de l'exécutable/du repo (voir lib.rs). Configurable
+// partagé, skins offline) — **et la base SQLite depuis le 2026-09-28** : elle
+// vivait à côté de l'exécutable, donc une réinstallation l'emportait et le
+// launcher repartait sur une base vide (voir `migrate_db_from_exe_dir` dans
+// lib.rs). En dev seulement, elle reste dans Backend/. Configurable
 // par l'utilisateur (Settings.tsx, section Stockage) : un petit fichier ancre
 // retient le chemin réel choisi. Cet ancre vit TOUJOURS à côté du dossier
 // `YuyuFrame` par défaut (jamais dedans) — sinon le déplacer supprimerait le

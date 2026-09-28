@@ -79,6 +79,45 @@ fn migrate_legacy_instance_ids(conn: &rusqlite::Connection) -> Vec<(String, Stri
     migrated
 }
 
+/// Récupère la base restée à côté de l'exécutable par les versions ≤ 0.1.0-27.
+///
+/// Copie plutôt que déplace : si quelque chose se passe mal pendant la
+/// migration, l'original est toujours là. L'ancienne base n'est pas effacée —
+/// elle sera emportée par la prochaine réinstallation, ce qui est justement
+/// la raison de ce déménagement.
+///
+/// Ne fait rien si la nouvelle existe déjà : elle fait autorité, et écraser
+/// une base en service par une vieille copie serait pire que le bug d'origine.
+fn migrate_db_from_exe_dir(target: &std::path::Path) {
+    if target.exists() {
+        return;
+    }
+    let Some(old) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("yuyu.db")))
+    else {
+        return;
+    };
+    if !old.is_file() {
+        return;
+    }
+    if let Some(parent) = target.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match std::fs::copy(&old, target) {
+        Ok(_) => tracing::info!(
+            "Base de données récupérée depuis {} vers {}",
+            old.display(),
+            target.display()
+        ),
+        Err(e) => tracing::error!(
+            "Récupération de la base {} impossible : {} — le launcher démarre sur une base neuve",
+            old.display(),
+            e
+        ),
+    }
+}
+
 pub fn run() {
     // Le build release tourne en `windows_subsystem = "windows"` (cf.
     // main.rs) — aucune console n'est attachée, donc tous les logs qui
@@ -154,11 +193,22 @@ pub fn run() {
                 // Dev : garde la DB dans Backend/ à côté du code source
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("yuyu.db")
             } else {
-                // Prod : à côté de l'exécutable
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(|d| d.join("yuyu.db")))
-                    .unwrap_or_else(|| std::path::PathBuf::from("yuyu.db"))
+                // Prod : dans les données du launcher, **jamais** à côté de
+                // l'exécutable.
+                //
+                // Elle y vivait jusqu'au 2026-09-28, et c'est ce qui a coûté
+                // leurs instances à tous ceux qui ont installé la version
+                // suivante : l'installeur remplace son dossier, la base part
+                // avec, le launcher redémarre sur une base vide — et la
+                // synchronisation de démarrage effaçait alors les dossiers
+                // qu'elle ne reconnaissait plus (voir `instance_startup_sync`,
+                // qui ne supprime plus rien).
+                //
+                // Le dossier de données, lui, survit aux mises à jour et suit
+                // un éventuel déplacement (Réglages → Stockage).
+                let target = paths::root().join("yuyu.db");
+                migrate_db_from_exe_dir(&target);
+                target
             };
 
             let conn = db::init_db(&db_path).expect("Impossible d'initialiser la base de données");

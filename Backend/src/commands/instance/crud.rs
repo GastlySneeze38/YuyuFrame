@@ -374,22 +374,76 @@ pub async fn instance_open_folder(instance_id: String) -> Result<(), String> {
     crate::paths::open_in_explorer(&instance_dir(&instance_id))
 }
 
-/// Synchronise la DB avec les dossiers réels au démarrage.
-/// mode = "db_wins"   → supprime les dossiers orphelins sur le disque
-/// mode = "disk_wins" → importe en DB les dossiers qui ont un meta.json
+/// Ce que la synchronisation de démarrage a le droit de faire.
+///
+/// Séparé de la commande pour être testable : c'est du calcul d'ensembles, et
+/// c'est exactement là que s'est produite la perte de données du 2026-09-27
+/// (voir la javadoc de `instance_startup_sync`).
+struct StartupSyncPlan {
+    /// Lignes du compte courant dont le dossier a disparu — à retirer de la
+    /// liste, le dossier n'existe plus de toute façon.
+    rows_to_forget: Vec<String>,
+    /// Dossiers qu'aucune ligne de la base ne revendique, tous comptes
+    /// confondus. Candidats à l'import — **jamais** à la suppression.
+    folders_unknown: Vec<String>,
+}
+
+fn plan_startup_sync(
+    disk_ids: &[String],
+    all_db_ids: &[String],
+    own_db_ids: &[String],
+) -> StartupSyncPlan {
+    use std::collections::HashSet;
+    let disk: HashSet<&String> = disk_ids.iter().collect();
+    let all: HashSet<&String> = all_db_ids.iter().collect();
+
+    let mut rows_to_forget: Vec<String> = own_db_ids
+        .iter()
+        .filter(|id| !disk.contains(id))
+        .cloned()
+        .collect();
+    let mut folders_unknown: Vec<String> = disk_ids
+        .iter()
+        .filter(|id| !all.contains(id))
+        .cloned()
+        .collect();
+    rows_to_forget.sort();
+    folders_unknown.sort();
+
+    StartupSyncPlan { rows_to_forget, folders_unknown }
+}
+
+/// Réconcilie la base et les dossiers réels au démarrage.
+///
+/// ── Ce que cette fonction ne fait plus, et pourquoi ───────────────────────
+/// Elle supprimait les dossiers « orphelins » avec `remove_dir_all` quand le
+/// mode valait `db_wins` (le défaut). Trois défauts qui se sont additionnés
+/// le 2026-09-27 et ont effacé les instances — mondes compris — de tous ceux
+/// qui ont installé la nouvelle version :
+///
+///  1. la liste de référence était **celle du compte connecté**
+///     (`instance_list(db, uid)`). Déconnecté, `uid` vaut 0 et ne correspond
+///     à aucune ligne : toutes les instances devenaient orphelines d'un coup.
+///     Connecté sur un second compte, celles du premier subissaient le même
+///     sort ;
+///  2. la base vivait **à côté de l'exécutable** (voir `lib.rs`) : une
+///     réinstallation la laissait derrière elle, et le launcher redémarrait
+///     donc sur une base vide, face à un disque plein d'instances ;
+///  3. la suppression était **définitive et silencieuse** — pas de corbeille,
+///     pas de confirmation, pas de log.
+///
+/// Un launcher n'a aucune raison d'effacer des mondes tout seul. Le mode ne
+/// décide donc plus que du sort des dossiers **inconnus de toute la base** :
+/// les importer dans la liste, ou les laisser tranquilles. Dans les deux cas
+/// ils restent sur le disque.
 #[tauri::command]
 pub async fn instance_startup_sync(
     state: tauri::State<'_, SharedState>,
     mode: String,
 ) -> Result<(), String> {
-    use std::collections::HashSet;
-
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-
-    let db_rows = db::instance_list(&db, uid).map_err(|e| e.to_string())?;
-    let db_ids: HashSet<String> = db_rows.iter().map(|r| r.id.clone()).collect();
 
     let instances_root = minecraft_dir().join("instances");
     if !instances_root.is_dir() {
@@ -397,39 +451,94 @@ pub async fn instance_startup_sync(
         return Ok(());
     }
 
-    let disk_ids: HashSet<String> = std::fs::read_dir(&instances_root)
+    let disk_ids: Vec<String> = std::fs::read_dir(&instances_root)
         .map_err(|e| e.to_string())?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
         .filter_map(|e| e.file_name().into_string().ok())
         .collect();
 
-    // DB entry existe mais le dossier a disparu → retirer de la DB
-    for id in db_ids.difference(&disk_ids) {
+    // Tous comptes confondus pour juger un dossier inconnu, le compte courant
+    // pour nettoyer ses propres lignes — voir `plan_startup_sync`.
+    let all_db_ids = db::instance_all_ids(&db).map_err(|e| e.to_string())?;
+    let own_db_ids: Vec<String> = db::instance_list(&db, uid)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|r| r.id)
+        .collect();
+
+    let plan = plan_startup_sync(&disk_ids, &all_db_ids, &own_db_ids);
+
+    for id in &plan.rows_to_forget {
+        tracing::info!("Instance {} retirée de la liste : son dossier n'existe plus", id);
         db::instance_delete(&db, id, uid).ok();
     }
 
-    // Dossier présent mais pas en DB
-    let orphan_ids: Vec<String> = disk_ids.difference(&db_ids).cloned().collect();
-    match mode.as_str() {
-        "db_wins" => {
-            for id in orphan_ids {
-                let _ = std::fs::remove_dir_all(instances_root.join(&id));
-            }
+    for id in &plan.folders_unknown {
+        // `meta.json` est écrit à chaque création/modification (voir
+        // `write_meta`) : c'est ce qui permet de retrouver une instance dont
+        // la base a été perdue. Sans lui on ne sait pas quoi inscrire — le
+        // dossier reste sur le disque, intact, en attendant mieux.
+        let meta_path = instances_root.join(id).join("meta.json");
+        let Ok(json) = std::fs::read_to_string(&meta_path) else {
+            tracing::info!("Dossier {} inconnu de la base et sans meta.json — laissé tel quel", id);
+            continue;
+        };
+        if mode != "disk_wins" {
+            tracing::info!("Dossier {} inconnu de la base — non importé (réglage), laissé tel quel", id);
+            continue;
         }
-        "disk_wins" => {
-            for id in orphan_ids {
-                let meta_path = instances_root.join(&id).join("meta.json");
-                if let Ok(json) = std::fs::read_to_string(&meta_path) {
-                    if let Ok(meta) = serde_json::from_str::<InstanceMeta>(&json) {
-                        db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description, &meta.jvm_vendor, meta.jvm_custom_path.as_deref(), &meta.gc_policy, &meta.jvm_extra_args, &meta.jvm_args_mode).ok();
-                    }
-                }
-                // Pas de meta.json → on laisse le dossier, impossible d'importer
+        match serde_json::from_str::<InstanceMeta>(&json) {
+            Ok(meta) => {
+                tracing::info!("Instance {} réimportée depuis son meta.json", id);
+                db::instance_insert(&db, &meta.id, uid, &meta.name, &meta.mc_version, &meta.loader, meta.ram_mb, &meta.description, &meta.jvm_vendor, meta.jvm_custom_path.as_deref(), &meta.gc_policy, &meta.jvm_extra_args, &meta.jvm_args_mode).ok();
             }
+            Err(e) => tracing::warn!("meta.json illisible pour {} : {} — dossier laissé tel quel", id, e),
         }
-        _ => {}
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn un_dossier_appartenant_a_un_autre_compte_n_est_pas_orphelin() {
+        // Le cœur de la perte de données : `own` est vide (déconnecté, ou
+        // connecté sur un autre compte) alors que la base connaît bien ces
+        // instances. Rien ne doit être considéré comme inconnu.
+        let plan = plan_startup_sync(&ids(&["a", "b"]), &ids(&["a", "b"]), &ids(&[]));
+        assert!(plan.folders_unknown.is_empty());
+        assert!(plan.rows_to_forget.is_empty());
+    }
+
+    #[test]
+    fn une_base_vide_ne_condamne_rien() {
+        // Base perdue (réinstallation) : tout le disque est « inconnu », mais
+        // inconnu ne veut plus dire supprimable — seulement importable.
+        let plan = plan_startup_sync(&ids(&["a", "b"]), &ids(&[]), &ids(&[]));
+        assert_eq!(plan.folders_unknown, ids(&["a", "b"]));
+        assert!(plan.rows_to_forget.is_empty());
+    }
+
+    #[test]
+    fn une_ligne_sans_dossier_est_oubliee() {
+        let plan = plan_startup_sync(&ids(&["a"]), &ids(&["a", "b"]), &ids(&["a", "b"]));
+        assert_eq!(plan.rows_to_forget, ids(&["b"]));
+        assert!(plan.folders_unknown.is_empty());
+    }
+
+    #[test]
+    fn seules_les_lignes_du_compte_courant_sont_oubliees() {
+        // `b` appartient à un autre compte et son dossier a disparu : ce n'est
+        // pas à la session courante de faire le ménage chez lui.
+        let plan = plan_startup_sync(&ids(&["a"]), &ids(&["a", "b"]), &ids(&["a"]));
+        assert!(plan.rows_to_forget.is_empty());
+    }
 }
