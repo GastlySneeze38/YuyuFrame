@@ -14,7 +14,6 @@ import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServ
 import { useStore, type Lang } from '@/stores/useStore'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
-import { useFleet } from '@/stores/useFleet'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
@@ -397,29 +396,33 @@ export default function App() {
   }, [])
 
   /**
-   * Notes de version — annonces de flotte à l'emplacement `modal`.
+   * Notes de version — celles du site (back-office → Contenu → Patch notes).
    *
-   * Le serveur a déjà fait le tri (OS, plan, version, fenêtre de validité) et
-   * le backend relit la configuration toutes les quinze minutes ; on se
-   * contente de déposer ce qui arrive. La file refuse d'elle-même ce qui a
-   * déjà été lu, donc redéposer à chaque relecture ne coûte rien.
+   * Elles venaient d'une annonce de flotte à l'emplacement `modal`, créée
+   * dans un tout autre écran : deux endroits nommés « notes de version », et
+   * publier dans celui auquel on pense n'affichait rien dans le launcher.
+   * Une seule source désormais — la même note part sur le site, sur Discord
+   * et ici.
    *
-   * La clé porte l'identifiant de l'annonce : une note corrigée dans le
-   * back-office garde le sien et ne réapparaît pas à ceux qui l'ont déjà vue,
-   * tandis qu'une nouvelle note est une nouvelle clé.
+   * La clé porte l'identifiant de la note : corrigée dans le back-office elle
+   * garde le sien et ne réapparaît pas à ceux qui l'ont déjà lue, tandis
+   * qu'une nouvelle note est une nouvelle clé. La file refuse d'elle-même ce
+   * qui a déjà été vu.
    */
-  const announcements = useFleet((s) => s.config.announcements)
   useEffect(() => {
     if (isConsoleWindow) return
-    for (const a of announcements) {
-      if (a.placement !== 'modal' || !a.title) continue
-      pushModal({
-        kind: 'patchNotes',
-        key: `announcement-${a.id}`,
-        data: { title: a.title, kicker: a.kicker, body: a.message },
+    api.patchNotes.latest()
+      .then((note) => {
+        if (!note) return
+        pushModal({
+          kind: 'patchNotes',
+          key: `patch-note-${note.id}`,
+          data: { title: note.title, kicker: note.version, body: note.body },
+        })
       })
-    }
-  }, [announcements, pushModal])
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Pastille du support : sans cette veille, une réponse de l'équipe n'était
   // visible qu'en allant soi-même sur l'écran Support. Relue au démarrage

@@ -37,14 +37,24 @@ export interface FleetAnnouncement {
   message: string
   level: 'info' | 'warning' | 'critical'
   /** notice : bandeau en haut du launcher. home : bannière du tableau
-   *  d'accueil. modal : notes de version, déposées dans la file de modales. */
-  placement: 'notice' | 'home' | 'modal'
+   *  d'accueil. Les notes de version ne passent plus par là — voir
+   *  `PatchNote`. */
+  placement: 'notice' | 'home'
   /** Étiquette courte avant le titre (« ÉVÉNEMENT »). */
   kicker: string | null
   title: string | null
   /** none | festive — habillage du panneau d'accueil. */
   theme: 'none' | 'festive'
   ends_at: string | null
+}
+
+/** Une note de version du site — même contenu que sur yuyuframe.eu. */
+export interface PatchNote {
+  id: string
+  version: string
+  title: string
+  /** Markdown, rendu par `PatchNotesModal`. */
+  body: string
 }
 
 export interface FleetConfig {
@@ -514,6 +524,13 @@ export const api = {
     read: (instanceId: string) => invoke<McOption[]>('mc_options_read', { instanceId }),
     write: (instanceId: string, changes: McOption[]) =>
       invoke<McOption[]>('mc_options_write', { instanceId, changes }),
+  },
+
+  // Notes de version — la table du site (Contenu → Patch notes du
+  // back-office), lue directement chez lui. `null` = aucune note publiée, ou
+  // site injoignable : dans les deux cas l'interface n'affiche rien.
+  patchNotes: {
+    latest: () => invoke<PatchNote | null>('patch_notes_latest'),
   },
 
   // Pays d'où l'on se connecte, demandé une seule fois au premier démarrage

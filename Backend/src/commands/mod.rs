@@ -10,6 +10,7 @@ pub mod jvm_profile;
 pub mod launch;
 pub mod locale;
 pub mod modrinth;
+pub mod patch_notes;
 pub mod pending;
 pub mod plan;
 pub mod reviews;

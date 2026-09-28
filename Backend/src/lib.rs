@@ -457,6 +457,7 @@ pub fn run() {
             commands::backup::backup_settings_save,
             commands::backup::backup_settings_reset,
             commands::locale::detect_country,
+            commands::patch_notes::patch_notes_latest,
             commands::system::info::system_memory_info,
             commands::system::storage::data_root_get,
             commands::system::storage::data_root_set,
