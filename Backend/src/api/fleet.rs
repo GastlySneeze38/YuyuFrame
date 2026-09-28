@@ -100,6 +100,25 @@ pub async fn current() -> Arc<FleetConfig> {
     cache().read().await.clone()
 }
 
+/// La fenêtre à prévenir quand la configuration change.
+///
+/// ── Pourquoi une poignée globale ──────────────────────────────────────────
+/// `reload` est appelée depuis trois endroits (la boucle de démarrage, la
+/// relecture toutes les quinze minutes, et la commande `fleet_refresh` juste
+/// après une connexion) dont aucun n'a de `AppHandle` sous la main. Plutôt
+/// que de faire passer la poignée dans trois signatures, on la retient une
+/// fois pour toutes ici, au démarrage.
+///
+/// Absente en test, et absente tant que `spawn_refresh` n'a pas tourné : dans
+/// les deux cas on se contente de ne prévenir personne.
+fn app_handle() -> &'static std::sync::OnceLock<tauri::AppHandle> {
+    static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+    &APP
+}
+
+/// Nom de l'événement écouté par le frontend (`stores/useFleet.ts`).
+pub const CONFIG_EVENT: &str = "fleet_config";
+
 /// Recharge depuis le serveur. Renvoie la configuration en place ensuite :
 /// la nouvelle si l'appel a réussi, la précédente sinon.
 pub async fn reload(state: &SharedState) -> Arc<FleetConfig> {
@@ -122,6 +141,18 @@ pub async fn reload(state: &SharedState) -> Arc<FleetConfig> {
             Ok(config) => {
                 let config = Arc::new(config);
                 *cache().write().await = config.clone();
+                // Prévenir tout de suite plutôt que d'attendre que l'interface
+                // repasse demander. Elle relit aussi toutes les minutes, mais
+                // au démarrage cette minute se voyait : le launcher s'ouvrait,
+                // et la bannière d'accueil comme les modales de notes de
+                // version n'arrivaient qu'une minute plus tard — souvent après
+                // que la partie soit lancée, donc jamais.
+                if let Some(app) = app_handle().get() {
+                    use tauri::Emitter;
+                    if let Err(e) = app.emit(CONFIG_EVENT, &*config) {
+                        tracing::warn!("configuration de flotte non transmise à l'interface : {e}");
+                    }
+                }
                 config
             }
             Err(e) => {
@@ -156,7 +187,8 @@ async fn anonymous_get(
 /// `tauri::async_runtime::spawn` et pas `tokio::spawn` : le `setup` de Tauri
 /// s'exécute sur le fil principal, hors de toute boucle asynchrone — un
 /// `tokio::spawn` y plante aussitôt (« there is no reactor running »).
-pub fn spawn_refresh(state: SharedState) {
+pub fn spawn_refresh(state: SharedState, app: tauri::AppHandle) {
+    let _ = app_handle().set(app);
     tauri::async_runtime::spawn(async move {
         loop {
             // Rien à rafraîchir sans fenêtre : cette configuration ne sert

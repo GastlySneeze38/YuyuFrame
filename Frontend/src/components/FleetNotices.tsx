@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useFleet } from '@/stores/useFleet'
 import { useStore } from '@/stores/useStore'
+import { useTauriEvent } from '@/hooks/useTauriEvent'
+import type { FleetConfig } from '@/api/client'
 import { useT } from '@/i18n'
 
 /**
@@ -17,12 +19,16 @@ const LEVEL_STYLES: Record<string, string> = {
   critical: 'bg-red-500/15 border-red-500/40 text-red-100',
 }
 
-/** Relecture périodique : le backend rafraîchit, on ne fait que relire. */
+/**
+ * Filet de sécurité seulement : le backend pousse `fleet_config` dès qu'il a
+ * du neuf (voir plus bas). Ce sondage ne rattrape qu'un événement manqué —
+ * une fenêtre recréée juste après la fin d'une partie, par exemple.
+ */
 const POLL_MS = 60_000
 
 export function FleetNotices() {
   const t = useT()
-  const { config, dismissed, load, dismiss } = useFleet()
+  const { config, dismissed, load, dismiss, apply } = useFleet()
   const licenseState = useStore((s) => s.yuyuLicenseState)
 
   useEffect(() => {
@@ -30,6 +36,12 @@ export function FleetNotices() {
     const timer = setInterval(load, POLL_MS)
     return () => clearInterval(timer)
   }, [load])
+
+  // La configuration arrive par là au démarrage : le backend l'émet dès que
+  // le serveur a répondu, sans attendre le prochain sondage. C'est ce qui
+  // fait apparaître la bannière d'accueil et les modales de notes de version
+  // au lancement plutôt qu'une minute après.
+  useTauriEvent<FleetConfig>('fleet_config', apply)
 
   // Version interdite : rien d'autre ne doit être utilisable.
   if (config.launcher_blocked) {

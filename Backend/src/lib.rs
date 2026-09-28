@@ -284,7 +284,7 @@ pub fn run() {
             // Pilotage par le back-office (version minimale, interrupteurs,
             // bannières) : première lecture tout de suite, puis toutes les
             // 15 minutes. Jamais bloquant — sans réponse, rien n'est coupé.
-            api::fleet::spawn_refresh(app_state);
+            api::fleet::spawn_refresh(app_state, app.handle().clone());
 
             // Manifeste Mojang réchauffé en tâche de fond : l'écran des
             // instances le demandait à chaque ouverture et attendait le
