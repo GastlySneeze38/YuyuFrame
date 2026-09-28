@@ -1156,6 +1156,15 @@ export const es: TranslationSchema = {
   },
 
   crash: {
+    update: {
+      title: 'Tu informe ha cambiado',
+      line: '«{{title}}» ha pasado a «{{status}}».',
+      team: 'Respuesta del equipo',
+      ref: 'Referencia {{ref}}',
+      read: 'Leer',
+      later: 'Más tarde',
+      badgeStays: 'El punto permanece hasta que se abra el informe.',
+    },
     modal: {
       title: 'El juego se ha cerrado inesperadamente',
       intro:

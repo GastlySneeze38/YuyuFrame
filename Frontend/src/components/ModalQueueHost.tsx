@@ -5,6 +5,7 @@ import { PatchNotesModal } from '@/components/PatchNotesModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { CrashReportModal } from '@/components/modals/CrashReportModal'
+import { CrashStatusModal } from '@/components/modals/CrashStatusModal'
 import { SupportUpdateModal } from '@/components/modals/SupportUpdateModal'
 import { ReviewPromptModal } from '@/components/modals/ReviewPromptModal'
 
@@ -28,6 +29,7 @@ const HANDLED: ModalKind[] = [
   'patchNotes',
   'reconnect',
   'crash',
+  'crashStatus',
   'support',
   'offlineReminder',
   'review',
@@ -79,6 +81,18 @@ export function ModalQueueHost() {
           instanceId={current.data.instanceId}
           title={current.data.title}
           cause={current.data.cause}
+          counter={counter}
+          onClose={close}
+        />
+      )}
+      {current?.kind === 'crashStatus' && (
+        <CrashStatusModal
+          key={current.key}
+          reportId={current.data.reportId}
+          publicId={current.data.publicId}
+          title={current.data.title}
+          status={current.data.status}
+          note={current.data.note}
           counter={counter}
           onClose={close}
         />

@@ -28,6 +28,7 @@ export type ModalKind =
   | 'patchNotes'
   | 'reconnect'
   | 'crash'
+  | 'crashStatus'
   | 'support'
   | 'offlineReminder'
   | 'review'
@@ -39,14 +40,17 @@ export type ModalKind =
  * changer, donc elles éclairent tout ce qui suit. La reconnexion vient
  * ensuite parce que sans compte valide, rien d'autre ne se joue. Le plantage
  * précède le support — on rend compte de ce qui vient de casser avant de
- * parler de ce qu'on a déjà signalé. Le rappel d'achat et la demande d'avis
- * ferment la marche : ce sont les deux seules qui demandent quelque chose au
- * lieu d'apporter une information.
+ * parler de ce qu'on a déjà signalé. Les nouvelles d'un rapport déjà envoyé
+ * viennent juste après, pour la même raison : ce qui vient d'arriver passe
+ * avant ce qu'on attendait. Le rappel d'achat et la demande d'avis ferment la
+ * marche : ce sont les deux seules qui demandent quelque chose au lieu
+ * d'apporter une information.
  */
 const PRIORITY: ModalKind[] = [
   'patchNotes',
   'reconnect',
   'crash',
+  'crashStatus',
   'support',
   'offlineReminder',
   'review',
@@ -57,6 +61,7 @@ type ModalPayload =
   | { kind: 'patchNotes'; data: { title: string; kicker: string | null; body: string } }
   | { kind: 'reconnect'; data: null }
   | { kind: 'crash'; data: { reportId: string; instanceId: string; title: string; cause: string } }
+  | { kind: 'crashStatus'; data: { reportId: string; publicId: string; title: string; status: string; note: string | null } }
   | { kind: 'support'; data: { ticketId: string; publicId: string; subject: string; status: string } }
   | { kind: 'offlineReminder'; data: null }
   | { kind: 'review'; data: { sessions: number } }

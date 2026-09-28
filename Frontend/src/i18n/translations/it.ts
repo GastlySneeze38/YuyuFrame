@@ -1156,6 +1156,15 @@ export const it: TranslationSchema = {
   },
 
   crash: {
+    update: {
+      title: 'La tua segnalazione è cambiata',
+      line: '«{{title}}» è passata a «{{status}}».',
+      team: 'Risposta del team',
+      ref: 'Riferimento {{ref}}',
+      read: 'Leggi',
+      later: 'Più tardi',
+      badgeStays: 'Il pallino resta finché la segnalazione non viene aperta.',
+    },
     modal: {
       title: 'Il gioco è crashato',
       intro:

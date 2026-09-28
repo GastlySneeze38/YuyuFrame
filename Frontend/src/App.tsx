@@ -15,6 +15,7 @@ import { useStore, type Lang } from '@/stores/useStore'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
 import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupportWatch'
+import { useCrashWatch } from '@/stores/useCrashWatch'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
@@ -110,6 +111,8 @@ export default function App() {
   const yuyuSignedIn = useStore((s) => s.yuyuSignedIn)
   const refreshSupportWatch = useSupportWatch((s) => s.refresh)
   const clearSupportWatch = useSupportWatch((s) => s.clear)
+  const refreshCrashWatch = useCrashWatch((s) => s.refresh)
+  const clearCrashWatch = useCrashWatch((s) => s.clear)
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
@@ -424,18 +427,28 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Pastille du support : sans cette veille, une réponse de l'équipe n'était
-  // visible qu'en allant soi-même sur l'écran Support. Relue au démarrage
-  // puis périodiquement, et remise à zéro dès qu'il n'y a plus de compte —
+  // Pastille du support et des rapports de plantage : sans cette veille, une
+  // réponse de l'équipe — ou le statut donné à un plantage envoyé — n'était
+  // visible qu'en allant soi-même sur l'écran Support. Relues au démarrage
+  // puis périodiquement, et remises à zéro dès qu'il n'y a plus de compte :
   // une pastille qui survivrait à la déconnexion ne parlerait de personne.
+  //
+  // Les deux vont ensemble parce qu'elles éclairent la même entrée de la
+  // barre de navigation, et qu'elles demandent la même chose au serveur au
+  // même moment.
   useEffect(() => {
     if (isConsoleWindow) return
     if (!yuyuSignedIn) {
       clearSupportWatch()
+      clearCrashWatch()
       return
     }
-    refreshSupportWatch()
-    const timer = setInterval(refreshSupportWatch, SUPPORT_POLL_MS)
+    const refresh = () => {
+      refreshSupportWatch()
+      refreshCrashWatch()
+    }
+    refresh()
+    const timer = setInterval(refresh, SUPPORT_POLL_MS)
     return () => clearInterval(timer)
   }, [yuyuSignedIn])
 

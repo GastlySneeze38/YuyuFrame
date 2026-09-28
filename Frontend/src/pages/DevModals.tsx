@@ -63,6 +63,21 @@ const SAMPLES: { label: string; hint: string; item: QueuedModal }[] = [
     },
   },
   {
+    label: 'Plantage — statut',
+    hint: 'L’équipe a donné un statut à un rapport envoyé',
+    item: {
+      kind: 'crashStatus',
+      key: 'dev-crash-status',
+      data: {
+        reportId: 'dev-remote-report',
+        publicId: 'CR-4F2A',
+        title: 'java.lang.NoSuchMethodError: net.minecraft.client.Options',
+        status: 'fixed',
+        note: 'Venait de Sodium 0.5.3, corrigé dans la 0.5.4 — mets le mod à jour.',
+      },
+    },
+  },
+  {
     label: 'Support — réponse',
     hint: 'L’équipe a répondu à une demande',
     item: {

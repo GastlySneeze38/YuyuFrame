@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useCrashWatch } from '@/stores/useCrashWatch'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { api } from '@/api/client'
@@ -59,6 +61,30 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
   const [entries, setEntries] = useState<CrashEntry[] | null>(null)
   const [openKey, setOpenKey] = useState<string | null>(null)
 
+  /**
+   * Ouvrir un rapport vaut lecture de son statut : c'est ce qui éteint la
+   * pastille (voir `stores/useCrashWatch.ts`). Fermer la modale qui annonce
+   * le changement ne suffit pas — on peut la fermer sans avoir rien lu.
+   *
+   * Seuls les rapports envoyés comptent : un rapport local n'a pas de statut.
+   */
+  const openEntry = useCallback((entry: CrashEntry) => {
+    setOpenKey(entry.key)
+    if (entry.remote) {
+      useCrashWatch.getState().acknowledge(entry.remote.id, entry.remote.status, entry.remote.status_updated_at)
+    }
+  }, [])
+
+  // `?crash=<id>` — la modale « ton rapport a bougé » renvoie ici avec le
+  // rapport en question. Sans ça elle déposerait sur une liste où il faudrait
+  // le retrouver soi-même, ce qui est précisément ce qu'on voulait éviter.
+  const wanted = new URLSearchParams(useLocation().search).get('crash')
+  useEffect(() => {
+    if (!wanted || !entries) return
+    const entry = entries.find((e) => e.remote?.id === wanted)
+    if (entry) openEntry(entry)
+  }, [wanted, entries, openEntry])
+
   const reload = useCallback(async () => {
     const local = await api.crashes.list().catch(() => [] as LocalCrashSummary[])
     // Sans compte connecté, il n'y a rien à demander au serveur : les
@@ -112,7 +138,7 @@ export function CrashPanel({ signedIn }: { signedIn: boolean }) {
                 variants={listItemVariants}
                 layout
                 {...press}
-                onClick={() => setOpenKey(e.key)}
+                onClick={() => openEntry(e)}
                 className={`flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors duration-150 ${
                   e.key === openKey ? 'border-accent/40 bg-accent/10' : 'border-transparent hover:border-line hover:bg-surface-1'
                 }`}

@@ -1163,6 +1163,15 @@ export const fr = {
   },
 
   crash: {
+    update: {
+      title: 'Ton rapport a bougé',
+      line: '« {{title}} » est passé à « {{status}} ».',
+      team: 'Réponse de l’équipe',
+      ref: 'Référence {{ref}}',
+      read: 'Lire',
+      later: 'Plus tard',
+      badgeStays: 'La pastille reste tant que le rapport n’a pas été ouvert.',
+    },
     modal: {
       title: 'Le jeu a planté',
       intro:

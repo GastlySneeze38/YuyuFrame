@@ -7,6 +7,7 @@ import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
+import { useCrashWatch } from '@/stores/useCrashWatch'
 import { loaderColor } from '@/lib/loader'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError, showNotice } from '@/stores/useErrorToast'
@@ -175,8 +176,11 @@ export default function Home() {
   const [bannerPulse, setBannerPulse] = useState(false)
   /** Survol du bouton de lancement — pilote la comète (voir LaunchSweep). */
   const [launchHover, setLaunchHover] = useState(false)
-  /** Réponses du support non lues — pastille sur l'entrée « Support ». */
+  /** Pastille de l'entrée « Support » : les réponses de l'équipe non lues,
+   *  plus les rapports de plantage dont le statut a changé sans qu'on soit
+   *  allé le lire. Les deux mènent au même écran, donc au même point. */
   const supportUnread = useSupportWatch((s) => s.unread)
+  const crashUpdates = useCrashWatch((s) => s.updates)
   const [savedServers, setSavedServers] = useState<SavedServer[]>([])
   const [showServerManage, setShowServerManage] = useState(false)
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
@@ -1016,7 +1020,7 @@ export default function Home() {
             <NavLink label={t('home.nav.plans')} onClick={() => navigate('/plans')} distance={0} plans>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
             </NavLink>
-            <NavLink label={t('home.nav.support')} onClick={() => navigate('/support')} distance={1} accent badge={supportUnread}>
+            <NavLink label={t('home.nav.support')} onClick={() => navigate('/support')} distance={1} accent badge={supportUnread + crashUpdates}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 00-9 9v5a3 3 0 003 3h1a1 1 0 001-1v-5a1 1 0 00-1-1H5v-1a7 7 0 1114 0v1h-2a1 1 0 00-1 1v5a1 1 0 001 1h1a3 3 0 003-3v-5a9 9 0 00-9-9z" /></svg>
             </NavLink>
             <NavLink label={t('home.nav.account')} onClick={() => navigate('/login')} distance={2}>

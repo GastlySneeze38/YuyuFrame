@@ -1157,6 +1157,15 @@ export const pt: TranslationSchema = {
   },
 
   crash: {
+    update: {
+      title: 'Seu relatório mudou',
+      line: '“{{title}}” passou para “{{status}}”.',
+      team: 'Resposta do time',
+      ref: 'Referência {{ref}}',
+      read: 'Ler',
+      later: 'Mais tarde',
+      badgeStays: 'O ponto fica até o relatório ser aberto.',
+    },
     modal: {
       title: 'O jogo travou',
       intro:

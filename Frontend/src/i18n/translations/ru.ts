@@ -1156,6 +1156,15 @@ export const ru: TranslationSchema = {
   },
 
   crash: {
+    update: {
+      title: 'Ваш отчёт изменился',
+      line: '«{{title}}» теперь «{{status}}».',
+      team: 'Ответ команды',
+      ref: 'Номер {{ref}}',
+      read: 'Читать',
+      later: 'Позже',
+      badgeStays: 'Точка остаётся, пока отчёт не открыт.',
+    },
     modal: {
       title: 'Игра вылетела',
       intro:

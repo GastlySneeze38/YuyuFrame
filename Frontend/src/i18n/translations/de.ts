@@ -1156,6 +1156,15 @@ export const de: TranslationSchema = {
   },
 
   crash: {
+    update: {
+      title: 'Dein Bericht hat sich bewegt',
+      line: '„{{title}}“ steht jetzt auf „{{status}}“.',
+      team: 'Antwort des Teams',
+      ref: 'Referenz {{ref}}',
+      read: 'Lesen',
+      later: 'Später',
+      badgeStays: 'Der Punkt bleibt, bis der Bericht geöffnet wurde.',
+    },
     modal: {
       title: 'Das Spiel ist abgestürzt',
       intro:

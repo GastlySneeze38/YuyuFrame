@@ -1156,6 +1156,15 @@ export const pl: TranslationSchema = {
   },
 
   crash: {
+    update: {
+      title: 'Twoje zgłoszenie się zmieniło',
+      line: '„{{title}}” ma teraz status „{{status}}”.',
+      team: 'Odpowiedź zespołu',
+      ref: 'Numer {{ref}}',
+      read: 'Przeczytaj',
+      later: 'Później',
+      badgeStays: 'Kropka zostaje, dopóki zgłoszenie nie zostanie otwarte.',
+    },
     modal: {
       title: 'Gra się wysypała',
       intro:
