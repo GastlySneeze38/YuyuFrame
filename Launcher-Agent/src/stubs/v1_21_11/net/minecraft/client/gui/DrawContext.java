@@ -36,6 +36,11 @@ public class DrawContext {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Pile de pose (Yarn {@code getMatrices}, {@code method_51448} — yarn-1.21.11-mergedv2). */
+    public org.joml.Matrix3x2fStack getMatrices() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public int getScaledWindowWidth() {
         throw new UnsupportedOperationException("stub compile-only");
     }

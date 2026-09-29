@@ -12,6 +12,8 @@ import com.yuyuframe.launcheragent.apigraphic.value.UiColor;
 import com.yuyuframe.launcheragent.apigraphic.value.UiFont;
 import com.yuyuframe.launcheragent.apimixin.v26_2.render.GameRendererAccessor262;
 import com.yuyuframe.launcheragent.apimixin.v26_2.render.GuiGraphicsExtractorInvoker262;
+import com.yuyuframe.launcheragent.apimixin.v26_2.core.GuiGraphicsExtractorAccessor262;
+import org.joml.Matrix3x2fStack;
 import com.yuyuframe.launcheragent.apimixin.v26_2.render.GuiRendererAccessor262;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -154,13 +156,25 @@ public final class VanillaGuiSink262 implements VanillaGuiSink {
         for (VanillaItemIcon icon : icons) {
             if (!(icon.itemStack instanceof ItemStack)) continue;
             ItemStack stack = (ItemStack) icon.itemStack;
+            // Taille demandée ≠ 16 pixels GUI : icône (et case/barre) mises à
+            // l'échelle par la pose, à la position exacte — voir VanillaItemIcon.scale.
+            Matrix3x2fStack pose = icon.scaled() ? ((GuiGraphicsExtractorAccessor262) (Object) g).la$pose() : null;
+            int ox = icon.guiX, oy = icon.guiY;
+            if (pose != null) {
+                pose.pushMatrix();
+                pose.translate(icon.guiXExact, icon.guiYExact);
+                pose.scale(icon.scale, icon.scale);
+                ox = 0;
+                oy = 0;
+            }
             if (icon.vanillaExtras) {
                 if (slot == null) slot = Identifier.withDefaultNamespace(VanillaSlotSprite.SPRITE);
-                g.blitSprite(textured, slot, icon.guiX - VanillaSlotSprite.ICON_DX,
-                    icon.guiY - VanillaSlotSprite.ICON_DY, VanillaSlotSprite.W, VanillaSlotSprite.H);
+                g.blitSprite(textured, slot, ox - VanillaSlotSprite.ICON_DX,
+                    oy - VanillaSlotSprite.ICON_DY, VanillaSlotSprite.W, VanillaSlotSprite.H);
             }
-            g.item(stack, icon.guiX, icon.guiY);
-            if (icon.vanillaExtras) g.itemDecorations(mc.font, stack, icon.guiX, icon.guiY);
+            g.item(stack, ox, oy);
+            if (icon.vanillaExtras) g.itemDecorations(mc.font, stack, ox, oy);
+            if (pose != null) pose.popMatrix();
         }
     }
 }

@@ -49,6 +49,9 @@ public final class VanillaItemQueue {
      * dit une fois.
      */
     private static final int MAX_PENDING = 1024;
+
+    /** Côté d'une icône d'objet vanilla, en pixels GUI — toutes versions. */
+    private static final float ICON_GUI = 16f;
     private boolean overflowReported;
 
     public VanillaItemQueue(String path) {
@@ -75,12 +78,17 @@ public final class VanillaItemQueue {
     public void enqueueIcon(Object itemStack, float x, float y, float size,
                             boolean vanillaExtras, int vpWidth, int vpHeight) {
         float guiScale = VanillaGuiScale.of(vpWidth);
-        int guiX = Math.round(x / guiScale);
-        int guiY = Math.round((vpHeight - y - size) / guiScale);
+        float guiXExact = x / guiScale;
+        float guiYExact = (vpHeight - y - size) / guiScale;
+        int guiX = Math.round(guiXExact);
+        int guiY = Math.round(guiYExact);
+        // Taille demandée en pixels GUI, rapportée aux 16 de l'icône vanilla —
+        // voir VanillaItemIcon.scale (la taille était ignorée jusqu'ici).
+        float scale = size > 0f ? size / (ICON_GUI * guiScale) : 1f;
         reportFirstEnqueue(guiScale, guiX, guiY);
         synchronized (icons) {
             if (icons.size() >= MAX_PENDING) dropUnflushed(icons, "icônes");
-            icons.add(new VanillaItemIcon(itemStack, guiX, guiY, vanillaExtras));
+            icons.add(new VanillaItemIcon(itemStack, guiX, guiY, vanillaExtras, scale, guiXExact, guiYExact));
         }
     }
 

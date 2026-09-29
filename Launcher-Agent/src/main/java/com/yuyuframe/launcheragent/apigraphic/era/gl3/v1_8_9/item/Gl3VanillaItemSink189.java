@@ -14,6 +14,7 @@ import net.minecraft.client.render.item.ItemRenderer;
 import net.minecraft.client.texture.TextureManager;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.Identifier;
+import org.lwjgl.opengl.GL11;
 
 import java.util.List;
 
@@ -98,8 +99,11 @@ public final class Gl3VanillaItemSink189 implements Gl3VanillaItemSink {
                 textures.bindTexture(widgets);
                 backgroundsBound = true;
             }
-            DrawableHelper.drawTexture(icon.guiX - ICON_OFFSET, icon.guiY - ICON_OFFSET, 0f, 0f,
+            boolean scaled = pushIconTransform(icon);
+            int ox = scaled ? 0 : icon.guiX, oy = scaled ? 0 : icon.guiY;
+            DrawableHelper.drawTexture(ox - ICON_OFFSET, oy - ICON_OFFSET, 0f, 0f,
                 SLOT_SIZE, SLOT_SIZE, WIDGETS_SIZE, WIDGETS_SIZE);
+            if (scaled) GL11.glPopMatrix();
         }
 
         ItemRenderer items = client.getItemRenderer();
@@ -110,13 +114,34 @@ public final class Gl3VanillaItemSink189 implements Gl3VanillaItemSink {
             for (VanillaItemIcon icon : icons) {
                 if (!(icon.itemStack instanceof ItemStack)) continue;
                 ItemStack stack = (ItemStack) icon.itemStack;
-                items.renderInGuiWithOverrides(stack, icon.guiX, icon.guiY);
-                if (icon.vanillaExtras) items.renderGuiItemOverlay(text, stack, icon.guiX, icon.guiY);
+                boolean scaled = pushIconTransform(icon);
+                int ox = scaled ? 0 : icon.guiX, oy = scaled ? 0 : icon.guiY;
+                try {
+                    items.renderInGuiWithOverrides(stack, ox, oy);
+                    if (icon.vanillaExtras) items.renderGuiItemOverlay(text, stack, ox, oy);
+                } finally {
+                    if (scaled) GL11.glPopMatrix();
+                }
             }
         } finally {
             DiffuseLighting.disable();
             GlStateManager.disableRescaleNormal();
         }
+    }
+
+    /**
+     * Taille demandée ≠ 16 pixels GUI : pousse une matrice qui place l'icône
+     * à sa position exacte et à la bonne taille — voir {@code VanillaItemIcon.scale}.
+     * Appels GL directs, comme {@code HeldItemGl189} : en 1.8.9,
+     * {@code GlStateManager.pushMatrix/translate/scale} ne sont que ces appels,
+     * sans cache d'état. {@code true} = une matrice a été poussée, à dépiler.
+     */
+    private static boolean pushIconTransform(VanillaItemIcon icon) {
+        if (!icon.scaled()) return false;
+        GL11.glPushMatrix();
+        GL11.glTranslatef(icon.guiXExact, icon.guiYExact, 0f);
+        GL11.glScalef(icon.scale, icon.scale, 1f);
+        return true;
     }
 
     /** Une ligne par raison DISTINCTE — jamais muet, jamais à chaque frame. */

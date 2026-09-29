@@ -526,17 +526,30 @@ public final class VanillaGuiSink1211 implements VanillaGuiSink {
         for (com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaItemIcon icon : icons) {
             if (!(icon.itemStack instanceof ItemStack)) continue;
             ItemStack stack = (ItemStack) icon.itemStack;
+            // Taille demandée ≠ 16 pixels GUI : icône (et case/barre) mises à
+            // l'échelle par la pose, à la position exacte — voir VanillaItemIcon.scale.
+            // getMatrices() est public sur cette version (voir AccessorBindings1211).
+            org.joml.Matrix3x2fStack pose = icon.scaled() ? ctx.getMatrices() : null;
+            int ox = icon.guiX, oy = icon.guiY;
+            if (pose != null) {
+                pose.pushMatrix();
+                pose.translate(icon.guiXExact, icon.guiYExact);
+                pose.scale(icon.scale, icon.scale);
+                ox = 0;
+                oy = 0;
+            }
             if (icon.vanillaExtras) {
                 if (slot == null) slot = Identifier.ofVanilla(com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.SPRITE);
                 ctx.drawGuiTexture(textured, slot,
-                    icon.guiX - com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.ICON_DX,
-                    icon.guiY - com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.ICON_DY,
+                    ox - com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.ICON_DX,
+                    oy - com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.ICON_DY,
                     com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.W,
                     com.yuyuframe.launcheragent.apigraphic.draw.item.VanillaSlotSprite.H);
             }
-            ctx.drawItem(stack, icon.guiX, icon.guiY);
+            ctx.drawItem(stack, ox, oy);
             // drawItemBar est PRIVÉ ici : drawStackOverlay, public, l'appelle.
-            if (icon.vanillaExtras) ctx.drawStackOverlay(client.textRenderer, stack, icon.guiX, icon.guiY);
+            if (icon.vanillaExtras) ctx.drawStackOverlay(client.textRenderer, stack, ox, oy);
+            if (pose != null) pose.popMatrix();
         }
     }
 

@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_1_1.core;
 
 import net.minecraft.client.renderer.state.gui.GuiRenderState;
+import org.joml.Matrix3x2fStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -24,4 +25,8 @@ public interface GuiGraphicsExtractorAccessor2611 {
 
     @Accessor("guiRenderState")
     GuiRenderState la$guiRenderState();
+
+    /** Pile de pose (champ privé {@code pose}) — mise à l'échelle des icônes d'objet, voir {@code VanillaItemIcon.scale}. */
+    @Accessor("pose")
+    Matrix3x2fStack la$pose();
 }
