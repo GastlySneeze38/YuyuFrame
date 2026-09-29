@@ -128,6 +128,24 @@ public final class VersionProfileRegistry {
             "26.1.1",
             null,
             "blaze3d"));
+
+        // 26.2 (2026-09-29) — GELÉE pendant le portage. Point de départ :
+        // copie de 26.1.2 (apimixin/v26_2, apigraphic/era/blaze3d/v26_2), unité
+        // de compilation à part contre src/stubs/v26_2 (build.bat). Écart
+        // mesuré avec 26.1.2 : 570 classes ajoutées, 300 retirées, 2 655
+        // modifiées. Ce qui casse (tools/mixincheck.py + tools/refcheck261.py) :
+        // l'ancien Gui (HUD) devient Hud, le nouveau Gui porte les écrans
+        // (screen/setScreen quittent Minecraft), ContextualBarRenderer devient
+        // ContextualBar, Options.hideGui disparaît (Hud.isHidden), le rendu du
+        // monde passe par extract/LevelExtractor, et Blaze3D est refondu
+        // (GpuSurface, RenderPassDescriptor, BindGroupLayout, GpuFormat…).
+        // Dégeler quand les deux audits sont à zéro.
+        PROFILES.add(new VersionProfile(
+            "26_2",
+            new String[]{ "26.2" },
+            "26.2",
+            null,
+            "blaze3d").frozen());
     }
 
     /**
