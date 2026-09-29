@@ -1,6 +1,7 @@
 package com.yuyuframe.launcheragent.apimixin.v26_2.render;
 
 import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -37,4 +38,15 @@ public interface DefaultVertexFormatAccessor262 {
 
     @Accessor("UV2_FORMAT")
     static GpuFormat la$uv2Format() { throw new AssertionError("DefaultVertexFormatAccessor262 non tissé"); }
+
+    /**
+     * Position + Color + UV0 + UV2 (28 octets) — la disposition qu'écrit à la
+     * main tout le chemin « en file » du moteur ({@code Blaze3DCore.putVertexPCTL}).
+     * C'était le format de {@code RenderPipelines.GUI_TEXT} en 26.1.2 ; en
+     * 26.2, GUI_TEXT est passé à {@code POSITION_TEX_COLOR} (24 octets, autre
+     * ordre), d'où ce format désormais nommé explicitement. Vérifié par javap :
+     * même constante, même composition en 26.2.
+     */
+    @Accessor("POSITION_COLOR_TEX_LIGHTMAP")
+    static VertexFormat la$positionColorTexLightmap() { throw new AssertionError("DefaultVertexFormatAccessor262 non tissé"); }
 }

@@ -34,30 +34,52 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "com.mojang.blaze3d.systems.GpuSurface")
 public abstract class GlobalUiPresentMixin262 {
 
+    /**
+     * TOUT se fait AVANT la copie vers la fenêtre — correctif du 2026-09-29
+     * (interface invisible au premier test en jeu, HUD intact, aucune erreur).
+     *
+     * <p>En 26.1.2, {@code presentTexture} ne faisait que désigner la texture
+     * à présenter ; la copie réelle avait lieu au {@code flipFrame}, APRÈS le
+     * TAIL de {@code blitToScreen} — d'où un dessin de l'interface au TAIL qui
+     * finissait quand même dans la frame. En 26.2, {@code blitFromTexture}
+     * enregistre la copie sur-le-champ : un dessin au TAIL arrivait dans la
+     * cible principale APRÈS la copie, puis était écrasé par la frame
+     * suivante. Le log fichier le confirmait : chaîne de flou, atlas, icônes
+     * du menu… tout était bien dessiné, simplement trop tard.
+     *
+     * <p>Ordre conservé de la 26.1.2 pour l'empilement : d'abord ce que la
+     * frame a mis en file (dessous), puis l'interface, puis ce que
+     * l'interface vient de mettre en file (texte, dessus). Effet de bord
+     * heureux : l'interface ne traîne plus d'une frame.
+     */
     @Inject(method = "blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V", at = @At("HEAD"))
     private void la$onBeforeBlit(CommandEncoder encoder, GpuTextureView source, CallbackInfo ci) {
+        Object mc;
         try {
-            Object mc = GlobalUiRenderBridge262.getMcInstance();
+            mc = GlobalUiRenderBridge262.getMcInstance();
             if (mc == null) return;
             if (!isMainColorView(mc, source)) return;
             Blaze3DCore.flushQueued();
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin262 (apimixin, flush texte HEAD): " + t);
+            return;
+        }
+        drawInterface(mc, this.getClass().getClassLoader());
+        try {
+            Blaze3DCore.flushQueued();
+        } catch (Throwable t) {
+            LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin262 (apimixin, flush après interface): " + t);
         }
     }
 
-    @Inject(method = "blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V", at = @At("TAIL"))
-    private void la$onAfterBlit(CommandEncoder encoder, GpuTextureView source, CallbackInfo ci) {
+    /** Overlay des modules ou écran de l'agent — l'ancien corps du TAIL de {@code blitToScreen} (26.1.2). */
+    private static void drawInterface(Object mc, ClassLoader loader) {
         try {
             UiInputPoller inputPoller = GlobalUiRenderBridge262.inputPoller;
             if (inputPoller == null) return;
 
-            Object mc = GlobalUiRenderBridge262.getMcInstance();
-            if (mc == null) return;
-            if (!isMainColorView(mc, source)) return;
-
             Object currentScreen = GlobalUiRenderBridge262.getCurrentScreen(mc);
-            UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
+            UiRenderer renderer = UiRenderer.get(loader);
 
             // LE HUD N'EST PLUS DESSINÉ ICI sur ce bracket (2026-08-30) — il
             // est émis pendant la passe GUI de vanilla, depuis
@@ -70,7 +92,7 @@ public abstract class GlobalUiPresentMixin262 {
             // Restent ici les rendus PAS ENCORE portés, qui gardent donc
             // l'ancien comportement : l'overlay plein écran des modules
             // (teinte vie basse) et l'aperçu shulker.
-            AgentBridge agent = AgentBridge.get(this.getClass().getClassLoader());
+            AgentBridge agent = AgentBridge.get(loader);
 
             if (currentScreen == null) {
                 if (!agent.hudHidden()) {

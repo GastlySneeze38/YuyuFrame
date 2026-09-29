@@ -24,6 +24,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.Blaze3DGpu;
 import com.yuyuframe.launcheragent.apimixin.v26_2.core.GlobalUiRenderBridge262;
+import com.yuyuframe.launcheragent.apimixin.v26_2.render.DefaultVertexFormatAccessor262;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
@@ -299,9 +300,23 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
         builder = builder.withBindGroupLayout(bindings.build());
         // 26.2 : withVertexFormat(format, mode) devient withVertexBinding(0,
         // format) + withPrimitiveTopology(topologie de la référence).
-        VertexFormat format = vertexFormatOverride != null
-            ? (VertexFormat) vertexFormatOverride
-            : ref.getVertexFormatBinding(0);
+        //
+        // Sans référence ni format fournis (tout le chemin « en file » :
+        // rects, texte, dégradés, flou…), le format N'EST PLUS hérité de
+        // GUI_TEXT : en 26.2 il y est passé de POSITION_COLOR_TEX_LIGHTMAP
+        // (28 octets) à POSITION_TEX_COLOR (24 octets, autre ordre), alors que
+        // le moteur écrit toujours ses sommets en Position+Color+UV0+UV2
+        // (Blaze3DCore.putVertexPCTL). Hériter donnait une géométrie mal lue,
+        // invisible, sans aucune erreur — interface vide au test du
+        // 2026-09-29. On pose donc explicitement le format que le moteur écrit.
+        VertexFormat format;
+        if (vertexFormatOverride != null) {
+            format = (VertexFormat) vertexFormatOverride;
+        } else if (reference == null) {
+            format = DefaultVertexFormatAccessor262.la$positionColorTexLightmap();
+        } else {
+            format = ref.getVertexFormatBinding(0);
+        }
         builder = builder.withVertexBinding(0, format)
             .withPrimitiveTopology(ref.getPrimitiveTopology());
 
