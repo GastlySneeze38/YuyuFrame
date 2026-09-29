@@ -85,7 +85,8 @@ public final class AccessorBindings262 {
         AccessorRegistry.bind(AccessPoint.CLIENT_LEVEL, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$level(); });
         AccessorRegistry.bind(AccessPoint.CLIENT_OPTIONS, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$options(); });
         AccessorRegistry.bind(AccessPoint.CLIENT_USER, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$user(); });
-        AccessorRegistry.bind(AccessPoint.CLIENT_SCREEN, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$screen(); });
+        // 26.2 : l'écran courant vit dans le nouveau Gui (plus dans Minecraft).
+        AccessorRegistry.bind(AccessPoint.CLIENT_SCREEN, (r, a) -> { GuiAccessor262 g = gui(r); return g == null ? null : g.la$screen(); });
         // INVENTORY avant CONTAINER : InventoryScreen hérite d'AbstractContainerScreen.
         AccessorRegistry.bind(AccessPoint.SCREEN_KIND, (r, a) -> {
             if (r instanceof net.minecraft.client.gui.screens.ChatScreen) return "CHAT";
@@ -94,14 +95,17 @@ public final class AccessorBindings262 {
             return "OTHER";
         });
         AccessorRegistry.bind(AccessPoint.CLIENT_SET_SCREEN, (r, a) -> {
-            Minecraft c = client();
-            if (c == null || a.length < 1) return null;
+            GuiAccessor262 g = gui(null);
+            if (g == null || a.length < 1) return null;
             // a[0] peut être null (fermeture) ; setScreen(Screen) est la SEULE
-            // surcharge à ce nom, aucune ambiguïté à lever.
-            c.setScreen((net.minecraft.client.gui.screens.Screen) a[0]);
+            // surcharge à ce nom, aucune ambiguïté à lever. 26.2 : porté par
+            // Gui (gestionnaire d'écrans), plus par Minecraft.
+            g.la$setScreen((net.minecraft.client.gui.screens.Screen) a[0]);
             return Boolean.TRUE;
         });
-        AccessorRegistry.bind(AccessPoint.CLIENT_GUI, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$gui(); });
+        // « HUD vanilla » (voir AccessPoint) : en 26.2 c'est Hud, champ hud du
+        // nouveau Gui — Minecraft.gui n'est plus que le gestionnaire d'écrans.
+        AccessorRegistry.bind(AccessPoint.CLIENT_GUI, (r, a) -> hudOf(r));
         AccessorRegistry.bind(AccessPoint.CLIENT_WINDOW, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$window(); });
         AccessorRegistry.bind(AccessPoint.CLIENT_MOUSE_HANDLER, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$mouseHandler(); });
         AccessorRegistry.bind(AccessPoint.CLIENT_RESOURCE_MANAGER, (r, a) -> { MinecraftAccessor262 m = mc(r); return m == null ? null : m.la$resourceManager(); });
@@ -119,7 +123,9 @@ public final class AccessorBindings262 {
         AccessorRegistry.bind(AccessPoint.OPTIONS_FOV, (r, a) -> { OptionsAccessor262 o = options(r); return o == null ? null : o.la$fov(); });
         AccessorRegistry.bind(AccessPoint.OPTIONS_SENSITIVITY, (r, a) -> { OptionsAccessor262 o = options(r); return o == null ? null : o.la$sensitivity(); });
         AccessorRegistry.bind(AccessPoint.OPTIONS_GAMMA, (r, a) -> { OptionsAccessor262 o = options(r); return o == null ? null : o.la$gamma(); });
-        AccessorRegistry.bind(AccessPoint.OPTIONS_HIDE_GUI, (r, a) -> { OptionsAccessor262 o = options(r); return o == null ? null : Boolean.valueOf(o.la$hideGui()); });
+        // 26.2 : Options.hideGui n'existe plus, l'état F1 est porté par le HUD
+        // (Hud.isHidden) — le receveur éventuel (des Options) est donc ignoré.
+        AccessorRegistry.bind(AccessPoint.OPTIONS_HIDE_GUI, (r, a) -> { HudAccessor262 h = hud(); return h == null ? null : Boolean.valueOf(h.la$isHidden()); });
 
         // ── Poignée d'option ───────────────────────────────────────────────
         AccessorRegistry.bind(AccessPoint.OPTION_VALUE, (r, a) ->
@@ -503,15 +509,14 @@ public final class AccessorBindings262 {
     /**
      * Le chat vanilla, ou {@code null} s'il n'est pas encore là.
      *
-     * <p>Toute la chaîne ({@code Minecraft} → {@code Gui} → {@code ChatComponent})
-     * est faite ICI et non chez l'appelant : c'est ce qui permet aux deux points
-     * d'accès du chat de ne prendre aucun receveur, et donc à l'appelant de ne
-     * nommer aucun de ces trois types.
+     * <p>Toute la chaîne ({@code Minecraft} → {@code Gui} → {@code Hud} →
+     * {@code ChatComponent} en 26.2) est faite ICI et non chez l'appelant :
+     * c'est ce qui permet aux deux points d'accès du chat de ne prendre aucun
+     * receveur, et donc à l'appelant de ne nommer aucun de ces types.
      */
     private static ChatComponent chat() {
-        MinecraftAccessor262 mc = mc(null);
-        Gui gui = mc == null ? null : mc.la$gui();
-        ChatComponent chat = gui == null ? null : gui.getChat();
+        HudAccessor262 hud = hud();
+        ChatComponent chat = hud == null ? null : hud.la$chat();
         return chat instanceof ChatComponentAccessor262 ? chat : null;
     }
 
@@ -681,6 +686,28 @@ public final class AccessorBindings262 {
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    /**
+     * Receveur (un {@code Minecraft}, ou {@code null} pour l'instance courante)
+     * → accessor du {@code Gui} 26.2, le gestionnaire d'écrans.
+     */
+    private static GuiAccessor262 gui(Object receiver) {
+        MinecraftAccessor262 m = mc(receiver);
+        Gui gui = m == null ? null : m.la$gui();
+        return gui instanceof GuiAccessor262 ? (GuiAccessor262) gui : null;
+    }
+
+    /** HUD du client courant ({@code Hud} en 26.2), en tant qu'objet du jeu. */
+    private static Object hudOf(Object receiver) {
+        GuiAccessor262 g = gui(receiver);
+        return g == null ? null : g.la$hud();
+    }
+
+    /** HUD du client courant, vu par son accessor, ou {@code null}. */
+    private static HudAccessor262 hud() {
+        Object hud = hudOf(null);
+        return hud instanceof HudAccessor262 ? (HudAccessor262) hud : null;
     }
 
     /**

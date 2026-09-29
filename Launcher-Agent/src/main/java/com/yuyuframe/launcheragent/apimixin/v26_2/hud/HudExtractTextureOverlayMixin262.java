@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * segment de chemin ("pumpkin"/"powder_snow") ; ce Mixin ne fait que
  * dispatcher.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 public abstract class HudExtractTextureOverlayMixin262 {
 
     @Inject(method = "extractTextureOverlay(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/resources/Identifier;F)V",

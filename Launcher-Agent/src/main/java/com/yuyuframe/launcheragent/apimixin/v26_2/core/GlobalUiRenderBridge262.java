@@ -45,8 +45,13 @@ public final class GlobalUiRenderBridge262 {
         return mcInstanceCache;
     }
 
+    /**
+     * 26.2 : {@code setScreen} a quitté {@code Minecraft} pour le nouveau
+     * {@code Gui} (gestionnaire d'écrans) — passe par {@link GuiAccessor262}.
+     */
     public static void setScreen(Object mc, Object screen) {
-        ((Minecraft) mc).setScreen((Screen) screen);
+        GuiAccessor262 gui = gui(mc);
+        if (gui != null) gui.la$setScreen((Screen) screen);
     }
 
     /** Ferme l'écran (setScreen(null)) — voir javadoc de l'ancien pont (closingScreenType inutile ici, setScreen(Screen) est la SEULE surcharge à ce nom, pas d'ambiguïté à lever). */
@@ -60,9 +65,16 @@ public final class GlobalUiRenderBridge262 {
         return window != null ? window.handle() : 0L;
     }
 
-    /** {@code screen} — via {@link MinecraftAccessor262#la$screen()} (2026-08-26, §22). */
+    /** {@code screen} — 26.2 : champ du nouveau {@code Gui}, via {@link GuiAccessor262#la$screen()}. */
     public static Object getCurrentScreen(Object mc) {
-        return mc instanceof MinecraftAccessor262 ? ((MinecraftAccessor262) mc).la$screen() : null;
+        GuiAccessor262 gui = gui(mc);
+        return gui == null ? null : gui.la$screen();
+    }
+
+    /** {@code Minecraft} → accessor de son {@code Gui} 26.2, ou {@code null}. */
+    private static GuiAccessor262 gui(Object mc) {
+        Object gui = mc instanceof MinecraftAccessor262 ? ((MinecraftAccessor262) mc).la$gui() : null;
+        return gui instanceof GuiAccessor262 ? (GuiAccessor262) gui : null;
     }
 
     /**

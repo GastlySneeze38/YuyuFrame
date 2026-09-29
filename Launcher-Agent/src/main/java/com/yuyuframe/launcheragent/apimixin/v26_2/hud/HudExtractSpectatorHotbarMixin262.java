@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
  * {@code @Local(argsOnly = true)} — omis ici, notre ctx de dispatch ne porte
  * que {@code graphics} (voir la javadoc de {@link VanillaHookRegistry}).
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractSpectatorHotbarMixin262 {
 
     @WrapOperation(method = "extractHotbarAndDecorations",

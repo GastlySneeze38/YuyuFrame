@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Porte {@code GuiMixin#wrapHeldItemTooltip} vers {@link HookPoint#HUD_EXTRACT_SELECTED_ITEM_NAME}
  * — voir {@link HudExtractCameraOverlayMixin262} pour l'explication du pattern.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractSelectedItemNameMixin262 {
 
     @Inject(method = "extractSelectedItemName(Lnet/minecraft/client/gui/GuiGraphicsExtractor;)V", at = @At("HEAD"), cancellable = true)

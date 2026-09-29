@@ -1,10 +1,13 @@
 package net.minecraft.client.gui;
 
-import net.minecraft.client.DeltaTracker;
-import net.minecraft.client.gui.components.ChatComponent;
-
-/** Stub compile-only (26.1+) — marqueur pour typer les paramètres capturés par les mixins de {@code apimixin/v26_1/hud/}. Voir {@code GuiGraphicsExtractor.java} pour le pourquoi de ce genre de stub sur 26.1+. {@code extractCrosshair} ajouté pour l'appel direct depuis {@code HudExtractCrosshairMixin261} (@Redirect, jamais réellement invoqué ici — résolu par la hiérarchie réelle Mojang au runtime). {@code getChat()} PUBLIC (vérifié javap) — ajouté pour {@code ChatEnhancementsModule}. */
+/**
+ * Stub compile-only (26.2) — marqueur de type, sans membre : tout accès passe
+ * par {@code apimixin/v26_2/core/GuiAccessor262}.
+ *
+ * <p>En 26.2, {@code Gui} n'est PLUS le HUD : celui-ci s'appelle {@link Hud}
+ * (champ {@code hud}), et {@code Gui} porte la gestion des écrans qui vivait
+ * dans {@code Minecraft} en 26.1 ({@code screen}, {@code setScreen}, overlay,
+ * ouverture du chat) — vérifié par javap sur le jar client 26.2.
+ */
 public abstract class Gui {
-    public void extractCrosshair(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {}
-    public ChatComponent getChat() { return null; }
 }

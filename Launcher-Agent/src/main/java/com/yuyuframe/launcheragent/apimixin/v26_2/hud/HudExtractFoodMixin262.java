@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Porte {@code GuiMixin#wrapFoodBar} vers {@link HookPoint#HUD_EXTRACT_FOOD}
  * — voir {@link HudExtractCameraOverlayMixin262} pour l'explication du pattern.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractFoodMixin262 {
 
     @Inject(method = "extractFood(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/world/entity/player/Player;II)V", at = @At("HEAD"), cancellable = true)

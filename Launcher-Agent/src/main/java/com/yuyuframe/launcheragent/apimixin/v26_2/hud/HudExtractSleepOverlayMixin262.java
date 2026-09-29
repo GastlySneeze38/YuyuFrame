@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Porte {@code GuiMixin#wrapSleepOverlay} vers {@link HookPoint#HUD_EXTRACT_SLEEP_OVERLAY}
  * — voir {@link HudExtractCameraOverlayMixin262} pour l'explication du pattern.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractSleepOverlayMixin262 {
 
     @Inject(method = "extractSleepOverlay(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true)

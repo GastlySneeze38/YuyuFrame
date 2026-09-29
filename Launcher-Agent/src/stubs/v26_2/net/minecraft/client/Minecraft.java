@@ -41,7 +41,11 @@ import net.minecraft.client.sounds.SoundManager;
  */
 public abstract class Minecraft {
     public static Minecraft getInstance() { return null; }
-    public abstract void setScreen(Screen screen);
+    // 26.2 : setScreen et le champ screen sont passés dans le nouveau Gui
+    // (voir apimixin/v26_2/core/GuiAccessor262) — retirés de ce stub.
+    // ⚠️ getMainRenderTarget N'EXISTE PLUS en 26.2 (surface de fenêtre
+    // GpuSurface à la place) : gardé ici le temps de l'étape 3 (couche GPU)
+    // pour que l'unité compile, signalé par tools/refcheck261.py.
     public abstract RenderTarget getMainRenderTarget();
     public abstract ClientPacketListener getConnection();
     public abstract SoundManager getSoundManager();
@@ -51,7 +55,6 @@ public abstract class Minecraft {
 
     public LocalPlayer player;
     public ClientLevel level;
-    public Screen screen;
     public MouseHandler mouseHandler;
     public Options options;
     /** Public final en jeu (vérifié sur le jar) — pour {@code GuiGraphicsExtractor.itemDecorations}. */

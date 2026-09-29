@@ -455,6 +455,9 @@ public final class MixinHookPointRegistry {
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────
         always("26.2", "v26_2.core.TitleScreenMixin262");
         always("26.2", "v26_2.core.MinecraftAccessor262");
+        // 26.2 : écrans portés par le nouveau Gui, HUD renommé Hud.
+        always("26.2", "v26_2.core.GuiAccessor262");
+        always("26.2", "v26_2.core.HudAccessor262");
         always("26.2", "v26_2.core.GlobalUiRenderMixin262");
         always("26.2", "v26_2.core.GlobalUiPresentMixin262");
         always("26.2", "v26_2.core.GuiFlushMixin262");

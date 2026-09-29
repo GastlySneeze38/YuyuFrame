@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Porte {@code GuiMixin#wrapAirBar} vers {@link HookPoint#HUD_EXTRACT_AIR_BUBBLES}
  * — voir {@link HudExtractCameraOverlayMixin262} pour l'explication du pattern.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractAirBubblesMixin262 {
 
     @Inject(method = "extractAirBubbles(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/world/entity/player/Player;III)V", at = @At("HEAD"), cancellable = true)

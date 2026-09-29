@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
  * Porte {@code GuiMixin#wrapExtractSpectatorGui} vers {@link HookPoint#HUD_EXTRACT_SPECTATOR_ACTION}
  * — voir {@link HudExtractCameraOverlayMixin262} pour l'explication du pattern.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractSpectatorActionMixin262 {
 
     @WrapOperation(method = "extractHotbarAndDecorations",

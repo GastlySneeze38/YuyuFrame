@@ -14,8 +14,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * voir mixinapi/26.1.2) vers {@link HookPoint#LEVEL_BLOCK_OUTLINE_EXTRACT} —
  * recoupe le hook déjà utilisé côté modules existants
  * (beforeRenderBlockOutline sur les brackets antérieurs).
+ *
+ * <p>26.2 : {@code extractBlockOutline(Camera, LevelRenderState)} a suivi
+ * l'extraction du monde dans {@code renderer.extract.LevelExtractor}, nom et
+ * descripteur inchangés (vérifié par javap).
  */
-@Mixin(targets = "net.minecraft.client.renderer.LevelRenderer")
+@Mixin(targets = "net.minecraft.client.renderer.extract.LevelExtractor")
 abstract class LevelBlockOutlineExtractMixin262 {
 
     @Inject(method = "extractBlockOutline", at = @At("RETURN"))

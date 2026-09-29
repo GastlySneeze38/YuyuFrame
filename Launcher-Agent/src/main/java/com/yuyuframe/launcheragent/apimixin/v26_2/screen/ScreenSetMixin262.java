@@ -42,8 +42,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Reste gaté sur {@link HookPoint#SCREEN_SET} : aucun module ne le consomme
  * aujourd'hui, donc il n'est pas tissé en pratique — c'est voulu, la gate est
  * une optimisation du temps de tissage.
+ *
+ * <p>26.2 : {@code setScreen(Screen)} a quitté {@code Minecraft} pour le
+ * nouveau {@code Gui} (gestionnaire d'écrans), même descripteur — vérifié par
+ * javap sur le jar client 26.2. L'historique ci-dessus concerne l'ancienne
+ * cible {@code Minecraft}.
  */
-@Mixin(targets = "net.minecraft.client.Minecraft")
+@Mixin(targets = "net.minecraft.client.gui.Gui")
 abstract class ScreenSetMixin262 {
 
     @Inject(method = "setScreen", at = @At("HEAD"))

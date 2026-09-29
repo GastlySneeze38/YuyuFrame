@@ -12,16 +12,19 @@ import org.spongepowered.asm.mixin.injection.At;
 /**
  * Porte {@code GuiMixin#wrapExperienceLevel} vers {@link HookPoint#HUD_EXTRACT_EXPERIENCE_LEVEL}
  * — voir {@link HudExtractCameraOverlayMixin262} pour l'explication du
- * pattern. {@code ContextualBarRenderer.extractExperienceLevel} est
+ * pattern. {@code ContextualBar.extractExperienceLevel} est
  * STATIQUE — pas de paramètre {@code instance} en tête, comme {@link
  * HudExtractArmorMixin262}. {@code DeltaTracker} capturé en {@code @Local}
  * côté Fabric d'origine, omis ici (même choix qu'ailleurs dans ce dossier).
+ *
+ * <p>26.2 : cible {@code Hud} (ex-{@code Gui}), interface {@code ContextualBar}
+ * (ex-{@code ContextualBarRenderer}) — méthode statique inchangée.
  */
-@Mixin(targets = "net.minecraft.client.gui.Gui")
+@Mixin(targets = "net.minecraft.client.gui.Hud")
 abstract class HudExtractExperienceLevelMixin262 {
 
     @WrapOperation(method = "extractHotbarAndDecorations",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/contextualbar/ContextualBarRenderer;extractExperienceLevel(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/gui/Font;I)V"))
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/contextualbar/ContextualBar;extractExperienceLevel(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/gui/Font;I)V"))
     private void la$dispatchExperienceLevel(GuiGraphicsExtractor graphics, Font font, int level, Operation<Void> renderVanilla) {
         if (!VanillaHookRegistry.dispatch(HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL, graphics)) {
             renderVanilla.call(graphics, font, level);

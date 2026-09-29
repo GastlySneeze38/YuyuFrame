@@ -8,7 +8,6 @@ import net.minecraft.client.Options;
 import net.minecraft.client.User;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -33,15 +32,15 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * Une instance de {@code Minecraft} (obtenue via {@code Minecraft.getInstance()})
  * implémente CETTE interface une fois le Mixin tissé — cast direct
  * {@code (MinecraftAccessor262) mc}, idiome standard Sponge Mixin.
+ *
+ * <p>26.2 : plus de champ {@code screen} ici — l'écran courant est passé dans
+ * le nouveau {@code Gui}, voir {@link GuiAccessor262} (via {@link #la$gui()}).
  */
 @Mixin(targets = "net.minecraft.client.Minecraft")
 public interface MinecraftAccessor262 {
 
     @Accessor("window")
     Window la$window();
-
-    @Accessor("screen")
-    Screen la$screen();
 
     @Accessor("mouseHandler")
     MouseHandler la$mouseHandler();
@@ -72,7 +71,12 @@ public interface MinecraftAccessor262 {
     @Accessor("user")
     User la$user();
 
-    /** Ajouté pour {@code ChatEnhancementsModule} (2026-08-26, §22) — {@code Gui} est public (vérifié javap), routé ici pour rester sur UNE seule surface d'accès à l'état interne de {@code Minecraft}, voir la javadoc de classe. */
+    /**
+     * Ajouté pour {@code ChatEnhancementsModule} (2026-08-26, §22) — {@code Gui} est public (vérifié javap), routé ici pour rester sur UNE seule surface d'accès à l'état interne de {@code Minecraft}, voir la javadoc de classe.
+     *
+     * <p>26.2 : ce {@code Gui} est le gestionnaire d'écrans, plus le HUD —
+     * le HUD s'obtient par {@code GuiAccessor262.la$hud()}.
+     */
     @Accessor("gui")
     Gui la$gui();
 
