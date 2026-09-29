@@ -7,6 +7,7 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiFocusable;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiHitTest;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiEasing;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
@@ -207,7 +208,10 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * {@code event.y()}.
      */
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
-        return dispatchClick(event.button(), doubleClick);
+        // 26.3 (SDL3) : le bouton arrive en numérotation SDL (1 gauche,
+        // 2 milieu, 3 droit) — ramené à l'index GLFW que dispatchClick
+        // attend. Identité sur les versions GLFW.
+        return dispatchClick(UiInputPollerModern.toGlfwButton(event.button()), doubleClick);
     }
 
     /**
@@ -291,7 +295,9 @@ public abstract class UiScreenBase extends Screen implements UiDrawable {
      * client 26.1.2 réel.
      */
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        return dispatchKeyPressed(event.key());
+        // 26.3 (SDL3) : key() est un scancode SDL — ramené au code GLFW que
+        // dispatchKeyPressed et les écrans comparent. Identité sur les versions GLFW.
+        return dispatchKeyPressed(UiInputPollerModern.toGlfwKey(event.key()));
     }
 
     private boolean dispatchKeyPressed(int keyCode) {

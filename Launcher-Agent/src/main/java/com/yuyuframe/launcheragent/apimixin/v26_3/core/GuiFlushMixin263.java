@@ -18,7 +18,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "net.minecraft.client.renderer.GameRenderer")
 public abstract class GuiFlushMixin263 {
 
-    @Inject(method = "render(Lnet/minecraft/client/DeltaTracker;Z)V",
+    // 26.3 : GameRenderer.render() ne prend plus d'arguments (javap) ; l'appel
+    // à Lighting.setupFor juste avant GuiRenderer.render est inchangé.
+    @Inject(method = "render()V",
         at = @At(value = "INVOKE",
                  target = "Lcom/mojang/blaze3d/platform/Lighting;setupFor(Lcom/mojang/blaze3d/platform/Lighting$Entry;)V",
                  shift = At.Shift.AFTER))

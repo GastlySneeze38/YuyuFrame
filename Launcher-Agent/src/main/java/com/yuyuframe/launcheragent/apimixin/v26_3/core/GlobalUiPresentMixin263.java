@@ -31,7 +31,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * la cible principale ? » porte maintenant sur la vue copiée — {@code this}
  * est la surface de la fenêtre, plus la cible de rendu.
  */
-@Mixin(targets = "com.mojang.renderpearl.api.device.GpuSurface")
+// 26.3 : GpuSurface est devenue une INTERFACE (api.device), blitFromTexture y
+// est abstraite — rien à tisser. On vise son unique implémentation,
+// FrontendGpuSurface, qui valide la copie puis la délègue au backend
+// (GpuSurfaceBackend : GlSurface ou VulkanGpuSurface) — relevé par javap.
+// Elle refuse la copie si l'encodeur est encore dans une passe : nos passes
+// sont toutes fermées avant la fin de ce HEAD.
+@Mixin(targets = "com.mojang.renderpearl.frontend.FrontendGpuSurface")
 public abstract class GlobalUiPresentMixin263 {
 
     /**

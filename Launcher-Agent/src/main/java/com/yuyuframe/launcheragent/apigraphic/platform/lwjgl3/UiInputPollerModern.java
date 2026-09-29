@@ -12,6 +12,10 @@ import java.util.Map;
 /**
  * Implémentation LWJGL3/GLFW (1.13+, dont 1.21) de UiInputPoller.
  *
+ * 26.3 (SDL3, plus de GLFW) : même classe, construite avec une
+ * {@link NativeInput} — lectures natives déléguées, événements poussés par
+ * les mixins de la tranche, tout le reste inchangé et toujours en codes GLFW.
+ *
  * glfwGetCursorPos() renvoie des coordonnées "fenêtre" (origine HAUT-gauche),
  * alors que gl_FragCoord (utilisé par UiRenderer) est en pixels FRAMEBUFFER
  * (origine BAS-gauche) — deux conversions nécessaires, pas juste un flip :
@@ -188,14 +192,78 @@ public final class UiInputPollerModern extends UiInputPoller {
      */
     public static volatile UiInputPollerModern ACTIVE;
 
+    /**
+     * Couche native quand ce n'est pas GLFW (26.3 : SDL3), {@code null} sur
+     * toutes les versions GLFW — où rien ne change : callbacks GLFW chaînés,
+     * lectures GLFW directes. Voir {@link NativeInput}.
+     */
+    private final NativeInput nativeInput;
+
     public UiInputPollerModern(long windowHandle, ClassLoader gameClassLoader) {
         this.windowHandle = windowHandle;
         this.gameClassLoader = gameClassLoader;
+        this.nativeInput = null;
         registerScrollCallback();
         registerCharCallback();
         registerMouseButtonCallback();
         registerKeyCallback();
         ACTIVE = this;
+    }
+
+    /**
+     * Poller sans GLFW (26.3). Aucun callback natif n'est posé : les
+     * événements arrivent par {@link #onKeyEvent}, {@link #onMouseButtonEvent},
+     * {@link #onScrollEvent} et {@link #onTextEvent}, appelés par les mixins
+     * d'entrée de la tranche de version.
+     */
+    public UiInputPollerModern(NativeInput nativeInput, ClassLoader gameClassLoader) {
+        this.windowHandle = 0L;
+        this.gameClassLoader = gameClassLoader;
+        this.nativeInput = nativeInput;
+        ACTIVE = this;
+    }
+
+    // ── Événements poussés par une tranche sans GLFW (voir NativeInput) ────
+    // Même traitement que les callbacks GLFW correspondants ; codes GLFW.
+
+    /** Touche enfoncée/relâchée — pendant de {@link #registerKeyCallback}. {@code glfwKey < 0} : touche sans code, suivie par scancode. */
+    public void onKeyEvent(int glfwKey, int scancode, boolean pressed) {
+        recordKey(glfwKey, scancode, pressed);
+    }
+
+    /** Bouton de souris (index GLFW) — pendant de {@link #registerMouseButtonCallback}. */
+    public void onMouseButtonEvent(int glfwButton, boolean pressed) {
+        writeLatched(buttonDown, buttonSeenAt, buttonReleasePending, glfwButton, pressed);
+    }
+
+    /** Molette verticale — pendant de {@link #registerScrollCallback} ; la suppression du scroll vanilla revient à l'appelant. */
+    public void onScrollEvent(double verticalAmount) {
+        pendingScroll += verticalAmount;
+    }
+
+    /** Texte saisi — pendant de {@link #registerCharCallback}, même filtre {@link UiInputPoller#textInputActive}. */
+    public void onTextEvent(String text) {
+        if (text == null || text.isEmpty() || !UiInputPoller.textInputActive) return;
+        synchronized (pendingChars) {
+            pendingChars.append(text);
+        }
+    }
+
+    /**
+     * Code de touche reçu de Minecraft ({@code KeyEvent.key()}) → code GLFW.
+     * Identité sur les versions GLFW ; traduit par la couche native sinon
+     * (26.3 : scancode SDL). Pour les écrans de l'agent, qui comparent à des
+     * codes GLFW (Échap = 256, Tab = 258…).
+     */
+    public static int toGlfwKey(int gameKey) {
+        UiInputPollerModern active = ACTIVE;
+        return active == null || active.nativeInput == null ? gameKey : active.nativeInput.toGlfwKey(gameKey);
+    }
+
+    /** Bouton reçu de Minecraft ({@code MouseButtonEvent.button()}) → index GLFW. Identité sur les versions GLFW. */
+    public static int toGlfwButton(int gameButton) {
+        UiInputPollerModern active = ACTIVE;
+        return active == null || active.nativeInput == null ? gameButton : active.nativeInput.toGlfwButton(gameButton);
     }
 
     /**
@@ -508,24 +576,7 @@ public final class UiInputPollerModern extends UiInputPoller {
                     int key = (Integer) args[1];
                     int scancode = (Integer) args[2];
                     int action = (Integer) args[3];
-                    if (key >= 0 && key < keyDown.length) {
-                        writeLatched(keyDown, keySeenAt, keyReleasePending, key, action != 0);
-                    } else if (key < 0) {
-                        // GLFW_KEY_UNKNOWN : seul le scancode l'identifie.
-                        // Même règle « appui jamais perdu » que writeLatched.
-                        if (action != 0) {
-                            if (!scancodeDown.contains(scancode)) scancodeSeenAt.remove(scancode);
-                            scancodeDown.add(scancode);
-                            scancodeReleasePending.remove(scancode);
-                        } else {
-                            Long seen = scancodeSeenAt.get(scancode);
-                            if (seen != null && System.nanoTime() - seen >= MIN_VISIBLE_NANOS) {
-                                scancodeDown.remove(scancode);
-                            } else {
-                                scancodeReleasePending.add(scancode);
-                            }
-                        }
-                    }
+                    recordKey(key, scancode, action != 0);
                     Object prev = previousKeyCb[0];
                     if (prev != null) {
                         try { method.invoke(prev, args); } catch (Throwable ignored) {}
@@ -539,6 +590,31 @@ public final class UiInputPollerModern extends UiInputPoller {
             previousKeyCb[0] = setCb.invoke(null, windowHandle, realCallback);
         } catch (Throwable t) {
             LauncherLog.err("[UiInputPollerModern] registerKeyCallback: " + rootCause(t));
+        }
+    }
+
+    /**
+     * État d'une touche — corps du callback clavier GLFW, partagé avec
+     * {@link #onKeyEvent} (versions sans GLFW). {@code key < 0}
+     * (GLFW_KEY_UNKNOWN) : seul le scancode l'identifie, même règle « appui
+     * jamais perdu » que {@link #writeLatched}.
+     */
+    private void recordKey(int key, int scancode, boolean pressed) {
+        if (key >= 0 && key < keyDown.length) {
+            writeLatched(keyDown, keySeenAt, keyReleasePending, key, pressed);
+        } else if (key < 0) {
+            if (pressed) {
+                if (!scancodeDown.contains(scancode)) scancodeSeenAt.remove(scancode);
+                scancodeDown.add(scancode);
+                scancodeReleasePending.remove(scancode);
+            } else {
+                Long seen = scancodeSeenAt.get(scancode);
+                if (seen != null && System.nanoTime() - seen >= MIN_VISIBLE_NANOS) {
+                    scancodeDown.remove(scancode);
+                } else {
+                    scancodeReleasePending.add(scancode);
+                }
+            }
         }
     }
 
@@ -589,6 +665,7 @@ public final class UiInputPollerModern extends UiInputPoller {
 
     @Override
     protected void readState() throws Exception {
+        if (nativeInput != null) nativeInput.frame();
         double[] cx = new double[1];
         double[] cy = new double[1];
         glfwGetCursorPos(windowHandle, cx, cy);
@@ -748,6 +825,12 @@ public final class UiInputPollerModern extends UiInputPoller {
         for (Object[] entry : CAPTURABLE_KEYS) {
             if (((Integer) entry[0]) == code) return (String) entry[1];
         }
+        // Sans GLFW (26.3) : libellé demandé à la couche native active.
+        UiInputPollerModern active = ACTIVE;
+        if (active != null && active.nativeInput != null) {
+            String name = active.nativeInput.keyName(code);
+            return name == null ? null : name.toUpperCase(java.util.Locale.ROOT);
+        }
         try {
             Class<?> glfwClass = Class.forName("org.lwjgl.glfw.GLFW", true, gameClassLoader);
             Method m = glfwClass.getMethod("glfwGetKeyName", int.class, int.class);
@@ -839,6 +922,7 @@ public final class UiInputPollerModern extends UiInputPoller {
     }
 
     private int glfwGetKey(long handle, int key) throws Exception {
+        if (nativeInput != null) return nativeInput.isKeyDown(key) ? 1 : 0;
         return (int) glfw("glfwGetKey", long.class, int.class).invoke(null, handle, key);
     }
 
@@ -862,9 +946,10 @@ public final class UiInputPollerModern extends UiInputPoller {
         if (cached != null) return cached;
         int resolved = 65 + (lower - 'a'); // repli US QWERTY
         try {
-            Method getKeyName = glfw("glfwGetKeyName", int.class, int.class);
+            Method getKeyName = nativeInput == null ? glfw("glfwGetKeyName", int.class, int.class) : null;
             for (int code = 65; code <= 90; code++) {
-                String name = (String) getKeyName.invoke(null, code, 0);
+                String name = nativeInput != null ? nativeInput.keyName(code)
+                    : (String) getKeyName.invoke(null, code, 0);
                 if (name != null && name.length() == 1 && Character.toLowerCase(name.charAt(0)) == lower) {
                     resolved = code;
                     break;
@@ -889,15 +974,20 @@ public final class UiInputPollerModern extends UiInputPoller {
         return m;
     }
 
+    // Sans GLFW (26.3), ces trois lectures passent par la couche native — même sens, mêmes unités.
+
     private void glfwGetCursorPos(long handle, double[] xOut, double[] yOut) throws Exception {
+        if (nativeInput != null) { nativeInput.cursorPos(xOut, yOut); return; }
         glfw("glfwGetCursorPos", long.class, double[].class, double[].class).invoke(null, handle, xOut, yOut);
     }
 
     private void glfwGetWindowSize(long handle, int[] wOut, int[] hOut) throws Exception {
+        if (nativeInput != null) { nativeInput.windowSize(wOut, hOut); return; }
         glfw("glfwGetWindowSize", long.class, int[].class, int[].class).invoke(null, handle, wOut, hOut);
     }
 
     private void glfwGetFramebufferSize(long handle, int[] wOut, int[] hOut) throws Exception {
+        if (nativeInput != null) { nativeInput.framebufferSize(wOut, hOut); return; }
         glfw("glfwGetFramebufferSize", long.class, int[].class, int[].class).invoke(null, handle, wOut, hOut);
     }
 }

@@ -150,21 +150,26 @@ public final class VersionProfileRegistry {
             null,
             "blaze3d"));
 
-        // 26.3 (2026-09-29) — GELÉE tant que mixincheck/refcheck ne sont pas à
-        // zéro contre le jar client 26.3. Point de départ : copie de 26.2
+        // 26.3 (2026-09-29) — DÉGELÉE le 2026-09-29 (build v1202) : mixincheck
+        // et refcheck à zéro contre le jar client 26.3, et nos 13 couples de
+        // shaders compilés hors jeu par le shaderc du jeu (options de
+        // renderpearl GlslCompiler) — rien n'a encore tourné en jeu. Point de départ : copie de 26.2
         // (apimixin/v26_3, apigraphic/era/blaze3d/v26_3, src/stubs/v26_3),
         // unité de compilation à part (build.bat). Écart mesuré avec 26.2 : 980
         // classes ajoutées, 549 retirées, 3 188 modifiées. Les deux ruptures :
         // Blaze3D renommé com.mojang.renderpearl (api/backend/frontend ;
         // RenderTarget, Window, RenderSystem restent dans com.mojang.blaze3d),
         // et GLFW remplacé par SDL3 (SDLEventHandler, codes de touches =
-        // scancodes SDL).
+        // scancodes SDL). Portés : couche GPU sur renderpearl (pipelines
+        // compilés gardés par Blaze3DGpu263, GLSL adapté par Glsl263), entrée
+        // par SdlNativeInput263 + mixins input/ (événements relayés au poller,
+        // traduits en codes GLFW par SdlKeys263).
         PROFILES.add(new VersionProfile(
             "26_3",
             new String[]{ "26.3" },
             "26.3",
             null,
-            "blaze3d").frozen());
+            "blaze3d"));
     }
 
     /**

@@ -4,6 +4,7 @@ import com.yuyuframe.launcheragent.apimixin.AgentBridge;
 import com.yuyuframe.launcheragent.apimixin.loader.FabricKnotExposer;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
+import com.yuyuframe.launcheragent.apimixin.v26_3.input.SdlNativeInput263;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -23,7 +24,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "net.minecraft.client.renderer.GameRenderer")
 public abstract class GlobalUiRenderMixin263 {
 
-    @Inject(method = "render(Lnet/minecraft/client/DeltaTracker;Z)V", at = @At("TAIL"))
+    // 26.3 : GameRenderer.render() ne prend plus d'arguments (javap).
+    @Inject(method = "render()V", at = @At("TAIL"))
     private void la$onRenderTail(CallbackInfo ci) {
         try {
             FabricKnotExposer.ensureExposed(this.getClass().getClassLoader());
@@ -34,7 +36,11 @@ public abstract class GlobalUiRenderMixin263 {
             if (GlobalUiRenderBridge263.inputPoller == null) {
                 long handle = GlobalUiRenderBridge263.getWindowHandle(mc);
                 if (handle == 0L) return;
-                GlobalUiRenderBridge263.inputPoller = new UiInputPollerModern(handle, this.getClass().getClassLoader());
+                // 26.3 : SDL3, plus de GLFW — le poller lit l'état par
+                // SdlNativeInput263 (handle = SDL_Window*) et reçoit les
+                // événements des mixins input/ de cette tranche.
+                GlobalUiRenderBridge263.inputPoller = new UiInputPollerModern(
+                    new SdlNativeInput263(handle, mc), this.getClass().getClassLoader());
                 // Tout ce bloc vivait ICI en dur (registre de modules, réglages
                 // globaux, commandes client, audit des HookPoint) — huit
                 // imports de runtime/ depuis apimixin/, donc un cycle de

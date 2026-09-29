@@ -74,10 +74,10 @@ public final class ModuleRegistry {
      */
     private static final boolean IS_26_1 = isLine26(System.getProperty("launcheragent.mcVersion", ""));
 
-    /** Versions de la ligne 26.x qui ont leur tranche de mixins (26.1, 26.1.1, 26.1.2 et 26.2). */
+    /** Versions de la ligne 26.x qui ont leur tranche de mixins (26.1, 26.1.1, 26.1.2, 26.2 et 26.3). */
     private static boolean isLine26(String mcVersion) {
         return "26.1".equals(mcVersion) || "26.1.1".equals(mcVersion) || "26.1.2".equals(mcVersion)
-            || "26.2".equals(mcVersion);
+            || "26.2".equals(mcVersion) || "26.3".equals(mcVersion);
     }
 
     /**

@@ -6,6 +6,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.Options;
 import net.minecraft.client.User;
+import com.mojang.blaze3d.platform.TextInputManager;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.renderer.GameRenderer;
@@ -45,6 +46,14 @@ public interface MinecraftAccessor263 {
 
     @Accessor("mouseHandler")
     MouseHandler la$mouseHandler();
+
+    /**
+     * 26.3 : saisie de texte SDL, que {@code SdlNativeInput263} démarre pour
+     * les champs de l'agent — voir {@link com.yuyuframe.launcheragent.apimixin.v26_3.input.TextInputManagerInvoker263}.
+     * Champ privé {@code textInputManager} (javap).
+     */
+    @Accessor("textInputManager")
+    TextInputManager la$textInputManager();
 
     /** Ajouté pour {@code FreelookModule} (forçage/restauration de la vue 3e personne) — voir sa javadoc. */
     @Accessor("options")

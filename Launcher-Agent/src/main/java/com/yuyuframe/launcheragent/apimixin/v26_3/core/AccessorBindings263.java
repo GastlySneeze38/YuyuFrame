@@ -5,6 +5,7 @@ import com.yuyuframe.launcheragent.apimixin.AccessorRegistry;
 import com.yuyuframe.launcheragent.apimixin.data.ItemInfo;
 import com.yuyuframe.launcheragent.apimixin.data.PlayerEffect;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import com.yuyuframe.launcheragent.apigraphic.platform.lwjgl3.UiInputPollerModern;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.CameraType;
@@ -145,7 +146,9 @@ public final class AccessorBindings263 {
             // partout ailleurs, y compris en Yarn. La 1.21.11 n'a pas besoin
             // d'accessor du tout : elle a un chemin public équivalent.
             InputConstants.Key key = ((KeyMappingAccessor263) r).la$key();
-            return key == null ? null : Integer.valueOf(key.getValue());
+            // 26.3 : la valeur est un scancode SDL ; le point d'accès rend un
+            // code GLFW (contrat de GameOptions.keyCode) — traduit ici.
+            return key == null ? null : Integer.valueOf(UiInputPollerModern.toGlfwKey(key.getValue()));
         });
         AccessorRegistry.bind(AccessPoint.OPTIONS_PERSPECTIVE, (r, a) -> {
             Object target = options(r);

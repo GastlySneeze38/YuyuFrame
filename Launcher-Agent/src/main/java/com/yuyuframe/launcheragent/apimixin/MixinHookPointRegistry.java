@@ -584,6 +584,13 @@ public final class MixinHookPointRegistry {
         // 26.3 (hérité de 26.2) : VertexFormatElement n'a plus de constantes, les formats
         // d'attributs sont lus sur DefaultVertexFormat.
         always("26.3", "v26_3.render.DefaultVertexFormatAccessor263");
+        // 26.3 : caches de pipelines compilés, où l'on inscrit les nôtres.
+        always("26.3", "v26_3.render.RenderSystemAccessor263");
+        // 26.3 : SDL3 remplace GLFW — événements d'entrée relayés au poller
+        // (plus de callbacks natifs à chaîner) et saisie de texte SDL.
+        always("26.3", "v26_3.input.KeyboardInputMixin263");
+        always("26.3", "v26_3.input.MouseInputMixin263");
+        always("26.3", "v26_3.input.TextInputManagerInvoker263");
         always("26.3", "v26_3.render.GameRendererAccessor263");
         always("26.3", "v26_3.render.GuiRendererAccessor263");
         always("26.3", "v26_3.render.RenderPipelinesAccessor263");
