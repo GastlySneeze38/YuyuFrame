@@ -149,6 +149,22 @@ public final class VersionProfileRegistry {
             "26.2",
             null,
             "blaze3d"));
+
+        // 26.3 (2026-09-29) — GELÉE tant que mixincheck/refcheck ne sont pas à
+        // zéro contre le jar client 26.3. Point de départ : copie de 26.2
+        // (apimixin/v26_3, apigraphic/era/blaze3d/v26_3, src/stubs/v26_3),
+        // unité de compilation à part (build.bat). Écart mesuré avec 26.2 : 980
+        // classes ajoutées, 549 retirées, 3 188 modifiées. Les deux ruptures :
+        // Blaze3D renommé com.mojang.renderpearl (api/backend/frontend ;
+        // RenderTarget, Window, RenderSystem restent dans com.mojang.blaze3d),
+        // et GLFW remplacé par SDL3 (SDLEventHandler, codes de touches =
+        // scancodes SDL).
+        PROFILES.add(new VersionProfile(
+            "26_3",
+            new String[]{ "26.3" },
+            "26.3",
+            null,
+            "blaze3d").frozen());
     }
 
     /**

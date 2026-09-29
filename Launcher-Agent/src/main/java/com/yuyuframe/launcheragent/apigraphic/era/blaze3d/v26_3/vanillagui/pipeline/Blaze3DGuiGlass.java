@@ -1,0 +1,121 @@
+package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_3.vanillagui.pipeline;
+
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.ShaderPipelineFactory;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders;
+import com.yuyuframe.launcheragent.apimixin.v26_3.render.RenderPipelinesAccessor263;
+import com.yuyuframe.launcheragent.apimixin.v26_3.render.DefaultVertexFormatAccessor263;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
+import net.minecraft.client.gui.render.TextureSetup;
+
+/**
+ * Panneau de VERRE DÉPOLI destiné à l'état de GUI de vanilla — troisième et
+ * dernière primitive du HUD à être portée (2026-08-31).
+ *
+ * <h2>Pourquoi pas le flou de vanilla</h2>
+ *
+ * Vanilla expose {@code blurBeforeThisStratum()}, mais c'est un post-effet
+ * PLEIN ÉCRAN et DESTRUCTIF : {@code GuiRenderer.draw} appelle
+ * {@code GameRenderer.processBlurEffect()}, qui exécute
+ * {@code post_effect/blur.json} — <b>six</b> passes de flou-boîte séparable —
+ * en réécrivant le framebuffer principal. Tout ce qui est dessiné avant la
+ * strate est flouté PARTOUT. C'est le flou du menu pause, pas du verre
+ * localisé : l'utiliser pour le HUD flouterait toute la vue de jeu.
+ *
+ * <p>Notre chaîne dual-Kawase fait moins de passes (trois pour le HUD),
+ * n'écrase pas le framebuffer, et produit une texture qu'on masque ensuite à
+ * la forme du panneau. Elle reste donc le bon outil ici.
+ *
+ * <h2>Le créneau manquant, et comment on s'en passe</h2>
+ *
+ * Le format porte déjà position locale (UV0), demi-taille (UV1) et rayons
+ * (UV2) : plus rien de libre pour la taille de l'écran, nécessaire pour
+ * convertir un fragment en coordonnée de texture. {@code textureSize(Sampler0, 0)}
+ * la donne directement en GLSL — aucun attribut ni uniforme supplémentaire.
+ *
+ * <p>La teinte voyage dans l'attribut {@code Color} : {@code rgb} = couleur de
+ * teinte, {@code a} = opacité finale du panneau. La FORCE de teinte n'ayant
+ * plus de créneau, elle est figée à la valeur du HUD — voir
+ * {@link #TINT_STRENGTH}.
+ */
+public final class Blaze3DGuiGlass {
+    private Blaze3DGuiGlass() {}
+
+    /**
+     * Force de teinte, figée faute de créneau libre par sommet. Reprend
+     * {@code UiTheme.GLASS_STRENGTH_FIELD}, la seule valeur que le HUD
+     * utilisait ({@code HudPanelRenderer} n'en passe pas d'autre).
+     */
+    public static final float TINT_STRENGTH = GuiElementShaders.GLASS_TINT_STRENGTH;
+
+    // GLSL PARTAGÉ avec la 1.21.11 (voir GuiElementShaders) : le rendu diffère, le shader non.
+    private static final String VERTEX_SRC = GuiElementShaders.GLASS_VERTEX;
+
+    private static final String FRAGMENT_SRC = GuiElementShaders.GLASS_FRAGMENT;
+
+    private static Object pipeline, shaderSource;
+    private static boolean buildAttempted, buildFailed;
+
+    public static Object pipeline() {
+        if (!buildAttempted) {
+            buildAttempted = true;
+            try {
+                if (!Blaze3DCore.isAvailable()) { buildFailed = true; return null; }
+                // 26.2 : builder(0) + addAttribute(nom, GpuFormat) — formats lus
+                // sur DefaultVertexFormat, même disposition qu'en 26.1.2.
+                VertexFormat format = VertexFormat.builder(0)
+                    .addAttribute("Position", DefaultVertexFormatAccessor263.la$positionFormat())
+                    .addAttribute("Color", DefaultVertexFormatAccessor263.la$colorFormat())
+                    .addAttribute("UV0", DefaultVertexFormatAccessor263.la$uv0Format())
+                    .addAttribute("UV1", DefaultVertexFormatAccessor263.la$uv1Format())
+                    .addAttribute("UV2", DefaultVertexFormatAccessor263.la$uv2Format())
+                    .build();
+                Object vsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_gui_glass.vsh");
+                Object fsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_gui_glass.fsh");
+                pipeline = ShaderPipelineFactory.buildPipeline("ui_gui_glass", vsh, fsh,
+                    new String[]{ "Sampler0" }, new String[]{ "DynamicTransforms", "Projection" },
+                    RenderPipelinesAccessor263.la$gui(), format);
+                shaderSource = ShaderPipelineFactory.shaderSource(vsh, VERTEX_SRC, fsh, FRAGMENT_SRC);
+            } catch (Throwable t) {
+                buildFailed = true;
+                LauncherLog.err("[Blaze3DGuiGlass] construction du pipeline: " + t);
+            }
+        }
+        return buildFailed ? null : pipeline;
+    }
+
+    public static boolean ensureCompiled() {
+        Object p = pipeline();
+        if (p == null) return false;
+        try {
+            ShaderPipelineFactory.precompile(ShaderPipelineFactory.device(), p, shaderSource);
+            return true;
+        } catch (Throwable t) {
+            LauncherLog.err("[Blaze3DGuiGlass] précompilation: " + t);
+            return false;
+        }
+    }
+
+    /**
+     * {@code TextureSetup} sur le résultat de la chaîne de flou, ou
+     * {@code null} si aucune chaîne n'a encore été calculée pour cette frame.
+     *
+     * <p>PAS mis en cache, contrairement à l'atlas de police : la chaîne est
+     * recréée à chaque changement de résolution, et sa vue avec.
+     */
+    public static TextureSetup textureSetup() {
+        try {
+            Object view = Blaze3DBlur.blurredView();
+            Object sampler = Blaze3DBlur.blurSampler();
+            if (view == null || sampler == null) return null;
+            return TextureSetup.singleTexture((GpuTextureView) view, (GpuSampler) sampler);
+        } catch (Throwable t) {
+            LauncherLog.err("[Blaze3DGuiGlass] textureSetup: " + t);
+            return null;
+        }
+    }
+}

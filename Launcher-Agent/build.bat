@@ -22,6 +22,11 @@ set "OUT_STUBS_1211=%AGENT_DIR%build\stubs_1_21_11"
 :: 26.1 (2026-09-29), a aligner sur le vrai jar 26.2.
 set "SRC_STUBS_262=%AGENT_DIR%src\stubs\v26_2"
 set "OUT_STUBS_262=%AGENT_DIR%build\stubs_26_2"
+:: Unite 26.3 (Blaze3D renomme renderpearl, GLFW remplace par SDL3) — meme
+:: montage, voir "Unite 26.3" plus bas. Stubs de depart = copie de ceux de la
+:: 26.2 avec la table des packages deplaces (2026-09-29).
+set "SRC_STUBS_263=%AGENT_DIR%src\stubs\v26_3"
+set "OUT_STUBS_263=%AGENT_DIR%build\stubs_26_3"
 :: Unite 1.8.9 (Yarn legacy : MEMES noms de classes que les modernes, API
 :: sans rapport) — meme montage que la 1.21.11, voir "Unite 1.8.9" plus bas.
 set "SRC_STUBS_189=%AGENT_DIR%src\stubs\v1_8_9"
@@ -275,10 +280,10 @@ echo [Build] Compilation principale...
 :: differente — les deux ne tiennent pas sur un classpath). Le filtre porte
 :: sur un SEGMENT de chemin complet (\v1_21_11\), jamais sur une sous-chaine
 :: de nom de fichier. Idem pour tout dossier "v1_8_9" (unite 1.8.9), tout
-:: dossier "v26_2" (unite 26.2), et pour la couche LWJGL 2 -> 3 (dossier
+:: dossier "v26_2" (unite 26.2), "v26_3" (unite 26.3), et pour la couche LWJGL 2 -> 3 (dossier
 :: lwjgl2compat + arborescence org\lwjgl), compilee dans son propre jar.
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\v26_2\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\v26_2\\' -and $_ -notmatch '\\v26_3\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (
@@ -461,6 +466,60 @@ if not "!JAVAC_RC!"=="0" (
     goto :error
 )
 echo [Build 26.2] Compilation OK
+
+:: --- Unite 26.3 : stubs + code type, compiles A PART ------------------------
+:: Meme montage que l'unite 26.2 : la 26.3 a renomme Blaze3D en renderpearl
+:: (com.mojang.renderpearl.api.*) mais garde com.mojang.blaze3d.* pour
+:: RenderTarget, Window, RenderSystem, InputConstants... avec une API
+:: differente (SDL3 au lieu de GLFW) — incompatible avec les stubs 26.2 sur un
+:: meme classpath. Sources : tout dossier "v26_3" de src\main\java.
+
+if exist "%OUT_STUBS_263%" rmdir /s /q "%OUT_STUBS_263%"
+mkdir "%OUT_STUBS_263%"
+echo [Stubs 26.3] Compilation des stubs 26.3...
+
+set "STUBLIST_263=%TEMP%\launcheragent_stubs_263.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_STUBS_263%' | Select-Object -ExpandProperty FullName | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%STUBLIST_263%', $files)"
+
+:: Meme garde-fou que pour STUBLIST — voir plus haut.
+for %%A in ("%STUBLIST_263%") do if %%~zA==0 (
+    echo [ERREUR] Aucun fichier .java trouve dans src\stubs\v26_3 — chemin/checkout incorrect ?
+    del "%STUBLIST_263%" 2>nul
+    goto :error
+)
+
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -d "%OUT_STUBS_263%" "@%STUBLIST_263%"
+set "JAVAC_RC=!errorlevel!"
+del "%STUBLIST_263%" 2>nul
+if not "!JAVAC_RC!"=="0" (
+    echo [ERREUR] Compilation stubs 26.3 echouee.
+    goto :error
+)
+echo [Stubs 26.3] OK
+
+echo [Build 26.3] Compilation du code type 26.3...
+set "SRCLIST_263=%TEMP%\launcheragent_sources_263.txt"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v26_3\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_263%', $files)"
+
+:: Meme garde-fou — voir plus haut.
+for %%A in ("%SRCLIST_263%") do if %%~zA==0 (
+    echo [ERREUR] Aucun dossier v26_3 trouve dans src\main\java — chemin/checkout incorrect ?
+    del "%SRCLIST_263%" 2>nul
+    goto :error
+)
+
+:: -proc:none : meme raison que la compilation principale (voir plus haut).
+"%JAVAC_CMD%" --release %JAVA_RELEASE% -encoding UTF-8 -proc:none ^
+  -cp "%LIB%\mixin.jar;%LIB%\mixinextras.jar;%OUT_MAIN%;%OUT_STUBS_263%" ^
+  -d "%OUT_MAIN%" ^
+  "@%SRCLIST_263%"
+set "JAVAC_RC=!errorlevel!"
+del "%SRCLIST_263%" 2>nul
+if not "!JAVAC_RC!"=="0" (
+    echo [ERREUR] Compilation du code type 26.3 echouee.
+    goto :error
+)
+echo [Build 26.3] Compilation OK
 
 :: --- Unite 1.8.9 : stubs Yarn legacy + liaisons, compiles A PART ------------
 :: Meme raison et meme montage que l'unite 1.21.11 : Yarn legacy reutilise les
