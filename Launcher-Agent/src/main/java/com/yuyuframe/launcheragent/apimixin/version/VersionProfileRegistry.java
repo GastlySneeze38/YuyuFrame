@@ -104,6 +104,19 @@ public final class VersionProfileRegistry {
             "26.1.2",
             null,
             "blaze3d"));
+
+        // 26.1 (2026-09-29) : mixins dans apimixin/v26_1_0, ère graphique dans
+        // apigraphic/era/blaze3d/v26_1_0 — copies de la 26.1.2, pas une source
+        // partagée (un dossier par version). Jar client comparé classe par
+        // classe avec 26.1.2 : 9 classes diffèrent sur 10 682, aucune ciblée ni
+        // référencée par l'agent (Checkbox, écrans de signalement, SharedConstants…),
+        // même Java 25 et mêmes bibliothèques. Non obfusqué, comme 26.1.2.
+        PROFILES.add(new VersionProfile(
+            "26_1_0",
+            new String[]{ "26.1" },
+            "26.1",
+            null,
+            "blaze3d"));
     }
 
     /**
