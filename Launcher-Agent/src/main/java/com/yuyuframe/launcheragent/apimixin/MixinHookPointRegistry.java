@@ -445,11 +445,11 @@ public final class MixinHookPointRegistry {
         gate("26.1.1", "v26_1_1.clock.ClockTotalTicksMixin2611", HookPoint.CLOCK_TOTAL_TICKS);
 
         // ══════════════════════════════════════════════════════════════════
-        // 26.2 — EN COURS DE PORTAGE (profil gelé, voir VersionProfileRegistry).
-        // Point de départ : copie des entrées 26.1.2. Les cibles de plusieurs
-        // de ces mixins ont bougé en 26.2 (Gui → Hud, écrans passés de
-        // Minecraft à Gui, ContextualBar, LevelExtractor, Blaze3D) : la table
-        // suivra le portage fichier par fichier.
+        // 26.2 — portée le 2026-09-29 à partir des entrées 26.1.2 (voir
+        // VersionProfileRegistry). Mêmes HookPoints ; les CIBLES ont bougé
+        // dans les fichiers eux-mêmes (Gui → Hud, écrans passés de Minecraft à
+        // Gui, ContextualBar, LevelExtractor, GpuSurface), et trois accessors
+        // sont propres à la 26.2 (Gui, Hud, DefaultVertexFormat).
         // ══════════════════════════════════════════════════════════════════
 
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────

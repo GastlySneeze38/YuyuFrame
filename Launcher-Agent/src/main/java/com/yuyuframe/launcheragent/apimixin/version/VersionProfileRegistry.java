@@ -129,7 +129,9 @@ public final class VersionProfileRegistry {
             null,
             "blaze3d"));
 
-        // 26.2 (2026-09-29) — GELÉE pendant le portage. Point de départ :
+        // 26.2 (2026-09-29) — DÉGELÉE le 2026-09-29 (build v1195), une fois
+        // tools/mixincheck.py et tools/refcheck261.py à zéro contre le jar
+        // client 26.2 — rien n'avait encore tourné en jeu. Point de départ :
         // copie de 26.1.2 (apimixin/v26_2, apigraphic/era/blaze3d/v26_2), unité
         // de compilation à part contre src/stubs/v26_2 (build.bat). Écart
         // mesuré avec 26.1.2 : 570 classes ajoutées, 300 retirées, 2 655
@@ -138,14 +140,15 @@ public final class VersionProfileRegistry {
         // (screen/setScreen quittent Minecraft), ContextualBarRenderer devient
         // ContextualBar, Options.hideGui disparaît (Hud.isHidden), le rendu du
         // monde passe par extract/LevelExtractor, et Blaze3D est refondu
-        // (GpuSurface, RenderPassDescriptor, BindGroupLayout, GpuFormat…).
-        // Dégeler quand les deux audits sont à zéro.
+        // (GpuSurface, RenderPassDescriptor, BindGroupLayout, GpuFormat…) —
+        // couche GPU portée dans Blaze3DGpu262, présentation de l'interface
+        // sur GpuSurface.blitFromTexture (ex-RenderTarget.blitToScreen).
         PROFILES.add(new VersionProfile(
             "26_2",
             new String[]{ "26.2" },
             "26.2",
             null,
-            "blaze3d").frozen());
+            "blaze3d"));
     }
 
     /**

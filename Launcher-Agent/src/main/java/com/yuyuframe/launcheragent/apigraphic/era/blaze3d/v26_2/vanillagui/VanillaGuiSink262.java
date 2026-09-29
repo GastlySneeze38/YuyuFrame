@@ -27,9 +27,10 @@ import java.util.List;
  * {@link VanillaGuiSink} de la 26.1.2 — délègue à {@link VanillaGuiLayer},
  * inchangée.
  *
- * <p>⚠️ 26.2 (2026-09-29) : copie de départ de
- * {@code v26_1_2/vanillagui/VanillaGuiSink261}, PAS encore portée — Blaze3D a
- * été refondu en 26.2. Déclarée par {@link VanillaGuiSinkProvider262}.
+ * <p>26.2 (2026-09-29) : copie de {@code v26_1_2/vanillagui/VanillaGuiSink261}
+ * branchée sur les accessors {@code apimixin/v26_2} ; les changements de
+ * Blaze3D sont absorbés par {@code Blaze3DGpu262} et les pipelines de ce
+ * dossier (audits à zéro). Déclarée par {@link VanillaGuiSinkProvider262}.
  *
  * <p>Aucune ligne de rendu n'a été réécrite en introduisant l'interface : ce
  * fichier ne fait que donner une FORME commune au chemin déjà validé en jeu,
