@@ -58,8 +58,8 @@ public final class ClearVisionModule extends LauncherModule {
         super("clear-vision", "Vision claire", "Retire le brouillard teinté et le givre de l'eau, la lave et la neige poudreuse", false,
             HookPoint.FOG_SETUP_WATER, HookPoint.FOG_SETUP_LAVA, HookPoint.FOG_SETUP_POWDERED_SNOW,
             HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
-        // 26.1.2 — voir apimixin/v26_1/fog/ (brouillard) et
-        // apimixin/v26_1/hud/HudExtractTextureOverlayMixin261 (givre écran).
+        // 26.1.2 — voir apimixin/v26_1_2/fog/ (brouillard) et
+        // apimixin/v26_1_2/hud/HudExtractTextureOverlayMixin261 (givre écran).
         VanillaHookRegistry.register(HookPoint.FOG_SETUP_WATER, ctx -> pushFogFarIf(clearWater, ctx));
         VanillaHookRegistry.register(HookPoint.FOG_SETUP_LAVA, ctx -> pushFogFarIf(clearLava, ctx));
         VanillaHookRegistry.register(HookPoint.FOG_SETUP_POWDERED_SNOW, ctx -> pushFogFarIf(clearPowderSnow, ctx));

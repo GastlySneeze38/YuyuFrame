@@ -1,6 +1,6 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui;
 
-import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_1.vanillagui.VanillaGuiSink261;
+import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_1_2.vanillagui.VanillaGuiSink261;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 import java.util.ServiceLoader;

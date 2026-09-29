@@ -91,7 +91,7 @@ public final class VersionProfileRegistry {
         // intermediary Fabric — voir FabricMC/fabric-loom#1585 et le guide de
         // portage officiel https://docs.fabricmc.net/develop/porting/, "The
         // 26.1 version of Minecraft is unobfuscated"). Les mixins de cette
-        // tranche (apimixin/v26_1/) utilisent donc les VRAIS noms Mojang
+        // tranche (apimixin/v26_1_2/) utilisent donc les VRAIS noms Mojang
         // directement en dur — chaque classe/méthode/champ vérifié
         // individuellement via javap sur le jar client 26.1.2 réel. AUCUN jar
         // Yarn n'est chargé (yarnJarNameHint=null) : MappingsRegistry reste en

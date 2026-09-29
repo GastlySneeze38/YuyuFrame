@@ -65,7 +65,7 @@ public final class ModuleRegistry {
 
     /**
      * Sans citrouille / Vision claire : implémentés via des mixins qui
-     * n'existent que pour 26.1.2 et 1.21.11 ({@code apimixin/v26_1},
+     * n'existent que pour 26.1.2 et 1.21.11 ({@code apimixin/v26_1_2},
      * {@code apimixin/v1_21_11}) — cartes gatées pour ne pas afficher des
      * toggles sans le moindre effet sur la 1.8.9 (même principe que le
      * masquage du groupe "Optimisations", demande explicite de l'utilisateur

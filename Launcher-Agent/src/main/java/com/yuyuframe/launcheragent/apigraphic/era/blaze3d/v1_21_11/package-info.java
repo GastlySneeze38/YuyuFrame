@@ -35,7 +35,7 @@
  * <p>Chargé uniquement sur 1.21.11 : sur une autre version, aucune classe de
  * ce dossier n'est jamais référencée, donc jamais chargée.
  *
- * <p>Rangement (2026-09-13), même forme que {@code v26_1/} : {@code gpu/}
+ * <p>Rangement (2026-09-13), même forme que {@code v26_1_2/} : {@code gpu/}
  * (implémentation de {@code Blaze3DGpu}), {@code vanillagui/} (sink de l'état
  * de GUI vanilla) et {@code vanillagui/element/} (éléments soumis à cet état).
  */

@@ -88,7 +88,7 @@ public final class ChatEnhancementsModule extends LauncherModule {
         super("chat-enhancements", "Chat amélioré", "Ping quand ton pseudo est mentionné + regroupe les messages répétés", false,
             HookPoint.CHAT_RECEIVE, HookPoint.CHAT_SEND);
         iconUrl = icons8("chat");
-        // 26.1.2 — voir apimixin/v26_1/chat/ChatReceiveMixin261 (réconciliation
+        // 26.1.2 — voir apimixin/v26_1_2/chat/ChatReceiveMixin261 (réconciliation
         // de l'ancien mixin.client.v26_1.ChatListenerMixin261, même déclencheur).
         VanillaHookRegistry.register(HookPoint.CHAT_RECEIVE, ctx -> { onChatMessageObserved(); return false; });
         // Voir consumeOwnEcho() : on note ce que le joueur ENVOIE pour

@@ -68,7 +68,7 @@ import java.util.Map;
  *
  * L'entrée est le nom de classe RELATIF au package Mixin {@code
  * com.yuyuframe.launcheragent.apimixin} (ex. {@code
- * v26_1.hud.HudExtractArmorMixin261}) — exactement ce qui atterrit dans le
+ * v26_1_2.hud.HudExtractArmorMixin261}) — exactement ce qui atterrit dans le
  * tableau {@code client} du JSON généré.
  *
  * <h2>Ajouter une version MC</h2>
@@ -86,7 +86,7 @@ public final class MixinHookPointRegistry {
     /** Une ligne de la table — miroir Java de ce que le scanner bytecode extrait. */
     public static final class Entry {
         public final String mcVersion;
-        /** Nom de classe relatif au package Mixin (ex. {@code v26_1.hud.HudExtractArmorMixin261}). */
+        /** Nom de classe relatif au package Mixin (ex. {@code v26_1_2.hud.HudExtractArmorMixin261}). */
         public final String mixinEntry;
         /** {@code null} pour une entrée {@link #always} — jamais gatée. */
         public final HookPoint hookPoint;
@@ -124,25 +124,25 @@ public final class MixinHookPointRegistry {
         // ── Infrastructure : hub de rendu, cycle d'écran, accessors ────────
         // Jamais gatés — ce sont eux qui font exister notre UI et nos accès
         // typés au jeu ; les gater reviendrait à gater l'agent lui-même.
-        always("26.1.2", "v26_1.core.TitleScreenMixin261");
-        always("26.1.2", "v26_1.core.MinecraftAccessor261");
-        always("26.1.2", "v26_1.core.GlobalUiRenderMixin261");
-        always("26.1.2", "v26_1.core.GlobalUiPresentMixin261");
-        always("26.1.2", "v26_1.core.GuiFlushMixin261");
-        always("26.1.2", "v26_1.core.OptionsAccessor261");
-        always("26.1.2", "v26_1.core.OptionInstanceAccessor261");
-        always("26.1.2", "v26_1.core.KeyMappingAccessor261");
-        always("26.1.2", "v26_1.core.FoodDataAccessor261");
-        always("26.1.2", "v26_1.core.DataComponentsAccessor261");
-        always("26.1.2", "v26_1.core.ServerDataAccessor261");
-        always("26.1.2", "v26_1.core.ChatComponentAccessor261");
-        always("26.1.2", "v26_1.core.FogRendererAccessor261");
-        always("26.1.2", "v26_1.core.GuiGraphicsExtractorAccessor261");
-        always("26.1.2", "v26_1.render.VertexFormatElementAccessor261");
-        always("26.1.2", "v26_1.render.GameRendererAccessor261");
-        always("26.1.2", "v26_1.render.GuiRendererAccessor261");
-        always("26.1.2", "v26_1.render.RenderPipelinesAccessor261");
-        always("26.1.2", "v26_1.render.GuiGraphicsExtractorInvoker261");
+        always("26.1.2", "v26_1_2.core.TitleScreenMixin261");
+        always("26.1.2", "v26_1_2.core.MinecraftAccessor261");
+        always("26.1.2", "v26_1_2.core.GlobalUiRenderMixin261");
+        always("26.1.2", "v26_1_2.core.GlobalUiPresentMixin261");
+        always("26.1.2", "v26_1_2.core.GuiFlushMixin261");
+        always("26.1.2", "v26_1_2.core.OptionsAccessor261");
+        always("26.1.2", "v26_1_2.core.OptionInstanceAccessor261");
+        always("26.1.2", "v26_1_2.core.KeyMappingAccessor261");
+        always("26.1.2", "v26_1_2.core.FoodDataAccessor261");
+        always("26.1.2", "v26_1_2.core.DataComponentsAccessor261");
+        always("26.1.2", "v26_1_2.core.ServerDataAccessor261");
+        always("26.1.2", "v26_1_2.core.ChatComponentAccessor261");
+        always("26.1.2", "v26_1_2.core.FogRendererAccessor261");
+        always("26.1.2", "v26_1_2.core.GuiGraphicsExtractorAccessor261");
+        always("26.1.2", "v26_1_2.render.VertexFormatElementAccessor261");
+        always("26.1.2", "v26_1_2.render.GameRendererAccessor261");
+        always("26.1.2", "v26_1_2.render.GuiRendererAccessor261");
+        always("26.1.2", "v26_1_2.render.RenderPipelinesAccessor261");
+        always("26.1.2", "v26_1_2.render.GuiGraphicsExtractorInvoker261");
 
         // ── Freelook : VOLONTAIREMENT non gaté (2026-08-24, [[project_mc_261_port]] §11) ──
         // Ces deux mixins dispatchent bien via HookPoint/VanillaHookRegistry
@@ -156,82 +156,82 @@ public final class MixinHookPointRegistry {
         // NoSuchMethodError sur Args$1.of(float,float) dans
         // Camera.alignWithEntity. Les laisser tisser inconditionnellement
         // évite le retransform et le bug.
-        always("26.1.2", "v26_1.freelook.CameraFreelookMixin261");
-        always("26.1.2", "v26_1.freelook.MouseHandlerFreelookMixin261");
+        always("26.1.2", "v26_1_2.freelook.CameraFreelookMixin261");
+        always("26.1.2", "v26_1_2.freelook.MouseHandlerFreelookMixin261");
 
         // ── HUD (fabric-rendering-v1) ─────────────────────────────────────
-        gate("26.1.2", "v26_1.hud.HudExtractCameraOverlayMixin261", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
-        gate("26.1.2", "v26_1.hud.HudExtractCrosshairMixin261", HookPoint.HUD_EXTRACT_CROSSHAIR);
-        gate("26.1.2", "v26_1.hud.HudExtractSpectatorHotbarMixin261", HookPoint.HUD_EXTRACT_HOTBAR);
-        gate("26.1.2", "v26_1.hud.HudExtractItemHotbarMixin261", HookPoint.HUD_EXTRACT_ITEM_HOTBAR);
-        gate("26.1.2", "v26_1.hud.HudExtractArmorMixin261", HookPoint.HUD_EXTRACT_ARMOR);
-        gate("26.1.2", "v26_1.hud.HudExtractHeartsMixin261", HookPoint.HUD_EXTRACT_HEARTS);
-        gate("26.1.2", "v26_1.hud.HudExtractFoodMixin261", HookPoint.HUD_EXTRACT_FOOD);
-        gate("26.1.2", "v26_1.hud.HudExtractAirBubblesMixin261", HookPoint.HUD_EXTRACT_AIR_BUBBLES);
-        gate("26.1.2", "v26_1.hud.HudExtractVehicleHealthMixin261", HookPoint.HUD_EXTRACT_VEHICLE_HEALTH);
-        gate("26.1.2", "v26_1.hud.HudExtractContextualBarBackgroundMixin261", HookPoint.HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND);
-        gate("26.1.2", "v26_1.hud.HudExtractExperienceLevelMixin261", HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL);
-        gate("26.1.2", "v26_1.hud.HudExtractSelectedItemNameMixin261", HookPoint.HUD_EXTRACT_SELECTED_ITEM_NAME);
-        gate("26.1.2", "v26_1.hud.HudExtractSpectatorActionMixin261", HookPoint.HUD_EXTRACT_SPECTATOR_ACTION);
-        gate("26.1.2", "v26_1.hud.HudExtractEffectsMixin261", HookPoint.HUD_EXTRACT_EFFECTS);
-        gate("26.1.2", "v26_1.hud.HudExtractBossOverlayMixin261", HookPoint.HUD_EXTRACT_BOSS_OVERLAY);
-        gate("26.1.2", "v26_1.hud.HudExtractSleepOverlayMixin261", HookPoint.HUD_EXTRACT_SLEEP_OVERLAY);
-        gate("26.1.2", "v26_1.hud.HudExtractDemoOverlayMixin261", HookPoint.HUD_EXTRACT_DEMO_OVERLAY);
-        gate("26.1.2", "v26_1.hud.HudExtractScoreboardSidebarMixin261", HookPoint.HUD_EXTRACT_SCOREBOARD_SIDEBAR);
-        gate("26.1.2", "v26_1.hud.HudExtractOverlayMessageMixin261", HookPoint.HUD_EXTRACT_OVERLAY_MESSAGE);
-        gate("26.1.2", "v26_1.hud.HudExtractTitleMixin261", HookPoint.HUD_EXTRACT_TITLE);
-        gate("26.1.2", "v26_1.hud.HudExtractChatMixin261", HookPoint.HUD_EXTRACT_CHAT);
-        gate("26.1.2", "v26_1.hud.HudExtractTabListMixin261", HookPoint.HUD_EXTRACT_TAB_LIST);
-        gate("26.1.2", "v26_1.hud.HudExtractTextureOverlayMixin261", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
+        gate("26.1.2", "v26_1_2.hud.HudExtractCameraOverlayMixin261", HookPoint.HUD_EXTRACT_CAMERA_OVERLAY);
+        gate("26.1.2", "v26_1_2.hud.HudExtractCrosshairMixin261", HookPoint.HUD_EXTRACT_CROSSHAIR);
+        gate("26.1.2", "v26_1_2.hud.HudExtractSpectatorHotbarMixin261", HookPoint.HUD_EXTRACT_HOTBAR);
+        gate("26.1.2", "v26_1_2.hud.HudExtractItemHotbarMixin261", HookPoint.HUD_EXTRACT_ITEM_HOTBAR);
+        gate("26.1.2", "v26_1_2.hud.HudExtractArmorMixin261", HookPoint.HUD_EXTRACT_ARMOR);
+        gate("26.1.2", "v26_1_2.hud.HudExtractHeartsMixin261", HookPoint.HUD_EXTRACT_HEARTS);
+        gate("26.1.2", "v26_1_2.hud.HudExtractFoodMixin261", HookPoint.HUD_EXTRACT_FOOD);
+        gate("26.1.2", "v26_1_2.hud.HudExtractAirBubblesMixin261", HookPoint.HUD_EXTRACT_AIR_BUBBLES);
+        gate("26.1.2", "v26_1_2.hud.HudExtractVehicleHealthMixin261", HookPoint.HUD_EXTRACT_VEHICLE_HEALTH);
+        gate("26.1.2", "v26_1_2.hud.HudExtractContextualBarBackgroundMixin261", HookPoint.HUD_EXTRACT_CONTEXTUAL_BAR_BACKGROUND);
+        gate("26.1.2", "v26_1_2.hud.HudExtractExperienceLevelMixin261", HookPoint.HUD_EXTRACT_EXPERIENCE_LEVEL);
+        gate("26.1.2", "v26_1_2.hud.HudExtractSelectedItemNameMixin261", HookPoint.HUD_EXTRACT_SELECTED_ITEM_NAME);
+        gate("26.1.2", "v26_1_2.hud.HudExtractSpectatorActionMixin261", HookPoint.HUD_EXTRACT_SPECTATOR_ACTION);
+        gate("26.1.2", "v26_1_2.hud.HudExtractEffectsMixin261", HookPoint.HUD_EXTRACT_EFFECTS);
+        gate("26.1.2", "v26_1_2.hud.HudExtractBossOverlayMixin261", HookPoint.HUD_EXTRACT_BOSS_OVERLAY);
+        gate("26.1.2", "v26_1_2.hud.HudExtractSleepOverlayMixin261", HookPoint.HUD_EXTRACT_SLEEP_OVERLAY);
+        gate("26.1.2", "v26_1_2.hud.HudExtractDemoOverlayMixin261", HookPoint.HUD_EXTRACT_DEMO_OVERLAY);
+        gate("26.1.2", "v26_1_2.hud.HudExtractScoreboardSidebarMixin261", HookPoint.HUD_EXTRACT_SCOREBOARD_SIDEBAR);
+        gate("26.1.2", "v26_1_2.hud.HudExtractOverlayMessageMixin261", HookPoint.HUD_EXTRACT_OVERLAY_MESSAGE);
+        gate("26.1.2", "v26_1_2.hud.HudExtractTitleMixin261", HookPoint.HUD_EXTRACT_TITLE);
+        gate("26.1.2", "v26_1_2.hud.HudExtractChatMixin261", HookPoint.HUD_EXTRACT_CHAT);
+        gate("26.1.2", "v26_1_2.hud.HudExtractTabListMixin261", HookPoint.HUD_EXTRACT_TAB_LIST);
+        gate("26.1.2", "v26_1_2.hud.HudExtractTextureOverlayMixin261", HookPoint.HUD_EXTRACT_TEXTURE_OVERLAY);
 
         // ── Brouillard par environnement ──────────────────────────────────
-        gate("26.1.2", "v26_1.fog.FogSetupAtmosphericMixin261", HookPoint.FOG_SETUP_ATMOSPHERIC);
-        gate("26.1.2", "v26_1.fog.FogSetupWaterMixin261", HookPoint.FOG_SETUP_WATER);
-        gate("26.1.2", "v26_1.fog.FogSetupLavaMixin261", HookPoint.FOG_SETUP_LAVA);
-        gate("26.1.2", "v26_1.fog.FogSetupPowderedSnowMixin261", HookPoint.FOG_SETUP_POWDERED_SNOW);
-        gate("26.1.2", "v26_1.fog.FogSetupBlindnessMixin261", HookPoint.FOG_SETUP_BLINDNESS);
-        gate("26.1.2", "v26_1.fog.FogSetupDarknessMixin261", HookPoint.FOG_SETUP_DARKNESS);
+        gate("26.1.2", "v26_1_2.fog.FogSetupAtmosphericMixin261", HookPoint.FOG_SETUP_ATMOSPHERIC);
+        gate("26.1.2", "v26_1_2.fog.FogSetupWaterMixin261", HookPoint.FOG_SETUP_WATER);
+        gate("26.1.2", "v26_1_2.fog.FogSetupLavaMixin261", HookPoint.FOG_SETUP_LAVA);
+        gate("26.1.2", "v26_1_2.fog.FogSetupPowderedSnowMixin261", HookPoint.FOG_SETUP_POWDERED_SNOW);
+        gate("26.1.2", "v26_1_2.fog.FogSetupBlindnessMixin261", HookPoint.FOG_SETUP_BLINDNESS);
+        gate("26.1.2", "v26_1_2.fog.FogSetupDarknessMixin261", HookPoint.FOG_SETUP_DARKNESS);
 
         // ── Rendu de texte/décorations d'item ─────────────────────────────
-        gate("26.1.2", "v26_1.render.ItemDecorationsExtractMixin261", HookPoint.ITEM_DECORATIONS_EXTRACT);
-        gate("26.1.2", "v26_1.render.AdvancementToastExtractMixin261", HookPoint.ADVANCEMENT_TOAST_EXTRACT);
-        gate("26.1.2", "v26_1.render.SubtitleOverlayExtractMixin261", HookPoint.SUBTITLE_OVERLAY_EXTRACT);
+        gate("26.1.2", "v26_1_2.render.ItemDecorationsExtractMixin261", HookPoint.ITEM_DECORATIONS_EXTRACT);
+        gate("26.1.2", "v26_1_2.render.AdvancementToastExtractMixin261", HookPoint.ADVANCEMENT_TOAST_EXTRACT);
+        gate("26.1.2", "v26_1_2.render.SubtitleOverlayExtractMixin261", HookPoint.SUBTITLE_OVERLAY_EXTRACT);
 
         // ── Monde/niveau ───────────────────────────────────────────────────
-        gate("26.1.2", "v26_1.level.LevelBlockOutlineExtractMixin261", HookPoint.LEVEL_BLOCK_OUTLINE_EXTRACT);
-        gate("26.1.2", "v26_1.level.LevelExtractMixin261", HookPoint.LEVEL_EXTRACT);
-        gate("26.1.2", "v26_1.level.GuiRenderStateResetMixin261", HookPoint.GUI_RENDER_STATE_RESET);
-        gate("26.1.2", "v26_1.level.GameRenderExtractMixin261", HookPoint.GAME_RENDER_EXTRACT);
+        gate("26.1.2", "v26_1_2.level.LevelBlockOutlineExtractMixin261", HookPoint.LEVEL_BLOCK_OUTLINE_EXTRACT);
+        gate("26.1.2", "v26_1_2.level.LevelExtractMixin261", HookPoint.LEVEL_EXTRACT);
+        gate("26.1.2", "v26_1_2.level.GuiRenderStateResetMixin261", HookPoint.GUI_RENDER_STATE_RESET);
+        gate("26.1.2", "v26_1_2.level.GameRenderExtractMixin261", HookPoint.GAME_RENDER_EXTRACT);
 
         // ── Écran/Input ────────────────────────────────────────────────────
-        gate("26.1.2", "v26_1.screen.ScreenInitMixin261", HookPoint.SCREEN_INIT);
-        gate("26.1.2", "v26_1.screen.MouseScrollMixin261", HookPoint.MOUSE_SCROLL);
-        gate("26.1.2", "v26_1.screen.KeyboardKeyMixin261", HookPoint.KEYBOARD_KEY);
-        gate("26.1.2", "v26_1.screen.ScreenSetMixin261", HookPoint.SCREEN_SET);
-        gate("26.1.2", "v26_1.screen.ScreenAfterBackgroundExtractMixin261", HookPoint.CONTAINER_SCREEN_EXTRACT_TOOLTIP);
+        gate("26.1.2", "v26_1_2.screen.ScreenInitMixin261", HookPoint.SCREEN_INIT);
+        gate("26.1.2", "v26_1_2.screen.MouseScrollMixin261", HookPoint.MOUSE_SCROLL);
+        gate("26.1.2", "v26_1_2.screen.KeyboardKeyMixin261", HookPoint.KEYBOARD_KEY);
+        gate("26.1.2", "v26_1_2.screen.ScreenSetMixin261", HookPoint.SCREEN_SET);
+        gate("26.1.2", "v26_1_2.screen.ScreenAfterBackgroundExtractMixin261", HookPoint.CONTAINER_SCREEN_EXTRACT_TOOLTIP);
 
         // ── Raccourcis clavier ─────────────────────────────────────────────
-        gate("26.1.2", "v26_1.keybind.KeybindRegisterMixin261", HookPoint.KEYBIND_REGISTER);
-        gate("26.1.2", "v26_1.keybind.KeybindCategoryRegisterMixin261", HookPoint.KEYBIND_CATEGORY_REGISTER);
+        gate("26.1.2", "v26_1_2.keybind.KeybindRegisterMixin261", HookPoint.KEYBIND_REGISTER);
+        gate("26.1.2", "v26_1_2.keybind.KeybindCategoryRegisterMixin261", HookPoint.KEYBIND_CATEGORY_REGISTER);
 
         // ── Chat / combat ──────────────────────────────────────────────────
-        gate("26.1.2", "v26_1.chat.ChatReceiveMixin261", HookPoint.CHAT_RECEIVE);
-        gate("26.1.2", "v26_1.chat.ChatSendMixin261", HookPoint.CHAT_SEND);
-        gate("26.1.2", "v26_1.chat.CommandSendMixin261", HookPoint.COMMAND_SEND);
-        gate("26.1.2", "v26_1.chat.CommandTreeMixin261", HookPoint.COMMAND_TREE_RECEIVE);
-        gate("26.1.2", "v26_1.combat.PiercingAttackMixin261", HookPoint.PIERCING_ATTACK);
+        gate("26.1.2", "v26_1_2.chat.ChatReceiveMixin261", HookPoint.CHAT_RECEIVE);
+        gate("26.1.2", "v26_1_2.chat.ChatSendMixin261", HookPoint.CHAT_SEND);
+        gate("26.1.2", "v26_1_2.chat.CommandSendMixin261", HookPoint.COMMAND_SEND);
+        gate("26.1.2", "v26_1_2.chat.CommandTreeMixin261", HookPoint.COMMAND_TREE_RECEIVE);
+        gate("26.1.2", "v26_1_2.combat.PiercingAttackMixin261", HookPoint.PIERCING_ATTACK);
 
         // ── Item ───────────────────────────────────────────────────────────
-        gate("26.1.2", "v26_1.item.ItemTooltipMixin261", HookPoint.ITEM_TOOLTIP);
+        gate("26.1.2", "v26_1_2.item.ItemTooltipMixin261", HookPoint.ITEM_TOOLTIP);
 
         // ── Cycle de vie tick/chunk/entité ────────────────────────────────
-        gate("26.1.2", "v26_1.lifecycle.ClientTickMixin261", HookPoint.CLIENT_TICK);
-        gate("26.1.2", "v26_1.lifecycle.EntityLoadMixin261", HookPoint.ENTITY_LOAD);
-        gate("26.1.2", "v26_1.lifecycle.EntityUnloadMixin261", HookPoint.ENTITY_UNLOAD);
-        gate("26.1.2", "v26_1.lifecycle.ClientLevelLoadMixin261", HookPoint.CLIENT_LEVEL_LOAD);
+        gate("26.1.2", "v26_1_2.lifecycle.ClientTickMixin261", HookPoint.CLIENT_TICK);
+        gate("26.1.2", "v26_1_2.lifecycle.EntityLoadMixin261", HookPoint.ENTITY_LOAD);
+        gate("26.1.2", "v26_1_2.lifecycle.EntityUnloadMixin261", HookPoint.ENTITY_UNLOAD);
+        gate("26.1.2", "v26_1_2.lifecycle.ClientLevelLoadMixin261", HookPoint.CLIENT_LEVEL_LOAD);
 
         // ── Horloge ────────────────────────────────────────────────────────
-        gate("26.1.2", "v26_1.clock.ClockTotalTicksMixin261", HookPoint.CLOCK_TOTAL_TICKS);
+        gate("26.1.2", "v26_1_2.clock.ClockTotalTicksMixin261", HookPoint.CLOCK_TOTAL_TICKS);
 
         // ══════════════════════════════════════════════════════════════════
         // 1.21.11 — MC OBFUSQUÉ : cibles en noms Yarn, méthodes traduites par

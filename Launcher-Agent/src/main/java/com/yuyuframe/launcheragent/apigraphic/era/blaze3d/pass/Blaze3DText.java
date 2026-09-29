@@ -36,7 +36,7 @@ public final class Blaze3DText {
      * ColorModulator} (voir {@link #TEXT_FRAGMENT_SRC}), pas besoin non plus
      * du lightmap (Sampler2) qu'un pipeline texte dédié n'a plus à neutraliser.
      */
-    // Public : partagé avec Blaze3DGuiText (v26_1/vanillagui/pipeline) et
+    // Public : partagé avec Blaze3DGuiText (v26_1_2/vanillagui/pipeline) et
     // GuiElementShaders (vanillagui), qui construisent le MÊME shader pour la
     // voie "état de GUI vanilla" (voir rendering-pipeline.md). Package-private
     // tant que tout vivait dans le même paquet ; rangement du 2026-09-13.
@@ -118,7 +118,7 @@ public final class Blaze3DText {
 
     /**
      * Public (package-private avant le rangement du 2026-09-13) :
-     * Blaze3DGuiText, désormais dans {@code v26_1/vanillagui/pipeline}, en a
+     * Blaze3DGuiText, désormais dans {@code v26_1_2/vanillagui/pipeline}, en a
      * besoin pour bâtir son TextureSetup.
      *
      * <p>{@code null} si le moteur n'est pas résolu (l'appelant se rabat alors

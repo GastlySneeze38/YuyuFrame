@@ -46,7 +46,7 @@ public final class WorldTimeModule extends LauncherModule {
             "Force l'heure affichée", false,
             HookPoint.CLOCK_TOTAL_TICKS);
         iconUrl = icons8("clock");
-        // 26.1.2 — voir apimixin/v26_1/clock/ClockTotalTicksMixin261.
+        // 26.1.2 — voir apimixin/v26_1_2/clock/ClockTotalTicksMixin261.
         VanillaHookRegistry.registerValue(HookPoint.CLOCK_TOTAL_TICKS, ctx -> isEnabled() ? (Long) (long) time : null);
     }
 }

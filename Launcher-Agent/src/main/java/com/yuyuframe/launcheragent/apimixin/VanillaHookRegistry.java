@@ -35,7 +35,7 @@ import java.util.Map;
  * {@link #dispatch} retourne désormais {@code boolean} au lieu de {@code void}
  * — {@code true} si AU MOINS UN handler a pris en charge le rendu lui-même,
  * auquel cas le mixin appelant NE DOIT PAS dessiner vanilla ensuite. Pour
- * l'instant, seuls les mixins de {@code apimixin/v26_1/hud/} consultent
+ * l'instant, seuls les mixins de {@code apimixin/v26_1_2/hud/} consultent
  * réellement cette valeur de retour (les autres catégories continuent à
  * l'ignorer, donc à toujours dessiner vanilla en plus — comportement
  * inchangé pour elles, migration au cas par cas plus tard si besoin).
