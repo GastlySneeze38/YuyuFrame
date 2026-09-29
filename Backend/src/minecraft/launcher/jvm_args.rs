@@ -109,7 +109,25 @@ pub(super) fn build_jvm_args(ram_mb: u32, natives_dir: &Path, java_major: u32, v
     if let Some(flag) = native_access_arg(java_major) {
         generated.push(flag);
     }
+    if let Some(flag) = jndi_dns_export_arg(java_major) {
+        generated.push(flag);
+    }
     merge_jvm_args(generated, extra_args, args_mode)
+}
+
+/// Rend `com.sun.jndi.dns` visible au classpath — `None` avant Java 9.
+///
+/// Les versions legacy (1.8.9…) résolvent les enregistrements SRV
+/// (`_minecraft._tcp.<domaine>`) par JNDI, et patchy (liste de serveurs
+/// bloqués de Mojang, dans `com.mojang:netty`) s'interpose en instanciant
+/// lui-même `DnsContextFactory` par `Class.forName(…).newInstance()`. Depuis
+/// Java 17 le paquet n'étant pas exporté, cette instanciation échoue, la
+/// résolution SRV aussi, et le jeu se connecte au domaine nu : uhcworld.fr,
+/// mcpvp.club… injoignables (constaté le 2026-09-29). Voir aussi
+/// `ServerAddressSrvMixin189` côté agent, pour le second problème (DNS IPv6
+/// sous `preferIPv4Stack`). Le drapeau n'existe pas en Java 8.
+fn jndi_dns_export_arg(java_major: u32) -> Option<String> {
+    (java_major >= 9).then(|| "--add-exports=jdk.naming.dns/com.sun.jndi.dns=ALL-UNNAMED".to_string())
 }
 
 /// Autorise l'accès natif au code du classpath (LWJGL charge ses DLL par
@@ -190,13 +208,15 @@ fn is_collector_specific(key: &str) -> bool {
 /// de tuning, mais l'utilisateur peut quand même les redéfinir : un `-Xmx`
 /// tapé à la main écrase le généré par `arg_key` comme n'importe quel autre.
 /// `--enable-native-access` non plus n'est pas du tuning (voir
-/// `native_access_arg`) : il reste aussi.
+/// `native_access_arg`) : il reste aussi, comme l'export JNDI DNS (voir
+/// `jndi_dns_export_arg`).
 fn is_mandatory_base(arg: &str) -> bool {
     arg.starts_with("-Xmx")
         || arg.starts_with("-Xms")
         || arg.starts_with("-Djava.library.path=")
         || arg.starts_with("-Dorg.lwjgl.librarypath=")
         || arg.starts_with("--enable-native-access=")
+        || arg.starts_with("--add-exports=jdk.naming.dns/")
 }
 
 /// Fusionne les drapeaux générés et ceux tapés dans l'écran "Configuration
@@ -532,7 +552,7 @@ pub(super) fn extract_mojang_jvm_args(details: &VersionDetails, natives_dir: &Pa
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_jvm_args, native_access_arg, parse_user_jvm_args};
+    use super::{jndi_dns_export_arg, merge_jvm_args, native_access_arg, parse_user_jvm_args};
 
     /// Le drapeau n'existe qu'à partir de Java 22 : une JVM plus ancienne
     /// refuserait de démarrer.
@@ -551,6 +571,20 @@ mod tests {
         gen.push("--enable-native-access=ALL-UNNAMED".to_string());
         let out = merge_jvm_args(gen, "-XX:+UseParallelGC", "replace");
         assert!(out.contains(&"--enable-native-access=ALL-UNNAMED".to_string()));
+    }
+
+    /// `--add-exports` n'existe pas en Java 8 (versions legacy sans agent).
+    #[test]
+    fn export_jndi_dns_seulement_a_partir_de_java_9() {
+        const FLAG: &str = "--add-exports=jdk.naming.dns/com.sun.jndi.dns=ALL-UNNAMED";
+        assert_eq!(jndi_dns_export_arg(8), None);
+        assert_eq!(jndi_dns_export_arg(17).as_deref(), Some(FLAG));
+        assert_eq!(jndi_dns_export_arg(25).as_deref(), Some(FLAG));
+
+        let mut gen = generated();
+        gen.push(FLAG.to_string());
+        let out = merge_jvm_args(gen, "-XX:+UseParallelGC", "replace");
+        assert!(out.contains(&FLAG.to_string()));
     }
 
     fn generated() -> Vec<String> {

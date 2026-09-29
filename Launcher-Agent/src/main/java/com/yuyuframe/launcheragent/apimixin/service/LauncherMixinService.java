@@ -659,6 +659,8 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
         new RefmapEntry(M189 + "fix/ScoreboardNullGuardMixin189",
             "net/minecraft/scoreboard/Scoreboard", "removeObjective",
             "(Lnet/minecraft/scoreboard/ScoreboardObjective;)V", null),
+        new RefmapEntry(M189 + "fix/ServerAddressSrvMixin189",
+            "net/minecraft/network/ServerAddress", "resolveSrv", "(Ljava/lang/String;)[Ljava/lang/String;", null),
     };
 
     /**

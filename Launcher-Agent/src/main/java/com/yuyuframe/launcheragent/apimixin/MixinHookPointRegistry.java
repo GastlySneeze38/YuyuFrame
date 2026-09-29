@@ -383,6 +383,7 @@ public final class MixinHookPointRegistry {
         always("1.8.9", "v1_8_9.lwjgl.CrashReportGlContextMixin189");
         always("1.8.9", "v1_8_9.lwjgl.ScreenGlfwClipboardMixin189");
         always("1.8.9", "v1_8_9.fix.ScoreboardNullGuardMixin189");
+        always("1.8.9", "v1_8_9.fix.ServerAddressSrvMixin189");
 
         // ── HUD ────────────────────────────────────────────────────────────
         gate("1.8.9", "v1_8_9.hud.HudExtractCrosshairMixin189", HookPoint.HUD_EXTRACT_CROSSHAIR);
