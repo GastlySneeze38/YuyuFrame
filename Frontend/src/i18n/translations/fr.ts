@@ -425,6 +425,7 @@ export const fr = {
     favorites: 'Favoris',
     others: 'Autres ({{count}})',
     newInstance: 'Nouvelle instance',
+    chooseInstance: 'Choisir une instance',
     importInstance: 'Importer une instance',
     selectInstance: 'Sélectionne une instance',
     modsWillAppearHere: "Les mods s'afficheront ici",

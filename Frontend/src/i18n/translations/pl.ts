@@ -427,6 +427,7 @@ export const pl: TranslationSchema = {
     favorites: 'Ulubione',
     others: 'Pozostałe ({{count}})',
     newInstance: 'Nowa instancja',
+    chooseInstance: 'Wybierz instancję',
     importInstance: 'Zaimportuj instancję',
     selectInstance: 'Wybierz instancję',
     modsWillAppearHere: 'Mody pojawią się tutaj',

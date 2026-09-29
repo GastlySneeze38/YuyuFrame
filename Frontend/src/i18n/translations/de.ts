@@ -427,6 +427,7 @@ export const de: TranslationSchema = {
     favorites: 'Favoriten',
     others: 'Weitere ({{count}})',
     newInstance: 'Neue Instanz',
+    chooseInstance: 'Instanz wählen',
     importInstance: 'Instanz importieren',
     selectInstance: 'Wähle eine Instanz',
     modsWillAppearHere: 'Die Mods erscheinen hier',

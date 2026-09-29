@@ -427,6 +427,7 @@ export const ru: TranslationSchema = {
     favorites: 'Избранные',
     others: 'Прочие ({{count}})',
     newInstance: 'Новая сборка',
+    chooseInstance: 'Выберите сборку',
     importInstance: 'Импортировать сборку',
     selectInstance: 'Выберите сборку',
     modsWillAppearHere: 'Моды появятся здесь',
