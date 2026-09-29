@@ -17,8 +17,14 @@ package com.yuyuframe.launcheragent.apimixin.v26_3.input;
  * Seules les touches qu'un clavier courant peut produire figurent ici ; les
  * autres n'ont pas de code GLFW et sont suivies par scancode
  * ({@code SCAN<n>}), comme sous GLFW.
+ *
+ * <p>PUBLIQUE, méthodes comprises — obligatoire : le corps des mixins
+ * {@code input/} est recopié DANS {@code MouseHandler}/{@code KeyboardHandler}
+ * (paquet {@code net.minecraft.client}), d'où il appelle cette classe. Une
+ * classe package-private y lève {@code IllegalAccessError} au premier clic
+ * (crash du 2026-09-29, v1202).
  */
-final class SdlKeys263 {
+public final class SdlKeys263 {
 
     private SdlKeys263() {
     }
@@ -99,11 +105,11 @@ final class SdlKeys263 {
         if (GLFW_TO_SDL[glfwKey] < 0) GLFW_TO_SDL[glfwKey] = sdlScancode;
     }
 
-    static int toGlfw(int sdlScancode) {
+    public static int toGlfw(int sdlScancode) {
         return sdlScancode >= 0 && sdlScancode < SDL_TO_GLFW.length ? SDL_TO_GLFW[sdlScancode] : -1;
     }
 
-    static int toSdl(int glfwKey) {
+    public static int toSdl(int glfwKey) {
         return glfwKey >= 0 && glfwKey < GLFW_TO_SDL.length ? GLFW_TO_SDL[glfwKey] : -1;
     }
 
@@ -112,7 +118,7 @@ final class SdlKeys263 {
      * latéraux ({@code SDL_BUTTON_*}) ; GLFW : 0 gauche, 1 droit, 2 milieu,
      * 3/4 latéraux. Milieu et droit sont INVERSÉS d'une numérotation à l'autre.
      */
-    static int buttonToGlfw(int sdlButton) {
+    public static int buttonToGlfw(int sdlButton) {
         switch (sdlButton) {
             case 1: return 0;
             case 2: return 2;
