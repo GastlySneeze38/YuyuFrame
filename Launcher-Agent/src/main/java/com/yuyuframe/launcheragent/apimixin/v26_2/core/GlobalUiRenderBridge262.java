@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.apimixin.v26_2.core;
 
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
+import com.yuyuframe.launcheragent.apimixin.v26_2.render.GameRendererAccessor262;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
 import com.mojang.blaze3d.platform.Window;
@@ -94,7 +95,16 @@ public final class GlobalUiRenderBridge262 {
         }
     }
 
+    /**
+     * Cible de rendu principale. 26.2 : {@code Minecraft.getMainRenderTarget()}
+     * n'existe plus, elle vit dans {@code GameRenderer.mainRenderTarget} —
+     * lue par {@link MinecraftAccessor262#la$gameRenderer()} puis
+     * {@link GameRendererAccessor262#la$mainRenderTarget()}.
+     */
     public static Object getMainFramebuffer(Object mc) {
-        return ((Minecraft) mc).getMainRenderTarget();
+        if (!(mc instanceof MinecraftAccessor262)) return null;
+        Object gameRenderer = ((MinecraftAccessor262) mc).la$gameRenderer();
+        return gameRenderer instanceof GameRendererAccessor262
+            ? ((GameRendererAccessor262) gameRenderer).la$mainRenderTarget() : null;
     }
 }

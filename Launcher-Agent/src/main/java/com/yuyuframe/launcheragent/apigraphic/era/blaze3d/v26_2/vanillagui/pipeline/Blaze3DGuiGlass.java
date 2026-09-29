@@ -8,7 +8,7 @@ import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DBlur;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders;
 import com.yuyuframe.launcheragent.apimixin.v26_2.render.RenderPipelinesAccessor262;
-import com.yuyuframe.launcheragent.apimixin.v26_2.render.VertexFormatElementAccessor262;
+import com.yuyuframe.launcheragent.apimixin.v26_2.render.DefaultVertexFormatAccessor262;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import net.minecraft.client.gui.render.TextureSetup;
 
@@ -65,12 +65,14 @@ public final class Blaze3DGuiGlass {
             buildAttempted = true;
             try {
                 if (!Blaze3DCore.isAvailable()) { buildFailed = true; return null; }
-                VertexFormat format = VertexFormat.builder()
-                    .add("Position", VertexFormatElementAccessor262.la$position())
-                    .add("Color", VertexFormatElementAccessor262.la$color())
-                    .add("UV0", VertexFormatElementAccessor262.la$uv0())
-                    .add("UV1", VertexFormatElementAccessor262.la$uv1())
-                    .add("UV2", VertexFormatElementAccessor262.la$uv2())
+                // 26.2 : builder(0) + addAttribute(nom, GpuFormat) — formats lus
+                // sur DefaultVertexFormat, même disposition qu'en 26.1.2.
+                VertexFormat format = VertexFormat.builder(0)
+                    .addAttribute("Position", DefaultVertexFormatAccessor262.la$positionFormat())
+                    .addAttribute("Color", DefaultVertexFormatAccessor262.la$colorFormat())
+                    .addAttribute("UV0", DefaultVertexFormatAccessor262.la$uv0Format())
+                    .addAttribute("UV1", DefaultVertexFormatAccessor262.la$uv1Format())
+                    .addAttribute("UV2", DefaultVertexFormatAccessor262.la$uv2Format())
                     .build();
                 Object vsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_gui_glass.vsh");
                 Object fsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_gui_glass.fsh");

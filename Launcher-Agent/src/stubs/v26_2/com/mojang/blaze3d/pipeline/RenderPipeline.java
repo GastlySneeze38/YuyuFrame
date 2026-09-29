@@ -1,26 +1,32 @@
 package com.mojang.blaze3d.pipeline;
 
-import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.resources.Identifier;
 
 /**
- * Stub compile-only (26.1+) — pipeline de rendu.
+ * Stub compile-only (26.2) — pipeline de rendu, construit par
+ * {@code Blaze3DGpu262} en recopiant l'état d'un pipeline vanilla de
+ * référence. Règles de l'unité : voir {@code com.mojang.blaze3d.systems.RenderSystem}.
  *
- * <p>À l'origine un simple marqueur, juste assez pour typer
- * {@code RenderPipelines.GUI_TEXTURED} (voir {@code RenderPipelinesAccessor261})
- * et les paramètres de {@code GuiGraphicsExtractor.blit/blitSprite}. Étendu
- * pour {@code Blaze3DGpu261}, qui CONSTRUIT nos pipelines maison en recopiant
- * l'état d'un pipeline vanilla de référence — règles de l'unité : voir
- * {@code com.mojang.blaze3d.systems.RenderSystem}.
+ * <p>Écarts avec la 26.1.2, vérifiés par javap sur le jar client 26.2 :
+ * <ul>
+ *   <li>samplers et uniformes ne se déclarent plus sur le builder
+ *       ({@code withSampler}/{@code withUniform} retirés) mais dans des
+ *       {@link BindGroupLayout} ({@code withBindGroupLayout}) ;</li>
+ *   <li>{@code withVertexFormat(format, mode)} devient
+ *       {@code withVertexBinding(0, format)} + {@code withPrimitiveTopology} ;
+ *       côté lecture, {@code getVertexFormat()}/{@code getVertexFormatMode()}
+ *       deviennent {@code getVertexFormatBinding(int)}/{@code getPrimitiveTopology()}.</li>
+ * </ul>
  */
 public abstract class RenderPipeline {
 
-    public VertexFormat getVertexFormat() {
+    public VertexFormat getVertexFormatBinding(int binding) {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
-    public VertexFormat.Mode getVertexFormatMode() {
+    public PrimitiveTopology getPrimitiveTopology() {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
@@ -51,8 +57,7 @@ public abstract class RenderPipeline {
     /**
      * {@code RenderPipeline$Builder}. Seules les méthodes réellement employées
      * sont déclarées : chaque surcharge omise est une surcharge qu'on ne peut
-     * pas appeler par erreur (leçon {@code drawItem}, où une résolution par nom
-     * seul avait choisi la mauvaise).
+     * pas appeler par erreur.
      */
     public static final class Builder {
 
@@ -71,15 +76,15 @@ public abstract class RenderPipeline {
             throw new UnsupportedOperationException("stub compile-only");
         }
 
-        public Builder withSampler(String name) {
+        public Builder withBindGroupLayout(BindGroupLayout layout) {
             throw new UnsupportedOperationException("stub compile-only");
         }
 
-        public Builder withUniform(String name, UniformType type) {
+        public Builder withVertexBinding(int binding, VertexFormat format) {
             throw new UnsupportedOperationException("stub compile-only");
         }
 
-        public Builder withVertexFormat(VertexFormat format, VertexFormat.Mode mode) {
+        public Builder withPrimitiveTopology(PrimitiveTopology topology) {
             throw new UnsupportedOperationException("stub compile-only");
         }
 
@@ -88,10 +93,9 @@ public abstract class RenderPipeline {
         }
 
         /**
-         * Surcharge NON-{@code Optional} : la variante {@code Optional} existe
-         * aussi en jeu, mais {@code GUI_TEXT} a un {@code DepthStencilState}
-         * nul et lui passer {@code Optional.of(null)} lèverait un NPE. On ne
-         * pose donc rien quand l'état de référence est nul.
+         * Surcharge NON-{@code Optional} : on ne pose rien quand l'état de
+         * référence est nul (voir le stub 26.1 — {@code Optional.of(null)}
+         * lèverait un NPE).
          */
         public Builder withDepthStencilState(DepthStencilState state) {
             throw new UnsupportedOperationException("stub compile-only");

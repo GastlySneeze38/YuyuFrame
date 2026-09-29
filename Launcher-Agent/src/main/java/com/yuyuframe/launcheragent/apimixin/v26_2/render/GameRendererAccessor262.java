@@ -1,5 +1,6 @@
 package com.yuyuframe.launcheragent.apimixin.v26_2.render;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.gui.render.GuiRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -15,4 +16,13 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface GameRendererAccessor262 {
     @Accessor("guiRenderer")
     GuiRenderer la$guiRenderer();
+
+    /**
+     * 26.2 : cible de rendu principale du jeu, là où tout le moteur dessine
+     * ({@code Blaze3DGpu262#mainColorView}). Remplace
+     * {@code Minecraft.getMainRenderTarget()}, supprimé en 26.2 — champ
+     * {@code private final RenderTarget mainRenderTarget} (vérifié par javap).
+     */
+    @Accessor("mainRenderTarget")
+    RenderTarget la$mainRenderTarget();
 }

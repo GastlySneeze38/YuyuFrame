@@ -6,6 +6,9 @@ import com.yuyuframe.launcheragent.apigraphic.widget.UiDrawable;
 import com.yuyuframe.launcheragent.apigraphic.platform.UiInputPoller;
 import com.yuyuframe.launcheragent.apigraphic.UiRenderer;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,33 +20,41 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * le pont apimixin {@link GlobalUiRenderBridge262} (même dossier) au lieu de
  * l'ancien pont réflexif. Reste "hub", même raisonnement que {@link
  * GlobalUiRenderMixin262} pour ne pas passer par {@code VanillaHookRegistry}.
+ *
+ * <p>26.2 : {@code RenderTarget.blitToScreen()} n'existe plus. La fin de frame
+ * de {@code Minecraft.renderFrame} est désormais {@code GameRenderer.render}
+ * → {@code GpuSurface.blitFromTexture(encoder, vueCouleurPrincipale)} →
+ * {@code GpuSurface.present()} (relevé par javap). {@code blitFromTexture}
+ * occupe exactement la place de l'ancien {@code blitToScreen} (qui faisait
+ * {@code presentTexture} de la vue couleur principale) : mêmes points HEAD et
+ * TAIL, même comportement que la 26.1.2 validée en jeu. Le contrôle « est-ce
+ * la cible principale ? » porte maintenant sur la vue copiée — {@code this}
+ * est la surface de la fenêtre, plus la cible de rendu.
  */
-@Mixin(targets = "com.mojang.blaze3d.pipeline.RenderTarget")
+@Mixin(targets = "com.mojang.blaze3d.systems.GpuSurface")
 public abstract class GlobalUiPresentMixin262 {
 
-    @Inject(method = "blitToScreen()V", at = @At("HEAD"))
-    private void la$onBeforeBlit(CallbackInfo ci) {
+    @Inject(method = "blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V", at = @At("HEAD"))
+    private void la$onBeforeBlit(CommandEncoder encoder, GpuTextureView source, CallbackInfo ci) {
         try {
             Object mc = GlobalUiRenderBridge262.getMcInstance();
             if (mc == null) return;
-            Object mainFramebuffer = GlobalUiRenderBridge262.getMainFramebuffer(mc);
-            if (mainFramebuffer != this) return;
+            if (!isMainColorView(mc, source)) return;
             Blaze3DCore.flushQueued();
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin262 (apimixin, flush texte HEAD): " + t);
         }
     }
 
-    @Inject(method = "blitToScreen()V", at = @At("TAIL"))
-    private void la$onAfterBlit(CallbackInfo ci) {
+    @Inject(method = "blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V", at = @At("TAIL"))
+    private void la$onAfterBlit(CommandEncoder encoder, GpuTextureView source, CallbackInfo ci) {
         try {
             UiInputPoller inputPoller = GlobalUiRenderBridge262.inputPoller;
             if (inputPoller == null) return;
 
             Object mc = GlobalUiRenderBridge262.getMcInstance();
             if (mc == null) return;
-            Object mainFramebuffer = GlobalUiRenderBridge262.getMainFramebuffer(mc);
-            if (mainFramebuffer != this) return;
+            if (!isMainColorView(mc, source)) return;
 
             Object currentScreen = GlobalUiRenderBridge262.getCurrentScreen(mc);
             UiRenderer renderer = UiRenderer.get(this.getClass().getClassLoader());
@@ -89,5 +100,14 @@ public abstract class GlobalUiPresentMixin262 {
         } catch (Throwable t) {
             LauncherLog.err("[LauncherAgent] GlobalUiPresentMixin262 (apimixin): " + t);
         }
+    }
+
+    /**
+     * 26.2 : équivalent de l'ancien {@code mainFramebuffer != this} — la vue
+     * copiée vers la fenêtre est-elle la vue couleur de la cible principale ?
+     */
+    private static boolean isMainColorView(Object mc, GpuTextureView source) {
+        Object main = GlobalUiRenderBridge262.getMainFramebuffer(mc);
+        return main instanceof RenderTarget && ((RenderTarget) main).getColorTextureView() == source;
     }
 }

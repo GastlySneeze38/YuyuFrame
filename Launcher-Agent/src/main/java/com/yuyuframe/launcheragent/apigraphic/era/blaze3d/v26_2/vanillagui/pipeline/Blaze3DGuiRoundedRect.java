@@ -5,7 +5,7 @@ import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.ShaderPipelineFact
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.pass.Blaze3DCore;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.vanillagui.GuiElementShaders;
 import com.yuyuframe.launcheragent.apimixin.v26_2.render.RenderPipelinesAccessor262;
-import com.yuyuframe.launcheragent.apimixin.v26_2.render.VertexFormatElementAccessor262;
+import com.yuyuframe.launcheragent.apimixin.v26_2.render.DefaultVertexFormatAccessor262;
 import com.yuyuframe.launcheragent.base.log.LauncherLog;
 
 /**
@@ -36,9 +36,11 @@ import com.yuyuframe.launcheragent.base.log.LauncherLog;
  * entiers courts suffisent largement : demi-tailles et rayons sont des pixels
  * GUI, jamais au-delà de quelques centaines.
  *
- * <p>Les constantes {@code VertexFormatElement} passent par un ACCESSOR
- * ({@link VertexFormatElementAccessor262}), pas par un accès direct — norme du
- * projet, voir sa javadoc.
+ * <p>Les formats d'attributs passent par un ACCESSOR
+ * ({@link DefaultVertexFormatAccessor262}), pas par un accès direct — norme du
+ * projet, voir sa javadoc. 26.2 : {@code VertexFormatElement} n'a plus de
+ * constantes, les formats ({@code GpuFormat}) sont ceux de
+ * {@code DefaultVertexFormat}.
  *
  * <h2>Contraintes héritées de l'étape précédente</h2>
  *
@@ -67,12 +69,14 @@ public final class Blaze3DGuiRoundedRect {
             try {
                 if (!Blaze3DCore.isAvailable()) { buildFailed = true; return null; }
 
-                VertexFormat format = VertexFormat.builder()
-                    .add("Position", VertexFormatElementAccessor262.la$position())
-                    .add("Color", VertexFormatElementAccessor262.la$color())
-                    .add("UV0", VertexFormatElementAccessor262.la$uv0())
-                    .add("UV1", VertexFormatElementAccessor262.la$uv1())
-                    .add("UV2", VertexFormatElementAccessor262.la$uv2())
+                // 26.2 : builder(0) + addAttribute(nom, GpuFormat) — formats lus
+                // sur DefaultVertexFormat, même disposition qu'en 26.1.2.
+                VertexFormat format = VertexFormat.builder(0)
+                    .addAttribute("Position", DefaultVertexFormatAccessor262.la$positionFormat())
+                    .addAttribute("Color", DefaultVertexFormatAccessor262.la$colorFormat())
+                    .addAttribute("UV0", DefaultVertexFormatAccessor262.la$uv0Format())
+                    .addAttribute("UV1", DefaultVertexFormatAccessor262.la$uv1Format())
+                    .addAttribute("UV2", DefaultVertexFormatAccessor262.la$uv2Format())
                     .build();
 
                 Object vsh = ShaderPipelineFactory.identifier("yuyuframe", "shader/ui_gui_rounded_rect.vsh");

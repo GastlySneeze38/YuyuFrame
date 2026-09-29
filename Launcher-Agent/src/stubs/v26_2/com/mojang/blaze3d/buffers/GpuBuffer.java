@@ -32,4 +32,9 @@ public abstract class GpuBuffer {
     public GpuBufferSlice slice(long offset, long length) {
         throw new UnsupportedOperationException("stub compile-only");
     }
+
+    /** Tampon entier — 26.2 : {@code RenderPass.setVertexBuffer} prend une slice (vérifié par javap). */
+    public GpuBufferSlice slice() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

@@ -1,22 +1,23 @@
 package com.mojang.blaze3d.systems;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.CompiledRenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.ShaderSource;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.textures.TextureFormat;
 
 import java.util.function.Supplier;
 
 /**
- * Stub compile-only 26.1.2 — règles de l'unité : voir {@link RenderSystem}.
+ * Stub compile-only 26.2 — règles de l'unité : voir {@link RenderSystem}.
  *
- * <p>CLASSE, et ce n'est pas un détail : en 1.21.11 le même nom désigne une
- * INTERFACE. Déclarer ce stub en interface ferait émettre à javac un
- * {@code invokeinterface} là où la JVM attend un {@code invokevirtual} —
- * {@code IncompatibleClassChangeError} au premier appel.
+ * <p>CLASSE, comme en 26.1.2 (INTERFACE en 1.21.11) — voir le stub 26.1 pour
+ * l'{@code IncompatibleClassChangeError} qu'un mauvais genre provoquerait.
+ *
+ * <p>26.2 : {@code createTexture} prend un {@code com.mojang.blaze3d.GpuFormat}
+ * ({@code textures.TextureFormat} a disparu). Vérifié par javap.
  *
  * <p>{@code precompilePipeline(RenderPipeline, ShaderSource)} : la surcharge
  * qui prend NOTRE source GLSL. Celle à un argument lirait la source du jeu,
@@ -31,7 +32,7 @@ public abstract class GpuDevice {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
-    public GpuTexture createTexture(Supplier<String> label, int usage, TextureFormat format,
+    public GpuTexture createTexture(Supplier<String> label, int usage, GpuFormat format,
                                     int width, int height, int depthOrLayers, int mipLevels) {
         throw new UnsupportedOperationException("stub compile-only");
     }

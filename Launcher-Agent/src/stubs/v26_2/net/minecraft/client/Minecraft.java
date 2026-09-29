@@ -1,8 +1,6 @@
 package net.minecraft.client;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.Window;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
@@ -42,11 +40,9 @@ import net.minecraft.client.sounds.SoundManager;
 public abstract class Minecraft {
     public static Minecraft getInstance() { return null; }
     // 26.2 : setScreen et le champ screen sont passés dans le nouveau Gui
-    // (voir apimixin/v26_2/core/GuiAccessor262) — retirés de ce stub.
-    // ⚠️ getMainRenderTarget N'EXISTE PLUS en 26.2 (surface de fenêtre
-    // GpuSurface à la place) : gardé ici le temps de l'étape 3 (couche GPU)
-    // pour que l'unité compile, signalé par tools/refcheck261.py.
-    public abstract RenderTarget getMainRenderTarget();
+    // (voir apimixin/v26_2/core/GuiAccessor262), et getMainRenderTarget
+    // n'existe plus — la cible principale est GameRenderer.mainRenderTarget
+    // (voir apimixin/v26_2/render/GameRendererAccessor262). Retirés du stub.
     public abstract ClientPacketListener getConnection();
     public abstract SoundManager getSoundManager();
     public abstract Window getWindow();

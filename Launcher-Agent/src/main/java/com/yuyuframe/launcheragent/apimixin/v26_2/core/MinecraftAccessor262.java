@@ -8,6 +8,7 @@ import net.minecraft.client.Options;
 import net.minecraft.client.User;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -112,4 +113,14 @@ public interface MinecraftAccessor262 {
     /** Monde client courant — {@code null} hors partie. Même raison que {@link #la$player()} de passer par un accessor malgré un champ public. */
     @Accessor("level")
     ClientLevel la$level();
+
+    /**
+     * 26.2 : la cible de rendu principale n'est plus exposée par
+     * {@code Minecraft.getMainRenderTarget()} (supprimé) mais par
+     * {@code GameRenderer.mainRenderTarget} — voir
+     * {@code render.GameRendererAccessor262#la$mainRenderTarget()}. Champ
+     * {@code public final GameRenderer gameRenderer} (vérifié par javap).
+     */
+    @Accessor("gameRenderer")
+    GameRenderer la$gameRenderer();
 }

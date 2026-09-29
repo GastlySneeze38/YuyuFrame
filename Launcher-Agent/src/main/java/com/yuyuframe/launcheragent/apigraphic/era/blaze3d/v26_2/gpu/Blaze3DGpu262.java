@@ -1,7 +1,10 @@
 package com.yuyuframe.launcheragent.apigraphic.era.blaze3d.v26_2.gpu;
 
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -18,10 +21,9 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.textures.TextureFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.Blaze3DGpu;
-import net.minecraft.client.Minecraft;
+import com.yuyuframe.launcheragent.apimixin.v26_2.core.GlobalUiRenderBridge262;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
@@ -29,10 +31,29 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 import java.nio.ByteBuffer;
-import java.util.OptionalInt;
+import java.util.Optional;
 
 /**
- * {@link Blaze3DGpu} pour la 26.1.2 — appels TYPÉS, aucune réflexion.
+ * {@link Blaze3DGpu} pour la 26.2 — portage de {@code Blaze3DGpu261} sur le
+ * Blaze3D refondu de la 26.2 (2026-09-29). Mêmes opérations pour le moteur
+ * partagé ; les écarts d'API, tous relevés par javap sur le jar client 26.2 :
+ * <ul>
+ *   <li>cible principale : {@code GameRenderer.mainRenderTarget} (accessors),
+ *       {@code Minecraft.getMainRenderTarget()} n'existe plus ;</li>
+ *   <li>{@code GpuFormat.RGBA8_UNORM} au lieu de {@code TextureFormat.RGBA8} ;</li>
+ *   <li>{@code writeToTexture} n'envoie plus que l'image ENTIÈRE à une
+ *       position (plus de largeur/hauteur ni de sauts de lignes) ;</li>
+ *   <li>couleur d'effacement d'une passe : {@code Optional<Vector4fc>} ;</li>
+ *   <li>{@code setVertexBuffer} prend une slice, {@code drawIndexed} cinq
+ *       entiers dans l'ordre Vulkan, tampon séquentiel par
+ *       {@code PrimitiveTopology} ;</li>
+ *   <li>pipelines : samplers et uniformes dans un {@code BindGroupLayout},
+ *       format par {@code withVertexBinding} + {@code withPrimitiveTopology}.</li>
+ * </ul>
+ *
+ * <p>Historique de la version 26.1.2 dont ce fichier est parti :
+ *
+ * <p>{@link Blaze3DGpu} pour la 26.1.2 — appels TYPÉS, aucune réflexion.
  *
  * <p>Remplace {@code Blaze3DGpuReflective261}, l'adaptateur transitoire qui
  * portait jusqu'ici TOUTE la réflexion restante du moteur Blaze3D. Avec ce
@@ -86,10 +107,12 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
 
     @Override
     public Object mainColorView() {
-        Minecraft mc = Minecraft.getInstance();
+        // 26.2 : la cible principale vit dans GameRenderer.mainRenderTarget,
+        // lue par accessors — voir GlobalUiRenderBridge262.getMainFramebuffer.
+        Object mc = GlobalUiRenderBridge262.getMcInstance();
         if (mc == null) return null;
-        RenderTarget target = mc.getMainRenderTarget();
-        return target != null ? target.getColorTextureView() : null;
+        Object target = GlobalUiRenderBridge262.getMainFramebuffer(mc);
+        return target instanceof RenderTarget ? ((RenderTarget) target).getColorTextureView() : null;
     }
 
     // ── Constantes d'usage ────────────────────────────────────────────────
@@ -122,7 +145,7 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
 
     @Override
     public Object createTexture(Object device, String label, int usage, int width, int height, int mipLevels) {
-        return ((GpuDevice) device).createTexture(() -> label, usage, TextureFormat.RGBA8, width, height, 1, mipLevels);
+        return ((GpuDevice) device).createTexture(() -> label, usage, GpuFormat.RGBA8_UNORM, width, height, 1, mipLevels);
     }
 
     @Override
@@ -150,11 +173,24 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
         ((CommandEncoder) encoder).writeToTexture((GpuTexture) texture, (NativeImage) image);
     }
 
+    /**
+     * 26.2 : {@code writeToTexture(texture, image, mip, depth, x, y)} n'envoie
+     * que l'image ENTIÈRE à la position donnée — la variante qui recadrait
+     * (largeur, hauteur, sauts de pixels et de lignes) a disparu. Les deux
+     * appelants du moteur (atlas d'icônes, mips du texte) envoient justement
+     * une image entière, sans saut ; tout autre usage est refusé bruyamment
+     * plutôt que d'écrire une région fausse en silence.
+     */
     @Override
     public void uploadImageRegion(Object encoder, Object texture, Object image, int mipLevel, int depth,
                                   int destX, int destY, int width, int height, int skipPixels, int skipRows) {
-        ((CommandEncoder) encoder).writeToTexture((GpuTexture) texture, (NativeImage) image,
-            mipLevel, depth, destX, destY, width, height, skipPixels, skipRows);
+        NativeImage source = (NativeImage) image;
+        if (skipPixels != 0 || skipRows != 0 || width != source.getWidth() || height != source.getHeight()) {
+            throw new UnsupportedOperationException("uploadImageRegion 26.2 : seule l'image entière est envoyable"
+                + " (demandé " + width + "x" + height + " sauts " + skipPixels + "/" + skipRows
+                + ", image " + source.getWidth() + "x" + source.getHeight() + ")");
+        }
+        ((CommandEncoder) encoder).writeToTexture((GpuTexture) texture, source, mipLevel, depth, destX, destY);
     }
 
     @Override
@@ -169,7 +205,8 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
 
     @Override
     public Object openPass(Object encoder, String label, Object colorView) {
-        return ((CommandEncoder) encoder).createRenderPass(() -> label, (GpuTextureView) colorView, OptionalInt.empty());
+        // 26.2 : pas d'effacement = Optional.empty() (ex-OptionalInt.empty()).
+        return ((CommandEncoder) encoder).createRenderPass(() -> label, (GpuTextureView) colorView, Optional.empty());
     }
 
     @Override
@@ -199,23 +236,26 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
 
     @Override
     public void setVertexBuffer(Object pass, int slot, Object buffer) {
-        ((RenderPass) pass).setVertexBuffer(slot, (GpuBuffer) buffer);
+        // 26.2 : le tampon se passe en slice — le tampon entier, comme avant.
+        ((RenderPass) pass).setVertexBuffer(slot, ((GpuBuffer) buffer).slice());
     }
 
     @Override
     public void drawQuads(Object pass, int quadCount) {
-        // getSequentialBuffer(QUADS) rend le tampon que l'adaptateur réflexif
-        // lisait par le champ PRIVÉ RenderSystem.sharedSequentialQuad — le seul
-        // accès qu'un appel typé ne pouvait pas reproduire, et la raison pour
-        // laquelle cet accesseur public a été cherché puis vérifié sur le jar.
+        // getSequentialBuffer(QUADS) rend le tampon d'indices séquentiel
+        // partagé du jeu (quads → triangles). 26.2 : QUADS est un
+        // PrimitiveTopology (ex-VertexFormat.Mode).
         RenderSystem.AutoStorageIndexBuffer indices =
-            RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
+            RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
         int indexCount = quadCount * 6;
         RenderPass p = (RenderPass) pass;
         p.setIndexBuffer(indices.getBuffer(indexCount), indices.type());
-        // drawIndexed(baseVertex, firstIndex, count, instanceCount) — ordre
-        // vérifié (bug historique : count passé en premier, zéro géométrie).
-        p.drawIndexed(0, 0, indexCount, 1);
+        // 26.2 : drawIndexed(indexCount, instanceCount, firstIndex, baseVertex,
+        // firstInstance) — ordre Vulkan, relevé sur l'appel de GuiRenderer
+        // (count, 1, firstIndex, baseVertex, 0). En 26.1.2 c'était
+        // (baseVertex, firstIndex, count, instanceCount) : un ordre faux ne
+        // lève rien, il ne dessine simplement aucune géométrie.
+        p.drawIndexed(indexCount, 1, 0, 0, 0);
     }
 
     @Override
@@ -245,16 +285,25 @@ final class Blaze3DGpu262 implements Blaze3DGpu {
             .withLocation(Identifier.fromNamespaceAndPath("yuyuframe", location))
             .withVertexShader((Identifier) vertexShaderId)
             .withFragmentShader((Identifier) fragmentShaderId);
+        // 26.2 : samplers et blocs d'uniformes vont dans un BindGroupLayout —
+        // un seul groupe par pipeline suffit : BindGroupLayout.ensureCompatible
+        // (seul contrôle, fait par GlProgram) n'exige que l'unicité des noms
+        // entre groupes, jamais un découpage précis (vérifié par javap).
+        BindGroupLayout.Builder bindings = BindGroupLayout.builder();
         for (String sampler : samplerNames) {
-            builder = builder.withSampler(sampler);
+            bindings = bindings.withSampler(sampler);
         }
         for (String uniformBuffer : uniformBufferNames) {
-            builder = builder.withUniform(uniformBuffer, UniformType.UNIFORM_BUFFER);
+            bindings = bindings.withUniform(uniformBuffer, UniformType.UNIFORM_BUFFER);
         }
+        builder = builder.withBindGroupLayout(bindings.build());
+        // 26.2 : withVertexFormat(format, mode) devient withVertexBinding(0,
+        // format) + withPrimitiveTopology(topologie de la référence).
         VertexFormat format = vertexFormatOverride != null
             ? (VertexFormat) vertexFormatOverride
-            : ref.getVertexFormat();
-        builder = builder.withVertexFormat(format, ref.getVertexFormatMode());
+            : ref.getVertexFormatBinding(0);
+        builder = builder.withVertexBinding(0, format)
+            .withPrimitiveTopology(ref.getPrimitiveTopology());
 
         ColorTargetState color = ref.getColorTargetState();
         builder = builder.withColorTargetState(color);

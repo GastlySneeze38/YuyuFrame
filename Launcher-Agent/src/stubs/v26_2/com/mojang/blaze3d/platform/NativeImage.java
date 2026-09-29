@@ -32,6 +32,15 @@ public final class NativeImage {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** Dimensions — 26.2 : garde de {@code Blaze3DGpu262#uploadImageRegion} (image envoyée entière). */
+    public int getWidth() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    public int getHeight() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     public void close() {
         throw new UnsupportedOperationException("stub compile-only");
     }

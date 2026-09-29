@@ -470,7 +470,9 @@ public final class MixinHookPointRegistry {
         always("26.2", "v26_2.core.ChatComponentAccessor262");
         always("26.2", "v26_2.core.FogRendererAccessor262");
         always("26.2", "v26_2.core.GuiGraphicsExtractorAccessor262");
-        always("26.2", "v26_2.render.VertexFormatElementAccessor262");
+        // 26.2 : VertexFormatElement n'a plus de constantes, les formats
+        // d'attributs sont lus sur DefaultVertexFormat.
+        always("26.2", "v26_2.render.DefaultVertexFormatAccessor262");
         always("26.2", "v26_2.render.GameRendererAccessor262");
         always("26.2", "v26_2.render.GuiRendererAccessor262");
         always("26.2", "v26_2.render.RenderPipelinesAccessor262");
