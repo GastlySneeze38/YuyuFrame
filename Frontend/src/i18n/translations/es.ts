@@ -653,6 +653,7 @@ export const es: TranslationSchema = {
     noResult: 'Sin resultados',
     noResultHint: 'Prueba con otras palabras o quita filtros',
     install: 'Instalar',
+    installed: 'Instalado',
     installing: '…',
     installedCount: '{{count}} pack(s) ya en esta instancia',
     noFile: 'No hay archivo descargable para «{{name}}»',

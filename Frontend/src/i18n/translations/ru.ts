@@ -653,6 +653,7 @@ export const ru: TranslationSchema = {
     noResult: 'Ничего не найдено',
     noResultHint: 'Попробуйте другие слова или снимите фильтры',
     install: 'Установить',
+    installed: 'Установлен',
     installing: '…',
     installedCount: 'паков уже в этой сборке: {{count}}',
     noFile: 'Для «{{name}}» нет архива для скачивания',

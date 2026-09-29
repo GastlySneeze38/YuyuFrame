@@ -653,6 +653,7 @@ export const de: TranslationSchema = {
     noResult: 'Kein Ergebnis',
     noResultHint: 'Versuche andere Wörter oder entferne Filter',
     install: 'Installieren',
+    installed: 'Installiert',
     installing: '…',
     installedCount: '{{count}} Pack(s) bereits in dieser Instanz',
     noFile: 'Kein herunterladbares Archiv für „{{name}}“',

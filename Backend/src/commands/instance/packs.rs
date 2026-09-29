@@ -50,6 +50,20 @@ pub struct PackInfo {
     pub name: String,
     pub size: u64,
     pub kind: PackKind,
+    /// Empreinte du fichier — c'est par elle que l'interface retrouve le
+    /// projet Modrinth d'un pack (`/v2/version_files`), comme pour les mods :
+    /// le nom du fichier téléchargé ne ressemble pas au titre du projet, un
+    /// pack installé n'était donc jamais reconnu dans la recherche. Même cache
+    /// (taille, date) que les mods : un pack de plusieurs centaines de Mo
+    /// n'est haché qu'une fois.
+    pub sha1: String,
+}
+
+/// SHA1 d'un fichier de pack, hors du fil asynchrone (lecture complète du fichier).
+async fn pack_sha1(path: PathBuf) -> String {
+    tokio::task::spawn_blocking(move || super::mods::sha1_cached(&path))
+        .await
+        .unwrap_or_default()
 }
 
 /// Un pack accepté est une archive `.zip`.
@@ -99,7 +113,8 @@ pub async fn packs_list(instance_id: String, kind: PackKind) -> Result<Vec<PackI
             continue;
         }
         let size = entry.metadata().await.map(|m| m.len()).unwrap_or(0);
-        packs.push(PackInfo { name, size, kind });
+        let sha1 = pack_sha1(entry.path()).await;
+        packs.push(PackInfo { name, size, kind, sha1 });
     }
     // Ordre alphabétique insensible à la casse : `read_dir` ne garantit aucun
     // ordre, et une liste qui se réordonne à chaque rafraîchissement est
@@ -178,15 +193,17 @@ pub async fn packs_install(
         }));
     }
 
-    tokio::fs::write(dir.join(&safe_name), &bytes)
+    let target = dir.join(&safe_name);
+    tokio::fs::write(&target, &bytes)
         .await
         .map_err(|e| e.to_string())?;
+    let sha1 = pack_sha1(target).await;
 
     crate::integrations::analytics::capture("pack_install_succeeded", serde_json::json!({
         "instance_id": &instance_id,
         "kind": kind,
     }));
-    Ok(PackInfo { name: safe_name, size: bytes.len() as u64, kind })
+    Ok(PackInfo { name: safe_name, size: bytes.len() as u64, kind, sha1 })
 }
 
 /// Copie des archives choisies sur le disque dans le dossier de l'instance.
@@ -211,8 +228,12 @@ pub async fn packs_import_paths(
             tracing::warn!("Import de pack ignoré (pas une archive .zip) : {}", path);
             continue;
         }
-        match tokio::fs::copy(&source, dir.join(&name)).await {
-            Ok(size) => added.push(PackInfo { name, size, kind }),
+        let target = dir.join(&name);
+        match tokio::fs::copy(&source, &target).await {
+            Ok(size) => {
+                let sha1 = pack_sha1(target).await;
+                added.push(PackInfo { name, size, kind, sha1 });
+            }
             Err(e) => tracing::warn!("Copie du pack {} échouée : {}", path, e),
         }
     }

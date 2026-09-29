@@ -131,6 +131,25 @@ export function ModsContent({ instance }: { instance: Instance }) {
    *  quand on est sur un autre écran. */
   const [packCount, setPackCount] = useState(0)
 
+  // Compteur chargé dès l'ouverture de l'instance. Jusqu'ici, seul `PacksTab`
+  // le remplissait, donc seulement une fois son onglet ouvert : le menu
+  // affichait « 0 » sur une instance pleine de packs. L'onglet continue de le
+  // tenir à jour après une pose ou une suppression.
+  useEffect(() => {
+    if (!instanceId) return
+    let cancelled = false
+    setPackCount(0)
+    Promise.all([
+      api.packs.list(instanceId, 'resourcepack'),
+      api.packs.list(instanceId, 'shader'),
+    ])
+      .then(([packs, shaders]) => { if (!cancelled) setPackCount(packs.length + shaders.length) })
+      // Un échec de lecture n'a pas à interrompre l'écran des mods : le
+      // compteur reste à 0 et l'onglet Packs, lui, signalera l'erreur.
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [instanceId])
+
   const mergeVersions = useCallback((fetched: Record<string, ModrinthInfo>) =>
     setVersionMap((prev) => ({ ...prev, ...fetched })), [])
 

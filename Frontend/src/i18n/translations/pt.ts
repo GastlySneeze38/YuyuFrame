@@ -654,6 +654,7 @@ export const pt: TranslationSchema = {
     noResult: 'Nenhum resultado',
     noResultHint: 'Tente outras palavras ou remova filtros',
     install: 'Instalar',
+    installed: 'Instalado',
     installing: '…',
     installedCount: '{{count}} pacote(s) já nesta instância',
     noFile: 'Nenhum arquivo baixável para “{{name}}”',

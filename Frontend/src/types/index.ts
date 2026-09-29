@@ -46,6 +46,8 @@ export interface PackInfo {
   name: string
   size: number
   kind: PackKind
+  /** Empreinte du fichier — relie un pack à son projet Modrinth, comme pour les mods. */
+  sha1: string
 }
 
 /** État du modèle de réglages partagé entre instances. */

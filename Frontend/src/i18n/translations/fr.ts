@@ -651,6 +651,7 @@ export const fr = {
     noResult: 'Aucun résultat',
     noResultHint: 'Essaie d’autres mots ou retire des filtres',
     install: 'Installer',
+    installed: 'Installé',
     installing: '…',
     installedCount: '{{count}} pack(s) déjà dans cette instance',
     noFile: 'Aucune archive téléchargeable pour « {{name}} »',

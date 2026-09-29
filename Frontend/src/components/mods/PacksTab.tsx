@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
-import type { ModrinthHit } from './modUtils'
+import { fetchVersionsByHash, type ModrinthHit } from './modUtils'
 import type { ModInstallProgress, PackInfo, PackKind } from '@/types'
 
 /**
@@ -163,6 +163,42 @@ export function PacksTab({
 
   const installedNames = useMemo(() => new Set(installed.map((p) => p.name.toLowerCase())), [installed])
 
+  // Pack installé → projet Modrinth, par empreinte (même requête que les
+  // mods, `/v2/version_files`). Le nom du fichier ne suffit pas : un pack
+  // téléchargé s'appelle « Faithful 32x - 1.21.zip », sa carte « Faithful
+  // 32x » — la recherche affichait donc « Installer » sur un pack déjà là.
+  // Les empreintes déjà résolues ne sont pas redemandées.
+  const [projectBySha, setProjectBySha] = useState<Record<string, string>>({})
+  useEffect(() => {
+    const missing = installed.map((p) => p.sha1).filter((h) => h && !(h in projectBySha))
+    if (missing.length === 0) return
+    let cancelled = false
+    void fetchVersionsByHash(missing).then((found) => {
+      if (cancelled) return
+      setProjectBySha((prev) => {
+        const next = { ...prev }
+        // Une empreinte inconnue de Modrinth (pack importé à la main) est
+        // notée vide, pour ne pas la redemander à chaque rafraîchissement.
+        for (const h of missing) next[h] = found[h]?.projectId ?? ''
+        return next
+      })
+    })
+    return () => { cancelled = true }
+  }, [installed, projectBySha])
+
+  // Projets posés pendant cette session : marqués tout de suite, sans
+  // attendre la réponse de Modrinth sur l'empreinte du nouveau fichier.
+  const [justInstalled, setJustInstalled] = useState<Set<string>>(new Set())
+
+  const installedProjects = useMemo(() => {
+    const set = new Set(justInstalled)
+    for (const p of installed) {
+      const id = projectBySha[p.sha1]
+      if (id) set.add(id)
+    }
+    return set
+  }, [installed, projectBySha, justInstalled])
+
   const handleInstall = async (hit: ModrinthHit) => {
     if (!browseKind || installing) return
     setInstalling(hit.project_id)
@@ -171,6 +207,7 @@ export function PacksTab({
       const file = await resolvePackFile(hit.slug, mcVersion)
       if (!file) { showError(t('packs.noFile', { name: hit.title })); return }
       await api.packs.install(instanceId, browseKind, file.url, file.filename)
+      setJustInstalled((prev) => new Set(prev).add(hit.project_id))
       await refresh()
     } catch (e) {
       showError(e)
@@ -183,6 +220,10 @@ export function PacksTab({
   const handleDelete = async (pack: PackInfo) => {
     try {
       await api.packs.delete(instanceId, pack.kind, pack.name)
+      // Le projet n'est plus « posé pendant la session » : sans ça, sa carte
+      // resterait marquée installée jusqu'à la fermeture de l'écran.
+      const id = projectBySha[pack.sha1]
+      if (id) setJustInstalled((prev) => { const next = new Set(prev); next.delete(id); return next })
       await refresh()
     } catch (e) {
       showError(e)
@@ -285,6 +326,7 @@ export function PacksTab({
           <AnimatePresence initial={false}>
             {results.map((hit) => {
               const busy = installing === hit.project_id
+              const isInstalled = !busy && installedProjects.has(hit.project_id)
               return (
                 <motion.div
                   key={hit.project_id}
@@ -302,18 +344,20 @@ export function PacksTab({
                     <span className="truncate text-[12.5px] font-bold text-[rgba(255,255,255,0.88)]">{hit.title}</span>
                     <span className="line-clamp-2 text-[10.5px] leading-[1.45] text-[rgba(255,255,255,0.32)]">{hit.description}</span>
                   </div>
-                  <motion.button {...pressIf(!busy)}
+                  <motion.button {...pressIf(!busy && !isInstalled)}
                     onClick={() => handleInstall(hit)}
-                    disabled={!!installing}
+                    disabled={!!installing || isInstalled}
                     className={`flex h-7 flex-shrink-0 items-center gap-1 self-start rounded-lg px-2.5 text-[11px] font-semibold transition-colors duration-150 ${
                       busy
                         ? 'bg-[rgba(40,38,65,0.7)] text-[rgba(255,255,255,0.4)]'
-                        : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.5)] disabled:opacity-40'
+                        : isInstalled
+                          ? 'cursor-default bg-[rgba(34,197,94,0.14)] text-[rgb(134,239,172)]'
+                          : 'bg-[rgba(75,63,207,0.3)] text-[rgba(255,255,255,0.85)] hover:bg-[rgba(75,63,207,0.5)] disabled:opacity-40'
                     }`}
                   >
                     {busy
                       ? (progress ? `${progress.percent}%` : t('packs.installing'))
-                      : t('packs.install')}
+                      : isInstalled ? t('packs.installed') : t('packs.install')}
                   </motion.button>
                 </motion.div>
               )
