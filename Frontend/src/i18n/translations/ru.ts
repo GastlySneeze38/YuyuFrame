@@ -627,7 +627,7 @@ export const ru: TranslationSchema = {
       instances: 'Сборки',
       settings: 'Настройки',
       sync: 'Синхронизация',
-      features: 'Возможности',
+      features: 'Функции',
       support: 'Поддержка',
       plans: 'Тарифы',
       stats: 'Статистика',
@@ -936,7 +936,7 @@ export const ru: TranslationSchema = {
     chartBlocksAppliedPerSec: 'Блоков применено / с',
   },
   features: {
-    title: 'Возможности',
+    title: 'Функции',
     subtitle: 'Всё, что умеет лаунчер, в одном месте',
     paidBadge: 'Подписка',
     soonBadge: 'Скоро',

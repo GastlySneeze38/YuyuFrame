@@ -936,7 +936,7 @@ export const it: TranslationSchema = {
     chartBlocksAppliedPerSec: 'Blocchi applicati / s',
   },
   features: {
-    title: 'Funzionalità',
+    title: 'Funzioni',
     subtitle: 'Tutto ciò che il launcher sa fare, in un unico posto',
     paidBadge: 'Abbonati',
     soonBadge: 'Presto',

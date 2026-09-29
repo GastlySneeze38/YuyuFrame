@@ -627,7 +627,7 @@ export const es: TranslationSchema = {
       instances: 'Instancias',
       settings: 'Ajustes',
       sync: 'Sync',
-      features: 'Herramientas',
+      features: 'Extras',
       support: 'Soporte',
       plans: 'Planes',
       stats: 'Stats',
@@ -936,7 +936,7 @@ export const es: TranslationSchema = {
     chartBlocksAppliedPerSec: 'Bloques aplicados / s',
   },
   features: {
-    title: 'Herramientas',
+    title: 'Extras',
     subtitle: 'Todo lo que sabe hacer el launcher, en un mismo sitio',
     paidBadge: 'Premium',
     soonBadge: 'Pronto',
