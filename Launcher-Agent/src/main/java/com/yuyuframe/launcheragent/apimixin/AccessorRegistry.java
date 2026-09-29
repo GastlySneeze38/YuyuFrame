@@ -86,6 +86,9 @@ public final class AccessorRegistry {
         if ("26.1".equals(mcVersion)) {
             return "com.yuyuframe.launcheragent.apimixin.v26_1_0.core.AccessorBindings2610";
         }
+        if ("26.1.1".equals(mcVersion)) {
+            return "com.yuyuframe.launcheragent.apimixin.v26_1_1.core.AccessorBindings2611";
+        }
         if ("1.21.11".equals(mcVersion)) {
             // Sur cette version, l essentiel des données est public, donc
             // atteint sans accessor. Rangée à côté de ses accessors, comme

@@ -28,7 +28,7 @@ pub const MIN_JAVA: u32 = 25;
 /// côtés plutôt que d'une règle « tout ce qui est récent ».
 ///
 /// `*` couvre une famille entière, comme côté Java.
-const SUPPORTED: [&str; 4] = ["1.8.*", "1.21.11", "26.1", "26.1.2"];
+const SUPPORTED: [&str; 5] = ["1.8.*", "1.21.11", "26.1", "26.1.1", "26.1.2"];
 
 /// Ce qui empêche l'agent de se charger, quand quelque chose l'empêche.
 ///
@@ -94,9 +94,10 @@ mod tests {
         assert!(version_supported("1.8.1"));
         assert!(version_supported("1.21.11"));
         assert!(version_supported("26.1"));
+        assert!(version_supported("26.1.1"));
         assert!(version_supported("26.1.2"));
-        // Pas de famille sur la ligne 26.1 : 26.1.1 n'a pas (encore) sa tranche.
-        assert!(!version_supported("26.1.1"));
+        // Pas de famille sur la ligne 26.1 : une 26.1.3 n'aurait pas sa tranche.
+        assert!(!version_supported("26.1.3"));
         // Une 1.21 non testée ne doit PAS hériter du profil de la 1.21.11 —
         // même règle que côté Java, où élargir une tranche se fait version
         // testée par version testée.

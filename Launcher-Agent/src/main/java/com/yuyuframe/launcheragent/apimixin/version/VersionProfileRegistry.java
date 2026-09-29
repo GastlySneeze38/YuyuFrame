@@ -117,6 +117,17 @@ public final class VersionProfileRegistry {
             "26.1",
             null,
             "blaze3d"));
+
+        // 26.1.1 (2026-09-29) : même démarche que 26.1 — apimixin/v26_1_1 et
+        // apigraphic/era/blaze3d/v26_1_1, copies de 26.1.2. Jar client : 8
+        // classes diffèrent de 26.1.2 et 3 de 26.1, toutes parmi celles déjà
+        // écartées pour 26.1 (aucune utilisée par l'agent). Non obfusqué.
+        PROFILES.add(new VersionProfile(
+            "26_1_1",
+            new String[]{ "26.1.1" },
+            "26.1.1",
+            null,
+            "blaze3d"));
     }
 
     /**

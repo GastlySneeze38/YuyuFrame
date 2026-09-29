@@ -65,17 +65,17 @@ public final class ModuleRegistry {
 
     /**
      * Sans citrouille / Vision claire : implémentés via des mixins qui
-     * n'existent que pour 26.1, 26.1.2 et 1.21.11 ({@code apimixin/v26_1_0},
-     * {@code apimixin/v26_1_2}, {@code apimixin/v1_21_11}) — cartes gatées pour ne pas afficher des
+     * n'existent que pour 26.1, 26.1.1, 26.1.2 et 1.21.11 ({@code apimixin/v26_1_0},
+     * {@code apimixin/v26_1_1}, {@code apimixin/v26_1_2}, {@code apimixin/v1_21_11}) — cartes gatées pour ne pas afficher des
      * toggles sans le moindre effet sur la 1.8.9 (même principe que le
      * masquage du groupe "Optimisations", demande explicite de l'utilisateur
      * lors de cet audit-là).
      */
     private static final boolean IS_26_1 = isLine261(System.getProperty("launcheragent.mcVersion", ""));
 
-    /** Versions de la ligne 26.1 qui ont leur tranche de mixins (26.1 et 26.1.2). */
+    /** Versions de la ligne 26.1 qui ont leur tranche de mixins (26.1, 26.1.1 et 26.1.2). */
     private static boolean isLine261(String mcVersion) {
-        return "26.1".equals(mcVersion) || "26.1.2".equals(mcVersion);
+        return "26.1".equals(mcVersion) || "26.1.1".equals(mcVersion) || "26.1.2".equals(mcVersion);
     }
 
     /**
