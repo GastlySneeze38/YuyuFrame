@@ -1000,6 +1000,8 @@ export const pl: TranslationSchema = {
     poseSitting: 'Siedzenie',
     poseWaving: 'Machanie',
     history: 'Noszone skórki',
+    showMore: 'Zobacz wszystkie',
+    allTitle: 'Wszystkie noszone skórki',
     historyEmpty: 'Na razie nic. Każda zastosowana skórka trafi tutaj.',
     restore: 'Przywróć',
     forget: 'Zapomnij tę skórkę',

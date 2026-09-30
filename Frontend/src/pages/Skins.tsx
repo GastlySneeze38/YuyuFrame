@@ -344,6 +344,43 @@ export default function Skins() {
                 1280, soit exactement la largeur par défaut de la fenêtre — la
                 mise en page aurait basculé sur un pixel de redimensionnement. */}
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
+              {/* L'import ouvre la lecture : on arrive ici pour changer de
+                  skin, donc on commence par le choisir. L'aperçu et
+                  l'historique — ce qu'on porte et ce qu'on a porté — restent
+                  côte à côte à sa droite. */}
+              <div className="flex min-h-0 flex-col gap-4">
+                {/* La méthode passe par un menu déroulant : trois onglets côte
+                    à côte réclamaient toute la largeur pour un choix qu'on fait
+                    une fois, et chaque option peut ici porter sa description. */}
+                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-4">
+                  <SourcePicker value={tab} onChange={setTab} />
+
+                  {tab === 'file' ? (
+                    <Button onClick={pickFile} loading={searching} fullWidth>{t('skins.chooseFile')}</Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        value={tab === 'player' ? playerName : url}
+                        onChange={(e) => (tab === 'player' ? setPlayerName(e.target.value) : setUrl(e.target.value))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') tab === 'player' ? searchPlayer() : checkUrl() }}
+                        placeholder={tab === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
+                        maxLength={tab === 'player' ? 16 : undefined}
+                        className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13.5px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
+                      />
+                      <Button
+                        onClick={tab === 'player' ? searchPlayer : checkUrl}
+                        loading={searching}
+                        disabled={!(tab === 'player' ? playerName.trim() : url.trim())}
+                      >
+                        {tab === 'player' ? t('skins.search') : t('skins.check')}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <PosePicker />
+              </div>
+
               <SkinPreview
                 dataUri={shown?.dataUri ?? null}
                 fallbackUrl={account ? defaultSkinUrl(account.mc_uuid) : null}
@@ -376,101 +413,89 @@ export default function Skins() {
                 }
               />
 
-              <History
-                entries={history}
-                currentSource={current?.source ?? null}
-                currentVariant={current?.variant ?? null}
-                onRestore={(e) => {
-                  setCandidate({
-                    kind: e.kind,
-                    source: e.source,
-                    variant: e.variant,
-                    dataUri: e.data_uri!,
-                    origin: e.origin,
-                    fromHistory: true,
-                  })
-                  setJustApplied(false)
-                }}
-                onForget={(entry) => setPending({ type: 'forget', entry })}
-              />
+              {/* Colonne du milieu : l'historique, ou la validation quand un
+                  skin est en attente. Les deux se regardent à côté de l'aperçu
+                  — on compare une image à une autre — et ils ne servent jamais
+                  en même temps, donc ils partagent la place au lieu de se la
+                  disputer. La validation apparaissait auparavant sous l'import,
+                  à l'autre bout de l'écran de ce qu'elle décrit. */}
+              <AnimatePresence mode="wait">
+                {candidate ? (
+                  <motion.div
+                    key="candidate"
+                    variants={fadeVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={fastTransition}
+                    className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-accent/30 bg-accent/5 p-5"
+                  >
+                    <VariantPicker
+                      value={candidate.variant}
+                      onChange={(variant) => setCandidate({ ...candidate, variant })}
+                    />
 
-              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-                {/* La méthode passe par un menu déroulant : trois onglets côte
-                    à côte réclamaient toute la largeur pour un choix qu'on fait
-                    une fois, et chaque option peut ici porter sa description. */}
-                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-4">
-                  <SourcePicker value={tab} onChange={setTab} />
-
-                  {tab === 'file' ? (
-                    <Button onClick={pickFile} loading={searching} fullWidth>{t('skins.chooseFile')}</Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <input
-                        value={tab === 'player' ? playerName : url}
-                        onChange={(e) => (tab === 'player' ? setPlayerName(e.target.value) : setUrl(e.target.value))}
-                        onKeyDown={(e) => { if (e.key === 'Enter') tab === 'player' ? searchPlayer() : checkUrl() }}
-                        placeholder={tab === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
-                        maxLength={tab === 'player' ? 16 : undefined}
-                        className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13.5px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
-                      />
-                      <Button
-                        onClick={tab === 'player' ? searchPlayer : checkUrl}
-                        loading={searching}
-                        disabled={!(tab === 'player' ? playerName.trim() : url.trim())}
-                      >
-                        {tab === 'player' ? t('skins.search') : t('skins.check')}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                <AnimatePresence mode="wait">
-                  {candidate ? (
-                    <motion.div
-                      key="candidate"
-                      variants={fadeVariants}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                      transition={fastTransition}
-                      className="flex flex-col gap-4 rounded-2xl border border-accent/30 bg-accent/5 p-5"
-                    >
-                      <VariantPicker
-                        value={candidate.variant}
-                        onChange={(variant) => setCandidate({ ...candidate, variant })}
-                      />
-
+                    {/* `flex-1` + centrage : les explications prennent le milieu
+                        de la carte au lieu de flotter entre deux vides. */}
+                    <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
                       {/* Un fichier sur un compte hors ligne est le seul cas qui
                           ne survit pas à l'effacement de la base : il faut le
                           dire avant, pas après. */}
                       {candidate.kind === 'local' && account?.is_offline && (
-                        <p className="rounded-xl border border-warning/35 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-txt-secondary">
+                        <p className="rounded-xl border border-warning/35 bg-warning/10 p-3.5 text-[13px] leading-relaxed text-txt-secondary">
                           {t('skins.localWarning')}
                         </p>
                       )}
 
-                      <p className="text-[12.5px] leading-relaxed text-txt-secondary">
+                      <p className="text-[13.5px] leading-relaxed text-txt-secondary">
                         {account?.is_offline
                           ? t('skins.offlineNotice')
                           : candidate.kind === 'local'
                             ? t('skins.fileToMojangNotice')
                             : t('skins.mojangNotice')}
                       </p>
+                    </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="primary" onClick={askApply} loading={busy}>
-                          {t('skins.apply')}
-                        </Button>
-                        <Button variant="ghost" onClick={() => setCandidate(null)} disabled={busy}>
-                          {t('skins.cancel')}
-                        </Button>
-                      </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                    <div className="flex gap-2">
+                      <Button variant="primary" onClick={askApply} loading={busy} fullWidth>
+                        {t('skins.apply')}
+                      </Button>
+                      <Button variant="ghost" onClick={() => setCandidate(null)} disabled={busy} fullWidth>
+                        {t('skins.cancel')}
+                      </Button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="history"
+                    variants={fadeVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={fastTransition}
+                    className="flex h-full min-h-0 flex-col"
+                  >
+                    <History
+                      entries={history}
+                      currentSource={current?.source ?? null}
+                      currentVariant={current?.variant ?? null}
+                      onRestore={(e) => {
+                        setCandidate({
+                          kind: e.kind,
+                          source: e.source,
+                          variant: e.variant,
+                          dataUri: e.data_uri!,
+                          origin: e.origin,
+                          fromHistory: true,
+                        })
+                        setJustApplied(false)
+                      }}
+                      onForget={(entry) => setPending({ type: 'forget', entry })}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                <PosePicker />
-              </div>
             </div>
           </div>
         )}
@@ -579,18 +604,26 @@ const POSES = ['standing', 'walking', 'running', 'flying', 'sitting', 'waving'] 
 function PosePicker() {
   const t = useT()
   return (
-    <div className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
+    // `flex-1` : cette carte absorbe la hauteur que l'import laisse libre, et
+    // ses boutons s'étirent avec elle. C'est ce qui évite deux cartes tassées
+    // en haut d'une colonne vide aux deux tiers.
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
       <div className="flex flex-col gap-0.5">
         <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
         <p className="text-[11.5px] leading-relaxed text-txt-muted">{t('skins.posesSoon')}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      {/* En lignes plutôt qu'en grille 3 × 2 : étirés en hauteur, six boutons
+          devenaient des pavés de 100 px pour un mot, hors de proportion avec
+          ce qu'ils font. Une liste occupe la même hauteur sans qu'aucun
+          élément n'ait l'air surdimensionné — et c'est la forme qui conviendra
+          quand chaque pose aura sa vignette à gauche. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         {POSES.map((pose) => (
           <button
             key={pose}
             disabled
-            className="rounded-xl border border-line bg-surface-2 px-2 py-2.5 text-[11.5px] font-medium text-txt-secondary opacity-50"
+            className="flex min-h-[36px] flex-1 items-center rounded-lg border border-line bg-surface-2 px-3.5 text-[12.5px] font-medium text-txt-secondary opacity-50"
           >
             {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
           </button>
@@ -764,12 +797,75 @@ function originLabel(origin: string, t: (k: string, v?: Record<string, string | 
   return t('skins.originUrl')
 }
 
+interface HeadSize {
+  /** Classe de taille du carré. */
+  box: string
+  /** `background-size` correspondant : huit fois le côté. */
+  bg: string
+  /** `background-position` : moins le côté, sur les deux axes. */
+  pos: string
+  /** Rembourrage de la vignette qui la contient. */
+  pad: string
+}
+
+const SIZES: Record<'large' | 'medium' | 'small', HeadSize> = {
+  large: { box: 'h-[104px] w-[104px]', bg: '832px 832px', pos: '-104px -104px', pad: 'p-3.5' },
+  medium: { box: 'h-14 w-14', bg: '448px 448px', pos: '-56px -56px', pad: 'p-3' },
+  small: { box: 'h-11 w-11', bg: '352px 352px', pos: '-44px -44px', pad: 'p-2' },
+}
+
 /**
- * Les skins déjà portés, en colonne à droite.
+ * Quatre agencements, selon le nombre de skins.
  *
- * Elle a son propre défilement : c'est la seule partie de l'écran dont la
- * hauteur dépend de ce que l'utilisateur a accumulé, et la laisser pousser le
- * reste vers le bas ramènerait le défaut qu'on vient de corriger.
+ * Le principe : ne jamais poser une grille là où il n'y a pas de quoi la
+ * remplir, et ne jamais cacher derrière une barre de défilement ce qu'on peut
+ * annoncer.
+ *
+ *   1-2    en lignes — une grille de deux cartes laisse trois quarts de cadre
+ *          vide ; une ligne pleine largeur montre la tête, le modèle et
+ *          l'action sans faire semblant
+ *   3-4    grande grille — deux colonnes, deux rangées, généreux
+ *   5-11   petite grille — tout tient encore à l'écran
+ *   12+    petite grille tronquée + une tuile « +N » qui ouvre le reste en
+ *          grand. Rien ne défile dans la colonne : ce qui ne tient pas est
+ *          compté et cliquable, pas enfoui
+ *
+ * Les classes de grille sont écrites en entier : Tailwind lit le source, une
+ * classe composée à l'exécution ne serait pas générée.
+ */
+function layoutFor(count: number): { shape: 'rows' | 'grid'; visible: number; grid: string; size: HeadSize } {
+  if (count <= 2) return { shape: 'rows', visible: count, grid: '', size: SIZES.medium }
+  // Quatre au plus pour la grande grille : deux colonnes, donc deux rangées de
+  // ~175 px. À six, il en faudrait trois et la carte déborderait — c'est la
+  // hauteur qui fixe cette borne, pas l'esthétique.
+  if (count <= 4) {
+    return {
+      shape: 'grid',
+      visible: count,
+      grid: 'place-content-center grid-cols-[repeat(auto-fill,minmax(150px,1fr))]',
+      size: SIZES.large,
+    }
+  }
+  if (count <= 11) {
+    return {
+      shape: 'grid',
+      visible: count,
+      grid: 'place-content-center grid-cols-[repeat(auto-fill,minmax(104px,1fr))]',
+      size: SIZES.small,
+    }
+  }
+  // Onze vignettes plus la tuile « +N » : douze cases, soit quatre rangées de
+  // trois dans la colonne, sans débordement.
+  return {
+    shape: 'grid',
+    visible: 11,
+    grid: 'content-start grid-cols-[repeat(auto-fill,minmax(104px,1fr))]',
+    size: SIZES.small,
+  }
+}
+
+/**
+ * Les skins déjà portés.
  *
  * Une entrée sans aperçu reste affichée : son hébergeur peut être momentanément
  * injoignable, et la faire disparaître donnerait à croire qu'on l'a perdue. Elle
@@ -789,80 +885,248 @@ function History({
   onForget: (entry: SkinHistoryEntry) => void
 }) {
   const t = useT()
+  const [showAll, setShowAll] = useState(false)
+
+  const plan = layoutFor(entries.length)
+  const visible = entries.slice(0, plan.visible)
+  const hidden = entries.length - visible.length
 
   return (
-    <div className="flex min-h-0 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
       <p className="text-[13.5px] font-semibold">{t('skins.history')}</p>
 
-      {/* `auto-fill` plutôt qu'un nombre de colonnes figé : c'est cette colonne
-          qui reçoit toute la largeur restante, et le nombre de vignettes par
-          ligne doit suivre la fenêtre plutôt que la contraindre. */}
       {entries.length === 0 ? (
         <p className="py-6 text-center text-[12.5px] leading-relaxed text-txt-secondary">{t('skins.historyEmpty')}</p>
+      ) : plan.shape === 'rows' ? (
+        // Alignées en haut, sous le titre : centrées, elles flottaient au
+        // milieu du cadre sans rien pour les y rattacher.
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          {visible.map((e) => (
+            <HistoryRow
+              key={e.id}
+              entry={e}
+              worn={isWorn(e, currentSource, currentVariant)}
+              onRestore={onRestore}
+              onForget={onForget}
+            />
+          ))}
+        </div>
       ) : (
-        <div className="-mr-1.5 grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(104px,1fr))] content-start gap-2 overflow-y-auto pr-1.5">
-          {entries.map((e) => {
-            const worn = e.source === currentSource && e.variant === currentVariant
-            return (
-              <div
-                key={e.id}
-                className={`group relative rounded-xl border transition-colors ${
-                  worn ? 'border-accent/45 bg-accent/10' : 'border-line bg-surface-2 hover:border-accent/35'
-                }`}
-              >
-                {/* La vignette entière change de skin : viser un lien de onze
-                    pixels pour faire le geste le plus courant de l'écran
-                    n'avait pas de sens. Porté ou sans aperçu, elle n'est plus
-                    un bouton — il n'y aurait rien à déclencher. */}
-                <button
-                  onClick={() => onRestore(e)}
-                  disabled={worn || !e.data_uri}
-                  title={worn ? undefined : t('skins.restore')}
-                  className="flex w-full flex-col items-center gap-1.5 p-2.5 disabled:cursor-default"
-                >
-                {e.data_uri ? (
-                  // Tête recadrée depuis le gabarit : la face fait 8×8 à
-                  // l'offset (8,8) d'une texture large de 64.
-                  <div
-                    className="h-12 w-12 rounded-lg [image-rendering:pixelated]"
-                    style={{
-                      backgroundImage: `url(${e.data_uri})`,
-                      backgroundSize: '384px 384px',
-                      backgroundPosition: '-48px -48px',
-                    }}
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 items-center justify-center whitespace-pre-line rounded-lg bg-surface-4 text-center text-[8.5px] leading-tight text-txt-muted">
-                    {t('skins.noPreview')}
-                  </div>
-                )}
+        <div className={`grid min-h-0 flex-1 gap-2 ${plan.grid}`}>
+          {visible.map((e) => (
+            <HistoryTile
+              key={e.id}
+              entry={e}
+              worn={isWorn(e, currentSource, currentVariant)}
+              size={plan.size}
+              onRestore={onRestore}
+              onForget={onForget}
+            />
+          ))}
 
-                <span className="text-[11px] text-txt-muted">{t(`skins.${e.variant}`)}</span>
-
-                {worn ? (
-                  <span className="text-[11px] font-semibold text-accent-hover">{t('skins.worn')}</span>
-                ) : (
-                  <span className="text-[11px] font-semibold text-txt-secondary transition-colors group-hover:text-txt-primary">
-                    {t('skins.restore')}
-                  </span>
-                )}
-                </button>
-
-                <button
-                  onClick={() => onForget(e)}
-                  title={t('skins.forget')}
-                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md text-txt-muted opacity-0 transition-all hover:bg-danger/20 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" width={11} height={11}>
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              </div>
-            )
-          })}
+          {/* Le reste n'est pas relégué sous une barre de défilement qu'on ne
+              voit pas : il est annoncé, compté, et s'ouvre en grand. */}
+          {hidden > 0 && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line-strong bg-surface-2 p-2 text-txt-secondary transition-colors hover:border-accent/45 hover:text-txt-primary"
+            >
+              <span className="text-[15px] font-bold">+{hidden}</span>
+              <span className="text-[10.5px] font-medium">{t('skins.showMore')}</span>
+            </button>
+          )}
         </div>
       )}
+
+      <AnimatePresence>
+        {showAll && (
+          <HistoryModal
+            entries={entries}
+            currentSource={currentSource}
+            currentVariant={currentVariant}
+            onRestore={(e) => { onRestore(e); setShowAll(false) }}
+            onForget={onForget}
+            onClose={() => setShowAll(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+function isWorn(entry: SkinHistoryEntry, source: string | null, variant: SkinVariant | null): boolean {
+  return entry.source === source && entry.variant === variant
+}
+
+/** Toutes les entrées, quand elles ne tiennent plus dans la colonne. */
+function HistoryModal({
+  entries,
+  currentSource,
+  currentVariant,
+  onRestore,
+  onForget,
+  onClose,
+}: {
+  entries: SkinHistoryEntry[]
+  currentSource: string | null
+  currentVariant: SkinVariant | null
+  onRestore: (entry: SkinHistoryEntry) => void
+  onForget: (entry: SkinHistoryEntry) => void
+  onClose: () => void
+}) {
+  const t = useT()
+  return (
+    <ModalShell title={t('skins.allTitle')} onClose={onClose} maxWidth="max-w-3xl">
+      <div className="grid max-h-[60vh] grid-cols-[repeat(auto-fill,minmax(104px,1fr))] content-start gap-2 overflow-y-auto pr-1">
+        {entries.map((e) => (
+          <HistoryTile
+            key={e.id}
+            entry={e}
+            worn={isWorn(e, currentSource, currentVariant)}
+            size={SIZES.small}
+            onRestore={onRestore}
+            onForget={onForget}
+          />
+        ))}
+      </div>
+    </ModalShell>
+  )
+}
+
+/**
+ * Une ligne — la forme des tout petits nombres.
+ *
+ * À un ou deux skins, une grille pose des cartes minuscules dans un coin d'un
+ * cadre vide. Une ligne pleine largeur, elle, montre une tête lisible, le
+ * modèle, et l'action, sans prétendre remplir une grille qui n'existe pas.
+ */
+function HistoryRow({
+  entry,
+  worn,
+  onRestore,
+  onForget,
+}: {
+  entry: SkinHistoryEntry
+  worn: boolean
+  onRestore: (entry: SkinHistoryEntry) => void
+  onForget: (entry: SkinHistoryEntry) => void
+}) {
+  const t = useT()
+  return (
+    <div
+      className={`group relative flex items-center gap-3 rounded-xl border p-3 transition-colors ${
+        worn ? 'border-accent/45 bg-accent/10' : 'border-line bg-surface-2 hover:border-accent/35'
+      }`}
+    >
+      <Head entry={entry} size={SIZES.medium} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[13px] font-semibold text-txt-primary">{t(`skins.${entry.variant}`)}</span>
+        <span className="truncate text-[11.5px] text-txt-muted">{t(`skins.${entry.variant}Hint`)}</span>
+      </div>
+
+      {worn ? (
+        <span className="mr-6 shrink-0 text-[12px] font-semibold text-accent-hover">{t('skins.worn')}</span>
+      ) : (
+        <Button size="sm" variant="ghost" onClick={() => onRestore(entry)} disabled={!entry.data_uri} className="mr-6">
+          {t('skins.restore')}
+        </Button>
+      )}
+
+      <ForgetButton onClick={() => onForget(entry)} />
+    </div>
+  )
+}
+
+/** Une vignette de grille — la forme dès qu'il y en a plusieurs. */
+function HistoryTile({
+  entry,
+  worn,
+  size,
+  onRestore,
+  onForget,
+}: {
+  entry: SkinHistoryEntry
+  worn: boolean
+  size: HeadSize
+  onRestore: (entry: SkinHistoryEntry) => void
+  onForget: (entry: SkinHistoryEntry) => void
+}) {
+  const t = useT()
+  return (
+    <div
+      className={`group relative rounded-xl border transition-colors ${
+        worn ? 'border-accent/45 bg-accent/10' : 'border-line bg-surface-2 hover:border-accent/35'
+      }`}
+    >
+      {/* La vignette entière change de skin : viser un lien de onze pixels pour
+          faire le geste le plus courant de l'écran n'avait pas de sens. Portée
+          ou sans aperçu, elle n'est plus un bouton — il n'y aurait rien à
+          déclencher. */}
+      <button
+        onClick={() => onRestore(entry)}
+        disabled={worn || !entry.data_uri}
+        title={worn ? undefined : t('skins.restore')}
+        className={`flex w-full flex-col items-center gap-1.5 disabled:cursor-default ${size.pad}`}
+      >
+        <Head entry={entry} size={size} />
+        <span className="text-[11px] text-txt-muted">{t(`skins.${entry.variant}`)}</span>
+        {worn ? (
+          <span className="text-[11px] font-semibold text-accent-hover">{t('skins.worn')}</span>
+        ) : (
+          <span className="text-[11px] font-semibold text-txt-secondary transition-colors group-hover:text-txt-primary">
+            {t('skins.restore')}
+          </span>
+        )}
+      </button>
+
+      <ForgetButton onClick={() => onForget(entry)} />
+    </div>
+  )
+}
+
+function ForgetButton({ onClick }: { onClick: () => void }) {
+  const t = useT()
+  return (
+    <button
+      onClick={onClick}
+      title={t('skins.forget')}
+      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md text-txt-muted opacity-0 transition-all hover:bg-danger/20 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" width={11} height={11}>
+        <path d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </button>
+  )
+}
+
+/**
+ * La tête du skin, recadrée depuis le gabarit.
+ *
+ * La face est un carré de 8 px pris à l'offset (8,8) d'une texture large de
+ * 64 : pour l'afficher à N pixels il faut donc une image de fond de 8 × N,
+ * décalée de N. Les classes sont écrites en entier dans `SIZES`, jamais
+ * assemblées — Tailwind lit le source, une classe composée à l'exécution ne
+ * serait pas générée.
+ */
+function Head({ entry, size }: { entry: SkinHistoryEntry; size: HeadSize }) {
+  const t = useT()
+  if (!entry.data_uri) {
+    return (
+      <div className={`flex shrink-0 items-center justify-center whitespace-pre-line rounded-lg bg-surface-4 text-center text-[9px] leading-tight text-txt-muted ${size.box}`}>
+        {t('skins.noPreview')}
+      </div>
+    )
+  }
+  return (
+    <div
+      className={`shrink-0 rounded-lg [image-rendering:pixelated] ${size.box}`}
+      style={{
+        backgroundImage: `url(${entry.data_uri})`,
+        backgroundSize: size.bg,
+        backgroundPosition: size.pos,
+      }}
+    />
   )
 }
 
@@ -928,17 +1192,31 @@ function VariantPicker({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-secondary">{t('skins.variant')}</p>
-      <div className="flex gap-2">
+      {/* Empilés plutôt que côte à côte : deux cartes dans une demi-largeur
+          donnaient un titre de deux mots sur une ligne et son explication sur
+          deux, en corps 11. Sur toute la largeur, chaque option tient en une
+          ligne lisible, et la pastille dit laquelle est choisie sans qu'on ait
+          à comparer deux fonds. */}
+      <div className="flex flex-col gap-2">
         {(['classic', 'slim'] as const).map((v) => (
           <button
             key={v}
             onClick={() => onChange(v)}
-            className={`flex-1 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+            className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
               value === v ? 'border-accent/50 bg-accent/15' : 'border-line bg-surface-1 hover:border-line-strong'
             }`}
           >
-            <span className="block text-[13px] font-semibold">{t(`skins.${v}`)}</span>
-            <span className="block text-[11px] text-txt-muted">{t(`skins.${v}Hint`)}</span>
+            <span
+              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                value === v ? 'border-accent-hover' : 'border-line-strong'
+              }`}
+            >
+              {value === v && <span className="h-2 w-2 rounded-full bg-accent-hover" />}
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[14px] font-semibold">{t(`skins.${v}`)}</span>
+              <span className="text-[12px] text-txt-muted">{t(`skins.${v}Hint`)}</span>
+            </span>
           </button>
         ))}
       </div>

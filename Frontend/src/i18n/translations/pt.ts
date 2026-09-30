@@ -1001,6 +1001,8 @@ export const pt: TranslationSchema = {
     poseSitting: 'Sentado',
     poseWaving: 'Aceno',
     history: 'Skins já usadas',
+    showMore: 'Ver todas',
+    allTitle: 'Todas as skins já usadas',
     historyEmpty: 'Nada por enquanto. Cada skin aplicada vai aparecer aqui.',
     restore: 'Colocar de novo',
     forget: 'Esquecer esta skin',

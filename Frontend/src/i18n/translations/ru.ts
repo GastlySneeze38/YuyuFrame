@@ -1000,6 +1000,8 @@ export const ru: TranslationSchema = {
     poseSitting: 'Сидя',
     poseWaving: 'Приветствие',
     history: 'Скины, которые вы носили',
+    showMore: 'Показать все',
+    allTitle: 'Все скины, которые вы носили',
     historyEmpty: 'Пока пусто. Каждый применённый скин попадёт сюда.',
     restore: 'Вернуть',
     forget: 'Забыть этот скин',

@@ -1000,6 +1000,8 @@ export const es: TranslationSchema = {
     poseSitting: 'Sentado',
     poseWaving: 'Saludo',
     history: 'Skins ya usadas',
+    showMore: 'Ver todo',
+    allTitle: 'Todas las skins ya usadas',
     historyEmpty: 'Nada por ahora. Cada skin que apliques aparecerá aquí.',
     restore: 'Volver a poner',
     forget: 'Olvidar esta skin',

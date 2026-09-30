@@ -1002,6 +1002,8 @@ export const fr = {
     poseSitting: 'Assis',
     poseWaving: 'Salut',
     history: 'Skins déjà portés',
+    showMore: 'Voir tout',
+    allTitle: 'Tous les skins déjà portés',
     historyEmpty: 'Rien pour l’instant. Chaque skin appliqué viendra se ranger ici.',
     restore: 'Remettre',
     forget: 'Oublier ce skin',
