@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -9,6 +10,7 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { ModalShell } from '@/components/ui/ModalShell'
 import { showError } from '@/stores/useErrorToast'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
@@ -33,6 +35,14 @@ import { useT } from '@/i18n'
  * Impossible donc de reconstituer un passé : on enregistre ce qui est appliqué
  * (`db/skin_history.rs`), pour les deux sortes de compte, et on amorce la liste
  * d'un compte Microsoft avec le skin qu'il porte quand on le découvre.
+ *
+ * ── Mise en page : trois colonnes, aucun défilement ───────────────────────
+ * L'écran tenait sur deux colonnes hautes, et l'historique passait sous la
+ * ligne de flottaison — on ne savait qu'il existait qu'en faisant défiler.
+ * Désormais aperçu · actions · historique tiennent côte à côte, et seule la
+ * liste d'historique défile dans son propre cadre quand elle déborde. Le
+ * défilement de la page reste possible pour les toutes petites fenêtres, mais
+ * ne sert jamais à la taille normale.
  */
 
 type Tab = 'player' | 'url' | 'file'
@@ -50,6 +60,23 @@ interface Candidate {
   fromHistory?: boolean
 }
 
+/** Action engageante en attente de confirmation — voir `ConfirmModal`. */
+type Pending =
+  | { type: 'apply' }
+  | { type: 'default' }
+  | { type: 'forget'; entry: SkinHistoryEntry }
+
+/**
+ * Apparence par défaut du compte, quand aucun skin n'est choisi.
+ *
+ * Le bouton « retirer le skin » laissait le personnage sans texture, ce qui
+ * n'existe pas en jeu : un compte sans skin porte le skin par défaut que
+ * Mojang lui attribue. L'aperçu montre donc toujours quelqu'un — ce service
+ * sert déjà d'avatar ailleurs dans le launcher, et rend le bon défaut pour un
+ * UUID inconnu, ce qui couvre les comptes hors ligne.
+ */
+const defaultSkinUrl = (uuid: string) => `https://mc-heads.net/skin/${uuid}`
+
 export default function Skins() {
   const t = useT()
   const [params, setParams] = useSearchParams()
@@ -65,9 +92,10 @@ export default function Skins() {
   const [playerName, setPlayerName] = useState('')
   const [url, setUrl] = useState('')
   const [searching, setSearching] = useState(false)
-  const [applying, setApplying] = useState(false)
-  const [removing, setRemoving] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
+  const [pending, setPending] = useState<Pending | null>(null)
+  const [showHosting, setShowHosting] = useState(false)
 
   useEffect(() => {
     api.mc.accounts()
@@ -190,9 +218,22 @@ export default function Skins() {
     }
   }
 
+  /**
+   * Appliquer sur un compte Microsoft change le skin chez Mojang, donc pour
+   * tout le monde : ça se confirme. Sur un compte hors ligne, rien ne sort du
+   * launcher et un mauvais choix se corrige d'un clic — demander là aussi
+   * userait la confirmation jusqu'à ce qu'on ne la lise plus.
+   */
+  const askApply = () => {
+    if (!account || !candidate) return
+    if (account.is_offline) void apply()
+    else setPending({ type: 'apply' })
+  }
+
   const apply = async () => {
-    if (!account || !candidate || applying) return
-    setApplying(true)
+    if (!account || !candidate || busy) return
+    setPending(null)
+    setBusy(true)
     try {
       const saved = await api.skin.apply(
         account.mc_uuid,
@@ -209,13 +250,23 @@ export default function Skins() {
     } catch (e) {
       showError(e)
     } finally {
-      setApplying(false)
+      setBusy(false)
     }
   }
 
-  const remove = async () => {
-    if (!account || removing) return
-    setRemoving(true)
+  /**
+   * Revenir à l'apparence par défaut.
+   *
+   * Côté serveur c'est la même opération qu'avant (la référence est effacée, et
+   * Mojang remet l'apparence par défaut du compte), mais ce n'est plus présenté
+   * comme « retirer » : un compte sans skin choisi n'est pas nu, il porte le
+   * skin par défaut que Mojang lui attribue. C'est ce que l'aperçu montre
+   * ensuite, et ce que le bouton annonce.
+   */
+  const useDefault = async () => {
+    if (!account || busy) return
+    setPending(null)
+    setBusy(true)
     try {
       await api.skin.remove(account.mc_uuid)
       setCurrent(null)
@@ -225,14 +276,15 @@ export default function Skins() {
     } catch (e) {
       showError(e)
     } finally {
-      setRemoving(false)
+      setBusy(false)
     }
   }
 
-  const forget = async (id: number) => {
+  const forget = async (entry: SkinHistoryEntry) => {
     if (!account) return
+    setPending(null)
     try {
-      await api.skin.historyForget(account.mc_uuid, id)
+      await api.skin.historyForget(account.mc_uuid, entry.id)
       loadHistory(account.mc_uuid)
     } catch (e) {
       showError(e)
@@ -240,7 +292,7 @@ export default function Skins() {
   }
 
   return (
-    <div className="relative h-full overflow-y-auto bg-bg-primary text-txt-primary">
+    <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">
       <PageGlow />
 
       <PageHeader>
@@ -249,27 +301,52 @@ export default function Skins() {
           <h1 className="text-[16px] font-black leading-[1.2] tracking-[-0.01em] text-txt-primary">
             {t('skins.title')}
           </h1>
-          <p className="mt-px text-[10px] text-txt-muted">{t('skins.subtitle')}</p>
+          <p className="mt-0.5 text-[11.5px] text-txt-secondary">{t('skins.subtitle')}</p>
         </div>
       </PageHeader>
 
-      <div className="mx-auto w-full max-w-5xl px-7 py-8">
+      {/* `overflow-y-auto` en secours : à la taille normale rien ne défile,
+          mais une fenêtre réduite à l'extrême doit rester utilisable. */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
         {accounts === null ? (
-          <div className="flex h-64 items-center justify-center">
+          <div className="flex h-full items-center justify-center">
             <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
           </div>
         ) : accounts.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-2 text-center">
-            <p className="text-[13px] font-semibold">{t('skins.noAccount')}</p>
-            <p className="max-w-sm text-[12px] leading-relaxed text-txt-secondary">{t('skins.noAccountHint')}</p>
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <p className="text-[14px] font-semibold">{t('skins.noAccount')}</p>
+            <p className="max-w-sm text-[12.5px] leading-relaxed text-txt-secondary">{t('skins.noAccountHint')}</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-6">
-            <AccountPicker accounts={accounts} selected={selected} onPick={pickAccount} />
+          <div className="mx-auto flex h-full min-h-[500px] w-full max-w-[1180px] flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <AccountPicker accounts={accounts} selected={selected} onPick={pickAccount} />
+              {/* Remplace les phrases d'aide qui vivaient sous chaque onglet :
+                  elles répétaient trois fois la même idée et disaient à chaque
+                  fois un tiers de l'histoire. Ici, tout est au même endroit,
+                  pour qui se pose la question. */}
+              <Button variant="ghost" size="sm" onClick={() => setShowHosting(true)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 16v-4M12 8h.01" />
+                </svg>
+                {t('skins.hostingButton')}
+              </Button>
+            </div>
 
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+            {/* Trois colonnes égales, dans l'ordre où on les regarde : ce que
+                le compte porte, ce qu'il a porté, et de quoi en changer.
+                L'historique est voisin de l'aperçu parce qu'ils parlent de la
+                même chose — remettre un ancien skin, c'est comparer deux
+                images, pas remplir un formulaire.
+
+                Elles s'installent dès 1024 px et pas à `xl` : ce dernier vaut
+                1280, soit exactement la largeur par défaut de la fenêtre — la
+                mise en page aurait basculé sur un pixel de redimensionnement. */}
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
               <SkinPreview
                 dataUri={shown?.dataUri ?? null}
+                fallbackUrl={account ? defaultSkinUrl(account.mc_uuid) : null}
                 variant={shown?.variant ?? 'classic'}
                 label={
                   candidate
@@ -282,74 +359,73 @@ export default function Skins() {
                       ? t('skins.previewCurrent')
                       : t('skins.previewNone')
                 }
+                note={candidate ? null : current ? originLabel(current.origin, t) : t('skins.defaultHint')}
                 pending={!!candidate}
+                // Discret et en bas : presque personne ne s'en sert, mais ceux
+                // qui le cherchent le cherchent là.
+                footer={
+                  !candidate && current ? (
+                    <button
+                      onClick={() => setPending({ type: 'default' })}
+                      disabled={busy}
+                      className="text-[11.5px] font-medium text-txt-muted underline decoration-txt-muted/40 underline-offset-2 transition-colors hover:text-txt-primary disabled:opacity-40"
+                    >
+                      {t('skins.defaultSkin')}
+                    </button>
+                  ) : null
+                }
               />
 
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
-                  <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
-                    {(['player', 'url', 'file'] as const).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setTab(m)}
-                        className={`flex-1 rounded-lg py-2 text-[12.5px] font-semibold transition-colors ${
-                          tab === m ? 'bg-accent text-white' : 'text-txt-secondary hover:text-txt-primary'
-                        }`}
+              <History
+                entries={history}
+                currentSource={current?.source ?? null}
+                currentVariant={current?.variant ?? null}
+                onRestore={(e) => {
+                  setCandidate({
+                    kind: e.kind,
+                    source: e.source,
+                    variant: e.variant,
+                    dataUri: e.data_uri!,
+                    origin: e.origin,
+                    fromHistory: true,
+                  })
+                  setJustApplied(false)
+                }}
+                onForget={(entry) => setPending({ type: 'forget', entry })}
+              />
+
+              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+                {/* La méthode passe par un menu déroulant : trois onglets côte
+                    à côte réclamaient toute la largeur pour un choix qu'on fait
+                    une fois, et chaque option peut ici porter sa description. */}
+                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-4">
+                  <SourcePicker value={tab} onChange={setTab} />
+
+                  {tab === 'file' ? (
+                    <Button onClick={pickFile} loading={searching} fullWidth>{t('skins.chooseFile')}</Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        value={tab === 'player' ? playerName : url}
+                        onChange={(e) => (tab === 'player' ? setPlayerName(e.target.value) : setUrl(e.target.value))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') tab === 'player' ? searchPlayer() : checkUrl() }}
+                        placeholder={tab === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
+                        maxLength={tab === 'player' ? 16 : undefined}
+                        className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13.5px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
+                      />
+                      <Button
+                        onClick={tab === 'player' ? searchPlayer : checkUrl}
+                        loading={searching}
+                        disabled={!(tab === 'player' ? playerName.trim() : url.trim())}
                       >
-                        {t(`skins.source${m[0].toUpperCase()}${m.slice(1)}`)}
-                      </button>
-                    ))}
-                  </div>
-
-                  {tab === 'player' && (
-                    <>
-                      <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skins.playerHint')}</p>
-                      <div className="flex gap-2">
-                        <input
-                          value={playerName}
-                          onChange={(e) => setPlayerName(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') searchPlayer() }}
-                          placeholder={t('skins.playerPlaceholder')}
-                          maxLength={16}
-                          className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13px] text-txt-primary outline-none transition-colors focus:border-accent/50"
-                        />
-                        <Button onClick={searchPlayer} loading={searching} disabled={!playerName.trim()}>
-                          {t('skins.search')}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-
-                  {tab === 'url' && (
-                    <>
-                      <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skins.urlHint')}</p>
-                      <div className="flex gap-2">
-                        <input
-                          value={url}
-                          onChange={(e) => setUrl(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') checkUrl() }}
-                          placeholder="https://.../skin.png"
-                          className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13px] text-txt-primary outline-none transition-colors focus:border-accent/50"
-                        />
-                        <Button onClick={checkUrl} loading={searching} disabled={!url.trim()}>
-                          {t('skins.check')}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-
-                  {tab === 'file' && (
-                    <>
-                      <p className="text-[12px] leading-relaxed text-txt-secondary">
-                        {account?.is_offline ? t('skins.fileHintOffline') : t('skins.fileHintMojang')}
-                      </p>
-                      <Button onClick={pickFile} loading={searching}>{t('skins.chooseFile')}</Button>
-                    </>
+                        {tab === 'player' ? t('skins.search') : t('skins.check')}
+                      </Button>
+                    </div>
                   )}
                 </div>
 
                 <AnimatePresence mode="wait">
-                  {candidate && (
+                  {candidate ? (
                     <motion.div
                       key="candidate"
                       variants={fadeVariants}
@@ -368,12 +444,12 @@ export default function Skins() {
                           ne survit pas à l'effacement de la base : il faut le
                           dire avant, pas après. */}
                       {candidate.kind === 'local' && account?.is_offline && (
-                        <p className="rounded-xl border border-warning/35 bg-warning/10 p-3 text-[12px] leading-relaxed text-txt-secondary">
+                        <p className="rounded-xl border border-warning/35 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-txt-secondary">
                           {t('skins.localWarning')}
                         </p>
                       )}
 
-                      <p className="text-[12px] leading-relaxed text-txt-secondary">
+                      <p className="text-[12.5px] leading-relaxed text-txt-secondary">
                         {account?.is_offline
                           ? t('skins.offlineNotice')
                           : candidate.kind === 'local'
@@ -382,59 +458,301 @@ export default function Skins() {
                       </p>
 
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="primary" onClick={apply} loading={applying}>
+                        <Button variant="primary" onClick={askApply} loading={busy}>
                           {t('skins.apply')}
                         </Button>
-                        <Button variant="ghost" onClick={() => setCandidate(null)} disabled={applying}>
+                        <Button variant="ghost" onClick={() => setCandidate(null)} disabled={busy}>
                           {t('skins.cancel')}
                         </Button>
                       </div>
                     </motion.div>
-                  )}
+                  ) : null}
                 </AnimatePresence>
 
-                {!candidate && current && (
-                  <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
-                    <div className="flex flex-col gap-1">
-                      <p className="text-[12.5px] font-semibold">{t('skins.currentTitle')}</p>
-                      <p className="text-[11.5px] text-txt-muted">{originLabel(current.origin, t)}</p>
-                    </div>
-                    {justApplied && (
-                      <p className="text-[12px] font-medium text-success">
-                        {account?.is_offline ? t('skins.appliedOffline') : t('skins.appliedMojang')}
-                      </p>
-                    )}
-                    <div>
-                      <Button variant="danger" size="sm" onClick={remove} loading={removing}>
-                        {t('skins.remove')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <PosePicker />
               </div>
             </div>
-
-            <History
-              entries={history}
-              currentSource={current?.source ?? null}
-              currentVariant={current?.variant ?? null}
-              onRestore={(e) => {
-                setCandidate({
-                  kind: e.kind,
-                  source: e.source,
-                  variant: e.variant,
-                  dataUri: e.data_uri!,
-                  origin: e.origin,
-                  fromHistory: true,
-                })
-                setJustApplied(false)
-              }}
-              onForget={forget}
-            />
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {showHosting && <HostingModal onClose={() => setShowHosting(false)} />}
+      </AnimatePresence>
+
+      {/* En popup plutôt qu'en ligne verte sous l'aperçu : le délai de
+          propagation chez Mojang est une vraie information — sans elle on
+          relance le jeu, on ne voit rien changer, et on croit que ça a raté.
+          Une ligne discrète à côté du personnage se lisait après coup, ou pas
+          du tout. */}
+      <AnimatePresence>
+        {justApplied && account && (
+          <AppliedModal offline={account.is_offline} onClose={() => setJustApplied(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pending && account && (
+          <ConfirmModal
+            pending={pending}
+            offline={account.is_offline}
+            onClose={() => setPending(null)}
+            onConfirm={() => {
+              if (pending.type === 'apply') void apply()
+              else if (pending.type === 'default') void useDefault()
+              else void forget(pending.entry)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+/**
+ * Confirmation des gestes qui engagent.
+ *
+ * Trois seulement, et chacun pour une raison précise : poser un skin sur un
+ * compte Microsoft le rend visible de tous, revenir au skin par défaut le fait
+ * aussi, et oublier un skin importé efface son unique exemplaire. Le reste ne
+ * demande rien — une confirmation qu'on voit partout finit par se cliquer sans
+ * être lue.
+ */
+function ConfirmModal({
+  pending,
+  offline,
+  onClose,
+  onConfirm,
+}: {
+  pending: Pending
+  offline: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const t = useT()
+
+  const { title, text, action, danger } =
+    pending.type === 'apply'
+      ? { title: t('skins.confirmApplyTitle'), text: t('skins.confirmApplyText'), action: t('skins.apply'), danger: false }
+      : pending.type === 'default'
+        ? {
+            title: t('skins.confirmDefaultTitle'),
+            text: offline ? t('skins.confirmDefaultTextOffline') : t('skins.confirmDefaultTextMojang'),
+            action: t('skins.defaultSkinAction'),
+            danger: false,
+          }
+        : {
+            title: t('skins.confirmForgetTitle'),
+            text: pending.entry.kind === 'local' ? t('skins.confirmForgetTextLocal') : t('skins.confirmForgetTextUrl'),
+            action: t('skins.forgetAction'),
+            danger: true,
+          }
+
+  return (
+    <ModalShell title={title} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">{text}</p>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onClose} fullWidth>{t('skins.cancel')}</Button>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} fullWidth>{action}</Button>
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
+/**
+ * Positions — boutons seuls, la mécanique viendra après.
+ *
+ * Rien n'est branché : cliquer une position ne change pas encore l'aperçu, et
+ * l'écran le dit plutôt que de laisser croire à une panne. C'est volontaire —
+ * les boutons sont là pour arrêter la forme, la pose elle-même se fera dans un
+ * second temps.
+ *
+ * Quand ce sera le moment, `skinview3d` fournit déjà les animations
+ * correspondantes (`IdleAnimation`, `WalkingAnimation`, `RunningAnimation`,
+ * `FlyingAnimation`) : il n'y aura qu'à les passer à `viewer.animation`, dans
+ * `SkinPreview`.
+ */
+const POSES = ['standing', 'walking', 'running', 'flying', 'sitting', 'waving'] as const
+
+function PosePicker() {
+  const t = useT()
+  return (
+    <div className="flex flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
+        <p className="text-[11.5px] leading-relaxed text-txt-muted">{t('skins.posesSoon')}</p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        {POSES.map((pose) => (
+          <button
+            key={pose}
+            disabled
+            className="rounded-xl border border-line bg-surface-2 px-2 py-2.5 text-[11.5px] font-medium text-txt-secondary opacity-50"
+          >
+            {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Choix de la méthode d'importation.
+ *
+ * Écrit à la main plutôt qu'un `<select>` : celui du système ne prend pas les
+ * couleurs du launcher, et on veut pouvoir décrire chaque méthode en une ligne
+ * sous son nom — c'est ce qui remplace les phrases d'aide retirées des onglets.
+ */
+function SourcePicker({ value, onChange }: { value: Tab; onChange: (tab: Tab) => void }) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  // Un clic à côté et Échap referment : les deux sorties qu'on essaie devant
+  // un menu ouvert.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [open])
+
+  const label = (tab: Tab) => t(`skins.source${tab[0].toUpperCase()}${tab.slice(1)}`)
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface-2 px-3.5 text-left transition-colors hover:border-accent/45"
+      >
+        <span className="truncate text-[13px] font-semibold text-txt-primary">{label(value)}</span>
+        <svg
+          viewBox="0 0 24 24"
+          width={15}
+          height={15}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={`shrink-0 text-txt-secondary transition-transform ${open ? 'rotate-180' : ''}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            role="listbox"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.14 }}
+            // Au-dessus de la carte du dessous, qui sinon recouvrirait le menu.
+            className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-xl border border-line bg-bg-card p-1 shadow-xl shadow-black/50"
+          >
+            {(['player', 'url', 'file'] as const).map((m) => (
+              <li key={m}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={m === value}
+                  onClick={() => { onChange(m); setOpen(false) }}
+                  className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                    m === value ? 'bg-accent/15' : 'hover:bg-surface-2'
+                  }`}
+                >
+                  <span className="block text-[12.5px] font-semibold text-txt-primary">{label(m)}</span>
+                  <span className="block text-[11px] leading-snug text-txt-muted">{t(`skins.source${m[0].toUpperCase()}${m.slice(1)}Hint`)}</span>
+                </button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/**
+ * Confirmation d'application.
+ *
+ * Elle existe surtout pour le délai : Mojang met quelques minutes à propager
+ * un nouveau skin à tous les serveurs. Sans cette phrase, on relance le jeu,
+ * on se voit avec l'ancien skin et on conclut que l'application a échoué —
+ * puis on recommence.
+ */
+function AppliedModal({ offline, onClose }: { offline: boolean; onClose: () => void }) {
+  const t = useT()
+  return (
+    <ModalShell title={t('skins.appliedTitle')} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col gap-5">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">
+          {offline ? t('skins.appliedOffline') : t('skins.appliedMojang')}
+        </p>
+        <Button variant="primary" onClick={onClose} fullWidth>{t('skins.gotIt')}</Button>
+      </div>
+    </ModalShell>
+  )
+}
+
+/**
+ * Où vivent les skins, et pourquoi.
+ *
+ * Une seule question revient sur cet écran — « c'est stocké où ? » — et elle
+ * mérite une réponse entière plutôt que trois phrases d'aide qui n'en donnent
+ * chacune qu'un tiers. Le cas du fichier sur un compte hors ligne est le seul
+ * qui engage l'utilisateur, il est donc distingué visuellement.
+ */
+function HostingModal({ onClose }: { onClose: () => void }) {
+  const t = useT()
+  const sections = [
+    { key: 'Player', warn: false },
+    { key: 'Url', warn: false },
+    { key: 'File', warn: true },
+    { key: 'History', warn: false },
+  ] as const
+
+  return (
+    <ModalShell title={t('skins.hostingTitle')} onClose={onClose} maxWidth="max-w-xl">
+      <div className="flex flex-col gap-4">
+        <p className="text-[13px] leading-relaxed text-txt-secondary">{t('skins.hostingIntro')}</p>
+
+        <div className="flex flex-col gap-2.5">
+          {sections.map(({ key, warn }) => (
+            <div
+              key={key}
+              className={`flex flex-col gap-1 rounded-xl border p-3.5 ${
+                warn ? 'border-warning/35 bg-warning/10' : 'border-line bg-surface-2'
+              }`}
+            >
+              <p className="text-[12.5px] font-semibold text-txt-primary">{t(`skins.hosting${key}Title`)}</p>
+              <p className="text-[12.5px] leading-relaxed text-txt-secondary">{t(`skins.hosting${key}Text`)}</p>
+            </div>
+          ))}
+        </div>
+
+        <Button variant="primary" onClick={onClose} fullWidth>{t('skins.gotIt')}</Button>
+      </div>
+    </ModalShell>
   )
 }
 
@@ -447,11 +765,15 @@ function originLabel(origin: string, t: (k: string, v?: Record<string, string | 
 }
 
 /**
- * Les skins déjà portés.
+ * Les skins déjà portés, en colonne à droite.
+ *
+ * Elle a son propre défilement : c'est la seule partie de l'écran dont la
+ * hauteur dépend de ce que l'utilisateur a accumulé, et la laisser pousser le
+ * reste vers le bas ramènerait le défaut qu'on vient de corriger.
  *
  * Une entrée sans aperçu reste affichée : son hébergeur peut être momentanément
  * injoignable, et la faire disparaître donnerait à croire qu'on l'a perdue. Elle
- * n'est simplement pas restaurable tant qu'on ne peut pas la montrer.
+ * n'est simplement pas remettable tant qu'on ne peut pas la montrer.
  */
 function History({
   entries,
@@ -464,72 +786,82 @@ function History({
   currentSource: string | null
   currentVariant: SkinVariant | null
   onRestore: (entry: SkinHistoryEntry) => void
-  onForget: (id: number) => void
+  onForget: (entry: SkinHistoryEntry) => void
 }) {
   const t = useT()
-  if (entries.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-txt-muted">{t('skins.history')}</p>
-        <p className="text-[11.5px] text-txt-secondary">{t('skins.historyHint')}</p>
-      </div>
+    <div className="flex min-h-0 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
+      <p className="text-[13.5px] font-semibold">{t('skins.history')}</p>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(116px,1fr))] gap-2.5">
-        {entries.map((e) => {
-          const worn = e.source === currentSource && e.variant === currentVariant
-          return (
-            <div
-              key={e.id}
-              className={`group relative flex flex-col items-center gap-2 rounded-xl border p-3 transition-colors ${
-                worn ? 'border-accent/45 bg-accent/10' : 'border-line bg-surface-1 hover:border-line-strong'
-              }`}
-            >
-              {e.data_uri ? (
-                // Tête recadrée depuis le gabarit : la face fait 8×8 à l'offset
-                // (8,8) d'une texture large de 64.
-                <div
-                  className="h-14 w-14 rounded-lg [image-rendering:pixelated]"
-                  style={{
-                    backgroundImage: `url(${e.data_uri})`,
-                    backgroundSize: '448px 448px',
-                    backgroundPosition: '-56px -56px',
-                  }}
-                />
-              ) : (
-                <div className="flex h-14 w-14 items-center justify-center whitespace-pre-line rounded-lg bg-surface-3 text-center text-[9px] leading-tight text-txt-muted">
-                  {t('skins.noPreview')}
-                </div>
-              )}
-
-              <span className="text-[10.5px] text-txt-muted">{t(`skins.${e.variant}`)}</span>
-
-              {worn ? (
-                <span className="text-[10.5px] font-semibold text-accent-hover">{t('skins.worn')}</span>
-              ) : (
+      {/* `auto-fill` plutôt qu'un nombre de colonnes figé : c'est cette colonne
+          qui reçoit toute la largeur restante, et le nombre de vignettes par
+          ligne doit suivre la fenêtre plutôt que la contraindre. */}
+      {entries.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] leading-relaxed text-txt-secondary">{t('skins.historyEmpty')}</p>
+      ) : (
+        <div className="-mr-1.5 grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(104px,1fr))] content-start gap-2 overflow-y-auto pr-1.5">
+          {entries.map((e) => {
+            const worn = e.source === currentSource && e.variant === currentVariant
+            return (
+              <div
+                key={e.id}
+                className={`group relative rounded-xl border transition-colors ${
+                  worn ? 'border-accent/45 bg-accent/10' : 'border-line bg-surface-2 hover:border-accent/35'
+                }`}
+              >
+                {/* La vignette entière change de skin : viser un lien de onze
+                    pixels pour faire le geste le plus courant de l'écran
+                    n'avait pas de sens. Porté ou sans aperçu, elle n'est plus
+                    un bouton — il n'y aurait rien à déclencher. */}
                 <button
                   onClick={() => onRestore(e)}
-                  disabled={!e.data_uri}
-                  className="text-[10.5px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={worn || !e.data_uri}
+                  title={worn ? undefined : t('skins.restore')}
+                  className="flex w-full flex-col items-center gap-1.5 p-2.5 disabled:cursor-default"
                 >
-                  {t('skins.restore')}
-                </button>
-              )}
+                {e.data_uri ? (
+                  // Tête recadrée depuis le gabarit : la face fait 8×8 à
+                  // l'offset (8,8) d'une texture large de 64.
+                  <div
+                    className="h-12 w-12 rounded-lg [image-rendering:pixelated]"
+                    style={{
+                      backgroundImage: `url(${e.data_uri})`,
+                      backgroundSize: '384px 384px',
+                      backgroundPosition: '-48px -48px',
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center whitespace-pre-line rounded-lg bg-surface-4 text-center text-[8.5px] leading-tight text-txt-muted">
+                    {t('skins.noPreview')}
+                  </div>
+                )}
 
-              <button
-                onClick={() => onForget(e.id)}
-                title={t('skins.forget')}
-                className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-md text-txt-muted opacity-0 transition-all hover:bg-danger/20 hover:text-danger group-hover:opacity-100"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" width={11} height={11}>
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </button>
-            </div>
-          )
-        })}
-      </div>
+                <span className="text-[11px] text-txt-muted">{t(`skins.${e.variant}`)}</span>
+
+                {worn ? (
+                  <span className="text-[11px] font-semibold text-accent-hover">{t('skins.worn')}</span>
+                ) : (
+                  <span className="text-[11px] font-semibold text-txt-secondary transition-colors group-hover:text-txt-primary">
+                    {t('skins.restore')}
+                  </span>
+                )}
+                </button>
+
+                <button
+                  onClick={() => onForget(e)}
+                  title={t('skins.forget')}
+                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md text-txt-muted opacity-0 transition-all hover:bg-danger/20 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" width={11} height={11}>
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -545,42 +877,42 @@ function AccountPicker({
 }) {
   const t = useT()
   return (
-    <div className="flex flex-col gap-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-txt-muted">{t('skins.account')}</p>
-      <div className="flex flex-wrap gap-2">
-        {accounts.map((a) => {
-          const active = a.mc_uuid === selected
-          return (
-            <button
-              key={a.mc_uuid}
-              onClick={() => onPick(a.mc_uuid)}
-              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
-                active ? 'border-accent/45 bg-accent/12' : 'border-line bg-surface-1 hover:border-line-strong'
-              }`}
-            >
-              {/* Les comptes hors ligne n'ont pas de profil Mojang : leur UUID
-                  est inventé, le service d'avatars n'a rien à en dire. */}
-              {a.is_offline ? (
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/40 font-black text-white [font-family:monospace] text-[14px]">
-                  {a.mc_username[0].toUpperCase()}
-                </span>
-              ) : (
-                <img
-                  src={`https://mc-heads.net/avatar/${a.mc_uuid}/32`}
-                  alt=""
-                  className="h-8 w-8 rounded-lg [image-rendering:pixelated]"
-                />
-              )}
-              <span className="flex flex-col">
-                <span className="text-[12.5px] font-semibold">{a.mc_username}</span>
-                <span className="text-[10px] text-txt-muted">
-                  {a.is_offline ? t('skins.offlineBadge') : t('skins.mojangBadge')}
-                </span>
+    <div className="flex flex-wrap items-center gap-2">
+      <p className="mr-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-secondary">
+        {t('skins.account')}
+      </p>
+      {accounts.map((a) => {
+        const active = a.mc_uuid === selected
+        return (
+          <button
+            key={a.mc_uuid}
+            onClick={() => onPick(a.mc_uuid)}
+            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
+              active ? 'border-accent/45 bg-accent/12' : 'border-line bg-surface-1 hover:border-line-strong'
+            }`}
+          >
+            {/* Les comptes hors ligne n'ont pas de profil Mojang : leur UUID
+                est inventé, le service d'avatars n'a rien à en dire. */}
+            {a.is_offline ? (
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/40 font-black text-white [font-family:monospace] text-[14px]">
+                {a.mc_username[0].toUpperCase()}
               </span>
-            </button>
-          )
-        })}
-      </div>
+            ) : (
+              <img
+                src={`https://mc-heads.net/avatar/${a.mc_uuid}/32`}
+                alt=""
+                className="h-8 w-8 rounded-lg [image-rendering:pixelated]"
+              />
+            )}
+            <span className="flex flex-col">
+              <span className="text-[13px] font-semibold">{a.mc_username}</span>
+              <span className="text-[11px] text-txt-muted">
+                {a.is_offline ? t('skins.offlineBadge') : t('skins.mojangBadge')}
+              </span>
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -595,7 +927,7 @@ function VariantPicker({
   const t = useT()
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-txt-muted">{t('skins.variant')}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-secondary">{t('skins.variant')}</p>
       <div className="flex gap-2">
         {(['classic', 'slim'] as const).map((v) => (
           <button
@@ -605,8 +937,8 @@ function VariantPicker({
               value === v ? 'border-accent/50 bg-accent/15' : 'border-line bg-surface-1 hover:border-line-strong'
             }`}
           >
-            <span className="block text-[12.5px] font-semibold">{t(`skins.${v}`)}</span>
-            <span className="block text-[10.5px] text-txt-muted">{t(`skins.${v}Hint`)}</span>
+            <span className="block text-[13px] font-semibold">{t(`skins.${v}`)}</span>
+            <span className="block text-[11px] text-txt-muted">{t(`skins.${v}Hint`)}</span>
           </button>
         ))}
       </div>
@@ -621,30 +953,49 @@ function VariantPicker({
  * en train de choisir juste à côté, et laisser `auto-detect` décider ferait
  * mentir l'aperçu sur ce qui sera appliqué. `skinview3d` nomme le modèle
  * classique « default » ; la traduction se fait ici, une seule fois.
+ *
+ * La zone de rendu prend la hauteur qu'on lui laisse (`flex-1`) au lieu d'une
+ * hauteur fixe : c'est elle qui absorbe les écarts de taille de fenêtre, pour
+ * que le reste de l'écran n'ait jamais à défiler.
  */
 function SkinPreview({
   dataUri,
+  fallbackUrl,
   variant,
   label,
+  note,
+  footer,
   pending,
 }: {
   dataUri: string | null
+  /** Apparence par défaut du compte, montrée quand aucun skin n'est choisi. */
+  fallbackUrl: string | null
   variant: SkinVariant
   label: string
+  /** Deuxième ligne : d'où vient le skin porté. */
+  note: string | null
+  footer: ReactNode
   pending: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<SkinViewer | null>(null)
 
-  const load = useCallback((uri: string | null, model: SkinVariant) => {
+  // Aucun skin choisi ne veut pas dire aucun personnage : le compte porte
+  // alors son apparence par défaut, et c'est elle qu'on montre. Le modèle
+  // repasse en détection automatique dans ce cas — le défaut n'est pas
+  // forcément classique, et ce n'est plus un réglage qu'on est en train de
+  // choisir.
+  const load = useCallback((uri: string | null, fallback: string | null, model: SkinVariant) => {
     const viewer = viewerRef.current
     if (!viewer) return
-    if (!uri) {
+    const src = uri ?? fallback
+    if (!src) {
       viewer.loadSkin(null)
       return
     }
-    ;(viewer.loadSkin(uri, { model: model === 'slim' ? 'slim' : 'default' }) as Promise<void> | void)?.catch?.(() => {})
+    const options = uri ? { model: model === 'slim' ? ('slim' as const) : ('default' as const) } : { model: 'auto-detect' as const }
+    ;(viewer.loadSkin(src, options) as Promise<void> | void)?.catch?.(() => {})
   }, [])
 
   useEffect(() => {
@@ -662,8 +1013,8 @@ function SkinPreview({
 
     const viewer = new SkinViewer({
       canvas: canvasRef.current,
-      width: width || 300,
-      height: height || 380,
+      width: width || 260,
+      height: height || 360,
     })
     viewer.background = null
     viewer.autoRotate = true
@@ -687,18 +1038,23 @@ function SkinPreview({
     }
   }, [])
 
-  useEffect(() => { load(dataUri, variant) }, [dataUri, variant, load])
+  useEffect(() => { load(dataUri, fallbackUrl, variant) }, [dataUri, fallbackUrl, variant, load])
 
   return (
     <div
-      className={`flex flex-col gap-3 rounded-2xl border p-5 transition-colors ${
+      className={`flex min-h-0 flex-col gap-2 rounded-2xl border p-4 transition-colors ${
         pending ? 'border-accent/30 bg-accent/5' : 'border-line bg-surface-1'
       }`}
     >
-      <div ref={boxRef} className="relative h-[340px] w-full">
+      <div ref={boxRef} className="relative min-h-[200px] w-full flex-1">
         <canvas ref={canvasRef} className="h-full w-full" />
       </div>
-      <p className="text-center text-[11.5px] text-txt-secondary">{label}</p>
+
+      <div className="flex flex-col items-center gap-1 text-center">
+        <p className="text-[13px] font-semibold text-txt-primary">{label}</p>
+        {note && <p className="text-[11.5px] leading-relaxed text-txt-secondary">{note}</p>}
+        {footer}
+      </div>
     </div>
   )
 }
