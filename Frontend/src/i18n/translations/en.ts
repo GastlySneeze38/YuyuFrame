@@ -952,7 +952,7 @@ export const en: TranslationSchema = {
   skins: {
     title: 'Skins',
     subtitle: 'The skin of your Minecraft accounts',
-    account: 'Account',
+    accountHint: 'Pick the account whose skin you want to change',
     mojangBadge: 'Microsoft account',
     offlineBadge: 'Offline',
     noAccount: 'No Minecraft account',

@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import type { SkinKind, SkinVariant } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { SkinFace } from '@/components/ui/SkinFace'
 import { useT } from '@/i18n'
 
 /**
@@ -152,16 +153,7 @@ export function SkinSourceInput({
 
       {value && (
         <div className="flex items-center gap-2 rounded-xl border border-[rgba(75,63,207,0.3)] bg-[rgba(75,63,207,0.08)] p-2">
-          {/* Tête recadrée depuis le gabarit : la face fait 8×8 à l'offset
-              (8,8) d'une texture de 64 de large. */}
-          <div
-            className="h-8 w-8 rounded-md [image-rendering:pixelated]"
-            style={{
-              backgroundImage: `url(${value.dataUri})`,
-              backgroundSize: '256px 256px',
-              backgroundPosition: '-32px -32px',
-            }}
-          />
+          <SkinFace dataUri={value.dataUri} size={32} className="rounded-md" />
           <p className="truncate text-[11px] text-[rgba(255,255,255,0.7)]">
             {value.origin.startsWith('player:')
               ? t('skins.originPlayer', { name: value.origin.slice('player:'.length) })

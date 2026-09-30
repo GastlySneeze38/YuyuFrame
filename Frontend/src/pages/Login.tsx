@@ -12,6 +12,7 @@ import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
 import { AddAccountModal } from '@/components/account/AddAccountModal'
 import { YuyuAccountPanel } from '@/components/account/YuyuAccountPanel'
 import { SectionTitle } from '@/components/ui/Field'
+import { SkinFace } from '@/components/ui/SkinFace'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { fadeVariants, fastTransition, listItemVariants, listVariants, pressable } from '@/lib/motion'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -665,20 +666,13 @@ function AccountRow({
       onMouseLeave={() => { setHovered(false); onLeave() }}
     >
       {/* Avatar — les comptes hors ligne n'ont pas de vrai profil Mojang,
-          donc pas d'appel à mc-heads.net : soit la tête recadrée depuis le
-          skin custom (face 8×8 à l'offset (8,8) d'une texture 64×64), soit
-          la pastille avec l'initiale. */}
+          donc pas d'appel à mc-heads.net : soit la tête tirée du skin choisi
+          (voir SkinFace, qui superpose bien les deux couches), soit la
+          pastille avec l'initiale. */}
       <div className="relative flex-shrink-0">
         {offline ? (
           skin ? (
-            <div
-              className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
-              style={{
-                backgroundImage: `url(${skin})`,
-                backgroundSize: '352px 352px',
-                backgroundPosition: '-44px -44px',
-              }}
-            />
+            <SkinFace dataUri={skin} size={44} className="rounded-lg" />
           ) : (
             <div className="flex items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
               {acc.username[0].toUpperCase()}

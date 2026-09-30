@@ -11,6 +11,7 @@ import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { ModalShell } from '@/components/ui/ModalShell'
+import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
@@ -96,6 +97,8 @@ export default function Skins() {
   const [justApplied, setJustApplied] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
   const [showHosting, setShowHosting] = useState(false)
+  /** Aperçu du skin de chaque compte, pour les avatars du sélecteur. */
+  const [faces, setFaces] = useState<Record<string, string | null>>({})
 
   useEffect(() => {
     api.mc.accounts()
@@ -118,6 +121,18 @@ export default function Skins() {
   const loadHistory = useCallback((uuid: string) => {
     api.skin.history(uuid).then(setHistory).catch(() => setHistory([]))
   }, [])
+
+  // Avatars du sélecteur. Lecture locale (la référence enregistrée et son cache
+  // d'aperçu), donc pas d'appel réseau par compte : un compte Microsoft jamais
+  // passé par ici n'en a pas, et retombe sur le service d'avatars.
+  useEffect(() => {
+    if (!accounts) return
+    accounts.forEach((a) => {
+      api.skin.preview(a.mc_uuid)
+        .then((uri) => setFaces((f) => ({ ...f, [a.mc_uuid]: uri })))
+        .catch(() => {})
+    })
+  }, [accounts])
 
   // Skin du compte choisi. Pour un compte Microsoft jamais passé par ici, la
   // référence locale est vide alors que Mojang, lui, sert bien un skin : on le
@@ -244,6 +259,7 @@ export default function Skins() {
       )
       setCurrent(saved)
       setCurrentUri(candidate.dataUri)
+      setFaces((f) => ({ ...f, [account.mc_uuid]: candidate.dataUri }))
       setCandidate(null)
       setJustApplied(true)
       loadHistory(account.mc_uuid)
@@ -271,6 +287,7 @@ export default function Skins() {
       await api.skin.remove(account.mc_uuid)
       setCurrent(null)
       setCurrentUri(null)
+      setFaces((f) => ({ ...f, [account.mc_uuid]: null }))
       setCandidate(null)
       setJustApplied(false)
     } catch (e) {
@@ -320,7 +337,7 @@ export default function Skins() {
         ) : (
           <div className="mx-auto flex h-full min-h-[500px] w-full max-w-[1180px] flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <AccountPicker accounts={accounts} selected={selected} onPick={pickAccount} />
+              <AccountPicker accounts={accounts} selected={selected} faces={faces} onPick={pickAccount} />
               {/* Remplace les phrases d'aide qui vivaient sous chaque onglet :
                   elles répétaient trois fois la même idée et disaient à chaque
                   fois un tiers de l'histoire. Ici, tout est au même endroit,
@@ -798,20 +815,16 @@ function originLabel(origin: string, t: (k: string, v?: Record<string, string | 
 }
 
 interface HeadSize {
-  /** Classe de taille du carré. */
-  box: string
-  /** `background-size` correspondant : huit fois le côté. */
-  bg: string
-  /** `background-position` : moins le côté, sur les deux axes. */
-  pos: string
+  /** Côté du carré rendu, en pixels — voir `SkinFace`. */
+  px: number
   /** Rembourrage de la vignette qui la contient. */
   pad: string
 }
 
 const SIZES: Record<'large' | 'medium' | 'small', HeadSize> = {
-  large: { box: 'h-[104px] w-[104px]', bg: '832px 832px', pos: '-104px -104px', pad: 'p-3.5' },
-  medium: { box: 'h-14 w-14', bg: '448px 448px', pos: '-56px -56px', pad: 'p-3' },
-  small: { box: 'h-11 w-11', bg: '352px 352px', pos: '-44px -44px', pad: 'p-2' },
+  large: { px: 104, pad: 'p-3.5' },
+  medium: { px: 56, pad: 'p-3' },
+  small: { px: 44, pad: 'p-2' },
 }
 
 /**
@@ -1100,76 +1113,104 @@ function ForgetButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-/**
- * La tête du skin, recadrée depuis le gabarit.
- *
- * La face est un carré de 8 px pris à l'offset (8,8) d'une texture large de
- * 64 : pour l'afficher à N pixels il faut donc une image de fond de 8 × N,
- * décalée de N. Les classes sont écrites en entier dans `SIZES`, jamais
- * assemblées — Tailwind lit le source, une classe composée à l'exécution ne
- * serait pas générée.
- */
+/** La tête du skin — voir `SkinFace` pour les deux couches à superposer. */
 function Head({ entry, size }: { entry: SkinHistoryEntry; size: HeadSize }) {
   const t = useT()
   if (!entry.data_uri) {
     return (
-      <div className={`flex shrink-0 items-center justify-center whitespace-pre-line rounded-lg bg-surface-4 text-center text-[9px] leading-tight text-txt-muted ${size.box}`}>
+      <div
+        style={{ width: size.px, height: size.px }}
+        className="flex shrink-0 items-center justify-center whitespace-pre-line rounded-lg bg-surface-4 text-center text-[9px] leading-tight text-txt-muted"
+      >
         {t('skins.noPreview')}
       </div>
     )
   }
-  return (
-    <div
-      className={`shrink-0 rounded-lg [image-rendering:pixelated] ${size.box}`}
-      style={{
-        backgroundImage: `url(${entry.data_uri})`,
-        backgroundSize: size.bg,
-        backgroundPosition: size.pos,
-      }}
-    />
-  )
+  return <SkinFace dataUri={entry.data_uri} size={size.px} className="rounded-lg" />
 }
 
+/**
+ * Le choix du compte.
+ *
+ * Trois choses le disent, puisque le mot « Compte » ne le dit plus : l'icône
+ * de personnage en tête de ligne, la pastille de sélection sur l'avatar du
+ * compte actif, et le fait que les autres soient visiblement en retrait. Une
+ * rangée de cartes toutes pareilles ne se lit pas comme un choix — elle se lit
+ * comme une liste.
+ *
+ * Les avatars sont ceux du skin porté, pas une initiale : c'est l'écran des
+ * skins, montrer le personnage est la façon la plus directe de dire de qui on
+ * parle.
+ */
 function AccountPicker({
   accounts,
   selected,
+  faces,
   onPick,
 }: {
   accounts: McAccountInfo[]
   selected: string | null
+  /** Aperçu du skin par compte — `undefined` tant qu'il n'est pas chargé. */
+  faces: Record<string, string | null>
   onPick: (uuid: string) => void
 }) {
   const t = useT()
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <p className="mr-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-secondary">
-        {t('skins.account')}
-      </p>
+      <span className="mr-0.5 text-txt-muted" title={t('skins.accountHint')}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5" />
+        </svg>
+      </span>
+
       {accounts.map((a) => {
         const active = a.mc_uuid === selected
+        const face = faces[a.mc_uuid]
         return (
           <button
             key={a.mc_uuid}
             onClick={() => onPick(a.mc_uuid)}
-            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
-              active ? 'border-accent/45 bg-accent/12' : 'border-line bg-surface-1 hover:border-line-strong'
+            aria-pressed={active}
+            title={active ? undefined : t('skins.accountHint')}
+            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-all ${
+              active
+                ? 'border-accent bg-accent/15 shadow-[0_0_20px_rgba(75,63,207,0.18)]'
+                : 'border-line bg-surface-1 opacity-60 hover:border-line-strong hover:opacity-100'
             }`}
           >
-            {/* Les comptes hors ligne n'ont pas de profil Mojang : leur UUID
-                est inventé, le service d'avatars n'a rien à en dire. */}
-            {a.is_offline ? (
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/40 font-black text-white [font-family:monospace] text-[14px]">
-                {a.mc_username[0].toUpperCase()}
-              </span>
-            ) : (
-              <img
-                src={`https://mc-heads.net/avatar/${a.mc_uuid}/32`}
-                alt=""
-                className="h-8 w-8 rounded-lg [image-rendering:pixelated]"
-              />
-            )}
+            <span className="relative">
+              {face ? (
+                <SkinFace dataUri={face} size={32} className="rounded-lg" />
+              ) : a.is_offline ? (
+                // Compte hors ligne sans skin : son UUID est inventé, aucun
+                // service d'avatars n'a rien à en dire. L'initiale fait office.
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/40 font-black text-white [font-family:monospace] text-[14px]">
+                  {a.mc_username[0].toUpperCase()}
+                </span>
+              ) : (
+                <img
+                  src={`https://mc-heads.net/avatar/${a.mc_uuid}/32`}
+                  alt=""
+                  className="h-8 w-8 rounded-lg [image-rendering:pixelated]"
+                />
+              )}
+
+              {/* La pastille dit « c'est celui-là » sans mot et sans couleur à
+                  interpréter. */}
+              {active && (
+                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-bg-primary bg-accent text-white">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+              )}
+            </span>
+
             <span className="flex flex-col">
-              <span className="text-[13px] font-semibold">{a.mc_username}</span>
+              <span className={`text-[13px] font-semibold ${active ? 'text-txt-primary' : 'text-txt-secondary'}`}>
+                {a.mc_username}
+              </span>
               <span className="text-[11px] text-txt-muted">
                 {a.is_offline ? t('skins.offlineBadge') : t('skins.mojangBadge')}
               </span>

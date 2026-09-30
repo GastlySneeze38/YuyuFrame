@@ -954,7 +954,7 @@ export const fr = {
   skins: {
     title: 'Skins',
     subtitle: 'Le skin de tes comptes Minecraft',
-    account: 'Compte',
+    accountHint: 'Choisis le compte dont tu veux changer le skin',
     mojangBadge: 'Compte Microsoft',
     offlineBadge: 'Hors ligne',
     noAccount: 'Aucun compte Minecraft',
