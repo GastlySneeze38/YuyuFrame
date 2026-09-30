@@ -132,6 +132,31 @@ export interface McAccountInfo {
   is_offline: boolean
 }
 
+/** `classic` = bras de 4 px (Steve), `slim` = 3 px (Alex). */
+export type SkinVariant = 'classic' | 'slim'
+
+/** Skin enregistré pour un compte — une URL, pas un fichier. */
+export interface SkinRef {
+  url: string
+  variant: SkinVariant
+  /** `player:<pseudo>` ou `url` — sert à réafficher d'où il vient. */
+  origin: string
+}
+
+/** Skin trouvé chez Mojang, avec son aperçu déjà téléchargé. */
+export interface ResolvedSkin {
+  username: string
+  uuid: string
+  url: string
+  variant: SkinVariant
+  data_uri: string
+}
+
+export interface CheckedSkin {
+  url: string
+  data_uri: string
+}
+
 export interface ModrinthAdvancedSearchInput {
   query: string
   gameVersion?: string
@@ -323,10 +348,28 @@ export const api = {
     /** Renvoie le compte actif après suppression (`null` s'il n'en reste aucun). */
     delete: (uuid: string) => invoke<McAccountInfo | null>('mc_delete', { uuid }),
     addOffline: (username: string) => invoke<McAccountInfo>('mc_add_offline', { username }),
-    setSkin: (uuid: string, sourcePath: string) => invoke<string>('set_account_skin', { uuid, sourcePath }),
-    setSkinFromUrl: (uuid: string, url: string) => invoke<string>('set_account_skin_from_url', { uuid, url }),
-    getSkin: (uuid: string) => invoke<string | null>('get_account_skin', { uuid }),
-    removeSkin: (uuid: string) => invoke<void>('remove_account_skin', { uuid }),
+  },
+
+  /**
+   * Skins — voir `commands/account/skin.rs` : un skin est une URL déjà
+   * hébergée (celle d'un compte premium chez Mojang, ou celle que
+   * l'utilisateur fournit) plus le modèle à employer. Le launcher n'héberge
+   * rien, donc il n'y a pas de skin « à envoyer » : seulement à désigner.
+   */
+  skin: {
+    /** Skin d'un joueur premium, cherché par son pseudo. */
+    resolvePlayer: (username: string) => invoke<ResolvedSkin>('skin_resolve_player', { username }),
+    /** Skin que Mojang sert pour ce compte en ce moment. */
+    ofAccount: (uuid: string) => invoke<ResolvedSkin>('skin_of_account', { uuid }),
+    /** Vérifie qu'une URL mène bien à un skin, et en rend l'aperçu. */
+    checkUrl: (url: string) => invoke<CheckedSkin>('skin_check_url', { url }),
+    /** Compte Microsoft : posé chez Mojang. Hors ligne : enregistré ici. */
+    apply: (uuid: string, url: string, variant: SkinVariant, origin: string) =>
+      invoke<SkinRef>('skin_apply', { uuid, url, variant, origin }),
+    remove: (uuid: string) => invoke<void>('skin_remove', { uuid }),
+    current: (uuid: string) => invoke<SkinRef | null>('skin_current', { uuid }),
+    /** Data URI du skin enregistré — `null` si aucun, ou aperçu indisponible. */
+    preview: (uuid: string) => invoke<string | null>('skin_preview_for_account', { uuid }),
   },
 
   deepLink: {

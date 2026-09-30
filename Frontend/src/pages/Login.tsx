@@ -11,7 +11,6 @@ import { showError } from '@/stores/useErrorToast'
 import { OfflineAccountModal } from '@/components/account/OfflineAccountModal'
 import { AddAccountModal } from '@/components/account/AddAccountModal'
 import { YuyuAccountPanel } from '@/components/account/YuyuAccountPanel'
-import { SkinPickerModal } from '@/components/account/SkinPickerModal'
 import { SectionTitle } from '@/components/ui/Field'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { fadeVariants, fastTransition, listItemVariants, listVariants, pressable } from '@/lib/motion'
@@ -121,14 +120,17 @@ export default function Login() {
       .catch(() => {})
   }, [])
 
-  // Charge le skin custom (voir OfflineAccountModal/skin.rs) des comptes hors
-  // ligne déjà connus — un seul appel par compte tant qu'il n'a pas encore
-  // été mis en cache (setSkin met aussi ce cache à jour directement).
+  // Aperçu du skin des comptes hors ligne déjà connus — un seul appel par
+  // compte tant qu'il n'est pas en cache.
+  //
+  // Seulement les comptes hors ligne : pour un compte Microsoft, le skin
+  // appliqué est parti chez Mojang (voir skin.rs), donc le service d'avatars
+  // employé plus bas le montre déjà, et sans passer par nous.
   useEffect(() => {
     accounts
       .filter((a) => a.is_offline && !(a.uuid in skins))
       .forEach((a) => {
-        api.mc.getSkin(a.uuid).then((dataUri) => {
+        api.skin.preview(a.uuid).then((dataUri) => {
           if (dataUri) setSkins((s) => ({ ...s, [a.uuid]: dataUri }))
         }).catch(() => {})
       })
@@ -467,7 +469,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                     onRemove={() => handleRemove(acc)}
                     onHover={() => setPreviewUuid(acc.uuid)}
                     onLeave={() => setPreviewUuid(null)}
-                    onSkinChange={(dataUri) => setSkins((s) => ({ ...s, [acc.uuid]: dataUri }))}
+                    onEditSkin={() => navigate(`/skins?account=${acc.uuid}`)}
                   />
                 ))}
               </AnimatePresence>
@@ -593,7 +595,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
                     onRemove={() => handleRemove(acc)}
                     onHover={() => setPreviewUuid(acc.uuid)}
                     onLeave={() => setPreviewUuid(null)}
-                    onSkinChange={(dataUri) => setSkins((s) => ({ ...s, [acc.uuid]: dataUri }))}
+                    onEditSkin={() => navigate(`/skins?account=${acc.uuid}`)}
                   />
                 ))}
               </AnimatePresence>
@@ -628,7 +630,7 @@ if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
  * moins large, mais on peut toujours tout faire.
  */
 function AccountRow({
-  acc, isActive, skin, compact, onSelect, onRemove, onHover, onLeave, onSkinChange,
+  acc, isActive, skin, compact, onSelect, onRemove, onHover, onLeave, onEditSkin,
 }: {
   acc: Account
   isActive: boolean
@@ -638,11 +640,10 @@ function AccountRow({
   onRemove: () => void
   onHover: () => void
   onLeave: () => void
-  onSkinChange: (dataUri: string) => void
+  onEditSkin: () => void
 }) {
   const t = useT()
   const [hovered, setHovered] = useState(false)
-  const [showSkinPicker, setShowSkinPicker] = useState(false)
   const offline = acc.is_offline
 
   return (
@@ -732,17 +733,19 @@ function AccountRow({
             {compact ? '▶' : t('login.select')}
           </button>
         )}
-        {offline && (
-          <button
-            onClick={() => setShowSkinPicker(true)}
-            title={t('login.changeSkin')}
-            className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgba(255,255,255,0.7)] hover:border-[rgba(255,255,255,0.15)]"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="w-[13px] h-[13px]">
-              <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4V6z" />
-            </svg>
-          </button>
-        )}
+        {/* Le skin se gère désormais pour les deux sortes de compte, sur
+            l'écran dédié (Fonctionnalités → Skins) : c'est là que vivent les
+            deux sources, l'aperçu 3D et le choix du modèle. Ici on n'y mène
+            plus qu'en un clic, sur le bon compte. */}
+        <button
+          onClick={onEditSkin}
+          title={t('login.changeSkin')}
+          className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgba(255,255,255,0.7)] hover:border-[rgba(255,255,255,0.15)]"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="w-[13px] h-[13px]">
+            <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4V6z" />
+          </svg>
+        </button>
         <button
           onClick={onRemove}
           className="flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-150 text-[rgba(255,255,255,0.2)] border border-[rgba(255,255,255,0.05)] bg-transparent hover:text-[rgb(252,165,165)] hover:border-[rgba(200,50,50,0.3)] hover:bg-[rgba(200,50,50,0.08)]"
@@ -753,16 +756,6 @@ function AccountRow({
           </svg>
         </button>
       </div>
-
-      <AnimatePresence>
-        {showSkinPicker && (
-          <SkinPickerModal
-            uuid={acc.uuid}
-            onClose={() => setShowSkinPicker(false)}
-            onApplied={onSkinChange}
-          />
-        )}
-      </AnimatePresence>
     </motion.div>
   )
 }

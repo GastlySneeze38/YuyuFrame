@@ -105,6 +105,73 @@ pub fn update_mc_tokens(
     Ok(())
 }
 
+// ── Skin : référence, pas fichier ─────────────────────────────────────────────
+//
+// Voir le commentaire de la migration dans `schema.rs` : on ne garde qu'une URL
+// déjà hébergée ailleurs et le modèle à utiliser, jamais les pixels.
+
+#[derive(Clone, serde::Serialize)]
+pub struct SkinRef {
+    pub url: String,
+    /// `classic` (bras de 4 px) ou `slim` (3 px, modèle « Alex »).
+    pub variant: String,
+    /// D'où vient la référence : `player:<pseudo>` ou `url`.
+    pub origin: String,
+}
+
+pub fn set_skin_ref(conn: &Connection, mc_uuid: &str, skin: &SkinRef) -> Result<()> {
+    conn.execute(
+        "UPDATE mc_sessions SET skin_url=?1, skin_variant=?2, skin_origin=?3, updated_at=?4
+         WHERE yuyu_user_id=?5 AND mc_uuid=?6",
+        params![
+            skin.url,
+            skin.variant,
+            skin.origin,
+            chrono::Utc::now().timestamp(),
+            PC_SCOPE,
+            mc_uuid
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn clear_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE mc_sessions SET skin_url=NULL, skin_variant=NULL, skin_origin=NULL, updated_at=?1
+         WHERE yuyu_user_id=?2 AND mc_uuid=?3",
+        params![chrono::Utc::now().timestamp(), PC_SCOPE, mc_uuid],
+    )?;
+    Ok(())
+}
+
+/// `None` = aucun skin choisi pour ce compte (ou compte inconnu). Une ligne
+/// dont l'URL est présente mais le modèle absent est lue en `classic` : le
+/// modèle est un détail d'affichage, il ne doit pas faire disparaître le skin.
+pub fn get_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<Option<SkinRef>> {
+    let row = conn.query_row(
+        "SELECT skin_url, skin_variant, skin_origin FROM mc_sessions
+         WHERE yuyu_user_id = ?1 AND mc_uuid = ?2",
+        params![PC_SCOPE, mc_uuid],
+        |r| {
+            Ok((
+                r.get::<_, Option<String>>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        },
+    );
+    match row {
+        Ok((Some(url), variant, origin)) => Ok(Some(SkinRef {
+            url,
+            variant: variant.unwrap_or_else(|| "classic".to_string()),
+            origin: origin.unwrap_or_else(|| "url".to_string()),
+        })),
+        Ok(_) => Ok(None),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 // ── Active MC session ──────────────────────────────────────────────────────────
 
 pub fn set_active_mc(conn: &Connection, mc_uuid: &str) -> Result<()> {

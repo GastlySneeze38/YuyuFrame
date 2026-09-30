@@ -50,6 +50,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/Server'),
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
+  () => import('@/pages/Skins'),
 ]
 
 /** Parties (sur trente jours) à partir desquelles on ose demander un avis. */
@@ -83,6 +84,7 @@ const SyncInstance = lazy(() => import('@/pages/SyncInstance'))
 const Server = lazy(() => import('@/pages/Server'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
+const Skins = lazy(() => import('@/pages/Skins'))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -523,6 +525,10 @@ export default function App() {
                 pas le plan affiché par le store. */}
             <Route path="/sync" element={<PlanGate feature="sync"><Sync /></PlanGate>} />
             <Route path="/features" element={<Features />} />
+            {/* Skins : pas de garde de plan, et pas d'écran séparé par type de
+                compte — Microsoft et hors ligne se gèrent au même endroit,
+                seule l'action d'« appliquer » diffère (voir Skins.tsx). */}
+            <Route path="/skins" element={<Skins />} />
             <Route path="/support" element={<Support />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />

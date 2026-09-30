@@ -129,6 +129,27 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // littéral "offline" posé par mc_add_offline comme access_token n'est
     // jamais celui d'un vrai token Microsoft, donc marqueur fiable à 100%.
     let _ = conn.execute("UPDATE mc_sessions SET is_offline = 1 WHERE access_token = 'offline' AND is_offline = 0", []);
+    // ── Skin : une référence, jamais un fichier ─────────────────────────────
+    // Le skin d'un compte est désormais une URL publique + son modèle, pas un
+    // PNG rangé chez nous. La raison est simple : un skin doit pouvoir être vu
+    // par les AUTRES joueurs, ce qui demande qu'il soit hébergé quelque part.
+    // Nous n'avons pas de stockage pour ça, alors on ne stocke rien et on ne
+    // manipule que des skins qui sont déjà hébergés — ceux de Mojang (skin
+    // d'un compte premium, servi par textures.minecraft.net) ou une URL
+    // fournie par l'utilisateur.
+    //
+    // `skin_origin` retient d'où la référence vient (`player:Notch`, `url`)
+    // pour pouvoir le réafficher ; c'est du confort, pas une donnée dont le
+    // comportement dépend.
+    //
+    // Les anciens PNG de %APPDATA%\YuyuFrame\skins\<uuid>.png ne sont pas
+    // convertis — ils n'ont pas d'URL, c'est précisément ce qui leur manque.
+    // Ils restent sur le disque sans être lus : on n'efface pas les fichiers
+    // de quelqu'un sans qu'il le demande.
+    let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_url TEXT", []);
+    let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_variant TEXT", []);
+    let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_origin TEXT", []);
+
     // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
     super::mc_account::migrate_to_pc_scope(&conn)?;
 

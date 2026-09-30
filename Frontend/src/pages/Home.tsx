@@ -240,7 +240,7 @@ export default function Home() {
   useEffect(() => {
     if (!uuid || !isOffline) { setCustomSkinUri(null); return }
     let cancelled = false
-    api.mc.getSkin(uuid)
+    api.skin.preview(uuid)
       .then((dataUri) => { if (!cancelled) setCustomSkinUri(dataUri ?? null) })
       .catch(() => { if (!cancelled) setCustomSkinUri(null) })
     return () => { cancelled = true }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
-import { SkinSourceInput, applySkinSource, type SkinSource } from '@/components/account/SkinSourceInput'
+import { SkinSourceInput, type SkinChoice } from '@/components/account/SkinSourceInput'
 import { clearDraft, useDraftState } from '@/stores/useDrafts'
 import { useT } from '@/i18n'
 
@@ -24,7 +24,7 @@ export function OfflineAccountModal({
   // Brouillon : fermer la modale, aller voir autre chose puis revenir ne
   // fait pas retaper le pseudo (voir stores/useDrafts.ts).
   const [username, setUsername] = useDraftState(DRAFT_KEY, 'username', '')
-  const [skinSource, setSkinSource] = useDraftState<SkinSource | null>(DRAFT_KEY, 'skinSource', null)
+  const [skinSource, setSkinSource] = useDraftState<SkinChoice | null>(DRAFT_KEY, 'skinSource', null)
   const [submitting, setSubmitting] = useState(false)
 
   const valid = USERNAME_RE.test(username)
@@ -35,8 +35,11 @@ export function OfflineAccountModal({
     try {
       const acc = await api.mc.addOffline(username)
       if (skinSource) {
+        // Le compte existe enfin : on peut lui rattacher la référence. Un échec
+        // ici ne remet pas en cause la création — le compte est utilisable sans
+        // skin, et l'écran Skins permettra d'y revenir.
         try {
-          await applySkinSource(acc.mc_uuid, skinSource)
+          await api.skin.apply(acc.mc_uuid, skinSource.url, skinSource.variant, skinSource.origin)
         } catch (e) {
           showError(e)
         }
