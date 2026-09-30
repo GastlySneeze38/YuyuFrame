@@ -4,6 +4,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { getCurrentWindow, currentMonitor, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
+import { skinPreview } from '@/lib/skinCache'
 import { useStore } from '@/stores/useStore'
 import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -134,7 +135,7 @@ export default function Login() {
     accounts
       .filter((a) => !(a.uuid in skins))
       .forEach((a) => {
-        api.skin.preview(a.uuid).then((dataUri) => {
+        skinPreview(a.uuid).then((dataUri) => {
           if (dataUri) setSkins((s) => ({ ...s, [a.uuid]: dataUri }))
         }).catch(() => {})
       })

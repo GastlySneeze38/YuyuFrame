@@ -13,6 +13,7 @@ import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
+import { forgetSkinPreview, rememberSkinPreview, skinPreview } from '@/lib/skinCache'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
 
@@ -128,7 +129,7 @@ export default function Skins() {
   useEffect(() => {
     if (!accounts) return
     accounts.forEach((a) => {
-      api.skin.preview(a.mc_uuid)
+      skinPreview(a.mc_uuid)
         .then((uri) => setFaces((f) => ({ ...f, [a.mc_uuid]: uri })))
         .catch(() => {})
     })
@@ -153,7 +154,7 @@ export default function Skins() {
         if (cancelled) return
         if (ref) {
           setCurrent(ref)
-          const uri = await api.skin.preview(uuid).catch(() => null)
+          const uri = await skinPreview(uuid).catch(() => null)
           if (!cancelled) setCurrentUri(uri)
         } else if (!account.is_offline) {
           const mojang = await api.skin.ofAccount(uuid).catch(() => null)
@@ -260,6 +261,8 @@ export default function Skins() {
       setCurrent(saved)
       setCurrentUri(candidate.dataUri)
       setFaces((f) => ({ ...f, [account.mc_uuid]: candidate.dataUri }))
+      // Les autres écrans liront le nouveau skin sans le redemander au Rust.
+      rememberSkinPreview(account.mc_uuid, candidate.dataUri)
       setCandidate(null)
       setJustApplied(true)
       loadHistory(account.mc_uuid)
@@ -288,6 +291,9 @@ export default function Skins() {
       setCurrent(null)
       setCurrentUri(null)
       setFaces((f) => ({ ...f, [account.mc_uuid]: null }))
+      // À recalculer plutôt qu'à forcer à `null` : sans référence, un compte
+      // Microsoft a quand même un skin chez Mojang — celui par défaut.
+      forgetSkinPreview(account.mc_uuid)
       setCandidate(null)
       setJustApplied(false)
     } catch (e) {

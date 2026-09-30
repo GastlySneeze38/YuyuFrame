@@ -46,6 +46,27 @@ const MAX_SKIN_BYTES: usize = 1024 * 1024;
 
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
 
+/// Client HTTP partagé.
+///
+/// Chaque appel construisait le sien, donc sa propre réserve de connexions et
+/// sa propre configuration TLS : sur une liaison lente, on repayait la poignée
+/// de main complète pour chaque image, alors que tout part vers deux ou trois
+/// hôtes. Un client unique garde les connexions ouvertes entre les appels.
+///
+/// Les délais ne sont pas là pour accélérer mais pour ne pas attendre
+/// indéfiniment : sans eux, un hébergeur qui ne répond jamais laisse l'aperçu
+/// en suspens jusqu'à ce que l'utilisateur quitte l'écran.
+fn http() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .connect_timeout(std::time::Duration::from_secs(8))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    })
+}
+
 // ── Types rendus au frontend ─────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -225,7 +246,7 @@ async fn fetch_preview(url: &str) -> Result<String, String> {
         }
     }
 
-    let resp = reqwest::Client::new()
+    let resp = http()
         .get(url)
         .send()
         .await
@@ -255,7 +276,7 @@ async fn fetch_preview(url: &str) -> Result<String, String> {
 // ── Lecture d'un profil Mojang ───────────────────────────────────────────────
 
 async fn textures_of_uuid(uuid: &str) -> Result<(String, String, String), String> {
-    let resp = reqwest::Client::new()
+    let resp = http()
         .get(format!("{}{}", SESSION_PROFILE_URL, undashed(uuid)))
         .send()
         .await
@@ -303,7 +324,7 @@ pub async fn skin_resolve_player(username: String) -> Result<ResolvedSkin, Strin
         return Err("Pseudo invalide (1-16 caractères, lettres/chiffres/_)".to_string());
     }
 
-    let resp = reqwest::Client::new()
+    let resp = http()
         .get(format!("{}{}", PROFILE_BY_NAME_URL, username))
         .send()
         .await
@@ -413,7 +434,7 @@ async fn account_row(state: &SharedState, uuid: &str) -> Result<db::McSessionRow
 /// chercher l'URL : elle doit donc être joignable depuis l'extérieur, et une
 /// URL locale sera refusée par eux, pas par nous.
 async fn push_to_mojang(access_token: &str, url: &str, variant: &str) -> Result<(), String> {
-    let resp = reqwest::Client::new()
+    let resp = http()
         .post(MC_SKINS_URL)
         .bearer_auth(access_token)
         .json(&serde_json::json!({ "variant": variant, "url": url }))
@@ -449,7 +470,7 @@ async fn upload_to_mojang(access_token: &str, bytes: Vec<u8>, variant: &str) -> 
         .text("variant", variant.to_string())
         .part("file", part);
 
-    let resp = reqwest::Client::new()
+    let resp = http()
         .post(MC_SKINS_URL)
         .bearer_auth(access_token)
         .multipart(form)
@@ -568,7 +589,7 @@ pub async fn skin_remove(state: tauri::State<'_, SharedState>, uuid: String) -> 
 
     if !row.is_offline {
         let session = super::fresh_session(&state, &uuid).await?;
-        let resp = reqwest::Client::new()
+        let resp = http()
             .delete(MC_ACTIVE_SKIN_URL)
             .bearer_auth(&session.access_token)
             .send()
@@ -607,11 +628,35 @@ pub async fn skin_preview_for_account(
         let conn = s.db.lock().await;
         db::get_skin_ref(&conn, &uuid).map_err(|e| e.to_string())?
     };
-    let Some(skin) = skin else { return Ok(None) };
+    // Aucune référence enregistrée : pour un compte Microsoft, le skin existe
+    // quand même — il est chez Mojang. On le résout ici plutôt que de laisser
+    // l'interface retomber sur un service d'avatars distant, et l'aperçu entre
+    // dans le cache disque au passage.
+    //
+    // C'est ce qui rend la bannière d'accueil instantanée dès la deuxième
+    // ouverture, même sans réseau : avant, chaque affichage retéléchargeait le
+    // skin, et sur une liaison lente le buste restait vide plusieurs secondes.
+    let (kind, source) = match skin {
+        Some(skin) => (skin.kind, skin.source),
+        None => {
+            let row = account_row(&state, &uuid).await?;
+            if row.is_offline {
+                return Ok(None);
+            }
+            match textures_of_uuid(&uuid).await {
+                Ok((_, url, _)) => ("url".to_string(), url),
+                Err(e) => {
+                    tracing::warn!("Skin Mojang de {} indisponible : {}", uuid, e);
+                    return Ok(None);
+                }
+            }
+        }
+    };
+
     // Un aperçu indisponible (hébergeur éteint, pas de réseau, fichier importé
     // disparu) n'est pas une erreur à remonter à l'écran : l'appelant affichera
     // son repli.
-    match resolve_preview(&skin.kind, &skin.source).await {
+    match resolve_preview(&kind, &source).await {
         Ok(data_uri) => Ok(Some(data_uri)),
         Err(e) => {
             tracing::warn!("Aperçu du skin de {} indisponible : {}", uuid, e);

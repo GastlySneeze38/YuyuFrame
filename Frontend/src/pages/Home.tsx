@@ -5,6 +5,7 @@ import type { Variants } from 'framer-motion'
 import { EASE_OUT, SNAP, press } from '@/lib/motion'
 import { P2P_ENABLED } from '@/config/features'
 import { api } from '@/api/client'
+import { skinPreview } from '@/lib/skinCache'
 import { useStore } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useCrashWatch } from '@/stores/useCrashWatch'
@@ -246,7 +247,7 @@ export default function Home() {
   useEffect(() => {
     if (!uuid) { setCustomSkinUri(null); return }
     let cancelled = false
-    api.skin.preview(uuid)
+    skinPreview(uuid)
       .then((dataUri) => { if (!cancelled) setCustomSkinUri(dataUri ?? null) })
       .catch(() => { if (!cancelled) setCustomSkinUri(null) })
     return () => { cancelled = true }
