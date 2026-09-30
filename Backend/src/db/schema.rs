@@ -75,6 +75,31 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              base_presets    TEXT    NOT NULL DEFAULT ''
          );
 
+         -- Historique des skins portés par un compte.
+         --
+         -- Il est à NOUS, et il ne peut pas être autrement : Mojang ne sert que
+         -- le skin actuel d'un profil, jamais les précédents (l'historique des
+         -- noms lui-même a été retiré de leur API en 2022). Les sites qui
+         -- affichent d'anciens skins les ont collectés par sondage pendant des
+         -- années. Donc un seul mécanisme, le même pour un compte Microsoft et
+         -- pour un compte hors ligne : on enregistre ce qui a été appliqué.
+         --
+         -- `kind` : 'url' (skin hébergé ailleurs, repartageable) ou 'local'
+         -- (PNG rangé sur CE PC, réservé aux comptes hors ligne — voir
+         -- l'avertissement affiché à l'import). `source` est l'URL ou le
+         -- chemin relatif du fichier selon le cas.
+         CREATE TABLE IF NOT EXISTS skin_history (
+             id            INTEGER PRIMARY KEY AUTOINCREMENT,
+             mc_uuid       TEXT    NOT NULL,
+             kind          TEXT    NOT NULL,
+             source        TEXT    NOT NULL,
+             variant       TEXT    NOT NULL,
+             origin        TEXT    NOT NULL,
+             first_seen_at INTEGER NOT NULL,
+             last_used_at  INTEGER NOT NULL,
+             UNIQUE(mc_uuid, source, variant)
+         );
+
          CREATE TABLE IF NOT EXISTS play_sessions (
              id            INTEGER PRIMARY KEY AUTOINCREMENT,
              yuyu_user_id  INTEGER NOT NULL,
@@ -149,6 +174,15 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_url TEXT", []);
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_variant TEXT", []);
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_origin TEXT", []);
+    // `url` (hébergé ailleurs) ou `local` (PNG importé, rangé sur ce PC).
+    //
+    // Le cas `local` a été rouvert le 2026-09-30, mais il ne concerne que les
+    // comptes hors ligne : pour un compte Microsoft, un fichier importé est
+    // ENVOYÉ à Mojang, qui l'héberge et nous rend une URL — la référence
+    // enregistrée redevient donc un `url`, partageable. C'est seulement pour un
+    // compte hors ligne qu'il n'y a personne à qui l'envoyer, et l'interface
+    // avertit alors que le skin ne vit que dans cette base.
+    let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_kind TEXT", []);
 
     // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
     super::mc_account::migrate_to_pc_scope(&conn)?;

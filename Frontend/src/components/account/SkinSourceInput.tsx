@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
-import type { SkinVariant } from '@/api/client'
+import type { SkinKind, SkinVariant } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
@@ -11,9 +12,11 @@ import { useT } from '@/i18n'
  * skin, il ne fait que désigner ceux qui le sont déjà.
  */
 export interface SkinChoice {
-  url: string
+  kind: SkinKind
+  /** URL, ou nom du fichier importé, selon `kind`. */
+  source: string
   variant: SkinVariant
-  /** `player:<pseudo>` ou `url`. */
+  /** `player:<pseudo>`, `url` ou `file`. */
   origin: string
   /** Aperçu, pour montrer ce qui a été trouvé sans dépendre du CORS. */
   dataUri: string
@@ -25,8 +28,9 @@ export interface SkinChoice {
  * `/skins` reste la maison du système : celui-ci n'en est qu'un raccourci, et
  * ne sait rien appliquer lui-même.
  *
- * Il n'y a plus de mode « fichier local » : un PNG sur le disque n'est visible
- * de personne d'autre, et ne pourra pas l'être sans hébergement.
+ * Le mode « fichier » est réservé de fait aux comptes hors ligne — c'est le seul
+ * endroit d'où ce composant est appelé. Un fichier ne vit alors que dans la base
+ * du launcher, ce que l'avertissement du bas dit sans détour.
  */
 export function SkinSourceInput({
   value,
@@ -36,7 +40,7 @@ export function SkinSourceInput({
   onChange: (choice: SkinChoice | null) => void
 }) {
   const t = useT()
-  const [mode, setMode] = useState<'player' | 'url'>('player')
+  const [mode, setMode] = useState<'player' | 'url' | 'file'>('player')
   const [player, setPlayer] = useState('')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,7 +53,8 @@ export function SkinSourceInput({
         if (!player.trim()) return
         const found = await api.skin.resolvePlayer(player.trim())
         onChange({
-          url: found.url,
+          kind: 'url',
+          source: found.url,
           variant: found.variant,
           origin: `player:${found.username}`,
           dataUri: found.data_uri,
@@ -57,8 +62,23 @@ export function SkinSourceInput({
       } else {
         if (!url.trim()) return
         const checked = await api.skin.checkUrl(url.trim())
-        onChange({ url: checked.url, variant: 'classic', origin: 'url', dataUri: checked.data_uri })
+        onChange({ ...checked, dataUri: checked.data_uri, origin: 'url' })
       }
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pickFile = async () => {
+    if (busy) return
+    const picked = await openFileDialog({ filters: [{ name: 'Skin Minecraft', extensions: ['png'] }] })
+    if (typeof picked !== 'string') return
+    setBusy(true)
+    try {
+      const imported = await api.skin.importFile(picked)
+      onChange({ ...imported, dataUri: imported.data_uri, origin: 'file' })
     } catch (e) {
       showError(e)
     } finally {
@@ -69,7 +89,7 @@ export function SkinSourceInput({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex gap-1 rounded-lg bg-[rgba(255,255,255,0.03)] p-0.5">
-        {(['player', 'url'] as const).map((m) => (
+        {(['player', 'url', 'file'] as const).map((m) => (
           <button
             key={m}
             onClick={() => { setMode(m); onChange(null) }}
@@ -77,11 +97,20 @@ export function SkinSourceInput({
               mode === m ? 'bg-[rgba(75,63,207,0.35)] text-white' : 'text-[rgba(255,255,255,0.35)] hover:text-[rgba(255,255,255,0.6)]'
             }`}
           >
-            {m === 'player' ? t('skins.sourcePlayer') : t('skins.sourceUrl')}
+            {t(`skins.source${m[0].toUpperCase()}${m.slice(1)}`)}
           </button>
         ))}
       </div>
 
+      {mode === 'file' ? (
+        <button
+          onClick={pickFile}
+          disabled={busy}
+          className="flex h-10 items-center justify-center gap-2 rounded-xl border border-dashed border-[rgba(255,255,255,0.12)] px-3 text-[12px] text-[rgba(255,255,255,0.5)] transition-colors hover:border-[rgba(75,63,207,0.4)] hover:text-[rgba(255,255,255,0.8)] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? <ButtonSpinner size={14} /> : t('skins.chooseFile')}
+        </button>
+      ) : (
       <div className="flex gap-1.5">
         <input
           value={mode === 'player' ? player : url}
@@ -110,6 +139,16 @@ export function SkinSourceInput({
           )}
         </button>
       </div>
+      )}
+
+      {/* Un compte hors ligne est le seul cas où un fichier ne va nulle part
+          d'autre que dans notre base. Ce composant ne sert qu'à ça, donc
+          l'avertissement n'a pas de condition à poser. */}
+      {value?.kind === 'local' && (
+        <p className="rounded-xl border border-warning/35 bg-warning/10 p-2.5 text-[10.5px] leading-relaxed text-[rgba(255,255,255,0.7)]">
+          {t('skins.localWarning')}
+        </p>
+      )}
 
       {value && (
         <div className="flex items-center gap-2 rounded-xl border border-[rgba(75,63,207,0.3)] bg-[rgba(75,63,207,0.08)] p-2">

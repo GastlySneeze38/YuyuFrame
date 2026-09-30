@@ -34,7 +34,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+# `multipart` : envoi d'un PNG de skin à Mojang (voir commands/account/skin.rs
+# — un fichier local devient ainsi un skin hébergé par eux, donc partageable).
+reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"

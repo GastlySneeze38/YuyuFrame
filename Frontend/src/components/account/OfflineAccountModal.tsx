@@ -39,7 +39,13 @@ export function OfflineAccountModal({
         // ici ne remet pas en cause la création — le compte est utilisable sans
         // skin, et l'écran Skins permettra d'y revenir.
         try {
-          await api.skin.apply(acc.mc_uuid, skinSource.url, skinSource.variant, skinSource.origin)
+          await api.skin.apply(
+            acc.mc_uuid,
+            skinSource.kind,
+            skinSource.source,
+            skinSource.variant,
+            skinSource.origin,
+          )
         } catch (e) {
           showError(e)
         }

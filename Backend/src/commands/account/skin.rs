@@ -60,10 +60,31 @@ pub struct ResolvedSkin {
     pub data_uri: String,
 }
 
+/// Skin désigné et vérifié, prêt à être appliqué. Rendu aussi bien par la
+/// vérification d'une URL que par l'import d'un fichier — les deux produisent
+/// la même chose vue de l'interface, seul `kind` les distingue.
 #[derive(Serialize)]
 pub struct CheckedSkin {
-    pub url: String,
+    /// `url` ou `local`.
+    pub kind: String,
+    /// URL, ou nom du fichier importé dans le dossier des skins locaux.
+    pub source: String,
+    pub variant: String,
     pub data_uri: String,
+}
+
+#[derive(Serialize)]
+pub struct HistoryEntry {
+    pub id: i64,
+    pub kind: String,
+    pub source: String,
+    pub variant: String,
+    pub origin: String,
+    pub first_seen_at: i64,
+    pub last_used_at: i64,
+    /// `None` quand l'aperçu n'a pas pu être obtenu (hébergeur éteint, fichier
+    /// local disparu) : l'entrée reste listée, l'interface montre un repli.
+    pub data_uri: Option<String>,
 }
 
 // ── Fonctions pures (testées en bas de fichier) ──────────────────────────────
@@ -144,6 +165,43 @@ fn to_data_uri(bytes: &[u8]) -> String {
 
 fn cache_dir() -> PathBuf {
     crate::paths::root().join("skins").join("cache")
+}
+
+/// Skins importés depuis un fichier, pour les comptes hors ligne.
+///
+/// À la différence du cache d'à côté, ce dossier n'est PAS jetable : il contient
+/// les seuls exemplaires de ces skins. C'est ce que l'interface annonce à
+/// l'import — effacer les données du launcher les efface avec.
+fn local_dir() -> PathBuf {
+    crate::paths::root().join("skins").join("local")
+}
+
+/// Le nom du fichier est l'empreinte de son contenu : deux imports du même PNG
+/// ne le rangent qu'une fois, et l'historique de deux comptes peut pointer
+/// dessus sans le dupliquer.
+async fn store_local(bytes: &[u8]) -> Result<String, String> {
+    validate_skin_png(bytes)?;
+    let digest: [u8; 32] = Sha256::digest(bytes).into();
+    let name: String = digest.iter().take(16).map(|b| format!("{:02x}", b)).collect();
+    let name = format!("{}.png", name);
+    let dir = local_dir();
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| e.to_string())?;
+    tokio::fs::write(dir.join(&name), bytes)
+        .await
+        .map_err(|e| format!("Enregistrement du skin impossible : {}", e))?;
+    Ok(name)
+}
+
+/// Aperçu d'une référence, quel que soit son genre.
+async fn resolve_preview(kind: &str, source: &str) -> Result<String, String> {
+    if kind == "local" {
+        let bytes = tokio::fs::read(local_dir().join(source))
+            .await
+            .map_err(|e| format!("Skin importé introuvable : {}", e))?;
+        validate_skin_png(&bytes)?;
+        return Ok(to_data_uri(&bytes));
+    }
+    fetch_preview(source).await
 }
 
 fn cache_path(url: &str) -> PathBuf {
@@ -277,10 +335,25 @@ pub async fn skin_resolve_player(username: String) -> Result<ResolvedSkin, Strin
 /// Skin que Mojang sert actuellement pour ce compte — ce que voient les autres
 /// joueurs, indépendamment de ce que le launcher a enregistré. Sert à afficher
 /// « skin actuel » sur un compte Microsoft qui n'est jamais passé par ici.
+/// Il amorce aussi l'historique : c'est le seul moment où l'on apprend quelque
+/// chose du passé d'un compte Microsoft. Mojang ne sert que le skin courant,
+/// donc la première fois qu'on regarde un compte, on note au moins celui-là —
+/// sans quoi son historique commencerait au premier changement fait ici, et
+/// revenir « à avant YuyuFrame » serait impossible.
 #[tauri::command]
-pub async fn skin_of_account(uuid: String) -> Result<ResolvedSkin, String> {
+pub async fn skin_of_account(
+    state: tauri::State<'_, SharedState>,
+    uuid: String,
+) -> Result<ResolvedSkin, String> {
     let (name, url, variant) = textures_of_uuid(&uuid).await?;
     let data_uri = fetch_preview(&url).await?;
+    {
+        let s = state.read().await;
+        let conn = s.db.lock().await;
+        if let Err(e) = db::skin_history::remember(&conn, &uuid, "url", &url, &variant, "mojang") {
+            tracing::warn!("Skin Mojang non ajouté à l'historique : {}", e);
+        }
+    }
     Ok(ResolvedSkin { username: name, uuid, url, variant, data_uri })
 }
 
@@ -292,7 +365,38 @@ pub async fn skin_of_account(uuid: String) -> Result<ResolvedSkin, String> {
 pub async fn skin_check_url(url: String) -> Result<CheckedSkin, String> {
     let url = url.trim().to_string();
     let data_uri = fetch_preview(&url).await?;
-    Ok(CheckedSkin { url, data_uri })
+    Ok(CheckedSkin { kind: "url".into(), source: url, variant: "classic".into(), data_uri })
+}
+
+/// Importe un PNG depuis le disque.
+///
+/// Ce que devient ce fichier dépend du compte, et c'est tout l'écart entre les
+/// deux sortes de compte :
+///
+/// - compte Microsoft : il sera **envoyé à Mojang** au moment d'appliquer (voir
+///   `skin_apply`), qui l'héberge et nous rend une URL. Le skin devient donc
+///   partageable, comme les autres ;
+/// - compte hors ligne : il n'y a personne à qui l'envoyer. Le fichier reste
+///   dans `skins/local/` sur ce PC, et c'est son seul exemplaire — l'interface
+///   l'annonce avant de l'appliquer.
+///
+/// L'import lui-même ne dépend pas du compte : on range le fichier et on rend
+/// son aperçu, la distinction se fait à l'application.
+#[tauri::command]
+pub async fn skin_import_file(source_path: String) -> Result<CheckedSkin, String> {
+    let bytes = tokio::fs::read(&source_path)
+        .await
+        .map_err(|e| format!("Lecture du fichier : {}", e))?;
+    if bytes.len() > MAX_SKIN_BYTES {
+        return Err("Fichier trop volumineux pour un skin (max 1 Mo)".to_string());
+    }
+    let name = store_local(&bytes).await?;
+    Ok(CheckedSkin {
+        kind: "local".into(),
+        source: name,
+        variant: "classic".into(),
+        data_uri: to_data_uri(&bytes),
+    })
 }
 
 // ── Application ──────────────────────────────────────────────────────────────
@@ -330,6 +434,60 @@ async fn push_to_mojang(access_token: &str, url: &str, variant: &str) -> Result<
     })
 }
 
+/// Envoie le PNG lui-même à Mojang, puis relit le profil pour connaître l'URL
+/// sous laquelle ils l'hébergent désormais.
+///
+/// C'est ce qui permet d'accepter un fichier local **sans** renoncer au partage
+/// sur un compte Microsoft : le fichier devient un skin hébergé par Mojang, et
+/// la référence qu'on enregistre est cette URL, pas le chemin sur le disque.
+async fn upload_to_mojang(access_token: &str, bytes: Vec<u8>, variant: &str) -> Result<String, String> {
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name("skin.png")
+        .mime_str("image/png")
+        .map_err(|e| e.to_string())?;
+    let form = reqwest::multipart::Form::new()
+        .text("variant", variant.to_string())
+        .part("file", part);
+
+    let resp = reqwest::Client::new()
+        .post(MC_SKINS_URL)
+        .bearer_auth(access_token)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Mojang injoignable : {}", e))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(if body.trim().is_empty() {
+            format!("Mojang a refusé le skin ({})", status)
+        } else {
+            format!("Mojang a refusé le skin ({}) : {}", status, body.trim())
+        });
+    }
+
+    // La réponse contient déjà le profil mis à jour : on y lit l'URL plutôt que
+    // de refaire un appel au serveur de sessions, qui est mis en cache quelques
+    // secondes et pourrait encore rendre l'ancienne.
+    let profile: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Réponse de Mojang illisible : {}", e))?;
+    profile
+        .get("skins")
+        .and_then(|s| s.as_array())
+        .and_then(|skins| {
+            skins
+                .iter()
+                .find(|s| s.get("state").and_then(|st| st.as_str()) == Some("ACTIVE"))
+                .or_else(|| skins.first())
+        })
+        .and_then(|s| s.get("url"))
+        .and_then(|u| u.as_str())
+        .map(normalize_texture_url)
+        .ok_or_else(|| "Mojang a accepté le skin sans en donner l'adresse".to_string())
+}
+
 /// Enregistre le skin choisi pour ce compte.
 ///
 /// Compte Microsoft : posé chez Mojang d'abord. Si Mojang refuse, rien n'est
@@ -339,32 +497,64 @@ async fn push_to_mojang(access_token: &str, url: &str, variant: &str) -> Result<
 pub async fn skin_apply(
     state: tauri::State<'_, SharedState>,
     uuid: String,
-    url: String,
+    kind: String,
+    source: String,
     variant: String,
     origin: String,
 ) -> Result<db::SkinRef, String> {
-    check_public_url(&url)?;
-    // Vérifié avant d'aller plus loin : une URL qui n'est pas un skin ne doit
-    // ni partir chez Mojang ni entrer en base.
-    fetch_preview(&url).await?;
-
     let row = account_row(&state, &uuid).await?;
     let variant = normalize_variant(&variant);
+    let local = kind == "local";
 
-    if !row.is_offline {
+    // Vérifié avant d'aller plus loin : ce qui n'est pas un skin ne doit ni
+    // partir chez Mojang ni entrer en base.
+    let bytes_or_uri = if local {
+        let bytes = tokio::fs::read(local_dir().join(&source))
+            .await
+            .map_err(|e| format!("Skin importé introuvable : {}", e))?;
+        validate_skin_png(&bytes)?;
+        Some(bytes)
+    } else {
+        check_public_url(&source)?;
+        fetch_preview(&source).await?;
+        None
+    };
+
+    // Le genre enregistré n'est pas toujours celui demandé : un fichier posé sur
+    // un compte Microsoft part chez Mojang, qui l'héberge — il redevient donc
+    // une URL, partageable comme les autres. Un compte hors ligne, lui, garde le
+    // fichier, faute de destinataire.
+    let skin = if row.is_offline {
+        db::SkinRef { kind: kind.clone(), source: source.clone(), variant: variant.clone(), origin }
+    } else {
         let session = super::fresh_session(&state, &uuid).await?;
-        push_to_mojang(&session.access_token, &url, &variant).await?;
-    }
+        match bytes_or_uri {
+            Some(bytes) => {
+                let hosted = upload_to_mojang(&session.access_token, bytes, &variant).await?;
+                db::SkinRef { kind: "url".into(), source: hosted, variant: variant.clone(), origin }
+            }
+            None => {
+                push_to_mojang(&session.access_token, &source, &variant).await?;
+                db::SkinRef { kind: "url".into(), source: source.clone(), variant: variant.clone(), origin }
+            }
+        }
+    };
 
-    let skin = db::SkinRef { url, variant, origin };
     {
         let s = state.read().await;
         let conn = s.db.lock().await;
         db::set_skin_ref(&conn, &uuid, &skin).map_err(|e| e.to_string())?;
+        // L'historique n'est alimenté qu'après un succès : un skin refusé par
+        // Mojang n'a jamais été porté, il n'a rien à faire dans la liste.
+        if let Err(e) =
+            db::skin_history::remember(&conn, &uuid, &skin.kind, &skin.source, &skin.variant, &skin.origin)
+        {
+            tracing::warn!("Skin non ajouté à l'historique : {}", e);
+        }
     }
     crate::integrations::analytics::capture(
         "skin_applied",
-        serde_json::json!({ "offline": row.is_offline, "variant": skin.variant }),
+        serde_json::json!({ "offline": row.is_offline, "variant": skin.variant, "kind": skin.kind }),
     );
     Ok(skin)
 }
@@ -418,15 +608,91 @@ pub async fn skin_preview_for_account(
         db::get_skin_ref(&conn, &uuid).map_err(|e| e.to_string())?
     };
     let Some(skin) = skin else { return Ok(None) };
-    // Un aperçu indisponible (hébergeur éteint, pas de réseau) n'est pas une
-    // erreur à remonter à l'écran : l'appelant affichera son repli.
-    match fetch_preview(&skin.url).await {
+    // Un aperçu indisponible (hébergeur éteint, pas de réseau, fichier importé
+    // disparu) n'est pas une erreur à remonter à l'écran : l'appelant affichera
+    // son repli.
+    match resolve_preview(&skin.kind, &skin.source).await {
         Ok(data_uri) => Ok(Some(data_uri)),
         Err(e) => {
             tracing::warn!("Aperçu du skin de {} indisponible : {}", uuid, e);
             Ok(None)
         }
     }
+}
+
+// ── Historique ───────────────────────────────────────────────────────────────
+
+/// Skins déjà portés par ce compte, du plus récent au plus ancien, avec leur
+/// aperçu. Voir `db/skin_history.rs` : cette liste est la nôtre, Mojang ne sait
+/// pas dire ce qu'un compte portait avant.
+#[tauri::command]
+pub async fn skin_history(
+    state: tauri::State<'_, SharedState>,
+    uuid: String,
+) -> Result<Vec<HistoryEntry>, String> {
+    let rows = {
+        let s = state.read().await;
+        let conn = s.db.lock().await;
+        db::skin_history::list(&conn, &uuid).map_err(|e| e.to_string())?
+    };
+
+    // Les aperçus sont résolus hors du verrou de la base : ils touchent le
+    // réseau et le disque, et garder la base bloquée pendant ce temps figerait
+    // tout le reste du launcher.
+    let mut entries = Vec::with_capacity(rows.len());
+    for row in rows {
+        let data_uri = resolve_preview(&row.kind, &row.source).await.ok();
+        entries.push(HistoryEntry {
+            id: row.id,
+            kind: row.kind,
+            source: row.source,
+            variant: row.variant,
+            origin: row.origin,
+            first_seen_at: row.first_seen_at,
+            last_used_at: row.last_used_at,
+            data_uri,
+        });
+    }
+    Ok(entries)
+}
+
+/// Retire une entrée de l'historique. Le fichier d'un skin importé n'est effacé
+/// que s'il ne sert plus à aucun compte — son nom est son empreinte, deux
+/// comptes hors ligne peuvent partager le même.
+#[tauri::command]
+pub async fn skin_history_forget(
+    state: tauri::State<'_, SharedState>,
+    uuid: String,
+    id: i64,
+) -> Result<(), String> {
+    let orphan = {
+        let s = state.read().await;
+        let conn = s.db.lock().await;
+        let gone = db::skin_history::list(&conn, &uuid)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|r| r.id == id);
+        db::skin_history::forget(&conn, &uuid, id).map_err(|e| e.to_string())?;
+        match gone {
+            Some(row) if row.kind == "local" => {
+                let still = db::skin_history::local_source_still_used(&conn, &row.source)
+                    .map_err(|e| e.to_string())?;
+                (!still).then_some(row.source)
+            }
+            _ => None,
+        }
+    };
+
+    if let Some(name) = orphan {
+        if let Err(e) = tokio::fs::remove_file(local_dir().join(&name)).await {
+            // Le fichier restant sur le disque est sans conséquence : plus
+            // personne ne le désigne.
+            if e.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!("Skin importé {} non supprimé : {}", name, e);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

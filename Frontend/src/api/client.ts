@@ -135,12 +135,34 @@ export interface McAccountInfo {
 /** `classic` = bras de 4 px (Steve), `slim` = 3 px (Alex). */
 export type SkinVariant = 'classic' | 'slim'
 
-/** Skin enregistré pour un compte — une URL, pas un fichier. */
+/**
+ * `url` = hébergé ailleurs, donc repartageable. `local` = PNG importé, rangé
+ * sur ce PC seulement — réservé aux comptes hors ligne, car un fichier posé sur
+ * un compte Microsoft est envoyé à Mojang et redevient une URL.
+ */
+export type SkinKind = 'url' | 'local'
+
+/** Skin enregistré pour un compte. */
 export interface SkinRef {
-  url: string
+  kind: SkinKind
+  /** URL, ou nom du fichier importé, selon `kind`. */
+  source: string
   variant: SkinVariant
-  /** `player:<pseudo>` ou `url` — sert à réafficher d'où il vient. */
+  /** `player:<pseudo>`, `url`, `file` ou `mojang` — d'où il vient. */
   origin: string
+}
+
+/** Skin déjà porté par un compte. Voir `db/skin_history.rs`. */
+export interface SkinHistoryEntry {
+  id: number
+  kind: SkinKind
+  source: string
+  variant: SkinVariant
+  origin: string
+  first_seen_at: number
+  last_used_at: number
+  /** `null` si l'aperçu est indisponible (hébergeur éteint, fichier disparu). */
+  data_uri: string | null
 }
 
 /** Skin trouvé chez Mojang, avec son aperçu déjà téléchargé. */
@@ -152,8 +174,11 @@ export interface ResolvedSkin {
   data_uri: string
 }
 
+/** Skin désigné et vérifié, prêt à appliquer — URL vérifiée ou fichier importé. */
 export interface CheckedSkin {
-  url: string
+  kind: SkinKind
+  source: string
+  variant: SkinVariant
   data_uri: string
 }
 
@@ -363,9 +388,17 @@ export const api = {
     ofAccount: (uuid: string) => invoke<ResolvedSkin>('skin_of_account', { uuid }),
     /** Vérifie qu'une URL mène bien à un skin, et en rend l'aperçu. */
     checkUrl: (url: string) => invoke<CheckedSkin>('skin_check_url', { url }),
-    /** Compte Microsoft : posé chez Mojang. Hors ligne : enregistré ici. */
-    apply: (uuid: string, url: string, variant: SkinVariant, origin: string) =>
-      invoke<SkinRef>('skin_apply', { uuid, url, variant, origin }),
+    /** Range un PNG du disque. Ce qu'il devient dépend du compte — voir `apply`. */
+    importFile: (sourcePath: string) => invoke<CheckedSkin>('skin_import_file', { sourcePath }),
+    /**
+     * Compte Microsoft : posé chez Mojang — et si c'est un fichier, envoyé chez
+     * eux, ce qui le transforme en skin hébergé. Hors ligne : enregistré ici.
+     */
+    apply: (uuid: string, kind: SkinKind, source: string, variant: SkinVariant, origin: string) =>
+      invoke<SkinRef>('skin_apply', { uuid, kind, source, variant, origin }),
+    /** Skins déjà portés, du plus récent au plus ancien. */
+    history: (uuid: string) => invoke<SkinHistoryEntry[]>('skin_history', { uuid }),
+    historyForget: (uuid: string, id: number) => invoke<void>('skin_history_forget', { uuid, id }),
     remove: (uuid: string) => invoke<void>('skin_remove', { uuid }),
     current: (uuid: string) => invoke<SkinRef | null>('skin_current', { uuid }),
     /** Data URI du skin enregistré — `null` si aucun, ou aperçu indisponible. */

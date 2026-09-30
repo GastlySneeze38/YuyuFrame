@@ -112,21 +112,26 @@ pub fn update_mc_tokens(
 
 #[derive(Clone, serde::Serialize)]
 pub struct SkinRef {
-    pub url: String,
+    /// `url` (hébergé ailleurs, repartageable) ou `local` (PNG sur ce PC —
+    /// comptes hors ligne seulement, voir la migration dans `schema.rs`).
+    pub kind: String,
+    /// URL, ou nom du fichier dans le dossier des skins importés selon `kind`.
+    pub source: String,
     /// `classic` (bras de 4 px) ou `slim` (3 px, modèle « Alex »).
     pub variant: String,
-    /// D'où vient la référence : `player:<pseudo>` ou `url`.
+    /// D'où vient la référence : `player:<pseudo>`, `url`, `file` ou `mojang`.
     pub origin: String,
 }
 
 pub fn set_skin_ref(conn: &Connection, mc_uuid: &str, skin: &SkinRef) -> Result<()> {
     conn.execute(
-        "UPDATE mc_sessions SET skin_url=?1, skin_variant=?2, skin_origin=?3, updated_at=?4
-         WHERE yuyu_user_id=?5 AND mc_uuid=?6",
+        "UPDATE mc_sessions SET skin_url=?1, skin_variant=?2, skin_origin=?3, skin_kind=?4, updated_at=?5
+         WHERE yuyu_user_id=?6 AND mc_uuid=?7",
         params![
-            skin.url,
+            skin.source,
             skin.variant,
             skin.origin,
+            skin.kind,
             chrono::Utc::now().timestamp(),
             PC_SCOPE,
             mc_uuid
@@ -137,19 +142,22 @@ pub fn set_skin_ref(conn: &Connection, mc_uuid: &str, skin: &SkinRef) -> Result<
 
 pub fn clear_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<()> {
     conn.execute(
-        "UPDATE mc_sessions SET skin_url=NULL, skin_variant=NULL, skin_origin=NULL, updated_at=?1
+        "UPDATE mc_sessions
+         SET skin_url=NULL, skin_variant=NULL, skin_origin=NULL, skin_kind=NULL, updated_at=?1
          WHERE yuyu_user_id=?2 AND mc_uuid=?3",
         params![chrono::Utc::now().timestamp(), PC_SCOPE, mc_uuid],
     )?;
     Ok(())
 }
 
-/// `None` = aucun skin choisi pour ce compte (ou compte inconnu). Une ligne
-/// dont l'URL est présente mais le modèle absent est lue en `classic` : le
-/// modèle est un détail d'affichage, il ne doit pas faire disparaître le skin.
+/// `None` = aucun skin choisi pour ce compte (ou compte inconnu). Seule la
+/// source décide de la présence d'un skin : un modèle ou un genre absent est lu
+/// avec sa valeur par défaut plutôt que de faire disparaître le skin. Les
+/// lignes écrites avant l'ouverture du cas `local` n'ont pas de `skin_kind`, et
+/// étaient toutes des URL.
 pub fn get_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<Option<SkinRef>> {
     let row = conn.query_row(
-        "SELECT skin_url, skin_variant, skin_origin FROM mc_sessions
+        "SELECT skin_url, skin_variant, skin_origin, skin_kind FROM mc_sessions
          WHERE yuyu_user_id = ?1 AND mc_uuid = ?2",
         params![PC_SCOPE, mc_uuid],
         |r| {
@@ -157,12 +165,14 @@ pub fn get_skin_ref(conn: &Connection, mc_uuid: &str) -> Result<Option<SkinRef>>
                 r.get::<_, Option<String>>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
             ))
         },
     );
     match row {
-        Ok((Some(url), variant, origin)) => Ok(Some(SkinRef {
-            url,
+        Ok((Some(source), variant, origin, kind)) => Ok(Some(SkinRef {
+            kind: kind.unwrap_or_else(|| "url".to_string()),
+            source,
             variant: variant.unwrap_or_else(|| "classic".to_string()),
             origin: origin.unwrap_or_else(|| "url".to_string()),
         })),

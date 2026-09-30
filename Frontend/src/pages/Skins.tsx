@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
-import type { McAccountInfo, SkinRef, SkinVariant } from '@/api/client'
+import type { McAccountInfo, SkinHistoryEntry, SkinKind, SkinRef, SkinVariant } from '@/api/client'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
@@ -16,33 +17,37 @@ import { useT } from '@/i18n'
  * Skins — l'écran unique, pour les comptes Microsoft comme pour les comptes
  * hors ligne.
  *
- * ── Un skin est une URL, pas un fichier ───────────────────────────────────
- * Voir `commands/account/skin.rs` pour le raisonnement complet. En bref : un
- * skin ne vaut que s'il est vu par les autres joueurs, donc il doit être
- * hébergé quelque part de public. Nous n'avons pas de stockage à offrir pour
- * ça, alors on ne manipule que des skins déjà hébergés — celui d'un compte
- * premium (Mojang l'héberge) ou une URL fournie par l'utilisateur.
+ * ── Trois sources, et ce qu'elles deviennent ──────────────────────────────
+ * Un skin doit être hébergé quelque part pour que les autres joueurs le
+ * voient ; nous n'hébergeons rien (voir `commands/account/skin.rs`). D'où :
  *
- * L'ancien choix « fichier local » a donc disparu : un PNG sur le disque de
- * quelqu'un n'est visible de personne, et il ne pourra pas l'être.
+ *   joueur   le skin de n'importe quel compte premium — Mojang l'héberge déjà
+ *   URL      n'importe quel PNG public — son hébergeur s'en charge
+ *   fichier  un PNG du disque. Sur un compte Microsoft il est ENVOYÉ à Mojang,
+ *            qui l'héberge : il rejoint donc les deux autres. Sur un compte
+ *            hors ligne, il n'y a personne à qui l'envoyer, et il ne vit que
+ *            dans la base du launcher — ce que l'écran dit avant d'appliquer.
  *
- * ── Ce que « appliquer » veut dire, selon le compte ───────────────────────
- * Microsoft : le skin part chez Mojang et devient réel partout. C'est une
- * modification du compte, annoncée comme telle sous le bouton.
- * Hors ligne : la référence reste chez nous et ne change que l'affichage du
- * launcher, jusqu'à ce que l'agent sache la poser en jeu.
+ * ── L'historique est le nôtre ─────────────────────────────────────────────
+ * Mojang ne sert que le skin *courant* d'un profil, jamais les précédents.
+ * Impossible donc de reconstituer un passé : on enregistre ce qui est appliqué
+ * (`db/skin_history.rs`), pour les deux sortes de compte, et on amorce la liste
+ * d'un compte Microsoft avec le skin qu'il porte quand on le découvre.
  */
 
-type Tab = 'player' | 'url'
+type Tab = 'player' | 'url' | 'file'
 
-/** Skin en attente de validation — choisi, vérifié, pas encore appliqué. */
+/** Skin choisi et vérifié, pas encore appliqué. */
 interface Candidate {
-  url: string
+  kind: SkinKind
+  source: string
   variant: SkinVariant
   dataUri: string
   origin: string
   /** Pseudo du joueur d'où il vient, pour l'annoncer à l'écran. */
   fromPlayer?: string
+  /** Vrai quand il sort de l'historique : le libellé d'aperçu le dit. */
+  fromHistory?: boolean
 }
 
 export default function Skins() {
@@ -55,6 +60,7 @@ export default function Skins() {
   const [current, setCurrent] = useState<SkinRef | null>(null)
   const [currentUri, setCurrentUri] = useState<string | null>(null)
   const [candidate, setCandidate] = useState<Candidate | null>(null)
+  const [history, setHistory] = useState<SkinHistoryEntry[]>([])
 
   const [playerName, setPlayerName] = useState('')
   const [url, setUrl] = useState('')
@@ -81,36 +87,46 @@ export default function Skins() {
     [accounts, selected],
   )
 
+  const loadHistory = useCallback((uuid: string) => {
+    api.skin.history(uuid).then(setHistory).catch(() => setHistory([]))
+  }, [])
+
   // Skin du compte choisi. Pour un compte Microsoft jamais passé par ici, la
   // référence locale est vide alors que Mojang, lui, sert bien un skin : on le
-  // demande à Mojang pour que l'écran montre la vérité plutôt qu'un vide.
+  // demande à Mojang pour que l'écran montre la vérité plutôt qu'un vide — et
+  // cet appel amorce du même coup son historique (voir skin_of_account).
   useEffect(() => {
     if (!account) return
     let cancelled = false
     setCurrent(null)
     setCurrentUri(null)
     setCandidate(null)
+    setHistory([])
     setJustApplied(false)
 
-    api.skin.current(account.mc_uuid)
+    const uuid = account.mc_uuid
+    api.skin.current(uuid)
       .then(async (ref) => {
         if (cancelled) return
         if (ref) {
           setCurrent(ref)
-          const uri = await api.skin.preview(account.mc_uuid).catch(() => null)
+          const uri = await api.skin.preview(uuid).catch(() => null)
           if (!cancelled) setCurrentUri(uri)
-          return
+        } else if (!account.is_offline) {
+          const mojang = await api.skin.ofAccount(uuid).catch(() => null)
+          if (!cancelled && mojang) {
+            setCurrent({ kind: 'url', source: mojang.url, variant: mojang.variant, origin: 'mojang' })
+            setCurrentUri(mojang.data_uri)
+          }
         }
-        if (account.is_offline) return
-        const mojang = await api.skin.ofAccount(account.mc_uuid).catch(() => null)
-        if (cancelled || !mojang) return
-        setCurrent({ url: mojang.url, variant: mojang.variant, origin: 'mojang' })
-        setCurrentUri(mojang.data_uri)
+        // Après l'amorçage, jamais avant : sinon la liste arriverait sans le
+        // skin que Mojang vient de nous apprendre.
+        if (!cancelled) loadHistory(uuid)
       })
       .catch(() => {})
 
     return () => { cancelled = true }
-  }, [account?.mc_uuid, account?.is_offline])
+  }, [account?.mc_uuid, account?.is_offline, loadHistory])
 
   const shown = candidate ?? (current && currentUri ? { ...current, dataUri: currentUri } : null)
 
@@ -127,7 +143,8 @@ export default function Skins() {
     try {
       const found = await api.skin.resolvePlayer(playerName.trim())
       setCandidate({
-        url: found.url,
+        kind: 'url',
+        source: found.url,
         variant: found.variant,
         dataUri: found.data_uri,
         origin: `player:${found.username}`,
@@ -146,15 +163,25 @@ export default function Skins() {
     setSearching(true)
     try {
       const checked = await api.skin.checkUrl(url.trim())
-      setCandidate({
-        url: checked.url,
-        // Rien dans les pixels ne distingue de façon fiable un skin fin d'un
-        // skin classique : on part du modèle le plus courant et on laisse
-        // choisir juste en dessous.
-        variant: 'classic',
-        dataUri: checked.data_uri,
-        origin: 'url',
-      })
+      // Rien dans les pixels ne distingue de façon fiable un skin fin d'un skin
+      // classique : on part du modèle le plus courant et on laisse choisir.
+      setCandidate({ ...checked, dataUri: checked.data_uri, origin: 'url' })
+      setJustApplied(false)
+    } catch (e) {
+      showError(e)
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const pickFile = async () => {
+    if (searching) return
+    const picked = await openFileDialog({ filters: [{ name: 'Skin Minecraft', extensions: ['png'] }] })
+    if (typeof picked !== 'string') return
+    setSearching(true)
+    try {
+      const imported = await api.skin.importFile(picked)
+      setCandidate({ ...imported, dataUri: imported.data_uri, origin: 'file' })
       setJustApplied(false)
     } catch (e) {
       showError(e)
@@ -167,11 +194,18 @@ export default function Skins() {
     if (!account || !candidate || applying) return
     setApplying(true)
     try {
-      const saved = await api.skin.apply(account.mc_uuid, candidate.url, candidate.variant, candidate.origin)
+      const saved = await api.skin.apply(
+        account.mc_uuid,
+        candidate.kind,
+        candidate.source,
+        candidate.variant,
+        candidate.origin,
+      )
       setCurrent(saved)
       setCurrentUri(candidate.dataUri)
       setCandidate(null)
       setJustApplied(true)
+      loadHistory(account.mc_uuid)
     } catch (e) {
       showError(e)
     } finally {
@@ -192,6 +226,16 @@ export default function Skins() {
       showError(e)
     } finally {
       setRemoving(false)
+    }
+  }
+
+  const forget = async (id: number) => {
+    if (!account) return
+    try {
+      await api.skin.historyForget(account.mc_uuid, id)
+      loadHistory(account.mc_uuid)
+    } catch (e) {
+      showError(e)
     }
   }
 
@@ -229,9 +273,11 @@ export default function Skins() {
                 variant={shown?.variant ?? 'classic'}
                 label={
                   candidate
-                    ? candidate.fromPlayer
-                      ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
-                      : t('skins.previewPending')
+                    ? candidate.fromHistory
+                      ? t('skins.previewFromHistory')
+                      : candidate.fromPlayer
+                        ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
+                        : t('skins.previewPending')
                     : current
                       ? t('skins.previewCurrent')
                       : t('skins.previewNone')
@@ -242,7 +288,7 @@ export default function Skins() {
               <div className="flex flex-col gap-5">
                 <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-5">
                   <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
-                    {(['player', 'url'] as const).map((m) => (
+                    {(['player', 'url', 'file'] as const).map((m) => (
                       <button
                         key={m}
                         onClick={() => setTab(m)}
@@ -250,12 +296,12 @@ export default function Skins() {
                           tab === m ? 'bg-accent text-white' : 'text-txt-secondary hover:text-txt-primary'
                         }`}
                       >
-                        {m === 'player' ? t('skins.sourcePlayer') : t('skins.sourceUrl')}
+                        {t(`skins.source${m[0].toUpperCase()}${m.slice(1)}`)}
                       </button>
                     ))}
                   </div>
 
-                  {tab === 'player' ? (
+                  {tab === 'player' && (
                     <>
                       <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skins.playerHint')}</p>
                       <div className="flex gap-2">
@@ -272,7 +318,9 @@ export default function Skins() {
                         </Button>
                       </div>
                     </>
-                  ) : (
+                  )}
+
+                  {tab === 'url' && (
                     <>
                       <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skins.urlHint')}</p>
                       <div className="flex gap-2">
@@ -287,6 +335,15 @@ export default function Skins() {
                           {t('skins.check')}
                         </Button>
                       </div>
+                    </>
+                  )}
+
+                  {tab === 'file' && (
+                    <>
+                      <p className="text-[12px] leading-relaxed text-txt-secondary">
+                        {account?.is_offline ? t('skins.fileHintOffline') : t('skins.fileHintMojang')}
+                      </p>
+                      <Button onClick={pickFile} loading={searching}>{t('skins.chooseFile')}</Button>
                     </>
                   )}
                 </div>
@@ -307,8 +364,21 @@ export default function Skins() {
                         onChange={(variant) => setCandidate({ ...candidate, variant })}
                       />
 
+                      {/* Un fichier sur un compte hors ligne est le seul cas qui
+                          ne survit pas à l'effacement de la base : il faut le
+                          dire avant, pas après. */}
+                      {candidate.kind === 'local' && account?.is_offline && (
+                        <p className="rounded-xl border border-warning/35 bg-warning/10 p-3 text-[12px] leading-relaxed text-txt-secondary">
+                          {t('skins.localWarning')}
+                        </p>
+                      )}
+
                       <p className="text-[12px] leading-relaxed text-txt-secondary">
-                        {account?.is_offline ? t('skins.offlineNotice') : t('skins.mojangNotice')}
+                        {account?.is_offline
+                          ? t('skins.offlineNotice')
+                          : candidate.kind === 'local'
+                            ? t('skins.fileToMojangNotice')
+                            : t('skins.mojangNotice')}
                       </p>
 
                       <div className="flex flex-wrap gap-2">
@@ -343,6 +413,24 @@ export default function Skins() {
                 )}
               </div>
             </div>
+
+            <History
+              entries={history}
+              currentSource={current?.source ?? null}
+              currentVariant={current?.variant ?? null}
+              onRestore={(e) => {
+                setCandidate({
+                  kind: e.kind,
+                  source: e.source,
+                  variant: e.variant,
+                  dataUri: e.data_uri!,
+                  origin: e.origin,
+                  fromHistory: true,
+                })
+                setJustApplied(false)
+              }}
+              onForget={forget}
+            />
           </div>
         )}
       </div>
@@ -350,11 +438,100 @@ export default function Skins() {
   )
 }
 
-/** Libellé lisible de l'origine enregistrée (`player:Notch`, `url`, `mojang`). */
+/** Libellé lisible de l'origine (`player:Notch`, `url`, `file`, `mojang`). */
 function originLabel(origin: string, t: (k: string, v?: Record<string, string | number>) => string): string {
   if (origin.startsWith('player:')) return t('skins.originPlayer', { name: origin.slice('player:'.length) })
   if (origin === 'mojang') return t('skins.originMojang')
+  if (origin === 'file') return t('skins.originFile')
   return t('skins.originUrl')
+}
+
+/**
+ * Les skins déjà portés.
+ *
+ * Une entrée sans aperçu reste affichée : son hébergeur peut être momentanément
+ * injoignable, et la faire disparaître donnerait à croire qu'on l'a perdue. Elle
+ * n'est simplement pas restaurable tant qu'on ne peut pas la montrer.
+ */
+function History({
+  entries,
+  currentSource,
+  currentVariant,
+  onRestore,
+  onForget,
+}: {
+  entries: SkinHistoryEntry[]
+  currentSource: string | null
+  currentVariant: SkinVariant | null
+  onRestore: (entry: SkinHistoryEntry) => void
+  onForget: (id: number) => void
+}) {
+  const t = useT()
+  if (entries.length === 0) return null
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-txt-muted">{t('skins.history')}</p>
+        <p className="text-[11.5px] text-txt-secondary">{t('skins.historyHint')}</p>
+      </div>
+
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(116px,1fr))] gap-2.5">
+        {entries.map((e) => {
+          const worn = e.source === currentSource && e.variant === currentVariant
+          return (
+            <div
+              key={e.id}
+              className={`group relative flex flex-col items-center gap-2 rounded-xl border p-3 transition-colors ${
+                worn ? 'border-accent/45 bg-accent/10' : 'border-line bg-surface-1 hover:border-line-strong'
+              }`}
+            >
+              {e.data_uri ? (
+                // Tête recadrée depuis le gabarit : la face fait 8×8 à l'offset
+                // (8,8) d'une texture large de 64.
+                <div
+                  className="h-14 w-14 rounded-lg [image-rendering:pixelated]"
+                  style={{
+                    backgroundImage: `url(${e.data_uri})`,
+                    backgroundSize: '448px 448px',
+                    backgroundPosition: '-56px -56px',
+                  }}
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center whitespace-pre-line rounded-lg bg-surface-3 text-center text-[9px] leading-tight text-txt-muted">
+                  {t('skins.noPreview')}
+                </div>
+              )}
+
+              <span className="text-[10.5px] text-txt-muted">{t(`skins.${e.variant}`)}</span>
+
+              {worn ? (
+                <span className="text-[10.5px] font-semibold text-accent-hover">{t('skins.worn')}</span>
+              ) : (
+                <button
+                  onClick={() => onRestore(e)}
+                  disabled={!e.data_uri}
+                  className="text-[10.5px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {t('skins.restore')}
+                </button>
+              )}
+
+              <button
+                onClick={() => onForget(e.id)}
+                title={t('skins.forget')}
+                className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-md text-txt-muted opacity-0 transition-all hover:bg-danger/20 hover:text-danger group-hover:opacity-100"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" width={11} height={11}>
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function AccountPicker({
