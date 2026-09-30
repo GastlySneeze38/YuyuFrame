@@ -303,8 +303,10 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
   const boxRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<SkinViewer | null>(null)
 
-  // Le skin local l'emporte : un compte hors ligne n'a rien à attendre du
-  // service, son UUID étant inventé — il y récupérerait un Steve par défaut.
+  // Le skin enregistré l'emporte : c'est la source la plus fraîche, le cache
+  // du service mettant du temps à refléter un changement. À défaut, le
+  // service — qui rend l'apparence par défaut pour un UUID inventé, donc un
+  // Steve plutôt qu'un vide pour un compte hors ligne sans skin.
   const source = localSkin ?? (uuid ? `https://mc-heads.net/skin/${uuid}` : null)
 
   const reframe = useCallback(() => {

@@ -1142,6 +1142,12 @@ function Head({ entry, size }: { entry: SkinHistoryEntry; size: HeadSize }) {
  * skins, montrer le personnage est la façon la plus directe de dire de qui on
  * parle.
  */
+/**
+ * Au-delà, les cartes passeraient à la ligne et la rangée mangerait la hauteur
+ * des trois colonnes du dessous. Le surplus part dans une modale.
+ */
+const MAX_ACCOUNT_CARDS = 5
+
 function AccountPicker({
   accounts,
   selected,
@@ -1155,6 +1161,18 @@ function AccountPicker({
   onPick: (uuid: string) => void
 }) {
   const t = useT()
+  const [showAll, setShowAll] = useState(false)
+
+  // Le compte choisi est toujours visible, même s'il est loin dans la liste :
+  // il prend alors la dernière place. Sans ça, choisir un compte depuis la
+  // modale le ferait disparaître aussitôt après l'avoir désigné.
+  const visible = accounts.slice(0, MAX_ACCOUNT_CARDS)
+  if (selected && !visible.some((a) => a.mc_uuid === selected)) {
+    const chosen = accounts.find((a) => a.mc_uuid === selected)
+    if (chosen) visible[MAX_ACCOUNT_CARDS - 1] = chosen
+  }
+  const hidden = accounts.length - visible.length
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="mr-0.5 text-txt-muted" title={t('skins.accountHint')}>
@@ -1164,9 +1182,8 @@ function AccountPicker({
         </svg>
       </span>
 
-      {accounts.map((a) => {
+      {visible.map((a) => {
         const active = a.mc_uuid === selected
-        const face = faces[a.mc_uuid]
         return (
           <button
             key={a.mc_uuid}
@@ -1179,34 +1196,7 @@ function AccountPicker({
                 : 'border-line bg-surface-1 opacity-60 hover:border-line-strong hover:opacity-100'
             }`}
           >
-            <span className="relative">
-              {face ? (
-                <SkinFace dataUri={face} size={32} className="rounded-lg" />
-              ) : a.is_offline ? (
-                // Compte hors ligne sans skin : son UUID est inventé, aucun
-                // service d'avatars n'a rien à en dire. L'initiale fait office.
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/40 font-black text-white [font-family:monospace] text-[14px]">
-                  {a.mc_username[0].toUpperCase()}
-                </span>
-              ) : (
-                <img
-                  src={`https://mc-heads.net/avatar/${a.mc_uuid}/32`}
-                  alt=""
-                  className="h-8 w-8 rounded-lg [image-rendering:pixelated]"
-                />
-              )}
-
-              {/* La pastille dit « c'est celui-là » sans mot et sans couleur à
-                  interpréter. */}
-              {active && (
-                <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-bg-primary bg-accent text-white">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
-                    <path d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-              )}
-            </span>
-
+            <AccountAvatar account={a} face={faces[a.mc_uuid]} size={32} checked={active} />
             <span className="flex flex-col">
               <span className={`text-[13px] font-semibold ${active ? 'text-txt-primary' : 'text-txt-secondary'}`}>
                 {a.mc_username}
@@ -1218,7 +1208,128 @@ function AccountPicker({
           </button>
         )
       })}
+
+      {hidden > 0 && (
+        <button
+          onClick={() => setShowAll(true)}
+          title={t('skins.allAccountsTitle')}
+          className="flex h-[52px] items-center gap-1.5 rounded-xl border border-dashed border-line-strong bg-surface-1 px-3.5 text-txt-secondary transition-colors hover:border-accent/45 hover:text-txt-primary"
+        >
+          <span className="text-[15px] font-bold leading-none">+{hidden}</span>
+        </button>
+      )}
+
+      <AnimatePresence>
+        {showAll && (
+          <AccountModal
+            accounts={accounts}
+            selected={selected}
+            faces={faces}
+            onPick={(uuid) => { onPick(uuid); setShowAll(false) }}
+            onClose={() => setShowAll(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+/** Tous les comptes, quand ils ne tiennent plus sur la rangée. */
+function AccountModal({
+  accounts,
+  selected,
+  faces,
+  onPick,
+  onClose,
+}: {
+  accounts: McAccountInfo[]
+  selected: string | null
+  faces: Record<string, string | null>
+  onPick: (uuid: string) => void
+  onClose: () => void
+}) {
+  const t = useT()
+  return (
+    <ModalShell title={t('skins.allAccountsTitle')} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1">
+        {accounts.map((a) => {
+          const active = a.mc_uuid === selected
+          return (
+            <button
+              key={a.mc_uuid}
+              onClick={() => onPick(a.mc_uuid)}
+              className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                active ? 'border-accent bg-accent/15' : 'border-line bg-surface-2 hover:border-accent/40'
+              }`}
+            >
+              <AccountAvatar account={a} face={faces[a.mc_uuid]} size={36} checked={active} />
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-[13.5px] font-semibold text-txt-primary">{a.mc_username}</span>
+                <span className="text-[11.5px] text-txt-muted">
+                  {a.is_offline ? t('skins.offlineBadge') : t('skins.mojangBadge')}
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </ModalShell>
+  )
+}
+
+function AccountAvatar({
+  account,
+  face,
+  size,
+  checked,
+}: {
+  account: McAccountInfo
+  face: string | null | undefined
+  size: number
+  checked: boolean
+}) {
+  return (
+    <span className="relative shrink-0">
+      {face ? (
+        <SkinFace dataUri={face} size={size} className="rounded-lg" />
+      ) : (
+        <>
+          {/* Sans skin enregistré, l'avatar du compte — et pour un compte hors
+              ligne, dont l'UUID est inventé, le service rend l'apparence par
+              défaut, donc Steve. C'est exactement ce qu'il faut montrer : un
+              compte sans skin n'est pas une initiale dans un carré, c'est un
+              personnage par défaut, et c'est déjà ce que l'aperçu 3D affiche.
+              L'initiale ne reste que pour le cas sans réseau. */}
+          <img
+            src={`https://mc-heads.net/avatar/${account.mc_uuid}/${size}`}
+            alt=""
+            style={{ width: size, height: size }}
+            className="rounded-lg [image-rendering:pixelated]"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+              const fallback = e.currentTarget.nextElementSibling as HTMLElement | null
+              if (fallback) fallback.style.display = 'flex'
+            }}
+          />
+          <span
+            style={{ width: size, height: size }}
+            className="hidden items-center justify-center rounded-lg bg-accent/40 font-black text-white [font-family:monospace] text-[14px]"
+          >
+            {account.mc_username[0].toUpperCase()}
+          </span>
+        </>
+      )}
+
+      {/* La pastille dit « c'est celui-là » sans mot et sans couleur à
+          interpréter. */}
+      {checked && (
+        <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-bg-primary bg-accent text-white">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+      )}
+    </span>
   )
 }
 

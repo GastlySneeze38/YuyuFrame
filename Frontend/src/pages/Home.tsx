@@ -146,7 +146,7 @@ export default function Home() {
   const t = useT()
   const FEATURES = useFeatures(t)
   const {
-    username, uuid, isOffline,
+    username, uuid,
     instances, setInstances,
     selectedInstanceId, setSelectedInstanceId, selectedInstance,
     isInstanceRunning, setInstanceRunning,
@@ -230,21 +230,27 @@ export default function Home() {
     return () => clearTimeout(timer)
   }, [welcome])
 
-  // Skin d'un compte hors ligne : mc-heads.net n'a rien pour un UUID inventé,
-  // donc la bannière n'aurait rien à rendre sans cette lecture locale.
+  // Skin enregistré du compte, pour la bannière — pour TOUS les comptes.
+  //
+  // Il était réservé aux comptes hors ligne, en supposant que le skin d'un
+  // compte Microsoft serait de toute façon servi par mc-heads. C'est vrai, mais
+  // avec le retard de leur cache : juste après un changement, la bannière
+  // montrait encore l'ancien. Notre référence locale passe donc devant, et le
+  // service reste le repli (voir SkinBust, qui rend l'apparence par défaut pour
+  // un UUID inventé).
   //
   // La texture part telle quelle au rendu 3D. Elle était auparavant recadrée
   // ici sur la zone « visage » du gabarit pour en tirer une vignette carrée ;
   // ce découpage n'a plus d'objet depuis que l'accueil montre le skin entier,
   // et un rendu 3D veut de toute façon la texture complète.
   useEffect(() => {
-    if (!uuid || !isOffline) { setCustomSkinUri(null); return }
+    if (!uuid) { setCustomSkinUri(null); return }
     let cancelled = false
     api.skin.preview(uuid)
       .then((dataUri) => { if (!cancelled) setCustomSkinUri(dataUri ?? null) })
       .catch(() => { if (!cancelled) setCustomSkinUri(null) })
     return () => { cancelled = true }
-  }, [uuid, isOffline])
+  }, [uuid])
 
   // Le client intégré ne sait pas se charger sur toutes les versions (voir
   // `agent_compat.rs`, côté Rust, qui reste seul juge). L'accueil le demande

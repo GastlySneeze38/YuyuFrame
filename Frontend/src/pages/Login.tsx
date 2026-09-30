@@ -121,15 +121,18 @@ export default function Login() {
       .catch(() => {})
   }, [])
 
-  // Aperçu du skin des comptes hors ligne déjà connus — un seul appel par
+  // Aperçu du skin enregistré, pour TOUS les comptes — un seul appel par
   // compte tant qu'il n'est pas en cache.
   //
-  // Seulement les comptes hors ligne : pour un compte Microsoft, le skin
-  // appliqué est parti chez Mojang (voir skin.rs), donc le service d'avatars
-  // employé plus bas le montre déjà, et sans passer par nous.
+  // Il ne se limitait avant qu'aux comptes hors ligne, en partant du principe
+  // qu'un skin posé sur un compte Microsoft était chez Mojang et donc déjà
+  // servi par le service d'avatars. C'est vrai à terme, mais ce service met du
+  // temps à rafraîchir son cache : entre-temps, l'écran des skins montrait le
+  // nouveau skin et celui-ci l'ancien — ou Steve. Notre référence locale est la
+  // plus fraîche, elle passe donc devant, et le service reste le repli.
   useEffect(() => {
     accounts
-      .filter((a) => a.is_offline && !(a.uuid in skins))
+      .filter((a) => !(a.uuid in skins))
       .forEach((a) => {
         api.skin.preview(a.uuid).then((dataUri) => {
           if (dataUri) setSkins((s) => ({ ...s, [a.uuid]: dataUri }))
@@ -172,22 +175,16 @@ export default function Login() {
     const viewer = viewerRef.current
     if (!viewer) return
     const displayUuid = previewUuid ?? uuid
-    const displayAccount_ = accounts.find((a) => a.uuid === displayUuid)
-    if (displayUuid && displayAccount_?.is_offline) {
-      // Pas de vrai skin Mojang pour un compte hors ligne — mc-heads.net n'a
-      // rien de pertinent pour cet UUID inventé, donc soit le skin custom
-      // (voir skins cache ci-dessus), soit rien du tout.
-      const custom = skins[displayUuid]
-      if (custom) {
-        ;(viewer.loadSkin(custom, { model: 'auto-detect' }) as Promise<void> | void)?.catch?.(() => {})
-      } else {
-        viewer.loadSkin(null)
-      }
-    } else if (displayUuid) {
-      ;(viewer.loadSkin(`https://mc-heads.net/skin/${displayUuid}`, { model: 'auto-detect' }) as Promise<void> | void)?.catch?.(() => {})
-    } else {
+    if (!displayUuid) {
       viewer.loadSkin(null)
+      return
     }
+    // Le skin enregistré d'abord, quel que soit le type de compte : c'est la
+    // source la plus fraîche (voir le cache ci-dessus). À défaut, le service
+    // d'avatars — qui rend l'apparence par défaut pour un UUID inventé, donc
+    // un personnage plutôt qu'un vide pour un compte hors ligne sans skin.
+    const source = skins[displayUuid] ?? `https://mc-heads.net/skin/${displayUuid}`
+    ;(viewer.loadSkin(source, { model: 'auto-detect' }) as Promise<void> | void)?.catch?.(() => {})
   }, [uuid, previewUuid, skins])
 
   const stopPolling = () => {
@@ -665,23 +662,18 @@ function AccountRow({
       onMouseEnter={() => { setHovered(true); onHover() }}
       onMouseLeave={() => { setHovered(false); onLeave() }}
     >
-      {/* Avatar — les comptes hors ligne n'ont pas de vrai profil Mojang,
-          donc pas d'appel à mc-heads.net : soit la tête tirée du skin choisi
-          (voir SkinFace, qui superpose bien les deux couches), soit la
-          pastille avec l'initiale. */}
+      {/* Avatar — la tête tirée du skin choisi (voir SkinFace, qui superpose
+          bien les deux couches), sinon l'avatar du compte. Les comptes hors
+          ligne passent par la même voie : leur UUID est inventé, le service
+          rend donc l'apparence par défaut, ce qui est exactement ce qu'un
+          compte sans skin doit montrer. L'initiale ne reste que sans réseau. */}
       <div className="relative flex-shrink-0">
-        {offline ? (
-          skin ? (
-            <SkinFace dataUri={skin} size={44} className="rounded-lg" />
-          ) : (
-            <div className="flex items-center justify-center rounded-lg font-black text-white w-11 h-11 bg-[rgba(75,63,207,0.45)] [font-family:monospace] text-[18px]">
-              {acc.username[0].toUpperCase()}
-            </div>
-          )
+        {skin ? (
+          <SkinFace dataUri={skin} size={44} className="rounded-lg" />
         ) : (
           <>
             <img
-              src={`https://mc-heads.net/avatar/${acc.uuid}/48`}
+              src={`https://mc-heads.net/avatar/${acc.uuid}/44`}
               alt={acc.username}
               className="rounded-lg w-11 h-11 [image-rendering:pixelated]"
               onError={(e) => {
