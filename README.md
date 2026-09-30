@@ -1,44 +1,95 @@
-# YuyuFrame — Launcher Minecraft Premium
+# YuyuFrame
 
-Launcher Minecraft premium avec synchronisation cloud, gestion avancée des instances, et système multijoueur P2P décentralisé.
+Open source Minecraft PvP client for Windows. A launcher with an in-game agent: 25 built-in modules (HUD, keystrokes, zoom, freelook, 1.7 animations…) with no mods to install, and a modernized 1.8.9 running on Java 25 and LWJGL 3.
 
-## Plans d'abonnement
+- Website: https://yuyuframe.eu
+- Download: [latest release](https://github.com/GastlySneeze38/YuyuFrame-v2/releases/latest)
+- Support: [Discord](https://discord.gg/mX8A6mnssy)
 
-| Feature | Free | Premium 3.99€/mois | Ultimate 7.99€/mois (bientôt disponible) |
-|---------|------|--------------------|----------------------|
-| Instances Minecraft | Illimitées | Illimitées | Illimitées |
-| Comptes Minecraft | Illimité | Illimité | Illimité |
-| Restauration cloud | — | ✓ | ✓ |
-| Sync cloud (saves) | — | 3 saves max | 10 saves max |
-| Instances synchronisées | — | 4 max | 10 max |
-| Statistiques avancées | — | ✓ | ✓ |
-| Grade décoratif en jeu | — | ✓ | ✓ |
-| Serveur 1 clic | — | — | ✓ |
+> Unofficial launcher, not affiliated with Mojang or Microsoft.
 
-## Fonctionnalités
+## Features
 
-- Lancement Minecraft vanilla, Fabric, Forge (toutes versions)
-- Gestion d'instances isolées (mods, saves, configs par instance)
-- Installation et gestion des mods (toggle, import URL)
-- Console de jeu intégrée avec coloration syntaxique
-- Synchronisation cloud des saves et configurations
-- Statistiques de jeu (temps par instance, sessions, graphiques)
-- Multijoueur P2P décentralisé — pas de serveur central requis
-- Authentification Microsoft OAuth officielle
+**In-game modules** — injected by the agent, no mod loader required. Availability depends on the Minecraft version.
 
-## Architecture
+| Family | Modules |
+|--------|---------|
+| HUD | FPS, ping, coordinates, keystrokes and CPS, armor durability, potion effects, saturation, world time |
+| Combat | 1.7 animations, custom crosshair, hurt cam, low health tint |
+| Camera | zoom, freelook, FOV |
+| Visibility | fullbright, no fog, no darkness, no pumpkin overlay |
+| Comfort | toggle sprint / sneak, macros, improved chat, Mumble Link |
+
+Supported versions for the agent: **1.8.9** (vanilla, on Java 25 and LWJGL 3), **1.21.11**, and **26.1 to 26.3**.
+
+**Launcher**
+
+- Isolated instances: Vanilla, Fabric, Forge, NeoForge and Quilt
+- Mods, modpacks and resource packs from Modrinth and CurseForge
+- Modrinth resource packs installable and applied from inside the game, without restarting Minecraft
+- Import of instances from other launchers
+- Multiple Microsoft accounts
+- Java profiles (Temurin, OpenJ9, GraalVM), reusable across instances
+- Game console, play time statistics
+- Available in 8 languages: English, French, Spanish, German, Italian, Portuguese (Brazil), Polish, Russian
+
+**Security**
+
+- Sign-in through Microsoft's official page: your password is never typed into the launcher
+- Session tokens masked in the console and logs
+- Signed updates; every release is built by GitHub Actions from this repository
+
+## Repository layout
 
 ```
-YuyuFrame 2/
-├── Launcher-Client/  Code public (repo séparé YuyuFrame-v2)
-│   ├── Backend/      Tauri 2 + Rust — launcher, auth, DB SQLite
-│   ├── Frontend/     React + TypeScript — UI Vite + Tailwind
-│   └── Launcher-Agent/ DLL JNI — installation de resource packs Modrinth in-game
-├── LauncherAPI/    API REST Axum — auth, paiement, cloud sync
-└── P2P-Server/
-    ├── p2p-agent/  Java Agent — injection Mixin dans la JVM Minecraft
-    └── rust-core/  DLL JNI — ownership engine, deltas P2P
+Backend/         Tauri 2 + Rust — launching, Microsoft auth, instances, local SQLite database
+Frontend/        React + TypeScript — interface (Vite, Tailwind, Zustand)
+Launcher-Agent/  In-game Java agent (Sponge Mixin), one mixin folder per Minecraft version
+  content-core/  Rust JNI library — Modrinth search and downloads from the game
 ```
 
-## Code Signature
-Code signing provided by SignPath Foundation
+The agent jar, its libraries and `content_core.dll` are bundled into the installer (`Backend/tauri.conf.json`, `bundle.resources`) and deployed by the launcher at startup.
+
+## Building from source
+
+Requirements (Windows):
+
+- [Rust](https://rustup.rs) (stable) and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)
+- Node.js 20
+- JDK 25 — the agent is compiled with `--release 25`
+- Tauri CLI: `cargo install tauri-cli --version "^2"`
+
+The agent and the JNI library must be built **before** the launcher, since the Tauri build embeds them. Always build them through their `build.bat`, never with `javac` or `cargo build` by hand:
+
+```bat
+cd Launcher-Agent\content-core
+build.bat
+
+cd ..
+build.bat
+```
+
+Then the launcher:
+
+```bat
+cd Frontend
+npm ci
+
+cd ..\Backend
+cargo tauri dev
+```
+
+`cargo tauri build` produces the installer. The release workflow (`.github/workflows/release.yml`) runs the same steps.
+
+## Documentation
+
+- [Privacy policy](PRIVACY.md)
+- [Terms of use](TERMS.md)
+
+## License
+
+[GPLv3](LICENSE.txt).
+
+## Code signing
+
+Code signing provided by [SignPath Foundation](https://signpath.org).
