@@ -461,7 +461,25 @@ export const api = {
       format: SkinFormat | null,
       /** Catégorie Ely.by, casse comprise ; `null` = toutes. */
       kind: SkinKindFilter | null,
-    ) => invoke<CatalogPage>('skin_catalog_browse', { page, tags, color, format, kind }),
+      /**
+       * Lève les deux filtres à la fois : celui d'Ely.by et celui de
+       * YuyuFrame. Un seul interrupteur, parce qu'un bouton « afficher le
+       * contenu sensible » qui continuerait d'en retirer ne tiendrait sa
+       * promesse qu'à moitié.
+       *
+       * Quand il est à `false`, une page rend moins de 40 entrées —
+       * l'appelant ne doit pas supposer de taille fixe.
+       */
+      showSensitive: boolean,
+    ) =>
+      invoke<CatalogPage>('skin_catalog_browse', {
+        page,
+        tags,
+        color,
+        format,
+        kind,
+        showSensitive,
+      }),
     /**
      * Aperçus des seules cases affichées, dans l'ordre demandé. `null` pour
      * celles dont l'image n'a pas pu être obtenue.

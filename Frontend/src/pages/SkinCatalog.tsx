@@ -51,8 +51,18 @@ import { useT } from '@/i18n'
  * une quinzaine.
  */
 
-/** Taille d'un lot Ely.by. Imposée : leur `limit` est ignoré. */
-const REMOTE_PAGE_SIZE = 40
+/**
+ * Pages d'aperçus gardées de part et d'autre de la position.
+ *
+ * Parcourir longtemps retiendrait sinon tout ce qu'on a vu : un aperçu (le
+ * PNG du skin) et surtout un rendu cuit (une image de 180×288) pèsent des
+ * dizaines de kilo-octets chacun, en data URI dans l'état React. Deux pages
+ * de chaque côté suffisent pour que reculer et avancer restent instantanés.
+ *
+ * Les entrées du catalogue elles-mêmes ne sont pas déchargées : quelques
+ * centaines d'octets pièce, négligeable à côté.
+ */
+const KEEP_PAGES = 2
 
 /**
  * Trois rangées, quitte à rétrécir les cases.
@@ -74,22 +84,6 @@ const TILE_ASPECT = 0.7
 const GRID_GAP = 12
 const MIN_COLUMNS = 2
 const MAX_COLUMNS = 10
-
-/**
- * Lots gardés de part et d'autre de la position.
- *
- * Parcourir longtemps retiendrait sinon tout ce qu'on a vu : les entrées du
- * catalogue sont légères, mais les aperçus (le PNG du skin) et surtout les
- * rendus cuits (une image de 180×288 par skin) ne le sont pas. À quelques
- * dizaines de kilo-octets pièce, cent pages feraient des dizaines de
- * méga-octets de data URI vivant dans l'état React.
- *
- * Un de chaque côté suffit : celui d'avant pour que reculer soit instantané,
- * celui d'après étant déjà préchargé. Au plus quatre lots en mémoire, soit
- * ~160 skins. Ce qui sort de cette fenêtre est déchargé — et le redemander
- * est de toute façon bon marché, le PNG restant dans le cache disque du Rust.
- */
-const KEEP_RADIUS = 1
 
 /**
  * Modèle de bras, tel que l'interface le présente.
@@ -153,12 +147,27 @@ export default function SkinCatalog() {
   const [model, setModel] = useState<ModelId>('any')
   const [kind, setKind] = useState<SkinKindFilter | null>(null)
 
-  /** Lots Ely.by déjà reçus, par numéro. */
-  const [pages, setPages] = useState<Map<number, CatalogSkin[]>>(() => new Map())
-  const [failed, setFailed] = useState<Set<number>>(() => new Set())
-  const [lastRemotePage, setLastRemotePage] = useState(1)
+  const [showSensitive, setShowSensitive] = useState(false)
 
-  /** Index, dans la liste continue, du premier élément affiché. Toujours un
+  /**
+   * Tout ce qui a été chargé, à plat et dans l'ordre.
+   *
+   * Les lots d'Ely.by ne font plus forcément 40 : le filtre de YuyuFrame en
+   * écarte une ou deux par lot. Indexer par « lot × 40 » décalerait donc tout
+   * un peu plus à chaque lot. On accumule à plat, et les pages se découpent
+   * là-dedans — ce qui garde aussi les pages pleines, puisqu'on charge le lot
+   * suivant dès qu'il manque de quoi remplir.
+   *
+   * Ces entrées ne sont jamais déchargées, à la différence des aperçus et des
+   * rendus : un `CatalogSkin` pèse quelques centaines d'octets, et on n'en
+   * accumule que ce qu'on a réellement parcouru.
+   */
+  const [items, setItems] = useState<CatalogSkin[]>([])
+  const [loadedLots, setLoadedLots] = useState(0)
+  const [lastLot, setLastLot] = useState(1)
+  const [loading, setLoading] = useState(true)
+
+  /** Index, dans la liste à plat, du premier élément affiché. Toujours un
    *  multiple du nombre de places — c'est lui la position, pas un numéro de
    *  page, pour que redimensionner la fenêtre ne téléporte pas ailleurs. */
   const [anchor, setAnchor] = useState(0)
@@ -181,9 +190,9 @@ export default function SkinCatalog() {
   const [tiling, setTiling] = useState<Tiling>({ columns: 4, rows: TARGET_ROWS, tileHeight: 160 })
   const slots = Math.max(1, tiling.columns * tiling.rows)
 
-  const total = lastRemotePage * REMOTE_PAGE_SIZE
-  const pageCount = Math.max(1, Math.floor(total / slots))
   const pageNumber = Math.floor(anchor / slots) + 1
+  /** Reste-t-il du catalogue à charger ? */
+  const moreLots = loadedLots < lastLot
 
   // ── La grille se mesure ───────────────────────────────────────────────────
   useEffect(() => {
@@ -200,85 +209,73 @@ export default function SkinCatalog() {
   }, [])
 
   // Changer de taille change le nombre de places : la position se recale sur
-  // une page pleine, au plus près de ce qu'on regardait.
+  // le début d'une page, au plus près de ce qu'on regardait.
   useEffect(() => {
-    setAnchor((current) => {
-      const maxAnchor = Math.max(0, (Math.floor(total / slots) - 1) * slots)
-      return Math.min(Math.floor(current / slots) * slots, maxAnchor)
-    })
-  }, [slots, total])
+    setAnchor((current) => Math.floor(current / slots) * slots)
+  }, [slots])
 
-  // ── Les lots nécessaires ──────────────────────────────────────────────────
+  // ── Chargement, lot par lot et dans l'ordre ───────────────────────────────
 
-  const firstRemote = Math.floor(anchor / REMOTE_PAGE_SIZE) + 1
-  const lastRemote = Math.floor((anchor + slots - 1) / REMOTE_PAGE_SIZE) + 1
+  const loadedLotsRef = useRef(loadedLots)
+  loadedLotsRef.current = loadedLots
+  const lastLotRef = useRef(lastLot)
+  lastLotRef.current = lastLot
+  const busy = useRef(false)
 
-  const pagesRef = useRef(pages)
-  pagesRef.current = pages
-  const inflight = useRef<Set<number>>(new Set())
+  /** Change à chaque changement de filtre : une réponse partie avant est
+   *  ignorée à son retour, au lieu d'être recollée à la mauvaise liste. */
+  const generation = useRef(0)
 
-  const ensureRemote = useCallback(
-    (page: number) => {
-      if (page < 1 || pagesRef.current.has(page) || inflight.current.has(page)) return
-      inflight.current.add(page)
-      const format = MODELS.find((m) => m.id === model)?.format ?? null
-      api.skin
-        .catalog(page, tags, null, format, kind)
-        .then((received) => {
-          setPages((known) => new Map(known).set(page, received.items))
-          setLastRemotePage(received.last_page)
-        })
-        .catch((e) => {
-          setFailed((known) => new Set(known).add(page))
-          showError(e)
-        })
-        .finally(() => inflight.current.delete(page))
-    },
-    [tags, model, kind],
-  )
+  const loadNextLot = useCallback(() => {
+    if (busy.current) return
+    const lot = loadedLotsRef.current + 1
+    if (lot > lastLotRef.current) return
 
+    busy.current = true
+    setLoading(true)
+    const mine = generation.current
+    const format = MODELS.find((m) => m.id === model)?.format ?? null
+
+    api.skin
+      .catalog(lot, tags, null, format, kind, showSensitive)
+      .then((received) => {
+        if (mine !== generation.current) return
+        setItems((known) => [...known, ...received.items])
+        setLoadedLots(lot)
+        setLastLot(received.last_page)
+      })
+      .catch((e) => {
+        if (mine !== generation.current) return
+        // On s'arrête là plutôt que de retenter en boucle sur le même lot.
+        setLastLot(lot - 1)
+        showError(e)
+      })
+      .finally(() => {
+        busy.current = false
+        if (mine === generation.current) setLoading(false)
+      })
+  }, [tags, model, kind, showSensitive])
+
+  // On garde une page d'avance : franchir une frontière de lot ne se voit pas,
+  // et la page affichée est toujours pleine tant qu'il reste du catalogue.
   useEffect(() => {
-    for (let page = firstRemote; page <= lastRemote; page += 1) ensureRemote(page)
-    // Le lot d'après, pendant qu'on regarde celui-ci : c'est ce qui rend
-    // invisible le franchissement d'une frontière de lot.
-    ensureRemote(lastRemote + 1)
-  }, [firstRemote, lastRemote, ensureRemote])
+    if (items.length < anchor + slots * 2 && loadedLots < lastLot) loadNextLot()
+  }, [items.length, anchor, slots, loadedLots, lastLot, loading, loadNextLot])
+
+  const visible = useMemo(() => items.slice(anchor, anchor + slots), [items, anchor, slots])
 
   // ── Déchargement de ce qui s'éloigne ──────────────────────────────────────
   //
-  // Les lots hors fenêtre partent, et avec eux leurs aperçus et leurs rendus
-  // cuits — c'est la même règle pour les trois caches, pour qu'aucun ne puisse
-  // grossir pendant que les autres se vident.
+  // Seuls les aperçus et les rendus cuits sont déchargés : ce sont eux qui
+  // pèsent (un data URI chacun, des dizaines de kilo-octets pour un rendu).
+  // Les entrées du catalogue restent, elles sont négligeables à côté.
   useEffect(() => {
-    const low = firstRemote - KEEP_RADIUS
-    const high = lastRemote + KEEP_RADIUS
-    setPages((known) => keepPages(known, low, high))
-    setFailed((known) => {
-      const kept = new Set(Array.from(known).filter((page) => page >= low && page <= high))
-      return kept.size === known.size ? known : kept
-    })
-  }, [firstRemote, lastRemote])
-
-  // Les aperçus et les rendus suivent les lots : une adresse qui n'appartient
-  // plus à aucun lot gardé n'a plus de case où s'afficher.
-  useEffect(() => {
-    const alive = new Set<string>()
-    pages.forEach((items) => items.forEach((skin) => alive.add(skin.url)))
+    const from = Math.max(0, anchor - slots * KEEP_PAGES)
+    const to = anchor + slots * (KEEP_PAGES + 1)
+    const alive = new Set(items.slice(from, to).map((skin) => skin.url))
     setPreviews((known) => keepUrls(known, alive))
     setBaked((known) => keepUrls(known, alive))
-  }, [pages])
-
-  /** `null` tant qu'un lot nécessaire manque — c'est l'état de chargement. */
-  const visible = useMemo(() => {
-    const gathered: CatalogSkin[] = []
-    for (let page = firstRemote; page <= lastRemote; page += 1) {
-      const items = pages.get(page)
-      if (!items) return failed.has(page) ? [] : null
-      gathered.push(...items)
-    }
-    const base = (firstRemote - 1) * REMOTE_PAGE_SIZE
-    return gathered.slice(anchor - base, anchor - base + slots)
-  }, [pages, failed, firstRemote, lastRemote, anchor, slots])
+  }, [items, anchor, slots])
 
   // ── Les aperçus des seules cases affichées ────────────────────────────────
   //
@@ -286,7 +283,6 @@ export default function SkinCatalog() {
   // douzaine, et c'est précisément ce qu'on a corrigé ailleurs pour les
   // connexions lentes. Le cache disque du Rust rend les retours gratuits.
   useEffect(() => {
-    if (!visible) return
     const missing = visible.map((s) => s.url).filter((url) => !(url in previews))
     if (missing.length === 0) return
     let cancelled = false
@@ -313,7 +309,6 @@ export default function SkinCatalog() {
 
   // ── Cuisson du rendu 3D ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!visible) return
     let cancelled = false
     visible.forEach((skin) => {
       const uri = previews[skin.url]
@@ -328,11 +323,12 @@ export default function SkinCatalog() {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   const canPrev = anchor > 0
-  const canNext = anchor + slots < total
+  // Encore du monde après la page affichée, ou encore des lots à charger.
+  const canNext = anchor + slots < items.length || moreLots
 
   const goNext = useCallback(() => {
-    setAnchor((current) => (current + slots < total ? current + slots : current))
-  }, [slots, total])
+    setAnchor((current) => (current + slots < items.length ? current + slots : current))
+  }, [slots, items.length])
 
   const goPrev = useCallback(() => {
     setAnchor((current) => Math.max(0, current - slots))
@@ -357,14 +353,21 @@ export default function SkinCatalog() {
     tags?: string[]
     model?: ModelId
     kind?: SkinKindFilter | null
+    showSensitive?: boolean
   }) => {
     if (next.tags !== undefined) setTags(next.tags)
     if (next.model !== undefined) setModel(next.model)
     if (next.kind !== undefined) setKind(next.kind)
-    setPages(new Map())
-    setFailed(new Set())
-    setLastRemotePage(1)
+    if (next.showSensitive !== undefined) setShowSensitive(next.showSensitive)
+    // Les réponses déjà parties appartiennent à l'ancienne liste.
+    generation.current += 1
+    setItems([])
+    setLoadedLots(0)
+    setLastLot(1)
     setAnchor(0)
+    setPreviews({})
+    setBaked({})
+    setLoading(true)
   }
 
   const addTag = () => {
@@ -412,6 +415,8 @@ export default function SkinCatalog() {
             onRemoveTag={(tag) => resetFilters({ tags: tags.filter((x) => x !== tag) })}
             onPickModel={(next) => resetFilters({ model: next })}
             onPickKind={(next) => resetFilters({ kind: kind === next ? null : next })}
+            showSensitive={showSensitive}
+            onToggleSensitive={() => resetFilters({ showSensitive: !showSensitive })}
           />
 
           {/* Filet de sécurité : quitter la grille éteint le survol, même si
@@ -422,7 +427,7 @@ export default function SkinCatalog() {
             className="relative min-h-0 flex-1"
           >
             <AnimatePresence mode="wait">
-              {!visible ? (
+              {visible.length === 0 && loading ? (
                 <Layer key="loading">
                   <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
                 </Layer>
@@ -469,8 +474,11 @@ export default function SkinCatalog() {
 
           <div className="flex items-center justify-center gap-4">
             <Arrow direction="prev" disabled={!canPrev} onClick={goPrev} label={t('skinCatalog.prev')} />
-            <p className="min-w-[132px] text-center text-[12.5px] tabular-nums text-txt-secondary">
-              {t('skinCatalog.page', { page: pageNumber, last: pageCount })}
+            {/* Pas de total : le filtre de YuyuFrame écarte des entrées, donc
+                le nombre de pages réel n'est connu qu'une fois le catalogue
+                parcouru. Mieux vaut ne rien annoncer qu'annoncer à côté. */}
+            <p className="min-w-[110px] text-center text-[12.5px] tabular-nums text-txt-secondary">
+              {t('skinCatalog.page', { page: pageNumber })}
             </p>
             <Arrow direction="next" disabled={!canNext} onClick={goNext} label={t('skinCatalog.next')} />
           </div>
@@ -508,19 +516,9 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Les deux filtres de déchargement rendent l'objet d'origine quand ils n'ont
- * rien à retirer. Sans ça, l'effet qui taille les aperçus d'après les lots
- * produirait un nouvel objet à chaque rendu, qui relancerait l'effet.
+ * Rend l'objet d'origine quand il n'y a rien à retirer. Sans ça, l'effet de
+ * déchargement produirait un nouvel objet à chaque rendu, qui le relancerait.
  */
-function keepPages(
-  pages: Map<number, CatalogSkin[]>,
-  low: number,
-  high: number,
-): Map<number, CatalogSkin[]> {
-  const kept = new Map(Array.from(pages).filter(([page]) => page >= low && page <= high))
-  return kept.size === pages.size ? pages : kept
-}
-
 function keepUrls<T>(entries: Record<string, T>, alive: Set<string>): Record<string, T> {
   const keys = Object.keys(entries)
   const kept = keys.filter((url) => alive.has(url))
@@ -558,21 +556,25 @@ function Filters({
   tagInput,
   model,
   kind,
+  showSensitive,
   onTagInput,
   onAddTag,
   onRemoveTag,
   onPickModel,
   onPickKind,
+  onToggleSensitive,
 }: {
   tags: string[]
   tagInput: string
   model: ModelId
   kind: SkinKindFilter | null
+  showSensitive: boolean
   onTagInput: (value: string) => void
   onAddTag: () => void
   onRemoveTag: (tag: string) => void
   onPickModel: (model: ModelId) => void
   onPickKind: (kind: SkinKindFilter) => void
+  onToggleSensitive: () => void
 }) {
   const t = useT()
   return (
@@ -632,6 +634,34 @@ function Filters({
             {t(kindKey(entry))}
           </Chip>
         ))}
+
+        {/* Lève les deux filtres, celui d'Ely.by et le nôtre. Teinté en
+            avertissement quand il est actif : c'est le seul réglage de cet
+            écran qui fait apparaître quelque chose plutôt que de trier. */}
+        <button
+          onClick={onToggleSensitive}
+          title={t('skinCatalog.sensitiveHint')}
+          className={`ml-auto flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] transition-colors ${
+            showSensitive
+              ? 'border-warning/50 bg-warning/15 text-txt-primary'
+              : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+          }`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+            {showSensitive ? (
+              <>
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </>
+            ) : (
+              <>
+                <path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 5.4-1.6" />
+                <path d="m2 2 20 20" />
+              </>
+            )}
+          </svg>
+          {t('skinCatalog.sensitive')}
+        </button>
       </div>
     </div>
   )
