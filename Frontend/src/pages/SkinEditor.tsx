@@ -117,6 +117,33 @@ const TOOLS: { id: Tool; shortcut: string }[] = [
 const MIN_BRUSH = 1
 const MAX_BRUSH = 32
 
+/**
+ * Fond en damier, pour les deux vues.
+ *
+ * Un fond uni sombre fait disparaître les skins noirs, et pire : il rend un
+ * pixel noir et un pixel **transparent** rigoureusement identiques, alors que
+ * c'est toute la différence entre le corps et la surcouche. Deux gris proches
+ * en damier règlent les deux — ce n'est pas tant leur clarté qui détache la
+ * silhouette que le motif, qu'aucun skin ne reproduit.
+ *
+ * Le dégradé conique est la façon la plus courte d'écrire un damier : ses
+ * quatre quarts forment un carrelage de 2×2, donc une case vaut la moitié de
+ * `tile`.
+ */
+const CHECKER_LIGHT = '#34343c'
+const CHECKER_DARK = '#26262c'
+
+function checkerStyle(tile: number) {
+  return {
+    backgroundImage: `conic-gradient(${CHECKER_LIGHT} 0 25%, ${CHECKER_DARK} 0 50%, ${CHECKER_LIGHT} 0 75%, ${CHECKER_DARK} 0)`,
+    backgroundSize: `${tile}px ${tile}px`,
+  }
+}
+
+/** Une case = 4 pixels de texture : assez fin pour servir de repère, assez
+ *  gros pour ne pas grésiller quand la vue est petite. */
+const checkerForTexture = (displaySize: number) => checkerStyle((displaySize / SKIN_SIZE) * 8)
+
 /** Palette de départ : des teintes qui servent vraiment à faire un
  *  personnage — peaux, cheveux, vêtements — plutôt qu'un nuancier. */
 const PALETTE = [
@@ -1137,13 +1164,13 @@ export default function SkinEditor() {
                 <div
                   ref={miniSlotRef}
                   style={{ width: miniSize, height: miniSize }}
-                  className="relative overflow-hidden rounded-lg border border-line bg-black/40"
+                  className="relative overflow-hidden rounded-lg border border-line"
                 >
                   <canvas
                     ref={miniRef}
                     width={SKIN_SIZE}
                     height={SKIN_SIZE}
-                    style={{ imageRendering: 'pixelated' }}
+                    style={{ imageRendering: 'pixelated', ...checkerForTexture(miniSize) }}
                     className={`absolute inset-0 h-full w-full ${mode === '2d' ? 'invisible' : ''}`}
                   />
                   {mode === '3d' && <RegionGrid />}
@@ -1168,24 +1195,16 @@ export default function SkinEditor() {
                     ref={flatRef}
                     width={SKIN_SIZE}
                     height={SKIN_SIZE}
-                    style={{ imageRendering: 'pixelated' }}
-                    className={`h-full w-full rounded-lg bg-black/40 ${tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair'}`}
+                    style={{ imageRendering: 'pixelated', ...checkerForTexture(flatSize) }}
+                    className={`h-full w-full rounded-lg ${tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair'}`}
                   />
                   <RegionGrid />
                 </div>
               </div>
 
-              {/* Ce qu'on pointe, en pastille et seulement quand on pointe
-                  quelque chose : la nommer aide surtout dans la vue à plat,
-                  où rien ne dit quel rectangle est un bras. En 2D, les coins
-                  inutilisés de l'atlas n'appartiennent à aucune partie — on le
-                  dit plutôt que de nommer au hasard. */}
-              {hover && (
-                <p className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/55 px-2 py-0.5 font-mono text-[10.5px] tabular-nums text-txt-secondary">
-                  {hover.part ? t(`skinEditor.part_${hover.part}`) : t('skinEditor.partNone')} ·{' '}
-                  {hover.pixel.x},{hover.pixel.y}
-                </p>
-              )}
+              {/* Le cadre 3D ayant son propre fond opaque, la pastille doit
+                  vivre dans celui des deux cadres qui est devant. */}
+              {mode === '2d' && <HoverChip hover={hover} />}
 
               {!ready && (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -1280,7 +1299,9 @@ export default function SkinEditor() {
         <div
           ref={boxRef}
           onClick={() => { if (mode === '2d') setMode('3d') }}
-          style={frame}
+          // Damier plus large ici : derrière un personnage, un motif fin
+          // grésillerait pendant la rotation.
+          style={{ ...frame, ...checkerStyle(28) }}
           className={`absolute overflow-hidden transition-[border-color] ${
             mode === '2d'
               ? 'cursor-pointer rounded-lg border border-line hover:border-accent/50'
@@ -1293,6 +1314,7 @@ export default function SkinEditor() {
               mode === '3d' ? (tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair') : ''
             }`}
           />
+          {mode === '3d' && <HoverChip hover={hover} />}
         </div>
       </div>
 
@@ -1324,6 +1346,24 @@ function readSaved(account: string | null): string | null {
 }
 
 // ── Briques d'interface ──────────────────────────────────────────────────────
+
+/**
+ * Ce qu'on pointe, en pastille et seulement quand on pointe quelque chose.
+ *
+ * La nommer aide surtout dans la vue à plat, où rien ne dit quel rectangle est
+ * un bras. En 2D, les coins inutilisés de l'atlas n'appartiennent à aucune
+ * partie — on le dit plutôt que de nommer au hasard.
+ */
+function HoverChip({ hover }: { hover: { part: PartId | null; pixel: Pixel } | null }) {
+  const t = useT()
+  if (!hover) return null
+  return (
+    <p className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/55 px-2 py-0.5 font-mono text-[10.5px] tabular-nums text-txt-secondary">
+      {hover.part ? t(`skinEditor.part_${hover.part}`) : t('skinEditor.partNone')} · {hover.pixel.x},
+      {hover.pixel.y}
+    </p>
+  )
+}
 
 /**
  * Le découpage de l'atlas, posé par-dessus la vue 2D.
