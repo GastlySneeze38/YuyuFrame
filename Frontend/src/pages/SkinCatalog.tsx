@@ -9,7 +9,7 @@ import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { showError } from '@/stores/useErrorToast'
-import { bakeSkin } from '@/lib/skinBake'
+import { BAKE_HEIGHT, BAKE_VIEW, BAKE_WIDTH, bakeSkin } from '@/lib/skinBake'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
 
@@ -165,6 +165,17 @@ export default function SkinCatalog() {
 
   const [previews, setPreviews] = useState<Record<string, string | null>>({})
   const [baked, setBaked] = useState<Record<string, string>>({})
+
+  /**
+   * La case survolée, tenue ici et non dans chaque case.
+   *
+   * Chaque case gardait son propre état, et il suffisait qu'un `mouseleave`
+   * se perde — ce qui arrive en balayant vite la grille — pour qu'elle reste
+   * bloquée en survol. Plusieurs aperçus 3D vivaient alors en même temps,
+   * c'est-à-dire plusieurs contextes WebGL, exactement ce qu'on voulait
+   * éviter. Avec une seule valeur ici, il ne peut y en avoir qu'un.
+   */
+  const [hovered, setHovered] = useState<number | null>(null)
 
   const gridRef = useRef<HTMLDivElement>(null)
   const [tiling, setTiling] = useState<Tiling>({ columns: 4, rows: TARGET_ROWS, tileHeight: 160 })
@@ -403,7 +414,13 @@ export default function SkinCatalog() {
             onPickKind={(next) => resetFilters({ kind: kind === next ? null : next })}
           />
 
-          <div ref={gridRef} className="relative min-h-0 flex-1">
+          {/* Filet de sécurité : quitter la grille éteint le survol, même si
+              la case concernée n'a pas reçu son propre `mouseleave`. */}
+          <div
+            ref={gridRef}
+            onMouseLeave={() => setHovered(null)}
+            className="relative min-h-0 flex-1"
+          >
             <AnimatePresence mode="wait">
               {!visible ? (
                 <Layer key="loading">
@@ -440,6 +457,8 @@ export default function SkinCatalog() {
                       image={baked[skin.url] ?? null}
                       source={previews[skin.url] ?? null}
                       pending={!(skin.url in previews)}
+                      hovered={hovered === skin.id}
+                      onHover={setHovered}
                       onTry={() => trySkin(skin)}
                     />
                   ))}
@@ -649,6 +668,8 @@ function Tile({
   image,
   source,
   pending,
+  hovered,
+  onHover,
   onTry,
 }: {
   skin: CatalogSkin
@@ -658,33 +679,71 @@ function Tile({
   /** PNG du skin, pour la 3D vivante au survol. */
   source: string | null
   pending: boolean
+  hovered: boolean
+  onHover: (id: number | null) => void
   onTry: () => void
 }) {
   const t = useT()
-  const [hovered, setHovered] = useState(false)
   const [live, setLive] = useState(false)
+  /** La 3D a sa texture et peut remplacer l'image. */
+  const [liveReady, setLiveReady] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Rectangle qu'occupe réellement l'image cuite dans la case.
+   *
+   * L'image est en `object-contain` : son format (180×288) n'étant pas celui
+   * de la case, elle est centrée avec des marges. Donner au canevas toute la
+   * case le faisait donc rendre un personnage plus grand et décalé — d'où le
+   * saut au survol. On calcule ici le même rectangle pour les deux.
+   */
+  const [fit, setFit] = useState<{ width: number; height: number } | null>(null)
+
+  useEffect(() => {
+    const box = boxRef.current
+    if (!box) return
+    const measure = () => {
+      const rect = box.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      const scale = Math.min(rect.width / BAKE_WIDTH, rect.height / BAKE_HEIGHT)
+      setFit({ width: BAKE_WIDTH * scale, height: BAKE_HEIGHT * scale })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [])
 
   // La 3D vivante attend que le survol se confirme — voir HOVER_DELAY_MS.
   useEffect(() => {
-    if (!hovered || !source) { setLive(false); return }
+    if (!hovered || !source) {
+      setLive(false)
+      setLiveReady(false)
+      return
+    }
     const timer = window.setTimeout(() => setLive(true), HOVER_DELAY_MS)
     return () => window.clearTimeout(timer)
   }, [hovered, source])
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => onHover(skin.id)}
+      onMouseLeave={() => onHover(null)}
       style={{ height }}
       className={`group relative flex flex-col overflow-hidden rounded-xl border transition-colors ${
         hovered ? 'border-accent/50 bg-surface-2' : 'border-line bg-surface-1'
       }`}
     >
-      <div className="relative min-h-0 flex-1">
-        {live && source ? (
-          <LiveViewer source={source} slim={skin.variant === 'slim'} />
-        ) : image ? (
-          <img src={image} alt="" className="h-full w-full object-contain" draggable={false} />
+      <div ref={boxRef} className="relative min-h-0 flex-1">
+        {image ? (
+          <img
+            src={image}
+            alt=""
+            draggable={false}
+            className={`h-full w-full object-contain transition-opacity duration-150 ${
+              liveReady ? 'opacity-0' : 'opacity-100'
+            }`}
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             {pending ? (
@@ -692,6 +751,25 @@ function Tile({
             ) : (
               <span className="text-[11px] text-txt-muted">{t('skinCatalog.noPreview')}</span>
             )}
+          </div>
+        )}
+
+        {/* Fondu croisé entre les deux : l'image ne disparaît qu'une fois la
+            3D prête, et la 3D n'apparaît pas avant. Sans le premier, le
+            canevas resterait vide le temps du décodage ; sans le second,
+            l'image fixe se verrait par transparence derrière la 3D, qui a un
+            fond transparent et tourne. Même position et même pose, donc le
+            passage de l'une à l'autre ne se voit pas. */}
+        {live && source && fit && (
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ width: fit.width, height: fit.height }}
+          >
+            <LiveViewer
+              source={source}
+              slim={skin.variant === 'slim'}
+              onReady={() => setLiveReady(true)}
+            />
           </div>
         )}
       </div>
@@ -738,13 +816,24 @@ function compact(value: number): string {
  * WebGL, le démonter le rend. Comme une seule case est survolée à la fois, il
  * n'y en a jamais qu'un — c'est tout l'intérêt des rendus cuits à côté.
  */
-function LiveViewer({ source, slim }: { source: string; slim: boolean }) {
+function LiveViewer({
+  source,
+  slim,
+  onReady,
+}: {
+  source: string
+  slim: boolean
+  /** Prévient la case que la 3D peut prendre la place de l'image. */
+  onReady: () => void
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     if (!canvasRef.current || !boxRef.current) return
     const { width, height } = boxRef.current.getBoundingClientRect()
+    let disposed = false
 
     // Même raison qu'ailleurs : `skinview3d` crée son contexte sans `alpha`,
     // et l'effacement peindrait du noir. On impose nos attributs en créant le
@@ -754,23 +843,43 @@ function LiveViewer({ source, slim }: { source: string; slim: boolean }) {
 
     const viewer = new SkinViewer({
       canvas: canvasRef.current,
-      width: width || 100,
-      height: height || MIN_TILE_HEIGHT,
+      width: width || BAKE_WIDTH,
+      height: height || BAKE_HEIGHT,
     })
     viewer.background = null
+    // Exactement la pose du rendu cuit, pour que la 3D prenne la place de
+    // l'image sans que le personnage bouge. La rotation et l'animation
+    // partent de là.
+    viewer.zoom = BAKE_VIEW.zoom
+    viewer.fov = BAKE_VIEW.fov
+    viewer.playerWrapper.rotation.y = BAKE_VIEW.rotationY
     viewer.autoRotate = true
     viewer.autoRotateSpeed = 1.4
-    viewer.zoom = 0.88
-    viewer.fov = 42
     viewer.animation = new WalkingAnimation()
     viewer.animation.speed = 0.5
-    ;(viewer.loadSkin(source, { model: slim ? 'slim' : 'default' }) as Promise<void> | void)?.catch?.(() => {})
+    ;(viewer.loadSkin(source, { model: slim ? 'slim' : 'default' }) as Promise<void> | void)
+      ?.then?.(() => {
+        if (disposed) return
+        setReady(true)
+        onReady()
+      })
+      ?.catch?.(() => {})
 
-    return () => viewer.dispose()
+    return () => {
+      disposed = true
+      viewer.dispose()
+    }
+    // `onReady` est volontairement hors des dépendances : une nouvelle
+    // référence à chaque rendu de la case relancerait le viewer, donc
+    // recréerait un contexte WebGL, à chaque image de l'animation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, slim])
 
   return (
-    <div ref={boxRef} className="h-full w-full">
+    <div
+      ref={boxRef}
+      className={`h-full w-full transition-opacity duration-150 ${ready ? 'opacity-100' : 'opacity-0'}`}
+    >
       <canvas ref={canvasRef} className="h-full w-full" />
     </div>
   )

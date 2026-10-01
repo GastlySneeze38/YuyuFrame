@@ -33,8 +33,24 @@ import { SkinViewer } from 'skinview3d'
 
 /** Taille du rendu cuit. Généreuse : l'image est réduite par la grille, et
  *  elle sert aussi d'agrandissement quand une case est mise en avant. */
-const BAKE_WIDTH = 180
-const BAKE_HEIGHT = 288
+export const BAKE_WIDTH = 180
+export const BAKE_HEIGHT = 288
+
+/**
+ * Réglages de caméra du rendu cuit.
+ *
+ * Exportés parce que la 3D vivante au survol doit les reprendre **à
+ * l'identique** : tant que les deux se configuraient chacun de leur côté, le
+ * personnage sautait d'une position à l'autre au survol. Une seule source,
+ * une seule pose de départ.
+ */
+export const BAKE_VIEW = {
+  zoom: 0.88,
+  fov: 42,
+  /** Trois quarts plutôt que de face : on voit le profil et le côté du corps,
+   *  là où la plupart des skins mettent ce qui les distingue. */
+  rotationY: -Math.PI / 7,
+} as const
 
 /**
  * Plafond du cache.
@@ -70,11 +86,9 @@ function ensureViewer(): SkinViewer {
     renderPaused: true,
   })
   viewer.background = null
-  viewer.zoom = 0.88
-  viewer.fov = 42
-  // Trois quarts plutôt que de face : on voit le profil et le côté du corps,
-  // là où la plupart des skins mettent ce qui les distingue.
-  viewer.playerWrapper.rotation.y = -Math.PI / 7
+  viewer.zoom = BAKE_VIEW.zoom
+  viewer.fov = BAKE_VIEW.fov
+  viewer.playerWrapper.rotation.y = BAKE_VIEW.rotationY
   return viewer
 }
 
