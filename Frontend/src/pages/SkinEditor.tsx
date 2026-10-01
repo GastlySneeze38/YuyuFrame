@@ -178,6 +178,9 @@ export default function SkinEditor() {
   const [color, setColor] = useState('#4b3fcf')
   const [brush, setBrush] = useState(1)
   const [layer, setLayer] = useState<Layer>('inner')
+  /** Les deux couches se masquent indépendamment : travailler la surcouche
+   *  demande souvent d'ôter le corps, exactement comme l'inverse. */
+  const [showInner, setShowInner] = useState(true)
   const [showOuter, setShowOuter] = useState(true)
   const [variant, setVariant] = useState<SkinVariant>('classic')
 
@@ -236,6 +239,10 @@ export default function SkinEditor() {
   brushRef.current = brush
   const layerRef = useRef(layer)
   layerRef.current = layer
+  const showInnerRef = useRef(showInner)
+  showInnerRef.current = showInner
+  const showOuterRef = useRef(showOuter)
+  showOuterRef.current = showOuter
 
   // ── Écriture sur la texture ───────────────────────────────────────────────
 
@@ -283,6 +290,15 @@ export default function SkinEditor() {
       if (!ctx) continue
       ctx.clearRect(0, 0, SKIN_SIZE, SKIN_SIZE)
       ctx.drawImage(source, 0, 0)
+      // Masquer une couche vaut aussi pour le fichier : sinon on la cacherait
+      // sur le personnage et elle resterait là, à plat, juste à côté. Seule la
+      // copie est gommée — la texture, elle, garde tout.
+      for (const region of REGIONS) {
+        const visible = region.layer === 'inner' ? showInnerRef.current : showOuterRef.current
+        if (visible) continue
+        const { x0, y0, x1, y1 } = region.rect
+        ctx.clearRect(x0, y0, x1 - x0, y1 - y0)
+      }
     }
   }, [])
 
@@ -424,6 +440,27 @@ export default function SkinEditor() {
 
   const undo = useCallback(() => goTo(atRef.current - 1), [goTo])
   const redo = useCallback(() => goTo(atRef.current + 1), [goTo])
+
+  /**
+   * Ne garder que l'étape où l'on est.
+   *
+   * Le dessin ne bouge pas — c'est déjà celui qu'on voit — donc rien à
+   * redessiner ni à réenregistrer : on ne jette que le chemin qui y mène.
+   * Utile quand quarante étapes d'essais encombrent la liste et qu'on repart
+   * du résultat.
+   */
+  const clearHistory = useCallback(() => {
+    const states = statesRef.current
+    const metas = metasRef.current
+    const index = atRef.current
+    if (states.length <= 1 || !states[index]) return
+
+    statesRef.current = [states[index]]
+    metasRef.current = [metas[index]]
+    atRef.current = 0
+    setHistory(metasRef.current)
+    setAt(0)
+  }, [])
 
   // ── Lancer de rayon ───────────────────────────────────────────────────────
 
@@ -947,13 +984,18 @@ export default function SkinEditor() {
 
   useEffect(() => {
     const viewer = viewerRef.current
-    if (viewer && ready) viewer.playerObject.skin.setOuterLayerVisible(showOuter)
-  }, [showOuter, ready])
+    if (!viewer || !ready) return
+    viewer.playerObject.skin.setInnerLayerVisible(showInner)
+    viewer.playerObject.skin.setOuterLayerVisible(showOuter)
+    // La copie à plat suit la même règle que le personnage.
+    commit()
+  }, [showInner, showOuter, ready, commit])
 
-  // Choisir la surcouche la rend forcément visible : peindre sur ce qu'on a
+  // Choisir une couche la rend forcément visible : peindre sur ce qu'on a
   // caché n'aurait aucun sens.
   useEffect(() => {
     if (layer === 'outer') setShowOuter(true)
+    else setShowInner(true)
   }, [layer])
 
   // L'état de départ est une étape comme les autres : sans elle, on ne
@@ -1166,14 +1208,16 @@ export default function SkinEditor() {
                   style={{ width: miniSize, height: miniSize }}
                   className="relative overflow-hidden rounded-lg border border-line"
                 >
+                  <div className="absolute inset-0" style={checkerForTexture(miniSize)} />
+                  {mode === '3d' && <RegionGrid active={layer} pass="under" />}
                   <canvas
                     ref={miniRef}
                     width={SKIN_SIZE}
                     height={SKIN_SIZE}
-                    style={{ imageRendering: 'pixelated', ...checkerForTexture(miniSize) }}
+                    style={{ imageRendering: 'pixelated' }}
                     className={`absolute inset-0 h-full w-full ${mode === '2d' ? 'invisible' : ''}`}
                   />
-                  {mode === '3d' && <RegionGrid />}
+                  {mode === '3d' && <RegionGrid active={layer} pass="over" />}
                 </div>
               </div>
             </button>
@@ -1186,19 +1230,31 @@ export default function SkinEditor() {
             >
               {/* Vue 2D : le fichier lui-même, agrandi au pixel. La 3D, elle,
                   vient se poser par-dessus ce cadre depuis l'extérieur. */}
-              <div
-                ref={flatBoxRef}
-                className={mode === '2d' ? 'absolute inset-0 flex items-center justify-center p-4' : 'hidden'}
-              >
-                <div className="relative" style={{ width: flatSize, height: flatSize }}>
-                  <canvas
-                    ref={flatRef}
-                    width={SKIN_SIZE}
-                    height={SKIN_SIZE}
-                    style={{ imageRendering: 'pixelated', ...checkerForTexture(flatSize) }}
-                    className={`h-full w-full rounded-lg ${tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair'}`}
-                  />
-                  <RegionGrid />
+              {/* Le rembourrage est sur le cadre extérieur et la mesure sur
+                  l'intérieur : `getBoundingClientRect` rend la boîte AVEC son
+                  rembourrage, donc mesurer ici donnait un carré trop grand qui
+                  débordait du cadre — très visible en plein écran, où la zone
+                  est bien plus haute que large. */}
+              <div className={mode === '2d' ? 'absolute inset-0 p-4' : 'hidden'}>
+                <div ref={flatBoxRef} className="flex h-full w-full items-center justify-center">
+                  {/* Quatre plans : damier, teinte de la couche active,
+                      dessin, puis contours. Le damier quitte le canevas pour
+                      que la teinte puisse se glisser entre les deux. */}
+                  <div className="relative" style={{ width: flatSize, height: flatSize }}>
+                    <div
+                      className="absolute inset-0 rounded-lg"
+                      style={checkerForTexture(flatSize)}
+                    />
+                    <RegionGrid active={layer} pass="under" />
+                    <canvas
+                      ref={flatRef}
+                      width={SKIN_SIZE}
+                      height={SKIN_SIZE}
+                      style={{ imageRendering: 'pixelated' }}
+                      className={`absolute inset-0 h-full w-full rounded-lg ${tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair'}`}
+                    />
+                    <RegionGrid active={layer} pass="over" />
+                  </div>
                 </div>
               </div>
 
@@ -1225,13 +1281,23 @@ export default function SkinEditor() {
                 value={layer}
                 onChange={(next) => setLayer(next as Layer)}
               />
-              <button
-                onClick={() => setShowOuter(!showOuter)}
-                disabled={layer === 'outer'}
-                className="mt-2 h-9 w-full rounded-lg border border-line bg-surface-2 px-3 text-[12.5px] text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {showOuter ? t('skinEditor.hideOverlay') : t('skinEditor.showOverlay')}
-              </button>
+              {/* Visibilité, indépendante du choix de ce qu'on peint. Celle de
+                  la couche active est verrouillée : la masquer reviendrait à
+                  peindre à l'aveugle. */}
+              <div className="mt-1.5 flex gap-1.5">
+                <EyeButton
+                  label={t('skinEditor.layerInner')}
+                  shown={showInner}
+                  disabled={layer === 'inner'}
+                  onClick={() => setShowInner(!showInner)}
+                />
+                <EyeButton
+                  label={t('skinEditor.layerOuter')}
+                  shown={showOuter}
+                  disabled={layer === 'outer'}
+                  onClick={() => setShowOuter(!showOuter)}
+                />
+              </div>
             </Card>
 
             <Card title={t('skinEditor.model')}>
@@ -1275,6 +1341,12 @@ export default function SkinEditor() {
                 <SmallButton onClick={() => setShowSteps(true)} disabled={history.length === 0}>
                   {t('skinEditor.viewSteps')}
                 </SmallButton>
+                <ConfirmButton
+                  label={t('skinEditor.clearHistory')}
+                  confirmLabel={t('skinEditor.clearHistoryConfirm')}
+                  disabled={history.length <= 1}
+                  onConfirm={clearHistory}
+                />
                 <SmallButton onClick={() => void reset('blank')}>{t('skinEditor.resetBlank')}</SmallButton>
                 <SmallButton onClick={() => void reset('account')} disabled={!account}>
                   {t('skinEditor.resetAccount')}
@@ -1377,26 +1449,50 @@ function HoverChip({ hover }: { hover: { part: PartId | null; pixel: Pixel } | n
  * taille d'affichage, et `pointer-events-none` pour ne jamais intercepter un
  * coup de pinceau.
  */
-function RegionGrid() {
+/**
+ * En deux passes, de part et d'autre du dessin.
+ *
+ * `under` teinte la couche qu'on peint. Elle passe **sous** le canevas, donc
+ * elle ne colore que les pixels encore vides : poser cette teinte au-dessus
+ * délavait le dessin, ce qui est exactement l'inverse du but — on veut
+ * repérer la zone, pas l'altérer.
+ *
+ * `over` garde ce qui doit rester visible par-dessus : le voile qui estompe
+ * l'autre couche (il n'estomperait rien s'il passait dessous) et tous les
+ * contours.
+ */
+function RegionGrid({ active, pass }: { active: Layer; pass: 'under' | 'over' }) {
   return (
     <svg
       viewBox={`0 0 ${SKIN_SIZE} ${SKIN_SIZE}`}
       className="pointer-events-none absolute inset-0 h-full w-full"
       aria-hidden
     >
-      {REGIONS.map((region) => (
-        <rect
-          key={`${region.part}-${region.layer}`}
-          x={region.rect.x0}
-          y={region.rect.y0}
-          width={region.rect.x1 - region.rect.x0}
-          height={region.rect.y1 - region.rect.y0}
-          fill="none"
-          stroke="rgba(255,255,255,0.22)"
-          strokeWidth={0.3}
-          strokeDasharray={region.layer === 'outer' ? '1 1' : undefined}
-        />
-      ))}
+      {REGIONS.map((region) => {
+        const mine = region.layer === active
+        if (pass === 'under' && !mine) return null
+        const box = {
+          x: region.rect.x0,
+          y: region.rect.y0,
+          width: region.rect.x1 - region.rect.x0,
+          height: region.rect.y1 - region.rect.y0,
+        }
+        const key = `${region.part}-${region.layer}`
+
+        if (pass === 'under') {
+          return <rect key={key} {...box} fill="rgba(60,50,170,0.30)" />
+        }
+        return (
+          <rect
+            key={key}
+            {...box}
+            fill={mine ? 'none' : 'rgba(0,0,0,0.42)'}
+            stroke={mine ? 'rgba(129,140,248,0.6)' : 'rgba(255,255,255,0.16)'}
+            strokeWidth={mine ? 0.4 : 0.25}
+            strokeDasharray={region.layer === 'outer' ? '1 1' : undefined}
+          />
+        )
+      })}
     </svg>
   )
 }
@@ -1630,6 +1726,102 @@ function StepCard({
  * libre ; en ligne, il le partage en largeur. Une hauteur fixe annulerait le
  * premier cas, et c'est ce qui laissait des commandes tassées sous un vide.
  */
+/** Bascule de visibilité d'une couche : l'œil dit l'état, le libellé dit de
+ *  quoi on parle. */
+function EyeButton({
+  label,
+  shown,
+  disabled,
+  onClick,
+}: {
+  label: string
+  shown: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border px-1.5 text-[11.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+        shown
+          ? 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+          : 'border-line bg-surface-2 text-txt-muted hover:border-line-strong'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0">
+        {shown ? (
+          <>
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+            <circle cx="12" cy="12" r="3" />
+          </>
+        ) : (
+          <>
+            <path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 2 11s3.5 7 10 7a9 9 0 0 0 5.4-1.6" />
+            <path d="m2 2 20 20" />
+          </>
+        )}
+      </svg>
+      <span className="truncate">{label}</span>
+    </button>
+  )
+}
+
+/**
+ * Bouton qui demande confirmation sur lui-même.
+ *
+ * Effacer l'historique ne touche pas au dessin, mais ne se rattrape pas : il
+ * faut un garde-fou. Une modale serait disproportionnée pour ça — le bouton se
+ * retourne et attend un second clic, puis revient tout seul si on le laisse.
+ */
+function ConfirmButton({
+  label,
+  confirmLabel,
+  disabled,
+  onConfirm,
+}: {
+  label: string
+  confirmLabel: string
+  disabled?: boolean
+  onConfirm: () => void
+}) {
+  const [asking, setAsking] = useState(false)
+
+  useEffect(() => {
+    if (!asking) return
+    const timer = window.setTimeout(() => setAsking(false), 4000)
+    return () => window.clearTimeout(timer)
+  }, [asking])
+
+  // Une fois désactivé — plus rien à effacer, par exemple — la question n'a
+  // plus lieu d'être.
+  useEffect(() => {
+    if (disabled) setAsking(false)
+  }, [disabled])
+
+  return (
+    <button
+      onClick={() => {
+        if (asking) {
+          onConfirm()
+          setAsking(false)
+        } else {
+          setAsking(true)
+        }
+      }}
+      disabled={disabled}
+      className={`min-h-[36px] max-h-[52px] flex-1 rounded-lg border px-2 text-[12.5px] leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+        asking
+          ? 'border-danger/50 bg-danger/15 text-danger'
+          : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+      }`}
+    >
+      {asking ? confirmLabel : label}
+    </button>
+  )
+}
+
 function SmallButton({
   onClick,
   disabled,
