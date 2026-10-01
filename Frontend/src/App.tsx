@@ -51,6 +51,7 @@ const PAGE_IMPORTS = [
   () => import('@/pages/JvmProfiles'),
   () => import('@/pages/JvmProfileEditor'),
   () => import('@/pages/Skins'),
+  () => import('@/pages/SkinCatalog'),
 ]
 
 /** Parties (sur trente jours) à partir desquelles on ose demander un avis. */
@@ -85,6 +86,7 @@ const Server = lazy(() => import('@/pages/Server'))
 const JvmProfiles = lazy(() => import('@/pages/JvmProfiles'))
 const JvmProfileEditor = lazy(() => import('@/pages/JvmProfileEditor'))
 const Skins = lazy(() => import('@/pages/Skins'))
+const SkinCatalog = lazy(() => import('@/pages/SkinCatalog'))
 // Atelier des modales. Le `import()` est DANS la branche de développement,
 // pas seulement la route : écrit dehors, Vite voyait un module importable et
 // en sortait un morceau de JS livré à tout le monde — mort, mais livré.
@@ -529,6 +531,9 @@ export default function App() {
                 compte — Microsoft et hors ligne se gèrent au même endroit,
                 seule l'action d'« appliquer » diffère (voir Skins.tsx). */}
             <Route path="/skins" element={<Skins />} />
+            {/* Le catalogue ne modifie jamais un compte : il désigne un skin
+                et renvoie à /skins avec lui en main, où l'on confirme. */}
+            <Route path="/skins/catalog" element={<SkinCatalog />} />
             <Route path="/support" element={<Support />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/stats" element={<Stats />} />

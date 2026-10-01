@@ -56,7 +56,7 @@ const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n
 /// Les délais ne sont pas là pour accélérer mais pour ne pas attendre
 /// indéfiniment : sans eux, un hébergeur qui ne répond jamais laisse l'aperçu
 /// en suspens jusqu'à ce que l'utilisateur quitte l'écran.
-fn http() -> &'static reqwest::Client {
+pub(super) fn http() -> &'static reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT.get_or_init(|| {
         reqwest::Client::builder()
@@ -237,7 +237,7 @@ fn cache_path(url: &str) -> PathBuf {
 /// montrer le skin même hors ligne. Il est indexé par URL : une URL dont le
 /// contenu change derrière notre dos gardera l'ancien aperçu, ce qui est
 /// acceptable pour un aperçu — la référence enregistrée, elle, reste juste.
-async fn fetch_preview(url: &str) -> Result<String, String> {
+pub(super) async fn fetch_preview(url: &str) -> Result<String, String> {
     check_public_url(url)?;
     let path = cache_path(url);
     if let Ok(bytes) = tokio::fs::read(&path).await {

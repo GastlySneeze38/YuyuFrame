@@ -165,6 +165,31 @@ export interface SkinHistoryEntry {
   data_uri: string | null
 }
 
+/**
+ * Entrée du catalogue Ely.by — voir `commands/account/catalog.rs`.
+ *
+ * `url` est une adresse publique et `variant` notre modèle : une entrée du
+ * catalogue est donc déjà une référence applicable, sans conversion. L'aperçu
+ * n'y figure pas, il se demande à part pour les seules cases affichées.
+ */
+export interface CatalogSkin {
+  id: number
+  url: string
+  variant: SkinVariant
+  /** Couleur dominante annoncée par Ely.by, souvent absente. */
+  color: string | null
+  tags: string[]
+  wearers: number
+  likes: number
+  views: number
+}
+
+export interface CatalogPage {
+  items: CatalogSkin[]
+  page: number
+  last_page: number
+}
+
 /** Skin trouvé chez Mojang, avec son aperçu déjà téléchargé. */
 export interface ResolvedSkin {
   username: string
@@ -403,6 +428,18 @@ export const api = {
     current: (uuid: string) => invoke<SkinRef | null>('skin_current', { uuid }),
     /** Data URI du skin enregistré — `null` si aucun, ou aperçu indisponible. */
     preview: (uuid: string) => invoke<string | null>('skin_preview_for_account', { uuid }),
+
+    /**
+     * Catalogue Ely.by. Les étiquettes tiennent lieu de recherche : les skins
+     * n'ont pas de titre. 40 entrées par page, taille imposée par Ely.by.
+     */
+    catalog: (page: number, tags: string[], color: string | null, slimOnly: boolean) =>
+      invoke<CatalogPage>('skin_catalog_browse', { page, tags, color, slimOnly }),
+    /**
+     * Aperçus des seules cases affichées, dans l'ordre demandé. `null` pour
+     * celles dont l'image n'a pas pu être obtenue.
+     */
+    catalogPreviews: (urls: string[]) => invoke<(string | null)[]>('skin_catalog_previews', { urls }),
   },
 
   deepLink: {

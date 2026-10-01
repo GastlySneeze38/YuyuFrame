@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
@@ -60,6 +60,8 @@ interface Candidate {
   fromPlayer?: string
   /** Vrai quand il sort de l'historique : le libellé d'aperçu le dit. */
   fromHistory?: boolean
+  /** Vrai quand il arrive du catalogue (`?try=`), même raison. */
+  fromCatalog?: boolean
 }
 
 /** Action engageante en attente de confirmation — voir `ConfirmModal`. */
@@ -81,6 +83,7 @@ const defaultSkinUrl = (uuid: string) => `https://mc-heads.net/skin/${uuid}`
 
 export default function Skins() {
   const t = useT()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [accounts, setAccounts] = useState<McAccountInfo[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
@@ -171,6 +174,46 @@ export default function Skins() {
 
     return () => { cancelled = true }
   }, [account?.mc_uuid, account?.is_offline, loadHistory])
+
+  // Skin rapporté du catalogue (`?try=`). Il arrive comme CANDIDAT, jamais
+  // appliqué : le chemin est exactement celui d'une URL collée à la main, avec
+  // la même confirmation. Le modèle vient du catalogue, qui le connaît, et non
+  // de la vérification, qui ne peut pas le deviner d'un PNG.
+  //
+  // L'effet attend qu'un compte soit choisi, parce que celui d'au-dessus vide
+  // le candidat à chaque changement de compte — poser le nôtre avant se ferait
+  // effacer aussitôt. Le garde-fou sert à ne le faire qu'une fois.
+  const tried = useRef(false)
+  useEffect(() => {
+    if (!account || tried.current) return
+    const url = params.get('try')
+    if (!url) return
+    tried.current = true
+
+    const variant: SkinVariant = params.get('variant') === 'slim' ? 'slim' : 'classic'
+    setTab('url')
+    setUrl(url)
+    api.skin.checkUrl(url)
+      .then((checked) => {
+        setCandidate({
+          kind: 'url',
+          source: checked.source,
+          variant,
+          dataUri: checked.data_uri,
+          origin: 'catalog',
+          fromCatalog: true,
+        })
+        setJustApplied(false)
+      })
+      .catch(showError)
+      .finally(() => {
+        // L'adresse ne reste pas dans l'URL : recharger l'écran ne doit pas
+        // reproposer un skin qu'on a peut-être déjà écarté.
+        const kept = new URLSearchParams()
+        if (account.mc_uuid) kept.set('account', account.mc_uuid)
+        setParams(kept, { replace: true })
+      })
+  }, [account?.mc_uuid])
 
   const shown = candidate ?? (current && currentUri ? { ...current, dataUri: currentUri } : null)
 
@@ -401,6 +444,31 @@ export default function Skins() {
                   )}
                 </div>
 
+                {/* Entre les deux : les trois sources supposent qu'on sait
+                    déjà quel skin on veut, le catalogue est l'écran d'avant —
+                    celui où l'on regarde ce qui existe. Le compte choisi le
+                    suit, pour revenir ici au même endroit. */}
+                <button
+                  onClick={() => navigate(account ? `/skins/catalog?account=${encodeURIComponent(account.mc_uuid)}` : '/skins/catalog')}
+                  className="group flex items-center gap-3 rounded-2xl border border-line bg-surface-1 p-4 text-left transition-colors hover:border-accent/40 hover:bg-surface-2"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent-text">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-semibold">{t('skinCatalog.openButton')}</p>
+                    <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-muted">{t('skinCatalog.openHint')}</p>
+                  </div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-txt-muted transition-colors group-hover:text-txt-primary">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+
                 <PosePicker />
               </div>
 
@@ -412,9 +480,11 @@ export default function Skins() {
                   candidate
                     ? candidate.fromHistory
                       ? t('skins.previewFromHistory')
-                      : candidate.fromPlayer
-                        ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
-                        : t('skins.previewPending')
+                      : candidate.fromCatalog
+                        ? t('skins.previewFromCatalog')
+                        : candidate.fromPlayer
+                          ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
+                          : t('skins.previewPending')
                     : current
                       ? t('skins.previewCurrent')
                       : t('skins.previewNone')
@@ -812,11 +882,13 @@ function HostingModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** Libellé lisible de l'origine (`player:Notch`, `url`, `file`, `mojang`). */
+/** Libellé lisible de l'origine (`player:Notch`, `url`, `file`, `mojang`,
+ *  `catalog`). */
 function originLabel(origin: string, t: (k: string, v?: Record<string, string | number>) => string): string {
   if (origin.startsWith('player:')) return t('skins.originPlayer', { name: origin.slice('player:'.length) })
   if (origin === 'mojang') return t('skins.originMojang')
   if (origin === 'file') return t('skins.originFile')
+  if (origin === 'catalog') return t('skins.originCatalog')
   return t('skins.originUrl')
 }
 

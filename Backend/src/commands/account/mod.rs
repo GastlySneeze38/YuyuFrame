@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod microsoft;
 pub mod minecraft;
 pub mod offline;

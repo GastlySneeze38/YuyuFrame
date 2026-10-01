@@ -373,6 +373,8 @@ pub fn run() {
             commands::account::skin::skin_remove,
             commands::account::skin::skin_current,
             commands::account::skin::skin_preview_for_account,
+            commands::account::catalog::skin_catalog_browse,
+            commands::account::catalog::skin_catalog_previews,
             commands::system::versions::list_versions,
             commands::launch::launch_game,
             commands::launch::cancel_launch,
