@@ -995,6 +995,7 @@ export const fr = {
     previewFromPlayer: 'Skin de {{name}}, pas encore appliqué',
     previewFromHistory: 'Skin de ton historique, pas encore remis',
     poses: 'Position',
+    spin: 'Rotation automatique',
     poseStanding: 'Debout',
     poseWalking: 'Marche',
     poseRunning: 'Course',

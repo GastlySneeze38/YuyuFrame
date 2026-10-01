@@ -96,6 +96,7 @@ export default function Skins() {
   /** La marche par défaut : un personnage qui bouge se lit mieux qu'un
    *  mannequin, et c'est la pose que l'aperçu jouait déjà avant d'être réglable. */
   const [pose, setPose] = useState<PoseId>('walking')
+  const [spin, setSpin] = useState(false)
 
   const [current, setCurrent] = useState<SkinRef | null>(null)
   const [currentUri, setCurrentUri] = useState<string | null>(null)
@@ -445,8 +446,13 @@ export default function Skins() {
               {/* L'import ouvre la lecture : on arrive ici pour changer de
                   skin, donc on commence par le choisir. L'aperçu et
                   l'historique — ce qu'on porte et ce qu'on a porté — restent
-                  côte à côte à sa droite. */}
-              <div className="flex min-h-0 flex-col gap-4">
+                  côte à côte à sa droite.
+
+                  `overflow-y-auto` en dernier recours : plus rien ne s'étire
+                  dans cette colonne, donc à taille normale rien ne défile,
+                  mais sur une fenêtre extrême mieux vaut défiler que voir une
+                  carte déborder de son cadre. */}
+              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
                 {/* La méthode passe par un menu déroulant : trois onglets côte
                     à côte réclamaient toute la largeur pour un choix qu'on fait
                     une fois, et chaque option peut ici porter sa description. */}
@@ -523,7 +529,7 @@ export default function Skins() {
                   </svg>
                 </button>
 
-                <PosePicker value={pose} onChange={setPose} />
+                <PosePicker value={pose} onChange={setPose} spin={spin} onSpin={setSpin} />
               </div>
 
               <SkinPreview
@@ -531,6 +537,7 @@ export default function Skins() {
                 fallbackUrl={account ? defaultSkinUrl(account.mc_uuid) : null}
                 variant={shown?.variant ?? 'classic'}
                 pose={pose}
+                spin={spin}
                 label={
                   candidate
                     ? candidate.fromHistory
@@ -740,33 +747,63 @@ function ConfirmModal({
  * Positions du personnage. Les poses elles-mêmes vivent dans
  * `lib/skinPoses.ts`, partagées avec l'éditeur — ici on ne fait que choisir.
  */
-function PosePicker({ value, onChange }: { value: PoseId; onChange: (pose: PoseId) => void }) {
+function PosePicker({
+  value,
+  onChange,
+  spin,
+  onSpin,
+}: {
+  value: PoseId
+  onChange: (pose: PoseId) => void
+  spin: boolean
+  onSpin: (spin: boolean) => void
+}) {
   const t = useT()
   return (
-    // `flex-1` : cette carte absorbe la hauteur que l'import laisse libre, et
-    // ses boutons s'étirent avec elle. C'est ce qui évite deux cartes tassées
-    // en haut d'une colonne vide aux deux tiers.
+    // La carte descend jusqu'en bas pour que la colonne s'arrête à la même
+    // hauteur que les deux autres — mais ses boutons, eux, gardent leur
+    // taille et se centrent dans ce qui reste. C'est leur étirement qui les
+    // faisait déborder du cadre quand la place manquait.
     <div className="flex min-h-0 flex-1 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
-      <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
+        {/* Éteinte par défaut : une rotation continue aide à faire le tour du
+            personnage, mais gêne dès qu'on veut regarder un détail — c'est à
+            l'utilisateur de la lancer, pas à l'écran de l'imposer. */}
+        <button
+          onClick={() => onSpin(!spin)}
+          title={t('skins.spin')}
+          aria-label={t('skins.spin')}
+          aria-pressed={spin}
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+            spin
+              ? 'border-accent/50 bg-accent/20 text-txt-primary'
+              : 'border-line bg-surface-2 text-txt-muted hover:border-line-strong hover:text-txt-primary'
+          }`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v5h-5" />
+          </svg>
+        </button>
+      </div>
 
-      {/* En lignes plutôt qu'en grille 3 × 2 : étirés en hauteur, six boutons
-          devenaient des pavés de 100 px pour un mot, hors de proportion avec
-          ce qu'ils font. Une liste occupe la même hauteur sans qu'aucun
-          élément n'ait l'air surdimensionné. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-        {POSES.map((pose) => (
-          <button
-            key={pose}
-            onClick={() => onChange(pose)}
-            className={`flex min-h-[36px] flex-1 items-center rounded-lg border px-3.5 text-[12.5px] font-medium transition-colors ${
-              value === pose
-                ? 'border-accent/50 bg-accent/20 text-txt-primary'
-                : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
-            }`}
-          >
-            {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
-          </button>
-        ))}
+      <div className="flex min-h-0 flex-1 items-center">
+        <div className="grid w-full grid-cols-2 gap-1.5">
+          {POSES.map((pose) => (
+            <button
+              key={pose}
+              onClick={() => onChange(pose)}
+              className={`flex h-9 items-center justify-center rounded-lg border px-2 text-[12.5px] font-medium transition-colors ${
+                value === pose
+                  ? 'border-accent/50 bg-accent/20 text-txt-primary'
+                  : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+              }`}
+            >
+              {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -1522,12 +1559,15 @@ function SkinPreview({
   footer,
   pending,
   pose,
+  spin,
 }: {
   dataUri: string | null
   /** Apparence par défaut du compte, montrée quand aucun skin n'est choisi. */
   fallbackUrl: string | null
   variant: SkinVariant
   pose: PoseId
+  /** Rotation continue du personnage sur lui-même. */
+  spin: boolean
   label: string
   /** Deuxième ligne : d'où vient le skin porté. */
   note: string | null
@@ -1574,7 +1614,8 @@ function SkinPreview({
       height: height || 360,
     })
     viewer.background = null
-    viewer.autoRotate = true
+    // La rotation est pilotée par son propre effet, et part éteinte.
+    viewer.autoRotate = false
     viewer.autoRotateSpeed = 0.6
     viewer.zoom = 0.82
     viewer.fov = 55
@@ -1600,6 +1641,10 @@ function SkinPreview({
   useEffect(() => {
     if (viewerRef.current) applyPose(viewerRef.current, pose, false)
   }, [pose])
+
+  useEffect(() => {
+    if (viewerRef.current) viewerRef.current.autoRotate = spin
+  }, [spin])
 
   return (
     <div

@@ -993,6 +993,7 @@ export const pl: TranslationSchema = {
     previewFromPlayer: 'Skórka gracza {{name}}, jeszcze nie zastosowana',
     previewFromHistory: 'Skórka z twojej historii, jeszcze nie przywrócona',
     poses: 'Poza',
+    spin: 'Automatyczny obrót',
     poseStanding: 'Stanie',
     poseWalking: 'Chód',
     poseRunning: 'Bieg',

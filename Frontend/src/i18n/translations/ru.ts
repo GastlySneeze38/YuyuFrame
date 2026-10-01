@@ -993,6 +993,7 @@ export const ru: TranslationSchema = {
     previewFromPlayer: 'Скин игрока {{name}}, ещё не применён',
     previewFromHistory: 'Скин из вашей истории, ещё не возвращён',
     poses: 'Поза',
+    spin: 'Автоповорот',
     poseStanding: 'Стоя',
     poseWalking: 'Ходьба',
     poseRunning: 'Бег',

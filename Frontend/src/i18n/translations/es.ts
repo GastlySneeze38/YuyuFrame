@@ -993,6 +993,7 @@ export const es: TranslationSchema = {
     previewFromPlayer: 'Skin de {{name}}, aún sin aplicar',
     previewFromHistory: 'Skin de tu historial, aún sin volver a poner',
     poses: 'Postura',
+    spin: 'Rotación automática',
     poseStanding: 'De pie',
     poseWalking: 'Andando',
     poseRunning: 'Corriendo',

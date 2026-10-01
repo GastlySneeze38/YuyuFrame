@@ -993,6 +993,7 @@ export const it: TranslationSchema = {
     previewFromPlayer: 'Skin di {{name}}, non ancora applicata',
     previewFromHistory: 'Skin dalla tua cronologia, non ancora rimessa',
     poses: 'Posa',
+    spin: 'Rotazione automatica',
     poseStanding: 'In piedi',
     poseWalking: 'Cammina',
     poseRunning: 'Corsa',
