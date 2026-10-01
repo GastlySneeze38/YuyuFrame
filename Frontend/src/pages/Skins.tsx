@@ -45,9 +45,17 @@ import { useT } from '@/i18n'
  * L'écran tenait sur deux colonnes hautes, et l'historique passait sous la
  * ligne de flottaison — on ne savait qu'il existait qu'en faisant défiler.
  * Désormais aperçu · actions · historique tiennent côte à côte, et seule la
- * liste d'historique défile dans son propre cadre quand elle déborde. Le
- * défilement de la page reste possible pour les toutes petites fenêtres, mais
- * ne sert jamais à la taille normale.
+ * liste d'historique défile dans son propre cadre quand elle déborde.
+ *
+ * Trois colonnes à TOUTES les tailles, y compris en petite fenêtre : les
+ * empiler faisait de l'écran une longue page à dérouler, où l'aperçu et
+ * l'historique ne se voyaient plus ensemble — c'est précisément ce qu'on avait
+ * corrigé. Ce qui s'adapte, ce sont les cartes : elles rétrécissent (paddings,
+ * gouttières, tailles de vignettes) et chaque colonne défile dans son propre
+ * cadre quand elle déborde. Ce qui ne doit JAMAIS arriver, c'est qu'une carte
+ * dépasse de son cadre : son contenu ne sait pas rapetisser indéfiniment,
+ * alors il se superpose à la carte d'à côté. D'où les `min-h-0` à chaque
+ * étage — sans eux, une boîte flex refuse de descendre sous son contenu.
  */
 
 type Tab = 'player' | 'url' | 'file'
@@ -110,8 +118,37 @@ export default function Skins() {
   const [justApplied, setJustApplied] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
   const [showHosting, setShowHosting] = useState(false)
+  const [showPoses, setShowPoses] = useState(false)
   /** Aperçu du skin de chaque compte, pour les avatars du sélecteur. */
   const [faces, setFaces] = useState<Record<string, string | null>>({})
+
+  // La carte des positions est la seule élastique de sa colonne : elle occupe
+  // ce que les trois cartes fixes laissent. Quand ce reste ne suffit plus à
+  // l'afficher entière, elle disparaît et son contenu part dans une modale,
+  // ouverte depuis un bouton posé sur l'aperçu 3D. La rétrécir encore aurait
+  // donné une carte illisible ; la laisser déborder, le bug qu'on vient de
+  // corriger.
+  //
+  // Mesure stable parce qu'elle ne porte QUE sur le bloc fixe et la colonne :
+  // ni l'un ni l'autre ne change selon la décision, donc pas de va-et-vient.
+  const columnRef = useRef<HTMLDivElement>(null)
+  const fixedRef = useRef<HTMLDivElement>(null)
+  const [posesFit, setPosesFit] = useState(true)
+
+  useEffect(() => {
+    const column = columnRef.current
+    const fixed = fixedRef.current
+    if (!column || !fixed) return
+    const measure = () => {
+      const gap = parseFloat(getComputedStyle(column).rowGap) || 0
+      setPosesFit(column.clientHeight - fixed.offsetHeight - gap >= POSE_CARD_MIN)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(column)
+    ro.observe(fixed)
+    return () => ro.disconnect()
+  }, [accounts])
 
   useEffect(() => {
     api.mc.accounts()
@@ -406,7 +443,7 @@ export default function Skins() {
 
       {/* `overflow-y-auto` en secours : à la taille normale rien ne défile,
           mais une fenêtre réduite à l'extrême doit rester utilisable. */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-7 lg:py-5">
         {accounts === null ? (
           <div className="flex h-full items-center justify-center">
             <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
@@ -417,7 +454,7 @@ export default function Skins() {
             <p className="max-w-sm text-[12.5px] leading-relaxed text-txt-secondary">{t('skins.noAccountHint')}</p>
           </div>
         ) : (
-          <div className="mx-auto flex h-full min-h-[500px] w-full max-w-[1180px] flex-col gap-4">
+          <div className="mx-auto flex h-full min-h-[400px] w-full max-w-[1180px] flex-col gap-3 lg:gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <AccountPicker accounts={accounts} selected={selected} faces={faces} onPick={pickAccount} />
               {/* Remplace les phrases d'aide qui vivaient sous chaque onglet :
@@ -439,10 +476,16 @@ export default function Skins() {
                 même chose — remettre un ancien skin, c'est comparer deux
                 images, pas remplir un formulaire.
 
-                Elles s'installent dès 1024 px et pas à `xl` : ce dernier vaut
-                1280, soit exactement la largeur par défaut de la fenêtre — la
-                mise en page aurait basculé sur un pixel de redimensionnement. */}
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
+                Elles tiennent à toutes les largeurs, sans point de bascule :
+                une version empilée existait sous 1024 px, elle rendait l'écran
+                à l'état qu'on avait justement corrigé — une page à dérouler où
+                l'historique ne se voit plus à côté de l'aperçu. Les colonnes
+                rétrécissent donc au lieu de passer à la ligne.
+
+                La gouttière suit : 12 px en fenêtre étroite, 16 au-delà. À
+                890 px de large, quatre pixels par gouttière valent une ligne
+                de vignette dans l'historique. */}
+            <div className="grid min-h-0 flex-1 grid-cols-3 gap-3 lg:gap-4">
               {/* L'import ouvre la lecture : on arrive ici pour changer de
                   skin, donc on commence par le choisir. L'aperçu et
                   l'historique — ce qu'on porte et ce qu'on a porté — restent
@@ -452,84 +495,89 @@ export default function Skins() {
                   dans cette colonne, donc à taille normale rien ne défile,
                   mais sur une fenêtre extrême mieux vaut défiler que voir une
                   carte déborder de son cadre. */}
-              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-                {/* La méthode passe par un menu déroulant : trois onglets côte
-                    à côte réclamaient toute la largeur pour un choix qu'on fait
-                    une fois, et chaque option peut ici porter sa description. */}
-                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-4">
-                  <SourcePicker value={tab} onChange={setTab} />
+              <div ref={columnRef} className="flex min-h-0 flex-col gap-3 overflow-y-auto lg:gap-4">
+                {/* Les trois cartes qui ne se rétrécissent pas, groupées pour
+                    être mesurées d'un bloc — c'est ce qu'elles laissent qui
+                    décide du sort de la carte des positions. */}
+                <div ref={fixedRef} className="flex shrink-0 flex-col gap-3 lg:gap-4">
+                  {/* La méthode passe par un menu déroulant : trois onglets côte
+                      à côte réclamaient toute la largeur pour un choix qu'on fait
+                      une fois, et chaque option peut ici porter sa description. */}
+                  <div className="flex shrink-0 flex-col gap-3 rounded-2xl border border-line bg-surface-1 p-3 lg:p-4">
+                    <SourcePicker value={tab} onChange={setTab} />
 
-                  {tab === 'file' ? (
-                    <Button onClick={pickFile} loading={searching} fullWidth>{t('skins.chooseFile')}</Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <input
-                        value={tab === 'player' ? playerName : url}
-                        onChange={(e) => (tab === 'player' ? setPlayerName(e.target.value) : setUrl(e.target.value))}
-                        onKeyDown={(e) => { if (e.key === 'Enter') tab === 'player' ? searchPlayer() : checkUrl() }}
-                        placeholder={tab === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
-                        maxLength={tab === 'player' ? 16 : undefined}
-                        className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13.5px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
-                      />
-                      <Button
-                        onClick={tab === 'player' ? searchPlayer : checkUrl}
-                        loading={searching}
-                        disabled={!(tab === 'player' ? playerName.trim() : url.trim())}
-                      >
-                        {tab === 'player' ? t('skins.search') : t('skins.check')}
-                      </Button>
+                    {tab === 'file' ? (
+                      <Button onClick={pickFile} loading={searching} fullWidth>{t('skins.chooseFile')}</Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          value={tab === 'player' ? playerName : url}
+                          onChange={(e) => (tab === 'player' ? setPlayerName(e.target.value) : setUrl(e.target.value))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') tab === 'player' ? searchPlayer() : checkUrl() }}
+                          placeholder={tab === 'player' ? t('skins.playerPlaceholder') : 'https://.../skin.png'}
+                          maxLength={tab === 'player' ? 16 : undefined}
+                          className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3.5 text-[13.5px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
+                        />
+                        <Button
+                          onClick={tab === 'player' ? searchPlayer : checkUrl}
+                          loading={searching}
+                          disabled={!(tab === 'player' ? playerName.trim() : url.trim())}
+                        >
+                          {tab === 'player' ? t('skins.search') : t('skins.check')}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Entre les deux : les trois sources supposent qu'on sait
+                      déjà quel skin on veut, le catalogue est l'écran d'avant —
+                      celui où l'on regarde ce qui existe. Le compte choisi le
+                      suit, pour revenir ici au même endroit. */}
+                  <button
+                    onClick={() => navigate(account ? `/skins/catalog?account=${encodeURIComponent(account.mc_uuid)}` : '/skins/catalog')}
+                    className="group flex shrink-0 items-center gap-3 rounded-2xl border border-line bg-surface-1 p-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-2 lg:p-4"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent-text">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                      </svg>
                     </div>
-                  )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] font-semibold">{t('skinCatalog.openButton')}</p>
+                      <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-muted">{t('skinCatalog.openHint')}</p>
+                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-txt-muted transition-colors group-hover:text-txt-primary">
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                  </button>
+
+                  {/* Et quand aucun skin existant ne convient : le dessiner. */}
+                  <button
+                    onClick={() => navigate(account ? `/skins/editor?account=${encodeURIComponent(account.mc_uuid)}` : '/skins/editor')}
+                    className="group flex shrink-0 items-center gap-3 rounded-2xl border border-line bg-surface-1 p-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-2 lg:p-4"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent-text">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                        <path d="M2 2l7.586 7.586" />
+                        <circle cx="11" cy="11" r="2" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] font-semibold">{t('skinEditor.openButton')}</p>
+                      <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-muted">{t('skinEditor.openHint')}</p>
+                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-txt-muted transition-colors group-hover:text-txt-primary">
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                  </button>
                 </div>
 
-                {/* Entre les deux : les trois sources supposent qu'on sait
-                    déjà quel skin on veut, le catalogue est l'écran d'avant —
-                    celui où l'on regarde ce qui existe. Le compte choisi le
-                    suit, pour revenir ici au même endroit. */}
-                <button
-                  onClick={() => navigate(account ? `/skins/catalog?account=${encodeURIComponent(account.mc_uuid)}` : '/skins/catalog')}
-                  className="group flex items-center gap-3 rounded-2xl border border-line bg-surface-1 p-4 text-left transition-colors hover:border-accent/40 hover:bg-surface-2"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent-text">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] font-semibold">{t('skinCatalog.openButton')}</p>
-                    <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-muted">{t('skinCatalog.openHint')}</p>
-                  </div>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-txt-muted transition-colors group-hover:text-txt-primary">
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </button>
-
-                {/* Et quand aucun skin existant ne convient : le dessiner. */}
-                <button
-                  onClick={() => navigate(account ? `/skins/editor?account=${encodeURIComponent(account.mc_uuid)}` : '/skins/editor')}
-                  className="group flex items-center gap-3 rounded-2xl border border-line bg-surface-1 p-4 text-left transition-colors hover:border-accent/40 hover:bg-surface-2"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent-text">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                      <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                      <path d="M2 2l7.586 7.586" />
-                      <circle cx="11" cy="11" r="2" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] font-semibold">{t('skinEditor.openButton')}</p>
-                    <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-muted">{t('skinEditor.openHint')}</p>
-                  </div>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-txt-muted transition-colors group-hover:text-txt-primary">
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </button>
-
-                <PosePicker value={pose} onChange={setPose} spin={spin} onSpin={setSpin} />
+                {posesFit && <PosePicker value={pose} onChange={setPose} spin={spin} onSpin={setSpin} />}
               </div>
 
               <SkinPreview
@@ -538,6 +586,7 @@ export default function Skins() {
                 variant={shown?.variant ?? 'classic'}
                 pose={pose}
                 spin={spin}
+                onPoses={posesFit ? null : () => setShowPoses(true)}
                 label={
                   candidate
                     ? candidate.fromHistory
@@ -585,7 +634,7 @@ export default function Skins() {
                     animate="animate"
                     exit="exit"
                     transition={fastTransition}
-                    className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-accent/30 bg-accent/5 p-5"
+                    className="flex h-full min-h-0 flex-col gap-3.5 overflow-y-auto rounded-2xl border border-accent/30 bg-accent/5 p-3.5 lg:gap-4 lg:p-5"
                   >
                     <VariantPicker
                       value={candidate.variant}
@@ -660,6 +709,18 @@ export default function Skins() {
 
       <AnimatePresence>
         {showHosting && <HostingModal onClose={() => setShowHosting(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPoses && (
+          <PosesModal
+            value={pose}
+            onChange={setPose}
+            spin={spin}
+            onSpin={setSpin}
+            onClose={() => setShowPoses(false)}
+          />
+        )}
       </AnimatePresence>
 
       {/* En popup plutôt qu'en ligne verte sous l'aperçu : le délai de
@@ -744,6 +805,108 @@ function ConfirmModal({
 }
 
 /**
+ * Hauteur en deçà de laquelle la carte des positions ne s'affiche plus : titre,
+ * rembourrages, et les trois rangées de boutons qu'il lui faut pour montrer les
+ * six positions. En dessous, elle part en modale plutôt que de se tasser.
+ */
+const POSE_CARD_MIN = 176
+
+/** La grille des six positions — partagée par la carte et la modale. */
+function PoseGrid({
+  value,
+  onChange,
+  columns,
+}: {
+  value: PoseId
+  onChange: (pose: PoseId) => void
+  columns: 2 | 3
+}) {
+  const t = useT()
+  return (
+    <div className={`grid w-full gap-1.5 ${columns === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      {POSES.map((pose) => (
+        <button
+          key={pose}
+          onClick={() => onChange(pose)}
+          className={`flex h-9 items-center justify-center rounded-lg border px-2 text-[12.5px] font-medium transition-colors ${
+            value === pose
+              ? 'border-accent/50 bg-accent/20 text-txt-primary'
+              : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+          }`}
+        >
+          {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * La rotation automatique. Éteinte par défaut : elle aide à faire le tour du
+ * personnage, mais gêne dès qu'on veut regarder un détail — c'est à
+ * l'utilisateur de la lancer, pas à l'écran de l'imposer.
+ */
+function SpinToggle({ spin, onSpin }: { spin: boolean; onSpin: (spin: boolean) => void }) {
+  const t = useT()
+  return (
+    <button
+      onClick={() => onSpin(!spin)}
+      title={t('skins.spin')}
+      aria-label={t('skins.spin')}
+      aria-pressed={spin}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+        spin
+          ? 'border-accent/50 bg-accent/20 text-txt-primary'
+          : 'border-line bg-surface-2 text-txt-muted hover:border-line-strong hover:text-txt-primary'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+        <path d="M21 3v5h-5" />
+      </svg>
+    </button>
+  )
+}
+
+/**
+ * Les mêmes positions, quand la colonne n'a pas la hauteur de leur carte.
+ *
+ * Elle s'ouvre depuis un bouton posé sur l'aperçu 3D — c'est le personnage
+ * qu'elles concernent, et c'est là qu'on les cherche quand elles ne sont plus
+ * dans la colonne. Mêmes composants que la carte, pour que les deux chemins ne
+ * divergent jamais.
+ */
+function PosesModal({
+  value,
+  onChange,
+  spin,
+  onSpin,
+  onClose,
+}: {
+  value: PoseId
+  onChange: (pose: PoseId) => void
+  spin: boolean
+  onSpin: (spin: boolean) => void
+  onClose: () => void
+}) {
+  const t = useT()
+  return (
+    <ModalShell title={t('skins.poses')} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col gap-4">
+        <PoseGrid value={value} onChange={onChange} columns={3} />
+
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
+          <span className="text-[12.5px] font-medium text-txt-secondary">{t('skins.spin')}</span>
+          <SpinToggle spin={spin} onSpin={onSpin} />
+        </div>
+
+        <Button variant="primary" onClick={onClose} fullWidth>{t('skins.gotIt')}</Button>
+      </div>
+    </ModalShell>
+  )
+}
+
+/**
  * Positions du personnage. Les poses elles-mêmes vivent dans
  * `lib/skinPoses.ts`, partagées avec l'éditeur — ici on ne fait que choisir.
  */
@@ -764,46 +927,14 @@ function PosePicker({
     // hauteur que les deux autres — mais ses boutons, eux, gardent leur
     // taille et se centrent dans ce qui reste. C'est leur étirement qui les
     // faisait déborder du cadre quand la place manquait.
-    <div className="flex min-h-0 flex-1 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-3 lg:p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
-        {/* Éteinte par défaut : une rotation continue aide à faire le tour du
-            personnage, mais gêne dès qu'on veut regarder un détail — c'est à
-            l'utilisateur de la lancer, pas à l'écran de l'imposer. */}
-        <button
-          onClick={() => onSpin(!spin)}
-          title={t('skins.spin')}
-          aria-label={t('skins.spin')}
-          aria-pressed={spin}
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-            spin
-              ? 'border-accent/50 bg-accent/20 text-txt-primary'
-              : 'border-line bg-surface-2 text-txt-muted hover:border-line-strong hover:text-txt-primary'
-          }`}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v5h-5" />
-          </svg>
-        </button>
+        <SpinToggle spin={spin} onSpin={onSpin} />
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center">
-        <div className="grid w-full grid-cols-2 gap-1.5">
-          {POSES.map((pose) => (
-            <button
-              key={pose}
-              onClick={() => onChange(pose)}
-              className={`flex h-9 items-center justify-center rounded-lg border px-2 text-[12.5px] font-medium transition-colors ${
-                value === pose
-                  ? 'border-accent/50 bg-accent/20 text-txt-primary'
-                  : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
-              }`}
-            >
-              {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
-            </button>
-          ))}
-        </div>
+      <div className="flex min-h-0 flex-1 items-center overflow-hidden">
+        <PoseGrid value={value} onChange={onChange} columns={2} />
       </div>
     </div>
   )
@@ -981,60 +1112,88 @@ interface HeadSize {
   px: number
   /** Rembourrage de la vignette qui la contient. */
   pad: string
+  /** Le même, en pixels : la mesure ne sait pas lire une classe Tailwind. */
+  padPx: number
+  /** Largeur minimale d'une colonne de vignettes de cette taille. */
+  min: number
 }
 
 const SIZES: Record<'large' | 'medium' | 'small', HeadSize> = {
-  large: { px: 104, pad: 'p-3.5' },
-  medium: { px: 56, pad: 'p-3' },
-  small: { px: 44, pad: 'p-2' },
+  large: { px: 104, pad: 'p-3.5', padPx: 14, min: 150 },
+  medium: { px: 56, pad: 'p-3', padPx: 12, min: 180 },
+  small: { px: 44, pad: 'p-2', padPx: 8, min: 104 },
+}
+
+/** `gap-2`, en pixels — la mesure a besoin du nombre, pas de la classe. */
+const TILE_GAP = 8
+
+/**
+ * Hauteur d'une vignette : les deux bordures, les deux rembourrages, la tête,
+ * et les deux lignes de texte sous elle (modèle puis action, 11 px avec leurs
+ * gouttières). Légèrement généreux à dessein — se tromper d'un pixel vers le
+ * bas montre une vignette de moins, vers le haut la fait déborder du cadre.
+ */
+const tileHeight = (size: HeadSize) => 2 + size.padPx * 2 + size.px + 42
+
+/** Hauteur d'une ligne pleine largeur — la tête moyenne et son rembourrage. */
+const ROW_HEIGHT = 2 + SIZES.medium.padPx * 2 + SIZES.medium.px
+
+interface Plan {
+  shape: 'rows' | 'grid'
+  /** Nombre de vignettes montrées ; le reste part dans la tuile « +N ». */
+  visible: number
+  columns: number
+  /** Vrai quand tout tient : la grille se centre au lieu de s'accrocher en haut. */
+  centered: boolean
+  size: HeadSize
 }
 
 /**
- * Quatre agencements, selon le nombre de skins.
+ * L'agencement se MESURE, il ne se déduit pas du nombre de skins.
  *
- * Le principe : ne jamais poser une grille là où il n'y a pas de quoi la
- * remplir, et ne jamais cacher derrière une barre de défilement ce qu'on peut
- * annoncer.
+ * Il l'a fait, et c'était juste tant que la colonne avait une taille connue.
+ * Depuis que les trois colonnes tiennent à toutes les tailles de fenêtre, la
+ * même grille de douze vignettes doit en montrer onze sur un grand écran et
+ * quatre sur une fenêtre réduite. Un nombre écrit en dur ne peut pas dire les
+ * deux : on calcule donc ce qui entre vraiment dans le cadre, et ce qui n'y
+ * entre pas est compté dans une tuile « +N » qui ouvre le reste en grand.
  *
- *   1-2    en lignes — une grille de deux cartes laisse trois quarts de cadre
- *          vide ; une ligne pleine largeur montre la tête, le modèle et
- *          l'action sans faire semblant
- *   3-4    grande grille — deux colonnes, deux rangées, généreux
- *   5-11   petite grille — tout tient encore à l'écran
- *   12+    petite grille tronquée + une tuile « +N » qui ouvre le reste en
- *          grand. Rien ne défile dans la colonne : ce qui ne tient pas est
- *          compté et cliquable, pas enfoui
+ * Rien ne défile ici : une liste de skins sous une barre de défilement, dans
+ * une colonne étroite, c'est une liste qu'on ne voit pas.
  *
- * Les classes de grille sont écrites en entier : Tailwind lit le source, une
- * classe composée à l'exécution ne serait pas générée.
+ * Trois tailles, par ordre de préférence — lignes pleine largeur à un ou deux
+ * skins (une grille de deux cartes laisse trois quarts de cadre vide), grandes
+ * vignettes si tout tient, petites sinon.
  */
-function layoutFor(count: number): { shape: 'rows' | 'grid'; visible: number; grid: string; size: HeadSize } {
-  if (count <= 2) return { shape: 'rows', visible: count, grid: '', size: SIZES.medium }
-  // Quatre au plus pour la grande grille : deux colonnes, donc deux rangées de
-  // ~175 px. À six, il en faudrait trois et la carte déborderait — c'est la
-  // hauteur qui fixe cette borne, pas l'esthétique.
-  if (count <= 4) {
-    return {
-      shape: 'grid',
-      visible: count,
-      grid: 'place-content-center grid-cols-[repeat(auto-fill,minmax(150px,1fr))]',
-      size: SIZES.large,
-    }
+function layoutFor(count: number, width: number, height: number): Plan {
+  /** Ce qu'une taille de vignette fait entrer dans le cadre mesuré. */
+  const fit = (size: HeadSize) => {
+    const columns = Math.max(1, Math.floor((width + TILE_GAP) / (size.min + TILE_GAP)))
+    const rows = Math.max(0, Math.floor((height + TILE_GAP) / (tileHeight(size) + TILE_GAP)))
+    return { columns, capacity: columns * rows }
   }
-  if (count <= 11) {
-    return {
-      shape: 'grid',
-      visible: count,
-      grid: 'place-content-center grid-cols-[repeat(auto-fill,minmax(104px,1fr))]',
-      size: SIZES.small,
-    }
+
+  if (count <= 2 && width >= SIZES.medium.min && height >= count * ROW_HEIGHT + (count - 1) * TILE_GAP) {
+    return { shape: 'rows', visible: count, columns: 1, centered: false, size: SIZES.medium }
   }
-  // Onze vignettes plus la tuile « +N » : douze cases, soit quatre rangées de
-  // trois dans la colonne, sans débordement.
+
+  const large = fit(SIZES.large)
+  if (large.capacity >= count) {
+    return { shape: 'grid', visible: count, columns: large.columns, centered: true, size: SIZES.large }
+  }
+
+  const small = fit(SIZES.small)
+  if (small.capacity >= count) {
+    return { shape: 'grid', visible: count, columns: small.columns, centered: true, size: SIZES.small }
+  }
+
+  // Une place est prise par la tuile « +N » : elle compte dans la capacité,
+  // sans quoi c'est elle qui déborderait du cadre.
   return {
     shape: 'grid',
-    visible: 11,
-    grid: 'content-start grid-cols-[repeat(auto-fill,minmax(104px,1fr))]',
+    visible: Math.max(small.capacity - 1, 0),
+    columns: small.columns,
+    centered: false,
     size: SIZES.small,
   }
 }
@@ -1061,57 +1220,84 @@ function History({
 }) {
   const t = useT()
   const [showAll, setShowAll] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ width: 0, height: 0 })
 
-  const plan = layoutFor(entries.length)
+  // Le cadre est mesuré, jamais supposé : sa taille vient de la colonne, donc
+  // de la fenêtre. `overflow-hidden` est ce qui rend la mesure stable — sans
+  // lui, un contenu trop grand repousserait le cadre, qui en montrerait plus,
+  // qui le repousserait encore.
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setBox((b) => (b.width === r.width && b.height === r.height ? b : { width: r.width, height: r.height }))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const plan = layoutFor(entries.length, box.width, box.height)
   const visible = entries.slice(0, plan.visible)
   const hidden = entries.length - visible.length
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-3 lg:p-4">
       <p className="text-[13.5px] font-semibold">{t('skins.history')}</p>
 
-      {entries.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] leading-relaxed text-txt-secondary">{t('skins.historyEmpty')}</p>
-      ) : plan.shape === 'rows' ? (
-        // Alignées en haut, sous le titre : centrées, elles flottaient au
-        // milieu du cadre sans rien pour les y rattacher.
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-          {visible.map((e) => (
-            <HistoryRow
-              key={e.id}
-              entry={e}
-              worn={isWorn(e, currentSource, currentVariant)}
-              onRestore={onRestore}
-              onForget={onForget}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className={`grid min-h-0 flex-1 gap-2 ${plan.grid}`}>
-          {visible.map((e) => (
-            <HistoryTile
-              key={e.id}
-              entry={e}
-              worn={isWorn(e, currentSource, currentVariant)}
-              size={plan.size}
-              onRestore={onRestore}
-              onForget={onForget}
-            />
-          ))}
+      <div ref={boxRef} className="min-h-0 flex-1 overflow-hidden">
+        {entries.length === 0 ? (
+          <p className="py-6 text-center text-[12.5px] leading-relaxed text-txt-secondary">{t('skins.historyEmpty')}</p>
+        ) : box.width === 0 ? null : plan.shape === 'rows' ? (
+          // Alignées en haut, sous le titre : centrées, elles flottaient au
+          // milieu du cadre sans rien pour les y rattacher.
+          <div className="flex flex-col gap-2">
+            {visible.map((e) => (
+              <HistoryRow
+                key={e.id}
+                entry={e}
+                worn={isWorn(e, currentSource, currentVariant)}
+                onRestore={onRestore}
+                onForget={onForget}
+              />
+            ))}
+          </div>
+        ) : (
+          // Le nombre de colonnes est calculé, donc écrit en `style` : une
+          // classe Tailwind composée à l'exécution ne serait pas générée.
+          <div
+            style={{ gridTemplateColumns: `repeat(${plan.columns}, minmax(0, 1fr))` }}
+            className={`grid h-full gap-2 ${plan.centered ? 'place-content-center' : 'content-start'}`}
+          >
+            {visible.map((e) => (
+              <HistoryTile
+                key={e.id}
+                entry={e}
+                worn={isWorn(e, currentSource, currentVariant)}
+                size={plan.size}
+                onRestore={onRestore}
+                onForget={onForget}
+              />
+            ))}
 
-          {/* Le reste n'est pas relégué sous une barre de défilement qu'on ne
-              voit pas : il est annoncé, compté, et s'ouvre en grand. */}
-          {hidden > 0 && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line-strong bg-surface-2 p-2 text-txt-secondary transition-colors hover:border-accent/45 hover:text-txt-primary"
-            >
-              <span className="text-[15px] font-bold">+{hidden}</span>
-              <span className="text-[10.5px] font-medium">{t('skins.showMore')}</span>
-            </button>
-          )}
-        </div>
-      )}
+            {/* Le reste n'est pas relégué sous une barre de défilement qu'on ne
+                voit pas : il est annoncé, compté, et s'ouvre en grand. */}
+            {hidden > 0 && (
+              <button
+                onClick={() => setShowAll(true)}
+                style={{ height: tileHeight(plan.size) }}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-line-strong bg-surface-2 p-2 text-txt-secondary transition-colors hover:border-accent/45 hover:text-txt-primary"
+              >
+                <span className="text-[15px] font-bold">+{hidden}</span>
+                <span className="text-[10.5px] font-medium">{t('skins.showMore')}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       <AnimatePresence>
         {showAll && (
@@ -1560,6 +1746,7 @@ function SkinPreview({
   pending,
   pose,
   spin,
+  onPoses,
 }: {
   dataUri: string | null
   /** Apparence par défaut du compte, montrée quand aucun skin n'est choisi. */
@@ -1568,12 +1755,19 @@ function SkinPreview({
   pose: PoseId
   /** Rotation continue du personnage sur lui-même. */
   spin: boolean
+  /**
+   * Ouvre les positions en modale — fourni seulement quand leur carte n'a pas
+   * tenu dans la colonne. Le bouton vit ici parce que c'est le personnage qu'il
+   * concerne, et il est posé SUR le cadre, jamais dans le canevas.
+   */
+  onPoses: (() => void) | null
   label: string
   /** Deuxième ligne : d'où vient le skin porté. */
   note: string | null
   footer: ReactNode
   pending: boolean
 }) {
+  const t = useT()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<SkinViewer | null>(null)
@@ -1648,12 +1842,31 @@ function SkinPreview({
 
   return (
     <div
-      className={`flex min-h-0 flex-col gap-2 rounded-2xl border p-4 transition-colors ${
+      className={`flex min-h-0 flex-col gap-2 rounded-2xl border p-3 transition-colors lg:p-4 ${
         pending ? 'border-accent/30 bg-accent/5' : 'border-line bg-surface-1'
       }`}
     >
-      <div ref={boxRef} className="relative min-h-[200px] w-full flex-1">
+      {/* La zone de rendu absorbe les écarts de hauteur de fenêtre. Son
+          plancher est bas (120 px) : c'est elle qui doit céder quand la place
+          manque, le libellé en dessous étant l'information, pas le décor. Un
+          plancher à 200 px poussait la carte hors de son cadre en fenêtre
+          courte. */}
+      <div ref={boxRef} className="relative min-h-[120px] w-full flex-1">
         <canvas ref={canvasRef} className="h-full w-full" />
+
+        {onPoses && (
+          <button
+            onClick={onPoses}
+            title={t('skins.poses')}
+            aria-label={t('skins.poses')}
+            className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface-2/90 text-txt-secondary backdrop-blur transition-colors hover:border-accent/45 hover:text-txt-primary"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <circle cx="12" cy="4.5" r="2.2" />
+              <path d="M12 7v7M12 14l-3 6M12 14l3 6M6 9.5l6-1.5 6 1.5" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-1 text-center">
