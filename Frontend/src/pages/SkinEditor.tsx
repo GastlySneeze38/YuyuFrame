@@ -17,6 +17,8 @@ import { bakeSkin } from '@/lib/skinBake'
 import { showError } from '@/stores/useErrorToast'
 import { skinPreview } from '@/lib/skinCache'
 import { putSkinDraft } from '@/lib/skinDraft'
+import { JOINT_LIMITS, NEUTRAL_JOINTS, POSES, applyPose } from '@/lib/skinPoses'
+import type { Joints, PoseId } from '@/lib/skinPoses'
 import {
   FULL_RECT,
   REGIONS,
@@ -193,6 +195,14 @@ export default function SkinEditor() {
   const [hover, setHover] = useState<{ part: PartId | null; pixel: Pixel } | null>(null)
   const [showSteps, setShowSteps] = useState(false)
   const [showPoses, setShowPoses] = useState(false)
+  /** Debout par défaut : c'est la pose sur laquelle on dessine le plus
+   *  naturellement, membres dégagés et face visible. */
+  const [pose, setPose] = useState<PoseId>('standing')
+  /** Réglages d'articulations, lus à chaque image par l'animation : la
+   *  référence évite de reconstruire la pose à chaque pixel de curseur. */
+  const [joints, setJoints] = useState<Joints>(NEUTRAL_JOINTS)
+  const jointsRef = useRef(joints)
+  jointsRef.current = joints
   const [mode, setMode] = useState<Mode>('3d')
   /** Côté le plus large possible pour la vue 2D : elle doit rester carrée et
    *  tenir dans son cadre, quelle que soit la forme de la fenêtre. */
@@ -638,6 +648,7 @@ export default function SkinEditor() {
     viewer.fov = 45
     // Ni rotation automatique ni animation : on peint sur un modèle immobile,
     // et un personnage qui bouge sous le pinceau serait inutilisable.
+    // La pose est posée par son propre effet, une fois le viewer prêt.
     viewer.autoRotate = false
     viewer.controls.enablePan = true
     // Le gauche ne sert qu'à peindre : il est neutralisé en coupant les
@@ -1006,6 +1017,14 @@ export default function SkinEditor() {
     const viewer = viewerRef.current
     if (viewer && ready) viewer.playerObject.skin.modelType = variant === 'slim' ? 'slim' : 'default'
   }, [variant, ready])
+
+  // Pose **tenue** : les membres se placent et ne bougent plus, pour qu'on
+  // peigne dessus. Changer de pose repasse par le module partagé, qui remet
+  // aussi les articulations à zéro avant d'appliquer la nouvelle.
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (viewer && ready) applyPose(viewer, pose, true, () => jointsRef.current)
+  }, [pose, ready])
 
   useEffect(() => {
     const viewer = viewerRef.current
@@ -1490,7 +1509,15 @@ export default function SkinEditor() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showPoses && <PosesModal onClose={() => setShowPoses(false)} />}
+        {showPoses && (
+          <PosesModal
+            value={pose}
+            onPick={setPose}
+            joints={joints}
+            onJoints={setJoints}
+            onClose={() => setShowPoses(false)}
+          />
+        )}
       </AnimatePresence>
     </div>
   )
@@ -1871,34 +1898,118 @@ function ViewAction({
 }
 
 /**
- * Positions du personnage.
+ * Positions du personnage — les mêmes que l'écran Skins, par le même module.
  *
- * Les mêmes que l'écran Skins, et **inertes des deux côtés** : la mécanique
- * sera posée une fois pour les deux écrans plutôt que deux fois. `skinview3d`
- * fournit déjà `IdleAnimation`, `WalkingAnimation`, `RunningAnimation` et
- * `FlyingAnimation` pour le jour où on les branche.
+ * Ici elles sont **tenues** et non jouées : on peint sur le modèle, et un
+ * personnage qui bouge sous le pinceau serait inutilisable. Choisir une pose
+ * sert donc à voir le skin sous un autre angle et à peindre dessus, pas à
+ * l'animer.
  */
-const POSES = ['standing', 'walking', 'running', 'flying', 'sitting', 'waving'] as const
+const JOINT_ORDER: (keyof Joints)[] = ['headTurn', 'headTilt', 'bodyTurn', 'legsSpread']
 
-function PosesModal({ onClose }: { onClose: () => void }) {
+function PosesModal({
+  value,
+  onPick,
+  joints,
+  onJoints,
+  onClose,
+}: {
+  value: PoseId
+  onPick: (pose: PoseId) => void
+  joints: Joints
+  onJoints: (joints: Joints) => void
+  onClose: () => void
+}) {
   const t = useT()
+  const touched = JOINT_ORDER.some((key) => joints[key] !== 0)
+
   return (
     <ModalShell title={t('skins.poses')} onClose={onClose}>
-      <div className="flex flex-col gap-3">
-        <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skins.posesSoon')}</p>
+      <div className="flex flex-col gap-4">
+        {/* Choisir une pose ne ferme plus la modale : on l'enchaîne souvent
+            avec un réglage d'articulation, et rouvrir à chaque fois serait
+            pénible. */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {POSES.map((pose) => (
             <button
               key={pose}
-              disabled
-              className="h-10 cursor-not-allowed rounded-lg border border-line bg-surface-2 text-[12.5px] text-txt-muted opacity-60"
+              onClick={() => onPick(pose)}
+              className={`h-10 rounded-lg border text-[12.5px] transition-colors ${
+                value === pose
+                  ? 'border-accent/50 bg-accent/20 text-txt-primary'
+                  : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+              }`}
             >
               {t(`skins.pose${pose.charAt(0).toUpperCase()}${pose.slice(1)}`)}
             </button>
           ))}
         </div>
+
+        <div className="flex flex-col gap-2.5 border-t border-line-soft pt-3.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-txt-muted">
+              {t('skinEditor.joints')}
+            </p>
+            <button
+              onClick={() => onJoints(NEUTRAL_JOINTS)}
+              disabled={!touched}
+              className="text-[11.5px] text-accent-text transition-opacity hover:underline disabled:cursor-not-allowed disabled:opacity-35 disabled:no-underline"
+            >
+              {t('skinEditor.jointsReset')}
+            </button>
+          </div>
+
+          {JOINT_ORDER.map((key) => (
+            <JointSlider
+              key={key}
+              label={t(`skinEditor.joint_${key}`)}
+              range={JOINT_LIMITS[key]}
+              value={joints[key]}
+              onChange={(next) => onJoints({ ...joints, [key]: next })}
+            />
+          ))}
+        </div>
       </div>
     </ModalShell>
+  )
+}
+
+/**
+ * Un degré par cran à l'écran, des radians en sortie.
+ *
+ * L'interface parle en degrés parce que personne ne règle une épaule en
+ * radians ; `three.js` n'accepte que des radians. La conversion vit ici, au
+ * seul endroit où les deux se rencontrent.
+ */
+function JointSlider({
+  label,
+  range,
+  value,
+  onChange,
+}: {
+  label: string
+  /** Amplitude en degrés, de part et d'autre de zéro. */
+  range: number
+  value: number
+  onChange: (radians: number) => void
+}) {
+  const degrees = Math.round((value * 180) / Math.PI)
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-[108px] shrink-0 text-[12px] text-txt-secondary">{label}</span>
+      <input
+        type="range"
+        min={-range}
+        max={range}
+        step={1}
+        value={degrees}
+        onChange={(e) => onChange((Number(e.target.value) * Math.PI) / 180)}
+        className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]"
+      />
+      <span className="w-10 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted">
+        {degrees}°
+      </span>
+    </div>
   )
 }
 

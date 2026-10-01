@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
-import { SkinViewer, WalkingAnimation } from 'skinview3d'
+import { SkinViewer } from 'skinview3d'
 import { api } from '@/api/client'
 import type { McAccountInfo, SkinHistoryEntry, SkinKind, SkinRef, SkinVariant } from '@/api/client'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -15,6 +15,8 @@ import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
 import { forgetSkinPreview, rememberSkinPreview, skinPreview } from '@/lib/skinCache'
 import { takeSkinDraft } from '@/lib/skinDraft'
+import { POSES, applyPose } from '@/lib/skinPoses'
+import type { PoseId } from '@/lib/skinPoses'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
 
@@ -91,6 +93,9 @@ export default function Skins() {
   const [accounts, setAccounts] = useState<McAccountInfo[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('player')
+  /** La marche par défaut : un personnage qui bouge se lit mieux qu'un
+   *  mannequin, et c'est la pose que l'aperçu jouait déjà avant d'être réglable. */
+  const [pose, setPose] = useState<PoseId>('walking')
 
   const [current, setCurrent] = useState<SkinRef | null>(null)
   const [currentUri, setCurrentUri] = useState<string | null>(null)
@@ -518,13 +523,14 @@ export default function Skins() {
                   </svg>
                 </button>
 
-                <PosePicker />
+                <PosePicker value={pose} onChange={setPose} />
               </div>
 
               <SkinPreview
                 dataUri={shown?.dataUri ?? null}
                 fallbackUrl={account ? defaultSkinUrl(account.mc_uuid) : null}
                 variant={shown?.variant ?? 'classic'}
+                pose={pose}
                 label={
                   candidate
                     ? candidate.fromHistory
@@ -731,43 +737,32 @@ function ConfirmModal({
 }
 
 /**
- * Positions — boutons seuls, la mécanique viendra après.
- *
- * Rien n'est branché : cliquer une position ne change pas encore l'aperçu, et
- * l'écran le dit plutôt que de laisser croire à une panne. C'est volontaire —
- * les boutons sont là pour arrêter la forme, la pose elle-même se fera dans un
- * second temps.
- *
- * Quand ce sera le moment, `skinview3d` fournit déjà les animations
- * correspondantes (`IdleAnimation`, `WalkingAnimation`, `RunningAnimation`,
- * `FlyingAnimation`) : il n'y aura qu'à les passer à `viewer.animation`, dans
- * `SkinPreview`.
+ * Positions du personnage. Les poses elles-mêmes vivent dans
+ * `lib/skinPoses.ts`, partagées avec l'éditeur — ici on ne fait que choisir.
  */
-const POSES = ['standing', 'walking', 'running', 'flying', 'sitting', 'waving'] as const
-
-function PosePicker() {
+function PosePicker({ value, onChange }: { value: PoseId; onChange: (pose: PoseId) => void }) {
   const t = useT()
   return (
     // `flex-1` : cette carte absorbe la hauteur que l'import laisse libre, et
     // ses boutons s'étirent avec elle. C'est ce qui évite deux cartes tassées
     // en haut d'une colonne vide aux deux tiers.
     <div className="flex min-h-0 flex-1 flex-col gap-2.5 rounded-2xl border border-line bg-surface-1 p-4">
-      <div className="flex flex-col gap-0.5">
-        <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
-        <p className="text-[11.5px] leading-relaxed text-txt-muted">{t('skins.posesSoon')}</p>
-      </div>
+      <p className="text-[13.5px] font-semibold">{t('skins.poses')}</p>
 
       {/* En lignes plutôt qu'en grille 3 × 2 : étirés en hauteur, six boutons
           devenaient des pavés de 100 px pour un mot, hors de proportion avec
           ce qu'ils font. Une liste occupe la même hauteur sans qu'aucun
-          élément n'ait l'air surdimensionné — et c'est la forme qui conviendra
-          quand chaque pose aura sa vignette à gauche. */}
+          élément n'ait l'air surdimensionné. */}
       <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         {POSES.map((pose) => (
           <button
             key={pose}
-            disabled
-            className="flex min-h-[36px] flex-1 items-center rounded-lg border border-line bg-surface-2 px-3.5 text-[12.5px] font-medium text-txt-secondary opacity-50"
+            onClick={() => onChange(pose)}
+            className={`flex min-h-[36px] flex-1 items-center rounded-lg border px-3.5 text-[12.5px] font-medium transition-colors ${
+              value === pose
+                ? 'border-accent/50 bg-accent/20 text-txt-primary'
+                : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+            }`}
           >
             {t(`skins.pose${pose[0].toUpperCase()}${pose.slice(1)}`)}
           </button>
@@ -1526,11 +1521,13 @@ function SkinPreview({
   note,
   footer,
   pending,
+  pose,
 }: {
   dataUri: string | null
   /** Apparence par défaut du compte, montrée quand aucun skin n'est choisi. */
   fallbackUrl: string | null
   variant: SkinVariant
+  pose: PoseId
   label: string
   /** Deuxième ligne : d'où vient le skin porté. */
   note: string | null
@@ -1581,8 +1578,6 @@ function SkinPreview({
     viewer.autoRotateSpeed = 0.6
     viewer.zoom = 0.82
     viewer.fov = 55
-    viewer.animation = new WalkingAnimation()
-    viewer.animation.speed = 0.4
     viewerRef.current = viewer
 
     const ro = new ResizeObserver(() => {
@@ -1599,6 +1594,12 @@ function SkinPreview({
   }, [])
 
   useEffect(() => { load(dataUri, fallbackUrl, variant) }, [dataUri, fallbackUrl, variant, load])
+
+  // L'aperçu **joue** la pose, contrairement à l'éditeur qui la tient : ici
+  // rien ne demande un modèle immobile.
+  useEffect(() => {
+    if (viewerRef.current) applyPose(viewerRef.current, pose, false)
+  }, [pose])
 
   return (
     <div
