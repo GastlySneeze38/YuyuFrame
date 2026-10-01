@@ -173,7 +173,7 @@ fn parse_catalog_page(raw: RawPage, block: bool) -> CatalogPage {
 /// sont comparés en minuscules, sous-chaîne comprise, pour attraper les
 /// déclinaisons : `наци` couvre `нацист`, `sex` couvre `Sexy`, `porn` couvre
 /// `pornhub`.
-const BLOCKED_TAG_TERMS: [&str; 28] = [
+const BLOCKED_TAG_TERMS: [&str; 30] = [
     // Nazisme. `adolf` à côté de `hitler` : l'entrée la plus populaire du
     // genre n'était étiquetée que du prénom.
     "hitler",
@@ -204,6 +204,11 @@ const BLOCKED_TAG_TERMS: [&str; 28] = [
     "naked",
     "boobs",
     "onlyfans",
+    // Radicaux russes, pas formes exactes : le catalogue est russophone et
+    // décline. `голы` couvre « голый » et « Человек-голые » sans toucher
+    // « венок на голове » — vérifié sur 2283 étiquettes.
+    "голы",
+    "сиськ",
     // Injures.
     "негр",
 ];
@@ -512,7 +517,7 @@ mod tests {
         for tag in [
             "Adolf Hitler", "adolf", "nazi", "Гитлер", "Третий рейх", "негр",
             "pornhub", "porn", "NSFW", "18+", "Sexy", "sex", "сексуальный", "Hentai",
-            "Nude", "naked", "boobs",
+            "Nude", "naked", "boobs", "голый", "Человек-голые", "Сиськи", "Голый гитлер",
         ] {
             assert!(is_blocked(&[tag.to_string()]), "{} aurait dû être écarté", tag);
         }
@@ -527,6 +532,9 @@ mod tests {
         for tag in [
             "zenless zone zero", "mindless self indulgence", "Simon Henriksson",
             "Girl", "Cute", "black suit", "WW2", "Historical",
+            // « couronne sur la tête » : c'est pour lui que le radical est
+            // `голы` et non `гол`.
+            "венок на голове",
         ] {
             assert!(!is_blocked(&[tag.to_string()]), "{} n'aurait pas dû être écarté", tag);
         }
