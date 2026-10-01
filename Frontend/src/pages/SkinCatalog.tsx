@@ -75,6 +75,22 @@ const GRID_GAP = 12
 const MIN_COLUMNS = 2
 const MAX_COLUMNS = 10
 
+/**
+ * Lots gardés de part et d'autre de la position.
+ *
+ * Parcourir longtemps retiendrait sinon tout ce qu'on a vu : les entrées du
+ * catalogue sont légères, mais les aperçus (le PNG du skin) et surtout les
+ * rendus cuits (une image de 180×288 par skin) ne le sont pas. À quelques
+ * dizaines de kilo-octets pièce, cent pages feraient des dizaines de
+ * méga-octets de data URI vivant dans l'état React.
+ *
+ * Un de chaque côté suffit : celui d'avant pour que reculer soit instantané,
+ * celui d'après étant déjà préchargé. Au plus quatre lots en mémoire, soit
+ * ~160 skins. Ce qui sort de cette fenêtre est déchargé — et le redemander
+ * est de toute façon bon marché, le PNG restant dans le cache disque du Rust.
+ */
+const KEEP_RADIUS = 1
+
 /** Délai avant de passer une case en 3D vivante. Un balayage rapide de la
  *  souris traverse une rangée entière : sans ce répit, on créerait et
  *  détruirait un contexte WebGL par case au passage. */
@@ -174,6 +190,30 @@ export default function SkinCatalog() {
     // invisible le franchissement d'une frontière de lot.
     ensureRemote(lastRemote + 1)
   }, [firstRemote, lastRemote, ensureRemote])
+
+  // ── Déchargement de ce qui s'éloigne ──────────────────────────────────────
+  //
+  // Les lots hors fenêtre partent, et avec eux leurs aperçus et leurs rendus
+  // cuits — c'est la même règle pour les trois caches, pour qu'aucun ne puisse
+  // grossir pendant que les autres se vident.
+  useEffect(() => {
+    const low = firstRemote - KEEP_RADIUS
+    const high = lastRemote + KEEP_RADIUS
+    setPages((known) => keepPages(known, low, high))
+    setFailed((known) => {
+      const kept = new Set(Array.from(known).filter((page) => page >= low && page <= high))
+      return kept.size === known.size ? known : kept
+    })
+  }, [firstRemote, lastRemote])
+
+  // Les aperçus et les rendus suivent les lots : une adresse qui n'appartient
+  // plus à aucun lot gardé n'a plus de case où s'afficher.
+  useEffect(() => {
+    const alive = new Set<string>()
+    pages.forEach((items) => items.forEach((skin) => alive.add(skin.url)))
+    setPreviews((known) => keepUrls(known, alive))
+    setBaked((known) => keepUrls(known, alive))
+  }, [pages])
 
   /** `null` tant qu'un lot nécessaire manque — c'est l'état de chargement. */
   const visible = useMemo(() => {
@@ -397,6 +437,27 @@ function tilingFor(width: number, height: number): Tiling {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * Les deux filtres de déchargement rendent l'objet d'origine quand ils n'ont
+ * rien à retirer. Sans ça, l'effet qui taille les aperçus d'après les lots
+ * produirait un nouvel objet à chaque rendu, qui relancerait l'effet.
+ */
+function keepPages(
+  pages: Map<number, CatalogSkin[]>,
+  low: number,
+  high: number,
+): Map<number, CatalogSkin[]> {
+  const kept = new Map(Array.from(pages).filter(([page]) => page >= low && page <= high))
+  return kept.size === pages.size ? pages : kept
+}
+
+function keepUrls<T>(entries: Record<string, T>, alive: Set<string>): Record<string, T> {
+  const keys = Object.keys(entries)
+  const kept = keys.filter((url) => alive.has(url))
+  if (kept.length === keys.length) return entries
+  return Object.fromEntries(kept.map((url) => [url, entries[url]]))
 }
 
 /** Couche centrée qui occupe la zone de grille — chargement, vide. */

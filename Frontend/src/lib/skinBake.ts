@@ -41,10 +41,15 @@ const BAKE_HEIGHT = 288
  *
  * Parcourir le catalogue longtemps finirait par retenir des centaines
  * d'images de quelques dizaines de kilo-octets. On garde les plus récentes et
- * on jette les premières entrées — revenir très en arrière recuit, ce qui est
- * rapide puisque le PNG source, lui, est toujours en cache côté Rust.
+ * on jette les premières entrées.
+ *
+ * Trois lots Ely.by, soit un peu moins que ce que le catalogue garde affiché
+ * (quatre lots) : ce cache n'est qu'un second rang. L'écran tient déjà ses
+ * rendus pour les cases qu'il montre, et celui-ci sert à ne pas recuire ce
+ * qu'il vient de décharger. Le dépasser ne coûterait qu'une cuisson, rapide,
+ * le PNG source restant dans le cache disque du Rust.
  */
-const MAX_CACHED = 240
+const MAX_CACHED = 120
 
 const cache = new Map<string, string>()
 let viewer: SkinViewer | null = null
