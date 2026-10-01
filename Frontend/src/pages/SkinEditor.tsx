@@ -261,6 +261,14 @@ export default function SkinEditor() {
   const flatRef = useRef<HTMLCanvasElement>(null)
   const miniRef = useRef<HTMLCanvasElement>(null)
   const flatBoxRef = useRef<HTMLDivElement>(null)
+  /** Le bloc des quatre plans de la vue 2D, celui que zoom et déplacement
+   *  transforment d'un seul tenant. */
+  const flatStageRef = useRef<HTMLDivElement>(null)
+  /** Zoom et décalage de la vue 2D. En ref et non en état : ils changent à
+   *  chaque cran de molette et à chaque image d'un déplacement, et redessiner
+   *  l'interface à ce rythme n'apporterait rien — c'est la même raison qui
+   *  garde le trait de pinceau hors de React. */
+  const flatViewRef = useRef({ zoom: 1, x: 0, y: 0 })
 
   /**
    * Les deux emplacements où la 3D peut vivre, et le cadre qu'elle occupe.
@@ -944,6 +952,123 @@ export default function SkinEditor() {
     }
   }, [ready, mode, applyTo, pickFlat, persist, pushState, clearPreview, drawPreview])
 
+  // ── Caméra de la vue 2D ───────────────────────────────────────────────────
+  //
+  // Mêmes gestes qu'en 3D, pour qu'on n'ait pas à les réapprendre en changeant
+  // de vue : le gauche ne fait que peindre, la molette zoome, et le droit
+  // déplace. En 3D le droit fait tourner et c'est molette + droit qui déplace ;
+  // ici il n'y a rien à faire tourner, donc les deux gestes mènent au même
+  // endroit — la main qui connaît la 3D tombe juste des deux façons.
+  //
+  // Rien ne passe par React : la transformation est écrite directement sur le
+  // bloc, comme le trait de pinceau est écrit directement sur la texture.
+  // `pickFlat` continue de fonctionner sans rien savoir de tout ça, puisqu'il
+  // mesure le canevas avec `getBoundingClientRect`, qui rend la boîte APRÈS
+  // transformation.
+  useEffect(() => {
+    const box = flatBoxRef.current
+    const stage = flatStageRef.current
+    if (!box || !stage || mode !== '2d') return
+
+    const MIN_ZOOM = 1
+    const MAX_ZOOM = 16
+
+    const paint = () => {
+      const { zoom, x, y } = flatViewRef.current
+      stage.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`
+    }
+
+    /**
+     * Le décalage est borné à la moitié du carré agrandi : on peut amener
+     * n'importe quel coin au centre, jamais pousser le dessin hors du cadre.
+     * Et à zoom 1 il n'y a rien à cadrer, donc la vue se recentre — c'est ce
+     * qui tient lieu de « réinitialiser », sans bouton à apprendre.
+     */
+    const clamp = () => {
+      const view = flatViewRef.current
+      if (view.zoom <= MIN_ZOOM) {
+        view.x = 0
+        view.y = 0
+        return
+      }
+      const limit = (stage.offsetWidth * view.zoom) / 2
+      view.x = Math.max(-limit, Math.min(limit, view.x))
+      view.y = Math.max(-limit, Math.min(limit, view.y))
+    }
+
+    // Zoom vers le pointeur, et non vers le centre : en 2D on grossit toujours
+    // un détail qu'on a sous le curseur, et le viser au centre d'abord serait
+    // un geste de plus à chaque cran.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const view = flatViewRef.current
+      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)))
+      if (next === view.zoom) return
+      const bounds = box.getBoundingClientRect()
+      const px = e.clientX - (bounds.left + bounds.width / 2)
+      const py = e.clientY - (bounds.top + bounds.height / 2)
+      // Le point sous le curseur ne bouge pas : son antécédent est conservé
+      // d'un zoom à l'autre.
+      const ratio = next / view.zoom
+      view.x = px - (px - view.x) * ratio
+      view.y = py - (py - view.y) * ratio
+      view.zoom = next
+      clamp()
+      paint()
+    }
+
+    let panning = 0
+    let last = { x: 0, y: 0 }
+
+    const onDown = (e: PointerEvent) => {
+      // Droit, ou molette enfoncée — jamais le gauche, qui peint.
+      if (e.button !== 2 && e.button !== 1) return
+      e.preventDefault()
+      panning = e.pointerId
+      last = { x: e.clientX, y: e.clientY }
+      box.setPointerCapture(e.pointerId)
+      box.style.cursor = 'grabbing'
+    }
+
+    const onMove = (e: PointerEvent) => {
+      if (panning !== e.pointerId) return
+      const view = flatViewRef.current
+      view.x += e.clientX - last.x
+      view.y += e.clientY - last.y
+      last = { x: e.clientX, y: e.clientY }
+      clamp()
+      paint()
+    }
+
+    const onUp = (e: PointerEvent) => {
+      if (panning !== e.pointerId) return
+      panning = 0
+      if (box.hasPointerCapture(e.pointerId)) box.releasePointerCapture(e.pointerId)
+      box.style.cursor = ''
+    }
+
+    /** Sans ça, le déplacement au bouton droit ouvre le menu du système. */
+    const onMenu = (e: MouseEvent) => e.preventDefault()
+
+    box.addEventListener('wheel', onWheel, { passive: false })
+    box.addEventListener('pointerdown', onDown)
+    box.addEventListener('pointermove', onMove)
+    box.addEventListener('pointerup', onUp)
+    box.addEventListener('pointercancel', onUp)
+    box.addEventListener('contextmenu', onMenu)
+
+    paint()
+    return () => {
+      box.removeEventListener('wheel', onWheel)
+      box.removeEventListener('pointerdown', onDown)
+      box.removeEventListener('pointermove', onMove)
+      box.removeEventListener('pointerup', onUp)
+      box.removeEventListener('pointercancel', onUp)
+      box.removeEventListener('contextmenu', onMenu)
+      box.style.cursor = ''
+    }
+  }, [mode])
+
   // Les deux aperçus restent carrés et tiennent dans leur cadre : on mesure
   // plutôt que de se fier à un rapport CSS, qui casse dès que le cadre devient
   // plus haut que large — et c'est exactement ce qui arrive sur une fenêtre
@@ -1317,11 +1442,20 @@ export default function SkinEditor() {
                   débordait du cadre — très visible en plein écran, où la zone
                   est bien plus haute que large. */}
               <div className={mode === '2d' ? 'absolute inset-0 p-4' : 'hidden'}>
-                <div ref={flatBoxRef} className="flex h-full w-full items-center justify-center">
+                {/* `overflow-hidden` : une fois zoomée, la texture dépasse du
+                    carré, et c'est ce cadre qui la rogne. */}
+                <div ref={flatBoxRef} className="flex h-full w-full items-center justify-center overflow-hidden">
                   {/* Quatre plans : damier, teinte de la couche active,
                       dessin, puis contours. Le damier quitte le canevas pour
-                      que la teinte puisse se glisser entre les deux. */}
-                  <div className="relative" style={{ width: flatSize, height: flatSize }}>
+                      que la teinte puisse se glisser entre les deux.
+                      Zoom et déplacement s'appliquent au bloc entier, d'un
+                      seul `transform` : les quatre plans restent alignés au
+                      pixel, et le damier grossit avec le dessin. */}
+                  <div
+                    ref={flatStageRef}
+                    className="relative shrink-0 origin-center"
+                    style={{ width: flatSize, height: flatSize }}
+                  >
                     <div
                       className="absolute inset-0 rounded-lg"
                       style={checkerForTexture(flatSize)}
