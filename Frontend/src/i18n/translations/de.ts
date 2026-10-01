@@ -1093,6 +1093,8 @@ export const de: TranslationSchema = {
     step_bucket: 'Füllung',
     step_blank: 'Neu angefangen',
     step_account: 'Konto-Skin',
+    download: 'PNG herunterladen',
+    fromCatalog: 'Einen Skin aus dem Katalog nehmen',
     viewSteps: 'Schritte ansehen',
     clearHistory: 'Verlauf löschen',
     clearHistoryConfirm: 'Löschen? Zeichnung bleibt',

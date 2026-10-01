@@ -377,17 +377,31 @@ export default function SkinCatalog() {
     resetFilters({ tags: [...tags, tag] })
   }
 
-  /** Essayer un skin, c'est repartir à l'écran Skins avec lui en main : il y
-   *  arrive comme candidat, et c'est là-bas qu'on confirme. */
+  /**
+   * Essayer un skin renvoie d'où l'on vient.
+   *
+   * Depuis l'écran Skins il y arrive **en candidat**, et c'est là-bas qu'on
+   * confirme. Depuis l'éditeur (`?to=editor`) il devient le dessin de départ :
+   * on est venu chercher une base, pas un skin à porter.
+   */
+  const fromEditor = params.get('to') === 'editor'
+
   const trySkin = (skin: CatalogSkin) => {
     const query = new URLSearchParams()
     if (account) query.set('account', account)
+    if (fromEditor) {
+      query.set('load', skin.url)
+      query.set('variant', skin.variant)
+      navigate(`/skins/editor?${query.toString()}`)
+      return
+    }
     query.set('try', skin.url)
     query.set('variant', skin.variant)
     navigate(`/skins?${query.toString()}`)
   }
 
-  const backTo = account ? `/skins?account=${encodeURIComponent(account)}` : '/skins'
+  const home = fromEditor ? '/skins/editor' : '/skins'
+  const backTo = account ? `${home}?account=${encodeURIComponent(account)}` : home
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-bg-primary text-txt-primary">

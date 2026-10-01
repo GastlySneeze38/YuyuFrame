@@ -1095,6 +1095,8 @@ export const fr = {
     step_bucket: 'Remplissage',
     step_blank: 'Remis à zéro',
     step_account: 'Skin du compte',
+    download: 'Télécharger le PNG',
+    fromCatalog: 'Prendre un skin du catalogue',
     viewSteps: 'Voir les étapes',
     clearHistory: 'Effacer l’historique',
     clearHistoryConfirm: 'Effacer ? Le dessin reste',

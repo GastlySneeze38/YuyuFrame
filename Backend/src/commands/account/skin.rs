@@ -450,6 +450,25 @@ pub async fn skin_import_bytes(data: String, variant: String) -> Result<CheckedS
     })
 }
 
+/// Écrit un skin sur le disque, à l'emplacement choisi par l'utilisateur.
+///
+/// Le chemin vient d'un sélecteur d'enregistrement, donc du geste de
+/// l'utilisateur et non du contenu — c'est la seule raison pour laquelle cette
+/// commande peut écrire où on le lui dit. Les octets sont validés avant
+/// écriture : on ne crée pas un `.png` qui n'en serait pas un.
+#[tauri::command]
+pub async fn skin_export_png(data: String, path: String) -> Result<(), String> {
+    let encoded = data.rsplit(',').next().unwrap_or_default();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| "Image illisible".to_string())?;
+    validate_skin_png(&bytes)?;
+    tokio::fs::write(&path, &bytes)
+        .await
+        .map_err(|e| format!("Enregistrement impossible : {}", e))?;
+    Ok(())
+}
+
 // ── Application ──────────────────────────────────────────────────────────────
 
 async fn account_row(state: &SharedState, uuid: &str) -> Result<db::McSessionRow, String> {

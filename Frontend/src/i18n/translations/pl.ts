@@ -1093,6 +1093,8 @@ export const pl: TranslationSchema = {
     step_bucket: 'Wypełnienie',
     step_blank: 'Zaczęta od nowa',
     step_account: 'Skórka konta',
+    download: 'Pobierz PNG',
+    fromCatalog: 'Weź skórkę z katalogu',
     viewSteps: 'Zobacz kroki',
     clearHistory: 'Wyczyść historię',
     clearHistoryConfirm: 'Wyczyścić? Rysunek zostaje',

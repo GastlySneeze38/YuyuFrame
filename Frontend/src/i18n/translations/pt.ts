@@ -1094,6 +1094,8 @@ export const pt: TranslationSchema = {
     step_bucket: 'Preenchimento',
     step_blank: 'Recomeçada',
     step_account: 'Skin da conta',
+    download: 'Baixar o PNG',
+    fromCatalog: 'Pegar uma skin do catálogo',
     viewSteps: 'Ver as etapas',
     clearHistory: 'Limpar o histórico',
     clearHistoryConfirm: 'Limpar? O desenho fica',

@@ -1093,6 +1093,8 @@ export const ru: TranslationSchema = {
     step_bucket: 'Заливка',
     step_blank: 'Начато заново',
     step_account: 'Скин аккаунта',
+    download: 'Скачать PNG',
+    fromCatalog: 'Взять скин из каталога',
     viewSteps: 'Посмотреть шаги',
     clearHistory: 'Очистить историю',
     clearHistoryConfirm: 'Очистить? Рисунок останется',

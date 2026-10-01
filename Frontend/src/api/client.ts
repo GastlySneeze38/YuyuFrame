@@ -441,6 +441,8 @@ export const api = {
      */
     importBytes: (data: string, variant: SkinVariant) =>
       invoke<CheckedSkin>('skin_import_bytes', { data, variant }),
+    /** Écrit le PNG à l'emplacement choisi dans le sélecteur d'enregistrement. */
+    exportPng: (data: string, path: string) => invoke<void>('skin_export_png', { data, path }),
     /**
      * Compte Microsoft : posé chez Mojang — et si c'est un fichier, envoyé chez
      * eux, ce qui le transforme en skin hébergé. Hors ligne : enregistré ici.

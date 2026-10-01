@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
+import { save as savePicker } from '@tauri-apps/plugin-dialog'
 import { MOUSE, Raycaster, Vector2 } from 'three'
 import type { BufferGeometry, Intersection, Mesh, Object3D, Texture } from 'three'
 import { SkinViewer } from 'skinview3d'
@@ -171,7 +172,7 @@ interface Target {
 export default function SkinEditor() {
   const t = useT()
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const account = params.get('account')
 
   const [tool, setTool] = useState<Tool>('pencil')
@@ -191,6 +192,7 @@ export default function SkinEditor() {
   const [at, setAt] = useState(0)
   const [hover, setHover] = useState<{ part: PartId | null; pixel: Pixel } | null>(null)
   const [showSteps, setShowSteps] = useState(false)
+  const [showPoses, setShowPoses] = useState(false)
   const [mode, setMode] = useState<Mode>('3d')
   /** Côté le plus large possible pour la vue 2D : elle doit rester carrée et
    *  tenir dans son cadre, quelle que soit la forme de la fenêtre. */
@@ -686,7 +688,22 @@ export default function SkinEditor() {
         if (current?.variant === 'slim') setVariant('slim')
       }
 
-      const saved = readSaved(account)
+      // Skin rapporté du catalogue (`?load=`). Il passe devant le brouillon
+      // local : on vient d'aller le chercher, c'est lui qu'on veut comme base.
+      // Son modèle vient du catalogue, qui le connaît.
+      const wanted = params.get('load')
+      let imported: string | null = null
+      if (wanted) {
+        if (params.get('variant') === 'slim') setVariant('slim')
+        const checked = await api.skin.checkUrl(wanted).catch((e) => {
+          showError(e)
+          return null
+        })
+        if (disposed) return
+        imported = checked?.data_uri ?? null
+      }
+
+      const saved = imported ?? readSaved(account)
       const source = saved ?? (account ? await skinPreview(account).catch(() => null) : null)
       if (disposed) return
 
@@ -709,6 +726,14 @@ export default function SkinEditor() {
       // Premier report vers la vue 2D et la vignette : sans lui, elles
       // resteraient vides jusqu'au premier coup de pinceau.
       commit()
+
+      // L'adresse ne reste pas dans l'URL : recharger l'écran ne doit pas
+      // réimporter par-dessus le travail en cours.
+      if (wanted) {
+        const kept = new URLSearchParams()
+        if (account) kept.set('account', account)
+        setParams(kept, { replace: true })
+      }
     }
     void start()
 
@@ -1077,6 +1102,30 @@ export default function SkinEditor() {
     [account, clearPreview, commit, persist, pushState],
   )
 
+  /** Le PNG sur le disque, à l'emplacement que l'utilisateur choisit. */
+  const download = useCallback(async () => {
+    const image = serialise()
+    if (!image) return
+    try {
+      const path = await savePicker({
+        defaultPath: 'skin.png',
+        filters: [{ name: 'PNG', extensions: ['png'] }],
+      })
+      if (!path) return
+      await api.skin.exportPng(image, path)
+    } catch (e) {
+      showError(e)
+    }
+  }, [serialise])
+
+  /** Le catalogue, avec le retour marqué : « essayer » y rapportera le skin
+   *  ici comme base de dessin, et non sur l'écran Skins pour le porter. */
+  const openCatalog = useCallback(() => {
+    const query = new URLSearchParams({ to: 'editor' })
+    if (account) query.set('account', account)
+    navigate(`/skins/catalog?${query.toString()}`)
+  }, [account, navigate])
+
   const save = useCallback(async () => {
     const image = serialise()
     if (!image || saving) return
@@ -1398,6 +1447,29 @@ export default function SkinEditor() {
             }`}
           />
           {mode === '3d' && <HoverChip hover={hover} />}
+
+          {/* Trois actions qui concernent le skin entier, pas le pinceau :
+              leur place est sur la vue, pas dans les cartes d'outils. Elles
+              sont hors du canevas, donc un clic ne part jamais faire tourner
+              la caméra. */}
+          {mode === '3d' && ready && (
+            <div className="absolute right-2 top-2 flex flex-col gap-1.5">
+              <ViewAction label={t('skinEditor.download')} onClick={() => void download()}>
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
+                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </ViewAction>
+              <ViewAction label={t('skinEditor.fromCatalog')} onClick={openCatalog}>
+                <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              </ViewAction>
+              <ViewAction label={t('skins.poses')} onClick={() => setShowPoses(true)}>
+                <circle cx="12" cy="5" r="2" />
+                <path d="M12 8v6m0 0-3 6m3-6 3 6M7 10h10" />
+              </ViewAction>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1415,6 +1487,10 @@ export default function SkinEditor() {
             onClose={() => setShowSteps(false)}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPoses && <PosesModal onClose={() => setShowPoses(false)} />}
       </AnimatePresence>
     </div>
   )
@@ -1764,6 +1840,68 @@ function StepCard({
  * libre ; en ligne, il le partage en largeur. Une hauteur fixe annulerait le
  * premier cas, et c'est ce qui laissait des commandes tassées sous un vide.
  */
+/**
+ * Bouton d'action posé sur la vue 3D. L'icône se passe en `children`, le reste
+ * de la balise SVG est commun.
+ *
+ * Fond opaque : posés sur un damier, des boutons translucides laissaient le
+ * motif transparaître derrière l'icône.
+ */
+function ViewAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-surface-2 text-txt-secondary transition-colors hover:border-accent/50 hover:bg-surface-3 hover:text-txt-primary"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-[19px] w-[19px]">
+        {children}
+      </svg>
+    </button>
+  )
+}
+
+/**
+ * Positions du personnage.
+ *
+ * Les mêmes que l'écran Skins, et **inertes des deux côtés** : la mécanique
+ * sera posée une fois pour les deux écrans plutôt que deux fois. `skinview3d`
+ * fournit déjà `IdleAnimation`, `WalkingAnimation`, `RunningAnimation` et
+ * `FlyingAnimation` pour le jour où on les branche.
+ */
+const POSES = ['standing', 'walking', 'running', 'flying', 'sitting', 'waving'] as const
+
+function PosesModal({ onClose }: { onClose: () => void }) {
+  const t = useT()
+  return (
+    <ModalShell title={t('skins.poses')} onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skins.posesSoon')}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {POSES.map((pose) => (
+            <button
+              key={pose}
+              disabled
+              className="h-10 cursor-not-allowed rounded-lg border border-line bg-surface-2 text-[12.5px] text-txt-muted opacity-60"
+            >
+              {t(`skins.pose${pose.charAt(0).toUpperCase()}${pose.slice(1)}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
 /** Bascule de visibilité d'une couche : l'œil dit l'état, le libellé dit de
  *  quoi on parle. */
 function EyeButton({
