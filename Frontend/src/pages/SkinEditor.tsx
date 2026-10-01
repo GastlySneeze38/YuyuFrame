@@ -1116,8 +1116,16 @@ export default function SkinEditor() {
         {/* Toujours trois colonnes, même étroites : les empiler sur une
             fenêtre réduite demanderait de défiler, ce qu'on refuse ici. Leur
             largeur suit la fenêtre, et les cartes s'y plient. */}
-        <div className="mx-auto grid h-full w-full max-w-[1180px] grid-cols-[164px_1fr_164px] gap-3 md:grid-cols-[196px_1fr_196px] xl:grid-cols-[248px_1fr_248px] xl:gap-4">
-          <div className="flex min-h-0 flex-col gap-3">
+        {/* Plafond haut : les colonnes sont fixes, donc tout ce qu'on relâche
+            va au milieu — et le milieu est la seule chose qui gagne à être
+            grande. 1180 px laissait un tiers de l'écran en marges sur un
+            1920. La vue 2D reste bornée par la hauteur, donc rien ne s'emballe
+            sur un écran très large. */}
+        <div className="mx-auto grid h-full w-full max-w-[1700px] grid-cols-[164px_1fr_164px] gap-3 md:grid-cols-[196px_1fr_196px] xl:grid-cols-[248px_1fr_248px] xl:gap-4 2xl:grid-cols-[280px_1fr_280px]">
+          {/* `overflow-y-auto` en dernier recours : à toute taille raisonnable
+              rien ne défile, mais sur une fenêtre extrême mieux vaut atteindre
+              une commande en défilant que la voir chevaucher sa voisine. */}
+          <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
             <Card title={t('skinEditor.tools')}>
               <div className="grid grid-cols-2 gap-1.5">
                 {TOOLS.map((entry) => (
@@ -1182,10 +1190,15 @@ export default function SkinEditor() {
             {/* La carte montre toujours la vue sur laquelle on ne travaille
                 PAS, et cliquer échange les deux. Le canevas 2D reste monté et
                 seulement masqué quand la 3D vient s'y poser : le démonter
-                ferait perdre sa taille à l'emplacement, donc son cadre. */}
+                ferait perdre sa taille à l'emplacement, donc son cadre.
+
+                Le carré ne peut pas dépasser la largeur de la colonne : au-delà
+                la carte s'étirerait sans rien montrer de plus. Le plafond suit
+                donc les paliers de largeur, et la place en trop reste sous la
+                carte plutôt que dedans. */}
             <button
               onClick={() => setMode(mode === '3d' ? '2d' : '3d')}
-              className={`flex min-h-0 flex-1 flex-col rounded-2xl border p-2.5 text-left transition-colors xl:p-3 ${
+              className={`flex min-h-[132px] max-h-[190px] flex-1 flex-col rounded-2xl border p-2.5 text-left transition-colors md:max-h-[222px] xl:max-h-[274px] xl:p-3 2xl:max-h-[306px] ${
                 mode === '2d'
                   ? 'border-accent/50 bg-accent/10'
                   : 'border-line bg-surface-1 hover:border-accent/40 hover:bg-surface-2'
@@ -1271,7 +1284,7 @@ export default function SkinEditor() {
 
           </div>
 
-          <div className="flex min-h-0 flex-col gap-3">
+          <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
             <Card title={t('skinEditor.layer')}>
               <Segmented
                 options={[
@@ -1300,7 +1313,12 @@ export default function SkinEditor() {
               </div>
             </Card>
 
-            <Card title={t('skinEditor.model')}>
+            {/* « Base » plutôt que « Modèle » : la carte dit sur quoi on
+                dessine — quelle morphologie, et à partir de quoi on repart.
+                Les deux reprises étaient dans l'historique, où elles n'avaient
+                rien à faire : elles ne parcourent pas le passé, elles
+                redéfinissent le départ. */}
+            <Card title={t('skinEditor.base')}>
               <Segmented
                 options={[
                   { id: 'classic', label: t('skinEditor.modelClassic') },
@@ -1309,50 +1327,43 @@ export default function SkinEditor() {
                 value={variant}
                 onChange={(next) => setVariant(next as SkinVariant)}
               />
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                <SmallButton onClick={() => void reset('blank')} title={t('skinEditor.resetBlank')}>
+                  {t('skinEditor.resetBlankShort')}
+                </SmallButton>
+                <SmallButton
+                  onClick={() => void reset('account')}
+                  disabled={!account}
+                  title={t('skinEditor.resetAccount')}
+                >
+                  {t('skinEditor.resetAccountShort')}
+                </SmallButton>
+              </div>
             </Card>
 
-            {/* La carte prend la hauteur restante et ses boutons se la
-                partagent : les laisser à 36 px laissait un vide sous la carte
-                et donnait des commandes tassées au-dessus de rien. Un plafond
-                les empêche de devenir des pavés sur une grande fenêtre. */}
-            <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface-1 p-3">
-              <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-txt-muted">
-                  {t('skinEditor.history')}
-                </p>
-                <p className="font-mono text-[11px] tabular-nums text-txt-muted">
-                  {history.length > 0 ? `${at + 1}/${history.length}` : '—'}
-                </p>
+            {/* Trois lignes, hauteur naturelle, jamais étirée.
+                L'ancienne version empilait six commandes dans une carte
+                élastique : sur une fenêtre moyenne elles débordaient sous le
+                bouton d'enregistrement, sur une petite elles le chevauchaient,
+                et sur une grande elles flottaient dans du vide. Les actions
+                rares ont rejoint les écrans auxquels elles appartiennent —
+                effacer l'historique est dans la modale des étapes, les
+                reprises dans « Base ». */}
+            <Card title={t('skinEditor.history')} counter={history.length > 0 ? `${at + 1}/${history.length}` : '—'}>
+              <div className="grid grid-cols-2 gap-1.5">
+                <SmallButton onClick={undo} disabled={at <= 0}>
+                  {t('skinEditor.undo')}
+                </SmallButton>
+                <SmallButton onClick={redo} disabled={at >= history.length - 1}>
+                  {t('skinEditor.redo')}
+                </SmallButton>
               </div>
-
-              <div className="flex min-h-0 flex-1 flex-col gap-2">
-                <div className="flex min-h-[36px] max-h-[52px] flex-1 gap-2">
-                  <SmallButton onClick={undo} disabled={at <= 0}>
-                    {t('skinEditor.undo')}
-                  </SmallButton>
-                  <SmallButton onClick={redo} disabled={at >= history.length - 1}>
-                    {t('skinEditor.redo')}
-                  </SmallButton>
-                </div>
-
-                {/* Les étapes vivent dans une modale : dans cette colonne elles
-                    tenaient sur vingt pixels de large, ce qui ne montrait ni le
-                    personnage ni ce qu'on avait fait. */}
+              <div className="mt-1.5">
                 <SmallButton onClick={() => setShowSteps(true)} disabled={history.length === 0}>
                   {t('skinEditor.viewSteps')}
                 </SmallButton>
-                <ConfirmButton
-                  label={t('skinEditor.clearHistory')}
-                  confirmLabel={t('skinEditor.clearHistoryConfirm')}
-                  disabled={history.length <= 1}
-                  onConfirm={clearHistory}
-                />
-                <SmallButton onClick={() => void reset('blank')}>{t('skinEditor.resetBlank')}</SmallButton>
-                <SmallButton onClick={() => void reset('account')} disabled={!account}>
-                  {t('skinEditor.resetAccount')}
-                </SmallButton>
               </div>
-            </div>
+            </Card>
 
             <div className="mt-auto flex shrink-0 flex-col gap-1.5">
               <Button onClick={() => void save()} loading={saving} disabled={!ready} fullWidth>
@@ -1400,6 +1411,7 @@ export default function SkinEditor() {
               goTo(index)
               setShowSteps(false)
             }}
+            onClear={clearHistory}
             onClose={() => setShowSteps(false)}
           />
         )}
@@ -1499,10 +1511,24 @@ function RegionGrid({ active, pass }: { active: Layer; pass: 'under' | 'over' })
 
 /** `shrink-0` : seules les cartes d'aperçu et l'historique absorbent la
  *  hauteur libre, les autres gardent la leur quelle que soit la fenêtre. */
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({
+  title,
+  counter,
+  children,
+}: {
+  title: string
+  /** Petit compteur aligné à droite du titre, quand la carte en a un. */
+  counter?: string
+  children: React.ReactNode
+}) {
   return (
     <div className="shrink-0 rounded-2xl border border-line bg-surface-1 p-2.5 xl:p-3">
-      <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-txt-muted">{title}</p>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-txt-muted">{title}</p>
+        {counter && (
+          <p className="shrink-0 font-mono text-[10.5px] tabular-nums text-txt-muted">{counter}</p>
+        )}
+      </div>
       {children}
     </div>
   )
@@ -1582,12 +1608,14 @@ function StepsModal({
   at,
   slim,
   onPick,
+  onClear,
   onClose,
 }: {
   entries: HistoryEntry[]
   at: number
   slim: boolean
   onPick: (index: number) => void
+  onClear: () => void
   onClose: () => void
 }) {
   const t = useT()
@@ -1651,10 +1679,20 @@ function StepsModal({
         {/* `border-line-soft` et jamais `border-line/60` : ces jetons portent
             déjà leur alpha, un suffixe d'opacité donne une couleur invalide et
             le navigateur retombe sur un trait blanc. */}
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-3">
-          <p className="font-mono text-[11.5px] tabular-nums text-txt-muted">
-            {focused + 1}/{entries.length}
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-3">
+          {/* Effacer l'historique se fait ici, devant la liste qu'on jette —
+              pas depuis une colonne où l'on ne voit pas ce qu'on perd. */}
+          <div className="flex items-center gap-3">
+            <ConfirmButton
+              label={t('skinEditor.clearHistory')}
+              confirmLabel={t('skinEditor.clearHistoryConfirm')}
+              disabled={entries.length <= 1}
+              onConfirm={onClear}
+            />
+            <p className="font-mono text-[11.5px] tabular-nums text-txt-muted">
+              {focused + 1}/{entries.length}
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => onPick(entries.length - 1)} disabled={at === entries.length - 1}>
               {t('skinEditor.backToLatest')}
@@ -1811,7 +1849,7 @@ function ConfirmButton({
         }
       }}
       disabled={disabled}
-      className={`min-h-[36px] max-h-[52px] flex-1 rounded-lg border px-2 text-[12.5px] leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+      className={`h-8 shrink-0 rounded-lg border px-3 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         asking
           ? 'border-danger/50 bg-danger/15 text-danger'
           : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
@@ -1822,20 +1860,32 @@ function ConfirmButton({
   )
 }
 
+/**
+ * Hauteur fixe, largeur pleine.
+ *
+ * Elle a d'abord été élastique pour remplir une carte qui s'étirait : c'est
+ * ce qui la faisait déborder dès que la fenêtre manquait de hauteur, les
+ * boutons refusant de descendre sous leur minimum. Les cartes ayant repris
+ * une taille naturelle, le bouton n'a plus à négocier — il se range en grille
+ * quand il en faut deux de front.
+ */
 function SmallButton({
   onClick,
   disabled,
+  title,
   children,
 }: {
   onClick: () => void
   disabled?: boolean
+  title?: string
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="min-h-[36px] max-h-[52px] flex-1 rounded-lg border border-line bg-surface-2 px-2 text-[12.5px] leading-tight text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-35"
+      title={title}
+      className="h-9 w-full min-w-0 truncate rounded-lg border border-line bg-surface-2 px-2 text-[12.5px] text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
     </button>
