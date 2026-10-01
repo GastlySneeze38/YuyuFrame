@@ -182,23 +182,51 @@ function writePixel(image: ImageData, { x, y }: Pixel, color: Rgba): void {
 
 // ── Mannequin de départ ──────────────────────────────────────────────────────
 
+export type PartId = 'head' | 'body' | 'rightArm' | 'leftArm' | 'rightLeg' | 'leftLeg'
+
+export interface Region {
+  part: PartId
+  layer: 'inner' | 'outer'
+  rect: Rect
+}
+
 /**
- * Zones de la couche intérieure, en 64×64.
+ * Découpage de l'atlas 64×64.
  *
- * Elles ne servent qu'à peindre le mannequin : la peinture, elle, n'a jamais
- * besoin de cette table, puisque le rectangle de chaque face se déduit de la
- * géométrie touchée. Les bras fins occupent deux colonnes de moins, mais on
- * remplit la largeur classique — les colonnes en trop ne sont lues par
- * personne, et ça évite une seconde table.
+ * La peinture en 3D n'en a pas besoin — le rectangle de chaque face se déduit
+ * de la géométrie touchée. Elle sert à deux choses que la 3D ne donne pas : le
+ * mannequin de départ, et la **lecture de la vue 2D**, où rien ne dit quel
+ * rectangle est un bras tant qu'on ne l'a pas dessiné par-dessus.
+ *
+ * Les bras fins occupent deux colonnes de moins, mais on garde la largeur
+ * classique : les colonnes en trop ne sont lues par personne, et ça évite une
+ * seconde table à tenir d'accord avec la première.
  */
-const INNER_REGIONS: Rect[] = [
-  { x0: 0, y0: 0, x1: 32, y1: 16 }, // tête
-  { x0: 0, y0: 16, x1: 16, y1: 32 }, // jambe droite
-  { x0: 16, y0: 16, x1: 40, y1: 32 }, // torse
-  { x0: 40, y0: 16, x1: 56, y1: 32 }, // bras droit
-  { x0: 16, y0: 48, x1: 32, y1: 64 }, // jambe gauche
-  { x0: 32, y0: 48, x1: 48, y1: 64 }, // bras gauche
+export const REGIONS: Region[] = [
+  { part: 'head', layer: 'inner', rect: { x0: 0, y0: 0, x1: 32, y1: 16 } },
+  { part: 'head', layer: 'outer', rect: { x0: 32, y0: 0, x1: 64, y1: 16 } },
+  { part: 'rightLeg', layer: 'inner', rect: { x0: 0, y0: 16, x1: 16, y1: 32 } },
+  { part: 'body', layer: 'inner', rect: { x0: 16, y0: 16, x1: 40, y1: 32 } },
+  { part: 'rightArm', layer: 'inner', rect: { x0: 40, y0: 16, x1: 56, y1: 32 } },
+  { part: 'rightLeg', layer: 'outer', rect: { x0: 0, y0: 32, x1: 16, y1: 48 } },
+  { part: 'body', layer: 'outer', rect: { x0: 16, y0: 32, x1: 40, y1: 48 } },
+  { part: 'rightArm', layer: 'outer', rect: { x0: 40, y0: 32, x1: 56, y1: 48 } },
+  { part: 'leftLeg', layer: 'outer', rect: { x0: 0, y0: 48, x1: 16, y1: 64 } },
+  { part: 'leftLeg', layer: 'inner', rect: { x0: 16, y0: 48, x1: 32, y1: 64 } },
+  { part: 'leftArm', layer: 'inner', rect: { x0: 32, y0: 48, x1: 48, y1: 64 } },
+  { part: 'leftArm', layer: 'outer', rect: { x0: 48, y0: 48, x1: 64, y1: 64 } },
 ]
+
+/** Zone sous un pixel — `null` dans les coins inutilisés de l'atlas. */
+export function regionAt(pixel: Pixel): Region | null {
+  return REGIONS.find((region) => rectContains(region.rect, pixel)) ?? null
+}
+
+/** L'atlas entier. En 2D, le pinceau n'est borné que par lui : franchir les
+ *  zones est précisément ce qu'on vient y faire. */
+export const FULL_RECT: Rect = { x0: 0, y0: 0, x1: SKIN_SIZE, y1: SKIN_SIZE }
+
+const INNER_REGIONS: Rect[] = REGIONS.filter((region) => region.layer === 'inner').map((r) => r.rect)
 
 /** Gris neutre : un mannequin, pas un skin qui prétendrait être fini. */
 const MANNEQUIN = '#9aa0a6'

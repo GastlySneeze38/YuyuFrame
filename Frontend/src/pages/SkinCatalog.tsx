@@ -804,7 +804,10 @@ function Tile({
         )}
       </div>
 
-      <div className="flex h-6 shrink-0 items-center justify-center gap-1 border-t border-line/60 px-2 text-[10.5px] tabular-nums text-txt-muted">
+      {/* `border-line-soft` et jamais `border-line/60` : ces jetons portent
+          déjà leur alpha, un suffixe d'opacité donne une couleur invalide et
+          le navigateur retombe sur un trait blanc. */}
+      <div className="flex h-6 shrink-0 items-center justify-center gap-1 border-t border-line-soft px-2 text-[10.5px] tabular-nums text-txt-muted">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
           <path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
           <circle cx="9.5" cy="7" r="4" />

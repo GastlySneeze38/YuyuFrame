@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
 import { MOUSE, Raycaster, Vector2 } from 'three'
 import type { BufferGeometry, Intersection, Mesh, Object3D, Texture } from 'three'
 import { SkinViewer } from 'skinview3d'
@@ -9,10 +10,15 @@ import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { ModalShell } from '@/components/ui/ModalShell'
+import { SkinFace } from '@/components/ui/SkinFace'
+import { bakeSkin } from '@/lib/skinBake'
 import { showError } from '@/stores/useErrorToast'
 import { skinPreview } from '@/lib/skinCache'
 import { putSkinDraft } from '@/lib/skinDraft'
 import {
+  FULL_RECT,
+  REGIONS,
   SKIN_SIZE,
   brushRect,
   drawMannequin,
@@ -20,10 +26,11 @@ import {
   hexToRgba,
   linePixels,
   pixelAt,
+  regionAt,
   rgbaToHex,
   uvToPixel,
 } from '@/lib/skinEditor'
-import type { Pixel, Rect } from '@/lib/skinEditor'
+import type { PartId, Pixel, Rect } from '@/lib/skinEditor'
 import { useT } from '@/i18n'
 
 /**
@@ -65,8 +72,30 @@ import { useT } from '@/i18n'
 
 type Tool = 'pencil' | 'eraser' | 'picker' | 'bucket'
 type Layer = 'inner' | 'outer'
-type PartId = 'head' | 'body' | 'rightArm' | 'leftArm' | 'rightLeg' | 'leftLeg'
 
+/** Sur quoi on travaille : le personnage, ou le fichier à plat. */
+type Mode = '3d' | '2d'
+
+/** Où peindre, une fois le pointeur résolu — par un rayon en 3D, par une
+ *  simple règle de trois en 2D. Le reste du traitement est commun. */
+interface Spot {
+  pixel: Pixel
+  /** Bornes du pinceau : la face touchée en 3D, l'atlas entier en 2D. */
+  face: Rect
+  part: PartId | null
+}
+
+/** Ce qui a produit une étape — affiché tel quel dans l'historique. */
+type StepLabel = 'start' | 'pencil' | 'eraser' | 'bucket' | 'blank' | 'account'
+
+interface HistoryEntry {
+  /** Identifiant stable, qui ne bouge pas quand l'historique est tronqué —
+   *  c'est lui qui sert de clé au cache des rendus cuits. */
+  id: number
+  label: StepLabel
+  /** Le skin à cette étape, pour la vignette et le rendu. */
+  thumb: string
+}
 const PART_IDS: PartId[] = ['head', 'body', 'rightArm', 'leftArm', 'rightLeg', 'leftLeg']
 
 const TOOLS: { id: Tool; shortcut: string }[] = [
@@ -76,7 +105,17 @@ const TOOLS: { id: Tool; shortcut: string }[] = [
   { id: 'bucket', shortcut: 'G' },
 ]
 
-const BRUSH_SIZES = [1, 2, 3, 4]
+/**
+ * Bornes du pinceau.
+ *
+ * Large exprès : en 3D le pinceau est de toute façon borné à la face touchée,
+ * donc une grande valeur revient à « remplir cette face d'un clic » ; en 2D,
+ * où il n'est borné que par l'atlas, elle couvre une zone entière. Un curseur
+ * au pixel près plutôt que quatre tailles figées, pour que les deux usages
+ * soient atteignables.
+ */
+const MIN_BRUSH = 1
+const MAX_BRUSH = 32
 
 /** Palette de départ : des teintes qui servent vraiment à faire un
  *  personnage — peaux, cheveux, vêtements — plutôt qu'un nuancier. */
@@ -85,8 +124,9 @@ const PALETTE = [
   '#b91c1c', '#ea580c', '#eab308', '#16a34a', '#0ea5e9', '#4b3fcf', '#a855f7', '#ec4899',
 ]
 
-/** Au-delà, l'annulation coûterait plus de mémoire qu'elle ne rend service.
- *  Un pas pèse 16 Ko (64×64 en RGBA), donc 40 pas tiennent dans 640 Ko. */
+/** Au-delà, l'historique coûterait plus de mémoire qu'il ne rend service. Une
+ *  étape pèse 16 Ko (64×64 en RGBA) plus sa vignette, donc 40 étapes tiennent
+ *  largement sous le mégaoctet. Les plus anciennes sont oubliées en premier. */
 const MAX_HISTORY = 40
 
 /** Le travail en cours est réécrit au plus toutes les 400 ms : un trait ne
@@ -117,8 +157,14 @@ export default function SkinEditor() {
   const [ready, setReady] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const [history, setHistory] = useState({ undo: 0, redo: 0 })
-  const [hover, setHover] = useState<{ part: PartId; pixel: Pixel } | null>(null)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [at, setAt] = useState(0)
+  const [hover, setHover] = useState<{ part: PartId | null; pixel: Pixel } | null>(null)
+  const [showSteps, setShowSteps] = useState(false)
+  const [mode, setMode] = useState<Mode>('3d')
+  /** Côté le plus large possible pour la vue 2D : elle doit rester carrée et
+   *  tenir dans son cadre, quelle que soit la forme de la fenêtre. */
+  const [flatSize, setFlatSize] = useState(320)
 
   const boxRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -127,8 +173,21 @@ export default function SkinEditor() {
   const textureRef = useRef<Texture | null>(null)
   const targetsRef = useRef<Target[]>([])
 
-  const undoRef = useRef<ImageData[]>([])
-  const redoRef = useRef<ImageData[]>([])
+  /**
+   * Historique linéaire : une suite d'états, et un curseur dedans.
+   *
+   * Deux piles (annuler / rétablir) suffisaient à reculer d'un pas, mais ne
+   * permettaient pas de montrer où l'on en est ni de sauter ailleurs. Ici
+   * chaque état est gardé en entier — 16 Ko pour un 64×64, c'est moins cher
+   * que de rejouer des opérations — avec sa vignette et ce qui l'a produit.
+   *
+   * Les images vivent dans des références et seules les vignettes passent par
+   * l'état React : recopier des `ImageData` à chaque rendu ne servirait à rien.
+   */
+  const statesRef = useRef<ImageData[]>([])
+  const metasRef = useRef<HistoryEntry[]>([])
+  const atRef = useRef(0)
+  const nextIdRef = useRef(0)
   const strokeRef = useRef<{ active: boolean; pixel: Pixel | null; face: Rect | null }>({
     active: false,
     pixel: null,
@@ -153,8 +212,51 @@ export default function SkinEditor() {
 
   // ── Écriture sur la texture ───────────────────────────────────────────────
 
+  const flatRef = useRef<HTMLCanvasElement>(null)
+  const miniRef = useRef<HTMLCanvasElement>(null)
+  const flatBoxRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Les deux emplacements où la 3D peut vivre, et le cadre qu'elle occupe.
+   *
+   * Le canevas 3D n'est **jamais déplacé dans le DOM** : il reste un enfant
+   * unique de la zone de contenu, posé en absolu sur l'emplacement actif. Le
+   * déplacer pour de bon — par un portail React, par exemple — le remonterait,
+   * et le contexte WebGL mourrait à chaque changement de vue.
+   *
+   * Les coordonnées sont calculées contre la zone de contenu et corrigées du
+   * défilement, pour rester justes si la fenêtre devient trop petite et que
+   * l'écran se met à défiler.
+   */
+  const contentRef = useRef<HTMLDivElement>(null)
+  const mainSlotRef = useRef<HTMLDivElement>(null)
+  const miniSlotRef = useRef<HTMLDivElement>(null)
+  const miniBoxRef = useRef<HTMLDivElement>(null)
+  const [frame, setFrame] = useState({ left: 0, top: 0, width: 0, height: 0 })
+  /** Côté de l'aperçu de la colonne. Mesuré comme la grande vue : la carte
+   *  absorbe la hauteur que les autres laissent, et le carré s'y adapte. */
+  const [miniSize, setMiniSize] = useState(160)
+
+  /**
+   * Un seul `commit` pour les trois surfaces.
+   *
+   * La texture est la source, le reste n'en est qu'une copie : la grande vue
+   * 2D et la vignette de la colonne sont deux canevas 64×64 agrandis par le
+   * CSS, redessinés d'un `drawImage` à chaque changement. C'est ce qui les
+   * rend « en temps réel » sans rien synchroniser à la main — et comme
+   * l'aperçu du pinceau vit lui aussi sur la texture, il apparaît dans les
+   * trois d'un coup.
+   */
   const commit = useCallback(() => {
     if (textureRef.current) textureRef.current.needsUpdate = true
+    const source = skinCtxRef.current?.canvas
+    if (!source) return
+    for (const target of [flatRef.current, miniRef.current]) {
+      const ctx = target?.getContext('2d')
+      if (!ctx) continue
+      ctx.clearRect(0, 0, SKIN_SIZE, SKIN_SIZE)
+      ctx.drawImage(source, 0, 0)
+    }
   }, [])
 
   /**
@@ -242,36 +344,59 @@ export default function SkinEditor() {
     }, SAVE_DELAY_MS)
   }, [account, serialise])
 
-  const snapshot = useCallback(() => {
-    const ctx = skinCtxRef.current
-    if (!ctx) return
-    // Toujours avant de lire : l'historique ne doit pas retenir une teinte
-    // d'aperçu, qui reviendrait comme un vrai coup de pinceau en annulant.
-    clearPreview()
-    undoRef.current.push(ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE))
-    if (undoRef.current.length > MAX_HISTORY) undoRef.current.shift()
-    redoRef.current = []
-    setHistory({ undo: undoRef.current.length, redo: 0 })
-  }, [clearPreview])
-
-  const step = useCallback(
-    (from: ImageData[], to: ImageData[]) => {
+  /**
+   * Enregistre l'état courant comme une étape.
+   *
+   * Revenir en arrière puis dessiner coupe ce qui suivait : c'est la règle
+   * habituelle, et la seule qui garde l'historique lisible — sans quoi il
+   * faudrait montrer un arbre.
+   */
+  const pushState = useCallback(
+    (label: StepLabel) => {
       const ctx = skinCtxRef.current
-      const previous = from.pop()
-      if (!ctx || !previous) return
+      if (!ctx) return
+      // Toujours avant de lire : l'historique ne doit pas retenir une teinte
+      // d'aperçu, qui reviendrait comme un vrai coup de pinceau.
       clearPreview()
-      to.push(ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE))
-      ctx.putImageData(previous, 0, 0)
+
+      const states = statesRef.current.slice(0, atRef.current + 1)
+      const metas = metasRef.current.slice(0, atRef.current + 1)
+      nextIdRef.current += 1
+      states.push(ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE))
+      metas.push({ id: nextIdRef.current, label, thumb: ctx.canvas.toDataURL('image/png') })
+      if (states.length > MAX_HISTORY) {
+        states.shift()
+        metas.shift()
+      }
+
+      statesRef.current = states
+      metasRef.current = metas
+      atRef.current = states.length - 1
+      setHistory(metas)
+      setAt(atRef.current)
+    },
+    [clearPreview],
+  )
+
+  /** Saut direct à une étape — c'est ce que les deux piles ne savaient pas faire. */
+  const goTo = useCallback(
+    (index: number) => {
+      const ctx = skinCtxRef.current
+      const image = statesRef.current[index]
+      if (!ctx || !image || index === atRef.current) return
+      clearPreview()
+      ctx.putImageData(image, 0, 0)
+      atRef.current = index
+      setAt(index)
       commit()
       persist()
       setDirty(true)
-      setHistory({ undo: undoRef.current.length, redo: redoRef.current.length })
     },
     [clearPreview, commit, persist],
   )
 
-  const undo = useCallback(() => step(undoRef.current, redoRef.current), [step])
-  const redo = useCallback(() => step(redoRef.current, undoRef.current), [step])
+  const undo = useCallback(() => goTo(atRef.current - 1), [goTo])
+  const redo = useCallback(() => goTo(atRef.current + 1), [goTo])
 
   // ── Lancer de rayon ───────────────────────────────────────────────────────
 
@@ -347,11 +472,18 @@ export default function SkinEditor() {
     ctx.fillRect(rect.x0, rect.y0, width, height)
   }
 
-  const applyAt = useCallback(
-    (x: number, y: number, starting: boolean) => {
+  /**
+   * Le traitement d'un point, une fois qu'on sait où il tombe.
+   *
+   * Les deux vues ne diffèrent que par la résolution du pointeur : un rayon
+   * en 3D, une règle de trois en 2D. Tout le reste — outils, trait continu,
+   * historique — est commun, et c'est ce qui garantit qu'une retouche faite
+   * dans une vue est exactement celle qu'on aurait faite dans l'autre.
+   */
+  const applyTo = useCallback(
+    (found: Spot, starting: boolean) => {
       const ctx = skinCtxRef.current
-      const found = pick(x, y)
-      if (!ctx || !found) return
+      if (!ctx) return
 
       if (toolRef.current === 'picker') {
         const image = ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE)
@@ -371,6 +503,9 @@ export default function SkinEditor() {
         commit()
         persist()
         setDirty(true)
+        // Le pot agit d'un coup : son étape se note tout de suite, sans
+        // attendre un relâchement qui ne changerait plus rien.
+        pushState('bucket')
         return
       }
 
@@ -390,8 +525,34 @@ export default function SkinEditor() {
       commit()
       setDirty(true)
     },
-    [commit, persist, pick],
+    [commit, persist, pushState],
   )
+
+  /** Résolution 3D : le rayon décide du pixel et de la face. */
+  const applyAt = useCallback(
+    (x: number, y: number, starting: boolean) => {
+      const found = pick(x, y)
+      if (found) applyTo(found, starting)
+    },
+    [applyTo, pick],
+  )
+
+  /**
+   * Résolution 2D : le pointeur sur le canevas agrandi donne le pixel
+   * directement. Le pinceau n'y est borné que par l'atlas — déborder d'une
+   * zone sur l'autre est justement ce qu'on vient y faire.
+   */
+  const pickFlat = useCallback((clientX: number, clientY: number): Spot | null => {
+    const canvas = flatRef.current
+    if (!canvas) return null
+    const bounds = canvas.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return null
+    const x = Math.floor(((clientX - bounds.left) / bounds.width) * SKIN_SIZE)
+    const y = Math.floor(((clientY - bounds.top) / bounds.height) * SKIN_SIZE)
+    if (x < 0 || y < 0 || x >= SKIN_SIZE || y >= SKIN_SIZE) return null
+    const pixel = { x, y }
+    return { pixel, face: FULL_RECT, part: regionAt(pixel)?.part ?? null }
+  }, [])
 
   // ── Mise en place ─────────────────────────────────────────────────────────
 
@@ -481,6 +642,9 @@ export default function SkinEditor() {
       skinCtxRef.current = viewer.skinCanvas.getContext('2d', { willReadFrequently: true })
       textureRef.current = skin.map
       setReady(true)
+      // Premier report vers la vue 2D et la vignette : sans lui, elles
+      // resteraient vides jusqu'au premier coup de pinceau.
+      commit()
     }
     void start()
 
@@ -501,7 +665,7 @@ export default function SkinEditor() {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !ready) return
+    if (!canvas || !ready || mode !== '3d') return
 
     // Un seul traitement par image, quel que soit le débit d'événements.
     const frame = () => {
@@ -547,7 +711,6 @@ export default function SkinEditor() {
 
       const found = pick(e.clientX, e.clientY)
       if (!found) return
-      if (toolRef.current !== 'picker') snapshot()
       strokeRef.current = { active: true, pixel: null, face: null }
       applyAt(e.clientX, e.clientY, true)
     }
@@ -564,8 +727,15 @@ export default function SkinEditor() {
       const viewer = viewerRef.current
       if (viewer) viewer.controls.enabled = true
       if (!strokeRef.current.active) return
+      const painted = strokeRef.current.pixel !== null
       strokeRef.current = { active: false, pixel: null, face: null }
       persist()
+      // Une étape par trait, pas par pixel : annuler doit défaire le geste
+      // qu'on vient de faire, pas son dernier point. Le pot et la pipette ne
+      // passent pas par là.
+      if (painted && (toolRef.current === 'pencil' || toolRef.current === 'eraser')) {
+        pushState(toolRef.current)
+      }
     }
 
     const onLeave = () => {
@@ -588,7 +758,158 @@ export default function SkinEditor() {
       cancelAnimationFrame(frameRef.current)
       frameRef.current = 0
     }
-  }, [ready, applyAt, pick, persist, snapshot, clearPreview, drawPreview])
+  }, [ready, mode, applyAt, pick, persist, pushState, clearPreview, drawPreview])
+
+  // ── Pointeur, vue 2D ──────────────────────────────────────────────────────
+  //
+  // Même découpage qu'en 3D — une image par traitement, trait relié, aperçu du
+  // pinceau — mais sans caméra à ménager : il n'y a rien à faire tourner ici,
+  // donc le bouton gauche a le canevas pour lui seul.
+  useEffect(() => {
+    const canvas = flatRef.current
+    if (!canvas || !ready || mode !== '2d') return
+
+    const frame = () => {
+      frameRef.current = 0
+      const at = pointerRef.current
+      pointerRef.current = null
+      if (!at) return
+
+      if (strokeRef.current.active) {
+        const found = pickFlat(at.x, at.y)
+        if (found) applyTo(found, false)
+        return
+      }
+
+      const found = pickFlat(at.x, at.y)
+      if (!found) {
+        clearPreview()
+        setHover(null)
+        return
+      }
+      setHover({ part: found.part, pixel: found.pixel })
+      const painting = toolRef.current === 'pencil' || toolRef.current === 'eraser'
+      drawPreview(brushRect(found.pixel, painting ? brushRef.current : 1, found.face))
+    }
+    const schedule = () => {
+      if (frameRef.current === 0) frameRef.current = requestAnimationFrame(frame)
+    }
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      canvas.setPointerCapture(e.pointerId)
+      clearPreview()
+      const found = pickFlat(e.clientX, e.clientY)
+      if (!found) return
+      strokeRef.current = { active: true, pixel: null, face: null }
+      applyTo(found, true)
+    }
+
+    const onMove = (e: PointerEvent) => {
+      pointerRef.current = { x: e.clientX, y: e.clientY }
+      schedule()
+    }
+
+    const onUp = (e: PointerEvent) => {
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+      if (!strokeRef.current.active) return
+      const painted = strokeRef.current.pixel !== null
+      strokeRef.current = { active: false, pixel: null, face: null }
+      persist()
+      if (painted && (toolRef.current === 'pencil' || toolRef.current === 'eraser')) {
+        pushState(toolRef.current)
+      }
+    }
+
+    const onLeave = () => {
+      pointerRef.current = null
+      clearPreview()
+      setHover(null)
+    }
+
+    canvas.addEventListener('pointerdown', onDown)
+    canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('pointerup', onUp)
+    canvas.addEventListener('pointercancel', onUp)
+    canvas.addEventListener('pointerleave', onLeave)
+    return () => {
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('pointerup', onUp)
+      canvas.removeEventListener('pointercancel', onUp)
+      canvas.removeEventListener('pointerleave', onLeave)
+      cancelAnimationFrame(frameRef.current)
+      frameRef.current = 0
+    }
+  }, [ready, mode, applyTo, pickFlat, persist, pushState, clearPreview, drawPreview])
+
+  // Les deux aperçus restent carrés et tiennent dans leur cadre : on mesure
+  // plutôt que de se fier à un rapport CSS, qui casse dès que le cadre devient
+  // plus haut que large — et c'est exactement ce qui arrive sur une fenêtre
+  // étroite.
+  useEffect(() => {
+    const box = flatBoxRef.current
+    if (!box || mode !== '2d') return
+    const measure = () => {
+      const { width, height } = box.getBoundingClientRect()
+      if (width > 0 && height > 0) setFlatSize(Math.max(SKIN_SIZE, Math.floor(Math.min(width, height))))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [mode])
+
+  useEffect(() => {
+    const box = miniBoxRef.current
+    if (!box) return
+    const measure = () => {
+      const { width, height } = box.getBoundingClientRect()
+      if (width > 0 && height > 0) setMiniSize(Math.max(48, Math.floor(Math.min(width, height))))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [])
+
+  // La 3D suit l'emplacement actif : le grand cadre quand on travaille
+  // dessus, la carte de la colonne quand on travaille à plat.
+  useEffect(() => {
+    const content = contentRef.current
+    const slot = mode === '3d' ? mainSlotRef.current : miniSlotRef.current
+    if (!content || !slot) return
+
+    const measure = () => {
+      const outer = content.getBoundingClientRect()
+      const inner = slot.getBoundingClientRect()
+      setFrame({
+        left: inner.left - outer.left + content.scrollLeft,
+        top: inner.top - outer.top + content.scrollTop,
+        width: inner.width,
+        height: inner.height,
+      })
+    }
+    measure()
+
+    const ro = new ResizeObserver(measure)
+    ro.observe(slot)
+    ro.observe(content)
+    content.addEventListener('scroll', measure)
+    return () => {
+      ro.disconnect()
+      content.removeEventListener('scroll', measure)
+    }
+  }, [mode, ready])
+
+  // Passer d'une vue à l'autre ne doit pas laisser une teinte d'aperçu ni un
+  // trait à moitié commencé derrière soi.
+  useEffect(() => {
+    clearPreview()
+    setHover(null)
+    strokeRef.current = { active: false, pixel: null, face: null }
+  }, [mode, clearPreview])
 
   // ── Réglages du modèle ────────────────────────────────────────────────────
 
@@ -608,6 +929,12 @@ export default function SkinEditor() {
     if (layer === 'outer') setShowOuter(true)
   }, [layer])
 
+  // L'état de départ est une étape comme les autres : sans elle, on ne
+  // pourrait pas revenir avant son premier trait.
+  useEffect(() => {
+    if (ready && statesRef.current.length === 0) pushState('start')
+  }, [ready, pushState])
+
   // Changer d'outil, de couleur ou de taille sans bouger la souris laisserait
   // un aperçu qui ment sur ce qui va se passer. Il se redessine au prochain
   // mouvement.
@@ -621,6 +948,9 @@ export default function SkinEditor() {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (target?.tagName === 'INPUT') return
+      // La modale des étapes a ses propres touches : lui laisser la main
+      // évite qu'une flèche change d'étape ET de taille de pinceau.
+      if (showSteps) return
       const key = e.key.toLowerCase()
 
       if ((e.ctrlKey || e.metaKey) && key === 'z') {
@@ -640,12 +970,12 @@ export default function SkinEditor() {
       if (key === 'e') setTool('eraser')
       if (key === 'i') setTool('picker')
       if (key === 'g') setTool('bucket')
-      if (e.key === '[') setBrush((size) => Math.max(BRUSH_SIZES[0], size - 1))
-      if (e.key === ']') setBrush((size) => Math.min(BRUSH_SIZES[BRUSH_SIZES.length - 1], size + 1))
+      if (e.key === '[') setBrush((size) => Math.max(MIN_BRUSH, size - 1))
+      if (e.key === ']') setBrush((size) => Math.min(MAX_BRUSH, size + 1))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [undo, redo])
+  }, [undo, redo, showSteps])
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -654,7 +984,7 @@ export default function SkinEditor() {
       const ctx = skinCtxRef.current
       const viewer = viewerRef.current
       if (!ctx || !viewer) return
-      snapshot()
+      clearPreview()
 
       if (from === 'account' && account) {
         const current = await skinPreview(account).catch(() => null)
@@ -665,6 +995,7 @@ export default function SkinEditor() {
           commit()
           persist()
           setDirty(true)
+          pushState('account')
           return
         }
       }
@@ -672,8 +1003,9 @@ export default function SkinEditor() {
       commit()
       persist()
       setDirty(true)
+      pushState('blank')
     },
-    [account, commit, persist, snapshot],
+    [account, clearPreview, commit, persist, pushState],
   )
 
   const save = useCallback(async () => {
@@ -709,8 +1041,13 @@ export default function SkinEditor() {
         </div>
       </PageHeader>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
-        <div className="mx-auto grid h-full min-h-[480px] w-full max-w-[1180px] grid-cols-1 gap-4 lg:grid-cols-[212px_1fr_212px]">
+      {/* Rien ne défile : l'écran tient toujours dans la fenêtre, et ce sont
+          les deux aperçus qui absorbent les écarts de taille. */}
+      <div ref={contentRef} className="relative min-h-0 flex-1 overflow-hidden px-4 py-4 xl:px-7 xl:py-5">
+        {/* Toujours trois colonnes, même étroites : les empiler sur une
+            fenêtre réduite demanderait de défiler, ce qu'on refuse ici. Leur
+            largeur suit la fenêtre, et les cartes s'y plient. */}
+        <div className="mx-auto grid h-full w-full max-w-[1180px] grid-cols-[164px_1fr_164px] gap-3 md:grid-cols-[196px_1fr_196px] xl:grid-cols-[248px_1fr_248px] xl:gap-4">
           <div className="flex min-h-0 flex-col gap-3">
             <Card title={t('skinEditor.tools')}>
               <div className="grid grid-cols-2 gap-1.5">
@@ -724,23 +1061,27 @@ export default function SkinEditor() {
                   />
                 ))}
               </div>
-            </Card>
 
-            <Card title={t('skinEditor.brush')}>
-              <div className="flex gap-1.5">
-                {BRUSH_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => setBrush(size)}
-                    className={`flex h-9 flex-1 items-center justify-center rounded-lg border text-[12.5px] tabular-nums transition-colors ${
-                      brush === size
-                        ? 'border-accent/50 bg-accent/20 text-txt-primary'
-                        : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong'
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
+              {/* La taille tenait dans sa propre carte, pour quatre chiffres :
+                  elle coûtait un en-tête et deux rembourrages de plus que ce
+                  qu'elle montrait. Elle revient ici, sous les outils auxquels
+                  elle s'applique, et en curseur — toute la plage au pixel
+                  près, dans moins de place qu'avant. */}
+              <div className="mt-2.5 flex items-center gap-2">
+                <input
+                  type="range"
+                  min={MIN_BRUSH}
+                  max={MAX_BRUSH}
+                  step={1}
+                  value={brush}
+                  title={t('skinEditor.brush')}
+                  aria-label={t('skinEditor.brush')}
+                  onChange={(e) => setBrush(Number(e.target.value))}
+                  className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[rgba(255,255,255,0.1)] accent-[#4B3FCF]"
+                />
+                <span className="w-5 shrink-0 text-right font-mono text-[11px] tabular-nums text-txt-muted">
+                  {brush}
+                </span>
               </div>
             </Card>
 
@@ -768,16 +1109,84 @@ export default function SkinEditor() {
                 ))}
               </div>
             </Card>
+
+            {/* La carte montre toujours la vue sur laquelle on ne travaille
+                PAS, et cliquer échange les deux. Le canevas 2D reste monté et
+                seulement masqué quand la 3D vient s'y poser : le démonter
+                ferait perdre sa taille à l'emplacement, donc son cadre. */}
+            <button
+              onClick={() => setMode(mode === '3d' ? '2d' : '3d')}
+              className={`flex min-h-0 flex-1 flex-col rounded-2xl border p-2.5 text-left transition-colors xl:p-3 ${
+                mode === '2d'
+                  ? 'border-accent/50 bg-accent/10'
+                  : 'border-line bg-surface-1 hover:border-accent/40 hover:bg-surface-2'
+              }`}
+            >
+              <div className="mb-2 flex shrink-0 items-baseline justify-between gap-1">
+                <p className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-txt-muted">
+                  {mode === '2d' ? t('skinEditor.modelTitle') : t('skinEditor.flatTitle')}
+                </p>
+                <p className="shrink-0 text-[10px] text-accent-text">
+                  {mode === '2d' ? t('skinEditor.backTo3d') : t('skinEditor.editFlat')}
+                </p>
+              </div>
+              {/* La carte absorbe la hauteur que les autres laissent, et le
+                  carré se mesure dedans : sur une fenêtre basse il rétrécit au
+                  lieu de pousser le reste hors de l'écran. */}
+              <div ref={miniBoxRef} className="flex min-h-0 flex-1 items-center justify-center">
+                <div
+                  ref={miniSlotRef}
+                  style={{ width: miniSize, height: miniSize }}
+                  className="relative overflow-hidden rounded-lg border border-line bg-black/40"
+                >
+                  <canvas
+                    ref={miniRef}
+                    width={SKIN_SIZE}
+                    height={SKIN_SIZE}
+                    style={{ imageRendering: 'pixelated' }}
+                    className={`absolute inset-0 h-full w-full ${mode === '2d' ? 'invisible' : ''}`}
+                  />
+                  {mode === '3d' && <RegionGrid />}
+                </div>
+              </div>
+            </button>
           </div>
 
           <div className="flex min-h-0 flex-col gap-2">
-            <div className="relative min-h-[320px] flex-1 rounded-2xl border border-line bg-surface-1">
-              <div ref={boxRef} className="absolute inset-0">
-                <canvas
-                  ref={canvasRef}
-                  className={`h-full w-full ${tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair'}`}
-                />
+            <div
+              ref={mainSlotRef}
+              className="relative min-h-0 flex-1 rounded-2xl border border-line bg-surface-1"
+            >
+              {/* Vue 2D : le fichier lui-même, agrandi au pixel. La 3D, elle,
+                  vient se poser par-dessus ce cadre depuis l'extérieur. */}
+              <div
+                ref={flatBoxRef}
+                className={mode === '2d' ? 'absolute inset-0 flex items-center justify-center p-4' : 'hidden'}
+              >
+                <div className="relative" style={{ width: flatSize, height: flatSize }}>
+                  <canvas
+                    ref={flatRef}
+                    width={SKIN_SIZE}
+                    height={SKIN_SIZE}
+                    style={{ imageRendering: 'pixelated' }}
+                    className={`h-full w-full rounded-lg bg-black/40 ${tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair'}`}
+                  />
+                  <RegionGrid />
+                </div>
               </div>
+
+              {/* Ce qu'on pointe, en pastille et seulement quand on pointe
+                  quelque chose : la nommer aide surtout dans la vue à plat,
+                  où rien ne dit quel rectangle est un bras. En 2D, les coins
+                  inutilisés de l'atlas n'appartiennent à aucune partie — on le
+                  dit plutôt que de nommer au hasard. */}
+              {hover && (
+                <p className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/55 px-2 py-0.5 font-mono text-[10.5px] tabular-nums text-txt-secondary">
+                  {hover.part ? t(`skinEditor.part_${hover.part}`) : t('skinEditor.partNone')} ·{' '}
+                  {hover.pixel.x},{hover.pixel.y}
+                </p>
+              )}
+
               {!ready && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <ButtonSpinner size={28} color="#818cf8" trackColor="rgba(255,255,255,0.08)" />
@@ -785,12 +1194,6 @@ export default function SkinEditor() {
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2">
-              <p className="text-[11.5px] leading-relaxed text-txt-muted">{t('skinEditor.hint')}</p>
-              <p className="shrink-0 font-mono text-[11.5px] tabular-nums text-txt-secondary">
-                {hover ? `${t(`skinEditor.part_${hover.part}`)} · ${hover.pixel.x},${hover.pixel.y}` : '—'}
-              </p>
-            </div>
           </div>
 
           <div className="flex min-h-0 flex-col gap-3">
@@ -803,13 +1206,10 @@ export default function SkinEditor() {
                 value={layer}
                 onChange={(next) => setLayer(next as Layer)}
               />
-              <p className="mt-1.5 text-[11px] leading-relaxed text-txt-muted">
-                {t('skinEditor.layerHint')}
-              </p>
               <button
                 onClick={() => setShowOuter(!showOuter)}
                 disabled={layer === 'outer'}
-                className="mt-2 w-full rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-[12px] text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-2 h-9 w-full rounded-lg border border-line bg-surface-2 px-3 text-[12.5px] text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {showOuter ? t('skinEditor.hideOverlay') : t('skinEditor.showOverlay')}
               </button>
@@ -826,24 +1226,44 @@ export default function SkinEditor() {
               />
             </Card>
 
-            <Card title={t('skinEditor.history')}>
-              <div className="flex gap-1.5">
-                <SmallButton onClick={undo} disabled={history.undo === 0}>
-                  {t('skinEditor.undo')}
-                </SmallButton>
-                <SmallButton onClick={redo} disabled={history.redo === 0}>
-                  {t('skinEditor.redo')}
-                </SmallButton>
+            {/* La carte prend la hauteur restante et ses boutons se la
+                partagent : les laisser à 36 px laissait un vide sous la carte
+                et donnait des commandes tassées au-dessus de rien. Un plafond
+                les empêche de devenir des pavés sur une grande fenêtre. */}
+            <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface-1 p-3">
+              <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-txt-muted">
+                  {t('skinEditor.history')}
+                </p>
+                <p className="font-mono text-[11px] tabular-nums text-txt-muted">
+                  {history.length > 0 ? `${at + 1}/${history.length}` : '—'}
+                </p>
               </div>
-              <div className="mt-1.5 flex gap-1.5">
+
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <div className="flex min-h-[36px] max-h-[52px] flex-1 gap-2">
+                  <SmallButton onClick={undo} disabled={at <= 0}>
+                    {t('skinEditor.undo')}
+                  </SmallButton>
+                  <SmallButton onClick={redo} disabled={at >= history.length - 1}>
+                    {t('skinEditor.redo')}
+                  </SmallButton>
+                </div>
+
+                {/* Les étapes vivent dans une modale : dans cette colonne elles
+                    tenaient sur vingt pixels de large, ce qui ne montrait ni le
+                    personnage ni ce qu'on avait fait. */}
+                <SmallButton onClick={() => setShowSteps(true)} disabled={history.length === 0}>
+                  {t('skinEditor.viewSteps')}
+                </SmallButton>
                 <SmallButton onClick={() => void reset('blank')}>{t('skinEditor.resetBlank')}</SmallButton>
                 <SmallButton onClick={() => void reset('account')} disabled={!account}>
                   {t('skinEditor.resetAccount')}
                 </SmallButton>
               </div>
-            </Card>
+            </div>
 
-            <div className="mt-auto flex flex-col gap-1.5">
+            <div className="mt-auto flex shrink-0 flex-col gap-1.5">
               <Button onClick={() => void save()} loading={saving} disabled={!ready} fullWidth>
                 {t('skinEditor.save')}
               </Button>
@@ -853,7 +1273,43 @@ export default function SkinEditor() {
             </div>
           </div>
         </div>
+
+        {/* Le personnage, posé sur l'emplacement actif. Il est écrit ici, hors
+            de la grille, pour n'être monté qu'une fois : c'est ce qui lui
+            permet de changer de place sans perdre son contexte WebGL. */}
+        <div
+          ref={boxRef}
+          onClick={() => { if (mode === '2d') setMode('3d') }}
+          style={frame}
+          className={`absolute overflow-hidden transition-[border-color] ${
+            mode === '2d'
+              ? 'cursor-pointer rounded-lg border border-line hover:border-accent/50'
+              : 'rounded-2xl'
+          }`}
+        >
+          <canvas
+            ref={canvasRef}
+            className={`h-full w-full ${
+              mode === '3d' ? (tool === 'picker' ? 'cursor-copy' : 'cursor-crosshair') : ''
+            }`}
+          />
+        </div>
       </div>
+
+      <AnimatePresence>
+        {showSteps && (
+          <StepsModal
+            entries={history}
+            at={at}
+            slim={variant === 'slim'}
+            onPick={(index) => {
+              goTo(index)
+              setShowSteps(false)
+            }}
+            onClose={() => setShowSteps(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -869,10 +1325,48 @@ function readSaved(account: string | null): string | null {
 
 // ── Briques d'interface ──────────────────────────────────────────────────────
 
+/**
+ * Le découpage de l'atlas, posé par-dessus la vue 2D.
+ *
+ * Sans lui, le fichier à plat est douze rectangles indistincts : rien ne dit
+ * lequel est un bras ni où finit le torse. Les zones intérieures sont en trait
+ * plein, les surcouches en pointillés — la même distinction que le sélecteur
+ * de couche à droite.
+ *
+ * En coordonnées de texture (`viewBox` 0→64), donc net à n'importe quelle
+ * taille d'affichage, et `pointer-events-none` pour ne jamais intercepter un
+ * coup de pinceau.
+ */
+function RegionGrid() {
+  return (
+    <svg
+      viewBox={`0 0 ${SKIN_SIZE} ${SKIN_SIZE}`}
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      aria-hidden
+    >
+      {REGIONS.map((region) => (
+        <rect
+          key={`${region.part}-${region.layer}`}
+          x={region.rect.x0}
+          y={region.rect.y0}
+          width={region.rect.x1 - region.rect.x0}
+          height={region.rect.y1 - region.rect.y0}
+          fill="none"
+          stroke="rgba(255,255,255,0.22)"
+          strokeWidth={0.3}
+          strokeDasharray={region.layer === 'outer' ? '1 1' : undefined}
+        />
+      ))}
+    </svg>
+  )
+}
+
+/** `shrink-0` : seules les cartes d'aperçu et l'historique absorbent la
+ *  hauteur libre, les autres gardent la leur quelle que soit la fenêtre. */
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface-1 p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-txt-muted">{title}</p>
+    <div className="shrink-0 rounded-2xl border border-line bg-surface-1 p-2.5 xl:p-3">
+      <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-txt-muted">{title}</p>
       {children}
     </div>
   )
@@ -892,7 +1386,7 @@ function ToolButton({
   return (
     <button
       onClick={onClick}
-      className={`flex h-9 items-center justify-between rounded-lg border px-2.5 text-[12px] transition-colors ${
+      className={`flex h-10 items-center justify-between rounded-lg border px-3 text-[12.5px] transition-colors ${
         active
           ? 'border-accent/50 bg-accent/20 text-txt-primary'
           : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
@@ -921,7 +1415,7 @@ function Segmented({
         <button
           key={option.id}
           onClick={() => onChange(option.id)}
-          className={`h-8 flex-1 border-l border-line text-[12px] transition-colors first:border-l-0 ${
+          className={`h-9 flex-1 border-l border-line text-[12.5px] transition-colors first:border-l-0 ${
             value === option.id
               ? 'bg-accent/20 text-txt-primary'
               : 'bg-surface-2 text-txt-secondary hover:bg-surface-3'
@@ -934,6 +1428,168 @@ function Segmented({
   )
 }
 
+/**
+ * Les étapes en grand.
+ *
+ * Chaque étape montre un **rendu 3D du personnage entier**, cuit une fois par
+ * `lib/skinBake.ts` puis gardé en cache — une tête de vingt pixels ne disait
+ * pas si on avait peint une jambe. Le rendu arrive après coup, donc la tête
+ * sert de premier jet le temps qu'il cuise : la grille est remplie tout de
+ * suite plutôt que vide puis peuplée.
+ *
+ * La navigation au clavier double le clic : flèches pour parcourir, Début et
+ * Fin pour les bouts, Entrée pour y aller. Survoler déplace aussi la mise en
+ * avant, pour que souris et clavier ne se contredisent pas.
+ */
+function StepsModal({
+  entries,
+  at,
+  slim,
+  onPick,
+  onClose,
+}: {
+  entries: HistoryEntry[]
+  at: number
+  slim: boolean
+  onPick: (index: number) => void
+  onClose: () => void
+}) {
+  const t = useT()
+  const [focused, setFocused] = useState(at)
+  const [renders, setRenders] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    entries.forEach((entry) => {
+      bakeSkin(`step:${entry.id}`, entry.thumb, slim)
+        .then((image) => {
+          if (!cancelled) setRenders((known) => ({ ...known, [entry.id]: image }))
+        })
+        .catch(() => {})
+    })
+    return () => { cancelled = true }
+  }, [entries, slim])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        setFocused((index) => Math.max(0, index - 1))
+      }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        setFocused((index) => Math.min(entries.length - 1, index + 1))
+      }
+      if (e.key === 'Home') setFocused(0)
+      if (e.key === 'End') setFocused(entries.length - 1)
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        onPick(focused)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [entries.length, focused, onPick])
+
+  return (
+    <ModalShell title={t('skinEditor.stepsTitle')} onClose={onClose} maxWidth="max-w-3xl">
+      <div className="flex flex-col gap-3">
+        <p className="text-[12px] leading-relaxed text-txt-secondary">{t('skinEditor.stepsHint')}</p>
+
+        <div className="grid max-h-[52vh] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 md:grid-cols-5">
+          {entries.map((entry, index) => (
+            <StepCard
+              key={entry.id}
+              entry={entry}
+              index={index}
+              render={renders[entry.id] ?? null}
+              current={index === at}
+              focused={index === focused}
+              ahead={index > at}
+              onHover={() => setFocused(index)}
+              onClick={() => onPick(index)}
+            />
+          ))}
+        </div>
+
+        {/* `border-line-soft` et jamais `border-line/60` : ces jetons portent
+            déjà leur alpha, un suffixe d'opacité donne une couleur invalide et
+            le navigateur retombe sur un trait blanc. */}
+        <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-3">
+          <p className="font-mono text-[11.5px] tabular-nums text-txt-muted">
+            {focused + 1}/{entries.length}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => onPick(entries.length - 1)} disabled={at === entries.length - 1}>
+              {t('skinEditor.backToLatest')}
+            </Button>
+            <Button size="sm" onClick={() => onPick(focused)}>{t('skinEditor.goToStep')}</Button>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
+function StepCard({
+  entry,
+  index,
+  render,
+  current,
+  focused,
+  ahead,
+  onHover,
+  onClick,
+}: {
+  entry: HistoryEntry
+  index: number
+  render: string | null
+  current: boolean
+  focused: boolean
+  ahead: boolean
+  onHover: () => void
+  onClick: () => void
+}) {
+  const t = useT()
+  const cardRef = useRef<HTMLButtonElement>(null)
+
+  // La grille défile : l'étape mise en avant doit rester visible quand on la
+  // parcourt aux flèches.
+  useEffect(() => {
+    if (focused) cardRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [focused])
+
+  return (
+    <button
+      ref={cardRef}
+      onMouseEnter={onHover}
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 rounded-xl border p-2 transition-colors ${
+        focused ? 'border-accent/60 bg-accent/15' : 'border-line bg-surface-2 hover:border-line-strong'
+      } ${ahead ? 'opacity-45' : ''}`}
+    >
+      <div className="flex h-[92px] w-full items-center justify-center">
+        {render ? (
+          <img src={render} alt="" className="h-full w-full object-contain" draggable={false} />
+        ) : (
+          <SkinFace dataUri={entry.thumb} size={40} className="rounded" />
+        )}
+      </div>
+      <p className="w-full truncate text-center text-[11.5px] text-txt-secondary">
+        {t(`skinEditor.step_${entry.label}`)}
+      </p>
+      <p className="font-mono text-[10.5px] tabular-nums text-txt-muted">
+        {current ? t('skinEditor.stepCurrent') : index + 1}
+      </p>
+    </button>
+  )
+}
+
+/**
+ * `min-h` et non `h` : en colonne, `flex-1` étire le bouton sur la hauteur
+ * libre ; en ligne, il le partage en largeur. Une hauteur fixe annulerait le
+ * premier cas, et c'est ce qui laissait des commandes tassées sous un vide.
+ */
 function SmallButton({
   onClick,
   disabled,
@@ -947,7 +1603,7 @@ function SmallButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="h-8 flex-1 rounded-lg border border-line bg-surface-2 text-[12px] text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-35"
+      className="min-h-[36px] max-h-[52px] flex-1 rounded-lg border border-line bg-surface-2 px-2 text-[12.5px] leading-tight text-txt-secondary transition-colors hover:border-line-strong hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
     </button>
