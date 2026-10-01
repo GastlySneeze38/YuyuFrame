@@ -367,6 +367,7 @@ pub fn run() {
             commands::account::skin::skin_of_account,
             commands::account::skin::skin_check_url,
             commands::account::skin::skin_import_file,
+            commands::account::skin::skin_import_bytes,
             commands::account::skin::skin_history,
             commands::account::skin::skin_history_forget,
             commands::account::skin::skin_apply,

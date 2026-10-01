@@ -14,6 +14,7 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
 import { forgetSkinPreview, rememberSkinPreview, skinPreview } from '@/lib/skinCache'
+import { takeSkinDraft } from '@/lib/skinDraft'
 import { fadeVariants, fastTransition } from '@/lib/motion'
 import { useT } from '@/i18n'
 
@@ -62,6 +63,8 @@ interface Candidate {
   fromHistory?: boolean
   /** Vrai quand il arrive du catalogue (`?try=`), même raison. */
   fromCatalog?: boolean
+  /** Vrai quand il sort de l'éditeur (`?tryDraft=`), même raison. */
+  fromEditor?: boolean
 }
 
 /** Action engageante en attente de confirmation — voir `ConfirmModal`. */
@@ -186,6 +189,36 @@ export default function Skins() {
   const tried = useRef(false)
   useEffect(() => {
     if (!account || tried.current) return
+
+    /** L'adresse ne reste pas dans l'URL : recharger l'écran ne doit pas
+     *  reproposer un skin qu'on a peut-être déjà écarté. */
+    const forget = () => {
+      const kept = new URLSearchParams()
+      if (account.mc_uuid) kept.set('account', account.mc_uuid)
+      setParams(kept, { replace: true })
+    }
+
+    // Skin sorti de l'éditeur. Il est déjà rangé côté Rust, donc rien à
+    // vérifier ni à retélécharger : il passe directement en candidat.
+    if (params.get('tryDraft')) {
+      tried.current = true
+      const draft = takeSkinDraft()
+      if (draft) {
+        setTab('file')
+        setCandidate({
+          kind: 'local',
+          source: draft.source,
+          variant: draft.variant,
+          dataUri: draft.dataUri,
+          origin: 'editor',
+          fromEditor: true,
+        })
+        setJustApplied(false)
+      }
+      forget()
+      return
+    }
+
     const url = params.get('try')
     if (!url) return
     tried.current = true
@@ -206,13 +239,7 @@ export default function Skins() {
         setJustApplied(false)
       })
       .catch(showError)
-      .finally(() => {
-        // L'adresse ne reste pas dans l'URL : recharger l'écran ne doit pas
-        // reproposer un skin qu'on a peut-être déjà écarté.
-        const kept = new URLSearchParams()
-        if (account.mc_uuid) kept.set('account', account.mc_uuid)
-        setParams(kept, { replace: true })
-      })
+      .finally(forget)
   }, [account?.mc_uuid])
 
   const shown = candidate ?? (current && currentUri ? { ...current, dataUri: currentUri } : null)
@@ -469,6 +496,28 @@ export default function Skins() {
                   </svg>
                 </button>
 
+                {/* Et quand aucun skin existant ne convient : le dessiner. */}
+                <button
+                  onClick={() => navigate(account ? `/skins/editor?account=${encodeURIComponent(account.mc_uuid)}` : '/skins/editor')}
+                  className="group flex items-center gap-3 rounded-2xl border border-line bg-surface-1 p-4 text-left transition-colors hover:border-accent/40 hover:bg-surface-2"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent-text">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                      <path d="M2 2l7.586 7.586" />
+                      <circle cx="11" cy="11" r="2" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-semibold">{t('skinEditor.openButton')}</p>
+                    <p className="mt-0.5 text-[11.5px] leading-relaxed text-txt-muted">{t('skinEditor.openHint')}</p>
+                  </div>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-txt-muted transition-colors group-hover:text-txt-primary">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+
                 <PosePicker />
               </div>
 
@@ -482,9 +531,11 @@ export default function Skins() {
                       ? t('skins.previewFromHistory')
                       : candidate.fromCatalog
                         ? t('skins.previewFromCatalog')
-                        : candidate.fromPlayer
-                          ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
-                          : t('skins.previewPending')
+                        : candidate.fromEditor
+                          ? t('skins.previewFromEditor')
+                          : candidate.fromPlayer
+                            ? t('skins.previewFromPlayer', { name: candidate.fromPlayer })
+                            : t('skins.previewPending')
                     : current
                       ? t('skins.previewCurrent')
                       : t('skins.previewNone')
@@ -889,6 +940,7 @@ function originLabel(origin: string, t: (k: string, v?: Record<string, string | 
   if (origin === 'mojang') return t('skins.originMojang')
   if (origin === 'file') return t('skins.originFile')
   if (origin === 'catalog') return t('skins.originCatalog')
+  if (origin === 'editor') return t('skins.originEditor')
   return t('skins.originUrl')
 }
 

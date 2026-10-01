@@ -420,6 +420,36 @@ pub async fn skin_import_file(source_path: String) -> Result<CheckedSkin, String
     })
 }
 
+/// Skin sorti de l'éditeur : des octets, pas un chemin sur le disque.
+///
+/// Il devient un skin importé comme un autre — même dossier, même
+/// déduplication par empreinte, même sort à l'application selon le compte.
+/// L'éditeur n'a donc rien de particulier à savoir sur l'hébergement : il
+/// dessine, et le reste de la chaîne ne change pas.
+///
+/// Le modèle, lui, vient de l'éditeur : il conditionne la disposition de la
+/// texture, donc celui qui a dessiné est le seul à le connaître — contrairement
+/// à une URL, dont on ne peut rien déduire.
+#[tauri::command]
+pub async fn skin_import_bytes(data: String, variant: String) -> Result<CheckedSkin, String> {
+    // Accepte aussi bien un data URI qu'un base64 nu : la partie utile est ce
+    // qui suit la virgule, et il n'y en a pas dans un base64 seul.
+    let encoded = data.rsplit(',').next().unwrap_or_default();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| "Image de l'éditeur illisible".to_string())?;
+    if bytes.len() > MAX_SKIN_BYTES {
+        return Err("Fichier trop volumineux pour un skin (max 1 Mo)".to_string());
+    }
+    let name = store_local(&bytes).await?;
+    Ok(CheckedSkin {
+        kind: "local".into(),
+        source: name,
+        variant: normalize_variant(&variant),
+        data_uri: to_data_uri(&bytes),
+    })
+}
+
 // ── Application ──────────────────────────────────────────────────────────────
 
 async fn account_row(state: &SharedState, uuid: &str) -> Result<db::McSessionRow, String> {

@@ -436,6 +436,12 @@ export const api = {
     /** Range un PNG du disque. Ce qu'il devient dépend du compte — voir `apply`. */
     importFile: (sourcePath: string) => invoke<CheckedSkin>('skin_import_file', { sourcePath }),
     /**
+     * Range un PNG produit par l'éditeur. Il devient un skin importé comme un
+     * autre ; le modèle vient de l'éditeur, seul à le connaître.
+     */
+    importBytes: (data: string, variant: SkinVariant) =>
+      invoke<CheckedSkin>('skin_import_bytes', { data, variant }),
+    /**
      * Compte Microsoft : posé chez Mojang — et si c'est un fichier, envoyé chez
      * eux, ce qui le transforme en skin hébergé. Hors ligne : enregistré ici.
      */
