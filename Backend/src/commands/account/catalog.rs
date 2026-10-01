@@ -132,12 +132,46 @@ fn parse_catalog_page(raw: RawPage) -> CatalogPage {
     }
 }
 
+/// Formats acceptés par Ely.by.
+///
+/// Leurs quatre options sont EXCLUSIVES, et `new` ne rend que des bras
+/// classiques — vérifié, 40 sur 40, sur plusieurs pages. C'est ce qui permet
+/// d'offrir un vrai choix classique/fin plutôt qu'une simple case « fin
+/// seulement ».
+///
+/// Il n'existe en revanche aucune valeur couvrant les deux formats classiques
+/// à la fois : `new` laisse de côté les 64×32 d'origine, une poignée de
+/// téléversements très anciens. C'est le prix d'un choix à trois entrées.
+const FORMATS: [&str; 3] = ["old", "new", "slim"];
+
+/// Catégories d'Ely.by, telles que leur propre filtre les orthographie — la
+/// casse compte : `kind=fantasy` est ignoré là où `kind=Fantasy` filtre.
+const KINDS: [&str; 10] = [
+    "Comics",
+    "Adventure",
+    "Heroes",
+    "Evildoers",
+    "Weekend",
+    "Characters",
+    "Historical",
+    "Fantasy",
+    "Scientific",
+    "Other",
+];
+
 /// Paramètres de requête, dans la forme qu'attend Ely.by.
 ///
 /// Les étiquettes se répètent sous la clé `tags[]` ; reqwest l'encode en
-/// `tags%5B%5D`, que le serveur accepte. `kind` et les tris existent sur leur
-/// site mais restent sans effet sur cette adresse, donc on ne les propose pas.
-fn catalog_query(page: u32, tags: &[String], color: Option<&str>, slim_only: bool) -> Vec<(String, String)> {
+/// `tags%5B%5D`, que le serveur accepte. Format et catégorie sont filtrés sur
+/// les valeurs connues : une valeur inventée serait ignorée par Ely.by, et
+/// l'interface montrerait alors un filtre actif qui ne filtre rien.
+fn catalog_query(
+    page: u32,
+    tags: &[String],
+    color: Option<&str>,
+    format: Option<&str>,
+    kind: Option<&str>,
+) -> Vec<(String, String)> {
     let mut query = vec![("page".to_string(), page.max(1).to_string())];
     for tag in tags.iter().filter(|t| !t.trim().is_empty()) {
         query.push(("tags[]".to_string(), tag.trim().to_string()));
@@ -145,8 +179,11 @@ fn catalog_query(page: u32, tags: &[String], color: Option<&str>, slim_only: boo
     if let Some(color) = color.map(str::trim).filter(|c| !c.is_empty()) {
         query.push(("color".to_string(), color.trim_start_matches('#').to_string()));
     }
-    if slim_only {
-        query.push(("type".to_string(), "slim".to_string()));
+    if let Some(format) = format.map(str::trim).filter(|f| FORMATS.contains(f)) {
+        query.push(("type".to_string(), format.to_string()));
+    }
+    if let Some(kind) = kind.map(str::trim).filter(|k| KINDS.contains(k)) {
+        query.push(("kind".to_string(), kind.to_string()));
     }
     query
 }
@@ -163,11 +200,14 @@ pub async fn skin_catalog_browse(
     page: u32,
     tags: Vec<String>,
     color: Option<String>,
-    slim_only: bool,
+    // `format` : `old`, `new` (= bras classiques) ou `slim` ; rien = tous.
+    // `kind` : une des catégories d'Ely.by ; rien = toutes.
+    format: Option<String>,
+    kind: Option<String>,
 ) -> Result<CatalogPage, String> {
     let resp = skin::http()
         .get(CATALOG_URL)
-        .query(&catalog_query(page, &tags, color.as_deref(), slim_only))
+        .query(&catalog_query(page, &tags, color.as_deref(), format.as_deref(), kind.as_deref()))
         .send()
         .await
         .map_err(|e| format!("Catalogue injoignable : {}", e))?;
@@ -284,7 +324,7 @@ mod tests {
 
     #[test]
     fn les_etiquettes_se_repetent_sous_la_meme_cle() {
-        let query = catalog_query(3, &["Girl".to_string(), " Dark ".to_string()], None, false);
+        let query = catalog_query(3, &["Girl".to_string(), " Dark ".to_string()], None, None, None);
         assert_eq!(
             query,
             vec![
@@ -298,20 +338,49 @@ mod tests {
     /// Le sélecteur de couleur rend `#1F1F1F`, Ely.by attend `1F1F1F`.
     #[test]
     fn la_couleur_perd_son_diese() {
-        let query = catalog_query(1, &[], Some("#1F1F1F"), true);
+        let query = catalog_query(1, &[], Some("#1F1F1F"), Some("slim"), None);
         assert!(query.contains(&("color".to_string(), "1F1F1F".to_string())));
         assert!(query.contains(&("type".to_string(), "slim".to_string())));
     }
 
+    /// « Classique » n'est pas une valeur d'Ely.by : c'est `new`, leur format
+    /// 64×64, qui ne contient que des bras classiques.
+    #[test]
+    fn le_format_classique_est_new() {
+        let query = catalog_query(1, &[], None, Some("new"), None);
+        assert!(query.contains(&("type".to_string(), "new".to_string())));
+    }
+
+    /// Une valeur inventée serait ignorée par Ely.by : l'interface afficherait
+    /// un filtre actif qui ne filtre rien. Mieux vaut ne rien envoyer.
+    #[test]
+    fn un_format_inconnu_n_est_pas_envoye() {
+        let query = catalog_query(1, &[], None, Some("classic"), None);
+        assert_eq!(query, vec![("page".to_string(), "1".to_string())]);
+    }
+
+    #[test]
+    fn la_categorie_part_telle_quelle() {
+        let query = catalog_query(1, &[], None, None, Some("Fantasy"));
+        assert!(query.contains(&("kind".to_string(), "Fantasy".to_string())));
+    }
+
+    /// La casse compte chez Ely.by : `fantasy` est ignoré, `Fantasy` filtre.
+    #[test]
+    fn une_categorie_mal_capitalisee_n_est_pas_envoyee() {
+        let query = catalog_query(1, &[], None, None, Some("fantasy"));
+        assert_eq!(query, vec![("page".to_string(), "1".to_string())]);
+    }
+
     #[test]
     fn une_etiquette_vide_n_est_pas_envoyee() {
-        let query = catalog_query(1, &["  ".to_string()], Some("  "), false);
+        let query = catalog_query(1, &["  ".to_string()], Some("  "), None, None);
         assert_eq!(query, vec![("page".to_string(), "1".to_string())]);
     }
 
     #[test]
     fn la_page_zero_devient_la_premiere() {
-        assert_eq!(catalog_query(0, &[], None, false)[0].1, "1");
+        assert_eq!(catalog_query(0, &[], None, None, None)[0].1, "1");
     }
 
     /// Les adresses font l'aller-retour par le frontend : seules celles du

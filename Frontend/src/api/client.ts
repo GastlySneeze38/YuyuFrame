@@ -190,6 +190,26 @@ export interface CatalogPage {
   last_page: number
 }
 
+/**
+ * Format Ely.by. Leurs quatre options sont exclusives, et `new` ne contient
+ * que des bras classiques — c'est lui qui sert de « classique » à l'interface,
+ * faute d'une valeur qui couvre aussi le vieux 64×32.
+ */
+export type SkinFormat = 'old' | 'new' | 'slim'
+
+/** Catégories d'Ely.by. La casse compte : `fantasy` est ignoré. */
+export type SkinKindFilter =
+  | 'Comics'
+  | 'Adventure'
+  | 'Heroes'
+  | 'Evildoers'
+  | 'Weekend'
+  | 'Characters'
+  | 'Historical'
+  | 'Fantasy'
+  | 'Scientific'
+  | 'Other'
+
 /** Skin trouvé chez Mojang, avec son aperçu déjà téléchargé. */
 export interface ResolvedSkin {
   username: string
@@ -433,8 +453,15 @@ export const api = {
      * Catalogue Ely.by. Les étiquettes tiennent lieu de recherche : les skins
      * n'ont pas de titre. 40 entrées par page, taille imposée par Ely.by.
      */
-    catalog: (page: number, tags: string[], color: string | null, slimOnly: boolean) =>
-      invoke<CatalogPage>('skin_catalog_browse', { page, tags, color, slimOnly }),
+    catalog: (
+      page: number,
+      tags: string[],
+      color: string | null,
+      /** `old`, `new` (= bras classiques) ou `slim` ; `null` = tous. */
+      format: SkinFormat | null,
+      /** Catégorie Ely.by, casse comprise ; `null` = toutes. */
+      kind: SkinKindFilter | null,
+    ) => invoke<CatalogPage>('skin_catalog_browse', { page, tags, color, format, kind }),
     /**
      * Aperçus des seules cases affichées, dans l'ordre demandé. `null` pour
      * celles dont l'image n'a pas pu être obtenue.

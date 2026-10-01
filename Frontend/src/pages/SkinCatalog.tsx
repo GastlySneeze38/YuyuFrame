@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
-import type { CatalogSkin } from '@/api/client'
+import type { CatalogSkin, SkinFormat, SkinKindFilter } from '@/api/client'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
@@ -91,6 +91,46 @@ const MAX_COLUMNS = 10
  */
 const KEEP_RADIUS = 1
 
+/**
+ * Modèle de bras, tel que l'interface le présente.
+ *
+ * Ely.by n'a pas de valeur « classique » : ses quatre formats sont exclusifs,
+ * et c'est `new` (le 64×64 moderne) qui ne contient que des bras classiques.
+ * La traduction se fait ici, une seule fois. Seule conséquence visible :
+ * « Classique » ne montre pas les vieux skins 64×32, une poignée de
+ * téléversements de 2013.
+ */
+const MODELS = [
+  { id: 'any', format: null, label: 'skinCatalog.modelAny' },
+  { id: 'classic', format: 'new', label: 'skinCatalog.modelClassic' },
+  { id: 'slim', format: 'slim', label: 'skinCatalog.modelSlim' },
+] as const satisfies readonly { id: string; format: SkinFormat | null; label: string }[]
+
+type ModelId = (typeof MODELS)[number]['id']
+
+/**
+ * Catégories d'Ely.by — leurs propres entrées, pas des étiquettes choisies par
+ * nous : elles rendent forcément des résultats, et couvrent le catalogue.
+ *
+ * La valeur part telle quelle (la casse compte côté Ely.by) ; seul le libellé
+ * est traduit.
+ */
+const KINDS = [
+  'Comics',
+  'Adventure',
+  'Heroes',
+  'Evildoers',
+  'Weekend',
+  'Characters',
+  'Historical',
+  'Fantasy',
+  'Scientific',
+  'Other',
+] as const satisfies readonly SkinKindFilter[]
+
+/** Clé de traduction du libellé d'une catégorie : `Comics` → `kindComics`. */
+const kindKey = (kind: SkinKindFilter) => `skinCatalog.kind${kind}`
+
 /** Délai avant de passer une case en 3D vivante. Un balayage rapide de la
  *  souris traverse une rangée entière : sans ce répit, on créerait et
  *  détruirait un contexte WebGL par case au passage. */
@@ -110,7 +150,8 @@ export default function SkinCatalog() {
 
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
-  const [slimOnly, setSlimOnly] = useState(false)
+  const [model, setModel] = useState<ModelId>('any')
+  const [kind, setKind] = useState<SkinKindFilter | null>(null)
 
   /** Lots Ely.by déjà reçus, par numéro. */
   const [pages, setPages] = useState<Map<number, CatalogSkin[]>>(() => new Map())
@@ -169,8 +210,9 @@ export default function SkinCatalog() {
     (page: number) => {
       if (page < 1 || pagesRef.current.has(page) || inflight.current.has(page)) return
       inflight.current.add(page)
+      const format = MODELS.find((m) => m.id === model)?.format ?? null
       api.skin
-        .catalog(page, tags, null, slimOnly)
+        .catalog(page, tags, null, format, kind)
         .then((received) => {
           setPages((known) => new Map(known).set(page, received.items))
           setLastRemotePage(received.last_page)
@@ -181,7 +223,7 @@ export default function SkinCatalog() {
         })
         .finally(() => inflight.current.delete(page))
     },
-    [tags, slimOnly],
+    [tags, model, kind],
   )
 
   useEffect(() => {
@@ -300,9 +342,14 @@ export default function SkinCatalog() {
 
   /** Changer de filtre change toute la liste : les lots en mémoire ne valent
    *  plus rien, et on repart du début. */
-  const resetTo = (nextTags: string[], nextSlimOnly: boolean) => {
-    setTags(nextTags)
-    setSlimOnly(nextSlimOnly)
+  const resetFilters = (next: {
+    tags?: string[]
+    model?: ModelId
+    kind?: SkinKindFilter | null
+  }) => {
+    if (next.tags !== undefined) setTags(next.tags)
+    if (next.model !== undefined) setModel(next.model)
+    if (next.kind !== undefined) setKind(next.kind)
     setPages(new Map())
     setFailed(new Set())
     setLastRemotePage(1)
@@ -313,7 +360,7 @@ export default function SkinCatalog() {
     const tag = tagInput.trim()
     setTagInput('')
     if (!tag || tags.includes(tag)) return
-    resetTo([...tags, tag], slimOnly)
+    resetFilters({ tags: [...tags, tag] })
   }
 
   /** Essayer un skin, c'est repartir à l'écran Skins avec lui en main : il y
@@ -347,11 +394,13 @@ export default function SkinCatalog() {
           <Filters
             tags={tags}
             tagInput={tagInput}
-            slimOnly={slimOnly}
+            model={model}
+            kind={kind}
             onTagInput={setTagInput}
             onAddTag={addTag}
-            onRemoveTag={(tag) => resetTo(tags.filter((x) => x !== tag), slimOnly)}
-            onToggleSlim={() => resetTo(tags, !slimOnly)}
+            onRemoveTag={(tag) => resetFilters({ tags: tags.filter((x) => x !== tag) })}
+            onPickModel={(next) => resetFilters({ model: next })}
+            onPickKind={(next) => resetFilters({ kind: kind === next ? null : next })}
           />
 
           <div ref={gridRef} className="relative min-h-0 flex-1">
@@ -478,63 +527,117 @@ function Layer({ children }: { children: React.ReactNode }) {
 
 // ── Filtres ──────────────────────────────────────────────────────────────────
 
+/**
+ * Deux rangées : la recherche et le modèle en haut, les catégories en bas.
+ *
+ * Les catégories sont celles d'Ely.by, pas des étiquettes choisies par nous —
+ * elles rendent forcément des résultats, et donnent une porte d'entrée à qui
+ * n'a pas de mot en tête. Le champ libre reste pour qui en a un.
+ */
 function Filters({
   tags,
   tagInput,
-  slimOnly,
+  model,
+  kind,
   onTagInput,
   onAddTag,
   onRemoveTag,
-  onToggleSlim,
+  onPickModel,
+  onPickKind,
 }: {
   tags: string[]
   tagInput: string
-  slimOnly: boolean
+  model: ModelId
+  kind: SkinKindFilter | null
   onTagInput: (value: string) => void
   onAddTag: () => void
   onRemoveTag: (tag: string) => void
-  onToggleSlim: () => void
+  onPickModel: (model: ModelId) => void
+  onPickKind: (kind: SkinKindFilter) => void
 }) {
   const t = useT()
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        value={tagInput}
-        onChange={(e) => onTagInput(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') onAddTag() }}
-        placeholder={t('skinCatalog.tagPlaceholder')}
-        maxLength={32}
-        className="h-10 w-[240px] rounded-xl border border-line bg-black/40 px-3.5 text-[13px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
-      />
-      <Button size="sm" variant="secondary" onClick={onAddTag} disabled={!tagInput.trim()}>
-        {t('skinCatalog.addTag')}
-      </Button>
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={tagInput}
+          onChange={(e) => onTagInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') onAddTag() }}
+          placeholder={t('skinCatalog.tagPlaceholder')}
+          maxLength={32}
+          className="h-9 w-[220px] rounded-xl border border-line bg-black/40 px-3.5 text-[13px] text-txt-primary placeholder:text-txt-muted outline-none transition-colors focus:border-accent/50"
+        />
+        <Button size="sm" variant="secondary" onClick={onAddTag} disabled={!tagInput.trim()}>
+          {t('skinCatalog.addTag')}
+        </Button>
 
-      {tags.map((tag) => (
-        <button
-          key={tag}
-          onClick={() => onRemoveTag(tag)}
-          title={t('skinCatalog.removeTag')}
-          className="flex h-8 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/15 px-3 text-[12.5px] text-txt-primary transition-colors hover:border-accent/70"
-        >
-          {tag}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-3 w-3">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
-        </button>
-      ))}
+        {tags.map((tag) => (
+          <button
+            key={tag}
+            onClick={() => onRemoveTag(tag)}
+            title={t('skinCatalog.removeTag')}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/15 px-3 text-[12.5px] text-txt-primary transition-colors hover:border-accent/70"
+          >
+            {tag}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" className="h-3 w-3">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        ))}
 
-      <button
-        onClick={onToggleSlim}
-        className={`ml-auto flex h-8 items-center rounded-lg border px-3 text-[12.5px] transition-colors ${
-          slimOnly
-            ? 'border-accent/50 bg-accent/15 text-txt-primary'
-            : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong'
-        }`}
-      >
-        {t('skinCatalog.slimOnly')}
-      </button>
+        {/* Les trois modèles collés en un seul bloc : c'est un choix unique,
+            et trois boutons séparés le feraient passer pour trois bascules. */}
+        <div className="ml-auto flex h-8 shrink-0 overflow-hidden rounded-lg border border-line">
+          {MODELS.map((entry) => (
+            <button
+              key={entry.id}
+              onClick={() => onPickModel(entry.id)}
+              className={`h-full border-l border-line px-3 text-[12.5px] transition-colors first:border-l-0 ${
+                model === entry.id
+                  ? 'bg-accent/20 text-txt-primary'
+                  : 'bg-surface-2 text-txt-secondary hover:bg-surface-3'
+              }`}
+            >
+              {t(entry.label)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Chip active={kind === null} onClick={() => kind && onPickKind(kind)}>
+          {t('skinCatalog.allKinds')}
+        </Chip>
+        {KINDS.map((entry) => (
+          <Chip key={entry} active={kind === entry} onClick={() => onPickKind(entry)}>
+            {t(kindKey(entry))}
+          </Chip>
+        ))}
+      </div>
     </div>
+  )
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`h-7 rounded-full border px-3 text-[12px] transition-colors ${
+        active
+          ? 'border-accent/50 bg-accent/20 text-txt-primary'
+          : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 
