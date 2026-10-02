@@ -1518,6 +1518,11 @@ export const en: TranslationSchema = {
       oom: 'Out of memory',
       loader: 'Mod loader',
       launcher: 'Launcher',
+      java: 'Java',
+    },
+    java: {
+      hint: 'The Java machine of this instance did not start — incomplete install, moved, or a version that does not match. This is fixed in its Java settings.',
+      action: 'Open the Java settings',
     },
     field: {
       instance: 'Instance',

@@ -70,6 +70,21 @@ export function CrashReportModal({
     navigate('/support?tab=crashes')
   }
 
+  /**
+   * Une JVM qui n'a pas démarré se répare, et toujours au même endroit.
+   *
+   * Les autres genres de plantage n'ont pas de remède connu du launcher : il
+   * n'y a rien à proposer, donc rien n'est proposé. Celui-ci est l'exception —
+   * « could not find java.dll » ne dit rien à personne, alors que trois clics
+   * dans les réglages Java de l'instance suffisent. L'écran y mène au lieu de
+   * décrire le chemin.
+   */
+  const javaProblem = cause === 'java'
+  function openJavaSettings() {
+    onClose()
+    navigate(`/instances?settings=${encodeURIComponent(instanceId)}&tab=java`)
+  }
+
   return (
     <ModalShell title={t('crash.modal.title')} onClose={onClose} counter={counter}>
       <div className="flex flex-col gap-5">
@@ -87,6 +102,15 @@ export function CrashReportModal({
           <span className="break-words font-mono text-[13px] font-semibold leading-relaxed text-txt-primary">{title}</span>
         </div>
 
+        {javaProblem && (
+          <div className="flex flex-col gap-2.5 rounded-xl border border-accent/30 bg-accent/10 p-3.5">
+            <p className="text-[12.5px] leading-relaxed text-txt-secondary">{t('crash.java.hint')}</p>
+            <Button variant="primary" onClick={openJavaSettings} fullWidth>
+              {t('crash.java.action')}
+            </Button>
+          </div>
+        )}
+
         {sent !== null ? (
           <p className="text-[13px] font-medium text-success">
             {sent ? t('crash.modal.sentWithRef', { ref: sent }) : t('crash.modal.sent')}
@@ -103,9 +127,13 @@ export function CrashReportModal({
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Envoyer reste l'action principale tant que rien n'est parti ;
               une fois le rapport envoyé, il n'y a plus qu'à aller lire la
-              réponse, donc c'est ce bouton-là qui prend la place. */}
+              réponse, donc c'est ce bouton-là qui prend la place.
+
+              Sauf pour un problème de Java : l'action principale est alors
+              au-dessus, celle qui le répare. Deux boutons principaux dans la
+              même fenêtre ne diraient plus lequel compte. */}
           {sent === null && signedIn && (
-            <Button variant="primary" onClick={send} loading={sending} className="flex-1">
+            <Button variant={javaProblem ? 'secondary' : 'primary'} onClick={send} loading={sending} className="flex-1">
               {sending ? t('crash.modal.sending') : t('crash.send')}
             </Button>
           )}

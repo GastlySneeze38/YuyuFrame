@@ -1518,6 +1518,11 @@ export const de: TranslationSchema = {
       oom: 'Zu wenig Arbeitsspeicher',
       loader: 'Mod-Loader',
       launcher: 'Launcher',
+      java: 'Java',
+    },
+    java: {
+      hint: 'Die Java-Maschine dieser Instanz ist nicht gestartet — unvollständige Installation, verschoben, oder eine Version, die nicht passt. Das lässt sich in ihren Java-Einstellungen beheben.',
+      action: 'Java-Einstellungen öffnen',
     },
     field: {
       instance: 'Instanz',

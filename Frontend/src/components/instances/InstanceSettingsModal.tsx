@@ -46,7 +46,8 @@ import { useT } from '@/i18n'
  * de fichier, pas des champs). Elles ne passent pas par le brouillon et
  * n'allument donc pas le pied.
  */
-type Tab = 'general' | 'installation' | 'window' | 'java' | 'game' | 'repair'
+const TABS = ['general', 'installation', 'window', 'java', 'game', 'repair'] as const
+type Tab = (typeof TABS)[number]
 
 export function InstanceSettingsModal({
   instance,
@@ -57,9 +58,13 @@ export function InstanceSettingsModal({
   onDuplicate,
   onDuplicateAs,
   onDelete,
+  initialTab,
 }: {
   instance: Instance
   versions: string[]
+  /** Onglet ouvert d'emblée. Posé par un écran qui sait où il envoie — la
+   *  modale de plantage pour un problème de Java, par exemple. */
+  initialTab?: string
   onClose: () => void
   onUpdate: (instance: Instance) => void
   /** Appliqué tout de suite, hors brouillon — voir l'en-tête du fichier. */
@@ -73,7 +78,13 @@ export function InstanceSettingsModal({
 }) {
   const t = useT()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('general')
+  // Un onglet demandé de l'extérieur n'est honoré que s'il existe : une
+  // adresse peut venir d'une version plus récente, ou avoir été tapée à la
+  // main, et ouvrir une modale sur du vide serait pire que de l'ouvrir au
+  // début.
+  const [tab, setTab] = useState<Tab>(
+    TABS.includes(initialTab as Tab) ? (initialTab as Tab) : 'general',
+  )
 
   const [name, setName] = useState(instance.name)
   const [description, setDescription] = useState(instance.description)

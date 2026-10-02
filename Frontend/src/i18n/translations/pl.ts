@@ -1518,6 +1518,11 @@ export const pl: TranslationSchema = {
       oom: 'Brak pamięci',
       loader: 'Loader modów',
       launcher: 'Launcher',
+      java: 'Java',
+    },
+    java: {
+      hint: 'Maszyna Javy tej instancji nie wystartowała — niekompletna instalacja, przeniesiona albo wersja, która nie pasuje. Naprawia się to w jej ustawieniach Javy.',
+      action: 'Otwórz ustawienia Javy',
     },
     field: {
       instance: 'Instancja',

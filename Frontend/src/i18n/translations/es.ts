@@ -1518,6 +1518,11 @@ export const es: TranslationSchema = {
       oom: 'Memoria insuficiente',
       loader: 'Cargador de mods',
       launcher: 'Launcher',
+      java: 'Java',
+    },
+    java: {
+      hint: 'La máquina Java de esta instancia no arrancó: instalación incompleta, movida o con una versión que no corresponde. Se arregla en sus ajustes de Java.',
+      action: 'Abrir los ajustes de Java',
     },
     field: {
       instance: 'Instancia',

@@ -184,6 +184,31 @@ fn is_loader_failure(log: &str) -> bool {
     MARKERS.iter().any(|m| log.contains(m))
 }
 
+/// La machine Java elle-même n'a pas démarré, ou n'est pas la bonne.
+///
+/// Un cas à part, et c'est tout l'intérêt de le distinguer : ce n'est ni le
+/// jeu, ni les mods, et aucun rapport de plantage n'existe — la JVM s'arrête
+/// avant d'avoir chargé quoi que ce soit. L'utilisateur voit deux lignes
+/// d'anglais incompréhensibles (« could not find java.dll ») et n'a aucune
+/// raison de deviner que la réponse est dans les réglages Java de son
+/// instance. C'est précisément là que l'écran l'envoie.
+///
+/// Les trois premiers marqueurs sont ceux d'un lanceur Java qui ne trouve pas
+/// sa bibliothèque de machine virtuelle — installation incomplète ou
+/// déplacée. Le dernier est l'inverse : la JVM a bien démarré, mais elle est
+/// trop ancienne pour les classes du jeu. Deux causes, un même remède.
+fn is_java_failure(log: &str) -> bool {
+    const MARKERS: [&str; 5] = [
+        "could not find java.dll",
+        "Could not find Java SE Runtime Environment",
+        "Error: opening registry key",
+        "UnsupportedClassVersionError",
+        "has been compiled by a more recent version of the Java Runtime",
+    ];
+    let lower = log.to_lowercase();
+    MARKERS.iter().any(|m| lower.contains(&m.to_lowercase()))
+}
+
 /// La première ligne qui ressemble à une exception Java.
 fn exception_line(log: &str) -> Option<&str> {
     log.lines().map(str::trim).find(|l| {
@@ -246,6 +271,12 @@ fn hex12(bytes: &[u8]) -> String {
 fn title_for(kind: &str, trace: Option<&str>, log: &str, exit_code: Option<i32>) -> String {
     if kind == "oom" {
         return "Mémoire insuffisante (OutOfMemoryError)".to_string();
+    }
+    // Un titre écrit pour être lu, et pas la ligne brute de la JVM : « could
+    // not find java.dll » ne dit rien à qui ne connaît pas Java, alors que
+    // c'est l'un des rares plantages qui se répare en trois clics.
+    if kind == "java" {
+        return "Java n'a pas pu démarrer".to_string();
     }
     // « Description: » du rapport de Minecraft : écrit pour être lu, souvent
     // plus parlant que la classe d'exception.
@@ -406,7 +437,14 @@ pub fn build(watch: &LaunchWatch, exit_code: Option<i32>, launcher_version: &str
 
     let trace = game_report.or_else(|| trace_from_log(&log));
     let scan = format!("{}\n{}", trace.as_deref().unwrap_or(""), log);
-    let kind = if is_oom(&scan) {
+    // L'ordre est celui du diagnostic : une JVM qui n'a pas démarré se
+    // reconnaît à des messages très particuliers, et aucun des autres genres
+    // ne peut les produire. La tester en premier évite qu'un
+    // `UnsupportedClassVersionError` parte en « plantage du jeu », où rien ne
+    // mènerait à la bonne page.
+    let kind = if is_java_failure(&scan) {
+        "java"
+    } else if is_oom(&scan) {
         "oom"
     } else if is_loader_failure(&scan) {
         "loader"
@@ -607,6 +645,35 @@ mod tests {
         java.lang.NullPointerException: Cannot invoke \"net.minecraft.Foo.bar()\"\n\
         \tat net.minecraft.client.Screen.render(Screen.java:128)\n\
         \tat net.minecraft.client.Minecraft.run(Minecraft.java:942)\n";
+
+    /// Les deux lignes que Windows écrit quand la JVM ne trouve pas sa
+    /// bibliothèque — c'est tout ce que l'utilisateur voit, et c'est à partir
+    /// de là qu'il faut l'amener aux réglages Java.
+    #[test]
+    fn une_jvm_qui_ne_demarre_pas_est_reconnue() {
+        assert!(is_java_failure("Error: could not find java.dll"));
+        assert!(is_java_failure("Error: Could not find Java SE Runtime Environment."));
+        assert!(is_java_failure("Error: opening registry key 'Software\\JavaSoft\\Java Runtime Environment'"));
+    }
+
+    /// L'autre moitié du même problème : la JVM a démarré, mais elle est trop
+    /// ancienne pour les classes du jeu. Même remède, donc même genre.
+    #[test]
+    fn une_jvm_trop_ancienne_est_reconnue() {
+        assert!(is_java_failure(
+            "java.lang.UnsupportedClassVersionError: net/minecraft/client/main/Main has been compiled by a more recent version of the Java Runtime"
+        ));
+    }
+
+    /// Un plantage ordinaire ne doit pas être pris pour un problème de Java :
+    /// l'écran enverrait vers une page qui n'y peut rien.
+    #[test]
+    fn un_plantage_ordinaire_n_est_pas_un_probleme_de_java() {
+        assert!(!is_java_failure(TRACE));
+        assert!(!is_java_failure("java.lang.OutOfMemoryError: Java heap space"));
+        assert!(!is_java_failure("Incompatible mods found"));
+        assert!(!is_java_failure(""));
+    }
 
     #[test]
     fn same_cause_gives_the_same_signature_across_machines() {

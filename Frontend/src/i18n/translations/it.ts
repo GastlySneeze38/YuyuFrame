@@ -1518,6 +1518,11 @@ export const it: TranslationSchema = {
       oom: 'Memoria esaurita',
       loader: 'Loader di mod',
       launcher: 'Launcher',
+      java: 'Java',
+    },
+    java: {
+      hint: 'La macchina Java di questa istanza non si è avviata: installazione incompleta, spostata, o con una versione che non corrisponde. Si risolve nelle sue impostazioni Java.',
+      action: 'Apri le impostazioni Java',
     },
     field: {
       instance: 'Istanza',

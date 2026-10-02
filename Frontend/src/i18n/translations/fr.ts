@@ -1530,6 +1530,11 @@ export const fr = {
       oom: 'Mémoire insuffisante',
       loader: 'Chargeur de mods',
       launcher: 'Launcher',
+      java: 'Java',
+    },
+    java: {
+      hint: "La machine Java de cette instance n'a pas démarré — installation incomplète, déplacée, ou version qui ne correspond pas. Ça se répare dans ses réglages Java.",
+      action: 'Ouvrir les réglages Java',
     },
     field: {
       instance: 'Instance',

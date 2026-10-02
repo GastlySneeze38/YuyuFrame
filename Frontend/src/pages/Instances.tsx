@@ -33,6 +33,9 @@ export default function Instances() {
   // pas copiée : la modale montre l'étoile des favoris et le nom, qui changent
   // pendant qu'elle est ouverte. Une copie serait restée celle de l'ouverture.
   const [settingsTargetId, setSettingsTargetId] = useState<string | null>(null)
+  /** Onglet à ouvrir dans les paramètres — posé par un lien qui sait où il
+   *  envoie (la modale de plantage pour un problème de Java, par exemple). */
+  const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined)
   const [duplicateSource, setDuplicateSource] = useState<Instance | null>(null)
   const [othersExpanded, setOthersExpanded] = useState(true)
   const loaded = useRef(false)
@@ -69,6 +72,16 @@ export default function Instances() {
       // Échec silencieux : une liste de versions manquante se signale dans
       // la fenêtre de création, pas par une alerte sur un écran qui marche.
       api.versions.list().then(setVersions).catch(() => {})
+    }
+
+    // `?settings=<id>&tab=java` ouvre directement les paramètres sur un
+    // onglet. Sert à ce qu'un écran qui constate un problème puisse envoyer
+    // là où il se règle, au lieu de décrire le chemin à suivre.
+    const params = new URLSearchParams(window.location.search)
+    const target = params.get('settings')
+    if (target) {
+      setSettingsTargetId(target)
+      setSettingsTab(params.get('tab') ?? undefined)
     }
   }, [])
 
@@ -347,7 +360,8 @@ export default function Instances() {
         <InstanceSettingsModal
           instance={settingsTarget}
           versions={releaseVersions}
-          onClose={() => setSettingsTargetId(null)}
+          initialTab={settingsTab}
+          onClose={() => { setSettingsTargetId(null); setSettingsTab(undefined) }}
           // La modale reste ouverte après un enregistrement : on y vient pour
           // régler plusieurs choses, et la refermer à chaque fois obligerait à
           // rouvrir le menu entre deux onglets.
