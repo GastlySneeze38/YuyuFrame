@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::minecraft::maven::MavenCoord;
 use crate::minecraft::mod_files::is_jar_file;
+use super::{mark_recommended, LoaderVersion};
 
 const FABRIC_META: &str = "https://meta.fabricmc.net/v2";
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
@@ -117,7 +118,12 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
 ///
 /// Fabric Meta rend déjà la liste triée du plus récent au plus ancien : on la
 /// garde telle quelle plutôt que de retrier, le tri d'origine étant le leur.
-pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+///
+/// Elle est **la même pour toutes les versions de Minecraft** (vérifié : 253
+/// entrées identiques pour 1.16.5 et 1.21.4), le loader Fabric étant
+/// indépendant du jeu. Le `stable` qu'ils publient est donc la seule
+/// indication utile, et ils n'en marquent qu'une seule — c'est la recommandée.
+pub async fn list_versions(mc_version: &str) -> Result<Vec<LoaderVersion>> {
     let client = crate::minecraft::http::short_lived_client();
     let entries: Vec<LoaderEntry> = client
         .get(format!("{FABRIC_META}/versions/loader/{mc_version}"))
@@ -126,7 +132,13 @@ pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
         .json()
         .await
         .map_err(|_| anyhow!("Fabric non disponible pour Minecraft {}", mc_version))?;
-    Ok(entries.into_iter().map(|e| e.loader.version).collect())
+
+    let mut versions: Vec<LoaderVersion> = entries
+        .into_iter()
+        .map(|e| LoaderVersion::new(e.loader.version, e.loader.stable))
+        .collect();
+    mark_recommended(&mut versions, None);
+    Ok(versions)
 }
 
 /// Le profil d'une version de loader **précise**, choisie par l'utilisateur.

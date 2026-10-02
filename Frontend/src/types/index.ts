@@ -142,6 +142,20 @@ export interface Instance {
   loader_version: string
 }
 
+/**
+ * Une version de loader proposée au choix.
+ *
+ * `recommended` est la seule réponse utile à « laquelle prendre » : c'est
+ * celle que le loader lui-même désigne, et celle que le launcher installerait
+ * sans épinglage. `stable` distingue une version publiée d'une pré-version —
+ * chez Quilt et NeoForge, les pré-versions sont la majorité de la liste.
+ */
+export interface LoaderVersion {
+  version: string
+  stable: boolean
+  recommended: boolean
+}
+
 /** Les trois sujets indépendants d'une config JVM. Ils sont édités séparément
  * parce qu'on change de ramasse-miettes sans toucher au compilateur — mélangés
  * dans une seule liste, impossible de dire quelle moitié d'un test a bougé. */

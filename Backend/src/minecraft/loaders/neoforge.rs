@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 use crate::minecraft::versions::predicate::{cmp_core, version_core};
+use super::{mark_recommended, LoaderVersion};
 
 const NEOFORGE_VERSIONS_API: &str =
     "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
@@ -54,7 +55,7 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
 ///
 /// Même filtre par préfixe que `fetch_latest_version` ci-dessus, et même tri
 /// numérique — un tri lexicographique mettrait `20.2.9` après `20.2.10`.
-pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+pub async fn list_versions(mc_version: &str) -> Result<Vec<LoaderVersion>> {
     let client = crate::minecraft::http::short_lived_client();
     let resp: NeoForgeVersionList = client
         .get(NEOFORGE_VERSIONS_API)
@@ -65,9 +66,21 @@ pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
         .map_err(|_| anyhow!("Impossible de contacter le serveur NeoForge"))?;
 
     let prefix = format!("{}.", mc_version.strip_prefix("1.").unwrap_or(mc_version));
-    let mut matching: Vec<String> = resp.versions.into_iter().filter(|v| v.starts_with(&prefix)).collect();
-    matching.sort_by(|a, b| cmp_core(&version_core(b), &version_core(a)));
-    Ok(matching)
+    let mut versions: Vec<LoaderVersion> = resp
+        .versions
+        .into_iter()
+        .filter(|v| v.starts_with(&prefix))
+        // Les beta sont la majorité (120 sur 158 pour 1.21.4) : les écarter de
+        // la liste priverait d'un choix légitime, ne pas les signaler ferait
+        // recommander une pré-version. On les garde, marquées.
+        .map(|v| {
+            let stable = !v.contains("-beta");
+            LoaderVersion::new(v, stable)
+        })
+        .collect();
+    versions.sort_by(|a, b| cmp_core(&version_core(&b.version), &version_core(&a.version)));
+    mark_recommended(&mut versions, None);
+    Ok(versions)
 }
 
 /// L'id de version installée est toujours exactement `neoforge-{version}`

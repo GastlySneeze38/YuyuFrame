@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 use crate::minecraft::versions::predicate::{cmp_core, version_core};
 use super::fabric::FabricProfile;
+use super::{mark_recommended, LoaderVersion};
 
 const QUILT_META: &str = "https://meta.quiltmc.org/v3";
 
@@ -28,9 +29,12 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
 
 /// Les versions de loader disponibles pour ce MC, la plus récente d'abord.
 ///
-/// Contrairement à Fabric, l'API v3 de Quilt ne garantit pas l'ordre : on
-/// trie, avec les mêmes helpers que la sélection automatique juste en dessous.
-pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+/// Trois différences avec Fabric, et chacune coûte une ligne ici : l'API v3 ne
+/// garantit pas l'ordre (on trie), elle ne publie **aucun champ `stable`** (on
+/// le déduit du nom), et l'essentiel de ce qu'elle rend est en pré-version —
+/// 254 des 307 entrées pour 1.21.4 portent `-beta`. Désigner la plus récente
+/// tout court enverrait donc presque toujours sur une beta.
+pub async fn list_versions(mc_version: &str) -> Result<Vec<LoaderVersion>> {
     let client = crate::minecraft::http::short_lived_client();
     let entries: Vec<LoaderEntry> = client
         .get(format!("{QUILT_META}/versions/loader/{mc_version}"))
@@ -39,9 +43,25 @@ pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
         .json()
         .await
         .map_err(|_| anyhow!("Quilt non disponible pour Minecraft {}", mc_version))?;
-    let mut versions: Vec<String> = entries.into_iter().map(|e| e.loader.version).collect();
-    versions.sort_by(|a, b| cmp_core(&version_core(b), &version_core(a)));
+
+    let mut versions: Vec<LoaderVersion> = entries
+        .into_iter()
+        .map(|e| {
+            let stable = is_stable(&e.loader.version);
+            LoaderVersion::new(e.loader.version, stable)
+        })
+        .collect();
+    versions.sort_by(|a, b| cmp_core(&version_core(&b.version), &version_core(&a.version)));
+    mark_recommended(&mut versions, None);
     Ok(versions)
+}
+
+/// Une version Quilt est publiée quand elle ne porte pas d'étiquette de
+/// pré-version — `0.20.0-beta.9`, `0.17.0-rc.1`. Le tiret seul ne suffit pas
+/// comme critère : il sert aussi à des suffixes de build ailleurs.
+fn is_stable(version: &str) -> bool {
+    let lower = version.to_ascii_lowercase();
+    !(lower.contains("-beta") || lower.contains("-rc") || lower.contains("-alpha") || lower.contains("-pre"))
 }
 
 /// Le profil d'une version de loader précise — voir `fabric::get_profile`.

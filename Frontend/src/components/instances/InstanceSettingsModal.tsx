@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
-import type { Instance, Loader, SharedOptionsStatus } from '@/types'
+import type { Instance, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { CloseButton } from '@/components/ui/CloseButton'
@@ -533,7 +533,7 @@ function InstallationTab({
   const [savingLabel, setSavingLabel] = useState('')
 
   /** Versions du loader proposées — `null` tant qu'on ne les a pas. */
-  const [loaderVersions, setLoaderVersions] = useState<string[] | null>(null)
+  const [loaderVersions, setLoaderVersions] = useState<LoaderVersion[] | null>(null)
 
   // Rechargées à chaque changement de loader ou de version de jeu : une liste
   // de builds n'a de sens que pour un couple précis. Le compteur de génération
@@ -683,15 +683,31 @@ function InstallationTab({
               {loaderVersions === null ? (
                 <p className="text-[11.5px] text-txt-muted">{t('common.loading')}</p>
               ) : (
-                <Select
-                  value={loaderVersion}
-                  onChange={setLoaderVersion}
-                  options={loaderVersions}
-                  // La première entrée n'est pas une version : c'est le
-                  // comportement par défaut du launcher, et il doit rester
-                  // atteignable pour revenir en arrière.
-                  placeholder={{ value: '', label: t('instancesPage.loaderLatest') }}
-                />
+                <>
+                  <Select
+                    value={loaderVersion}
+                    onChange={setLoaderVersion}
+                    // La recommandation et l'état de publication sont écrits
+                    // DANS le libellé : on ne peut pas styliser une `<option>`
+                    // de façon fiable, et c'est au moment de choisir qu'il
+                    // faut l'information, pas après.
+                    options={loaderVersions.map((v) => ({
+                      value: v.version,
+                      label: v.recommended
+                        ? `${v.version} — ${t('instancesPage.loaderRecommended')}`
+                        : v.stable
+                          ? v.version
+                          : `${v.version} — ${t('instancesPage.loaderUnstable')}`,
+                    }))}
+                    // La première entrée n'est pas une version : c'est le
+                    // comportement par défaut du launcher, et il doit rester
+                    // atteignable pour revenir en arrière.
+                    placeholder={{ value: '', label: t('instancesPage.loaderLatest') }}
+                  />
+                  <p className="text-[11px] leading-relaxed text-txt-muted">
+                    {t('instancesPage.loaderVersionHint')}
+                  </p>
+                </>
               )}
             </Field>
           )}
@@ -744,7 +760,9 @@ function Select({
 }: {
   value: string
   onChange: (value: string) => void
-  options: string[]
+  /** Une chaîne quand la valeur suffit, une paire quand le libellé en dit
+   *  plus que la valeur (voir les versions de loader). */
+  options: (string | { value: string; label: string })[]
   placeholder?: { value: string; label: string }
 }) {
   return (
@@ -757,9 +775,10 @@ function Select({
         {placeholder && (
           <option value={placeholder.value} className="bg-[#111118]">{placeholder.label}</option>
         )}
-        {options.map((o) => (
-          <option key={o} value={o} className="bg-[#111118]">{o}</option>
-        ))}
+        {options.map((o) => {
+          const { value: v, label: l } = typeof o === 'string' ? { value: o, label: o } : o
+          return <option key={v} value={v} className="bg-[#111118]">{l}</option>
+        })}
       </select>
       <svg viewBox="0 0 10 6" fill="currentColor" width={10} height={6} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted">
         <path d="M0 0l5 6 5-6z" />

@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+use crate::minecraft::loaders::LoaderVersion;
 use crate::minecraft::versions;
 
 #[derive(Serialize)]
@@ -31,7 +32,7 @@ pub async fn list_versions() -> Result<Vec<VersionEntry>, String> {
 /// Une liste vide plutôt qu'une erreur pour « vanilla » : il n'y a pas de
 /// loader à versionner, et l'interface n'a rien de spécial à traiter.
 #[tauri::command]
-pub async fn loader_versions(loader: String, mc_version: String) -> Result<Vec<String>, String> {
+pub async fn loader_versions(loader: String, mc_version: String) -> Result<Vec<LoaderVersion>, String> {
     use crate::minecraft::loaders::{fabric, forge, neoforge, quilt};
     match loader.as_str() {
         "fabric" => fabric::list_versions(&mc_version).await,

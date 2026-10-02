@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::minecraft::maven::MavenCoord;
+use crate::minecraft::versions::predicate::{cmp_core, version_core};
+use super::{mark_recommended, LoaderVersion};
 
 const FORGE_PROMOTIONS: &str =
     "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
@@ -81,11 +83,18 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
 /// Les builds Forge disponibles pour ce MC, le plus récent d'abord.
 ///
 /// `promotions_slim.json` ne connaît que « recommended » et « latest » : pour
-/// proposer un choix, il faut la liste complète, qui n'existe que dans le
+/// proposer un choix il faut la liste complète, qui n'existe que dans le
 /// `maven-metadata.xml` du dépôt. Pas de dépendance XML pour autant — on ne
 /// cherche qu'une suite de `<version>…</version>`, et un analyseur complet
-/// pour ça serait disproportionné (voir `extract_maven_versions`, testé).
-pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+/// pour ça serait disproportionné (voir `builds_for`, testé).
+///
+/// Deux requêtes et non une : le maven donne la liste, les promotions disent
+/// laquelle Forge recommande. C'est leur propre désignation, et c'est
+/// exactement ce que le launcher installe quand rien n'est épinglé — la
+/// recommandation ne doit pas dire autre chose que ce qui se passerait sans
+/// elle. Promotions injoignable n'est pas fatal : on retombe sur le build le
+/// plus récent.
+pub async fn list_versions(mc_version: &str) -> Result<Vec<LoaderVersion>> {
     let client = crate::minecraft::http::short_lived_client();
     let xml = client
         .get(format!("{FORGE_MAVEN}maven-metadata.xml"))
@@ -95,27 +104,44 @@ pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
         .await
         .map_err(|_| anyhow!("Impossible de contacter le serveur Forge"))?;
 
-    // Les versions y sont écrites `1.21.4-54.0.1` : on garde celles de ce MC
-    // et on ne rend que le build, seule partie que l'utilisateur choisit.
-    let prefix = format!("{mc_version}-");
-    let mut builds: Vec<String> = extract_maven_versions(&xml)
+    let mut versions: Vec<LoaderVersion> = builds_for(&xml, mc_version)
         .into_iter()
-        .filter_map(|v| v.strip_prefix(&prefix).map(|b| b.to_string()))
+        // Forge ne publie pas de pré-versions par canal : tout ce qui est au
+        // maven est publié. La distinction utile est « recommandée ou non ».
+        .map(|b| LoaderVersion::new(b, true))
         .collect();
-    // Le maven les range du plus ancien au plus récent.
-    builds.reverse();
-    Ok(builds)
+
+    let promoted = fetch_latest_version(mc_version).await.ok();
+    mark_recommended(&mut versions, promoted.as_deref());
+    Ok(versions)
 }
 
-/// Le contenu des balises `<version>` d'un `maven-metadata.xml`, dans l'ordre
-/// du document.
-fn extract_maven_versions(xml: &str) -> Vec<String> {
-    xml.split("<version>")
+/// Les builds Forge de cette version de MC, le plus récent d'abord.
+///
+/// Deux pièges, tous deux vérifiés sur le vrai `maven-metadata.xml` :
+///
+///   - **le document n'est pas trié** (`1.21.4-54.1.6` y précède
+///     `1.21.4-54.1.18`), donc l'ordre d'apparition ne veut rien dire — on
+///     trie numériquement, comme ailleurs dans le launcher ;
+///   - **le pré-1.13 répète la version MC en suffixe** (`1.7.10-10.13.4.1614-1.7.10`).
+///     Il faut l'enlever, parce que le reste du code manipule le build au
+///     format des promotions (`10.13.4.1614`) — c'est lui que `install`
+///     attend, et il sait déjà reconstruire l'URL legacy.
+fn builds_for(xml: &str, mc_version: &str) -> Vec<String> {
+    let prefix = format!("{mc_version}-");
+    let suffix = format!("-{mc_version}");
+    let mut builds: Vec<String> = xml
+        .split("<version>")
         .skip(1)
         .filter_map(|rest| rest.split_once("</version>"))
-        .map(|(v, _)| v.trim().to_string())
+        .map(|(v, _)| v.trim())
         .filter(|v| !v.is_empty())
-        .collect()
+        .filter_map(|v| v.strip_prefix(&prefix))
+        .map(|b| b.strip_suffix(&suffix).unwrap_or(b).to_string())
+        .collect();
+    builds.sort_by(|a, b| cmp_core(&version_core(b), &version_core(a)));
+    builds.dedup();
+    builds
 }
 
 /// Trouve un dossier de version déjà installé correspondant à ce MC+build Forge.
@@ -413,34 +439,39 @@ pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path, client: 
 
 #[cfg(test)]
 mod tests {
-    use super::extract_maven_versions;
+    use super::builds_for;
 
-    /// Le maven de Forge, en plus petit — balises sur plusieurs lignes et
-    /// indentées, comme dans le vrai fichier.
-    const XML: &str = r#"<metadata>
-      <versioning>
-        <versions>
-          <version>1.21.4-54.0.1</version>
-          <version>1.21.4-54.1.0</version>
-          <version>1.20.1-47.2.0</version>
-        </versions>
-      </versioning>
-    </metadata>"#;
+    /// Un extrait fidèle du vrai maven : non trié, et le pré-1.13 qui répète
+    /// la version MC en suffixe.
+    const XML: &str = r#"<metadata><versioning><versions>
+      <version>1.21.4-54.1.6</version>
+      <version>1.21.4-54.1.18</version>
+      <version>1.21.4-54.1.5</version>
+      <version>1.20.1-47.2.0</version>
+      <version>1.7.10-10.13.4.1614-1.7.10</version>
+      <version>1.7.10-10.13.0.1150</version>
+    </versions></versioning></metadata>"#;
 
+    /// Le document n'est pas ordonné : c'est le tri numérique qui décide, et
+    /// `54.1.18` passe donc devant `54.1.6` (un tri de texte ferait l'inverse).
     #[test]
-    fn lit_les_versions_dans_l_ordre_du_document() {
-        assert_eq!(
-            extract_maven_versions(XML),
-            vec!["1.21.4-54.0.1", "1.21.4-54.1.0", "1.20.1-47.2.0"]
-        );
+    fn la_plus_recente_d_abord_quel_que_soit_l_ordre_du_document() {
+        assert_eq!(builds_for(XML, "1.21.4"), vec!["54.1.18", "54.1.6", "54.1.5"]);
     }
 
-    /// Un document sans version ne doit pas rendre une entrée vide : la liste
-    /// alimente un menu, et un choix vide serait sélectionnable.
+    /// Le suffixe du pré-1.13 est retiré : le reste du launcher manipule le
+    /// build au format des promotions, et c'est lui que l'installeur attend.
     #[test]
-    fn ne_rend_rien_quand_il_n_y_a_rien() {
-        assert!(extract_maven_versions("<metadata></metadata>").is_empty());
-        assert!(extract_maven_versions("<version></version>").is_empty());
-        assert!(extract_maven_versions("").is_empty());
+    fn le_suffixe_repete_du_pre_1_13_est_retire() {
+        assert_eq!(builds_for(XML, "1.7.10"), vec!["10.13.4.1614", "10.13.0.1150"]);
+    }
+
+    /// Une version de MC voisine ne doit pas déteindre : `1.21.4-` ne prend
+    /// pas les builds de `1.20.1`.
+    #[test]
+    fn ne_prend_que_les_builds_de_ce_minecraft() {
+        assert_eq!(builds_for(XML, "1.20.1"), vec!["47.2.0"]);
+        assert!(builds_for(XML, "1.99").is_empty());
+        assert!(builds_for("<metadata></metadata>", "1.21.4").is_empty());
     }
 }
