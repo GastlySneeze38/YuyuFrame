@@ -20,7 +20,7 @@ use super::progress::{set_progress_monotonic, ProgressFloor};
 /// `docs/LauncherAgent/v1.8.9/README.md` § 3.1 (décision D7). Limitée au
 /// loader vanilla : Forge 1.8.9 passe par LaunchWrapper, incompatible avec
 /// Java 9+ (voir `ensure_java`), et Fabric/Quilt n'en sont pas concernés.
-pub(super) fn java_requirement(
+pub fn java_requirement(
     version_id: &str,
     loader: Option<&str>,
     declared: Option<&JavaVersionInfo>,
@@ -79,7 +79,7 @@ pub(super) async fn is_openj9(java: &str) -> bool {
     lower.contains("openj9") || lower.contains("j9 vm")
 }
 
-pub(super) async fn detect_java_major_version(java: &str) -> Option<u32> {
+pub async fn detect_java_major_version(java: &str) -> Option<u32> {
     let out = tokio::time::timeout(
         JAVA_VERSION_TIMEOUT,
         hidden_command(java).arg("-version").output(),
@@ -139,6 +139,80 @@ const MOJANG_JAVA_MANIFEST: &str =
 /// `JvmVendor::Graal`) ; `Temurin` (le défaut) et tous les replis best-effort
 /// partagent la même résolution : JAVA_HOME → install système → runtime
 /// Mojang en cache → téléchargement Mojang.
+/// Installe le runtime recommandé pour ce couple (composant, version).
+///
+/// Façade au-dessus d'[`ensure_java`] pour l'écran « Java et mémoire » :
+/// l'appelant n'a ainsi à connaître ni `JvmVendor` ni le plancher de
+/// progression, qui sont des détails du lancement. Même fonction que lui,
+/// donc même runtime au même endroit — et comme elle cherche d'abord ce qui
+/// est déjà présent, cliquer sur « Installer » quand tout va bien ne
+/// retélécharge rien.
+pub async fn install_java_runtime(
+    component: &str,
+    required_major: u32,
+    app: &tauri::AppHandle,
+    instance_id: &str,
+) -> Result<String> {
+    let client = crate::minecraft::http::short_lived_client();
+    let progress = ProgressFloor::new(instance_id);
+    let (path, _) = ensure_java(
+        component,
+        required_major,
+        &super::minecraft_dir(),
+        &client,
+        app,
+        &progress,
+        // Le vendeur par défaut du launcher : c'est la résolution standard
+        // (système, puis runtime Mojang/Temurin), pas un choix imposé.
+        JvmVendor::Temurin,
+        None,
+    )
+    .await?;
+    Ok(path)
+}
+
+/// Où est le Java que le lancement utiliserait **sans rien télécharger**.
+///
+/// L'écran « Java et mémoire » a besoin de montrer un état, pas de provoquer
+/// un téléchargement de 45 Mo parce qu'on a ouvert un onglet. C'est la même
+/// cascade que [`ensure_java`] amputée de ses téléchargements : `JAVA_HOME`
+/// à la version exacte, puis une installation système, puis les runtimes que
+/// le launcher a déjà posés.
+///
+/// **À faire bouger avec [`ensure_java`]** : les deux décrivent la même
+/// recherche, et une divergence ferait afficher un chemin qui n'est pas celui
+/// que le jeu emploierait.
+pub async fn resolve_existing_java(component: &str, required_major: u32, mc_dir: &Path) -> Option<String> {
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let exe = PathBuf::from(&home).join("bin").join(java_exe_name());
+        if exe.exists() {
+            if detect_java_major_version(&exe.to_string_lossy()).await == Some(required_major) {
+                return Some(exe.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    if let Some(java) = find_system_java_verified(required_major).await {
+        return Some(java);
+    }
+
+    if component == "jre-legacy" {
+        let dir = mc_dir.join("runtime").join("jre-legacy-temurin");
+        let exe = dir.join("bin").join(java_exe_name());
+        if runtime_is_complete(&dir, &exe) {
+            return Some(exe.to_string_lossy().to_string());
+        }
+    }
+
+    let dir = mc_dir.join("runtime").join(component);
+    let exe = if cfg!(target_os = "macos") {
+        dir.join("jre.bundle").join("Contents").join("Home").join("bin").join("java")
+    } else {
+        dir.join("bin").join(java_exe_name())
+    };
+    runtime_is_complete(&dir, &exe).then(|| exe.to_string_lossy().to_string())
+}
+
 pub(super) async fn ensure_java(
     component: &str,
     required_major: u32,
@@ -575,7 +649,7 @@ fn mojang_platform_key() -> &'static str {
 /// process par candidat. D'où l'ordre — le chemin rapide d'abord, et le
 /// chemin sûr seulement quand le rapide a échoué, c'est-à-dire dans le seul
 /// cas où l'on s'apprêtait à retélécharger un runtime entier pour rien.
-pub(super) async fn find_system_java_verified(required_major: u32) -> Option<String> {
+pub async fn find_system_java_verified(required_major: u32) -> Option<String> {
     if let Some(java) = find_system_java(required_major) {
         return Some(java);
     }

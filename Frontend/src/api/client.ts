@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaStatus, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -345,6 +345,23 @@ export const api = {
     /** Remet en état ce que le diagnostic a trouvé abîmé, et rend le nombre de
      *  fichiers retéléchargés. Ne touche jamais au dossier de l'instance. */
     repair: (instanceId: string) => invoke<number>('instance_repair', { instanceId }),
+
+    // ── Java de l'instance (onglet « Java et mémoire ») ──────────────────
+    // La version requise vient de la version du jeu, jamais d'un réglage :
+    // ces commandes la donnent, pas l'inverse.
+    javaStatus: (instanceId: string) => invoke<JavaStatus>('instance_java_status', { instanceId }),
+    /** Cherche un Java de la bonne version sur la machine. Rend une
+     *  proposition, n'enregistre rien. */
+    javaDetect: (instanceId: string) => invoke<string | null>('instance_java_detect', { instanceId }),
+    /** Désigne la JVM, ou `null` pour revenir à la résolution automatique. */
+    setJavaPath: (instanceId: string, path: string | null) =>
+      invoke<JavaStatus>('instance_set_java_path', { instanceId, path }),
+    /** Installe le runtime recommandé — même fonction que le lancement, donc
+     *  rien n'est retéléchargé si tout est déjà en place. */
+    installJava: (instanceId: string) => invoke<JavaStatus>('instance_install_java', { instanceId }),
+    /** La version majeure que rend cet exécutable, ou `null` si ce n'en est
+     *  pas un. Pour valider un chemin choisi avec « Parcourir ». */
+    probeJava: (path: string) => invoke<number | null>('java_probe', { path }),
     // P1-6 (audit launcher, Phase 6) — aperçu de la ligne de commande réelle,
     // recalculée côté Rust par les mêmes fonctions qu'un vrai lancement.
     previewJvmConfig: (instanceId: string, mcVersion: string, ramMb: number, jvm: JvmFormValues) =>

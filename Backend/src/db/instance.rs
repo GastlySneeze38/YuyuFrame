@@ -99,6 +99,24 @@ pub fn instance_set_icon(conn: &Connection, id: &str, user_id: i64, icon: &str) 
     Ok(())
 }
 
+/// Désigne la JVM d'une instance, ou revient à la résolution automatique.
+///
+/// Le vendeur suit le chemin et n'est pas un réglage séparé ici : `ensure_java`
+/// refuse un vendeur « custom » sans chemin, et un chemin posé sans vendeur
+/// « custom » serait ignoré. Les laisser se régler indépendamment ne produit
+/// donc que des états qui ne lancent pas.
+pub fn instance_set_java_path(conn: &Connection, id: &str, user_id: i64, path: Option<&str>) -> Result<()> {
+    let vendor = if path.is_some() { "custom" } else { "auto" };
+    let n = conn.execute(
+        "UPDATE instances SET jvm_custom_path = ?1, jvm_vendor = ?2 WHERE id = ?3 AND yuyu_user_id = ?4",
+        params![path, vendor, id, user_id],
+    )?;
+    if n == 0 {
+        return Err(anyhow::anyhow!("Instance introuvable"));
+    }
+    Ok(())
+}
+
 /// Épingle une version de loader (chaîne vide = la plus récente compatible).
 pub fn instance_set_loader_version(conn: &Connection, id: &str, user_id: i64, version: &str) -> Result<()> {
     conn.execute(

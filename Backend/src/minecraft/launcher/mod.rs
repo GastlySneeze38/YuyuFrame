@@ -17,6 +17,12 @@ mod servers;
 // descente de fichiers du lancement plutôt que d'en écrire une seconde : même
 // chemins d'artefacts, même règles d'inclusion, même téléchargement vérifié.
 pub use classpath::{artifact_path, download_verified, should_download_library};
+// L'écran « Java et mémoire » montre, vérifie et installe le runtime que le
+// lancement emploierait — il passe donc par les mêmes fonctions que lui.
+pub use java::{
+    detect_java_major_version, find_system_java_verified, install_java_runtime, java_requirement,
+    resolve_existing_java,
+};
 pub use agent_compat::{blocked_by as agent_blocked_by, AgentBlock, MIN_JAVA as AGENT_MIN_JAVA};
 pub use agent_deploy::deploy_bundled_agent;
 pub use orchestrator::{download_and_launch, minecraft_dir, preview_jvm_config, LAUNCH_CANCELLED_MSG};

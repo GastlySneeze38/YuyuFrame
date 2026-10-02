@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
-import type { HealthCheck, Instance, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
+import type { HealthCheck, Instance, JavaStatus, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { CloseButton } from '@/components/ui/CloseButton'
@@ -296,6 +296,10 @@ export function InstanceSettingsModal({
 
             {tab === 'java' && (
               <div className="flex flex-col gap-5">
+                <JavaField instance={instance} />
+
+                <Separator />
+
                 <Field label={t('instancesPage.ramTitle')} hint={formatRam(ram)}>
                   <RamPicker value={ram} onChange={setRam} loader={instance.loader} modCount={modCount} onStatusChange={setRamStatus} />
                 </Field>
@@ -499,6 +503,187 @@ function ActionButton({
       } disabled:cursor-not-allowed disabled:opacity-40`}
     >
       {busy ? t('common.loading') : done ? t('instancesPage.done') : children}
+    </button>
+  )
+}
+
+/**
+ * L'emplacement du Java de cette instance.
+ *
+ * La version requise n'est pas un choix : elle vient de la version du jeu (et
+ * du loader). L'écran l'annonce donc dans son titre — « Java 21 » — plutôt que
+ * de la faire sélectionner, et les trois boutons ne portent que sur le
+ * *chemin* : installer le runtime recommandé, en détecter un déjà présent sur
+ * la machine, ou en désigner un à la main.
+ *
+ * Le launcher faisait déjà tout cela seul au lancement ; c'est précisément le
+ * problème que cet écran règle : quand la résolution échoue, rien ne le disait
+ * et le jeu ne démarrait pas.
+ */
+function JavaField({ instance }: { instance: Instance }) {
+  const t = useT()
+  const [status, setStatus] = useState<JavaStatus | null>(null)
+  const [busy, setBusy] = useState<'install' | 'detect' | 'browse' | null>(null)
+
+  const load = () => {
+    api.instances.javaStatus(instance.id).then(setStatus).catch(() => setStatus(null))
+  }
+  // Rechargé quand la version du jeu ou le loader change : c'est ce couple qui
+  // décide de la version requise.
+  useEffect(load, [instance.id, instance.mc_version, instance.loader, instance.jvm_custom_path])
+
+  const apply = async (path: string | null) => {
+    try {
+      setStatus(await api.instances.setJavaPath(instance.id, path))
+    } catch (e) {
+      showError(e)
+    }
+  }
+
+  const install = async () => {
+    setBusy('install')
+    try {
+      setStatus(await api.instances.installJava(instance.id))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const detect = async () => {
+    setBusy('detect')
+    try {
+      const found = await api.instances.javaDetect(instance.id)
+      if (!found) { showError(t('instancesPage.javaNotFound')); return }
+      await apply(found)
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const browse = async () => {
+    const picked = await openFileDialog({
+      // Sur Windows l'exécutable s'appelle `java.exe` ; ailleurs il n'a pas
+      // d'extension, et un filtre en imposerait une qui n'existe pas.
+      filters: navigator.userAgent.includes('Windows')
+        ? [{ name: 'Java', extensions: ['exe'] }]
+        : undefined,
+    })
+    if (typeof picked !== 'string') return
+    setBusy('browse')
+    try {
+      // On interroge la JVM avant de l'enregistrer : désigner un fichier qui
+      // n'est pas un java, ou qui est de la mauvaise version, se verrait
+      // sinon au prochain lancement seulement.
+      const major = await api.instances.probeJava(picked)
+      if (major === null) { showError(t('instancesPage.javaInvalid')); return }
+      if (status && major !== status.required_major) {
+        showError(t('instancesPage.javaWrongVersion', { found: major, required: status.required_major }))
+        return
+      }
+      await apply(picked)
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const label = status ? t('instancesPage.javaLocation', { major: status.required_major }) : t('instancesPage.java')
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[13px] font-semibold text-txt-primary">{label}</p>
+
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-10 min-w-0 flex-1 items-center rounded-xl border border-line bg-black/40 px-3">
+          <span
+            dir="rtl"
+            className={`truncate text-left text-[12.5px] ${status?.path ? 'text-txt-secondary' : 'text-txt-muted'}`}
+            title={status?.path ?? undefined}
+          >
+            {/* De droite à gauche : sur un chemin trop long, c'est le nom du
+                fichier qui compte, pas le début de l'arborescence. */}
+            {status?.path ?? t('instancesPage.javaNone')}
+          </span>
+        </div>
+        <StatusDot ok={status?.ok ?? false} />
+      </div>
+
+      {status && status.path && !status.ok && (
+        <p className="text-[11.5px] text-warning">
+          {status.detected_major
+            ? t('instancesPage.javaWrongVersion', { found: status.detected_major, required: status.required_major })
+            : t('instancesPage.javaInvalid')}
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <SmallAction onClick={install} busy={busy === 'install'} disabled={busy !== null}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" width={13} height={13}>
+            <path d="M12 3v12M7 11l5 5 5-5M5 20h14" />
+          </svg>
+          {t('instancesPage.javaInstall')}
+        </SmallAction>
+        <SmallAction onClick={detect} busy={busy === 'detect'} disabled={busy !== null}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" width={13} height={13}>
+            <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
+          </svg>
+          {t('instancesPage.javaDetect')}
+        </SmallAction>
+        <SmallAction onClick={browse} busy={busy === 'browse'} disabled={busy !== null}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" width={13} height={13}>
+            <path d="M3 7h6l2 2h10v10H3z" />
+          </svg>
+          {t('instancesPage.javaBrowse')}
+        </SmallAction>
+        {/* Seulement quand il y a quelque chose à retirer : un bouton
+            « automatique » alors qu'on y est déjà n'apprendrait rien. */}
+        {status?.source === 'custom' && (
+          <SmallAction onClick={() => apply(null)} busy={false} disabled={busy !== null}>
+            {t('instancesPage.javaAuto')}
+          </SmallAction>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** La pastille d'état, à droite du chemin — verte ou rouge, rien d'autre. */
+function StatusDot({ ok }: { ok: boolean }) {
+  return ok ? (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18} className="shrink-0 text-[rgb(134,239,172)]">
+      <circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={18} height={18} className="shrink-0 text-danger">
+      <circle cx="12" cy="12" r="9" /><path d="M9 9l6 6M15 9l-6 6" />
+    </svg>
+  )
+}
+
+function SmallAction({
+  onClick,
+  busy,
+  disabled,
+  children,
+}: {
+  onClick: () => void
+  busy: boolean
+  disabled?: boolean
+  children: ReactNode
+}) {
+  const t = useT()
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12px] font-semibold text-txt-secondary transition-colors hover:border-accent/40 hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {busy ? t('common.loading') : children}
     </button>
   )
 }

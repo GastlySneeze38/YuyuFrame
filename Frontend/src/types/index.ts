@@ -143,6 +143,22 @@ export interface Instance {
 }
 
 /**
+ * L'état du Java d'une instance — voir `commands/instance/java.rs`.
+ *
+ * `required_major` est imposé par la version du jeu, jamais choisi.
+ * `source` vaut `custom` (chemin désigné à la main), `resolved` (trouvé par le
+ * launcher) ou `none`.
+ */
+export interface JavaStatus {
+  required_major: number
+  component: string
+  path: string | null
+  source: 'custom' | 'resolved' | 'none'
+  detected_major: number | null
+  ok: boolean
+}
+
+/**
  * Un point de contrôle de l'installation — voir `commands/instance/repair.rs`.
  *
  * `status` vaut `ok`, `broken` (présent mais altéré), `missing`, ou `unknown`
