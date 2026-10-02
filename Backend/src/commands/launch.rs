@@ -65,6 +65,10 @@ pub async fn launch_game(
         jvm_profile_id: instance.jvm_profile_id,
         icon: instance.icon,
         loader_version: instance.loader_version,
+        window_custom: instance.window_custom,
+        window_fullscreen: instance.window_fullscreen,
+        window_width: instance.window_width,
+        window_height: instance.window_height,
     };
 
     // Une config reliée remplace INTÉGRALEMENT le bloc JVM de l'instance —
@@ -196,6 +200,14 @@ pub async fn launch_game(
 
         let started_at = chrono::Utc::now().timestamp();
 
+        // Le plein écran se repose à chaque lancement : le jeu réécrit
+        // `options.txt` en quittant, donc en sortir une fois annulerait sinon
+        // définitivement ce que l'instance demande. Seulement quand elle impose
+        // sa fenêtre — sans ça, on effacerait le choix fait en jeu.
+        if instance.window_custom {
+            crate::commands::instance::options::force_fullscreen(&instance.id, instance.window_fullscreen).await;
+        }
+
         let session_id: Option<i64> = {
             let s = state_clone.read().await;
             let db = s.db.lock().await;
@@ -242,6 +254,9 @@ pub async fn launch_game(
             &jvm_extra_args,
             &jvm_args_mode,
             &instance.loader_version,
+            instance
+                .window_custom
+                .then_some((instance.window_width, instance.window_height)),
         )
         .await
         {

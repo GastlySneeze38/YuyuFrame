@@ -86,6 +86,11 @@ pub async fn download_and_launch(
     // compatible, qui est ce que le launcher a toujours fait — le paramètre
     // n'ajoute un comportement que lorsqu'il porte quelque chose.
     loader_version: &str,
+    // Taille de fenêtre imposée par l'instance, `None` quand elle n'impose
+    // rien — ce qui est le cas par défaut et ce que le launcher a toujours
+    // fait. Le plein écran, lui, ne passe pas par ici : il n'a pas d'argument
+    // de ligne de commande et vit dans `options.txt` (voir `force_fullscreen`).
+    window_size: Option<(u32, u32)>,
 ) -> Result<Vec<String>> {
     // P1-6 : "auto" couvre toute la config (vendeur ET GC), résolu une seule
     // fois ici avant toute utilisation — voir doc de `resolve_auto_vendor`.
@@ -620,6 +625,17 @@ pub async fn download_and_launch(
     args.extend(["-cp".to_string(), classpath_str, main_class]);
     args.extend(build_game_args(&details, session, &mc_game_dir, &assets_dir, version_id));
     args.extend(extra_game_args);
+    // Après les arguments du manifeste et ceux du loader : le jeu lit la
+    // dernière occurrence, donc ce que l'instance demande gagne sur un
+    // `--width` qui viendrait d'ailleurs.
+    if let Some((width, height)) = window_size {
+        args.extend([
+            "--width".to_string(),
+            width.to_string(),
+            "--height".to_string(),
+            height.to_string(),
+        ]);
+    }
     if let Some(address) = connect_server {
         log_to_console(&app, &console_label, &format!("Connexion directe au serveur {}...", address), "out");
         args.extend(build_server_connect_args(version_id, address));

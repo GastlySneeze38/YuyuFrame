@@ -130,6 +130,40 @@ pub async fn mc_options_write(
     Ok(parse(&next))
 }
 
+/// Impose le plein écran dans `options.txt` juste avant un lancement.
+///
+/// Par `options.txt` et non par un argument de ligne de commande : Minecraft
+/// n'en a pas pour le plein écran, c'est ce fichier qui en décide. Et comme le
+/// jeu le réécrit en quittant, le réglage doit être reposé à **chaque**
+/// lancement — sinon une sortie du plein écran en jeu annulerait pour toujours
+/// ce que l'instance demande.
+///
+/// N'est appelé que si l'instance impose sa fenêtre (voir `window_custom`) :
+/// sans ça, écrire `fullscreen:false` effacerait le choix fait en jeu.
+///
+/// Best-effort : un `options.txt` illisible ne doit pas empêcher de jouer.
+pub(crate) async fn force_fullscreen(instance_id: &str, fullscreen: bool) {
+    let path = options_path(instance_id);
+    let current = match tokio::fs::read_to_string(&path).await {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            tracing::warn!("Plein écran non appliqué ({} illisible) : {}", path.display(), e);
+            return;
+        }
+    };
+    let next = apply(
+        &current,
+        &[McOption { key: "fullscreen".into(), value: fullscreen.to_string() }],
+    );
+    if let Some(parent) = path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    if let Err(e) = tokio::fs::write(&path, next.as_bytes()).await {
+        tracing::warn!("Écriture du plein écran dans {} échouée : {}", path.display(), e);
+    }
+}
+
 /// Enregistre le réglage « synchroniser les paramètres Minecraft ».
 ///
 /// Poussé par le frontend au démarrage et à chaque changement, comme pour

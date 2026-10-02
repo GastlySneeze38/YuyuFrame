@@ -49,7 +49,24 @@ pub struct Instance {
     /// inattendu qu'elle croirait installé.
     #[serde(default)]
     pub loader_version: String,
+    /// Le launcher impose-t-il la fenêtre de jeu ? Faux = il n'y touche pas,
+    /// et les trois champs suivants n'ont aucun effet au lancement.
+    ///
+    /// Hors de `meta.json` comme les autres préférences : une instance
+    /// réimportée repart sans contrainte de fenêtre, ce qui est le défaut sûr.
+    #[serde(default)]
+    pub window_custom: bool,
+    #[serde(default)]
+    pub window_fullscreen: bool,
+    #[serde(default = "default_window_width")]
+    pub window_width: u32,
+    #[serde(default = "default_window_height")]
+    pub window_height: u32,
 }
+
+/// Taille par défaut de la fenêtre de Minecraft, reprise telle quelle.
+fn default_window_width() -> u32 { 854 }
+fn default_window_height() -> u32 { 480 }
 
 #[derive(Serialize, Deserialize)]
 struct InstanceMeta {
@@ -163,6 +180,8 @@ pub(super) fn row_to_instance(r: db::InstanceRow) -> Instance {
         jvm_vendor: r.jvm_vendor, jvm_custom_path: r.jvm_custom_path, gc_policy: r.gc_policy,
         jvm_extra_args: r.jvm_extra_args, jvm_args_mode: r.jvm_args_mode,
         jvm_profile_id: r.jvm_profile_id, icon: r.icon, loader_version: r.loader_version,
+        window_custom: r.window_custom, window_fullscreen: r.window_fullscreen,
+        window_width: r.window_width, window_height: r.window_height,
     }
 }
 
@@ -235,7 +254,7 @@ pub async fn instance_create(
         "mc_version": &mc_version,
         "loader": &loader,
     }));
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon: String::new(), loader_version: String::new() })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon: String::new(), loader_version: String::new(), window_custom: false, window_fullscreen: false, window_width: default_window_width(), window_height: default_window_height() })
 }
 
 #[tauri::command]
@@ -408,11 +427,40 @@ pub async fn instance_duplicate(
     // La config JVM reliée n'est PAS dupliquée : une config est justement
     // faite pour être partagée entre instances, la copie repart donc déliée
     // plutôt que d'hériter d'un lien que l'utilisateur n'a pas demandé.
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon, loader_version })
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon, loader_version, window_custom: false, window_fullscreen: false, window_width: default_window_width(), window_height: default_window_height() })
 }
 
 // Le modèle `shared_options.txt` (export, application, état) vit désormais
 // dans `options.rs`, avec tout ce qui touche aux réglages Minecraft.
+
+/// Enregistre les réglages de fenêtre d'une instance.
+///
+/// Bornes volontairement larges mais présentes : en deçà de 640×480 le jeu
+/// n'affiche plus ses menus correctement, et une valeur absurde (un zéro saisi
+/// par accident) empêcherait la fenêtre de s'ouvrir sans rien expliquer. Au
+/// delà, on ne juge pas : un écran large ou plusieurs moniteurs, ça existe.
+#[tauri::command]
+pub async fn instance_set_window(
+    state: tauri::State<'_, SharedState>,
+    instance_id: String,
+    custom: bool,
+    fullscreen: bool,
+    width: u32,
+    height: u32,
+) -> Result<Instance, String> {
+    let width = width.clamp(640, 15360);
+    let height = height.clamp(480, 8640);
+
+    let s = state.read().await;
+    let uid = user_id(&s);
+    let db = s.db.lock().await;
+    db::instance_set_window(&db, &instance_id, uid, custom, fullscreen, width, height)
+        .map_err(|e| e.to_string())?;
+    db::instance_get(&db, &instance_id, uid)
+        .map_err(|e| e.to_string())?
+        .map(row_to_instance)
+        .ok_or_else(|| "Instance introuvable".into())
+}
 
 /// Ouvre le dossier de l'instance dans l'explorateur Windows — le crée
 /// d'abord si l'instance n'a encore jamais été lancée (ex: juste après

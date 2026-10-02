@@ -36,10 +36,16 @@ pub struct InstanceRow {
     /// Version du loader épinglée. Vide = la plus récente compatible, le
     /// comportement historique et toujours celui par défaut.
     pub loader_version: String,
+    /// Le launcher impose-t-il la fenêtre de jeu ? Faux = il n'y touche pas,
+    /// et les trois champs suivants n'ont aucun effet.
+    pub window_custom: bool,
+    pub window_fullscreen: bool,
+    pub window_width: u32,
+    pub window_height: u32,
 }
 
 const INSTANCE_COLUMNS: &str =
-    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id, icon, loader_version";
+    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id, icon, loader_version, window_custom, window_fullscreen, window_width, window_height";
 
 fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
     Ok(InstanceRow {
@@ -58,6 +64,10 @@ fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
         jvm_profile_id: r.get(12)?,
         icon: r.get(13)?,
         loader_version: r.get(14)?,
+        window_custom: r.get::<_, i64>(15)? != 0,
+        window_fullscreen: r.get::<_, i64>(16)? != 0,
+        window_width: r.get::<_, u32>(17)?,
+        window_height: r.get::<_, u32>(18)?,
     })
 }
 
@@ -92,6 +102,32 @@ pub fn instance_set_icon(conn: &Connection, id: &str, user_id: i64, icon: &str) 
     let n = conn.execute(
         "UPDATE instances SET icon = ?1 WHERE id = ?2 AND yuyu_user_id = ?3",
         params![icon, id, user_id],
+    )?;
+    if n == 0 {
+        return Err(anyhow::anyhow!("Instance introuvable"));
+    }
+    Ok(())
+}
+
+/// Enregistre les réglages de fenêtre d'une instance.
+///
+/// Les quatre ensemble, et non un par un : ils ne veulent rien dire séparés.
+/// `custom` à faux rend les trois autres sans effet au lancement, mais on les
+/// garde quand même en base — décocher puis recocher doit retrouver ses
+/// valeurs, pas en réinventer.
+pub fn instance_set_window(
+    conn: &Connection,
+    id: &str,
+    user_id: i64,
+    custom: bool,
+    fullscreen: bool,
+    width: u32,
+    height: u32,
+) -> Result<()> {
+    let n = conn.execute(
+        "UPDATE instances SET window_custom = ?1, window_fullscreen = ?2, window_width = ?3, window_height = ?4
+         WHERE id = ?5 AND yuyu_user_id = ?6",
+        params![custom as i64, fullscreen as i64, width, height, id, user_id],
     )?;
     if n == 0 {
         return Err(anyhow::anyhow!("Instance introuvable"));

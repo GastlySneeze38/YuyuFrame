@@ -11,6 +11,7 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { Button } from '@/components/ui/Button'
 import { CloseButton } from '@/components/ui/CloseButton'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
+import { Toggle } from '@/components/ui/Toggle'
 import { showError } from '@/stores/useErrorToast'
 import { loaderColor, LOADERS } from '@/lib/loader'
 import { useLoadersFor } from '@/lib/loaderCompat'
@@ -45,7 +46,7 @@ import { useT } from '@/i18n'
  * de fichier, pas des champs). Elles ne passent pas par le brouillon et
  * n'allument donc pas le pied.
  */
-type Tab = 'general' | 'installation' | 'java' | 'game' | 'repair'
+type Tab = 'general' | 'installation' | 'window' | 'java' | 'game' | 'repair'
 
 export function InstanceSettingsModal({
   instance,
@@ -117,6 +118,7 @@ export function InstanceSettingsModal({
     () => [
       { id: 'general' as const, label: t('instancesPage.tabGeneral'), icon: <IconInfo /> },
       { id: 'installation' as const, label: t('instancesPage.tabInstallation'), icon: <IconBox /> },
+      { id: 'window' as const, label: t('instancesPage.tabWindow'), icon: <IconWindow /> },
       { id: 'java' as const, label: t('instancesPage.tabJava'), icon: <IconChip /> },
       { id: 'game' as const, label: t('instancesPage.tabGame'), icon: <IconSliders /> },
       { id: 'repair' as const, label: t('instancesPage.tabRepair'), icon: <IconWrench /> },
@@ -330,6 +332,8 @@ export function InstanceSettingsModal({
                 </motion.button>
               </div>
             )}
+
+            {tab === 'window' && <WindowTab instance={instance} onUpdate={onUpdate} />}
 
             {tab === 'game' && <GameSettings instanceId={instance.id} />}
 
@@ -680,6 +684,126 @@ function ActionButton({
     >
       {busy ? t('common.loading') : done ? t('instancesPage.done') : children}
     </button>
+  )
+}
+
+/**
+ * La fenêtre de jeu de cette instance.
+ *
+ * Tout dépend du premier interrupteur, et c'est voulu : tant qu'il est éteint,
+ * **le launcher ne touche à rien**. En particulier il n'écrit pas
+ * `fullscreen:false` dans `options.txt`, ce qui effacerait le choix fait en
+ * jeu — un écran de réglages qui défait ce que le joueur vient de régler
+ * ailleurs est pire que pas d'écran du tout.
+ *
+ * Les deux réglages n'empruntent pas le même chemin, parce que Minecraft ne
+ * leur en donne qu'un seul chacun : la taille passe par les arguments
+ * `--width`/`--height`, le plein écran par `options.txt`, qui est le seul
+ * endroit où il existe. Conséquence directe : le jeu réécrit ce fichier en
+ * quittant, donc le plein écran est reposé à **chaque** lancement.
+ *
+ * L'enregistrement est immédiat — ce sont trois valeurs sans conséquence sur
+ * les fichiers de l'instance, contrairement à l'onglet Installation.
+ */
+function WindowTab({ instance, onUpdate }: { instance: Instance; onUpdate: (i: Instance) => void }) {
+  const t = useT()
+  const [width, setWidth] = useState(String(instance.window_width))
+  const [height, setHeight] = useState(String(instance.window_height))
+
+  const save = async (custom: boolean, fullscreen: boolean, w: number, h: number) => {
+    try {
+      const updated = await api.instances.setWindow(instance.id, custom, fullscreen, w, h)
+      // Les valeurs reviennent bornées par le Rust : on réaffiche les siennes
+      // plutôt que ce qui a été tapé, sinon un 10 saisi resterait à l'écran
+      // alors que 640 a été enregistré.
+      setWidth(String(updated.window_width))
+      setHeight(String(updated.window_height))
+      onUpdate(updated)
+    } catch (e) {
+      showError(e)
+    }
+  }
+
+  /** Le champ accepte n'importe quoi pendant la frappe et n'enregistre qu'à la
+   *  sortie : borner à chaque caractère empêcherait d'effacer pour retaper. */
+  const commitSize = (raw: string, which: 'width' | 'height') => {
+    const value = Number(raw)
+    const fallback = which === 'width' ? instance.window_width : instance.window_height
+    const next = Number.isFinite(value) && value > 0 ? Math.round(value) : fallback
+    void save(
+      instance.window_custom,
+      instance.window_fullscreen,
+      which === 'width' ? next : Number(width) || instance.window_width,
+      which === 'height' ? next : Number(height) || instance.window_height,
+    )
+  }
+
+  const locked = !instance.window_custom
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Row
+        title={t('instancesPage.windowCustom')}
+        desc={t('instancesPage.windowCustomDesc')}
+        action={
+          <Toggle
+            checked={instance.window_custom}
+            onChange={() =>
+              save(!instance.window_custom, instance.window_fullscreen, instance.window_width, instance.window_height)
+            }
+          />
+        }
+      />
+
+      <Separator />
+
+      {/* Grisés plutôt que cachés : ils disent ce que l'interrupteur
+          au-dessus commande, et les faire disparaître laisserait un écran
+          vide sans explication. */}
+      <div className={`flex flex-col gap-5 transition-opacity ${locked ? 'pointer-events-none opacity-40' : ''}`}>
+        <Row
+          title={t('instancesPage.windowFullscreen')}
+          desc={t('instancesPage.windowFullscreenDesc')}
+          action={
+            <Toggle
+              checked={instance.window_fullscreen}
+              onChange={() =>
+                save(instance.window_custom, !instance.window_fullscreen, instance.window_width, instance.window_height)
+              }
+            />
+          }
+        />
+
+        <div className="flex gap-3">
+          <Field label={t('instancesPage.windowWidth')}>
+            <input
+              type="number"
+              value={width}
+              onChange={(e) => setWidth(e.target.value)}
+              onBlur={(e) => commitSize(e.target.value, 'width')}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+              className="h-10 w-full rounded-xl border border-line bg-black/40 px-3 text-[13px] text-txt-primary outline-none transition-colors focus:border-accent/60"
+            />
+          </Field>
+          <Field label={t('instancesPage.windowHeight')}>
+            <input
+              type="number"
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+              onBlur={(e) => commitSize(e.target.value, 'height')}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+              className="h-10 w-full rounded-xl border border-line bg-black/40 px-3 text-[13px] text-txt-primary outline-none transition-colors focus:border-accent/60"
+            />
+          </Field>
+        </div>
+
+        <p className="text-[11.5px] leading-relaxed text-txt-muted">
+          {instance.window_fullscreen
+            ? t('instancesPage.windowSizeIgnored')
+            : t('instancesPage.windowSizeHint')}
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -1756,6 +1880,11 @@ const IconChip = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
     <rect x="7" y="7" width="10" height="10" rx="1.5" />
     <path d="M10 3v2M14 3v2M10 19v2M14 19v2M3 10h2M3 14h2M19 10h2M19 14h2" />
+  </svg>
+)
+const IconWindow = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
+    <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" />
   </svg>
 )
 const IconWrench = () => (

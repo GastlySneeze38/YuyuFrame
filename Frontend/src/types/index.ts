@@ -140,6 +140,12 @@ export interface Instance {
   /** Version du loader épinglée. Vide = la plus récente compatible, le
    *  comportement par défaut du launcher. */
   loader_version: string
+  /** Le launcher impose-t-il la fenêtre de jeu ? Faux = il n'y touche pas, et
+   *  les trois champs suivants n'ont aucun effet au lancement. */
+  window_custom: boolean
+  window_fullscreen: boolean
+  window_width: number
+  window_height: number
 }
 
 /**

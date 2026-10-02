@@ -52,7 +52,11 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              jvm_extra_args  TEXT    NOT NULL DEFAULT '',
              jvm_args_mode   TEXT    NOT NULL DEFAULT 'append',
              icon            TEXT    NOT NULL DEFAULT '',
-             loader_version  TEXT    NOT NULL DEFAULT ''
+             loader_version  TEXT    NOT NULL DEFAULT '',
+             window_custom     INTEGER NOT NULL DEFAULT 0,
+             window_fullscreen INTEGER NOT NULL DEFAULT 0,
+             window_width      INTEGER NOT NULL DEFAULT 854,
+             window_height     INTEGER NOT NULL DEFAULT 480
          );
 
          -- Configurations JVM réutilisables : une même config peut être reliée
@@ -155,6 +159,14 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // et ce qu'il continue de faire par défaut : la colonne n'ajoute un
     // comportement que lorsqu'elle est renseignée.
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN loader_version TEXT NOT NULL DEFAULT ''", []);
+    // Fenêtre de jeu par instance. `window_custom` à 0 = le launcher ne touche
+    // à rien, ce qu'il a toujours fait : les trois autres colonnes n'ont alors
+    // aucun effet, et surtout le `fullscreen` d'`options.txt` reste celui que
+    // le joueur a choisi en jeu. 854×480 est la taille par défaut de Minecraft.
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN window_custom INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN window_fullscreen INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN window_width INTEGER NOT NULL DEFAULT 854", []);
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN window_height INTEGER NOT NULL DEFAULT 480", []);
     // Jeu de drapeaux dont chaque catégorie est issue, en JSON
     // (`{"gc":"gc-brucethemoose"}`) : purement informatif côté launcher, c'est
     // l'interface qui s'en sert pour montrer les écarts introduits depuis.

@@ -453,6 +453,7 @@ pub fn run() {
             commands::instance::options_archive::instance_import_options,
             commands::instance::options::set_sync_game_settings,
             commands::instance::crud::instance_open_folder,
+            commands::instance::crud::instance_set_window,
             commands::instance::icon::instance_set_icon,
             commands::instance::java::instance_java_status,
             commands::instance::java::instance_java_detect,

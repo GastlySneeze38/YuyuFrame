@@ -349,6 +349,10 @@ export const api = {
     setSyncGameSettings: (enabled: boolean) =>
       invoke<void>('set_sync_game_settings', { enabled }),
     openFolder: (instanceId: string) => invoke<void>('instance_open_folder', { instanceId }),
+    /** Réglages de fenêtre du jeu. Les quatre ensemble : séparés, ils ne
+     *  veulent rien dire — `custom` à faux rend les autres sans effet. */
+    setWindow: (instanceId: string, custom: boolean, fullscreen: boolean, width: number, height: number) =>
+      invoke<Instance>('instance_set_window', { instanceId, custom, fullscreen, width, height }),
     /** Pose l'icône depuis un fichier image, ou la retire avec `null`. Les
      *  octets sont relus et rangés en base par le Rust — le chemin ne survit
      *  pas à l'appel (voir `commands/instance/icon.rs`). */
