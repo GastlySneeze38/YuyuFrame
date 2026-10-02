@@ -6,6 +6,7 @@ import type { Instance, SharePreview, ShareSource } from '@/types'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { formatBytes, formatRam } from '@/lib/format'
 import { JvmSummary } from './ShareTab'
+import { ShareLinkInput } from '@/components/ui/ShareLinkInput'
 import { loaderColor } from '@/lib/loader'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
@@ -31,18 +32,19 @@ interface Progress {
 }
 
 export function ShareImportModal({
-  initialSource,
+  initialLink,
   onClose,
   onImported,
 }: {
-  initialSource?: ShareSource
+  /** Lien (ou parties) arrivé par un clic : le champ s'ouvre déjà rempli,
+   *  et le parent y ajoute les parties cliquées ensuite. */
+  initialLink?: string
   onClose: () => void
   onImported: (instance: Instance) => void
 }) {
   const t = useT()
   const defaultRam = useStore((s) => s.defaultRam)
-  const [source, setSource] = useState<ShareSource | null>(initialSource ?? null)
-  const [linkInput, setLinkInput] = useState('')
+  const [source, setSource] = useState<ShareSource | null>(null)
   const [preview, setPreview] = useState<SharePreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
@@ -78,12 +80,6 @@ export function ShareImportModal({
     const picked = await openFileDialog({ filters: [{ name: 'Modrinth pack', extensions: ['mrpack', 'zip'] }] })
     if (!picked || Array.isArray(picked)) return
     setSource({ kind: 'file', path: picked })
-  }
-
-  const submitLink = () => {
-    const link = linkInput.trim()
-    if (!link) return
-    setSource({ kind: 'link', link })
   }
 
   const install = async () => {
@@ -123,22 +119,12 @@ export function ShareImportModal({
             </button>
             <div className="flex flex-col gap-1.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-muted">{t('share.importLink')}</p>
-              <div className="flex gap-2">
-                <input
-                  value={linkInput}
-                  onChange={(e) => setLinkInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') submitLink() }}
-                  placeholder="yuyuframe://instance/…"
-                  className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3 text-[12.5px] text-txt-primary outline-none placeholder:text-txt-muted focus:border-accent/60"
-                />
-                <button
-                  onClick={submitLink}
-                  disabled={!linkInput.trim()}
-                  className="rounded-xl border border-line bg-surface-2 px-4 text-[12.5px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary disabled:opacity-40"
-                >
-                  {t('share.importLinkGo')}
-                </button>
-              </div>
+              <ShareLinkInput
+                kind="instance"
+                value={initialLink}
+                placeholder="yuyuframe://instance/…"
+                onReady={(link) => setSource({ kind: 'link', link })}
+              />
             </div>
           </>
         )}
@@ -184,6 +170,14 @@ export function ShareImportModal({
                   ))}
                 </ul>
               )}
+              {preview.options > 0 && <p>{t('optionsShare.gameCount', { count: preview.options })}</p>}
+              {preview.client > 0 && <p>{t('optionsShare.clientCount', { count: preview.client })}</p>}
+              {preview.servers.length > 0 && (
+                <p>
+                  {t('share.previewServers', { count: preview.servers.length })}
+                  <span className="text-txt-muted"> · {preview.servers.join(', ')}</span>
+                </p>
+              )}
             </div>
 
             {preview.jvm && (
@@ -224,7 +218,7 @@ export function ShareImportModal({
               >
                 {t('share.create')}
               </button>
-              {!initialSource && (
+              {!initialLink && (
                 <button
                   onClick={() => { setSource(null); setPreview(null) }}
                   className="rounded-xl border border-line bg-surface-2 px-4 py-2 text-[12.5px] font-semibold text-txt-secondary hover:text-txt-primary"

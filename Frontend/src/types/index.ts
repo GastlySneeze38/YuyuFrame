@@ -336,6 +336,17 @@ export interface ShareScan {
   jvmRejected: string[]
   /** Nom de la config JVM reliée, si l'instance en a une. */
   jvmProfile: string | null
+  /** Options du client intégré qui partiraient (0 : instance jamais lancée). */
+  clientOptions: number
+}
+
+/** Ce qu'on a collé d'un lien de partage (`share_link_status`). */
+export interface ShareLinkStatus {
+  kind: string
+  /** 1 pour un lien d'un seul tenant. */
+  total: number
+  received: number[]
+  complete: boolean
 }
 
 export interface ShareExport {
@@ -367,6 +378,12 @@ export interface SharePreview {
   jvm: JvmShare | null
   /** Arguments JVM du pack écartés par le filtre de sécurité. */
   jvmRejected: string[]
+  /** Réglages d'`options.txt` reçus par lien. */
+  options: number
+  /** Options du client intégré reçues. */
+  client: number
+  /** Noms des serveurs reçus par lien. */
+  servers: string[]
 }
 
 /** Contenu d'un lien d'options, ou ce qui en a été appliqué : nombre de

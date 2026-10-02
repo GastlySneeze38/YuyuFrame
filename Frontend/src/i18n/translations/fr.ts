@@ -1716,8 +1716,11 @@ export const fr = {
     serversWarning: 'La liste des serveurs sera partagée, avec leurs adresses.',
     saveFile: 'Enregistrer le fichier .mrpack',
     exporting: 'Création du pack…',
-    linkUnavailable:
-      "Le lien ne porte que des fichiers publiés sur Modrinth : {{count}} élément(s) coché(s) ne le sont pas. Décoche-les, ou partage le fichier.",
+    clientNone: 'Pas encore d’options : lance l’instance une fois',
+    clientPrivacy: 'sans mots de passe ni macros',
+    linkHint:
+      'Le lien porte la même chose que le fichier. Au-delà d’un message Discord, il est découpé en parties à envoyer une par message ; config et dossiers de mods l’alourdissent vite.',
+    previewServers: '{{count}} serveur(s)',
     fileDone: 'Pack enregistré : {{linked}} fichier(s) à télécharger, {{embedded}} inclus, {{size}} au total.',
     howToReceive:
       'Pour le recevoir : Instances → Importer une instance → Instance partagée. Le fichier .mrpack s’ouvre aussi dans Prism Launcher et la Modrinth App.',
@@ -1759,6 +1762,13 @@ export const fr = {
     copied: 'Lien copié ({{count}} caractères).',
     tooLongForDiscord:
       'Trop long pour un message Discord ({{limit}} caractères max) : envoie-le en fichier texte, ou colle-le directement dans YuyuFrame.',
+    parts: 'Lien en {{count}} parties : envoie-les toutes, une par message. Le destinataire les colle à la suite, dans n’importe quel ordre.',
+    copyPart: 'Copier la partie {{index}}/{{total}}',
+    copyAll: 'Tout copier d’un coup (pour coller directement dans YuyuFrame)',
+    allCopied: 'Toutes les parties sont copiées',
+    wrongKind: 'Ce lien de partage ne sert pas ici.',
+    allParts: 'Les {{total}} parties sont là.',
+    missingParts: '{{received}} partie(s) sur {{total}} — colle aussi la ou les parties {{missing}}, à la suite.',
   },
 
   // Options du client intégré et partage des options (onglet « Paramètres du jeu »).

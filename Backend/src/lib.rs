@@ -470,6 +470,7 @@ pub fn run() {
             commands::instance::java::instance_install_custom_java,
             commands::instance::repair::instance_diagnose,
             commands::instance::repair::instance_repair,
+            share_link::share_link_status,
             commands::instance::share::instance_share_scan,
             commands::instance::share::instance_share_export,
             commands::instance::share::instance_share_link,

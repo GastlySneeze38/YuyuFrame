@@ -10,21 +10,19 @@ import { useT } from '@/i18n'
 /**
  * Onglet « Partager » : donner son instance à quelqu'un sans rien héberger.
  *
- * Deux sorties, une seule sélection :
- * - **le fichier `.mrpack`**, qui marche toujours : ce qui est sur Modrinth ou
- *   CurseForge n'y est qu'une adresse, le reste y est copié ;
- * - **le lien**, sans fichier, possible seulement quand tout ce qui est coché
- *   est sur Modrinth. Il n'est pas caché quand il est impossible : il dit
- *   pourquoi, pour qu'on sache quoi décocher.
+ * Deux sorties, une seule sélection, le même contenu :
+ * - **le fichier `.mrpack`** : ce qui est sur Modrinth ou CurseForge n'y est
+ *   qu'une adresse, le reste y est copié — aucune limite de taille ;
+ * - **le lien** : la même chose, compressée dans le lien (options et serveurs
+ *   en texte, comme le partage d'options). Trop long pour un message, il se
+ *   découpe en parties ; au-delà de `MAX_PARTS`, le Rust nomme les éléments
+ *   les plus lourds à décocher.
  *
  * L'inventaire vient du dossier lui-même (`commands/instance/share.rs`) : ce
  * qu'un mod range dans un dossier à son nom apparaît sous « Autres », décoché.
  */
 
 const GROUP_ORDER: ShareGroup[] = ['mods', 'resourcepacks', 'shaderpacks', 'settings', 'servers', 'saves', 'other']
-
-/** Groupes qu'un lien peut porter : ceux qui ont des fichiers de plateforme. */
-const LINKABLE_GROUPS: ShareGroup[] = ['mods', 'resourcepacks', 'shaderpacks']
 
 const VENDOR_LABELS: Record<string, string> = { temurin: 'Temurin', openj9: 'OpenJ9', graal: 'GraalVM' }
 
@@ -63,6 +61,7 @@ export function ShareTab({ instance }: { instance: Instance }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [open, setOpen] = useState<Set<ShareGroup>>(new Set())
   const [includeJvm, setIncludeJvm] = useState(true)
+  const [includeClient, setIncludeClient] = useState(true)
   const [busy, setBusy] = useState<'file' | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
@@ -90,8 +89,9 @@ export function ShareTab({ instance }: { instance: Instance }) {
   const linked = chosen.filter((i) => i.source !== 'embedded')
   const embedded = chosen.filter((i) => i.source === 'embedded')
   const embeddedSize = embedded.reduce((sum, i) => sum + i.size, 0)
-  const notLinkable = chosen.filter((i) => i.source !== 'modrinth' || !LINKABLE_GROUPS.includes(i.group))
   const serversChosen = chosen.some((i) => i.group === 'servers')
+  const sendClient = includeClient && (scan?.clientOptions ?? 0) > 0
+  const nothing = chosen.length === 0 && !includeJvm && !sendClient
 
   const toggle = (path: string) => {
     setDone(null)
@@ -134,7 +134,7 @@ export function ShareTab({ instance }: { instance: Instance }) {
     setBusy('file')
     setDone(null)
     try {
-      const result = await api.share.exportFile(instance.id, [...selected], includeJvm, target)
+      const result = await api.share.exportFile(instance.id, [...selected], includeJvm, sendClient, target)
       setDone(t('share.fileDone', { linked: result.linked, embedded: result.embedded, size: formatBytes(result.size) }))
     } catch (e) {
       showError(e)
@@ -183,6 +183,32 @@ export function ShareTab({ instance }: { instance: Instance }) {
               <span className="break-all font-mono text-[10.5px]">{scan.jvmRejected.join(' ')}</span>
             </p>
           )}
+        </div>
+      </label>
+
+      {/* Les options du client YuyuFrame vivent hors du dossier de
+          l'instance (agent/module-config) : elles ne sont dans aucun groupe. */}
+      <label
+        className={`flex items-start gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 ${
+          scan.clientOptions > 0 ? 'cursor-pointer' : 'opacity-50'
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={sendClient}
+          disabled={scan.clientOptions === 0}
+          onChange={() => { setDone(null); setIncludeClient((v) => !v) }}
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-accent"
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="text-[12.5px] font-semibold text-txt-primary">{t('optionsShare.clientTitle')}</p>
+          <p className="text-[11.5px] text-txt-muted">
+            {scan.clientOptions > 0
+              ? t('optionsShare.clientCount', { count: scan.clientOptions })
+              : t('share.clientNone')}
+            {' · '}
+            {t('share.clientPrivacy')}
+          </p>
         </div>
       </label>
 
@@ -258,19 +284,17 @@ export function ShareTab({ instance }: { instance: Instance }) {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={exportFile}
-            disabled={busy !== null || chosen.length === 0}
-            className="rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={busy !== null || nothing}
+            className="h-fit rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === 'file' ? t('share.exporting') : t('share.saveFile')}
           </button>
           <ShareLinkButton
-            make={() => api.share.link(instance.id, [...selected], includeJvm)}
-            disabled={busy !== null || linked.length === 0 || notLinkable.length > 0}
+            make={() => api.share.link(instance.id, [...selected], includeJvm, sendClient)}
+            disabled={busy !== null || nothing}
           />
         </div>
-        {notLinkable.length > 0 && (
-          <p className="text-[11px] text-txt-muted">{t('share.linkUnavailable', { count: notLinkable.length })}</p>
-        )}
+        <p className="text-[11px] text-txt-muted">{t('share.linkHint')}</p>
         {done && <p className="text-[12px] text-[rgba(134,239,172,0.85)]">{done}</p>}
         <p className="text-[11px] text-txt-muted">{t('share.howToReceive')}</p>
       </div>

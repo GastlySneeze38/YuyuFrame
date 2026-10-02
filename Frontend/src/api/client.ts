@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -403,17 +403,23 @@ export const api = {
     /** Tout ce qui peut se partager, et d'où chaque fichier se télécharge. */
     scan: (instanceId: string) => invoke<ShareScan>('instance_share_scan', { instanceId }),
     /** Écrit le `.mrpack` des éléments choisis (désignés par leur `path`),
-     *  avec la configuration Java si `includeJvm`. */
-    exportFile: (instanceId: string, paths: string[], includeJvm: boolean, filePath: string) =>
-      invoke<ShareExport>('instance_share_export', { instanceId, paths, includeJvm, filePath }),
-    /** Lien `yuyuframe://instance/…` — refusé si un élément n'est pas sur Modrinth. */
-    link: (instanceId: string, paths: string[], includeJvm: boolean) =>
-      invoke<string>('instance_share_link', { instanceId, paths, includeJvm }),
+     *  avec la configuration Java et les options du client si demandé. */
+    exportFile: (instanceId: string, paths: string[], includeJvm: boolean, includeClient: boolean, filePath: string) =>
+      invoke<ShareExport>('instance_share_export', { instanceId, paths, includeJvm, includeClient, filePath }),
+    /** Lien `yuyuframe://instance/…`, en une ou plusieurs parties. */
+    link: (instanceId: string, paths: string[], includeJvm: boolean, includeClient: boolean) =>
+      invoke<string[]>('instance_share_link', { instanceId, paths, includeJvm, includeClient }),
     preview: (source: ShareSource) => invoke<SharePreview>('instance_share_preview', { source }),
     /** Crée l'instance et installe le pack ; progression par `share_import_progress`.
      *  `applyJvm` : reprendre la configuration Java jointe (RAM comprise). */
     import: (source: ShareSource, name: string, ramMb: number, applyJvm: boolean) =>
       invoke<ShareImport>('instance_share_import', { source, name, ramMb, applyJvm }),
+  },
+
+  // Liens de partage, toutes sortes confondues (`Backend/src/share_link.rs`).
+  shareLink: {
+    /** Ce qu'on a collé : sorte, parties reçues, parties manquantes. */
+    status: (text: string) => invoke<ShareLinkStatus>('share_link_status', { text }),
   },
 
   // Options du jeu et du client intégré (`commands/instance/options_share.rs`) :
@@ -427,7 +433,7 @@ export const api = {
     importClient: (instanceId: string, path: string) =>
       invoke<number>('instance_client_options_import', { instanceId, path }),
     link: (instanceId: string, game: boolean, client: boolean) =>
-      invoke<string>('instance_options_link', { instanceId, game, client }),
+      invoke<string[]>('instance_options_link', { instanceId, game, client }),
     preview: (link: string) => invoke<OptionsLinkInfo>('options_link_preview', { link }),
     /** Applique un lien à une instance (fusion) ; rend ce qui a été appliqué. */
     apply: (instanceId: string, link: string, game: boolean, client: boolean) =>

@@ -130,9 +130,12 @@ export default function App() {
   // Le même protocole porte rejoindre un ami (`join`) et tous les liens de
   // partage (`Backend/src/share_link.rs`). Une sorte de lien nouvelle = une
   // branche dans le rendu plus bas.
+  // Un lien long arrive en parties : une partie cliquée pendant que la
+  // fenêtre de la même sorte est ouverte s'ajoute aux précédentes (le champ
+  // `ShareLinkInput` compte ce qu'il a et ce qui manque).
   const handleDeepLink = (url: string) => {
     const kind = shareLinkKind(url)
-    if (kind) setShareLink({ kind, link: url })
+    if (kind) setShareLink((prev) => (prev?.kind === kind ? { kind, link: `${prev.link}\n${url}` } : { kind, link: url }))
     else setJoinRequest(parseJoinUrl(url))
   }
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
@@ -515,12 +518,11 @@ export default function App() {
         <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
       )}
       {shareLink?.kind === 'options' && (
-        <OptionsLinkModal key={shareLink.link} link={shareLink.link} onClose={() => setShareLink(null)} />
+        <OptionsLinkModal link={shareLink.link} onClose={() => setShareLink(null)} />
       )}
       {shareLink?.kind === 'instance' && (
         <ShareImportModal
-          key={shareLink.link}
-          initialSource={{ kind: 'link', link: shareLink.link }}
+          initialLink={shareLink.link}
           onClose={() => setShareLink(null)}
           onImported={(inst) => {
             addInstance(inst)

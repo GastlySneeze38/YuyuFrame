@@ -47,13 +47,14 @@ fn clean_entry(key: &str, value: &str) -> bool {
     !key.is_empty() && key.len() <= 200 && !key.contains(['\n', '\r']) && !value.contains(['\n', '\r'])
 }
 
-fn keep_client(option: &McOption, for_link: bool) -> bool {
+/// Partagé avec le partage d'instance (`share.rs`) : mêmes règles partout.
+pub(super) fn keep_client(option: &McOption, for_link: bool) -> bool {
     clean_entry(&option.key, &option.value)
         && !CLIENT_PRIVATE.contains(&option.key.as_str())
         && !(for_link && CLIENT_LINK_EXCLUDED.contains(&option.key.as_str()))
 }
 
-fn keep_game(option: &McOption) -> bool {
+pub(super) fn keep_game(option: &McOption) -> bool {
     clean_entry(&option.key, &option.value) && !GAME_PRIVATE.contains(&option.key.as_str())
 }
 
@@ -106,11 +107,11 @@ pub async fn instance_client_options_import(instance_id: String, path: String) -
 
 const SECTION_SEPARATOR: char = '\u{1E}';
 
-fn to_text(options: &[McOption], separator: char) -> String {
+pub(super) fn to_text(options: &[McOption], separator: char) -> String {
     options.iter().map(|o| format!("{}{separator}{}", o.key, o.value)).collect::<Vec<_>>().join("\n")
 }
 
-fn from_text(text: &str, separator: char) -> Vec<McOption> {
+pub(super) fn from_text(text: &str, separator: char) -> Vec<McOption> {
     text.lines()
         .filter_map(|line| line.split_once(separator))
         .map(|(key, value)| McOption { key: key.to_string(), value: value.to_string() })
@@ -119,7 +120,7 @@ fn from_text(text: &str, separator: char) -> Vec<McOption> {
 
 /// Lit un lien et ne garde que ce qui a le droit d'entrer.
 fn read_link(link: &str) -> Result<(Option<Vec<McOption>>, Option<Vec<McOption>>), String> {
-    let text = crate::share_link::read(link, LINK_KIND)?;
+    let text = crate::share_link::read_text(link, LINK_KIND)?;
     let (game_text, client_text) = text.split_once(SECTION_SEPARATOR).ok_or("Lien de partage abîmé")?;
     let game: Vec<McOption> = from_text(game_text, ':').into_iter().filter(keep_game).take(MAX_ENTRIES).collect();
     let client: Vec<McOption> = from_text(client_text, '=')
@@ -140,7 +141,7 @@ pub struct OptionsLinkInfo {
 }
 
 #[tauri::command]
-pub async fn instance_options_link(instance_id: String, game: bool, client: bool) -> Result<String, String> {
+pub async fn instance_options_link(instance_id: String, game: bool, client: bool) -> Result<Vec<String>, String> {
     let game_options: Vec<McOption> = if game {
         mc_options_read(instance_id.clone()).await?.into_iter().filter(keep_game).collect()
     } else {
@@ -155,7 +156,7 @@ pub async fn instance_options_link(instance_id: String, game: bool, client: bool
         return Err("Rien à partager : cette instance n'a pas encore d'options (lance-la une fois).".into());
     }
     let text = format!("{}{SECTION_SEPARATOR}{}", to_text(&game_options, ':'), to_text(&client_options, '='));
-    crate::share_link::build(LINK_KIND, &text)
+    Ok(crate::share_link::build_text(LINK_KIND, &text)?)
 }
 
 #[tauri::command]
@@ -226,7 +227,7 @@ mod tests {
         let text = format!(
             "fov:0.5\nlastServer:x\nresourcePacks:[\"vanilla\"]{SECTION_SEPARATOR}fps.enabled=true\nmacros.setting.logins=secret\nmacros.setting.macros=F6|/op moi\nzoom.setting.zoomKey=C"
         );
-        let link = crate::share_link::build(LINK_KIND, &text).unwrap();
+        let link = crate::share_link::build_text(LINK_KIND, &text).unwrap().join("\n");
         let (game, client) = read_link(&link).unwrap();
         assert_eq!(game.unwrap(), vec![opt("fov", "0.5"), opt("resourcePacks", "[\"vanilla\"]")]);
         assert_eq!(client.unwrap(), vec![opt("fps.enabled", "true"), opt("zoom.setting.zoomKey", "C")]);
@@ -250,14 +251,15 @@ mod tests {
             .unwrap_or_default();
         for (label, g, c) in [("jeu", &game[..], &[][..]), ("client", &[][..], &client[..]), ("les deux", &game[..], &client[..])] {
             let text = format!("{}{SECTION_SEPARATOR}{}", to_text(g, ':'), to_text(c, '='));
-            let link = crate::share_link::build(LINK_KIND, &text).unwrap();
-            eprintln!("{label} : {} octets de texte -> lien de {} caractères", text.len(), link.chars().count());
+            let parts = crate::share_link::build_text(LINK_KIND, &text).unwrap();
+            let chars: usize = parts.iter().map(|p| p.chars().count()).sum();
+            eprintln!("{label} : {} octets de texte -> {} caractères en {} partie(s)", text.len(), chars, parts.len());
         }
     }
 
     #[test]
     fn une_seule_section() {
-        let link = crate::share_link::build(LINK_KIND, &format!("{SECTION_SEPARATOR}fps.enabled=true")).unwrap();
+        let link = crate::share_link::build_text(LINK_KIND, &format!("{SECTION_SEPARATOR}fps.enabled=true")).unwrap().join("\n");
         let (game, client) = read_link(&link).unwrap();
         assert!(game.is_none());
         assert_eq!(client.unwrap().len(), 1);

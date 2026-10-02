@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import type { OptionsLinkInfo } from '@/types'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { ShareLinkButton } from '@/components/ui/ShareLinkButton'
+import { ShareLinkInput } from '@/components/ui/ShareLinkInput'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
@@ -151,8 +152,7 @@ function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: b
  */
 export function OptionsLinkApply({ instanceId, initialLink }: { instanceId: string; initialLink?: string }) {
   const t = useT()
-  const [input, setInput] = useState(initialLink ?? '')
-  const [link, setLink] = useState<string | null>(initialLink ?? null)
+  const [link, setLink] = useState<string | null>(null)
   const [info, setInfo] = useState<OptionsLinkInfo | null>(null)
   const [game, setGame] = useState(true)
   const [client, setClient] = useState(true)
@@ -189,23 +189,10 @@ export function OptionsLinkApply({ instanceId, initialLink }: { instanceId: stri
 
   return (
     <div className="flex flex-col gap-3">
-      {!initialLink && (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-[12.5px] font-semibold text-txt-primary">{t('optionsShare.applyTitle')}</p>
-          <div className="flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && input.trim()) setLink(input.trim()) }}
-              placeholder="yuyuframe://options/…"
-              className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3 text-[12.5px] text-txt-primary outline-none placeholder:text-txt-muted focus:border-accent/60"
-            />
-            <button onClick={() => setLink(input.trim())} disabled={!input.trim()} className={secondaryButton}>
-              {t('share.importLinkGo')}
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="flex flex-col gap-1.5">
+        {!initialLink && <p className="text-[12.5px] font-semibold text-txt-primary">{t('optionsShare.applyTitle')}</p>}
+        <ShareLinkInput kind="options" value={initialLink} placeholder="yuyuframe://options/…" onReady={setLink} />
+      </div>
 
       {info && !applied && (
         <>

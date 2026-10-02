@@ -1702,8 +1702,11 @@ export const pl: TranslationSchema = {
     serversWarning: 'Lista serwerów zostanie udostępniona razem z adresami.',
     saveFile: 'Zapisz plik .mrpack',
     exporting: 'Tworzenie paczki…',
-    linkUnavailable:
-      'Link zawiera tylko pliki opublikowane na Modrinth. Zaznaczone elementy spoza Modrinth: {{count}}. Odznacz je albo udostępnij plik.',
+    clientNone: 'Jeszcze brak opcji: uruchom instancję raz',
+    clientPrivacy: 'bez haseł i makr',
+    linkHint:
+      'Link zawiera to samo co plik. Jeśli nie zmieści się w jednej wiadomości na Discordzie, zostanie podzielony na części do wysłania po jednej w wiadomości; config i foldery modów szybko go powiększają.',
+    previewServers: 'Serwery: {{count}}',
     fileDone: 'Paczka zapisana: do pobrania {{linked}}, w paczce {{embedded}}, łącznie {{size}}.',
     howToReceive:
       'Aby ją odebrać: Instancje → Zaimportuj instancję → Udostępniona instancja. Plik .mrpack otworzysz też w Prism Launcher i w Modrinth App.',
@@ -1744,6 +1747,13 @@ export const pl: TranslationSchema = {
     copied: 'Link skopiowany (znaki: {{count}}).',
     tooLongForDiscord:
       'Za długi na wiadomość na Discordzie (maks. {{limit}} znaków): wyślij go jako plik tekstowy albo wklej bezpośrednio w YuyuFrame.',
+    parts: 'Link w częściach ({{count}}): wyślij wszystkie, po jednej w wiadomości. Odbiorca wkleja je jedna po drugiej, w dowolnej kolejności.',
+    copyPart: 'Kopiuj część {{index}}/{{total}}',
+    copyAll: 'Kopiuj wszystko naraz (do wklejenia bezpośrednio w YuyuFrame)',
+    allCopied: 'Skopiowano wszystkie części',
+    wrongKind: 'Ten link nie pasuje tutaj.',
+    allParts: 'Wszystkie części są na miejscu ({{total}}).',
+    missingParts: 'Części: {{received}} z {{total}} — wklej też część {{missing}}, jedna po drugiej.',
   },
 
   optionsShare: {

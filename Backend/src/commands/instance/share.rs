@@ -49,8 +49,11 @@ use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use sha2::Sha512;
 
+use super::agent_options::{agent_options_read, agent_options_write};
 use super::crud::{instance_dir, row_to_instance, user_id, Instance};
 use super::mods::sha1_cached;
+use super::options::{mc_options_write, McOption};
+use super::options_share::{from_text, keep_client, keep_game, to_text};
 use crate::db;
 use crate::minecraft::mod_files::{is_disabled_jar, is_jar_file};
 use crate::state::SharedState;
@@ -174,6 +177,8 @@ pub struct ShareScan {
     /// Arguments JVM qui ne partiront pas (filtre de sécurité).
     pub jvm_rejected: Vec<String>,
     pub jvm_profile: Option<String>,
+    /// Nombre d'options du client intégré qui partiraient (0 : jamais lancé).
+    pub client_options: u32,
 }
 
 /// Élément trouvé sur le disque, avant d'avoir cherché où il se télécharge.
@@ -471,6 +476,8 @@ struct Scanned {
     jvm_rejected: Vec<String>,
     /// Nom de la config JVM reliée, s'il y en a une.
     jvm_profile: Option<String>,
+    /// Options du client intégré, déjà filtrées (ni mots de passe ni macros).
+    client_options: Vec<McOption>,
 }
 
 async fn scan(state: &tauri::State<'_, SharedState>, instance_id: &str) -> Result<Scanned, String> {
@@ -510,7 +517,14 @@ async fn scan(state: &tauri::State<'_, SharedState>, instance_id: &str) -> Resul
         .filter_map(|(e, h)| h.as_ref().map(|h| (h.clone(), e.abs.clone())))
         .collect();
     let lookup_failed = resolve(state, &to_resolve).await;
-    Ok(Scanned { instance, entries, lookup_failed, jvm, jvm_rejected, jvm_profile })
+    // Un fichier illisible vaut « pas d'options » : ne bloque pas le reste.
+    let client_options: Vec<McOption> = agent_options_read(instance_id.to_string())
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|o| keep_client(o, true))
+        .collect();
+    Ok(Scanned { instance, entries, lookup_failed, jvm, jvm_rejected, jvm_profile, client_options })
 }
 
 fn item_of(entry: &Entry, sha1: Option<&String>) -> ShareItem {
@@ -541,6 +555,7 @@ pub async fn instance_share_scan(
         jvm: scanned.jvm,
         jvm_rejected: scanned.jvm_rejected,
         jvm_profile: scanned.jvm_profile,
+        client_options: scanned.client_options.len() as u32,
     })
 }
 
@@ -697,8 +712,22 @@ const YUYU_FILE: &str = "yuyuframe.json";
 #[serde(rename_all = "camelCase")]
 struct YuyuExtras {
     format_version: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     jvm: Option<JvmShare>,
+    /// Options du client intégré (`agent/module-config/<instance>.properties`) :
+    /// hors du dossier de l'instance, donc hors d'`overrides/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    client: Option<Vec<(String, String)>>,
+}
+
+/// `options.txt` passe par les mêmes règles que le partage d'options
+/// (`options_share.rs`) : sans `lastServer`, sans ligne piégée.
+const OPTIONS_FILE: &str = "options.txt";
+
+fn shared_options_txt(abs: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(abs).ok()?;
+    let options: Vec<McOption> = from_text(&content, ':').into_iter().filter(keep_game).collect();
+    Some(to_text(&options, ':') + "\n")
 }
 
 // ── Version du loader ───────────────────────────────────────────────────────
@@ -834,18 +863,29 @@ pub async fn instance_share_export(
     instance_id: String,
     paths: Vec<String>,
     include_jvm: bool,
+    include_client: bool,
     file_path: String,
 ) -> Result<ShareExport, String> {
     let scanned = scan(&state, &instance_id).await?;
-    let extras = include_jvm.then(|| YuyuExtras { format_version: 1, jvm: Some(scanned.jvm.clone()) });
+    let client = Some(scanned.client_options.iter().map(|o| (o.key.clone(), o.value.clone())).collect::<Vec<_>>())
+        .filter(|c| include_client && !c.is_empty());
+    let jvm = include_jvm.then(|| scanned.jvm.clone());
+    let extras = (jvm.is_some() || client.is_some()).then_some(YuyuExtras { format_version: 1, jvm, client });
     let loader_version = loader_version_of(&scanned.instance).await?;
     let chosen = selection(&scanned, &paths);
 
     let mut linked: Vec<(PathBuf, String, Remote)> = Vec::new();
     let mut embedded: Vec<(PathBuf, String)> = Vec::new();
+    // Fichiers réécrits avant de partir (`options.txt` filtré).
+    let mut generated: Vec<(String, Vec<u8>)> = Vec::new();
     for (entry, sha1) in chosen {
         match sha1.as_deref().and_then(cached) {
             Some(remote) => linked.push((entry.abs.clone(), entry.path.clone(), remote)),
+            None if entry.path == OPTIONS_FILE => {
+                if let Some(text) = shared_options_txt(&entry.abs) {
+                    generated.push((entry.path.clone(), text.into_bytes()));
+                }
+            }
             None => files_of(&entry.abs, &entry.path, &mut embedded),
         }
     }
@@ -907,6 +947,10 @@ pub async fn instance_share_export(
                 let mut file = std::fs::File::open(abs).map_err(|e| format!("{rel} : {e}"))?;
                 std::io::copy(&mut file, &mut zip).map_err(|e| format!("{rel} : {e}"))?;
             }
+            for (rel, content) in &generated {
+                zip.start_file(format!("overrides/{rel}"), options).map_err(|e| e.to_string())?;
+                zip.write_all(content).map_err(|e| format!("{rel} : {e}"))?;
+            }
             zip.finish().map_err(|e| e.to_string())?;
             Ok(())
         };
@@ -917,7 +961,7 @@ pub async fn instance_share_export(
         std::fs::rename(&partial, &target).map_err(|e| e.to_string())?;
         Ok(ShareExport {
             linked: linked.len() as u32,
-            embedded: embedded.len() as u32,
+            embedded: (embedded.len() + generated.len()) as u32,
             size: std::fs::metadata(&target).map(|m| m.len()).unwrap_or(0),
         })
     })
@@ -936,21 +980,80 @@ fn chrono_stamp() -> String {
 
 // ── Lien de partage ─────────────────────────────────────────────────────────
 
-// Le lien porte un texte (`crate::share_link`, qui le compresse), une
-// information par ligne :
+// Le lien porte tout ce que porte le fichier, compressé par `crate::share_link`
+// (et découpé en parties s'il le faut). Les données sont une suite
+// d'enregistrements « étiquette (1 octet), longueur (LEB128), contenu » :
 //
-//   nom de l'instance
-//   version de Minecraft
-//   loader
-//   version du loader
-//   fichiers : un jeton par fichier, collés
-//   [RAM JVM GC mode]          (configuration Java, facultative)
-//   [arguments JVM, séparés par des espaces]
+//   H  en-tête, une information par ligne : nom, version de Minecraft,
+//      loader, version du loader, jetons des fichiers Modrinth (collés)
+//   J  configuration Java : « RAM JVM GC mode », puis les arguments
+//   O  `options.txt`, en lignes `clé:valeur` filtrées (`options_share.rs`)
+//   C  options du client intégré, en lignes `clé=valeur` filtrées
+//   S  serveurs : « nom<TAB>adresse » par ligne (ni icône ni rien d'autre)
+//   R  fichier à télécharger hors Modrinth (CurseForge) : chemin, adresse,
+//      SHA-1, séparés par NUL
+//   F  fichier copié dans le lien : chemin, NUL, contenu
+//
+// Les options et les serveurs voyagent en texte, sous la forme du
+// dictionnaire de compression, et sont fusionnés à l'arrivée — exactement
+// comme le partage d'options. Seuls les fichiers `F` pèsent vraiment : c'est
+// eux que l'interface nomme quand un lien dépasse `MAX_PARTS`.
 //
 // Un jeton = la famille (`m`, `M` pour un mod désactivé, `r`, `s`), les 8
 // caractères de l'identifiant de version Modrinth, puis 4 chiffres hexa du
 // SHA-1 **seulement** si cette version publie plusieurs fichiers. Pas
 // d'ambiguïté à la lecture : aucune famille n'est un chiffre hexa.
+
+const REC_HEADER: u8 = b'H';
+const REC_JVM: u8 = b'J';
+const REC_OPTIONS: u8 = b'O';
+const REC_CLIENT: u8 = b'C';
+const REC_SERVERS: u8 = b'S';
+const REC_REMOTE: u8 = b'R';
+const REC_FILE: u8 = b'F';
+
+fn push_record(out: &mut Vec<u8>, tag: u8, body: &[u8]) {
+    out.push(tag);
+    let mut n = body.len();
+    loop {
+        let byte = (n & 0x7F) as u8;
+        n >>= 7;
+        if n == 0 {
+            out.push(byte);
+            break;
+        }
+        out.push(byte | 0x80);
+    }
+    out.extend_from_slice(body);
+}
+
+fn records(mut data: &[u8]) -> Option<Vec<(u8, &[u8])>> {
+    let mut out = Vec::new();
+    while let Some((&tag, rest)) = data.split_first() {
+        let (mut len, mut shift, mut pos) = (0usize, 0u32, 0usize);
+        loop {
+            let byte = *rest.get(pos)?;
+            pos += 1;
+            len |= ((byte & 0x7F) as usize).checked_shl(shift)?;
+            if byte & 0x80 == 0 {
+                break;
+            }
+            shift += 7;
+            if shift > 28 {
+                return None;
+            }
+        }
+        let body = rest.get(pos..pos + len)?;
+        out.push((tag, body));
+        data = &rest[pos + len..];
+    }
+    Some(out)
+}
+
+/// Une valeur sur une ligne : ni retour à la ligne ni tabulation (séparateurs).
+fn one_line(s: &str) -> String {
+    s.replace(['\n', '\r', '\t', '\0'], " ")
+}
 
 const LINK_KIND: &str = "instance";
 /// Longueur d'un identifiant de version Modrinth.
@@ -1033,38 +1136,99 @@ pub async fn instance_share_link(
     instance_id: String,
     paths: Vec<String>,
     include_jvm: bool,
-) -> Result<String, String> {
+    include_client: bool,
+) -> Result<Vec<String>, String> {
     let scanned = scan(&state, &instance_id).await?;
     let loader_version = loader_version_of(&scanned.instance).await?;
+    let dir = instance_dir(&instance_id);
 
     let mut tokens = String::new();
+    let mut body: Vec<u8> = Vec::new();
+    // Taille de ce qui est copié dans le lien, par élément : si le lien
+    // déborde, on dit lesquels décocher.
+    let mut heavy: Vec<(String, u64)> = Vec::new();
+
     for (entry, sha1) in selection(&scanned, &paths) {
         let name = entry.path.rsplit('/').next().unwrap_or_default();
-        let token = sha1.as_deref().and_then(|h| {
-            let remote = cached(h)?;
-            let kind = kind_of(entry.group, is_disabled_jar(name))?;
-            encode_token(kind, remote.modrinth_version.as_deref()?, h, remote.ambiguous)
-        });
-        match token {
-            Some(t) => tokens.push_str(&t),
-            None => return Err(format!("« {} » n'est pas sur Modrinth : partage-le par fichier", entry.path)),
+        let remote = sha1.as_deref().and_then(cached);
+        // Modrinth : un jeton de quelques caractères.
+        if let (Some(r), Some(h)) = (&remote, sha1.as_deref()) {
+            let token = kind_of(entry.group, is_disabled_jar(name))
+                .zip(r.modrinth_version.as_deref())
+                .and_then(|(kind, version)| encode_token(kind, version, h, r.ambiguous));
+            if let Some(t) = token {
+                tokens.push_str(&t);
+                continue;
+            }
+            // Ailleurs (CurseForge) : l'adresse et l'empreinte.
+            let record = format!("{}\0{}\0{}", entry.path, r.url, h);
+            push_record(&mut body, REC_REMOTE, record.as_bytes());
+            continue;
         }
+        if entry.path == OPTIONS_FILE {
+            if let Some(text) = shared_options_txt(&entry.abs) {
+                push_record(&mut body, REC_OPTIONS, text.trim_end().as_bytes());
+            }
+            continue;
+        }
+        if entry.group == Group::Servers {
+            let servers = crate::minecraft::launcher::read_saved_servers(&dir).unwrap_or_default();
+            let text = servers
+                .iter()
+                .map(|s| format!("{}\t{}", one_line(&s.name), one_line(&s.ip)))
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !text.is_empty() {
+                push_record(&mut body, REC_SERVERS, text.as_bytes());
+            }
+            continue;
+        }
+        // Le reste est copié tel quel.
+        let mut files = Vec::new();
+        files_of(&entry.abs, &entry.path, &mut files);
+        let mut size = 0u64;
+        for (abs, rel) in files {
+            let content = std::fs::read(&abs).map_err(|e| format!("{rel} : {e}"))?;
+            size += content.len() as u64;
+            let mut record = rel.into_bytes();
+            record.push(0);
+            record.extend_from_slice(&content);
+            push_record(&mut body, REC_FILE, &record);
+        }
+        heavy.push((entry.path.clone(), size));
     }
 
-    let one_line = |s: &str| s.replace(['\n', '\r'], " ");
-    let mut lines = vec![
-        one_line(&scanned.instance.name),
-        scanned.instance.mc_version.clone(),
-        scanned.instance.loader.clone(),
-        loader_version,
-        tokens,
-    ];
     if include_jvm {
         let jvm = &scanned.jvm;
-        lines.push(format!("{} {} {} {}", jvm.ram_mb, jvm.vendor, jvm.gc_policy, jvm.args_mode));
-        lines.push(jvm.args.join(" "));
+        let text = format!("{} {} {} {}\n{}", jvm.ram_mb, jvm.vendor, jvm.gc_policy, jvm.args_mode, jvm.args.join(" "));
+        push_record(&mut body, REC_JVM, text.as_bytes());
     }
-    crate::share_link::build(LINK_KIND, &lines.join("\n"))
+    if include_client && !scanned.client_options.is_empty() {
+        push_record(&mut body, REC_CLIENT, to_text(&scanned.client_options, '=').as_bytes());
+    }
+
+    let header = [one_line(&scanned.instance.name), scanned.instance.mc_version.clone(), scanned.instance.loader.clone(), loader_version, tokens]
+        .join("\n");
+    let mut data = Vec::new();
+    push_record(&mut data, REC_HEADER, header.as_bytes());
+    data.extend_from_slice(&body);
+
+    crate::share_link::build(LINK_KIND, &data).map_err(|e| match e {
+        crate::share_link::LinkError::TooLarge { parts } => {
+            heavy.sort_by(|a, b| b.1.cmp(&a.1));
+            let names: Vec<&str> = heavy.iter().take(3).map(|(p, _)| p.as_str()).collect();
+            if names.is_empty() {
+                String::from(crate::share_link::LinkError::TooLarge { parts })
+            } else {
+                format!(
+                    "Trop volumineux pour un lien ({parts} parties, {} au plus). Les éléments copiés les plus lourds : {}. Décoche-les, ou partage le fichier.",
+                    crate::share_link::MAX_PARTS,
+                    names.join(", ")
+                )
+            }
+        }
+        other => String::from(other),
+    })
 }
 
 // ── Lecture d'un pack reçu ──────────────────────────────────────────────────
@@ -1126,6 +1290,23 @@ struct Pack {
     /// Configuration Java jointe, déjà filtrée, et les arguments écartés.
     jvm: Option<JvmShare>,
     jvm_rejected: Vec<String>,
+    /// `options.txt` reçu en réglages (lien), fusionné à l'arrivée.
+    options: Vec<McOption>,
+    /// Options du client intégré, filtrées.
+    client: Vec<McOption>,
+    /// Serveurs (nom, adresse), ajoutés à la liste s'ils n'y sont pas.
+    servers: Vec<(String, String)>,
+    /// Fichiers copiés dans un lien : (chemin vérifié, contenu).
+    inline: Vec<(String, Vec<u8>)>,
+}
+
+/// Options du client reçues : mêmes règles que le partage d'options.
+fn received_client(pairs: Vec<(String, String)>) -> Vec<McOption> {
+    pairs
+        .into_iter()
+        .map(|(key, value)| McOption { key, value })
+        .filter(|o| keep_client(o, true))
+        .collect()
 }
 
 /// Filtre une configuration reçue ; rend aussi ce qui a été écarté.
@@ -1167,7 +1348,9 @@ fn read_mrpack(path: &Path) -> Result<Pack, String> {
         entry.read_to_string(&mut content).ok()?;
         serde_json::from_str(&content).ok()
     });
-    let (jvm, jvm_rejected) = received_jvm(extras.and_then(|e| e.jvm));
+    let (extras_jvm, extras_client) = extras.map(|e| (e.jvm, e.client)).unwrap_or_default();
+    let (jvm, jvm_rejected) = received_jvm(extras_jvm);
+    let client = received_client(extras_client.unwrap_or_default());
 
     let mut rejected = Vec::new();
     let mut files = Vec::new();
@@ -1224,32 +1407,103 @@ fn read_mrpack(path: &Path) -> Result<Pack, String> {
         rejected,
         jvm,
         jvm_rejected,
+        // `options.txt` et la liste des serveurs voyagent dans `overrides/`,
+        // comme le format Modrinth le veut (les autres launchers les lisent).
+        options: Vec::new(),
+        client,
+        servers: Vec::new(),
+        inline: Vec::new(),
     })
 }
 
+/// Contenu d'un enregistrement texte du lien.
+fn record_text(body: &[u8]) -> Result<&str, String> {
+    std::str::from_utf8(body).map_err(|_| "Lien de partage abîmé".to_string())
+}
+
 async fn read_link(link: &str) -> Result<Pack, String> {
-    let text = crate::share_link::read(link, LINK_KIND)?;
-    let lines: Vec<&str> = text.split('\n').collect();
-    let [name, mc_version, loader, loader_version, tokens, rest @ ..] = lines.as_slice() else {
-        return Err("Lien de partage abîmé".into());
+    let broken = || "Lien de partage abîmé".to_string();
+    let data = crate::share_link::read(link, LINK_KIND)?;
+    let records = records(&data).ok_or_else(broken)?;
+
+    let header = records.iter().find(|(tag, _)| *tag == REC_HEADER).ok_or_else(broken)?;
+    let lines: Vec<&str> = record_text(header.1)?.split('\n').collect();
+    let [name, mc_version, loader, loader_version, tokens] = lines.as_slice() else {
+        return Err(broken());
     };
     if mc_version.is_empty() || !matches!(*loader, "vanilla" | "fabric" | "quilt" | "forge" | "neoforge") {
-        return Err("Lien de partage abîmé".into());
+        return Err(broken());
     }
     let (name, mc_version, loader, loader_version) =
         (name.to_string(), mc_version.to_string(), loader.to_string(), loader_version.to_string());
     let tokens = decode_tokens(tokens)?;
-    // Ligne « RAM JVM GC mode », puis les arguments : présentes ensemble ou pas du tout.
-    let (jvm, jvm_rejected) = received_jvm(rest.first().and_then(|head| {
-        let mut words = head.split(' ');
-        Some(JvmShare {
-            ram_mb: words.next()?.parse().ok()?,
-            vendor: words.next()?.to_string(),
-            gc_policy: words.next()?.to_string(),
-            args_mode: words.next()?.to_string(),
-            args: rest.get(1).map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default(),
-        })
-    }));
+
+    let mut raw_jvm = None;
+    let mut options = Vec::new();
+    let mut client = Vec::new();
+    let mut servers = Vec::new();
+    let mut inline = Vec::new();
+    let mut remote_files = Vec::new();
+    let mut rejected = Vec::new();
+    for (tag, body) in &records {
+        match *tag {
+            // « RAM JVM GC mode », puis les arguments.
+            REC_JVM => {
+                let text = record_text(body)?;
+                let (head, args) = text.split_once('\n').unwrap_or((text, ""));
+                let mut words = head.split(' ');
+                raw_jvm = (|| {
+                    Some(JvmShare {
+                        ram_mb: words.next()?.parse().ok()?,
+                        vendor: words.next()?.to_string(),
+                        gc_policy: words.next()?.to_string(),
+                        args_mode: words.next()?.to_string(),
+                        args: args.split_whitespace().map(str::to_string).collect(),
+                    })
+                })();
+            }
+            REC_OPTIONS => options = from_text(record_text(body)?, ':').into_iter().filter(keep_game).collect(),
+            REC_CLIENT => {
+                client = from_text(record_text(body)?, '=').into_iter().filter(|o| keep_client(o, true)).collect()
+            }
+            REC_SERVERS => {
+                servers = record_text(body)?
+                    .lines()
+                    .filter_map(|l| l.split_once('\t'))
+                    .filter(|(name, ip)| !ip.is_empty() && name.len() <= 200 && ip.len() <= 255)
+                    .map(|(name, ip)| (name.to_string(), ip.to_string()))
+                    .collect()
+            }
+            REC_REMOTE => {
+                let mut fields = record_text(body)?.split('\0');
+                let (Some(path), Some(url), Some(sha1)) = (fields.next(), fields.next(), fields.next()) else {
+                    return Err(broken());
+                };
+                match safe_relative(path) {
+                    Some(path) if allowed_download(url) => remote_files.push(PackFile {
+                        path,
+                        url: url.to_string(),
+                        sha1: Some(sha1.to_lowercase()),
+                        sha512: None,
+                        size: 0,
+                    }),
+                    _ => rejected.push(path.to_string()),
+                }
+            }
+            REC_FILE => {
+                let split = body.iter().position(|b| *b == 0).ok_or_else(broken)?;
+                let path = std::str::from_utf8(&body[..split]).map_err(|_| broken())?;
+                match safe_relative(path) {
+                    Some(path) => inline.push((path, body[split + 1..].to_vec())),
+                    None => rejected.push(path.to_string()),
+                }
+            }
+            // Une étiquette inconnue vient d'une version plus récente : on
+            // prend ce qu'on comprend.
+            _ => {}
+        }
+    }
+    let (jvm, jvm_rejected) = received_jvm(raw_jvm);
 
     let mut versions: HashMap<String, MrVersion> = HashMap::new();
     if !tokens.is_empty() {
@@ -1267,8 +1521,7 @@ async fn read_link(link: &str) -> Result<Pack, String> {
         versions = list.into_iter().map(|v| (v.id.clone(), v)).collect();
     }
 
-    let mut files = Vec::new();
-    let mut rejected = Vec::new();
+    let mut files = remote_files;
     for token in tokens {
         let (dir, disabled) = dir_of(token.kind).expect("vérifié au décodage");
         // Sans début d'empreinte, la version n'avait qu'un fichier quand le
@@ -1315,6 +1568,10 @@ async fn read_link(link: &str) -> Result<Pack, String> {
         rejected,
         jvm,
         jvm_rejected,
+        options,
+        client,
+        servers,
+        inline,
     })
 }
 
@@ -1353,6 +1610,12 @@ pub struct SharePreview {
     pub jvm: Option<JvmShare>,
     /// Arguments JVM du pack écartés par le filtre de sécurité.
     pub jvm_rejected: Vec<String>,
+    /// Réglages d'`options.txt` reçus par lien (0 : aucun).
+    pub options: u32,
+    /// Options du client intégré reçues (0 : aucune).
+    pub client: u32,
+    /// Noms des serveurs reçus par lien.
+    pub servers: Vec<String>,
 }
 
 fn source_of(url: &str) -> &'static str {
@@ -1380,7 +1643,15 @@ pub async fn instance_share_preview(source: ShareSource) -> Result<SharePreview,
             .overrides
             .iter()
             .map(|(_, rel, size)| PreviewFile { path: rel.clone(), size: *size, source: String::new() })
+            .chain(pack.inline.iter().map(|(rel, content)| PreviewFile {
+                path: rel.clone(),
+                size: content.len() as u64,
+                source: String::new(),
+            }))
             .collect(),
+        options: pack.options.len() as u32,
+        client: pack.client.len() as u32,
+        servers: pack.servers.iter().map(|(name, _)| name.clone()).collect(),
         name: pack.name,
         summary: pack.summary,
         mc_version: pack.mc_version,
@@ -1550,6 +1821,48 @@ pub async fn instance_share_import(
         failed.extend(extract_failed);
     }
 
+    // Ce qu'un lien porte en plus des téléchargements. Les chemins ont été
+    // vérifiés à la lecture (`safe_relative`) ; les options et les serveurs
+    // sont **fusionnés**, comme le partage d'options.
+    for (rel, content) in &pack.inline {
+        let dest = join_relative(&dir, rel);
+        let written = match dest.parent() {
+            Some(parent) => tokio::fs::create_dir_all(parent).await.and(tokio::fs::write(&dest, content).await),
+            None => tokio::fs::write(&dest, content).await,
+        };
+        if let Err(e) = written {
+            tracing::warn!("[Partage] écriture de {} échouée : {}", rel, e);
+            failed.push(rel.clone());
+        }
+    }
+    if !pack.options.is_empty() {
+        if let Err(e) = mc_options_write(instance.id.clone(), pack.options.clone()).await {
+            tracing::warn!("[Partage] options du jeu : {}", e);
+            failed.push(OPTIONS_FILE.into());
+        }
+    }
+    if !pack.client.is_empty() {
+        if let Err(e) = agent_options_write(instance.id.clone(), pack.client.clone()).await {
+            tracing::warn!("[Partage] options du client : {}", e);
+            failed.push("options du client YuyuFrame".into());
+        }
+    }
+    if !pack.servers.is_empty() {
+        let servers: Vec<crate::minecraft::launcher::SavedServer> = pack
+            .servers
+            .iter()
+            .map(|(name, ip)| crate::minecraft::launcher::SavedServer { name: name.clone(), ip: ip.clone() })
+            .collect();
+        let dir = dir.clone();
+        let merged = tokio::task::spawn_blocking(move || crate::minecraft::launcher::merge_saved_servers(&dir, &servers))
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Err(e) = merged {
+            tracing::warn!("[Partage] serveurs : {}", e);
+            failed.push("servers.dat".into());
+        }
+    }
+
     crate::integrations::analytics::capture("instance_share_imported", serde_json::json!({
         "from": match source { ShareSource::File { .. } => "file", ShareSource::Link { .. } => "link" },
         "files": total,
@@ -1628,11 +1941,48 @@ mod tests {
     fn lien_instance_compact() {
         let tokens = "mL6Sv1iN2mAfA2Emwm89mGFM8zmJ832fm3dmX6ou16c3mUdiBeac7mRystERKEmMwcLS51SmYo9xOcemw8P6TokGmOqq8TOAVmFItuNokSmZJ6YTrMYm4H8A03wameRJU33HpmiFNRLrRBm7RYVKQJmmgjsLvJfWmpX4mxVAvmkWf58HtHmIYPINJuwrBX6pU42frWWLpy1hrR5ZGSF8ArRGIzA5emrxeIjARlrryEg1LARqryQdcUfnrrkqcBpfhrrI4ivyUVarrJtYoNiksyCCduG4sy6zWED9ssgUv7fBPsWcoEHPPx";
         let args = "-XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+PerfDisableSharedMem -XX:+AlwaysActAsServerClassMachine -XX:+UseCriticalJavaThreadPriority -XX:MetaspaceSize=256m -XX:-UseG1GC -XX:+UseShenandoahGC -XX:ShenandoahGCMode=generational -XX:+ParallelRefProcEnabled -XX:ShenandoahGuaranteedGCInterval=1000000 -XX:-ShenandoahUncommit -XX:-DontCompileHugeMethods -XX:MaxNodeLimit=240000 -XX:NodeLimitFudgeFactor=8000 -XX:NmethodSweepActivity=1 -XX:ReservedCodeCacheSize=400M -XX:NonNMethodCodeHeapSize=12M";
-        let text = format!("CocoWorld 1.5\n26.1.2\nfabric\n0.19.5\n{tokens}\n6144 temurin g1 replace\n{args}");
-        let link = crate::share_link::build(LINK_KIND, &text).unwrap();
-        let length = link.chars().count();
+        let mut data = Vec::new();
+        push_record(&mut data, REC_HEADER, format!("CocoWorld 1.5\n26.1.2\nfabric\n0.19.5\n{tokens}").as_bytes());
+        push_record(&mut data, REC_JVM, format!("6144 temurin g1 replace\n{args}").as_bytes());
+        let links = crate::share_link::build(LINK_KIND, &data).unwrap();
+        assert_eq!(links.len(), 1);
+        let length = links[0].chars().count();
         assert!(length < 300, "{length} caractères");
-        assert_eq!(crate::share_link::read(&link, LINK_KIND).unwrap(), text);
+        assert_eq!(crate::share_link::read(&links[0], LINK_KIND).unwrap(), data);
+    }
+
+    /// Un lien fabriqué à la main : options filtrées à la lecture, serveurs,
+    /// fichier copié, et un chemin qui sort de l'instance refusé.
+    #[tokio::test]
+    async fn lecture_d_un_lien_complet() {
+        let mut data = Vec::new();
+        push_record(&mut data, REC_HEADER, b"Test\n1.21.11\nvanilla\n\n");
+        push_record(&mut data, REC_OPTIONS, b"fov:0.5\nlastServer:prive.example");
+        push_record(&mut data, REC_CLIENT, b"zoom.enabled=true\nmacros.setting.logins=secret");
+        push_record(&mut data, REC_SERVERS, b"Mon serveur\tmc.example.org\nSans adresse\t");
+        push_record(&mut data, REC_FILE, b"config/a.json\0{\"x\":1}");
+        push_record(&mut data, REC_FILE, b"../../evil.txt\0boom");
+        push_record(&mut data, b'Z', b"etiquette future, ignoree");
+        let link = crate::share_link::build(LINK_KIND, &data).unwrap().join("\n");
+
+        let pack = read_link(&link).await.unwrap();
+        assert_eq!(pack.name, "Test");
+        assert_eq!(pack.options, vec![McOption { key: "fov".into(), value: "0.5".into() }]);
+        assert_eq!(pack.client, vec![McOption { key: "zoom.enabled".into(), value: "true".into() }]);
+        assert_eq!(pack.servers, vec![("Mon serveur".to_string(), "mc.example.org".to_string())]);
+        assert_eq!(pack.inline, vec![("config/a.json".to_string(), b"{\"x\":1}".to_vec())]);
+        assert_eq!(pack.rejected, vec!["../../evil.txt".to_string()]);
+    }
+
+    #[test]
+    fn enregistrements_aller_retour() {
+        let mut data = Vec::new();
+        push_record(&mut data, REC_HEADER, b"abc");
+        push_record(&mut data, REC_FILE, &vec![7u8; 300]);
+        let parsed = records(&data).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[1].1.len(), 300);
+        assert!(records(&data[..data.len() - 1]).is_none());
     }
 
     #[test]
