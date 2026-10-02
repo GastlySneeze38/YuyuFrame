@@ -77,3 +77,25 @@ pub async fn loader_availability(mc_version: String) -> Result<Vec<String>, Stri
     }
     Ok(available)
 }
+
+/// Les versions du jeu utilisables avec ce loader.
+///
+/// La question inverse de [`loader_availability`], et elle se pose là où le
+/// loader n'est pas un choix : une instance qu'on duplique garde le sien, un
+/// modpack impose le sien. Proposer alors une version du jeu que le loader ne
+/// connaît pas ne mène qu'à un lancement qui échoue.
+///
+/// « vanilla » rend une liste vide, qui se lit « aucune restriction » —
+/// l'appelant n'a rien à filtrer.
+#[tauri::command]
+pub async fn loader_game_versions(loader: String) -> Result<Vec<String>, String> {
+    use crate::minecraft::loaders::{fabric, forge, neoforge, quilt};
+    match loader.as_str() {
+        "fabric" => fabric::game_versions().await,
+        "quilt" => quilt::game_versions().await,
+        "forge" => forge::game_versions().await,
+        "neoforge" => neoforge::game_versions().await,
+        _ => Ok(Vec::new()),
+    }
+    .map_err(|e| e.to_string())
+}

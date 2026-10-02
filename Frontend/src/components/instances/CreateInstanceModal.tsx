@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import type { Instance, JvmVendor, Loader } from '@/types'
 import { INSTANCE_PRESETS, type InstancePreset } from '@/data/presets'
 import { loaderColor } from '@/lib/loader'
+import { allowedVersions, useGameVersionsFor, useLoadersFor } from '@/lib/loaderCompat'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
@@ -118,6 +119,25 @@ export function CreateInstanceModal({
   useEffect(() => {
     if (versions.length > 0 && !mcVersion) setMcVersion(versions[0])
   }, [versions])
+
+  // Deux filtrages, selon qui décide quoi.
+  //
+  // En « vierge », la version du jeu est choisie en premier (elle est au-dessus
+  // dans le formulaire) et c'est la liste des loaders qui s'y adapte. Avec un
+  // modpack, le loader est imposé par le preset : c'est alors la liste des
+  // versions qui se réduit — proposer une version que ce loader ne connaît pas
+  // ne mènerait qu'à un lancement raté.
+  const availableLoaders = useLoadersFor(mcVersion)
+  const loaderVersions = useGameVersionsFor(mode === 'preset' ? loader : 'vanilla')
+  const offeredVersions = allowedVersions(versions, loaderVersions, selectedPreset?.mcVersion)
+
+  // Le loader choisi peut disparaître en changeant de version du jeu (NeoForge
+  // avant 1.20.2). On retombe sur vanilla, le seul qui existe partout, plutôt
+  // que de garder sélectionné un bouton qui n'est plus là.
+  useEffect(() => {
+    if (mode === 'preset' || !availableLoaders) return
+    if (!availableLoaders.includes(loader)) setLoader('vanilla')
+  }, [mode, availableLoaders, loader])
 
   const handleSelectPreset = (preset: InstancePreset) => {
     setSelectedPreset(preset)
@@ -233,12 +253,12 @@ export function CreateInstanceModal({
             {mode === 'blank' ? (
               <div className="flex flex-col gap-4">
                 <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} />
-                <LoaderPicker value={loader} onChange={setLoader} />
+                <LoaderPicker value={loader} onChange={setLoader} available={availableLoaders} />
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <div className="flex items-end gap-3">
-                  <VersionSelect versions={versions} value={mcVersion} onChange={handleVersionChange} className="flex-1" />
+                  <VersionSelect versions={offeredVersions} value={mcVersion} onChange={handleVersionChange} className="flex-1" />
                   <div className="flex h-[40px] items-center gap-1.5 rounded-xl px-3 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
                     <span className="text-[11px] font-semibold" style={{ color: loaderColor(loader) }}>{loader}</span>
                   </div>

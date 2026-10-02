@@ -9,6 +9,7 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { BackArrowIcon } from '@/components/ui/icons/BackArrowIcon'
 import { NameInput, VersionSelect, LoaderPicker } from '@/components/instances/InstanceFormFields'
+import { useLoadersFor } from '@/lib/loaderCompat'
 import { showError } from '@/stores/useErrorToast'
 import type { DetectedLauncher, DetectedSource, ImportProgressEvent, Loader, ScanResult } from '@/types'
 import { useT } from '@/i18n'
@@ -59,6 +60,7 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
   const [name, setName] = useState('')
   const [mcVersion, setMcVersion] = useState('')
   const [loader, setLoader] = useState<Loader>('vanilla')
+  const availableLoaders = useLoadersFor(mcVersion)
   const [ram, setRam] = useState(defaultRam)
   // Purement informatif ici (pas de blocage, contrairement à la création
   // "vierge") : l'import garde un objectif de simplicité, une valeur par
@@ -332,7 +334,10 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
                   value={mcVersion}
                   onChange={setMcVersion}
                 />
-                <LoaderPicker value={loader} onChange={setLoader} />
+                {/* Même règle que la création : la version du jeu est
+                    au-dessus, donc c'est elle qui décide quels loaders ont un
+                    sens. */}
+                <LoaderPicker value={loader} onChange={setLoader} available={availableLoaders} />
                 <RamPicker value={ram} onChange={setRam} loader={loader} modCount={scan.mods.length} onStatusChange={setRamStatus} />
                 {ramStatus.isKnownTier && !ramStatus.isRecommended && (
                   <p className="text-[11px] text-[rgba(240,180,90,0.6)] -mt-2">⚠ {t('instancesPage.ramNotOptimal')}</p>

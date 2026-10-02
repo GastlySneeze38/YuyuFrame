@@ -148,6 +148,22 @@ pub async fn list_versions(mc_version: &str) -> Result<Vec<LoaderVersion>> {
     Ok(versions)
 }
 
+/// Les versions du jeu que Fabric connaît.
+///
+/// La question inverse de [`supports`], et la même route : elle sert là où le
+/// loader est imposé et où c'est la liste des versions qu'il faut réduire
+/// (duplication d'une instance, modpack qui impose son loader).
+pub async fn game_versions() -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let games: Vec<GameVersion> = client
+        .get(format!("{FABRIC_META}/versions/game"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(games.into_iter().map(|g| g.version).collect())
+}
+
 /// Fabric connaît-il cette version du jeu ?
 ///
 /// Par `/versions/game` et non par la liste des loaders : la première tient en

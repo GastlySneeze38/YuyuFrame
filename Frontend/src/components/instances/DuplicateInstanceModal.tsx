@@ -6,6 +6,7 @@ import { loaderColor } from '@/lib/loader'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
+import { allowedVersions, useGameVersionsFor } from '@/lib/loaderCompat'
 import { NameInput, SubmitButton, VersionSelect } from './InstanceFormFields'
 import { useT } from '@/i18n'
 
@@ -35,6 +36,9 @@ export function DuplicateInstanceModal({
   // Purement informatif ici (pas de blocage) : contrairement à la création,
   // cette RAM existait déjà sur l'instance source — un avertissement suffit.
   const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
+
+  const allowed = useGameVersionsFor(source.loader)
+  const offered = allowedVersions(versions, allowed, source.mc_version)
 
   /**
    * Mettre à jour les mods pour la nouvelle version, ou les copier tels quels.
@@ -71,7 +75,11 @@ export function DuplicateInstanceModal({
       <div className="flex flex-col gap-4">
         <NameInput value={name} onChange={setName} onEnter={handleDuplicate} />
 
-        <VersionSelect versions={versions} value={mcVersion} onChange={setMcVersion} />
+        {/* Le loader de la source est conservé, donc c'est la liste des
+            versions qui se réduit : proposer une version que ce loader ne
+            connaît pas ne mènerait qu'à un lancement raté. La version
+            d'origine reste proposée même si le loader ne la publie plus. */}
+        <VersionSelect versions={offered} value={mcVersion} onChange={setMcVersion} />
 
         <RamPicker value={ram} onChange={setRam} loader={source.loader} modCount={modCount} onStatusChange={setRamStatus} />
 

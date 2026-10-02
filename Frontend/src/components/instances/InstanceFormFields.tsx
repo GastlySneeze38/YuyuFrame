@@ -78,12 +78,18 @@ export function VersionSelect({ versions, value, onChange, className = '' }: { v
   )
 }
 
-export function LoaderPicker({ value, onChange }: { value: Loader; onChange: (l: Loader) => void }) {
+/**
+ * `available` : les loaders qui existent pour la version du jeu choisie,
+ * `null` tant qu'on ne sait pas — auquel cas on les propose tous. Un loader
+ * qu'on ne peut pas installer n'a pas à occuper un bouton, et le découvrir au
+ * lancement serait trop tard.
+ */
+export function LoaderPicker({ value, onChange, available }: { value: Loader; onChange: (l: Loader) => void; available?: string[] | null }) {
   return (
     <div>
       <label className="text-[10px] text-[rgba(255,255,255,0.4)] tracking-[0.1em] uppercase font-semibold">Loader</label>
       <div className="flex gap-1 mt-1">
-        {LOADERS.map((l) => (
+        {LOADERS.filter((l) => !available || available.includes(l)).map((l) => (
           <button
             key={l}
             onClick={() => onChange(l)}

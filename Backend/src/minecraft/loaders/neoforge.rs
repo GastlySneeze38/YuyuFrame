@@ -51,6 +51,40 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Aucune version NeoForge pour Minecraft {}", mc_version))
 }
 
+/// Les versions du jeu pour lesquelles NeoForge publie quelque chose.
+///
+/// Déduites de leurs numéros, faute d'une liste publiée : `20.2.3` cible
+/// `1.20.2`. Le cas particulier est la version `.0`, qui vise une version de
+/// Minecraft **sans patch** — `21.0.x` est pour `1.21`, pas pour « 1.21.0 »
+/// qui n'existe pas. On rend donc les deux formes, et c'est la liste des
+/// versions du jeu qui tranche en ne gardant que celles qui existent.
+pub async fn game_versions() -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let resp: NeoForgeVersionList = client.get(NEOFORGE_VERSIONS_API).send().await?.json().await?;
+    Ok(game_versions_from(&resp.versions))
+}
+
+/// Partie calculatoire de [`game_versions`], isolée pour être testable.
+fn game_versions_from(versions: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for v in versions {
+        let mut parts = v.split('.');
+        let (Some(major), Some(minor)) = (parts.next(), parts.next()) else { continue };
+        // Les branches hors ligne principale (`0.25w14craftmine.3-beta`) ne
+        // ciblent pas une version publiée : elles n'ont rien à faire ici.
+        if major.parse::<u32>().is_err() || minor.parse::<u32>().is_err() {
+            continue;
+        }
+        out.push(format!("1.{major}.{minor}"));
+        if minor == "0" {
+            out.push(format!("1.{major}"));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// NeoForge a-t-il une version pour ce MC ?
 ///
 /// Souvent non, et c'est normal : le dépôt `net.neoforged:neoforge` commence à
@@ -185,4 +219,36 @@ pub async fn install(neoforge_ver: &str, mc_dir: &Path, java: &str, client: &req
     }
 
     Ok(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::game_versions_from;
+
+    fn v(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// `20.2.3` cible `1.20.2` : c'est le numéro du loader qui porte la
+    /// version du jeu, NeoForge ne publiant pas la correspondance.
+    #[test]
+    fn la_version_du_jeu_se_lit_dans_le_numero() {
+        assert_eq!(game_versions_from(&v(&["20.2.3", "20.2.4", "21.3.1"])), v(&["1.20.2", "1.21.3"]));
+    }
+
+    /// Le patch `.0` vise une version sans patch : `21.0.x` est pour `1.21`,
+    /// et « 1.21.0 » n'existe pas. On rend les deux, le manifeste du jeu
+    /// écartera celle qui n'existe pas.
+    #[test]
+    fn le_patch_zero_vise_aussi_la_version_sans_patch() {
+        assert_eq!(game_versions_from(&v(&["21.0.5"])), v(&["1.21", "1.21.0"]));
+    }
+
+    /// Les branches hors ligne principale ne ciblent aucune version publiée.
+    #[test]
+    fn les_branches_speciales_sont_ecartees() {
+        assert!(game_versions_from(&v(&["0.25w14craftmine.3-beta"])).is_empty());
+        assert!(game_versions_from(&v(&["21"])).is_empty());
+        assert!(game_versions_from(&[]).is_empty());
+    }
 }

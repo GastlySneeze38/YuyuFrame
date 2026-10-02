@@ -11,6 +11,7 @@ import { CloseButton } from '@/components/ui/CloseButton'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
 import { loaderColor, LOADERS } from '@/lib/loader'
+import { useLoadersFor } from '@/lib/loaderCompat'
 import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
 import { InstanceIcon } from './InstanceIcon'
@@ -540,7 +541,7 @@ function InstallationTab({
   /** Loaders qui existent pour la version du jeu choisie — `null` en attente.
    *  Tant qu'on ne sait pas, on les propose tous : retirer un bouton puis le
    *  remettre une seconde plus tard serait pire que de ne rien filtrer. */
-  const [available, setAvailable] = useState<string[] | null>(null)
+  const available = useLoadersFor(mcVersion)
 
   // Rechargées à chaque changement de loader ou de version de jeu : une liste
   // de builds n'a de sens que pour un couple précis. Le compteur de génération
@@ -558,18 +559,6 @@ function InstallationTab({
       .then((list) => { if (generation.current === mine) setLoaderVersions(list) })
       .catch(() => { if (generation.current === mine) setLoaderVersions([]) })
   }, [loader, mcVersion])
-
-  // Quels loaders existent pour cette version du jeu. Dépend de la seule
-  // version de jeu, pas du loader choisi : c'est une propriété de la version.
-  const availabilityGeneration = useRef(0)
-  useEffect(() => {
-    if (!editing) return
-    const mine = ++availabilityGeneration.current
-    setAvailable(null)
-    api.versions.loaderAvailability(mcVersion)
-      .then((list) => { if (availabilityGeneration.current === mine) setAvailable(list) })
-      .catch(() => { if (availabilityGeneration.current === mine) setAvailable(null) })
-  }, [editing, mcVersion])
 
   // Changer de version du jeu peut faire disparaître le loader choisi — passer
   // de 1.21 à 1.19 retire NeoForge. On retombe alors sur vanilla, le seul qui

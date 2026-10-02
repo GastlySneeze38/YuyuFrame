@@ -380,6 +380,7 @@ pub fn run() {
             commands::system::versions::list_versions,
             commands::system::versions::loader_versions,
             commands::system::versions::loader_availability,
+            commands::system::versions::loader_game_versions,
             commands::launch::launch_game,
             commands::launch::cancel_launch,
             commands::launch::reload_agent,

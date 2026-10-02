@@ -80,6 +80,23 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Aucune version Forge pour Minecraft {}", mc_version))
 }
 
+/// Les versions du jeu pour lesquelles Forge publie quelque chose.
+///
+/// Lues dans les clés des promotions (`1.21.4-recommended`), donc exactement
+/// les versions que le launcher sait installer — pas une liste reconstituée.
+pub async fn game_versions() -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let promos: ForgePromos = client.get(FORGE_PROMOTIONS).send().await?.json().await?;
+    let mut versions: Vec<String> = promos
+        .promos
+        .keys()
+        .filter_map(|k| k.rsplit_once('-').map(|(mc, _)| mc.to_string()))
+        .collect();
+    versions.sort();
+    versions.dedup();
+    Ok(versions)
+}
+
 /// Forge a-t-il une version pour ce MC ?
 ///
 /// Par les promotions et non par le maven : le premier fait quelques dizaines

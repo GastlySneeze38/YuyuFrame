@@ -295,6 +295,11 @@ export const api = {
      *  y figure : mieux vaut un choix de trop qu'un choix retiré à tort. */
     loaderAvailability: (mcVersion: string) =>
       invoke<string[]>('loader_availability', { mcVersion }),
+    /** Les versions du jeu utilisables avec ce loader. Vide pour « vanilla »,
+     *  qui ne restreint rien. Question inverse de la précédente : elle se pose
+     *  là où le loader n'est pas un choix (duplication, modpack). */
+    loaderGameVersions: (loader: string) =>
+      invoke<string[]>('loader_game_versions', { loader }),
   },
 
   instances: {

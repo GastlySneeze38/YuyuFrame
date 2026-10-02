@@ -64,6 +64,18 @@ fn is_stable(version: &str) -> bool {
     !(lower.contains("-beta") || lower.contains("-rc") || lower.contains("-alpha") || lower.contains("-pre"))
 }
 
+/// Les versions du jeu que Quilt connaît — voir `fabric::game_versions`.
+pub async fn game_versions() -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let games: Vec<super::fabric::GameVersion> = client
+        .get(format!("{QUILT_META}/versions/game"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(games.into_iter().map(|g| g.version).collect())
+}
+
 /// Quilt connaît-il cette version du jeu ? Même route et même convention que
 /// `fabric::supports` : `Err` = « on ne sait pas », pas « non ».
 pub async fn supports(mc_version: &str) -> Result<bool> {
