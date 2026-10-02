@@ -1729,5 +1729,15 @@ export const de: TranslationSchema = {
     openInstance: 'Instanz ansehen',
     importEntry: 'Geteilte Instanz',
     importEntryDesc: 'Eine .mrpack-Datei oder ein yuyuframe://-Link, den dir jemand geschickt hat',
+    jvmTitle: 'Java-Konfiguration',
+    jvmAuto: 'auto',
+    jvmReplace: 'ersetzt die Argumente des Launchers',
+    jvmNoArgs: 'Keine eigenen Argumente.',
+    jvmRejectedOut:
+      '{{count}} Argument(e) werden nicht geteilt: Sie verweisen auf eine Datei, einen Ordner oder einen Befehl und ergäben auf einem anderen PC keinen Sinn (oder könnten dort etwas anderes als das Spiel starten).',
+    jvmApply: 'Java-Konfiguration dieser Instanz übernehmen',
+    jvmDefault: 'Abgewählt: Standard-Java-Einstellungen des Launchers, mit {{ram}} Speicher.',
+    jvmRejectedIn:
+      '{{count}} Java-Argument(e) aus dem Pack wurden zu deiner Sicherheit entfernt (sie könnten ein Programm starten oder eine Datei auf deinem PC lesen):',
   },
 }

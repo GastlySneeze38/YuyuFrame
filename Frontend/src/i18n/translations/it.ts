@@ -1729,5 +1729,15 @@ export const it: TranslationSchema = {
     openInstance: 'Vedi l’istanza',
     importEntry: 'Istanza condivisa',
     importEntryDesc: 'Un file .mrpack o un link yuyuframe:// che qualcuno ti ha inviato',
+    jvmTitle: 'Configurazione Java',
+    jvmAuto: 'auto',
+    jvmReplace: 'sostituisce gli argomenti del launcher',
+    jvmNoArgs: 'Nessun argomento personalizzato.',
+    jvmRejectedOut:
+      '{{count}} argomento/i non verranno condivisi: indicano un file, una cartella o un comando, e non avrebbero senso su un altro PC (o potrebbero servire a lanciarvi qualcosa di diverso dal gioco).',
+    jvmApply: 'Applica la configurazione Java di questa istanza',
+    jvmDefault: 'Deselezionato: impostazioni Java predefinite del launcher, con {{ram}} di memoria.',
+    jvmRejectedIn:
+      '{{count}} argomento/i Java del pack sono stati scartati per la tua sicurezza (potrebbero avviare un programma o leggere un file sul tuo PC):',
   },
 }

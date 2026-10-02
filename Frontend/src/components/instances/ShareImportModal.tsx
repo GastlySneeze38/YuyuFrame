@@ -4,7 +4,8 @@ import { listen } from '@tauri-apps/api/event'
 import { api } from '@/api/client'
 import type { Instance, SharePreview, ShareSource } from '@/types'
 import { ModalShell } from '@/components/ui/ModalShell'
-import { formatBytes } from '@/lib/format'
+import { formatBytes, formatRam } from '@/lib/format'
+import { JvmSummary } from './ShareTab'
 import { loaderColor } from '@/lib/loader'
 import { useStore } from '@/stores/useStore'
 import { showError } from '@/stores/useErrorToast'
@@ -46,6 +47,9 @@ export function ShareImportModal({
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
   const [showEmbedded, setShowEmbedded] = useState(false)
+  /** Reprendre la configuration Java jointe — déjà filtrée côté Rust, mais
+   *  c'est la RAM de quelqu'un d'autre : elle se décoche. */
+  const [applyJvm, setApplyJvm] = useState(true)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [result, setResult] = useState<{ instance: Instance; failed: string[] } | null>(null)
 
@@ -87,7 +91,7 @@ export function ShareImportModal({
     setProgress({ current: 0, total: preview.downloads.length, label: '' })
     const unlisten = await listen<Progress>('share_import_progress', (e) => setProgress(e.payload))
     try {
-      const imported = await api.share.import(source, name.trim(), defaultRam)
+      const imported = await api.share.import(source, name.trim(), defaultRam, applyJvm && preview.jvm !== null)
       setResult(imported)
     } catch (e) {
       showError(e)
@@ -181,6 +185,30 @@ export function ShareImportModal({
                 </ul>
               )}
             </div>
+
+            {preview.jvm && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={applyJvm}
+                  onChange={() => setApplyJvm((v) => !v)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-accent"
+                />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <p className="text-[12.5px] font-semibold text-txt-primary">{t('share.jvmApply')}</p>
+                  <JvmSummary jvm={preview.jvm} />
+                  {!applyJvm && (
+                    <p className="text-[11px] text-txt-muted">{t('share.jvmDefault', { ram: formatRam(defaultRam) })}</p>
+                  )}
+                </div>
+              </label>
+            )}
+            {preview.jvmRejected.length > 0 && (
+              <p className="text-[11.5px] text-warning">
+                ⚠ {t('share.jvmRejectedIn', { count: preview.jvmRejected.length })}{' '}
+                <span className="break-all font-mono text-[10.5px]">{preview.jvmRejected.join(' ')}</span>
+              </p>
+            )}
 
             {embeddedMods.length > 0 && (
               <p className="text-[11.5px] text-warning">⚠ {t('share.embeddedModsWarning', { count: embeddedMods.length })}</p>

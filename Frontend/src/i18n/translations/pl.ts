@@ -1729,5 +1729,15 @@ export const pl: TranslationSchema = {
     openInstance: 'Pokaż instancję',
     importEntry: 'Udostępniona instancja',
     importEntryDesc: 'Plik .mrpack albo link yuyuframe://, który ktoś ci wysłał',
+    jvmTitle: 'Konfiguracja Javy',
+    jvmAuto: 'auto',
+    jvmReplace: 'zastępuje argumenty launchera',
+    jvmNoArgs: 'Brak własnych argumentów.',
+    jvmRejectedOut:
+      'Argumenty, które nie zostaną udostępnione ({{count}}): wskazują plik, folder albo polecenie i nie miałyby sensu na innym komputerze (albo mogłyby tam uruchomić coś innego niż grę).',
+    jvmApply: 'Zastosuj konfigurację Javy z tej instancji',
+    jvmDefault: 'Odznaczone: domyślne ustawienia Javy launchera, z pamięcią {{ram}}.',
+    jvmRejectedIn:
+      'Argumenty Javy z paczki usunięte dla twojego bezpieczeństwa ({{count}}) — mogłyby uruchomić program albo odczytać plik na twoim komputerze:',
   },
 }

@@ -402,15 +402,18 @@ export const api = {
   share: {
     /** Tout ce qui peut se partager, et d'où chaque fichier se télécharge. */
     scan: (instanceId: string) => invoke<ShareScan>('instance_share_scan', { instanceId }),
-    /** Écrit le `.mrpack` des éléments choisis (désignés par leur `path`). */
-    exportFile: (instanceId: string, paths: string[], filePath: string) =>
-      invoke<ShareExport>('instance_share_export', { instanceId, paths, filePath }),
+    /** Écrit le `.mrpack` des éléments choisis (désignés par leur `path`),
+     *  avec la configuration Java si `includeJvm`. */
+    exportFile: (instanceId: string, paths: string[], includeJvm: boolean, filePath: string) =>
+      invoke<ShareExport>('instance_share_export', { instanceId, paths, includeJvm, filePath }),
     /** Lien `yuyuframe://import?…` — refusé si un élément n'est pas sur Modrinth. */
-    link: (instanceId: string, paths: string[]) => invoke<string>('instance_share_link', { instanceId, paths }),
+    link: (instanceId: string, paths: string[], includeJvm: boolean) =>
+      invoke<string>('instance_share_link', { instanceId, paths, includeJvm }),
     preview: (source: ShareSource) => invoke<SharePreview>('instance_share_preview', { source }),
-    /** Crée l'instance et installe le pack ; progression par `share_import_progress`. */
-    import: (source: ShareSource, name: string, ramMb: number) =>
-      invoke<ShareImport>('instance_share_import', { source, name, ramMb }),
+    /** Crée l'instance et installe le pack ; progression par `share_import_progress`.
+     *  `applyJvm` : reprendre la configuration Java jointe (RAM comprise). */
+    import: (source: ShareSource, name: string, ramMb: number, applyJvm: boolean) =>
+      invoke<ShareImport>('instance_share_import', { source, name, ramMb, applyJvm }),
   },
 
   // Configurations JVM réutilisables (écran /jvm) — reliables à plusieurs

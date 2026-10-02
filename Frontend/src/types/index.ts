@@ -313,6 +313,17 @@ export interface ShareItem {
   selected: boolean
 }
 
+/** Configuration Java qui voyage avec l'instance — déjà passée par la liste
+ *  blanche des arguments (rien qui lance une commande ou touche un fichier). */
+export interface JvmShare {
+  ramMb: number
+  /** auto | temurin | openj9 | graal — jamais un chemin de Java personnalisé. */
+  vendor: string
+  gcPolicy: string
+  argsMode: 'append' | 'replace'
+  args: string[]
+}
+
 export interface ShareScan {
   name: string
   mcVersion: string
@@ -320,6 +331,11 @@ export interface ShareScan {
   items: ShareItem[]
   /** Modrinth injoignable : ce qu'il aurait reconnu est compté comme embarqué. */
   lookupFailed: boolean
+  jvm: JvmShare
+  /** Arguments qui ne partiront pas (filtre de sécurité). */
+  jvmRejected: string[]
+  /** Nom de la config JVM reliée, si l'instance en a une. */
+  jvmProfile: string | null
 }
 
 export interface ShareExport {
@@ -347,6 +363,10 @@ export interface SharePreview {
   embedded: SharePreviewFile[]
   /** Fichiers écartés : chemin dangereux, adresse hors plateformes, version introuvable. */
   rejected: string[]
+  /** Configuration Java jointe, déjà filtrée — `null` si le pack n'en a pas. */
+  jvm: JvmShare | null
+  /** Arguments JVM du pack écartés par le filtre de sécurité. */
+  jvmRejected: string[]
 }
 
 export interface ShareImport {

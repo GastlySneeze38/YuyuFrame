@@ -154,7 +154,7 @@ fn native_access_arg(java_major: u32) -> Option<String> {
 /// une corvée. Conséquence assumée : un drapeau contenant une espace (un
 /// `-D` pointant vers un chemin Windows non échappé) serait coupé en deux —
 /// les drapeaux de tuning JVM n'en contiennent jamais.
-pub(super) fn parse_user_jvm_args(raw: &str) -> Vec<String> {
+pub(crate) fn parse_user_jvm_args(raw: &str) -> Vec<String> {
     raw.lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))

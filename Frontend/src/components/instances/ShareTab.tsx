@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { save as saveFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
-import type { Instance, ShareGroup, ShareItem, ShareScan } from '@/types'
-import { formatBytes } from '@/lib/format'
+import type { Instance, JvmShare, ShareGroup, ShareItem, ShareScan } from '@/types'
+import { formatBytes, formatRam } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 
@@ -25,6 +25,31 @@ const GROUP_ORDER: ShareGroup[] = ['mods', 'resourcepacks', 'shaderpacks', 'sett
 /** Groupes qu'un lien peut porter : ceux qui ont des fichiers de plateforme. */
 const LINKABLE_GROUPS: ShareGroup[] = ['mods', 'resourcepacks', 'shaderpacks']
 
+const VENDOR_LABELS: Record<string, string> = { temurin: 'Temurin', openj9: 'OpenJ9', graal: 'GraalVM' }
+
+/**
+ * Résumé d'une configuration Java : mémoire, JVM, ramasse-miettes, puis les
+ * arguments en entier — ceux qu'on envoie comme ceux qu'on reçoit se lisent
+ * avant d'être acceptés. Partagé par l'onglet et la fenêtre d'import.
+ */
+export function JvmSummary({ jvm }: { jvm: JvmShare }) {
+  const t = useT()
+  const auto = t('share.jvmAuto')
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-[11.5px] text-txt-secondary">
+        {formatRam(jvm.ramMb)} · {VENDOR_LABELS[jvm.vendor] ?? auto} · GC {jvm.gcPolicy === 'auto' ? auto : jvm.gcPolicy}
+        {jvm.argsMode === 'replace' && ` · ${t('share.jvmReplace')}`}
+      </p>
+      {jvm.args.length > 0 ? (
+        <p className="break-all font-mono text-[10.5px] leading-relaxed text-txt-muted">{jvm.args.join(' ')}</p>
+      ) : (
+        <p className="text-[11px] text-txt-muted">{t('share.jvmNoArgs')}</p>
+      )}
+    </div>
+  )
+}
+
 function displayName(item: ShareItem): string {
   // Dans les dossiers de contenu, le nom du fichier suffit ; ailleurs, le
   // chemin est ce qui parle (« config », « options.txt », « xaero »).
@@ -36,6 +61,7 @@ export function ShareTab({ instance }: { instance: Instance }) {
   const [scan, setScan] = useState<ShareScan | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [open, setOpen] = useState<Set<ShareGroup>>(new Set())
+  const [includeJvm, setIncludeJvm] = useState(true)
   const [busy, setBusy] = useState<'file' | 'link' | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
@@ -107,7 +133,7 @@ export function ShareTab({ instance }: { instance: Instance }) {
     setBusy('file')
     setDone(null)
     try {
-      const result = await api.share.exportFile(instance.id, [...selected], target)
+      const result = await api.share.exportFile(instance.id, [...selected], includeJvm, target)
       setDone(t('share.fileDone', { linked: result.linked, embedded: result.embedded, size: formatBytes(result.size) }))
     } catch (e) {
       showError(e)
@@ -120,7 +146,7 @@ export function ShareTab({ instance }: { instance: Instance }) {
     setBusy('link')
     setDone(null)
     try {
-      const link = await api.share.link(instance.id, [...selected])
+      const link = await api.share.link(instance.id, [...selected], includeJvm)
       await navigator.clipboard.writeText(link)
       setDone(t('share.linkDone', { count: link.length }))
     } catch (e) {
@@ -148,6 +174,30 @@ export function ShareTab({ instance }: { instance: Instance }) {
       </div>
 
       {scan.lookupFailed && <p className="text-[11.5px] text-warning">⚠ {t('share.lookupFailed')}</p>}
+
+      {/* La configuration Java : celle que le lancement emploie, donc la
+          config JVM reliée quand il y en a une. */}
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5">
+        <input
+          type="checkbox"
+          checked={includeJvm}
+          onChange={() => { setDone(null); setIncludeJvm((v) => !v) }}
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-accent"
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-[12.5px] font-semibold text-txt-primary">
+            {t('share.jvmTitle')}
+            {scan.jvmProfile && <span className="font-normal text-txt-muted"> · {scan.jvmProfile}</span>}
+          </p>
+          <JvmSummary jvm={scan.jvm} />
+          {scan.jvmRejected.length > 0 && (
+            <p className="text-[11px] text-warning">
+              ⚠ {t('share.jvmRejectedOut', { count: scan.jvmRejected.length })}{' '}
+              <span className="break-all font-mono text-[10.5px]">{scan.jvmRejected.join(' ')}</span>
+            </p>
+          )}
+        </div>
+      </label>
 
       <div className="flex flex-col gap-2">
         {groups.map(({ group, items }) => {

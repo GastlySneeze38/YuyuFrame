@@ -1743,6 +1743,16 @@ export const fr = {
     openInstance: "Voir l'instance",
     importEntry: 'Instance partagée',
     importEntryDesc: 'Un fichier .mrpack ou un lien yuyuframe:// reçu de quelqu’un',
+    jvmTitle: 'Configuration Java',
+    jvmAuto: 'auto',
+    jvmReplace: 'remplace les arguments du launcher',
+    jvmNoArgs: 'Aucun argument personnalisé.',
+    jvmRejectedOut:
+      "{{count}} argument(s) ne seront pas partagés : ils désignent un fichier, un dossier ou une commande, et n'auraient pas de sens sur un autre PC (ou serviraient à y lancer autre chose que le jeu).",
+    jvmApply: 'Appliquer la configuration Java de cette instance',
+    jvmDefault: 'Décoché : réglages Java par défaut du launcher, avec {{ram}} de mémoire.',
+    jvmRejectedIn:
+      "{{count}} argument(s) Java du pack ont été écartés pour ta sécurité (ils pourraient lancer un programme ou lire un fichier sur ton PC) :",
   },
 }
 

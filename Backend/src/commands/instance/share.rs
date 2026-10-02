@@ -169,6 +169,11 @@ pub struct ShareScan {
     /// comptés comme embarqués, et l'interface le dit — sinon le pack
     /// gonflerait sans explication.
     pub lookup_failed: bool,
+    /// Configuration Java qui partira, déjà filtrée.
+    pub jvm: JvmShare,
+    /// Arguments JVM qui ne partiront pas (filtre de sécurité).
+    pub jvm_rejected: Vec<String>,
+    pub jvm_profile: Option<String>,
 }
 
 /// Élément trouvé sur le disque, avant d'avoir cherché où il se télécharge.
@@ -456,18 +461,32 @@ struct Scanned {
     instance: Instance,
     entries: Vec<(Entry, Option<String>)>,
     lookup_failed: bool,
+    /// Configuration Java déjà filtrée, et ce que le filtre a retiré.
+    jvm: JvmShare,
+    jvm_rejected: Vec<String>,
+    /// Nom de la config JVM reliée, s'il y en a une.
+    jvm_profile: Option<String>,
 }
 
 async fn scan(state: &tauri::State<'_, SharedState>, instance_id: &str) -> Result<Scanned, String> {
-    let instance = {
+    let (instance, profile) = {
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
-        db::instance_get(&db, instance_id, uid)
+        let instance = db::instance_get(&db, instance_id, uid)
             .map_err(|e| e.to_string())?
             .map(row_to_instance)
-            .ok_or("Instance introuvable")?
+            .ok_or("Instance introuvable")?;
+        // Une config supprimée laisse un id orphelin : comme au lancement, on
+        // retombe sur les réglages de l'instance.
+        let profile = instance
+            .jvm_profile_id
+            .as_deref()
+            .and_then(|id| db::jvm_profile_get(&db, id, uid).ok().flatten());
+        (instance, profile)
     };
+    let (jvm, jvm_rejected) = sanitize_jvm(effective_jvm(&instance, profile.as_ref()));
+    let jvm_profile = profile.map(|p| p.name);
     let dir = instance_dir(instance_id);
     let entries = tokio::task::spawn_blocking(move || {
         inventory(&dir)
@@ -486,7 +505,7 @@ async fn scan(state: &tauri::State<'_, SharedState>, instance_id: &str) -> Resul
         .filter_map(|(e, h)| h.as_ref().map(|h| (h.clone(), e.abs.clone())))
         .collect();
     let lookup_failed = resolve(state, &to_resolve).await;
-    Ok(Scanned { instance, entries, lookup_failed })
+    Ok(Scanned { instance, entries, lookup_failed, jvm, jvm_rejected, jvm_profile })
 }
 
 fn item_of(entry: &Entry, sha1: Option<&String>) -> ShareItem {
@@ -514,7 +533,167 @@ pub async fn instance_share_scan(
         loader: scanned.instance.loader,
         items,
         lookup_failed: scanned.lookup_failed,
+        jvm: scanned.jvm,
+        jvm_rejected: scanned.jvm_rejected,
+        jvm_profile: scanned.jvm_profile,
     })
+}
+
+// ── Configuration Java ──────────────────────────────────────────────────────
+//
+// Partagée avec l'instance : RAM, JVM, ramasse-miettes, mode et arguments —
+// ce que le lancement emploie réellement, donc la config JVM reliée si
+// l'instance en a une (`launch.rs` : elle remplace intégralement le bloc de
+// l'instance). Jamais le chemin d'un Java personnalisé : il n'existe que sur
+// la machine de l'expéditeur.
+//
+// **Les arguments passent par une liste blanche**, à l'envoi comme à la
+// réception. Un argument JVM n'est pas un réglage anodin : `-javaagent:`,
+// `-XX:OnOutOfMemoryError=…` ou `-Djava.library.path=` (pointé vers une DLL
+// glissée dans le pack) suffisent à faire exécuter n'importe quoi par la
+// machine qui importe. Ne passe que du réglage — tailles mémoire, drapeaux
+// `-XX:` sans fichier ni commande, propriétés `-D` sans chemin — et ce qui
+// est écarté est montré, des deux côtés. À l'envoi, le filtre protège aussi
+// l'expéditeur : un `-XX:HeapDumpPath=C:\Users\<nom>\…` ne part pas.
+
+/// Configuration Java telle qu'elle voyage.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct JvmShare {
+    pub ram_mb: u32,
+    /// auto | temurin | openj9 | graal
+    pub vendor: String,
+    pub gc_policy: String,
+    /// append | replace — voir `merge_jvm_args`.
+    pub args_mode: String,
+    pub args: Vec<String>,
+}
+
+const JVM_VENDORS: &[&str] = &["auto", "temurin", "openj9", "graal"];
+const RAM_RANGE: std::ops::RangeInclusive<u32> = 512..=65_536;
+
+/// Morceaux de nom de drapeau `-XX:` refusés : tout ce qui lance une commande,
+/// lit ou écrit un fichier, ou charge du code. Pas « options » : il bloquait
+/// `-XX:+UnlockExperimentalVMOptions`, présent dans presque tous les jeux de
+/// drapeaux, et `VMOptionsFile` tombe déjà sur « file ».
+const XX_BLOCKED: &[&str] = &[
+    "onerror", "onoutofmemory", "file", "path", "log", "dump", "flags", "command",
+    "library", "agent", "recording", "archive", "exec", "script",
+];
+
+/// Préfixes de propriétés `-D` refusés : celles de la JVM et de LWJGL règlent
+/// le chargement des classes et des bibliothèques natives.
+const D_BLOCKED_PREFIXES: &[&str] = &["java.", "jdk.", "sun.", "javax.", "com.sun.", "org.lwjgl."];
+/// Morceaux de nom de propriété `-D` refusés (même raison que `XX_BLOCKED`).
+const D_BLOCKED: &[&str] = &[
+    "path", "file", "dir", "home", "class", "agent", "library", "loader", "security",
+    "ssl", "config", "proxy", "url", "host",
+];
+
+fn plain_value(v: &str) -> bool {
+    !v.is_empty() && v.len() <= 64 && v.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | ',' | '_' | '+' | '-'))
+}
+
+fn plain_name(v: &str) -> bool {
+    !v.is_empty() && v.len() <= 80 && v.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// `4G`, `512m`, `1024` — une taille mémoire de la JVM.
+fn memory_size(v: &str) -> bool {
+    let digits = v.trim_end_matches(['k', 'K', 'm', 'M', 'g', 'G', 't', 'T']);
+    !digits.is_empty() && digits.len() + 1 >= v.len() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Un argument JVM peut-il venir de quelqu'un d'autre ?
+fn jvm_arg_allowed(arg: &str) -> bool {
+    if let Some(rest) = arg.strip_prefix("-XX:") {
+        let (name, value) = match rest.strip_prefix(['+', '-']) {
+            Some(flag) => (flag, None),
+            None => match rest.split_once('=') {
+                Some((n, v)) => (n, Some(v)),
+                None => return false,
+            },
+        };
+        let lower = name.to_ascii_lowercase();
+        return name.chars().all(|c| c.is_ascii_alphanumeric())
+            && !name.is_empty()
+            && value.map_or(true, plain_value)
+            && !XX_BLOCKED.iter().any(|b| lower.contains(b));
+    }
+    if let Some(rest) = arg.strip_prefix("-D") {
+        let (key, value) = match rest.split_once('=') {
+            Some((k, v)) => (k, Some(v)),
+            None => (rest, None),
+        };
+        let lower = key.to_ascii_lowercase();
+        return plain_name(key)
+            && value.map_or(true, plain_value)
+            && !D_BLOCKED_PREFIXES.iter().any(|p| lower.starts_with(p))
+            && !D_BLOCKED.iter().any(|b| lower.contains(b));
+    }
+    for prefix in ["-Xmx", "-Xms", "-Xmn", "-Xss"] {
+        if let Some(size) = arg.strip_prefix(prefix) {
+            return memory_size(size);
+        }
+    }
+    for prefix in ["-Xgcpolicy:", "-Xtune:"] {
+        if let Some(word) = arg.strip_prefix(prefix) {
+            return word.chars().all(|c| c.is_ascii_alphanumeric()) && !word.is_empty();
+        }
+    }
+    matches!(arg, "-Xdisableexplicitgc" | "-Xnoclassgc")
+}
+
+/// Ramène une configuration à ce qui peut voyager. Rend aussi les arguments
+/// écartés, pour les montrer.
+fn sanitize_jvm(raw: JvmShare) -> (JvmShare, Vec<String>) {
+    let (args, rejected): (Vec<String>, Vec<String>) = raw.args.into_iter().partition(|a| jvm_arg_allowed(a));
+    let clean = JvmShare {
+        ram_mb: raw.ram_mb.clamp(*RAM_RANGE.start(), *RAM_RANGE.end()),
+        vendor: if JVM_VENDORS.contains(&raw.vendor.as_str()) { raw.vendor } else { "auto".into() },
+        gc_policy: if raw.gc_policy.len() <= 32 && raw.gc_policy.chars().all(|c| c.is_ascii_alphanumeric()) && !raw.gc_policy.is_empty() {
+            raw.gc_policy
+        } else {
+            "auto".into()
+        },
+        args_mode: if raw.args_mode == "replace" { "replace".into() } else { "append".into() },
+        args,
+    };
+    (clean, rejected)
+}
+
+/// La configuration que le lancement emploierait (voir `launch.rs`).
+fn effective_jvm(instance: &Instance, profile: Option<&db::JvmProfileRow>) -> JvmShare {
+    use crate::minecraft::launcher::parse_user_jvm_args;
+    match profile {
+        Some(p) => JvmShare {
+            ram_mb: p.ram_mb.unwrap_or(instance.ram_mb),
+            vendor: p.jvm_vendor.clone(),
+            gc_policy: p.gc_policy.clone(),
+            args_mode: p.args_mode.clone(),
+            args: parse_user_jvm_args(&p.all_args()),
+        },
+        None => JvmShare {
+            ram_mb: instance.ram_mb,
+            vendor: instance.jvm_vendor.clone(),
+            gc_policy: instance.gc_policy.clone(),
+            args_mode: instance.jvm_args_mode.clone(),
+            args: parse_user_jvm_args(&instance.jvm_extra_args),
+        },
+    }
+}
+
+/// Fichier propre à YuyuFrame à la racine du `.mrpack` : le format Modrinth
+/// n'a rien pour la JVM, et les autres launchers ignorent ce qu'ils ne
+/// connaissent pas à cet endroit.
+const YUYU_FILE: &str = "yuyuframe.json";
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct YuyuExtras {
+    format_version: u32,
+    #[serde(default)]
+    jvm: Option<JvmShare>,
 }
 
 // ── Version du loader ───────────────────────────────────────────────────────
@@ -649,9 +828,11 @@ pub async fn instance_share_export(
     state: tauri::State<'_, SharedState>,
     instance_id: String,
     paths: Vec<String>,
+    include_jvm: bool,
     file_path: String,
 ) -> Result<ShareExport, String> {
     let scanned = scan(&state, &instance_id).await?;
+    let extras = include_jvm.then(|| YuyuExtras { format_version: 1, jvm: Some(scanned.jvm.clone()) });
     let loader_version = loader_version_of(&scanned.instance).await?;
     let chosen = selection(&scanned, &paths);
 
@@ -711,6 +892,11 @@ pub async fn instance_share_export(
             zip.start_file("modrinth.index.json", options).map_err(|e| e.to_string())?;
             zip.write_all(&serde_json::to_vec_pretty(&index).map_err(|e| e.to_string())?)
                 .map_err(|e| e.to_string())?;
+            if let Some(extras) = &extras {
+                zip.start_file(YUYU_FILE, options).map_err(|e| e.to_string())?;
+                zip.write_all(&serde_json::to_vec_pretty(extras).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            }
             for (abs, rel) in &embedded {
                 zip.start_file(format!("overrides/{rel}"), options).map_err(|e| e.to_string())?;
                 let mut file = std::fs::File::open(abs).map_err(|e| format!("{rel} : {e}"))?;
@@ -815,6 +1001,7 @@ pub async fn instance_share_link(
     state: tauri::State<'_, SharedState>,
     instance_id: String,
     paths: Vec<String>,
+    include_jvm: bool,
 ) -> Result<String, String> {
     let scanned = scan(&state, &instance_id).await?;
     let loader_version = loader_version_of(&scanned.instance).await?;
@@ -841,6 +1028,17 @@ pub async fn instance_share_link(
         .append_pair("l", &scanned.instance.loader)
         .append_pair("lv", &loader_version)
         .append_pair("f", &tokens);
+    // Configuration Java : courte (une RAM, trois mots, quelques drapeaux),
+    // elle tient dans le lien sans le rallonger notablement.
+    if include_jvm {
+        let jvm = &scanned.jvm;
+        url.query_pairs_mut()
+            .append_pair("ram", &jvm.ram_mb.to_string())
+            .append_pair("jv", &jvm.vendor)
+            .append_pair("gc", &jvm.gc_policy)
+            .append_pair("jm", &jvm.args_mode)
+            .append_pair("ja", &jvm.args.join(" "));
+    }
     Ok(url.to_string())
 }
 
@@ -900,6 +1098,20 @@ struct Pack {
     /// Fichiers ignorés : chemin refusé, adresse hors des plateformes, version
     /// introuvable.
     rejected: Vec<String>,
+    /// Configuration Java jointe, déjà filtrée, et les arguments écartés.
+    jvm: Option<JvmShare>,
+    jvm_rejected: Vec<String>,
+}
+
+/// Filtre une configuration reçue ; rend aussi ce qui a été écarté.
+fn received_jvm(raw: Option<JvmShare>) -> (Option<JvmShare>, Vec<String>) {
+    match raw {
+        Some(raw) => {
+            let (clean, rejected) = sanitize_jvm(raw);
+            (Some(clean), rejected)
+        }
+        None => (None, Vec::new()),
+    }
 }
 
 fn read_mrpack(path: &Path) -> Result<Pack, String> {
@@ -922,6 +1134,15 @@ fn read_mrpack(path: &Path) -> Result<Pack, String> {
         .cloned()
         .ok_or("Ce pack n'indique pas sa version de Minecraft")?;
     let (loader, loader_version) = loader_from_dependencies(&index.dependencies);
+
+    // Fichier propre à YuyuFrame, facultatif : un pack venu d'ailleurs n'en a
+    // pas, et un fichier illisible vaut « pas de configuration Java ».
+    let extras: Option<YuyuExtras> = archive.by_name(YUYU_FILE).ok().and_then(|mut entry| {
+        let mut content = String::new();
+        entry.read_to_string(&mut content).ok()?;
+        serde_json::from_str(&content).ok()
+    });
+    let (jvm, jvm_rejected) = received_jvm(extras.and_then(|e| e.jvm));
 
     let mut rejected = Vec::new();
     let mut files = Vec::new();
@@ -976,6 +1197,8 @@ fn read_mrpack(path: &Path) -> Result<Pack, String> {
         overrides,
         archive: Some(path.to_path_buf()),
         rejected,
+        jvm,
+        jvm_rejected,
     })
 }
 
@@ -994,6 +1217,13 @@ async fn read_link(link: &str) -> Result<Pack, String> {
         return Err("Lien de partage abîmé".into());
     }
     let tokens = decode_tokens(params.get("f").map(String::as_str).unwrap_or_default())?;
+    let (jvm, jvm_rejected) = received_jvm(params.get("ram").map(|ram| JvmShare {
+        ram_mb: ram.parse().unwrap_or(4096),
+        vendor: params.get("jv").cloned().unwrap_or_default(),
+        gc_policy: params.get("gc").cloned().unwrap_or_default(),
+        args_mode: params.get("jm").cloned().unwrap_or_default(),
+        args: params.get("ja").map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default(),
+    }));
 
     let mut versions: HashMap<String, MrVersion> = HashMap::new();
     if !tokens.is_empty() {
@@ -1054,6 +1284,8 @@ async fn read_link(link: &str) -> Result<Pack, String> {
         overrides: Vec::new(),
         archive: None,
         rejected,
+        jvm,
+        jvm_rejected,
     })
 }
 
@@ -1088,6 +1320,10 @@ pub struct SharePreview {
     pub downloads: Vec<PreviewFile>,
     pub embedded: Vec<PreviewFile>,
     pub rejected: Vec<String>,
+    /// Configuration Java jointe (déjà filtrée), à appliquer ou non.
+    pub jvm: Option<JvmShare>,
+    /// Arguments JVM du pack écartés par le filtre de sécurité.
+    pub jvm_rejected: Vec<String>,
 }
 
 fn source_of(url: &str) -> &'static str {
@@ -1122,6 +1358,8 @@ pub async fn instance_share_preview(source: ShareSource) -> Result<SharePreview,
         loader: pack.loader,
         loader_version: pack.loader_version,
         rejected: pack.rejected,
+        jvm: pack.jvm,
+        jvm_rejected: pack.jvm_rejected,
     })
 }
 
@@ -1197,6 +1435,7 @@ pub async fn instance_share_import(
     source: ShareSource,
     name: String,
     ram_mb: u32,
+    apply_jvm: bool,
 ) -> Result<ShareImport, String> {
     use futures::StreamExt;
     use tauri::Emitter;
@@ -1207,18 +1446,22 @@ pub async fn instance_share_import(
         .or_else(|| Some(pack.name.trim().to_string()).filter(|n| !n.is_empty()))
         .unwrap_or_else(|| "Instance partagée".to_string());
 
+    // La configuration Java reçue a déjà passé le filtre (`received_jvm`) ;
+    // elle ne s'applique que si l'utilisateur l'a gardée cochée. Sinon les
+    // réglages par défaut du launcher, et la RAM choisie de ce côté-ci.
+    let jvm = pack.jvm.clone().filter(|_| apply_jvm);
     let mut instance = super::crud::instance_create(
         state.clone(),
         name,
         pack.mc_version.clone(),
         pack.loader.clone(),
-        ram_mb,
+        jvm.as_ref().map_or(ram_mb, |j| j.ram_mb),
         Some(pack.summary.clone()),
+        jvm.as_ref().map(|j| j.vendor.clone()),
         None,
-        None,
-        None,
-        None,
-        None,
+        jvm.as_ref().map(|j| j.gc_policy.clone()),
+        jvm.as_ref().map(|j| j.args.join("\n")),
+        jvm.as_ref().map(|j| j.args_mode.clone()),
     )
     .await?;
 
@@ -1365,6 +1608,54 @@ mod tests {
         assert!(matches_hashes(data, Some("0000"), Some(&sha512)));
         assert!(!matches_hashes(data, Some(&sha1), Some("00")));
         assert!(!matches_hashes(b"other", Some(&sha1), None));
+    }
+
+    /// Des réglages courants, tirés des jeux de drapeaux qui circulent
+    /// (Aikar, Graal, ZGC) : ils doivent passer.
+    #[test]
+    fn arguments_jvm_de_reglage_acceptes() {
+        for arg in [
+            "-Xmx6G", "-Xms4096m", "-Xss2m", "-XX:+UseG1GC", "-XX:+UnlockExperimentalVMOptions",
+            "-XX:MaxGCPauseMillis=50", "-XX:G1NewSizePercent=30", "-XX:-DontCompileHugeMethods",
+            "-XX:+UseZGC", "-XX:+ZGenerational", "-XX:+AlwaysPreTouch", "-Xgcpolicy:gencon",
+            "-Xdisableexplicitgc", "-Dfml.ignoreInvalidMinecraftCertificates=true",
+            "-Dlog4j2.formatMsgNoLookups=true",
+        ] {
+            assert!(jvm_arg_allowed(arg), "{arg}");
+        }
+    }
+
+    /// De quoi faire exécuter du code ou écrire un fichier : jamais.
+    #[test]
+    fn arguments_jvm_dangereux_refuses() {
+        for arg in [
+            "-javaagent:C:/evil.jar", "-agentlib:jdwp=transport=dt_socket", "-agentpath:x.dll",
+            "-XX:OnOutOfMemoryError=calc.exe", "-XX:OnError=cmd", "-XX:ErrorFile=C:/x.log",
+            "-XX:HeapDumpPath=C:/Users/moi", "-XX:+HeapDumpOnOutOfMemoryError", "-XX:Flags=x",
+            "-XX:VMOptionsFile=x", "-XX:CompileCommand=x", "-XX:StartFlightRecording=filename=x",
+            "-Djava.library.path=mods", "-Dorg.lwjgl.librarypath=x", "-Djava.system.class.loader=Evil",
+            "-Dlog4j.configurationFile=http://x", "-Dfoo=C:/bar", "-Dfoo=a/b", "-cp", "evil.jar",
+            "@argfile", "--add-opens=java.base/java.lang=ALL-UNNAMED", "-jar", "-Xmx4GG", "-Xbootclasspath/a:x",
+        ] {
+            assert!(!jvm_arg_allowed(arg), "{arg}");
+        }
+    }
+
+    #[test]
+    fn configuration_jvm_assainie() {
+        let (clean, rejected) = sanitize_jvm(JvmShare {
+            ram_mb: 999_999,
+            vendor: "custom".into(),
+            gc_policy: "g1 ; rm".into(),
+            args_mode: "n'importe quoi".into(),
+            args: vec!["-XX:+UseG1GC".into(), "-javaagent:x.jar".into()],
+        });
+        assert_eq!(clean.ram_mb, 65_536);
+        assert_eq!(clean.vendor, "auto");
+        assert_eq!(clean.gc_policy, "auto");
+        assert_eq!(clean.args_mode, "append");
+        assert_eq!(clean.args, vec!["-XX:+UseG1GC".to_string()]);
+        assert_eq!(rejected, vec!["-javaagent:x.jar".to_string()]);
     }
 
     #[test]

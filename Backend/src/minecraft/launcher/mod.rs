@@ -24,6 +24,9 @@ pub use java::{
     install_java_runtime, java_requirement, resolve_existing_java,
 };
 pub use agent_compat::{blocked_by as agent_blocked_by, AgentBlock, MIN_JAVA as AGENT_MIN_JAVA};
+// Le partage d'instance (`commands::instance::share`) lit les arguments JVM
+// exactement comme le lancement les découpera.
+pub(crate) use jvm_args::parse_user_jvm_args;
 pub use agent_deploy::deploy_bundled_agent;
 pub use orchestrator::{download_and_launch, minecraft_dir, preview_jvm_config, LAUNCH_CANCELLED_MSG};
 pub use progress::{register_console_waiter, signal_console_ready};

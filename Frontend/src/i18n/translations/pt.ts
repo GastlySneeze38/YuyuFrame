@@ -1730,5 +1730,15 @@ export const pt: TranslationSchema = {
     openInstance: 'Ver a instância',
     importEntry: 'Instância compartilhada',
     importEntryDesc: 'Um arquivo .mrpack ou um link yuyuframe:// que alguém enviou para você',
+    jvmTitle: 'Configuração do Java',
+    jvmAuto: 'auto',
+    jvmReplace: 'substitui os argumentos do launcher',
+    jvmNoArgs: 'Nenhum argumento personalizado.',
+    jvmRejectedOut:
+      '{{count}} argumento(s) não serão compartilhados: apontam para um arquivo, uma pasta ou um comando, e não fariam sentido em outro PC (ou poderiam ser usados para executar lá algo além do jogo).',
+    jvmApply: 'Aplicar a configuração do Java desta instância',
+    jvmDefault: 'Desmarcado: configurações padrão do Java do launcher, com {{ram}} de memória.',
+    jvmRejectedIn:
+      '{{count}} argumento(s) do Java do pack foram descartados para a sua segurança (poderiam executar um programa ou ler um arquivo no seu PC):',
   },
 }
