@@ -139,6 +139,73 @@ const MOJANG_JAVA_MANIFEST: &str =
 /// `JvmVendor::Graal`) ; `Temurin` (le défaut) et tous les replis best-effort
 /// partagent la même résolution : JAVA_HOME → install système → runtime
 /// Mojang en cache → téléchargement Mojang.
+/// Ce qu'on peut dire d'une installation Java sans la lancer pour de bon.
+///
+/// Trois questions, de la moins chère à la plus chère, parce qu'elles
+/// n'échouent pas pour les mêmes raisons : le fichier est-il là, le dossier
+/// qui l'entoure est-il complet (une extraction interrompue laisse un
+/// `java.exe` orphelin, sans `jvm.dll` — il existe et ne démarrera jamais), et
+/// la JVM répond-elle quand on l'interroge.
+pub struct JavaInspection {
+    pub path: String,
+    pub exists: bool,
+    /// `None` quand la question n'a pas de sens : un `java` trouvé par le
+    /// `PATH` n'a pas de dossier de runtime à inspecter.
+    pub complete: Option<bool>,
+    /// Version majeure rendue par la JVM elle-même, si elle a répondu.
+    pub major: Option<u32>,
+}
+
+/// Examine une installation Java — voir [`JavaInspection`].
+pub async fn inspect_java(path: &str) -> JavaInspection {
+    let exe = Path::new(path);
+    let exists = exe.exists();
+    let complete = exe
+        .parent()
+        .and_then(Path::parent)
+        .map(|home| runtime_is_complete(home, exe));
+    // On n'interroge pas un fichier absent : le processus échouerait de toute
+    // façon, et l'attente de cinq secondes serait gratuite.
+    let major = if exists || !path.contains(std::path::MAIN_SEPARATOR) {
+        detect_java_major_version(path).await
+    } else {
+        None
+    };
+    JavaInspection { path: path.to_string(), exists, complete, major }
+}
+
+/// Installe une version de Java **choisie**, à côté des runtimes gérés.
+///
+/// Le launcher sait déjà télécharger un JRE Eclipse Temurin et un OpenJ9 pour
+/// ses propres besoins ; ici c'est l'utilisateur qui dit lequel et en quelle
+/// version majeure. Chaque combinaison a son dossier
+/// (`runtime/custom-temurin-21`), donc en installer une n'écrase pas une
+/// autre, et une installation déjà complète n'est pas retéléchargée.
+///
+/// Ne touche pas au réglage de l'instance : l'appelant décide d'y poser le
+/// chemin obtenu, ce qui laisse le geste réversible.
+pub async fn install_custom_java(major: u32, vendor: &str) -> Result<String> {
+    let jvm_impl = if vendor == "openj9" { "openj9" } else { "hotspot" };
+    let dir = super::minecraft_dir()
+        .join("runtime")
+        .join(format!("custom-{jvm_impl}-{major}"));
+    let exe = dir.join("bin").join(java_exe_name());
+
+    if runtime_is_complete(&dir, &exe) {
+        return Ok(exe.to_string_lossy().to_string());
+    }
+
+    let client = crate::minecraft::http::short_lived_client();
+    download_adoptium(major, jvm_impl, &dir, &client).await?;
+    if !exe.exists() {
+        return Err(anyhow!(
+            "Installation terminée mais aucun exécutable Java dans {}",
+            dir.display()
+        ));
+    }
+    Ok(exe.to_string_lossy().to_string())
+}
+
 /// Installe le runtime recommandé pour ce couple (composant, version).
 ///
 /// Façade au-dessus d'[`ensure_java`] pour l'écran « Java et mémoire » :

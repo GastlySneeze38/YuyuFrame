@@ -456,6 +456,8 @@ pub fn run() {
             commands::instance::java::instance_set_java_path,
             commands::instance::java::instance_install_java,
             commands::instance::java::java_probe,
+            commands::instance::java::instance_java_inspect,
+            commands::instance::java::instance_install_custom_java,
             commands::instance::repair::instance_diagnose,
             commands::instance::repair::instance_repair,
             commands::sync::push_pull::sync_list_instances,

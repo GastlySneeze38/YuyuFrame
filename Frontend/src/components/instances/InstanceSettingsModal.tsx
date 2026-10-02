@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
-import type { HealthCheck, Instance, JavaStatus, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
+import type { HealthCheck, Instance, JavaReport, JavaStatus, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
+import { Button } from '@/components/ui/Button'
 import { CloseButton } from '@/components/ui/CloseButton'
 import { RamPicker, type RamStatus } from '@/components/ui/RamPicker'
 import { showError } from '@/stores/useErrorToast'
@@ -523,7 +524,9 @@ function ActionButton({
 function JavaField({ instance }: { instance: Instance }) {
   const t = useT()
   const [status, setStatus] = useState<JavaStatus | null>(null)
-  const [busy, setBusy] = useState<'install' | 'detect' | 'browse' | null>(null)
+  const [report, setReport] = useState<JavaReport | null>(null)
+  const [customOpen, setCustomOpen] = useState(false)
+  const [busy, setBusy] = useState<'install' | 'detect' | 'browse' | 'analyse' | null>(null)
 
   const load = () => {
     api.instances.javaStatus(instance.id).then(setStatus).catch(() => setStatus(null))
@@ -533,6 +536,7 @@ function JavaField({ instance }: { instance: Instance }) {
   useEffect(load, [instance.id, instance.mc_version, instance.loader, instance.jvm_custom_path])
 
   const apply = async (path: string | null) => {
+    setReport(null)
     try {
       setStatus(await api.instances.setJavaPath(instance.id, path))
     } catch (e) {
@@ -540,8 +544,22 @@ function JavaField({ instance }: { instance: Instance }) {
     }
   }
 
+  /** Le rapport est jeté dès qu'on touche au chemin : il décrirait une
+   *  installation qui n'est plus celle qu'on regarde. */
+  const analyse = async () => {
+    setBusy('analyse')
+    try {
+      setReport(await api.instances.inspectJava(instance.id))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const install = async () => {
     setBusy('install')
+    setReport(null)
     try {
       setStatus(await api.instances.installJava(instance.id))
     } catch (e) {
@@ -640,6 +658,22 @@ function JavaField({ instance }: { instance: Instance }) {
           </svg>
           {t('instancesPage.javaBrowse')}
         </SmallAction>
+        {/* Le pendant de « Réparer » pour Java : le lancement se contente de
+            trouver un exécutable, alors qu'une extraction interrompue laisse
+            un java sans sa bibliothèque de machine virtuelle — présent, et
+            incapable de démarrer. */}
+        <SmallAction onClick={analyse} busy={busy === 'analyse'} disabled={busy !== null || !status?.path}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" width={13} height={13}>
+            <path d="M3 13h4l2 5 4-12 2 7h6" />
+          </svg>
+          {t('instancesPage.javaAnalyse')}
+        </SmallAction>
+        <SmallAction onClick={() => setCustomOpen(true)} busy={false} disabled={busy !== null}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" width={13} height={13}>
+            <path d="M12 3v12M7 11l5 5 5-5M5 20h14" /><circle cx="18" cy="6" r="2.5" />
+          </svg>
+          {t('instancesPage.javaCustomInstall')}
+        </SmallAction>
         {/* Seulement quand il y a quelque chose à retirer : un bouton
             « automatique » alors qu'on y est déjà n'apprendrait rien. */}
         {status?.source === 'custom' && (
@@ -648,7 +682,151 @@ function JavaField({ instance }: { instance: Instance }) {
           </SmallAction>
         )}
       </div>
+
+      {/* Le rapport reste affiché jusqu'au geste suivant : on l'a demandé, il
+          n'a pas à disparaître tout seul. */}
+      {report && (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface-2 p-3">
+          <ReportLine ok={report.exists} label={t('instancesPage.javaCheckExists')} />
+          <ReportLine
+            ok={report.complete !== false}
+            label={t('instancesPage.javaCheckComplete')}
+            note={report.complete === null ? t('instancesPage.javaCheckNotApplicable') : undefined}
+          />
+          <ReportLine
+            ok={report.major === report.required_major}
+            label={t('instancesPage.javaCheckResponds')}
+            note={report.major ? `Java ${report.major}` : t('instancesPage.javaCheckNoAnswer')}
+          />
+        </div>
+      )}
+
+      <AnimatePresence>
+        {customOpen && (
+          <CustomJavaModal
+            instanceId={instance.id}
+            requiredMajor={status?.required_major ?? 21}
+            onClose={() => setCustomOpen(false)}
+            onInstalled={(next) => { setStatus(next); setReport(null); setCustomOpen(false) }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+/** Une ligne du rapport : ce qui a été vérifié, et le verdict. */
+function ReportLine({ ok, label, note }: { ok: boolean; label: string; note?: string }) {
+  return (
+    <div className="flex items-center gap-2.5 text-[12px]">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ok ? 'bg-[rgb(134,239,172)]' : 'bg-danger'}`} />
+      <span className="flex-1 text-txt-secondary">{label}</span>
+      {note && <span className="shrink-0 text-[11px] text-txt-muted">{note}</span>}
+    </div>
+  )
+}
+
+/**
+ * Installer une version de Java choisie.
+ *
+ * Deux décisions, et pas une de plus : qui le publie, et quelle version
+ * majeure. Le reste — système d'exploitation, architecture, build — se déduit
+ * de la machine, et le demander ne ferait que multiplier les façons de se
+ * tromper.
+ *
+ * La version requise par l'instance est proposée en premier et marquée :
+ * installer autre chose est légitime (tester une JVM plus récente), mais ça
+ * ne doit pas se faire par inadvertance, d'où l'avertissement quand on s'en
+ * écarte.
+ */
+function CustomJavaModal({
+  instanceId,
+  requiredMajor,
+  onClose,
+  onInstalled,
+}: {
+  instanceId: string
+  requiredMajor: number
+  onClose: () => void
+  onInstalled: (status: JavaStatus) => void
+}) {
+  const t = useT()
+  const [vendor, setVendor] = useState<'hotspot' | 'openj9'>('hotspot')
+  const [major, setMajor] = useState(requiredMajor)
+  const [busy, setBusy] = useState(false)
+
+  // Les versions à support long, plus celle qu'exige l'instance si elle n'y
+  // est pas : une liste figée laisserait de côté la seule qui compte vraiment.
+  const majors = [...new Set([requiredMajor, 8, 11, 17, 21, 25])].sort((a, b) => a - b)
+
+  const install = async () => {
+    setBusy(true)
+    try {
+      onInstalled(await api.instances.installCustomJava(instanceId, major, vendor))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ModalShell title={t('instancesPage.javaCustomInstall')} onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col gap-4">
+        <p className="text-[12.5px] leading-relaxed text-txt-secondary">
+          {t('instancesPage.javaCustomDesc')}
+        </p>
+
+        <Field label={t('instancesPage.javaVendor')}>
+          <div className="flex gap-1.5">
+            {([
+              { id: 'hotspot' as const, label: 'Eclipse Temurin' },
+              { id: 'openj9' as const, label: 'OpenJ9' },
+            ]).map((v) => (
+              <button
+                key={v.id}
+                onClick={() => setVendor(v.id)}
+                className={`h-10 flex-1 rounded-xl border text-[12.5px] font-semibold transition-colors ${
+                  vendor === v.id
+                    ? 'border-accent/70 bg-accent/30 text-txt-primary'
+                    : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label={t('instancesPage.javaMajor')}>
+          <Select
+            value={String(major)}
+            onChange={(v) => setMajor(Number(v))}
+            options={majors.map((m) => ({
+              value: String(m),
+              label: m === requiredMajor
+                ? t('instancesPage.javaMajorRequired', { major: m })
+                : `Java ${m}`,
+            }))}
+          />
+        </Field>
+
+        {major !== requiredMajor && (
+          <div className="flex gap-2.5 rounded-xl border border-warning/35 bg-warning/10 p-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={15} height={15} className="mt-px shrink-0 text-warning">
+              <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
+            </svg>
+            <p className="text-[11.5px] leading-relaxed text-txt-secondary">
+              {t('instancesPage.javaMajorMismatch', { major, required: requiredMajor })}
+            </p>
+          </div>
+        )}
+
+        <Button variant="primary" onClick={install} loading={busy} fullWidth>
+          {t('instancesPage.javaCustomAction')}
+        </Button>
+      </div>
+    </ModalShell>
   )
 }
 

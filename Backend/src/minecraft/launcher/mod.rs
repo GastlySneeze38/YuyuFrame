@@ -20,8 +20,8 @@ pub use classpath::{artifact_path, download_verified, should_download_library};
 // L'écran « Java et mémoire » montre, vérifie et installe le runtime que le
 // lancement emploierait — il passe donc par les mêmes fonctions que lui.
 pub use java::{
-    detect_java_major_version, find_system_java_verified, install_java_runtime, java_requirement,
-    resolve_existing_java,
+    detect_java_major_version, find_system_java_verified, inspect_java, install_custom_java,
+    install_java_runtime, java_requirement, resolve_existing_java,
 };
 pub use agent_compat::{blocked_by as agent_blocked_by, AgentBlock, MIN_JAVA as AGENT_MIN_JAVA};
 pub use agent_deploy::deploy_bundled_agent;

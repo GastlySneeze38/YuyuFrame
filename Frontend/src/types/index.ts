@@ -159,6 +159,26 @@ export interface JavaStatus {
 }
 
 /**
+ * Le rapport d'intégrité d'une installation Java — voir
+ * `commands/instance/java.rs`.
+ *
+ * Trois contrôles distincts, parce qu'ils n'échouent pas pour les mêmes
+ * raisons : le fichier est-il là, le dossier qui l'entoure est-il complet (une
+ * extraction interrompue laisse un `java.exe` sans sa bibliothèque de machine
+ * virtuelle — présent, et incapable de démarrer), et la JVM répond-elle.
+ * `complete` vaut `null` quand la question n'a pas de sens, pour un `java`
+ * trouvé par le `PATH`.
+ */
+export interface JavaReport {
+  path: string
+  exists: boolean
+  complete: boolean | null
+  major: number | null
+  required_major: number
+  ok: boolean
+}
+
+/**
  * Un point de contrôle de l'installation — voir `commands/instance/repair.rs`.
  *
  * `status` vaut `ok`, `broken` (présent mais altéré), `missing`, ou `unknown`

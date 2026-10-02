@@ -16,8 +16,8 @@ use std::path::Path;
 
 use crate::db;
 use crate::minecraft::launcher::{
-    detect_java_major_version, find_system_java_verified, install_java_runtime, java_requirement,
-    minecraft_dir, resolve_existing_java,
+    detect_java_major_version, find_system_java_verified, inspect_java, install_custom_java,
+    install_java_runtime, java_requirement, minecraft_dir, resolve_existing_java,
 };
 use crate::state::SharedState;
 
@@ -178,4 +178,70 @@ pub async fn instance_install_java(
         .map_err(|e| e.to_string())?;
 
     instance_java_status(state, instance_id).await
+}
+
+/// Le rapport d'intégrité tel que l'écran l'affiche.
+#[derive(Serialize)]
+pub struct JavaReport {
+    pub path: String,
+    pub exists: bool,
+    /// `null` quand la question n'a pas de sens — un `java` trouvé par le
+    /// `PATH` n'a pas de dossier de runtime à inspecter.
+    pub complete: Option<bool>,
+    pub major: Option<u32>,
+    pub required_major: u32,
+    /// Vrai seulement si les trois contrôles passent et que la version est
+    /// celle attendue.
+    pub ok: bool,
+}
+
+/// Examine l'installation Java que cette instance utiliserait.
+///
+/// Le pendant du bouton « Réparer » pour Java : le lancement se contente de
+/// trouver un exécutable, alors qu'une extraction interrompue laisse un
+/// `java.exe` sans sa bibliothèque de machine virtuelle — présent, et
+/// incapable de démarrer.
+#[tauri::command]
+pub async fn instance_java_inspect(
+    state: tauri::State<'_, SharedState>,
+    instance_id: String,
+) -> Result<JavaReport, String> {
+    let status = instance_java_status(state, instance_id).await?;
+    let Some(path) = status.path else {
+        return Ok(JavaReport {
+            path: String::new(),
+            exists: false,
+            complete: None,
+            major: None,
+            required_major: status.required_major,
+            ok: false,
+        });
+    };
+
+    let report = inspect_java(&path).await;
+    Ok(JavaReport {
+        ok: report.exists
+            && report.complete != Some(false)
+            && report.major == Some(status.required_major),
+        path: report.path,
+        exists: report.exists,
+        complete: report.complete,
+        major: report.major,
+        required_major: status.required_major,
+    })
+}
+
+/// Installe une version de Java choisie, et la pose sur l'instance.
+///
+/// Elle devient le chemin personnalisé : c'est ce que « personnalisé » veut
+/// dire, et ça reste réversible d'un clic (« revenir à l'automatique »).
+#[tauri::command]
+pub async fn instance_install_custom_java(
+    state: tauri::State<'_, SharedState>,
+    instance_id: String,
+    major: u32,
+    vendor: String,
+) -> Result<JavaStatus, String> {
+    let path = install_custom_java(major, &vendor).await.map_err(|e| e.to_string())?;
+    instance_set_java_path(state, instance_id, Some(path)).await
 }

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaStatus, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -362,6 +362,14 @@ export const api = {
     /** La version majeure que rend cet exécutable, ou `null` si ce n'en est
      *  pas un. Pour valider un chemin choisi avec « Parcourir ». */
     probeJava: (path: string) => invoke<number | null>('java_probe', { path }),
+    /** Examine l'installation Java employée : présence, complétude du dossier,
+     *  réponse de la JVM. Le pendant de « Réparer » pour Java — le lancement
+     *  se contente de trouver un exécutable. */
+    inspectJava: (instanceId: string) => invoke<JavaReport>('instance_java_inspect', { instanceId }),
+    /** Installe une version de Java choisie (vendeur + version majeure) et la
+     *  pose sur l'instance comme chemin personnalisé. */
+    installCustomJava: (instanceId: string, major: number, vendor: string) =>
+      invoke<JavaStatus>('instance_install_custom_java', { instanceId, major, vendor }),
     // P1-6 (audit launcher, Phase 6) — aperçu de la ligne de commande réelle,
     // recalculée côté Rust par les mêmes fonctions qu'un vrai lancement.
     previewJvmConfig: (instanceId: string, mcVersion: string, ramMb: number, jvm: JvmFormValues) =>
