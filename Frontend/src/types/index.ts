@@ -159,6 +159,21 @@ export interface JavaStatus {
 }
 
 /**
+ * Ce qu'emporterait une exportation des options — voir
+ * `commands/instance/options_archive.rs`.
+ *
+ * `has_options` à faux veut dire que le jeu n'a jamais été lancé dans cette
+ * instance : c'est la seule raison pour laquelle `options.txt` manque, et
+ * l'écran le dit autrement qu'un « 0 fichier » qui laisserait croire à une
+ * panne.
+ */
+export interface OptionsSummary {
+  files: number
+  has_options: boolean
+  config_files: number
+}
+
+/**
  * Le rapport d'intégrité d'une installation Java — voir
  * `commands/instance/java.rs`.
  *

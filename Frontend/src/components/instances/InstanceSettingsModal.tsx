@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
+import { open as openFileDialog, save as saveFileDialog } from '@tauri-apps/plugin-dialog'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { api } from '@/api/client'
-import type { HealthCheck, Instance, JavaReport, JavaStatus, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
+import type { HealthCheck, Instance, JavaReport, JavaStatus, Loader, LoaderVersion, OptionsSummary, SharedOptionsStatus } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { Button } from '@/components/ui/Button'
@@ -475,6 +476,180 @@ function GameSettings({ instanceId }: { instanceId: string }) {
           </ActionButton>
         }
       />
+
+      <Separator />
+
+      <OptionsTransfer instanceId={instanceId} />
+    </div>
+  )
+}
+
+/**
+ * Emporter et reprendre **toutes** les options de l'instance.
+ *
+ * Le modèle partagé au-dessus ne connaît qu'`options.txt` — ce qu'il faut pour
+ * « mes réglages de base partout », et trop peu pour « donne-moi ta
+ * configuration » : dans un modpack, l'essentiel des réglages vit dans
+ * `config/`, un fichier par mod. D'où une archive, qui se range dans les
+ * téléchargements et se redonne telle quelle.
+ *
+ * L'importation accepte le dépôt direct d'un fichier sur la zone. C'est le
+ * geste naturel quand on reçoit une configuration, et ça évite d'aller la
+ * rechercher dans un sélecteur alors qu'elle est déjà sous la souris.
+ */
+function OptionsTransfer({ instanceId }: { instanceId: string }) {
+  const t = useT()
+  const [summary, setSummary] = useState<OptionsSummary | null>(null)
+  const [busy, setBusy] = useState<'export' | 'import' | null>(null)
+  const [result, setResult] = useState<string | null>(null)
+  const [hovering, setHovering] = useState(false)
+  /** Rectangle de la zone de dépôt, pour savoir si le fichier est au-dessus
+   *  d'elle : l'événement Tauri donne une position dans la fenêtre, pas un
+   *  survol d'élément — la webview ne voit pas ce glisser-déposer. */
+  const dropRef = useRef<HTMLDivElement>(null)
+
+  const refresh = () => {
+    api.instances.optionsSummary(instanceId).then(setSummary).catch(() => setSummary(null))
+  }
+  useEffect(refresh, [instanceId])
+
+  const importFrom = async (path: string) => {
+    setBusy('import')
+    setResult(null)
+    try {
+      const count = await api.instances.importOptions(instanceId, path)
+      setResult(t('instancesPage.optionsImported', { count }))
+      refresh()
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // Le glisser-déposer passe par Tauri et non par le DOM : la webview a le
+  // sien désactivé (c'est le défaut de Tauri 2), et c'est tant mieux — son
+  // événement à lui ne donnerait pas le chemin du fichier, seulement son
+  // contenu, qu'il faudrait relire pour rien.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    let cancelled = false
+
+    const over = (position: { x: number; y: number }) => {
+      const box = dropRef.current?.getBoundingClientRect()
+      if (!box) return false
+      // La position vient en pixels physiques : on la ramène dans le repère
+      // de la page, sinon la zone est fausse dès que l'affichage est agrandi.
+      const x = position.x / window.devicePixelRatio
+      const y = position.y / window.devicePixelRatio
+      return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
+    }
+
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (event.payload.type === 'over') {
+          setHovering(over(event.payload.position))
+          return
+        }
+        if (event.payload.type === 'drop') {
+          const inside = over(event.payload.position)
+          setHovering(false)
+          // Un seul fichier : l'archive OU le `options.txt`. En déposer
+          // plusieurs ne veut rien dire ici, et en choisir un au hasard serait
+          // pire que de ne rien faire.
+          const [file] = event.payload.paths
+          if (inside && file) void importFrom(file)
+          return
+        }
+        setHovering(false)
+      })
+      .then((fn) => {
+        if (cancelled) fn()
+        else unlisten = fn
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [instanceId])
+
+  const exportAll = async () => {
+    const path = await saveFileDialog({
+      defaultPath: `options-${instanceId}.zip`,
+      filters: [{ name: 'Archive', extensions: ['zip'] }],
+    })
+    if (!path) return
+    setBusy('export')
+    setResult(null)
+    try {
+      const count = await api.instances.exportOptions(instanceId, path)
+      setResult(t('instancesPage.optionsExported', { count }))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const pick = async () => {
+    const picked = await openFileDialog({
+      filters: [{ name: t('instancesPage.optionsFile'), extensions: ['zip', 'txt'] }],
+    })
+    if (typeof picked === 'string') await importFrom(picked)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface-2 p-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-muted">
+          {t('instancesPage.optionsTransferTitle')}
+        </p>
+        <p className="text-[12.5px] leading-relaxed text-txt-secondary">
+          {t('instancesPage.optionsTransferDesc')}
+        </p>
+        <p className="mt-1 text-[11.5px] text-txt-muted">
+          {summary === null
+            ? t('common.loading')
+            : summary.files === 0
+              ? t('instancesPage.optionsNone')
+              : t('instancesPage.optionsCount', { files: summary.files, config: summary.config_files })}
+        </p>
+      </div>
+
+      <Row
+        title={t('instancesPage.optionsDownload')}
+        desc={t('instancesPage.optionsDownloadDesc')}
+        action={
+          <ActionButton onClick={exportAll} busy={busy === 'export'} done={false} disabled={summary?.files === 0}>
+            {t('instancesPage.optionsDownloadAction')}
+          </ActionButton>
+        }
+      />
+
+      {/* La zone de dépôt EST le bouton d'importation : deux surfaces pour le
+          même geste demanderaient de choisir laquelle utiliser. */}
+      <button
+        ref={dropRef as unknown as React.RefObject<HTMLButtonElement>}
+        onClick={pick}
+        disabled={busy !== null}
+        className={`flex flex-col items-center gap-1 rounded-xl border border-dashed px-4 py-5 text-center transition-colors ${
+          hovering
+            ? 'border-accent bg-accent/15'
+            : 'border-line-strong bg-surface-2 hover:border-accent/50'
+        } disabled:opacity-50`}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={18} height={18} className={hovering ? 'text-accent-hover' : 'text-txt-muted'}>
+          <path d="M12 16V4M7 9l5-5 5 5M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2" />
+        </svg>
+        <span className="text-[12.5px] font-semibold text-txt-primary">
+          {busy === 'import' ? t('common.loading') : t('instancesPage.optionsImport')}
+        </span>
+        <span className="text-[11px] leading-snug text-txt-muted">{t('instancesPage.optionsImportHint')}</span>
+      </button>
+
+      {result && <p className="text-[12px] text-[rgba(134,239,172,0.85)]">{result}</p>}
     </div>
   )
 }

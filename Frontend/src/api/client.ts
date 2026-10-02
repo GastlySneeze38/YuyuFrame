@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -325,6 +325,22 @@ export const api = {
     startupSync: (mode: string) => invoke<void>('instance_startup_sync', { mode }),
     exportSettings: (instanceId: string) => invoke<void>('instance_export_settings', { instanceId }),
     applySettings: (instanceId: string) => invoke<boolean>('instance_apply_settings', { instanceId }),
+
+    // ── Options complètes (options.txt + config/ des mods) ───────────────
+    // Distinct du modèle partagé juste au-dessus, qui ne connaît qu'
+    // `options.txt` : ici c'est « donne-moi ta configuration », donc une
+    // archive, et les réglages des mods comptent autant que ceux du jeu.
+    /** Ce qu'une exportation emporterait, sans rien écrire. */
+    optionsSummary: (instanceId: string) =>
+      invoke<OptionsSummary>('instance_options_summary', { instanceId }),
+    /** Écrit l'archive au chemin rendu par le sélecteur d'enregistrement, et
+     *  rend le nombre de fichiers emportés. */
+    exportOptions: (instanceId: string, path: string) =>
+      invoke<number>('instance_export_options', { instanceId, path }),
+    /** Reprend des options depuis une archive ou un `options.txt` nu, et rend
+     *  le nombre de fichiers rétablis. */
+    importOptions: (instanceId: string, path: string) =>
+      invoke<number>('instance_import_options', { instanceId, path }),
     /** État du modèle `shared_options.txt` — ce qui décide si « synchroniser
      *  les paramètres Minecraft » a quelque chose à copier. */
     sharedOptionsStatus: () => invoke<SharedOptionsStatus>('shared_options_status'),
