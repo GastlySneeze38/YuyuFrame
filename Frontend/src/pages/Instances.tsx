@@ -8,7 +8,7 @@ import { ModsContent } from '@/pages/Mods'
 import { ImportSourceModal } from '@/components/import/ImportSourceModal'
 import { InstanceCard } from '@/components/instances/InstanceCard'
 import { CreateInstanceModal } from '@/components/instances/CreateInstanceModal'
-import { EditInstanceModal } from '@/components/instances/EditInstanceModal'
+import { InstanceSettingsModal } from '@/components/instances/InstanceSettingsModal'
 import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstanceModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { InstanceCardSkeleton } from '@/components/ui/Skeleton'
@@ -29,12 +29,16 @@ export default function Instances() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [editTarget, setEditTarget] = useState<Instance | null>(null)
+  // L'instance ouverte dans les paramètres est désignée par son identifiant,
+  // pas copiée : la modale montre l'étoile des favoris et le nom, qui changent
+  // pendant qu'elle est ouverte. Une copie serait restée celle de l'ouverture.
+  const [settingsTargetId, setSettingsTargetId] = useState<string | null>(null)
   const [duplicateSource, setDuplicateSource] = useState<Instance | null>(null)
   const [othersExpanded, setOthersExpanded] = useState(true)
   const loaded = useRef(false)
 
   const selectedInstance = instances.find((i) => i.id === selectedInstanceId) ?? null
+  const settingsTarget = instances.find((i) => i.id === settingsTargetId) ?? null
   const favorites = instances.filter((i) => i.favorite)
   const others = instances.filter((i) => !i.favorite)
 
@@ -86,6 +90,10 @@ export default function Instances() {
     } catch (e) { showError(e) }
   }, [updateInstance])
 
+  const handleSettings = useCallback((inst: Instance) => {
+    setSettingsTargetId(inst.id)
+  }, [])
+
   const handleOpenFolder = useCallback((inst: Instance) => {
     api.instances.openFolder(inst.id).catch(showError)
   }, [])
@@ -99,7 +107,7 @@ export default function Instances() {
         onSelect={setSelectedInstanceId}
         onToggleFavorite={handleToggleFavorite}
         onDelete={handleDelete}
-        onEdit={setEditTarget}
+        onSettings={handleSettings}
         onDuplicate={setDuplicateSource}
         onOpenFolder={handleOpenFolder}
       />
@@ -316,15 +324,16 @@ export default function Instances() {
         />
       )}
 
-      {editTarget && (
-        <EditInstanceModal
-          instance={editTarget}
+      {settingsTarget && (
+        <InstanceSettingsModal
+          instance={settingsTarget}
           versions={releaseVersions}
-          onClose={() => setEditTarget(null)}
-          onUpdate={(updated) => {
-            updateInstance(updated)
-            setEditTarget(null)
-          }}
+          onClose={() => setSettingsTargetId(null)}
+          // La modale reste ouverte après un enregistrement : on y vient pour
+          // régler plusieurs choses, et la refermer à chaque fois obligerait à
+          // rouvrir le menu entre deux onglets.
+          onUpdate={updateInstance}
+          onToggleFavorite={handleToggleFavorite}
         />
       )}
 

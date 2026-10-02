@@ -1,11 +1,9 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { api } from '@/api/client'
 import type { Instance } from '@/types'
 import { loaderColor } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
-import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import { SNAP, listItemVariants } from '@/lib/motion'
 import { MenuItem } from './MenuItem'
@@ -19,7 +17,7 @@ export const InstanceCard = memo(function InstanceCard({
   onSelect,
   onToggleFavorite,
   onDelete,
-  onEdit,
+  onSettings,
   onDuplicate,
   onOpenFolder,
 }: {
@@ -28,7 +26,8 @@ export const InstanceCard = memo(function InstanceCard({
   onSelect: (id: string) => void
   onToggleFavorite: (id: string) => void
   onDelete: (id: string) => void
-  onEdit: (instance: Instance) => void
+  /** Ouvre la modale de paramètres — tout ce qui se règle y vit. */
+  onSettings: (instance: Instance) => void
   onDuplicate: (instance: Instance) => void
   onOpenFolder: (instance: Instance) => void
 }) {
@@ -208,23 +207,21 @@ export const InstanceCard = memo(function InstanceCard({
                 >
                   {!confirm ? (
                     <>
+                      {/* Un seul chemin vers tout ce qui se règle. « Modifier
+                          l'instance » et « Exporter mes paramètres » étaient
+                          deux entrées de ce menu, chacune menant à une partie
+                          des réglages ; elles sont devenues deux onglets de la
+                          modale de paramètres. Ne restent ici que les gestes
+                          qui n'ont rien à régler. */}
                       <MenuItem
-                        onClick={() => { setMenuOpen(false); onEdit(instance) }}
-                        label={t('instancesPage.editInstance')}
-                        icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>}
+                        onClick={() => { setMenuOpen(false); onSettings(instance) }}
+                        label={t('instancesPage.settings')}
+                        icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19.14 12.94a7.07 7.07 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.03 7.03 0 00-1.63-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 00-.6.22L2.65 8.84a.5.5 0 00.12.64l2.03 1.58a7.07 7.07 0 000 1.88l-2.03 1.58a.5.5 0 00-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.21.08.47 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z" /></svg>}
                       />
                       <MenuItem
                         onClick={() => { setMenuOpen(false); onDuplicate(instance) }}
                         label={t('instancesPage.duplicate')}
                         icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" /></svg>}
-                      />
-                      <MenuItem
-                        onClick={() => {
-                          setMenuOpen(false)
-                          api.instances.exportSettings(instance.id).catch(showError)
-                        }}
-                        label={t('instancesPage.exportSettings')}
-                        icon={<svg viewBox="0 0 24 24" fill="currentColor" width={13} height={13}><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>}
                       />
                       <MenuItem
                         onClick={() => { setMenuOpen(false); onOpenFolder(instance) }}
