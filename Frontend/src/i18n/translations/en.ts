@@ -1702,12 +1702,9 @@ export const en: TranslationSchema = {
     serversWarning: 'The server list will be shared, with their addresses.',
     saveFile: 'Save the .mrpack file',
     exporting: 'Creating the pack…',
-    copyLink: 'Copy link',
-    linking: 'Preparing the link…',
     linkUnavailable:
       'The link only carries files published on Modrinth: {{count}} checked item(s) are not. Uncheck them, or share the file.',
     fileDone: 'Pack saved: {{linked}} file(s) to download, {{embedded}} included, {{size}} in total.',
-    linkDone: 'Link copied ({{count}} characters).',
     howToReceive:
       'To receive it: Instances → Import an instance → Shared instance. The .mrpack file also opens in Prism Launcher and the Modrinth App.',
     importTitle: 'Import a shared instance',
@@ -1739,5 +1736,43 @@ export const en: TranslationSchema = {
     jvmDefault: 'Unchecked: the launcher’s default Java settings, with {{ram}} of memory.',
     jvmRejectedIn:
       '{{count}} Java argument(s) from the pack were removed for your safety (they could run a program or read a file on your PC):',
+  },
+
+  shareLink: {
+    copy: 'Copy link',
+    preparing: 'Preparing the link…',
+    copied: 'Link copied ({{count}} characters).',
+    tooLongForDiscord:
+      'Too long for a Discord message ({{limit}} characters max): send it as a text file, or paste it directly into YuyuFrame.',
+  },
+
+  optionsShare: {
+    clientTitle: 'YuyuFrame client options',
+    clientDesc:
+      'The settings of the built-in client’s modules (HUD, zoom, crosshair…), in a .properties file — to keep, or to reuse on another instance.',
+    passwordsNever: 'Passwords saved in the Macros module are never exported.',
+    clientExport: 'Download client options',
+    clientExportDesc: 'Saves a .properties file wherever you choose.',
+    clientImport: 'Import client options',
+    clientImportDesc: 'Settings from the file replace yours; the others stay as they are.',
+    importAction: 'Import',
+    clientExported: '{{count}} setting(s) exported.',
+    clientImported: '{{count}} setting(s) imported. They will apply on the next launch.',
+    linkTitle: 'Share by link',
+    linkDesc:
+      'Game options and YuyuFrame client options in a single link, with no file and no server. Whoever receives it pastes it into this tab.',
+    game: 'Game options (options.txt)',
+    client: 'YuyuFrame client options',
+    linkPrivacy:
+      'Never in the link: passwords and macros from the Macros module, and the address of the last server you joined.',
+    applyTitle: 'Apply an options link you received',
+    gameCount: 'Game options ({{count}} settings)',
+    clientCount: 'YuyuFrame client options ({{count}} settings)',
+    applyMerge: 'Each setting in the link replaces yours; the ones it does not contain stay as they are.',
+    applyAction: 'Apply to this instance',
+    applied: 'Applied: {{game}} game option(s), {{client}} client option(s).',
+    modalTitle: 'Shared options',
+    noInstance: 'Create an instance first to apply these options to it.',
+    targetInstance: 'Instance receiving the options',
   },
 }

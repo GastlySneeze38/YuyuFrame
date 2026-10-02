@@ -1716,12 +1716,9 @@ export const fr = {
     serversWarning: 'La liste des serveurs sera partagée, avec leurs adresses.',
     saveFile: 'Enregistrer le fichier .mrpack',
     exporting: 'Création du pack…',
-    copyLink: 'Copier le lien',
-    linking: 'Préparation du lien…',
     linkUnavailable:
       "Le lien ne porte que des fichiers publiés sur Modrinth : {{count}} élément(s) coché(s) ne le sont pas. Décoche-les, ou partage le fichier.",
     fileDone: 'Pack enregistré : {{linked}} fichier(s) à télécharger, {{embedded}} inclus, {{size}} au total.',
-    linkDone: 'Lien copié ({{count}} caractères).',
     howToReceive:
       'Pour le recevoir : Instances → Importer une instance → Instance partagée. Le fichier .mrpack s’ouvre aussi dans Prism Launcher et la Modrinth App.',
     importTitle: 'Importer une instance partagée',
@@ -1753,6 +1750,46 @@ export const fr = {
     jvmDefault: 'Décoché : réglages Java par défaut du launcher, avec {{ram}} de mémoire.',
     jvmRejectedIn:
       "{{count}} argument(s) Java du pack ont été écartés pour ta sécurité (ils pourraient lancer un programme ou lire un fichier sur ton PC) :",
+  },
+
+  // Bouton commun « Copier le lien » de tous les partages (ShareLinkButton).
+  shareLink: {
+    copy: 'Copier le lien',
+    preparing: 'Préparation du lien…',
+    copied: 'Lien copié ({{count}} caractères).',
+    tooLongForDiscord:
+      'Trop long pour un message Discord ({{limit}} caractères max) : envoie-le en fichier texte, ou colle-le directement dans YuyuFrame.',
+  },
+
+  // Options du client intégré et partage des options (onglet « Paramètres du jeu »).
+  optionsShare: {
+    clientTitle: 'Options du client YuyuFrame',
+    clientDesc:
+      'Les réglages des modules du client intégré (HUD, zoom, crosshair…), dans un fichier .properties — à garder, ou à reprendre sur une autre instance.',
+    passwordsNever: 'Les mots de passe enregistrés dans le module Macros ne sont jamais exportés.',
+    clientExport: 'Télécharger les options du client',
+    clientExportDesc: 'Enregistre un fichier .properties à l’endroit de ton choix.',
+    clientImport: 'Importer des options du client',
+    clientImportDesc: 'Les réglages du fichier remplacent les tiens ; les autres ne bougent pas.',
+    importAction: 'Importer',
+    clientExported: '{{count}} réglage(s) exporté(s).',
+    clientImported: '{{count}} réglage(s) importé(s). Ils s’appliqueront au prochain lancement.',
+    linkTitle: 'Partager par lien',
+    linkDesc:
+      'Les options du jeu et celles du client YuyuFrame dans un seul lien, sans fichier ni serveur. La personne qui le reçoit le colle dans cet onglet.',
+    game: 'Options du jeu (options.txt)',
+    client: 'Options du client YuyuFrame',
+    linkPrivacy:
+      'Jamais dans le lien : les mots de passe et les macros du module Macros, et l’adresse du dernier serveur rejoint.',
+    applyTitle: 'Appliquer un lien d’options reçu',
+    gameCount: 'Options du jeu ({{count}} réglages)',
+    clientCount: 'Options du client YuyuFrame ({{count}} réglages)',
+    applyMerge: 'Chaque réglage du lien remplace le tien ; ceux qu’il ne contient pas restent comme ils sont.',
+    applyAction: 'Appliquer à cette instance',
+    applied: 'Appliqué : {{game}} option(s) du jeu, {{client}} option(s) du client.',
+    modalTitle: 'Options partagées',
+    noInstance: 'Crée d’abord une instance pour y appliquer ces options.',
+    targetInstance: 'Instance qui reçoit les options',
   },
 }
 

@@ -10,7 +10,7 @@
 //!   devient une ligne avec son adresse et ses empreintes, tout le reste (mod
 //!   fait maison, `config/`, options, mondes choisis) est **embarqué** dans
 //!   `overrides/`. Le pack pèse le poids de ce qui n'est nulle part ailleurs.
-//! - **Un lien `yuyuframe://import?…`**, sans fichier du tout, quand tout ce
+//! - **Un lien `yuyuframe://instance?…`** (`crate::share_link`), sans fichier du tout, quand tout ce
 //!   qui est choisi est sur Modrinth : version du jeu, loader, et pour chaque
 //!   fichier 13 caractères (sa famille, l'identifiant de version Modrinth, le
 //!   début de son SHA-1). Une centaine de mods tient sous la limite de 2 000
@@ -931,7 +931,9 @@ fn chrono_stamp() -> String {
 
 // ── Lien de partage ─────────────────────────────────────────────────────────
 
-const LINK_VERSION: &str = "1";
+/// Sorte et version du lien (`crate::share_link`).
+const LINK_KIND: &str = "instance";
+const LINK_VERSION: u32 = 1;
 /// Longueur d'un identifiant de version Modrinth.
 const VERSION_ID_LEN: usize = 8;
 /// Début du SHA-1 gardé dans le lien : départage les fichiers d'une même
@@ -1020,26 +1022,27 @@ pub async fn instance_share_link(
         }
     }
 
-    let mut url = reqwest::Url::parse("yuyuframe://import").map_err(|e| e.to_string())?;
-    url.query_pairs_mut()
-        .append_pair("v", LINK_VERSION)
-        .append_pair("n", &scanned.instance.name)
-        .append_pair("mc", &scanned.instance.mc_version)
-        .append_pair("l", &scanned.instance.loader)
-        .append_pair("lv", &loader_version)
-        .append_pair("f", &tokens);
+    let mut params: Vec<(&str, String)> = vec![
+        ("n", scanned.instance.name.clone()),
+        ("mc", scanned.instance.mc_version.clone()),
+        ("l", scanned.instance.loader.clone()),
+        ("lv", loader_version),
+        ("f", tokens),
+    ];
     // Configuration Java : courte (une RAM, trois mots, quelques drapeaux),
     // elle tient dans le lien sans le rallonger notablement.
     if include_jvm {
         let jvm = &scanned.jvm;
-        url.query_pairs_mut()
-            .append_pair("ram", &jvm.ram_mb.to_string())
-            .append_pair("jv", &jvm.vendor)
-            .append_pair("gc", &jvm.gc_policy)
-            .append_pair("jm", &jvm.args_mode)
-            .append_pair("ja", &jvm.args.join(" "));
+        params.extend([
+            ("ram", jvm.ram_mb.to_string()),
+            ("jv", jvm.vendor.clone()),
+            ("gc", jvm.gc_policy.clone()),
+            ("jm", jvm.args_mode.clone()),
+            ("ja", jvm.args.join(" ")),
+        ]);
     }
-    Ok(url.to_string())
+    let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    Ok(crate::share_link::build(LINK_KIND, LINK_VERSION, &params))
 }
 
 // ── Lecture d'un pack reçu ──────────────────────────────────────────────────
@@ -1203,14 +1206,7 @@ fn read_mrpack(path: &Path) -> Result<Pack, String> {
 }
 
 async fn read_link(link: &str) -> Result<Pack, String> {
-    let url = reqwest::Url::parse(link.trim()).map_err(|_| "Ce n'est pas un lien de partage YuyuFrame".to_string())?;
-    if url.scheme() != "yuyuframe" || url.host_str() != Some("import") {
-        return Err("Ce n'est pas un lien de partage YuyuFrame".into());
-    }
-    let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
-    if params.get("v").map(String::as_str) != Some(LINK_VERSION) {
-        return Err("Ce lien vient d'une version plus récente de YuyuFrame : mets le launcher à jour".into());
-    }
+    let params = crate::share_link::parse(link, LINK_KIND, LINK_VERSION)?;
     let mc_version = params.get("mc").cloned().filter(|v| !v.is_empty()).ok_or("Lien de partage abîmé")?;
     let loader = params.get("l").cloned().unwrap_or_else(|| "vanilla".into());
     if !matches!(loader.as_str(), "vanilla" | "fabric" | "quilt" | "forge" | "neoforge") {

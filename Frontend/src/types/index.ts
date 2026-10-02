@@ -295,7 +295,7 @@ export type ModpackImportResult =
 
 // ── Partage d'instance (`commands/instance/share.rs`) ─────────────────────
 // Rien n'est hébergé : un `.mrpack` qui référence ce qui est sur Modrinth ou
-// CurseForge et embarque le reste, ou un lien `yuyuframe://import?…` quand
+// CurseForge et embarque le reste, ou un lien `yuyuframe://instance?…` quand
 // tout est sur Modrinth.
 
 export type ShareGroup = 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings' | 'servers' | 'saves' | 'other'
@@ -367,6 +367,15 @@ export interface SharePreview {
   jvm: JvmShare | null
   /** Arguments JVM du pack écartés par le filtre de sécurité. */
   jvmRejected: string[]
+}
+
+/** Contenu d'un lien d'options, ou ce qui en a été appliqué : nombre de
+ *  réglages de chaque côté, `null` quand il n'y en a pas. */
+export interface OptionsLinkInfo {
+  /** `options.txt` du jeu. */
+  game: number | null
+  /** Options du client intégré YuyuFrame. */
+  client: number | null
 }
 
 export interface ShareImport {

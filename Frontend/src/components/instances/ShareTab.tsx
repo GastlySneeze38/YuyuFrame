@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import type { Instance, JvmShare, ShareGroup, ShareItem, ShareScan } from '@/types'
 import { formatBytes, formatRam } from '@/lib/format'
 import { showError } from '@/stores/useErrorToast'
+import { ShareLinkButton } from '@/components/ui/ShareLinkButton'
 import { useT } from '@/i18n'
 
 /**
@@ -62,7 +63,7 @@ export function ShareTab({ instance }: { instance: Instance }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [open, setOpen] = useState<Set<ShareGroup>>(new Set())
   const [includeJvm, setIncludeJvm] = useState(true)
-  const [busy, setBusy] = useState<'file' | 'link' | null>(null)
+  const [busy, setBusy] = useState<'file' | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
   useEffect(() => {
@@ -135,20 +136,6 @@ export function ShareTab({ instance }: { instance: Instance }) {
     try {
       const result = await api.share.exportFile(instance.id, [...selected], includeJvm, target)
       setDone(t('share.fileDone', { linked: result.linked, embedded: result.embedded, size: formatBytes(result.size) }))
-    } catch (e) {
-      showError(e)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const copyLink = async () => {
-    setBusy('link')
-    setDone(null)
-    try {
-      const link = await api.share.link(instance.id, [...selected], includeJvm)
-      await navigator.clipboard.writeText(link)
-      setDone(t('share.linkDone', { count: link.length }))
     } catch (e) {
       showError(e)
     } finally {
@@ -276,13 +263,10 @@ export function ShareTab({ instance }: { instance: Instance }) {
           >
             {busy === 'file' ? t('share.exporting') : t('share.saveFile')}
           </button>
-          <button
-            onClick={copyLink}
+          <ShareLinkButton
+            make={() => api.share.link(instance.id, [...selected], includeJvm)}
             disabled={busy !== null || linked.length === 0 || notLinkable.length > 0}
-            className="rounded-xl border border-line bg-surface-2 px-4 py-2 text-[12.5px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {busy === 'link' ? t('share.linking') : t('share.copyLink')}
-          </button>
+          />
         </div>
         {notLinkable.length > 0 && (
           <p className="text-[11px] text-txt-muted">{t('share.linkUnavailable', { count: notLinkable.length })}</p>

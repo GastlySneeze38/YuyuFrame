@@ -200,6 +200,19 @@ fn line_for(change: &McOption) -> String {
     format!("{}={}", escape(&change.key, true), escape(&change.value, false))
 }
 
+/// Octets d'un `.properties` (ISO-8859-1, échappements Java) → réglages.
+/// Pour le partage des options (`options_share.rs`) : même lecture que le
+/// fichier de l'agent, donc un fichier exporté se relit sans surprise.
+pub(super) fn from_properties(bytes: &[u8]) -> Vec<McOption> {
+    parse(&decode_latin1(bytes))
+}
+
+/// Réglages → octets d'un `.properties` que l'agent sait relire.
+pub(super) fn to_properties(settings: &[McOption]) -> Vec<u8> {
+    let header = "#YuyuFrame - options du client integre\n";
+    encode_latin1(&format!("{header}{}", apply("", settings)))
+}
+
 #[tauri::command]
 pub async fn agent_options_read(instance_id: String) -> Result<Vec<McOption>, String> {
     match tokio::fs::read(config_path(&instance_id)).await {

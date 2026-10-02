@@ -19,6 +19,7 @@ import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
 import { InstanceIcon } from './InstanceIcon'
 import { ShareTab } from './ShareTab'
+import { ClientOptionsTransfer, OptionsLinkApply, OptionsLinkCreate } from './OptionsShare'
 import { useT } from '@/i18n'
 
 /**
@@ -499,6 +500,15 @@ function GameSettings({ instanceId }: { instanceId: string }) {
       <Separator />
 
       <OptionsTransfer instanceId={instanceId} />
+
+      <Separator />
+
+      <ClientOptionsTransfer instanceId={instanceId} />
+
+      <Separator />
+
+      <OptionsLinkCreate instanceId={instanceId} />
+      <OptionsLinkApply instanceId={instanceId} />
     </div>
   )
 }

@@ -7,6 +7,7 @@ mod minecraft;
 mod paths;
 mod process;
 mod recovery;
+mod share_link;
 mod state;
 mod stats;
 mod sync;
@@ -451,6 +452,11 @@ pub fn run() {
             commands::instance::options_archive::instance_options_summary,
             commands::instance::options_archive::instance_export_options,
             commands::instance::options_archive::instance_import_options,
+            commands::instance::options_share::instance_client_options_export,
+            commands::instance::options_share::instance_client_options_import,
+            commands::instance::options_share::instance_options_link,
+            commands::instance::options_share::options_link_preview,
+            commands::instance::options_share::instance_options_from_link,
             commands::instance::options::set_sync_game_settings,
             commands::instance::crud::instance_open_folder,
             commands::instance::crud::instance_set_window,

@@ -12,7 +12,7 @@ import { showError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 
 /**
- * Recevoir une instance partagée : un `.mrpack` ou un lien `yuyuframe://import`.
+ * Recevoir une instance partagée : un `.mrpack` ou un lien `yuyuframe://instance`.
  *
  * Rien n'est créé avant l'aperçu : on montre d'abord d'où viendra chaque
  * fichier, et surtout **ce qui est copié dans le pack** sans être passé par
@@ -128,7 +128,7 @@ export function ShareImportModal({
                   value={linkInput}
                   onChange={(e) => setLinkInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitLink() }}
-                  placeholder="yuyuframe://import?…"
+                  placeholder="yuyuframe://instance?…"
                   className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3 text-[12.5px] text-txt-primary outline-none placeholder:text-txt-muted focus:border-accent/60"
                 />
                 <button

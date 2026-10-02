@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -406,7 +406,7 @@ export const api = {
      *  avec la configuration Java si `includeJvm`. */
     exportFile: (instanceId: string, paths: string[], includeJvm: boolean, filePath: string) =>
       invoke<ShareExport>('instance_share_export', { instanceId, paths, includeJvm, filePath }),
-    /** Lien `yuyuframe://import?…` — refusé si un élément n'est pas sur Modrinth. */
+    /** Lien `yuyuframe://instance?…` — refusé si un élément n'est pas sur Modrinth. */
     link: (instanceId: string, paths: string[], includeJvm: boolean) =>
       invoke<string>('instance_share_link', { instanceId, paths, includeJvm }),
     preview: (source: ShareSource) => invoke<SharePreview>('instance_share_preview', { source }),
@@ -414,6 +414,24 @@ export const api = {
      *  `applyJvm` : reprendre la configuration Java jointe (RAM comprise). */
     import: (source: ShareSource, name: string, ramMb: number, applyJvm: boolean) =>
       invoke<ShareImport>('instance_share_import', { source, name, ramMb, applyJvm }),
+  },
+
+  // Options du jeu et du client intégré (`commands/instance/options_share.rs`) :
+  // le `.properties` du client en fichier, et les deux dans un lien
+  // `yuyuframe://options?…`. Mots de passe des macros jamais inclus.
+  optionsShare: {
+    /** Écrit le `.properties` du client ; rend le nombre de réglages. */
+    exportClient: (instanceId: string, path: string) =>
+      invoke<number>('instance_client_options_export', { instanceId, path }),
+    /** Fusionne un `.properties` dans les options du client de l'instance. */
+    importClient: (instanceId: string, path: string) =>
+      invoke<number>('instance_client_options_import', { instanceId, path }),
+    link: (instanceId: string, game: boolean, client: boolean) =>
+      invoke<string>('instance_options_link', { instanceId, game, client }),
+    preview: (link: string) => invoke<OptionsLinkInfo>('options_link_preview', { link }),
+    /** Applique un lien à une instance (fusion) ; rend ce qui a été appliqué. */
+    apply: (instanceId: string, link: string, game: boolean, client: boolean) =>
+      invoke<OptionsLinkInfo>('instance_options_from_link', { instanceId, link, game, client }),
   },
 
   // Configurations JVM réutilisables (écran /jvm) — reliables à plusieurs

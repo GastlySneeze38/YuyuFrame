@@ -12,6 +12,8 @@ import { PlanGate } from '@/components/PlanGate'
 import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { ShareImportModal } from '@/components/instances/ShareImportModal'
+import { OptionsLinkModal } from '@/components/instances/OptionsShare'
+import { shareLinkKind, type ShareLinkKind } from '@/lib/shareLink'
 import { useStore, type Lang } from '@/stores/useStore'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
@@ -121,14 +123,16 @@ export default function App() {
   const refreshCrashWatch = useCrashWatch((s) => s.refresh)
   const clearCrashWatch = useCrashWatch((s) => s.clear)
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
-  /** Lien `yuyuframe://import?…` cliqué : instance partagée à recevoir. */
-  const [shareLink, setShareLink] = useState<string | null>(null)
+  /** Lien de partage cliqué (`lib/shareLink.ts`), par sorte. */
+  const [shareLink, setShareLink] = useState<{ kind: ShareLinkKind; link: string } | null>(null)
   const addInstance = useStore((s) => s.addInstance)
   const setSelectedInstanceId = useStore((s) => s.setSelectedInstanceId)
-  // Le même protocole porte deux gestes : rejoindre un ami (`join`) et
-  // recevoir une instance (`import`, commands/instance/share.rs).
+  // Le même protocole porte rejoindre un ami (`join`) et tous les liens de
+  // partage (`Backend/src/share_link.rs`). Une sorte de lien nouvelle = une
+  // branche dans le rendu plus bas.
   const handleDeepLink = (url: string) => {
-    if (url.startsWith('yuyuframe://import')) setShareLink(url)
+    const kind = shareLinkKind(url)
+    if (kind) setShareLink({ kind, link: url })
     else setJoinRequest(parseJoinUrl(url))
   }
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
@@ -510,10 +514,13 @@ export default function App() {
       {joinRequest && (
         <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
       )}
-      {shareLink && (
+      {shareLink?.kind === 'options' && (
+        <OptionsLinkModal key={shareLink.link} link={shareLink.link} onClose={() => setShareLink(null)} />
+      )}
+      {shareLink?.kind === 'instance' && (
         <ShareImportModal
-          key={shareLink}
-          initialSource={{ kind: 'link', link: shareLink }}
+          key={shareLink.link}
+          initialSource={{ kind: 'link', link: shareLink.link }}
           onClose={() => setShareLink(null)}
           onImported={(inst) => {
             addInstance(inst)

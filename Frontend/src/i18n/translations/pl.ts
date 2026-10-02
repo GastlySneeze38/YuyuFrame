@@ -1702,12 +1702,9 @@ export const pl: TranslationSchema = {
     serversWarning: 'Lista serwerów zostanie udostępniona razem z adresami.',
     saveFile: 'Zapisz plik .mrpack',
     exporting: 'Tworzenie paczki…',
-    copyLink: 'Kopiuj link',
-    linking: 'Przygotowywanie linku…',
     linkUnavailable:
       'Link zawiera tylko pliki opublikowane na Modrinth. Zaznaczone elementy spoza Modrinth: {{count}}. Odznacz je albo udostępnij plik.',
     fileDone: 'Paczka zapisana: do pobrania {{linked}}, w paczce {{embedded}}, łącznie {{size}}.',
-    linkDone: 'Link skopiowany (znaki: {{count}}).',
     howToReceive:
       'Aby ją odebrać: Instancje → Zaimportuj instancję → Udostępniona instancja. Plik .mrpack otworzysz też w Prism Launcher i w Modrinth App.',
     importTitle: 'Importuj udostępnioną instancję',
@@ -1739,5 +1736,43 @@ export const pl: TranslationSchema = {
     jvmDefault: 'Odznaczone: domyślne ustawienia Javy launchera, z pamięcią {{ram}}.',
     jvmRejectedIn:
       'Argumenty Javy z paczki usunięte dla twojego bezpieczeństwa ({{count}}) — mogłyby uruchomić program albo odczytać plik na twoim komputerze:',
+  },
+
+  shareLink: {
+    copy: 'Kopiuj link',
+    preparing: 'Przygotowywanie linku…',
+    copied: 'Link skopiowany (znaki: {{count}}).',
+    tooLongForDiscord:
+      'Za długi na wiadomość na Discordzie (maks. {{limit}} znaków): wyślij go jako plik tekstowy albo wklej bezpośrednio w YuyuFrame.',
+  },
+
+  optionsShare: {
+    clientTitle: 'Opcje klienta YuyuFrame',
+    clientDesc:
+      'Ustawienia modułów wbudowanego klienta (HUD, zoom, celownik…) w pliku .properties — do zachowania albo użycia w innej instancji.',
+    passwordsNever: 'Hasła zapisane w module Macros nigdy nie są eksportowane.',
+    clientExport: 'Pobierz opcje klienta',
+    clientExportDesc: 'Zapisuje plik .properties w wybranym miejscu.',
+    clientImport: 'Importuj opcje klienta',
+    clientImportDesc: 'Ustawienia z pliku zastępują twoje; pozostałe się nie zmieniają.',
+    importAction: 'Importuj',
+    clientExported: 'Wyeksportowane ustawienia: {{count}}.',
+    clientImported: 'Zaimportowane ustawienia: {{count}}. Zadziałają przy następnym uruchomieniu.',
+    linkTitle: 'Udostępnij linkiem',
+    linkDesc:
+      'Opcje gry i opcje klienta YuyuFrame w jednym linku, bez pliku i bez serwera. Odbiorca wkleja go w tej karcie.',
+    game: 'Opcje gry (options.txt)',
+    client: 'Opcje klienta YuyuFrame',
+    linkPrivacy:
+      'Nigdy w linku: hasła i makra z modułu Macros oraz adres ostatniego serwera, na który wchodziłeś.',
+    applyTitle: 'Zastosuj otrzymany link z opcjami',
+    gameCount: 'Opcje gry (ustawienia: {{count}})',
+    clientCount: 'Opcje klienta YuyuFrame (ustawienia: {{count}})',
+    applyMerge: 'Każde ustawienie z linku zastępuje twoje; tych, których nie zawiera, nie zmienia.',
+    applyAction: 'Zastosuj do tej instancji',
+    applied: 'Zastosowano: opcje gry — {{game}}, opcje klienta — {{client}}.',
+    modalTitle: 'Udostępnione opcje',
+    noInstance: 'Najpierw utwórz instancję, do której zastosujesz te opcje.',
+    targetInstance: 'Instancja, która otrzyma opcje',
   },
 }

@@ -8267,6 +8267,7 @@ dependencies = [
  "discord-rich-presence",
  "ed25519-dalek",
  "fastnbt",
+ "flate2",
  "futures",
  "libp2p",
  "md-5",
