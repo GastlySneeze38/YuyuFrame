@@ -14,7 +14,7 @@ import { useT } from '@/i18n'
  *
  * Trois blocs, du plus personnel au plus partagé :
  * - le `.properties` du client YuyuFrame en fichier (garder, redonner) ;
- * - un lien `yuyuframe://options?…` avec `options.txt` et/ou le client ;
+ * - un lien `yuyuframe://options/…` avec `options.txt` et/ou le client ;
  * - appliquer un lien reçu à cette instance (aussi ouvert par un lien
  *   cliqué, `OptionsLinkModal`).
  *
@@ -197,7 +197,7 @@ export function OptionsLinkApply({ instanceId, initialLink }: { instanceId: stri
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && input.trim()) setLink(input.trim()) }}
-              placeholder="yuyuframe://options?…"
+              placeholder="yuyuframe://options/…"
               className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3 text-[12.5px] text-txt-primary outline-none placeholder:text-txt-muted focus:border-accent/60"
             />
             <button onClick={() => setLink(input.trim())} disabled={!input.trim()} className={secondaryButton}>
@@ -237,7 +237,7 @@ export function OptionsLinkApply({ instanceId, initialLink }: { instanceId: stri
   )
 }
 
-/** Fenêtre ouverte par un lien `yuyuframe://options?…` cliqué : choisir
+/** Fenêtre ouverte par un lien `yuyuframe://options/…` cliqué : choisir
  *  l'instance qui le reçoit, puis le même écran que dans l'onglet. */
 export function OptionsLinkModal({ link, onClose }: { link: string; onClose: () => void }) {
   const t = useT()

@@ -8267,7 +8267,6 @@ dependencies = [
  "discord-rich-presence",
  "ed25519-dalek",
  "fastnbt",
- "flate2",
  "futures",
  "libp2p",
  "md-5",
@@ -8295,6 +8294,7 @@ dependencies = [
  "tungstenite",
  "uuid 1.23.1",
  "zip 2.4.2",
+ "zstd",
 ]
 
 [[package]]

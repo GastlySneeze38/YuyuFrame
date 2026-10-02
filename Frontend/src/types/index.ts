@@ -295,7 +295,7 @@ export type ModpackImportResult =
 
 // ── Partage d'instance (`commands/instance/share.rs`) ─────────────────────
 // Rien n'est hébergé : un `.mrpack` qui référence ce qui est sur Modrinth ou
-// CurseForge et embarque le reste, ou un lien `yuyuframe://instance?…` quand
+// CurseForge et embarque le reste, ou un lien `yuyuframe://instance/…` quand
 // tout est sur Modrinth.
 
 export type ShareGroup = 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings' | 'servers' | 'saves' | 'other'

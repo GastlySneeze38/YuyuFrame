@@ -10,12 +10,12 @@
 //!   devient une ligne avec son adresse et ses empreintes, tout le reste (mod
 //!   fait maison, `config/`, options, mondes choisis) est **embarqué** dans
 //!   `overrides/`. Le pack pèse le poids de ce qui n'est nulle part ailleurs.
-//! - **Un lien `yuyuframe://instance?…`** (`crate::share_link`), sans fichier du tout, quand tout ce
-//!   qui est choisi est sur Modrinth : version du jeu, loader, et pour chaque
-//!   fichier 13 caractères (sa famille, l'identifiant de version Modrinth, le
-//!   début de son SHA-1). Une centaine de mods tient sous la limite de 2 000
-//!   caractères d'un message Discord. Ni configs ni fichiers locaux : ils n'y
-//!   tiendraient pas, c'est le rôle du fichier.
+//! - **Un lien `yuyuframe://instance/…`** (`crate::share_link`), sans fichier
+//!   du tout, quand tout ce qui est choisi est sur Modrinth : version du jeu,
+//!   loader, l'identifiant de version Modrinth de chaque fichier, et la
+//!   configuration Java. Une instance de 22 mods avec ses drapeaux JVM tient
+//!   en moins de 300 caractères (test `lien_instance_compact`). Ni configs ni
+//!   fichiers locaux : c'est le rôle du fichier.
 //!
 //! ── Ce qui se partage ───────────────────────────────────────────────────────
 //! L'inventaire part du **contenu réel** du dossier, pas d'une liste figée :
@@ -313,6 +313,9 @@ struct Remote {
     url: String,
     /// Identifiant de version Modrinth, pour le lien de partage.
     modrinth_version: Option<String>,
+    /// La version Modrinth publie plusieurs fichiers : le lien doit dire
+    /// lequel (début du SHA-1). Sinon, l'identifiant suffit.
+    ambiguous: bool,
     sha512: Option<String>,
 }
 
@@ -389,6 +392,7 @@ async fn resolve(state: &tauri::State<'_, SharedState>, files: &[(String, PathBu
                 source: Source::Modrinth,
                 url: file.url.clone(),
                 modrinth_version: Some(version.id.clone()),
+                ambiguous: version.files.len() > 1,
                 sha512: file.hashes.sha512.clone(),
             });
         }
@@ -428,6 +432,7 @@ async fn resolve(state: &tauri::State<'_, SharedState>, files: &[(String, PathBu
                     source: Source::Curseforge,
                     url: url.to_string(),
                     modrinth_version: None,
+                    ambiguous: false,
                     sha512: None,
                 });
             }
@@ -931,15 +936,28 @@ fn chrono_stamp() -> String {
 
 // ── Lien de partage ─────────────────────────────────────────────────────────
 
-/// Sorte et version du lien (`crate::share_link`).
+// Le lien porte un texte (`crate::share_link`, qui le compresse), une
+// information par ligne :
+//
+//   nom de l'instance
+//   version de Minecraft
+//   loader
+//   version du loader
+//   fichiers : un jeton par fichier, collés
+//   [RAM JVM GC mode]          (configuration Java, facultative)
+//   [arguments JVM, séparés par des espaces]
+//
+// Un jeton = la famille (`m`, `M` pour un mod désactivé, `r`, `s`), les 8
+// caractères de l'identifiant de version Modrinth, puis 4 chiffres hexa du
+// SHA-1 **seulement** si cette version publie plusieurs fichiers. Pas
+// d'ambiguïté à la lecture : aucune famille n'est un chiffre hexa.
+
 const LINK_KIND: &str = "instance";
-const LINK_VERSION: u32 = 1;
 /// Longueur d'un identifiant de version Modrinth.
 const VERSION_ID_LEN: usize = 8;
-/// Début du SHA-1 gardé dans le lien : départage les fichiers d'une même
-/// version (un jar Fabric et un jar Forge publiés ensemble, par exemple).
+/// Début du SHA-1, quand une version publie plusieurs fichiers (un jar
+/// Fabric et un jar Forge publiés ensemble, par exemple).
 const HASH_PREFIX_LEN: usize = 4;
-const TOKEN_LEN: usize = 1 + VERSION_ID_LEN + HASH_PREFIX_LEN;
 
 /// Famille d'un fichier dans le lien. Majuscule = mod désactivé.
 fn kind_of(group: Group, disabled: bool) -> Option<char> {
@@ -969,33 +987,44 @@ fn valid_version_id(id: &str) -> bool {
 struct LinkToken {
     kind: char,
     version_id: String,
+    /// Vide quand la version n'a qu'un fichier.
     hash_prefix: String,
 }
 
-fn encode_token(kind: char, version_id: &str, sha1: &str) -> Option<String> {
+fn encode_token(kind: char, version_id: &str, sha1: &str, ambiguous: bool) -> Option<String> {
     if !valid_version_id(version_id) || sha1.len() < HASH_PREFIX_LEN {
         return None;
     }
-    Some(format!("{kind}{version_id}{}", &sha1[..HASH_PREFIX_LEN]))
+    let prefix = if ambiguous { &sha1[..HASH_PREFIX_LEN] } else { "" };
+    Some(format!("{kind}{version_id}{}", prefix.to_ascii_lowercase()))
 }
 
 fn decode_tokens(raw: &str) -> Result<Vec<LinkToken>, String> {
-    if !raw.is_ascii() || raw.len() % TOKEN_LEN != 0 {
-        return Err("Lien de partage abîmé".into());
+    let broken = || "Lien de partage abîmé".to_string();
+    if !raw.is_ascii() {
+        return Err(broken());
     }
-    raw.as_bytes()
-        .chunks(TOKEN_LEN)
-        .map(|chunk| {
-            let s = std::str::from_utf8(chunk).map_err(|_| "Lien de partage abîmé".to_string())?;
-            let kind = s.chars().next().unwrap_or(' ');
-            let version_id = &s[1..1 + VERSION_ID_LEN];
-            let hash_prefix = &s[1 + VERSION_ID_LEN..];
-            if dir_of(kind).is_none() || !valid_version_id(version_id) || !hash_prefix.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Err("Lien de partage abîmé".into());
+    let bytes = raw.as_bytes();
+    let is_hex = |b: &u8| b.is_ascii_digit() || (b'a'..=b'f').contains(b);
+    let mut tokens = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        let kind = bytes[i] as char;
+        let id = raw.get(i + 1..i + 1 + VERSION_ID_LEN).ok_or_else(broken)?;
+        if dir_of(kind).is_none() || !valid_version_id(id) {
+            return Err(broken());
+        }
+        i += 1 + VERSION_ID_LEN;
+        let prefix = match bytes.get(i..i + HASH_PREFIX_LEN) {
+            Some(p) if p.iter().all(is_hex) => {
+                i += HASH_PREFIX_LEN;
+                std::str::from_utf8(p).map_err(|_| broken())?.to_string()
             }
-            Ok(LinkToken { kind, version_id: version_id.to_string(), hash_prefix: hash_prefix.to_lowercase() })
-        })
-        .collect()
+            _ => String::new(),
+        };
+        tokens.push(LinkToken { kind, version_id: id.to_string(), hash_prefix: prefix });
+    }
+    Ok(tokens)
 }
 
 #[tauri::command]
@@ -1014,7 +1043,7 @@ pub async fn instance_share_link(
         let token = sha1.as_deref().and_then(|h| {
             let remote = cached(h)?;
             let kind = kind_of(entry.group, is_disabled_jar(name))?;
-            encode_token(kind, remote.modrinth_version.as_deref()?, h)
+            encode_token(kind, remote.modrinth_version.as_deref()?, h, remote.ambiguous)
         });
         match token {
             Some(t) => tokens.push_str(&t),
@@ -1022,27 +1051,20 @@ pub async fn instance_share_link(
         }
     }
 
-    let mut params: Vec<(&str, String)> = vec![
-        ("n", scanned.instance.name.clone()),
-        ("mc", scanned.instance.mc_version.clone()),
-        ("l", scanned.instance.loader.clone()),
-        ("lv", loader_version),
-        ("f", tokens),
+    let one_line = |s: &str| s.replace(['\n', '\r'], " ");
+    let mut lines = vec![
+        one_line(&scanned.instance.name),
+        scanned.instance.mc_version.clone(),
+        scanned.instance.loader.clone(),
+        loader_version,
+        tokens,
     ];
-    // Configuration Java : courte (une RAM, trois mots, quelques drapeaux),
-    // elle tient dans le lien sans le rallonger notablement.
     if include_jvm {
         let jvm = &scanned.jvm;
-        params.extend([
-            ("ram", jvm.ram_mb.to_string()),
-            ("jv", jvm.vendor.clone()),
-            ("gc", jvm.gc_policy.clone()),
-            ("jm", jvm.args_mode.clone()),
-            ("ja", jvm.args.join(" ")),
-        ]);
+        lines.push(format!("{} {} {} {}", jvm.ram_mb, jvm.vendor, jvm.gc_policy, jvm.args_mode));
+        lines.push(jvm.args.join(" "));
     }
-    let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    Ok(crate::share_link::build(LINK_KIND, LINK_VERSION, &params))
+    crate::share_link::build(LINK_KIND, &lines.join("\n"))
 }
 
 // ── Lecture d'un pack reçu ──────────────────────────────────────────────────
@@ -1206,19 +1228,27 @@ fn read_mrpack(path: &Path) -> Result<Pack, String> {
 }
 
 async fn read_link(link: &str) -> Result<Pack, String> {
-    let params = crate::share_link::parse(link, LINK_KIND, LINK_VERSION)?;
-    let mc_version = params.get("mc").cloned().filter(|v| !v.is_empty()).ok_or("Lien de partage abîmé")?;
-    let loader = params.get("l").cloned().unwrap_or_else(|| "vanilla".into());
-    if !matches!(loader.as_str(), "vanilla" | "fabric" | "quilt" | "forge" | "neoforge") {
+    let text = crate::share_link::read(link, LINK_KIND)?;
+    let lines: Vec<&str> = text.split('\n').collect();
+    let [name, mc_version, loader, loader_version, tokens, rest @ ..] = lines.as_slice() else {
+        return Err("Lien de partage abîmé".into());
+    };
+    if mc_version.is_empty() || !matches!(*loader, "vanilla" | "fabric" | "quilt" | "forge" | "neoforge") {
         return Err("Lien de partage abîmé".into());
     }
-    let tokens = decode_tokens(params.get("f").map(String::as_str).unwrap_or_default())?;
-    let (jvm, jvm_rejected) = received_jvm(params.get("ram").map(|ram| JvmShare {
-        ram_mb: ram.parse().unwrap_or(4096),
-        vendor: params.get("jv").cloned().unwrap_or_default(),
-        gc_policy: params.get("gc").cloned().unwrap_or_default(),
-        args_mode: params.get("jm").cloned().unwrap_or_default(),
-        args: params.get("ja").map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default(),
+    let (name, mc_version, loader, loader_version) =
+        (name.to_string(), mc_version.to_string(), loader.to_string(), loader_version.to_string());
+    let tokens = decode_tokens(tokens)?;
+    // Ligne « RAM JVM GC mode », puis les arguments : présentes ensemble ou pas du tout.
+    let (jvm, jvm_rejected) = received_jvm(rest.first().and_then(|head| {
+        let mut words = head.split(' ');
+        Some(JvmShare {
+            ram_mb: words.next()?.parse().ok()?,
+            vendor: words.next()?.to_string(),
+            gc_policy: words.next()?.to_string(),
+            args_mode: words.next()?.to_string(),
+            args: rest.get(1).map(|a| a.split_whitespace().map(str::to_string).collect()).unwrap_or_default(),
+        })
     }));
 
     let mut versions: HashMap<String, MrVersion> = HashMap::new();
@@ -1241,11 +1271,14 @@ async fn read_link(link: &str) -> Result<Pack, String> {
     let mut rejected = Vec::new();
     for token in tokens {
         let (dir, disabled) = dir_of(token.kind).expect("vérifié au décodage");
+        // Sans début d'empreinte, la version n'avait qu'un fichier quand le
+        // lien a été fait : le principal (ou le seul).
         let file = versions.get(&token.version_id).and_then(|v| {
-            v.files
-                .iter()
-                .find(|f| f.hashes.sha1.to_lowercase().starts_with(&token.hash_prefix))
-                .or_else(|| v.files.iter().find(|f| f.primary))
+            if token.hash_prefix.is_empty() {
+                v.files.iter().find(|f| f.primary).or_else(|| v.files.first())
+            } else {
+                v.files.iter().find(|f| f.hashes.sha1.to_lowercase().starts_with(&token.hash_prefix))
+            }
         });
         let Some(file) = file else {
             rejected.push(token.version_id);
@@ -1271,11 +1304,11 @@ async fn read_link(link: &str) -> Result<Pack, String> {
     }
 
     Ok(Pack {
-        name: params.get("n").cloned().unwrap_or_default(),
+        name,
         summary: String::new(),
         mc_version,
         loader,
-        loader_version: params.get("lv").cloned().unwrap_or_default(),
+        loader_version,
         files,
         overrides: Vec::new(),
         archive: None,
@@ -1565,25 +1598,41 @@ mod tests {
 
     #[test]
     fn jeton_de_lien_aller_retour() {
-        let token = encode_token('M', "AbCd1234", "deadbeef00").unwrap();
-        assert_eq!(token.len(), TOKEN_LEN);
-        let decoded = decode_tokens(&format!("{token}{}", encode_token('r', "zzzzzzzz", "0123abcd").unwrap())).unwrap();
-        assert_eq!(decoded.len(), 2);
-        assert_eq!(decoded[0].kind, 'M');
-        assert_eq!(decoded[0].version_id, "AbCd1234");
-        assert_eq!(decoded[0].hash_prefix, "dead");
+        // Avec empreinte (version à plusieurs fichiers), sans, puis encore avec.
+        let a = encode_token('M', "AbCd1234", "DEADbeef00", true).unwrap();
+        let b = encode_token('r', "zzzzzzzz", "0123abcd", false).unwrap();
+        let c = encode_token('s', "9f9f9f9f", "abcdef01", true).unwrap();
+        assert_eq!(a.len(), 13);
+        assert_eq!(b.len(), 9);
+        let decoded = decode_tokens(&format!("{a}{b}{c}")).unwrap();
+        assert_eq!(decoded.len(), 3);
+        assert_eq!((decoded[0].kind, decoded[0].version_id.as_str(), decoded[0].hash_prefix.as_str()), ('M', "AbCd1234", "dead"));
         assert_eq!(dir_of(decoded[0].kind), Some(("mods", true)));
-        assert_eq!(decoded[1].kind, 'r');
+        assert_eq!((decoded[1].kind, decoded[1].hash_prefix.as_str()), ('r', ""));
+        assert_eq!((decoded[2].version_id.as_str(), decoded[2].hash_prefix.as_str()), ("9f9f9f9f", "abcd"));
     }
 
     #[test]
     fn jeton_de_lien_invalide() {
-        assert!(encode_token('m', "trop-long-id", "dead").is_none());
-        assert!(decode_tokens("mAbCd1234dea").is_err()); // longueur
-        assert!(decode_tokens("xAbCd1234dead").is_err()); // famille inconnue
-        assert!(decode_tokens("mAbCd12/4dead").is_err()); // identifiant
-        assert!(decode_tokens("mAbCd1234zzzz").is_err()); // empreinte
+        assert!(encode_token('m', "trop-long-id", "dead", false).is_none());
+        assert!(decode_tokens("mAbCd123").is_err()); // identifiant tronqué
+        assert!(decode_tokens("xAbCd1234").is_err()); // famille inconnue
+        assert!(decode_tokens("mAbCd12/4").is_err()); // identifiant
+        assert!(decode_tokens("mAbCd1234zz").is_err()); // ni empreinte ni jeton suivant
         assert!(decode_tokens("").unwrap().is_empty());
+    }
+
+    /// Le lien de ton instance CocoWorld (22 mods, packs et config Java) :
+    /// dans le format d'avant, 1 523 caractères.
+    #[test]
+    fn lien_instance_compact() {
+        let tokens = "mL6Sv1iN2mAfA2Emwm89mGFM8zmJ832fm3dmX6ou16c3mUdiBeac7mRystERKEmMwcLS51SmYo9xOcemw8P6TokGmOqq8TOAVmFItuNokSmZJ6YTrMYm4H8A03wameRJU33HpmiFNRLrRBm7RYVKQJmmgjsLvJfWmpX4mxVAvmkWf58HtHmIYPINJuwrBX6pU42frWWLpy1hrR5ZGSF8ArRGIzA5emrxeIjARlrryEg1LARqryQdcUfnrrkqcBpfhrrI4ivyUVarrJtYoNiksyCCduG4sy6zWED9ssgUv7fBPsWcoEHPPx";
+        let args = "-XX:+UnlockExperimentalVMOptions -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+PerfDisableSharedMem -XX:+AlwaysActAsServerClassMachine -XX:+UseCriticalJavaThreadPriority -XX:MetaspaceSize=256m -XX:-UseG1GC -XX:+UseShenandoahGC -XX:ShenandoahGCMode=generational -XX:+ParallelRefProcEnabled -XX:ShenandoahGuaranteedGCInterval=1000000 -XX:-ShenandoahUncommit -XX:-DontCompileHugeMethods -XX:MaxNodeLimit=240000 -XX:NodeLimitFudgeFactor=8000 -XX:NmethodSweepActivity=1 -XX:ReservedCodeCacheSize=400M -XX:NonNMethodCodeHeapSize=12M";
+        let text = format!("CocoWorld 1.5\n26.1.2\nfabric\n0.19.5\n{tokens}\n6144 temurin g1 replace\n{args}");
+        let link = crate::share_link::build(LINK_KIND, &text).unwrap();
+        let length = link.chars().count();
+        assert!(length < 300, "{length} caractères");
+        assert_eq!(crate::share_link::read(&link, LINK_KIND).unwrap(), text);
     }
 
     #[test]

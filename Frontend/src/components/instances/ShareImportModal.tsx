@@ -128,7 +128,7 @@ export function ShareImportModal({
                   value={linkInput}
                   onChange={(e) => setLinkInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitLink() }}
-                  placeholder="yuyuframe://instance?…"
+                  placeholder="yuyuframe://instance/…"
                   className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-black/40 px-3 text-[12.5px] text-txt-primary outline-none placeholder:text-txt-muted focus:border-accent/60"
                 />
                 <button

@@ -406,7 +406,7 @@ export const api = {
      *  avec la configuration Java si `includeJvm`. */
     exportFile: (instanceId: string, paths: string[], includeJvm: boolean, filePath: string) =>
       invoke<ShareExport>('instance_share_export', { instanceId, paths, includeJvm, filePath }),
-    /** Lien `yuyuframe://instance?…` — refusé si un élément n'est pas sur Modrinth. */
+    /** Lien `yuyuframe://instance/…` — refusé si un élément n'est pas sur Modrinth. */
     link: (instanceId: string, paths: string[], includeJvm: boolean) =>
       invoke<string>('instance_share_link', { instanceId, paths, includeJvm }),
     preview: (source: ShareSource) => invoke<SharePreview>('instance_share_preview', { source }),
@@ -418,7 +418,7 @@ export const api = {
 
   // Options du jeu et du client intégré (`commands/instance/options_share.rs`) :
   // le `.properties` du client en fichier, et les deux dans un lien
-  // `yuyuframe://options?…`. Mots de passe des macros jamais inclus.
+  // `yuyuframe://options/…`. Mots de passe des macros jamais inclus.
   optionsShare: {
     /** Écrit le `.properties` du client ; rend le nombre de réglages. */
     exportClient: (instanceId: string, path: string) =>

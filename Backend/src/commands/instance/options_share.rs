@@ -6,12 +6,12 @@
 //!   à garder ou à redonner. L'import **fusionne** : une clé du fichier
 //!   remplace la sienne, les autres restent — un fichier qui ne parle que du
 //!   HUD ne remet pas le reste à zéro.
-//! - **Lien `yuyuframe://options?…`** (`crate::share_link`) : `options.txt`
+//! - **Lien `yuyuframe://options/…`** (`crate::share_link`) : `options.txt`
 //!   et/ou les options du client, compressés dans le lien. Rien d'hébergé ;
 //!   on le colle dans le launcher (onglet « Paramètres du jeu » d'une
-//!   instance) ou on le clique. Avec un `options.txt` complet et un client
-//!   réglé, compter ~5 600 caractères : trop pour un message Discord (2 000),
-//!   assez pour un copier-coller.
+//!   instance) ou on le clique. Mesuré sur de vraies instances
+//!   (`mesure_lien_options`) : 400 à 900 caractères pour les deux, sous la
+//!   limite d'un message Discord.
 //!
 //! ── Ce qui ne part jamais ───────────────────────────────────────────────────
 //! - `macros.setting.logins` : les connexions automatiques du module Macros,
@@ -25,13 +25,12 @@
 //! Le reste est du réglage. Une valeur avec un retour à la ligne est refusée :
 //! elle ajouterait une ligne de plus dans le fichier écrit.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::agent_options::{agent_options_read, agent_options_write, from_properties, to_properties};
 use super::options::{mc_options_read, mc_options_write, McOption};
 
 const LINK_KIND: &str = "options";
-const LINK_VERSION: u32 = 1;
 
 /// Mots de passe : jamais exportés, jamais importés.
 const CLIENT_PRIVATE: &[&str] = &["macros.setting.logins"];
@@ -99,41 +98,36 @@ pub async fn instance_client_options_import(instance_id: String, path: String) -
 }
 
 // ── Lien de partage ─────────────────────────────────────────────────────────
+//
+// Texte transporté (`crate::share_link`) : les lignes d'`options.txt`
+// (`clé:valeur`), un séparateur U+001E, puis celles du client (`clé=valeur`).
+// La forme même des fichiers, donc celle du dictionnaire de compression :
+// chaque réglage resté à sa valeur par défaut ne coûte presque rien.
 
-/// Ce que transporte le lien. Des paires plutôt que `McOption` : moins de
-/// texte avant compression, et c'est tout ce qu'il faut.
-#[derive(Serialize, Deserialize, Default)]
-struct OptionsPayload {
-    /// `options.txt`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    g: Option<Vec<(String, String)>>,
-    /// Options du client intégré.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    c: Option<Vec<(String, String)>>,
+const SECTION_SEPARATOR: char = '\u{1E}';
+
+fn to_text(options: &[McOption], separator: char) -> String {
+    options.iter().map(|o| format!("{}{separator}{}", o.key, o.value)).collect::<Vec<_>>().join("\n")
 }
 
-fn to_pairs(options: Vec<McOption>) -> Vec<(String, String)> {
-    options.into_iter().map(|o| (o.key, o.value)).collect()
-}
-
-fn to_options(pairs: Vec<(String, String)>) -> Vec<McOption> {
-    pairs.into_iter().map(|(key, value)| McOption { key, value }).collect()
+fn from_text(text: &str, separator: char) -> Vec<McOption> {
+    text.lines()
+        .filter_map(|line| line.split_once(separator))
+        .map(|(key, value)| McOption { key: key.to_string(), value: value.to_string() })
+        .collect()
 }
 
 /// Lit un lien et ne garde que ce qui a le droit d'entrer.
 fn read_link(link: &str) -> Result<(Option<Vec<McOption>>, Option<Vec<McOption>>), String> {
-    let params = crate::share_link::parse(link, LINK_KIND, LINK_VERSION)?;
-    let data = params.get(crate::share_link::DATA_PARAM).ok_or("Lien de partage abîmé")?;
-    let payload: OptionsPayload = crate::share_link::unpack(data)?;
-    let game = payload
-        .g
-        .map(|g| to_options(g).into_iter().filter(keep_game).take(MAX_ENTRIES).collect::<Vec<_>>())
-        .filter(|g| !g.is_empty());
-    let client = payload
-        .c
-        .map(|c| to_options(c).into_iter().filter(|o| keep_client(o, true)).take(MAX_ENTRIES).collect::<Vec<_>>())
-        .filter(|c| !c.is_empty());
-    Ok((game, client))
+    let text = crate::share_link::read(link, LINK_KIND)?;
+    let (game_text, client_text) = text.split_once(SECTION_SEPARATOR).ok_or("Lien de partage abîmé")?;
+    let game: Vec<McOption> = from_text(game_text, ':').into_iter().filter(keep_game).take(MAX_ENTRIES).collect();
+    let client: Vec<McOption> = from_text(client_text, '=')
+        .into_iter()
+        .filter(|o| keep_client(o, true))
+        .take(MAX_ENTRIES)
+        .collect();
+    Ok((Some(game).filter(|g| !g.is_empty()), Some(client).filter(|c| !c.is_empty())))
 }
 
 /// Ce qu'un lien contient, ou ce qui a été appliqué : nombre de réglages de
@@ -147,24 +141,21 @@ pub struct OptionsLinkInfo {
 
 #[tauri::command]
 pub async fn instance_options_link(instance_id: String, game: bool, client: bool) -> Result<String, String> {
-    let mut payload = OptionsPayload::default();
-    if game {
-        let options: Vec<McOption> = mc_options_read(instance_id.clone()).await?.into_iter().filter(keep_game).collect();
-        payload.g = Some(to_pairs(options)).filter(|g| !g.is_empty());
-    }
-    if client {
-        let options: Vec<McOption> = agent_options_read(instance_id)
-            .await?
-            .into_iter()
-            .filter(|o| keep_client(o, true))
-            .collect();
-        payload.c = Some(to_pairs(options)).filter(|c| !c.is_empty());
-    }
-    if payload.g.is_none() && payload.c.is_none() {
+    let game_options: Vec<McOption> = if game {
+        mc_options_read(instance_id.clone()).await?.into_iter().filter(keep_game).collect()
+    } else {
+        Vec::new()
+    };
+    let client_options: Vec<McOption> = if client {
+        agent_options_read(instance_id).await?.into_iter().filter(|o| keep_client(o, true)).collect()
+    } else {
+        Vec::new()
+    };
+    if game_options.is_empty() && client_options.is_empty() {
         return Err("Rien à partager : cette instance n'a pas encore d'options (lance-la une fois).".into());
     }
-    let data = crate::share_link::pack(&payload)?;
-    Ok(crate::share_link::build(LINK_KIND, LINK_VERSION, &[(crate::share_link::DATA_PARAM, &data)]))
+    let text = format!("{}{SECTION_SEPARATOR}{}", to_text(&game_options, ':'), to_text(&client_options, '='));
+    crate::share_link::build(LINK_KIND, &text)
 }
 
 #[tauri::command]
@@ -228,15 +219,47 @@ mod tests {
         assert!(keep_game(&opt("fov", "0.5")));
     }
 
+    /// Un lien fabriqué à la main avec des données interdites : elles sont
+    /// écartées à la lecture, pas seulement à l'envoi.
     #[test]
     fn lien_aller_retour_filtre() {
-        let payload = OptionsPayload {
-            g: Some(vec![("fov".into(), "0.5".into()), ("lastServer".into(), "x".into())]),
-            c: Some(vec![("fps.enabled".into(), "true".into()), ("macros.setting.logins".into(), "secret".into())]),
-        };
-        let link = crate::share_link::build(LINK_KIND, LINK_VERSION, &[("d", &crate::share_link::pack(&payload).unwrap())]);
+        let text = format!(
+            "fov:0.5\nlastServer:x\nresourcePacks:[\"vanilla\"]{SECTION_SEPARATOR}fps.enabled=true\nmacros.setting.logins=secret\nmacros.setting.macros=F6|/op moi\nzoom.setting.zoomKey=C"
+        );
+        let link = crate::share_link::build(LINK_KIND, &text).unwrap();
         let (game, client) = read_link(&link).unwrap();
-        assert_eq!(game.unwrap(), vec![opt("fov", "0.5")]);
-        assert_eq!(client.unwrap(), vec![opt("fps.enabled", "true")]);
+        assert_eq!(game.unwrap(), vec![opt("fov", "0.5"), opt("resourcePacks", "[\"vanilla\"]")]);
+        assert_eq!(client.unwrap(), vec![opt("fps.enabled", "true"), opt("zoom.setting.zoomKey", "C")]);
+    }
+
+    /// Mesure sur de vraies options : `YF_MEASURE_OPTIONS=<options.txt>` et
+    /// `YF_MEASURE_CLIENT=<.properties>`, puis
+    /// `cargo test --lib mesure_lien_options -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn mesure_lien_options() {
+        let game: Vec<McOption> = std::env::var("YF_MEASURE_OPTIONS")
+            .ok()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .map(|t| from_text(&t, ':').into_iter().filter(keep_game).collect())
+            .unwrap_or_default();
+        let client: Vec<McOption> = std::env::var("YF_MEASURE_CLIENT")
+            .ok()
+            .and_then(|p| std::fs::read(p).ok())
+            .map(|b| from_properties(&b).into_iter().filter(|o| keep_client(o, true)).collect())
+            .unwrap_or_default();
+        for (label, g, c) in [("jeu", &game[..], &[][..]), ("client", &[][..], &client[..]), ("les deux", &game[..], &client[..])] {
+            let text = format!("{}{SECTION_SEPARATOR}{}", to_text(g, ':'), to_text(c, '='));
+            let link = crate::share_link::build(LINK_KIND, &text).unwrap();
+            eprintln!("{label} : {} octets de texte -> lien de {} caractères", text.len(), link.chars().count());
+        }
+    }
+
+    #[test]
+    fn une_seule_section() {
+        let link = crate::share_link::build(LINK_KIND, &format!("{SECTION_SEPARATOR}fps.enabled=true")).unwrap();
+        let (game, client) = read_link(&link).unwrap();
+        assert!(game.is_none());
+        assert_eq!(client.unwrap().len(), 1);
     }
 }
