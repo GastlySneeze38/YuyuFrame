@@ -14,6 +14,8 @@ import type { SharedOptionsStatus } from '@/types'
 import { SettingsNav, useSectionSpy } from '@/components/settings/SettingsNav'
 import { PageGlow } from '@/components/PageGlow'
 import { Button } from '@/components/ui/Button'
+import { SettingsLinkModal, SettingsShareModal } from '@/components/settings/SettingsShare'
+import { CREATOR_SETTINGS_LINK } from '@/lib/launcherSettingsShare'
 import { useT, LANGUAGES } from '@/i18n'
 
 /** Valeurs courantes proposées en puces pour la RAM personnalisée (>8 Go) —
@@ -103,9 +105,13 @@ export default function Settings() {
   const { scrollRef, sectionRefs, activeId, goTo } = useSectionSpy(CATEGORIES)
 
   const [analyticsDisabled, setAnalyticsDisabledState] = useState(false)
-  useEffect(() => {
+  const readAnalytics = () => {
     api.analytics.isDisabled().then(setAnalyticsDisabledState).catch(() => {})
-  }, [])
+  }
+  useEffect(readAnalytics, [])
+
+  /** En-tête : partager ses paramètres, ou appliquer ceux du créateur. */
+  const [sharing, setSharing] = useState<'share' | 'optimized' | null>(null)
   const toggleAnalytics = () => {
     const next = !analyticsDisabled
     setAnalyticsDisabledState(next)
@@ -153,7 +159,26 @@ export default function Settings() {
             {t('settings.subtitle')}
           </p>
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setSharing('share')}>
+            {t('settingsShare.shareButton')}
+          </Button>
+          <Button size="sm" onClick={() => setSharing('optimized')}>
+            {t('settingsShare.optimizedButton')}
+          </Button>
+        </div>
       </PageHeader>
+
+      {sharing === 'share' && <SettingsShareModal onClose={() => setSharing(null)} onApplied={readAnalytics} />}
+      {sharing === 'optimized' && (
+        <SettingsLinkModal
+          link={CREATOR_SETTINGS_LINK}
+          title={t('settingsShare.optimizedTitle')}
+          desc={t('settingsShare.optimizedDesc')}
+          onClose={() => setSharing(null)}
+          onApplied={readAnalytics}
+        />
+      )}
 
       {/* Content */}
       <div className="flex flex-1 overflow-hidden">

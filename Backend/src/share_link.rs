@@ -187,6 +187,42 @@ pub fn share_link_status(text: String) -> Result<LinkStatus, String> {
     Ok(LinkStatus { kind: first.kind.clone(), total, complete: received.len() as u32 == total, received })
 }
 
+/// Sortes dont le contenu est fabriqué **et validé** par l'interface : les
+/// réglages du launcher vivent dans son magasin persisté, pas en Rust. Les
+/// autres sortes (`instance`, `options`) ont leurs propres commandes, qui
+/// valident côté Rust — elles ne passent jamais par ces deux-là.
+const UI_KINDS: &[&str] = &["settings"];
+/// Un texte de réglages fait quelques centaines d'octets.
+const UI_MAX_TEXT: usize = 64 * 1024;
+
+fn check_ui_kind(kind: &str) -> Result<(), String> {
+    if UI_KINDS.contains(&kind) {
+        Ok(())
+    } else {
+        Err("Sorte de lien inconnue".into())
+    }
+}
+
+#[tauri::command]
+pub fn share_link_build(kind: String, text: String) -> Result<Vec<String>, String> {
+    check_ui_kind(&kind)?;
+    if text.len() > UI_MAX_TEXT {
+        return Err("Trop volumineux pour un lien".into());
+    }
+    Ok(build_text(&kind, &text)?)
+}
+
+/// Rend le texte d'un lien ; c'est à l'interface d'en valider chaque valeur.
+#[tauri::command]
+pub fn share_link_read(kind: String, text: String) -> Result<String, String> {
+    check_ui_kind(&kind)?;
+    let content = read_text(&text, &kind)?;
+    if content.len() > UI_MAX_TEXT {
+        return Err("Lien de partage trop volumineux".into());
+    }
+    Ok(content)
+}
+
 struct ParsedLink {
     kind: String,
     /// (numéro, total, identifiant) pour une partie.
@@ -497,6 +533,27 @@ mod tests {
         let mixed = format!("{}\n{}", a[0], b[1]);
         assert!(read(&mixed, "instance").is_err());
         assert!(share_link_status(mixed).is_err());
+    }
+
+    /// Les commandes génériques ne servent qu'aux sortes de l'interface : on
+    /// ne fabrique pas un lien d'instance sans passer par sa validation.
+    #[test]
+    fn commandes_generiques_limitees() {
+        let links = share_link_build("settings".into(), "closeOnLaunch=true".into()).unwrap();
+        assert_eq!(share_link_read("settings".into(), links.join("\n")).unwrap(), "closeOnLaunch=true");
+        assert!(share_link_build("instance".into(), "x".into()).is_err());
+        assert!(share_link_read("options".into(), links.join("\n")).is_err());
+    }
+
+    /// Décode un lien (ou ses parties) pour voir ce qu'il contient :
+    /// `YF_LINK=<lien> cargo test --lib decoder_un_lien -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn decoder_un_lien() {
+        let text = std::env::var("YF_LINK").expect("YF_LINK");
+        let status = share_link_status(text.clone()).unwrap();
+        let data = read(&text, &status.kind).unwrap();
+        eprintln!("sorte : {} ({} partie(s))\n{}", status.kind, status.total, String::from_utf8_lossy(&data));
     }
 
     #[test]

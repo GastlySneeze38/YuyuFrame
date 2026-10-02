@@ -13,6 +13,7 @@ import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
 import { ShareImportModal } from '@/components/instances/ShareImportModal'
 import { OptionsLinkModal } from '@/components/instances/OptionsShare'
+import { SettingsLinkModal } from '@/components/settings/SettingsShare'
 import { shareLinkKind, type ShareLinkKind } from '@/lib/shareLink'
 import { useStore, type Lang } from '@/stores/useStore'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
@@ -519,6 +520,9 @@ export default function App() {
       )}
       {shareLink?.kind === 'options' && (
         <OptionsLinkModal link={shareLink.link} onClose={() => setShareLink(null)} />
+      )}
+      {shareLink?.kind === 'settings' && (
+        <SettingsLinkModal link={shareLink.link} onClose={() => setShareLink(null)} />
       )}
       {shareLink?.kind === 'instance' && (
         <ShareImportModal

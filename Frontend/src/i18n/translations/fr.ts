@@ -1801,6 +1801,28 @@ export const fr = {
     noInstance: 'Crée d’abord une instance pour y appliquer ces options.',
     targetInstance: 'Instance qui reçoit les options',
   },
+
+  // Partage des paramètres du launcher (en-tête de la page Paramètres).
+  settingsShare: {
+    shareButton: 'Partager',
+    optimizedButton: 'Paramètres optimisés',
+    shareTitle: 'Partager mes paramètres',
+    shareDesc: 'Tes paramètres du launcher dans un lien, sans fichier ni serveur. La personne qui le reçoit voit chaque changement avant de l’appliquer.',
+    notShared: 'Jamais dans le lien : la langue et le dossier de stockage, qui sont propres à chacun.',
+    applyTitle: 'Appliquer un lien reçu',
+    applyAction: 'Appliquer {{count}} changement(s)',
+    applied: '{{count}} paramètre(s) appliqué(s).',
+    nothingChanges: 'Rien ne change : tu as déjà ces paramètres.',
+    optimizedTitle: 'Paramètres optimisés',
+    optimizedDesc: 'Les réglages recommandés par le créateur de YuyuFrame. Vérifie la liste, puis applique.',
+    optimizedSoon: 'Les paramètres optimisés arrivent bientôt.',
+    receivedTitle: 'Paramètres partagés',
+    on: 'Activé',
+    off: 'Désactivé',
+    none: 'Aucune',
+    jvmVendor: 'Java par défaut',
+    gcPolicy: 'Ramasse-miettes par défaut',
+  },
 }
 
 export type TranslationSchema = typeof fr

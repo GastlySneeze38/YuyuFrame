@@ -471,6 +471,8 @@ pub fn run() {
             commands::instance::repair::instance_diagnose,
             commands::instance::repair::instance_repair,
             share_link::share_link_status,
+            share_link::share_link_build,
+            share_link::share_link_read,
             commands::instance::share::instance_share_scan,
             commands::instance::share::instance_share_export,
             commands::instance::share::instance_share_link,

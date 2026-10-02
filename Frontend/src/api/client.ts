@@ -420,6 +420,11 @@ export const api = {
   shareLink: {
     /** Ce qu'on a collé : sorte, parties reçues, parties manquantes. */
     status: (text: string) => invoke<ShareLinkStatus>('share_link_status', { text }),
+    /** Sortes dont le contenu vit dans l'interface (`settings`) : le Rust ne
+     *  fait que compresser et découper ; la validation est ici
+     *  (`lib/launcherSettingsShare.ts`). */
+    build: (kind: 'settings', text: string) => invoke<string[]>('share_link_build', { kind, text }),
+    read: (kind: 'settings', text: string) => invoke<string>('share_link_read', { kind, text }),
   },
 
   // Options du jeu et du client intégré (`commands/instance/options_share.rs`) :
