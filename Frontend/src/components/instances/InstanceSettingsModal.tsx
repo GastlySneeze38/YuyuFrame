@@ -529,26 +529,56 @@ function InstallationTab({
   const [loader, setLoader] = useState<Loader>(instance.loader)
   const [loaderVersion, setLoaderVersion] = useState(instance.loader_version)
   const [updateMods, setUpdateMods] = useState(true)
+  /** Effacer les mods en passant à vanilla. Décoché par défaut : la case
+   *  propose une suppression, et une suppression ne se propose pas cochée. */
+  const [wipeMods, setWipeMods] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingLabel, setSavingLabel] = useState('')
 
   /** Versions du loader proposées — `null` tant qu'on ne les a pas. */
   const [loaderVersions, setLoaderVersions] = useState<LoaderVersion[] | null>(null)
+  /** Loaders qui existent pour la version du jeu choisie — `null` en attente.
+   *  Tant qu'on ne sait pas, on les propose tous : retirer un bouton puis le
+   *  remettre une seconde plus tard serait pire que de ne rien filtrer. */
+  const [available, setAvailable] = useState<string[] | null>(null)
 
   // Rechargées à chaque changement de loader ou de version de jeu : une liste
   // de builds n'a de sens que pour un couple précis. Le compteur de génération
   // écarte la réponse d'un couple qu'on vient de quitter — sans lui, une
   // réponse lente écraserait la liste du couple courant.
+  // Chargées dès l'ouverture de l'onglet et pas seulement en édition : la vue
+  // de lecture annonce elle aussi la version recommandée, puisque c'est elle
+  // que le launcher installe quand rien n'est épinglé.
   const generation = useRef(0)
   useEffect(() => {
-    if (!editing) return
     const mine = ++generation.current
     setLoaderVersions(null)
     if (loader === 'vanilla') { setLoaderVersions([]); return }
     api.versions.loader(loader, mcVersion)
       .then((list) => { if (generation.current === mine) setLoaderVersions(list) })
       .catch(() => { if (generation.current === mine) setLoaderVersions([]) })
-  }, [editing, loader, mcVersion])
+  }, [loader, mcVersion])
+
+  // Quels loaders existent pour cette version du jeu. Dépend de la seule
+  // version de jeu, pas du loader choisi : c'est une propriété de la version.
+  const availabilityGeneration = useRef(0)
+  useEffect(() => {
+    if (!editing) return
+    const mine = ++availabilityGeneration.current
+    setAvailable(null)
+    api.versions.loaderAvailability(mcVersion)
+      .then((list) => { if (availabilityGeneration.current === mine) setAvailable(list) })
+      .catch(() => { if (availabilityGeneration.current === mine) setAvailable(null) })
+  }, [editing, mcVersion])
+
+  // Changer de version du jeu peut faire disparaître le loader choisi — passer
+  // de 1.21 à 1.19 retire NeoForge. On retombe alors sur vanilla, le seul qui
+  // existe partout, plutôt que de laisser un bouton sélectionné qui n'est plus
+  // proposé.
+  useEffect(() => {
+    if (!editing || !available) return
+    if (!available.includes(loader)) setLoader('vanilla')
+  }, [editing, available, loader])
 
   // Une version épinglée pour un autre couple n'existerait pas ici : on la
   // relâche plutôt que de proposer un choix qui ferait échouer le lancement.
@@ -562,10 +592,32 @@ function InstallationTab({
     setLoader(instance.loader)
     setLoaderVersion(instance.loader_version)
     setUpdateMods(true)
+    setWipeMods(false)
     setEditing(false)
   }
 
   const versionChanged = mcVersion !== instance.mc_version || loader !== instance.loader
+  /** On quitte un loader pour vanilla : les mods installés ne se chargeront
+   *  plus, quelle que soit leur version. */
+  const goingVanilla = loader === 'vanilla' && instance.loader !== 'vanilla'
+
+  /**
+   * Ce que le launcher installe quand rien n'est épinglé.
+   *
+   * C'est la version recommandée par le loader lui-même, pas « la plus
+   * récente » : l'une veut dire quelque chose, l'autre non. Elle est annoncée
+   * avec son numéro partout où on parle de recommandation, sans quoi
+   * « recommandée » reste une promesse sans contenu.
+   */
+  const recommended = loaderVersions?.find((v) => v.recommended) ?? null
+  const defaultLabel = recommended
+    ? t('instancesPage.loaderDefaultWith', { version: recommended.version })
+    : t('instancesPage.loaderDefault')
+
+  /** Un loader peut n'exister pour aucune version du jeu choisi — NeoForge
+   *  avant 1.20.2, Quilt et Fabric sur les très vieilles versions. Rien à
+   *  recommander alors, et rien à installer non plus. */
+  const unavailable = loader !== 'vanilla' && loaderVersions?.length === 0
 
   const save = async () => {
     setSaving(true)
@@ -587,7 +639,19 @@ function InstallationTab({
         },
         loaderVersion,
       )
-      if (versionChanged && updateMods) {
+      if (goingVanilla) {
+        if (wipeMods) {
+          setSavingLabel(t('instancesPage.wipingMods'))
+          // Un par un : c'est ce que la commande sait faire, et une
+          // suppression qui échoue sur un fichier ne doit pas emporter les
+          // autres — l'instance resterait à moitié nettoyée sans qu'on sache
+          // où elle s'est arrêtée.
+          const mods = await api.mods.list(instance.id).catch(() => [])
+          for (const mod of mods) {
+            await api.mods.delete(instance.id, mod.name).catch(() => {})
+          }
+        }
+      } else if (versionChanged && updateMods) {
         setSavingLabel(t('instancesPage.updatingMods'))
         await updateModsForNewVersion(instance.id, mcVersion, loader)
       }
@@ -619,11 +683,26 @@ function InstallationTab({
             {instance.loader !== 'vanilla' && (
               <Line label={t('instancesPage.loaderVersion', { loader: label(instance.loader) })}>
                 <span className="font-semibold text-txt-primary">
-                  {instance.loader_version || t('instancesPage.loaderLatest')}
+                  {/* Sans recommandation connue, un tiret : annoncer
+                      « Recommandée » sans pouvoir dire laquelle serait une
+                      promesse vide, et c'est le cas quand le loader n'existe
+                      pas pour cette version du jeu. */}
+                  {instance.loader_version || (recommended || !unavailable ? defaultLabel : '—')}
                 </span>
               </Line>
             )}
           </div>
+
+          {unavailable && (
+            <div className="flex gap-2.5 rounded-xl border border-danger/35 bg-danger/10 p-3">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={15} height={15} className="mt-px shrink-0 text-danger">
+                <circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" />
+              </svg>
+              <p className="text-[11.5px] leading-relaxed text-txt-secondary">
+                {t('instancesPage.loaderUnavailable', { loader: label(instance.loader), mc: instance.mc_version })}
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2.5">
             <button
@@ -657,8 +736,12 @@ function InstallationTab({
           </div>
 
           <Field label={t('instancesPage.platform')}>
+            {/* Seuls les loaders qui existent pour cette version du jeu : un
+                bouton qu'on ne peut pas choisir n'a pas à être là. Le message
+                d'indisponibilité plus bas reste, en filet — il attrape le cas
+                où la vérification n'a pas pu se faire. */}
             <div className="flex flex-wrap gap-1.5">
-              {LOADERS.map((l) => (
+              {LOADERS.filter((l) => !available || available.includes(l)).map((l) => (
                 <button
                   key={l}
                   onClick={() => setLoader(l)}
@@ -682,6 +765,17 @@ function InstallationTab({
             <Field label={t('instancesPage.loaderVersion', { loader: label(loader) })}>
               {loaderVersions === null ? (
                 <p className="text-[11.5px] text-txt-muted">{t('common.loading')}</p>
+              ) : unavailable ? (
+                // Pas de menu du tout : il n'y a rien à y mettre, et un menu
+                // vide laisserait croire à un chargement qui n'aboutit pas.
+                <div className="flex gap-2.5 rounded-xl border border-danger/35 bg-danger/10 p-3">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={15} height={15} className="mt-px shrink-0 text-danger">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" />
+                  </svg>
+                  <p className="text-[11.5px] leading-relaxed text-txt-secondary">
+                    {t('instancesPage.loaderUnavailable', { loader: label(loader), mc: mcVersion })}
+                  </p>
+                </div>
               ) : (
                 <>
                   <Select
@@ -699,10 +793,11 @@ function InstallationTab({
                           ? v.version
                           : `${v.version} — ${t('instancesPage.loaderUnstable')}`,
                     }))}
-                    // La première entrée n'est pas une version : c'est le
-                    // comportement par défaut du launcher, et il doit rester
-                    // atteignable pour revenir en arrière.
-                    placeholder={{ value: '', label: t('instancesPage.loaderLatest') }}
+                    // La première entrée n'est pas une version choisie : c'est
+                    // le comportement par défaut du launcher, qui doit rester
+                    // atteignable pour revenir en arrière — et qui annonce
+                    // quelle version il installera.
+                    placeholder={{ value: '', label: defaultLabel }}
                   />
                   <p className="text-[11px] leading-relaxed text-txt-muted">
                     {t('instancesPage.loaderVersionHint')}
@@ -712,28 +807,37 @@ function InstallationTab({
             </Field>
           )}
 
+          {/* Deux questions différentes selon la destination. Vers un loader :
+              faut-il chercher une version compatible de chaque mod ? Vers
+              vanilla : il n'y a plus rien à chercher, les mods ne se
+              chargeront plus — la seule chose à décider est si on les efface.
+              Et celle-là part décochée : un dossier de mods vidé ne se
+              récupère pas, alors qu'un dossier laissé en place ne coûte que
+              de la place et redevient utile en revenant sur un loader. */}
           {versionChanged && (
             <button
-              onClick={() => setUpdateMods(!updateMods)}
+              onClick={() => (goingVanilla ? setWipeMods(!wipeMods) : setUpdateMods(!updateMods))}
               className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5 text-left transition-colors hover:border-line-strong"
             >
-              <Check on={updateMods} />
+              <Check on={goingVanilla ? wipeMods : updateMods} danger={goingVanilla} />
               <span className="min-w-0">
                 <span className="block text-[12px] font-semibold text-txt-secondary">
-                  {t('instancesPage.updateModsLabel')}
+                  {goingVanilla ? t('instancesPage.wipeModsLabel') : t('instancesPage.updateModsLabel')}
                 </span>
                 <span className="block text-[11px] leading-snug text-txt-muted">
-                  {t('instancesPage.updateModsHint')}
+                  {goingVanilla ? t('instancesPage.wipeModsHint') : t('instancesPage.updateModsHint')}
                 </span>
               </span>
             </button>
           )}
 
           <div className="flex gap-2">
+            {/* Enregistrer un couple sans aucune version de loader ne ferait
+                que repousser l'échec au lancement, où il serait incompréhensible. */}
             <button
               onClick={save}
-              disabled={saving}
-              className="rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+              disabled={saving || unavailable}
+              className="rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {saving ? savingLabel : t('common.save')}
             </button>
@@ -787,11 +891,17 @@ function Select({
   )
 }
 
-function Check({ on }: { on: boolean }) {
+/** `danger` quand cocher détruit quelque chose : la couleur dit ce que le
+ *  libellé annonce, avant qu'on ait fini de le lire. */
+function Check({ on, danger }: { on: boolean; danger?: boolean }) {
   return (
     <span
       className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-colors ${
-        on ? 'border-accent bg-accent text-white' : 'border-line-strong bg-transparent text-transparent'
+        on
+          ? danger
+            ? 'border-danger bg-danger text-white'
+            : 'border-accent bg-accent text-white'
+          : 'border-line-strong bg-transparent text-transparent'
       }`}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" width={11} height={11}>

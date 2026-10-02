@@ -51,6 +51,21 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Aucune version NeoForge pour Minecraft {}", mc_version))
 }
 
+/// NeoForge a-t-il une version pour ce MC ?
+///
+/// Souvent non, et c'est normal : le dépôt `net.neoforged:neoforge` commence à
+/// `20.2`, donc **rien avant Minecraft 1.20.2** (les builds 1.20.1 vivent sous
+/// un autre artefact, que le launcher n'installe pas). Même liste que
+/// `list_versions`, filtrée pareil.
+///
+/// `Err` = « on ne sait pas » (réseau), jamais « non ».
+pub async fn supports(mc_version: &str) -> Result<bool> {
+    let client = crate::minecraft::http::short_lived_client();
+    let resp: NeoForgeVersionList = client.get(NEOFORGE_VERSIONS_API).send().await?.json().await?;
+    let prefix = format!("{}.", mc_version.strip_prefix("1.").unwrap_or(mc_version));
+    Ok(resp.versions.iter().any(|v| v.starts_with(&prefix)))
+}
+
 /// Les versions NeoForge disponibles pour ce MC, la plus récente d'abord.
 ///
 /// Même filtre par préfixe que `fetch_latest_version` ci-dessus, et même tri

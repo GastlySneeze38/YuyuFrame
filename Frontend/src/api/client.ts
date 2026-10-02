@@ -290,6 +290,11 @@ export const api = {
      *  d'abord. Vide pour `vanilla`, qui n'a pas de loader à versionner. */
     loader: (loader: string, mcVersion: string) =>
       invoke<LoaderVersion[]>('loader_versions', { loader, mcVersion }),
+    /** Les loaders qui ont au moins une version pour cette version du jeu —
+     *  « vanilla » toujours compris. Un loader dont on ne sait rien (réseau)
+     *  y figure : mieux vaut un choix de trop qu'un choix retiré à tort. */
+    loaderAvailability: (mcVersion: string) =>
+      invoke<string[]>('loader_availability', { mcVersion }),
   },
 
   instances: {

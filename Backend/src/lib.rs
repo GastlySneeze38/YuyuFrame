@@ -379,6 +379,7 @@ pub fn run() {
             commands::account::catalog::skin_catalog_previews,
             commands::system::versions::list_versions,
             commands::system::versions::loader_versions,
+            commands::system::versions::loader_availability,
             commands::launch::launch_game,
             commands::launch::cancel_launch,
             commands::launch::reload_agent,

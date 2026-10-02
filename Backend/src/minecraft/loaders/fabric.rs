@@ -9,6 +9,13 @@ use super::{mark_recommended, LoaderVersion};
 const FABRIC_META: &str = "https://meta.fabricmc.net/v2";
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 
+/// Une version du jeu connue d'un loader — `/versions/game`, chez Fabric
+/// comme chez Quilt.
+#[derive(Deserialize)]
+pub(super) struct GameVersion {
+    pub version: String,
+}
+
 #[derive(Deserialize)]
 struct LoaderEntry {
     loader: LoaderInfo,
@@ -139,6 +146,27 @@ pub async fn list_versions(mc_version: &str) -> Result<Vec<LoaderVersion>> {
         .collect();
     mark_recommended(&mut versions, None);
     Ok(versions)
+}
+
+/// Fabric connaît-il cette version du jeu ?
+///
+/// Par `/versions/game` et non par la liste des loaders : la première tient en
+/// quelques centaines d'entrées `{version, stable}`, la seconde rend tout le
+/// profil de chaque loader. Pour une question binaire posée à chaque
+/// changement de version dans un menu, la différence se voit.
+///
+/// `Err` veut dire « on ne sait pas » (réseau), jamais « non » — c'est à
+/// l'appelant de décider, et il propose le loader plutôt que de le retirer
+/// sur une panne passagère.
+pub async fn supports(mc_version: &str) -> Result<bool> {
+    let client = crate::minecraft::http::short_lived_client();
+    let games: Vec<GameVersion> = client
+        .get(format!("{FABRIC_META}/versions/game"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(games.iter().any(|g| g.version == mc_version))
 }
 
 /// Le profil d'une version de loader **précise**, choisie par l'utilisateur.

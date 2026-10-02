@@ -43,3 +43,37 @@ pub async fn loader_versions(loader: String, mc_version: String) -> Result<Vec<L
     }
     .map_err(|e| e.to_string())
 }
+
+/// Les loaders qui ont au moins une version pour cette version du jeu.
+///
+/// Sert à ne pas proposer un choix qui ne mène nulle part : NeoForge n'existe
+/// pas avant Minecraft 1.20.2, Quilt et Fabric s'arrêtent vers 1.14, et rien
+/// dans leur nom ne le dit. « vanilla » y est toujours, n'ayant aucun loader à
+/// installer.
+///
+/// Les quatre interrogations partent **ensemble**, et chacune passe par la
+/// route la plus légère de son loader (voir les `supports` respectifs) : cette
+/// commande se déclenche à chaque changement de version dans un menu.
+///
+/// Un loader dont on ne sait rien est **proposé** : une panne de réseau ne doit
+/// pas retirer un choix légitime, et l'écran garde un message d'erreur en
+/// dernier recours si la liste de versions revient vide.
+#[tauri::command]
+pub async fn loader_availability(mc_version: String) -> Result<Vec<String>, String> {
+    use crate::minecraft::loaders::{fabric, forge, neoforge, quilt};
+
+    let (fab, qui, forg, neo) = tokio::join!(
+        fabric::supports(&mc_version),
+        quilt::supports(&mc_version),
+        forge::supports(&mc_version),
+        neoforge::supports(&mc_version),
+    );
+
+    let mut available = vec!["vanilla".to_string()];
+    for (name, result) in [("fabric", fab), ("quilt", qui), ("forge", forg), ("neoforge", neo)] {
+        if result.unwrap_or(true) {
+            available.push(name.to_string());
+        }
+    }
+    Ok(available)
+}

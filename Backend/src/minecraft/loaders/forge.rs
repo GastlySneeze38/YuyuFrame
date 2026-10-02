@@ -80,6 +80,21 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Aucune version Forge pour Minecraft {}", mc_version))
 }
 
+/// Forge a-t-il une version pour ce MC ?
+///
+/// Par les promotions et non par le maven : le premier fait quelques dizaines
+/// de kilo-octets, le second plus d'un méga-octet pour la même réponse
+/// binaire. Et une version promue est précisément ce que le launcher
+/// installerait — s'il n'y en a pas, il n'y a rien à proposer.
+///
+/// `Err` = « on ne sait pas » (réseau), jamais « non ».
+pub async fn supports(mc_version: &str) -> Result<bool> {
+    let client = crate::minecraft::http::short_lived_client();
+    let promos: ForgePromos = client.get(FORGE_PROMOTIONS).send().await?.json().await?;
+    Ok(promos.promos.contains_key(&format!("{mc_version}-recommended"))
+        || promos.promos.contains_key(&format!("{mc_version}-latest")))
+}
+
 /// Les builds Forge disponibles pour ce MC, le plus récent d'abord.
 ///
 /// `promotions_slim.json` ne connaît que « recommended » et « latest » : pour
