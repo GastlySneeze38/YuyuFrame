@@ -154,11 +154,6 @@ pub fn read_text(text: &str, kind: &str) -> Result<String, String> {
     String::from_utf8(read(text, kind)?).map_err(|_| broken())
 }
 
-/// La sorte d'un lien (`instance`, `options`…), sans rien valider d'autre.
-pub fn kind_of(link: &str) -> Option<String> {
-    links_in(link).into_iter().next().map(|l| l.kind)
-}
-
 /// Où en est un collage : quelles parties on a, combien il en faut.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -444,7 +439,7 @@ mod tests {
         let text = "fov:0.5\nmaxFps:260\n\u{1E}zoom.enabled=true\nmacro accentuée é";
         let link = one("options", text);
         assert!(link.starts_with("yuyuframe://options/"));
-        assert_eq!(kind_of(&link).as_deref(), Some("options"));
+        assert_eq!(share_link_status(link.clone()).unwrap().kind, "options");
         assert_eq!(read_text(&link, "options").unwrap(), text);
         assert!(read(&link, "instance").unwrap_err().contains("ne sert pas ici"));
         // Collé au milieu d'un message.

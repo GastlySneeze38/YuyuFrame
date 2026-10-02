@@ -27,8 +27,10 @@
 //!   `usercache.json`, l'historique des commandes, `essential/` (le mod
 //!   Essential y garde des jetons de connexion), et les fichiers internes du
 //!   launcher (`meta.json`, `modpack.json`).
-//! - **Coché d'office** : mods, packs de ressources, shaders, `config/` et les
-//!   fichiers d'options — c'est ce qu'on attend en partageant une instance.
+//! - **Coché d'office** : mods, packs de ressources, shaders et les fichiers
+//!   d'options — c'est ce qu'on attend en partageant une instance. `config/`
+//!   est proposé décoché : il pèse vite plus que tout le reste et contient la
+//!   configuration personnelle de chaque mod.
 //! - **Proposé, décoché** : la liste des serveurs (elle peut contenir
 //!   l'adresse d'un serveur privé), chaque monde (lourd, et rarement voulu),
 //!   et tout le reste.
@@ -535,8 +537,18 @@ fn item_of(entry: &Entry, sha1: Option<&String>) -> ShareItem {
         size: entry.size,
         files: entry.files,
         source,
-        selected: entry.group.selected_by_default(),
+        selected: selected_by_default(entry),
     }
+}
+
+/// Dossier des réglages de mods : décoché d'office. Il pèse vite plus que
+/// tout le reste (138 Ko, 8 parties de lien sur une vraie instance) et
+/// contient la configuration personnelle de chaque mod — on le coche quand
+/// on veut vraiment la transmettre.
+const CONFIG_DIR: &str = "config";
+
+fn selected_by_default(entry: &Entry) -> bool {
+    entry.group.selected_by_default() && entry.path != CONFIG_DIR
 }
 
 #[tauri::command]
