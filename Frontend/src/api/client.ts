@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -396,6 +396,21 @@ export const api = {
       invoke<JvmConfigPreview>('preview_jvm_config', { instanceId, mcVersion, ramMb, ...jvmInvokeArgs(jvm) }),
     setJvmProfile: (instanceId: string, profileId: string | null) =>
       invoke<void>('instance_set_jvm_profile', { instanceId, profileId }),
+  },
+
+  // Partage d'instance sans hébergement (`commands/instance/share.rs`).
+  share: {
+    /** Tout ce qui peut se partager, et d'où chaque fichier se télécharge. */
+    scan: (instanceId: string) => invoke<ShareScan>('instance_share_scan', { instanceId }),
+    /** Écrit le `.mrpack` des éléments choisis (désignés par leur `path`). */
+    exportFile: (instanceId: string, paths: string[], filePath: string) =>
+      invoke<ShareExport>('instance_share_export', { instanceId, paths, filePath }),
+    /** Lien `yuyuframe://import?…` — refusé si un élément n'est pas sur Modrinth. */
+    link: (instanceId: string, paths: string[]) => invoke<string>('instance_share_link', { instanceId, paths }),
+    preview: (source: ShareSource) => invoke<SharePreview>('instance_share_preview', { source }),
+    /** Crée l'instance et installe le pack ; progression par `share_import_progress`. */
+    import: (source: ShareSource, name: string, ramMb: number) =>
+      invoke<ShareImport>('instance_share_import', { source, name, ramMb }),
   },
 
   // Configurations JVM réutilisables (écran /jvm) — reliables à plusieurs

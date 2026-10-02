@@ -9,3 +9,4 @@ pub mod options;
 pub mod options_archive;
 pub mod packs;
 pub mod repair;
+pub mod share;

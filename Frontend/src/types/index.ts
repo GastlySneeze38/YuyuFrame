@@ -293,6 +293,67 @@ export type ModpackImportResult =
   | { kind: 'structured'; meta: ModpackMeta }
   | { kind: 'generic'; imported: number; failed: number }
 
+// ── Partage d'instance (`commands/instance/share.rs`) ─────────────────────
+// Rien n'est hébergé : un `.mrpack` qui référence ce qui est sur Modrinth ou
+// CurseForge et embarque le reste, ou un lien `yuyuframe://import?…` quand
+// tout est sur Modrinth.
+
+export type ShareGroup = 'mods' | 'resourcepacks' | 'shaderpacks' | 'settings' | 'servers' | 'saves' | 'other'
+/** D'où le destinataire récupère l'élément — `embedded` : copié dans le pack. */
+export type ShareOrigin = 'modrinth' | 'curseforge' | 'embedded'
+
+export interface ShareItem {
+  /** Chemin relatif à l'instance — aussi l'identifiant de la sélection. */
+  path: string
+  group: ShareGroup
+  size: number
+  files: number
+  source: ShareOrigin
+  /** Coché par défaut. */
+  selected: boolean
+}
+
+export interface ShareScan {
+  name: string
+  mcVersion: string
+  loader: string
+  items: ShareItem[]
+  /** Modrinth injoignable : ce qu'il aurait reconnu est compté comme embarqué. */
+  lookupFailed: boolean
+}
+
+export interface ShareExport {
+  linked: number
+  embedded: number
+  size: number
+}
+
+export type ShareSource = { kind: 'file'; path: string } | { kind: 'link'; link: string }
+
+export interface SharePreviewFile {
+  path: string
+  size: number
+  /** modrinth | curseforge | github | gitlab ; vide pour un fichier embarqué. */
+  source: string
+}
+
+export interface SharePreview {
+  name: string
+  summary: string
+  mcVersion: string
+  loader: string
+  loaderVersion: string
+  downloads: SharePreviewFile[]
+  embedded: SharePreviewFile[]
+  /** Fichiers écartés : chemin dangereux, adresse hors plateformes, version introuvable. */
+  rejected: string[]
+}
+
+export interface ShareImport {
+  instance: Instance
+  failed: string[]
+}
+
 /// Aperçu d'un pack avant install (ModpackDetailModal) — version MC, loader,
 /// et noms des mods référencés. Résolu depuis le fichier du pack lui-même
 /// (`modpack_fetch_index`/`modpack_fetch_curseforge_index`), pas depuis les

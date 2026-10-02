@@ -10,6 +10,7 @@ import { InstanceCard } from '@/components/instances/InstanceCard'
 import { CreateInstanceModal } from '@/components/instances/CreateInstanceModal'
 import { InstanceSettingsModal } from '@/components/instances/InstanceSettingsModal'
 import { DuplicateInstanceModal } from '@/components/instances/DuplicateInstanceModal'
+import { ShareImportModal } from '@/components/instances/ShareImportModal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { InstanceCardSkeleton } from '@/components/ui/Skeleton'
 import { SNAP, listItemVariants, listVariants, press } from '@/lib/motion'
@@ -29,6 +30,7 @@ export default function Instances() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showShareImport, setShowShareImport] = useState(false)
   // L'instance ouverte dans les paramètres est désignée par son identifiant,
   // pas copiée : la modale montre l'étoile des favoris et le nom, qui changent
   // pendant qu'elle est ouverte. Une copie serait restée celle de l'ouverture.
@@ -392,6 +394,18 @@ export default function Instances() {
           onImported={(instanceId) => {
             api.instances.list().then(setInstances).catch(showError)
             setSelectedInstanceId(instanceId)
+          }}
+          onPickShared={() => { setShowImport(false); setShowShareImport(true) }}
+        />
+      )}
+
+      {showShareImport && (
+        <ShareImportModal
+          onClose={() => setShowShareImport(false)}
+          onImported={(inst) => {
+            addInstance(inst)
+            setSelectedInstanceId(inst.id)
+            setShowShareImport(false)
           }}
         />
       )}

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 
 use super::crud::instance_dir;
+use super::share::{join_relative, safe_relative};
 use crate::commands::curseforge::post_json;
 use crate::minecraft::mod_files::is_jar_file;
 use crate::minecraft::versions::predicate::read_fabric_mod_json;
@@ -317,7 +318,12 @@ fn extract_prefixed_dir(bytes: &[u8], prefix_name: &str, dir: &std::path::Path) 
         if rel.is_empty() || name.ends_with('/') {
             continue;
         }
-        let dest = rel.split('/').fold(dir.to_path_buf(), |acc, c| acc.join(c));
+        // Archive venue d'ailleurs : pas de `..`, pas de fichier interne du launcher.
+        let Some(rel) = safe_relative(rel) else {
+            tracing::warn!("[Modpack CF] chemin refusé : {}", name);
+            continue;
+        };
+        let dest = join_relative(dir, &rel);
         if let Some(parent) = dest.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 tracing::warn!("[Modpack CF] création du dossier pour {} échouée : {}", name, e);
@@ -605,7 +611,11 @@ fn extract_into_instance(bytes: &[u8], dir: &std::path::Path) -> Result<Vec<Stri
             if rel.is_empty() || name.ends_with('/') {
                 continue;
             }
-            let dest = rel.split('/').fold(dir.to_path_buf(), |acc, c| acc.join(c));
+            let Some(rel) = safe_relative(rel) else {
+                tracing::warn!("[Modpack] chemin refusé : {}", name);
+                continue;
+            };
+            let dest = join_relative(dir, &rel);
             if let Some(parent) = dest.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
                     tracing::warn!("[Modpack] création du dossier pour {} échouée : {}", name, e);
@@ -721,7 +731,12 @@ fn extract_generic_pack(bytes: &[u8], dir: &std::path::Path) -> Result<(usize, u
         if rel.is_empty() || name.ends_with('/') {
             continue;
         }
-        let dest = rel.split('/').fold(dir.to_path_buf(), |acc, c| acc.join(c));
+        let Some(rel) = safe_relative(rel) else {
+            tracing::warn!("[Modpack générique] chemin refusé : {}", name);
+            failed += 1;
+            continue;
+        };
+        let dest = join_relative(dir, &rel);
         if let Some(parent) = dest.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 tracing::warn!("[Modpack générique] création du dossier pour {} échouée : {}", name, e);
@@ -901,7 +916,12 @@ async fn install_pack(
             failed_files.push(file.path.clone());
             continue;
         }
-        let dest = file.path.split('/').fold(dir.clone(), |acc, c| acc.join(c));
+        let Some(rel) = safe_relative(&file.path) else {
+            tracing::warn!("[Modpack] chemin refusé : {}", file.path);
+            failed_files.push(file.path.clone());
+            continue;
+        };
+        let dest = join_relative(&dir, &rel);
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
         }

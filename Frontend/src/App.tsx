@@ -11,6 +11,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { PlanGate } from '@/components/PlanGate'
 import { ModalQueueHost } from '@/components/ModalQueueHost'
 import { JoinServerModal, type JoinRequest } from '@/components/servers/JoinServerModal'
+import { ShareImportModal } from '@/components/instances/ShareImportModal'
 import { useStore, type Lang } from '@/stores/useStore'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
@@ -120,6 +121,16 @@ export default function App() {
   const refreshCrashWatch = useCrashWatch((s) => s.refresh)
   const clearCrashWatch = useCrashWatch((s) => s.clear)
   const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null)
+  /** Lien `yuyuframe://import?…` cliqué : instance partagée à recevoir. */
+  const [shareLink, setShareLink] = useState<string | null>(null)
+  const addInstance = useStore((s) => s.addInstance)
+  const setSelectedInstanceId = useStore((s) => s.setSelectedInstanceId)
+  // Le même protocole porte deux gestes : rejoindre un ami (`join`) et
+  // recevoir une instance (`import`, commands/instance/share.rs).
+  const handleDeepLink = (url: string) => {
+    if (url.startsWith('yuyuframe://import')) setShareLink(url)
+    else setJoinRequest(parseJoinUrl(url))
+  }
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
   // consommé dans les callbacks de démarrage ci-dessous, jamais relu après.
   const needsReconnectRef = useRef(authSystemVersion < AUTH_SYSTEM_VERSION)
@@ -285,7 +296,7 @@ export default function App() {
   useEffect(() => {
     if (isConsoleWindow) return
     api.deepLink.takePending().then((url) => {
-      if (url) setJoinRequest(parseJoinUrl(url))
+      if (url) handleDeepLink(url)
     }).catch(() => {})
   }, [])
 
@@ -309,7 +320,7 @@ export default function App() {
   }, [syncGameSettings])
 
   useTauriEvent<string>('deep_link_join', (url) => {
-    setJoinRequest(parseJoinUrl(url))
+    handleDeepLink(url)
   })
 
   // Les trois demandes de démarrage sont déposées sans se soucier les unes
@@ -498,6 +509,19 @@ export default function App() {
       <ModalQueueHost />
       {joinRequest && (
         <JoinServerModal request={joinRequest} onClose={() => setJoinRequest(null)} />
+      )}
+      {shareLink && (
+        <ShareImportModal
+          key={shareLink}
+          initialSource={{ kind: 'link', link: shareLink }}
+          onClose={() => setShareLink(null)}
+          onImported={(inst) => {
+            addInstance(inst)
+            setSelectedInstanceId(inst.id)
+            setShareLink(null)
+            navigate('/instances')
+          }}
+        />
       )}
       <FleetNotices />
       {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}

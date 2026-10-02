@@ -125,7 +125,7 @@ fn murmur2_32(data: &[u8], seed: u32) -> u32 {
     h
 }
 
-fn curseforge_fingerprint(data: &[u8]) -> u32 {
+pub(crate) fn curseforge_fingerprint(data: &[u8]) -> u32 {
     let filtered: Vec<u8> = data.iter().copied().filter(|&b| b != 9 && b != 10 && b != 13 && b != 32).collect();
     murmur2_32(&filtered, 1)
 }

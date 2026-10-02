@@ -37,9 +37,12 @@ interface ImportSourceModalProps {
   onImported: (instanceId: string) => void
   /// Si fourni, la destination est verrouillée sur cette instance (appelé depuis Mods.tsx).
   fixedInstanceId?: string
+  /// Instance reçue de quelqu'un (.mrpack ou lien) : elle crée sa propre
+  /// instance, donc l'entrée n'existe que depuis la page Instances.
+  onPickShared?: () => void
 }
 
-export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: ImportSourceModalProps) {
+export function ImportSourceModal({ onClose, onImported, fixedInstanceId, onPickShared }: ImportSourceModalProps) {
   const t = useT()
   const { instances, versions, defaultRam } = useStore()
   const releaseVersions = versions.filter((v) => v.version_type === 'release').map((v) => v.id)
@@ -228,6 +231,18 @@ export function ImportSourceModal({ onClose, onImported, fixedInstanceId }: Impo
 
         {step === 'pick' && (
           <div className="flex flex-1 flex-col gap-3 overflow-hidden py-4">
+            {onPickShared && (
+              <button
+                onClick={onPickShared}
+                className="flex items-center gap-3 rounded-xl border border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.1)] p-3 text-left transition-colors hover:bg-[rgba(75,63,207,0.18)]"
+              >
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-white">{t('share.importEntry')}</p>
+                  <p className="text-[11px] text-[rgba(255,255,255,0.45)]">{t('share.importEntryDesc')}</p>
+                </div>
+              </button>
+            )}
+
             {detectingLaunchers && (
               <p className="text-[11.5px] text-[rgba(255,255,255,0.35)] text-center">{t('import.searchingLaunchers')}</p>
             )}

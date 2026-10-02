@@ -18,6 +18,7 @@ import { useLoadersFor } from '@/lib/loaderCompat'
 import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
 import { InstanceIcon } from './InstanceIcon'
+import { ShareTab } from './ShareTab'
 import { useT } from '@/i18n'
 
 /**
@@ -46,7 +47,7 @@ import { useT } from '@/i18n'
  * de fichier, pas des champs). Elles ne passent pas par le brouillon et
  * n'allument donc pas le pied.
  */
-const TABS = ['general', 'installation', 'window', 'java', 'game', 'repair'] as const
+const TABS = ['general', 'installation', 'window', 'java', 'game', 'repair', 'share'] as const
 type Tab = (typeof TABS)[number]
 
 export function InstanceSettingsModal({
@@ -133,6 +134,7 @@ export function InstanceSettingsModal({
       { id: 'java' as const, label: t('instancesPage.tabJava'), icon: <IconChip /> },
       { id: 'game' as const, label: t('instancesPage.tabGame'), icon: <IconSliders /> },
       { id: 'repair' as const, label: t('instancesPage.tabRepair'), icon: <IconWrench /> },
+      { id: 'share' as const, label: t('instancesPage.tabShare'), icon: <IconShare /> },
     ],
     [t],
   )
@@ -349,6 +351,8 @@ export function InstanceSettingsModal({
             {tab === 'game' && <GameSettings instanceId={instance.id} />}
 
             {tab === 'repair' && <RepairTab instance={instance} />}
+
+            {tab === 'share' && <ShareTab instance={instance} />}
           </div>
         </div>
 
@@ -1896,6 +1900,12 @@ const IconChip = () => (
 const IconWindow = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
     <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" />
+  </svg>
+)
+const IconShare = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
+    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
   </svg>
 )
 const IconWrench = () => (
