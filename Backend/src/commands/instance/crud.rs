@@ -33,6 +33,14 @@ pub struct Instance {
     /// défaut du launcher — sûr, jamais un lancement avec des drapeaux
     /// inattendus.
     pub jvm_profile_id: Option<String>,
+    /// Icône choisie par l'utilisateur, en data URI ; vide = icône par défaut.
+    ///
+    /// Absente de `meta.json` pour la même raison que le champ ci-dessus :
+    /// c'est une préférence d'affichage, elle vit en base. Une instance
+    /// réimportée depuis son dossier repart donc avec l'icône par défaut,
+    /// jamais avec une icône cassée.
+    #[serde(default)]
+    pub icon: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -140,17 +148,17 @@ pub(crate) fn gen_id(name: &str) -> String {
     }
 }
 
-fn row_to_instance(r: db::InstanceRow) -> Instance {
+pub(super) fn row_to_instance(r: db::InstanceRow) -> Instance {
     Instance {
         id: r.id, name: r.name, mc_version: r.mc_version, loader: r.loader, ram_mb: r.ram_mb,
         favorite: r.favorite, description: r.description,
         jvm_vendor: r.jvm_vendor, jvm_custom_path: r.jvm_custom_path, gc_policy: r.gc_policy,
         jvm_extra_args: r.jvm_extra_args, jvm_args_mode: r.jvm_args_mode,
-        jvm_profile_id: r.jvm_profile_id,
+        jvm_profile_id: r.jvm_profile_id, icon: r.icon,
     }
 }
 
-fn user_id(s: &crate::state::AppState) -> i64 {
+pub(super) fn user_id(s: &crate::state::AppState) -> i64 {
     s.current_yuyu_user_id().unwrap_or(0)
 }
 
@@ -219,7 +227,7 @@ pub async fn instance_create(
         "mc_version": &mc_version,
         "loader": &loader,
     }));
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon: String::new() })
 }
 
 #[tauri::command]
@@ -305,14 +313,14 @@ pub async fn instance_duplicate(
     }
     let name = name.trim().to_string();
 
-    let (loader, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode) = {
+    let (loader, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, icon) = {
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
         let src = db::instance_get(&db, &source_id, uid)
             .map_err(|e| e.to_string())?
             .ok_or("Instance source introuvable")?;
-        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy, src.jvm_extra_args, src.jvm_args_mode)
+        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy, src.jvm_extra_args, src.jvm_args_mode, src.icon)
     };
 
     let new_id = gen_id(&name);
@@ -357,10 +365,17 @@ pub async fn instance_duplicate(
     db::instance_insert(&db, &new_id, uid, &name, &mc_version, &loader, ram_mb, "", &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
         .map_err(|e| e.to_string())?;
 
+    // L'icône suit la copie : elle fait partie de « la même chose », au même
+    // titre que les mods et les réglages du jeu. Elle est en base, donc rien
+    // à copier sur le disque.
+    if !icon.is_empty() {
+        db::instance_set_icon(&db, &new_id, uid, &icon).map_err(|e| e.to_string())?;
+    }
+
     // La config JVM reliée n'est PAS dupliquée : une config est justement
     // faite pour être partagée entre instances, la copie repart donc déliée
     // plutôt que d'hériter d'un lien que l'utilisateur n'a pas demandé.
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None })
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon })
 }
 
 // Le modèle `shared_options.txt` (export, application, état) vit désormais

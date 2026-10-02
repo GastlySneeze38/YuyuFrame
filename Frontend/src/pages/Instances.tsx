@@ -80,6 +80,10 @@ export default function Instances() {
     try {
       await api.instances.delete(id)
       removeInstance(id)
+      // Supprimée depuis ses propres paramètres : la modale se vide d'elle-même
+      // (son contenu vient de la liste), mais l'identifiant visé n'aurait plus
+      // rien à désigner.
+      setSettingsTargetId((current) => (current === id ? null : current))
     } catch (e) { showError(e) }
   }, [removeInstance])
 
@@ -93,6 +97,21 @@ export default function Instances() {
   const handleSettings = useCallback((inst: Instance) => {
     setSettingsTargetId(inst.id)
   }, [])
+
+  /** Copie immédiate, sans rien demander — le geste courant. Changer la
+   *  version ou le nom au passage a son propre bouton, qui ouvre la fenêtre. */
+  const handleDuplicateNow = useCallback(async (inst: Instance) => {
+    try {
+      const copy = await api.instances.duplicate(
+        inst.id,
+        t('instancesPage.copyOf', { name: inst.name }),
+        inst.mc_version,
+        inst.ram_mb,
+      )
+      addInstance(copy)
+      setSelectedInstanceId(copy.id)
+    } catch (e) { showError(e) }
+  }, [addInstance, setSelectedInstanceId, t])
 
   const handleOpenFolder = useCallback((inst: Instance) => {
     api.instances.openFolder(inst.id).catch(showError)
@@ -334,6 +353,9 @@ export default function Instances() {
           // rouvrir le menu entre deux onglets.
           onUpdate={updateInstance}
           onToggleFavorite={handleToggleFavorite}
+          onDuplicate={handleDuplicateNow}
+          onDuplicateAs={setDuplicateSource}
+          onDelete={handleDelete}
         />
       )}
 

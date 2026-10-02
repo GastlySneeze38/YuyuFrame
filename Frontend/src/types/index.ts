@@ -134,6 +134,9 @@ export interface Instance {
   /** Config JVM reliée (`JvmProfile.id`). Quand elle est là, elle remplace
    * intégralement les trois champs ci-dessus au lancement. */
   jvm_profile_id: string | null
+  /** Icône choisie par l'utilisateur, en data URI. Vide = icône par défaut
+   *  (voir `components/instances/InstanceIcon.tsx`). */
+  icon: string
 }
 
 /** Les trois sujets indépendants d'une config JVM. Ils sont édités séparément

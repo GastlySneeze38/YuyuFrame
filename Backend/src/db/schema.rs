@@ -50,7 +50,8 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              jvm_custom_path TEXT,
              gc_policy       TEXT    NOT NULL DEFAULT 'auto',
              jvm_extra_args  TEXT    NOT NULL DEFAULT '',
-             jvm_args_mode   TEXT    NOT NULL DEFAULT 'append'
+             jvm_args_mode   TEXT    NOT NULL DEFAULT 'append',
+             icon            TEXT    NOT NULL DEFAULT ''
          );
 
          -- Configurations JVM réutilisables : une même config peut être reliée
@@ -141,6 +142,13 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // Config JVM reliée. NULL = aucune, l'instance retombe sur ses propres
     // colonnes jvm_* ci-dessus (donc sur les drapeaux générés par défaut).
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN jvm_profile_id TEXT", []);
+    // Icône de l'instance, en data URI (`data:image/png;base64,…`), vide pour
+    // l'icône par défaut. Les octets sont en base plutôt que sur le disque
+    // pour que la liste des instances les ait déjà : un fichier par instance
+    // voudrait dire une lecture par carte à chaque affichage, et un chemin à
+    // réparer dès que l'image d'origine est déplacée. La contrepartie est une
+    // taille bornée à l'import (voir `commands::instance::icon`).
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN icon TEXT NOT NULL DEFAULT ''", []);
     // Jeu de drapeaux dont chaque catégorie est issue, en JSON
     // (`{"gc":"gc-brucethemoose"}`) : purement informatif côté launcher, c'est
     // l'interface qui s'en sert pour montrer les écarts introduits depuis.

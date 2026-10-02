@@ -36,12 +36,24 @@ export function DuplicateInstanceModal({
   // cette RAM existait déjà sur l'instance source — un avertissement suffit.
   const [ramStatus, setRamStatus] = useState<RamStatus>({ isKnownTier: true, isRecommended: true })
 
+  /**
+   * Mettre à jour les mods pour la nouvelle version, ou les copier tels quels.
+   *
+   * C'était automatique et muet : changer la version relançait la recherche
+   * d'une version compatible de chaque mod. Ça vaut la plupart du temps, mais
+   * pas toujours — on duplique aussi pour garder un état connu qui marche, et
+   * repartir de mods figés. Le choix est donc posé, et il se pose seulement
+   * quand la version change (sinon il n'y a rien à mettre à jour).
+   */
+  const [updateMods, setUpdateMods] = useState(true)
+  const versionChanged = mcVersion !== source.mc_version
+
   const handleDuplicate = async () => {
     if (!name.trim()) { showError(t('instancesPage.nameRequired')); return }
     setLoading(true); setLoadingLabel(t('instancesPage.duplicating'))
     try {
       const instance = await api.instances.duplicate(source.id, name.trim(), mcVersion, ram)
-      if (mcVersion !== source.mc_version) {
+      if (versionChanged && updateMods) {
         setLoadingLabel(t('instancesPage.updatingMods'))
         await updateModsForNewVersion(instance.id, mcVersion, source.loader)
       }
@@ -69,11 +81,38 @@ export function DuplicateInstanceModal({
           </svg>
           <p className="text-[11px] text-[rgba(255,255,255,0.35)]">
             {t('instancesPage.loaderKeptPrefix')} <span className="font-semibold" style={{ color: loaderColor(source.loader) }}>{source.loader}</span> {t('instancesPage.loaderKeptSuffix')}{' '}
-            {mcVersion !== source.mc_version
+            {versionChanged && updateMods
               ? <>{t('instancesPage.modsWillUpdateForLower')} <span className="text-[rgba(120,110,230,0.9)] font-semibold">{mcVersion}</span>.</>
               : t('instancesPage.modsWillCopy')}
           </p>
         </div>
+
+        {versionChanged && (
+          <button
+            onClick={() => setUpdateMods(!updateMods)}
+            className="flex items-center gap-3 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5 text-left transition-colors hover:border-[rgba(255,255,255,0.18)]"
+          >
+            <span
+              className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-colors ${
+                updateMods
+                  ? 'border-[rgba(75,63,207,0.8)] bg-[#4B3FCF] text-white'
+                  : 'border-[rgba(255,255,255,0.18)] bg-transparent text-transparent'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" width={11} height={11}>
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[12px] font-semibold text-[rgba(255,255,255,0.8)]">
+                {t('instancesPage.updateModsLabel')}
+              </span>
+              <span className="block text-[11px] leading-snug text-[rgba(255,255,255,0.35)]">
+                {t('instancesPage.updateModsHint')}
+              </span>
+            </span>
+          </button>
+        )}
 
         {ramStatus.isKnownTier && !ramStatus.isRecommended && (
           <p className="text-[11px] text-[rgba(240,180,90,0.6)] -mt-2">⚠ {t('instancesPage.ramNotOptimal')}</p>

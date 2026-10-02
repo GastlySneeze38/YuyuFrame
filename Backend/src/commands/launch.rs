@@ -63,6 +63,7 @@ pub async fn launch_game(
         jvm_extra_args: instance.jvm_extra_args,
         jvm_args_mode: instance.jvm_args_mode,
         jvm_profile_id: instance.jvm_profile_id,
+        icon: instance.icon,
     };
 
     // Une config reliée remplace INTÉGRALEMENT le bloc JVM de l'instance —

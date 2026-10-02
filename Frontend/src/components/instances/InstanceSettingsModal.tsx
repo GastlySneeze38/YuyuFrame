@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
 import type { Instance, Loader, SharedOptionsStatus } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
@@ -12,6 +13,7 @@ import { showError } from '@/stores/useErrorToast'
 import { loaderColor, LOADERS } from '@/lib/loader'
 import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
+import { InstanceIcon } from './InstanceIcon'
 import { useT } from '@/i18n'
 
 /**
@@ -48,6 +50,9 @@ export function InstanceSettingsModal({
   onClose,
   onUpdate,
   onToggleFavorite,
+  onDuplicate,
+  onDuplicateAs,
+  onDelete,
 }: {
   instance: Instance
   versions: string[]
@@ -55,6 +60,12 @@ export function InstanceSettingsModal({
   onUpdate: (instance: Instance) => void
   /** Appliqué tout de suite, hors brouillon — voir l'en-tête du fichier. */
   onToggleFavorite: (id: string) => void
+  /** Copie immédiate, sans rien demander : même version, même RAM, même nom
+   *  préfixé. C'est le geste courant, et il n'a besoin d'aucune réponse. */
+  onDuplicate: (instance: Instance) => void
+  /** Copie en changeant quelque chose — ouvre la fenêtre de duplication. */
+  onDuplicateAs: (instance: Instance) => void
+  onDelete: (id: string) => void
 }) {
   const t = useT()
   const navigate = useNavigate()
@@ -156,9 +167,7 @@ export function InstanceSettingsModal({
     >
       <div className="flex h-full min-h-0 flex-col">
         <header className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-[16px]">
-            🧱
-          </div>
+          <InstanceIcon instance={instance} size={36} />
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
             <p className="truncate text-[15px] font-bold text-txt-primary">{instance.name}</p>
             <span className="shrink-0 text-txt-muted">›</span>
@@ -188,26 +197,35 @@ export function InstanceSettingsModal({
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {tab === 'general' && (
               <div className="flex flex-col gap-5">
-                <Field label={t('instancesPage.name')}>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={t('instancesPage.namePlaceholder')}
-                    className="h-10 w-full rounded-xl border border-line bg-black/40 px-3 text-[13px] text-txt-primary outline-none transition-colors placeholder:text-txt-muted focus:border-accent/60"
-                  />
-                </Field>
+                {/* Le nom et l'icône côte à côte : ce sont les deux faces de
+                    la même chose — comment l'instance se reconnaît dans la
+                    liste. */}
+                <div className="flex items-start gap-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-5">
+                    <Field label={t('instancesPage.name')}>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={t('instancesPage.namePlaceholder')}
+                        className="h-10 w-full rounded-xl border border-line bg-black/40 px-3 text-[13px] text-txt-primary outline-none transition-colors placeholder:text-txt-muted focus:border-accent/60"
+                      />
+                    </Field>
 
-                <Field label={t('instancesPage.description')} hint={t('instancesPage.optional')}>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder={t('instancesPage.descriptionPlaceholder')}
-                    rows={3}
-                    maxLength={140}
-                    className="w-full resize-none rounded-xl border border-line bg-black/40 px-3 py-2 text-[13px] text-txt-primary outline-none transition-colors placeholder:text-txt-muted focus:border-accent/60"
-                  />
-                </Field>
+                    <Field label={t('instancesPage.description')} hint={t('instancesPage.optional')}>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder={t('instancesPage.descriptionPlaceholder')}
+                        rows={3}
+                        maxLength={140}
+                        className="w-full resize-none rounded-xl border border-line bg-black/40 px-3 py-2 text-[13px] text-txt-primary outline-none transition-colors placeholder:text-txt-muted focus:border-accent/60"
+                      />
+                    </Field>
+                  </div>
+
+                  <IconField instance={instance} onUpdate={onUpdate} />
+                </div>
 
                 <Row
                   title={t('instancesPage.favorite')}
@@ -228,6 +246,45 @@ export function InstanceSettingsModal({
                       </svg>
                     </motion.button>
                   }
+                />
+
+                <Separator />
+
+                {/* Les mêmes gestes que le menu à trois points de la carte,
+                    volontairement : on ouvre les paramètres pour s'occuper
+                    d'une instance, et refermer pour retrouver un menu ailleurs
+                    n'a pas de sens. Le menu reste le raccourci, ceci est
+                    l'endroit où tout est écrit. */}
+                <Row
+                  title={t('instancesPage.duplicate')}
+                  desc={t('instancesPage.duplicateHint')}
+                  action={
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        onClick={() => onDuplicate(instance)}
+                        className="flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] font-semibold text-txt-secondary transition-colors hover:border-accent/40 hover:text-txt-primary"
+                      >
+                        <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
+                          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                        </svg>
+                        {t('instancesPage.duplicate')}
+                      </button>
+                      <button
+                        onClick={() => onDuplicateAs(instance)}
+                        className="rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] font-semibold text-txt-secondary transition-colors hover:border-accent/40 hover:text-txt-primary"
+                      >
+                        {t('instancesPage.duplicateAs')}
+                      </button>
+                    </div>
+                  }
+                />
+
+                <Separator />
+
+                <Row
+                  title={t('instancesPage.deleteForever')}
+                  desc={t('instancesPage.deleteHint')}
+                  action={<DeleteButton onConfirm={() => onDelete(instance.id)} />}
                 />
               </div>
             )}
@@ -504,6 +561,122 @@ function ActionButton({
       {busy ? t('common.loading') : done ? t('instancesPage.done') : children}
     </button>
   )
+}
+
+/**
+ * L'icône de l'instance, et de quoi la changer.
+ *
+ * Le chemin choisi ne sert qu'à l'appel : c'est le Rust qui lit le fichier et
+ * range les octets (voir `commands/instance/icon.rs`), donc déplacer ou
+ * supprimer l'image d'origine ensuite ne casse rien.
+ */
+function IconField({ instance, onUpdate }: { instance: Instance; onUpdate: (i: Instance) => void }) {
+  const t = useT()
+  const [busy, setBusy] = useState(false)
+
+  const pick = async () => {
+    if (busy) return
+    const picked = await openFileDialog({
+      filters: [{ name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+    })
+    if (typeof picked !== 'string') return
+    setBusy(true)
+    try {
+      onUpdate(await api.instances.setIcon(instance.id, picked))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clear = async () => {
+    setBusy(true)
+    try {
+      onUpdate(await api.instances.setIcon(instance.id, null))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-2">
+      <span className="self-start text-[10px] font-semibold uppercase tracking-[0.1em] text-txt-muted">
+        {t('instancesPage.icon')}
+      </span>
+      <button
+        onClick={pick}
+        disabled={busy}
+        title={t('instancesPage.changeIcon')}
+        className="group relative overflow-hidden rounded-2xl border border-line transition-colors hover:border-accent/50 disabled:opacity-60"
+      >
+        <InstanceIcon instance={instance} size={84} className="rounded-2xl" />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition-opacity group-hover:opacity-100">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={18} height={18} className="text-white">
+            <path d="M3 7h3l2-2h8l2 2h3v12H3z" /><circle cx="12" cy="13" r="3.5" />
+          </svg>
+        </span>
+      </button>
+      {instance.icon ? (
+        <button
+          onClick={clear}
+          disabled={busy}
+          className="text-[11px] font-medium text-txt-muted underline decoration-txt-muted underline-offset-2 transition-colors hover:text-txt-primary disabled:opacity-50"
+        >
+          {t('instancesPage.removeIcon')}
+        </button>
+      ) : (
+        <span className="text-[11px] text-txt-muted">{t('instancesPage.iconHint')}</span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Suppression définitive : la confirmation tient dans le bouton lui-même.
+ *
+ * Une modale par-dessus la modale des paramètres serait disproportionnée, et
+ * le texte au-dessus dit déjà ce qui se perd.
+ */
+function DeleteButton({ onConfirm }: { onConfirm: () => void }) {
+  const t = useT()
+  const [armed, setArmed] = useState(false)
+
+  if (!armed) {
+    return (
+      <button
+        onClick={() => setArmed(true)}
+        className="flex shrink-0 items-center gap-1.5 rounded-xl border border-danger/40 bg-danger/10 px-3.5 py-2 text-[12px] font-semibold text-danger transition-colors hover:bg-danger/20"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
+          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+        </svg>
+        {t('instancesPage.deleteForever')}
+      </button>
+    )
+  }
+  return (
+    <div className="flex shrink-0 gap-2">
+      <button
+        onClick={() => setArmed(false)}
+        className="rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-[12px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary"
+      >
+        {t('common.cancel')}
+      </button>
+      <button
+        onClick={onConfirm}
+        className="rounded-xl bg-danger px-3.5 py-2 text-[12px] font-bold text-white"
+      >
+        {t('common.delete')}
+      </button>
+    </div>
+  )
+}
+
+function Separator() {
+  return <div className="h-px bg-line" />
 }
 
 /** Un champ et son intitulé — la forme de tout ce qui se saisit ici. */

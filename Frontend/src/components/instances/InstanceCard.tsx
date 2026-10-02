@@ -7,6 +7,7 @@ import { formatRam } from '@/lib/format'
 import { useT } from '@/i18n'
 import { SNAP, listItemVariants } from '@/lib/motion'
 import { MenuItem } from './MenuItem'
+import { InstanceIcon } from './InstanceIcon'
 
 /** Mémoïsé : rendu en liste — les callbacks reçoivent l'id/l'instance pour
  * que le parent puisse passer des références stables (useCallback ou setter
@@ -134,9 +135,13 @@ export const InstanceCard = memo(function InstanceCard({
         <motion.div
           animate={selected ? { rotate: [0, -8, 6, 0], scale: 1.06 } : { rotate: 0, scale: 1 }}
           transition={{ type: 'spring', stiffness: 420, damping: 16 }}
-          className={`flex items-center justify-center rounded-xl flex-shrink-0 w-[36px] h-[36px] text-[15px] ${selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}`}
+          className="flex-shrink-0"
         >
-          🧱
+          <InstanceIcon
+            instance={instance}
+            size={36}
+            className={selected ? 'bg-[rgba(75,63,207,0.3)]' : 'bg-[rgba(255,255,255,0.05)]'}
+          />
         </motion.div>
 
         <div className="flex flex-col flex-1 min-w-0">

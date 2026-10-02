@@ -28,10 +28,15 @@ pub struct InstanceRow {
     /// remplace intégralement les champs `jvm_*` ci-dessus au lancement —
     /// ceux-ci ne servent plus que de repli pour une instance sans config.
     pub jvm_profile_id: Option<String>,
+    /// Icône choisie par l'utilisateur, en data URI. Vide = icône par défaut.
+    /// Les octets eux-mêmes sont ici (voir la migration dans `schema.rs`), ce
+    /// qui évite une lecture de fichier par carte à chaque affichage de la
+    /// liste.
+    pub icon: String,
 }
 
 const INSTANCE_COLUMNS: &str =
-    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id";
+    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id, icon";
 
 fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
     Ok(InstanceRow {
@@ -48,6 +53,7 @@ fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
         jvm_extra_args: r.get(10)?,
         jvm_args_mode: r.get(11)?,
         jvm_profile_id: r.get(12)?,
+        icon: r.get(13)?,
     })
 }
 
@@ -70,6 +76,23 @@ pub fn instance_get(conn: &Connection, id: &str, user_id: i64) -> Result<Option<
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e.into()),
     }
+}
+
+/// Pose ou retire l'icône (chaîne vide = retour à l'icône par défaut).
+///
+/// Une mise à jour à part, et non un paramètre de plus sur `instance_update` :
+/// l'icône se change d'un geste isolé, qui n'a pas à repasser le nom, la
+/// version et les six champs JVM — ni à être repassée par chaque appelant de
+/// `instance_update`, qui l'écraserait en l'oubliant.
+pub fn instance_set_icon(conn: &Connection, id: &str, user_id: i64, icon: &str) -> Result<()> {
+    let n = conn.execute(
+        "UPDATE instances SET icon = ?1 WHERE id = ?2 AND yuyu_user_id = ?3",
+        params![icon, id, user_id],
+    )?;
+    if n == 0 {
+        return Err(anyhow::anyhow!("Instance introuvable"));
+    }
+    Ok(())
 }
 
 pub fn instance_set_favorite(conn: &Connection, id: &str, user_id: i64, favorite: bool) -> Result<()> {

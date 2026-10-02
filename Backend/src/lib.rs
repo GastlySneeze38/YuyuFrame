@@ -447,6 +447,7 @@ pub fn run() {
             commands::instance::options::shared_options_status,
             commands::instance::options::set_sync_game_settings,
             commands::instance::crud::instance_open_folder,
+            commands::instance::icon::instance_set_icon,
             commands::sync::push_pull::sync_list_instances,
             commands::sync::push_pull::sync_list_saves,
             commands::sync::push_pull::sync_push_instance,

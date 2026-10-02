@@ -316,6 +316,11 @@ export const api = {
     setSyncGameSettings: (enabled: boolean) =>
       invoke<void>('set_sync_game_settings', { enabled }),
     openFolder: (instanceId: string) => invoke<void>('instance_open_folder', { instanceId }),
+    /** Pose l'icône depuis un fichier image, ou la retire avec `null`. Les
+     *  octets sont relus et rangés en base par le Rust — le chemin ne survit
+     *  pas à l'appel (voir `commands/instance/icon.rs`). */
+    setIcon: (instanceId: string, path: string | null) =>
+      invoke<Instance>('instance_set_icon', { instanceId, path }),
     // P1-6 (audit launcher, Phase 6) — aperçu de la ligne de commande réelle,
     // recalculée côté Rust par les mêmes fonctions qu'un vrai lancement.
     previewJvmConfig: (instanceId: string, mcVersion: string, ramMb: number, jvm: JvmFormValues) =>
