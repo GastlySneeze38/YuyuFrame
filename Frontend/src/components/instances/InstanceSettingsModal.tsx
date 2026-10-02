@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { api } from '@/api/client'
-import type { Instance, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
+import type { HealthCheck, Instance, Loader, LoaderVersion, SharedOptionsStatus } from '@/types'
 import { updateModsForNewVersion } from '@/pages/Mods'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { CloseButton } from '@/components/ui/CloseButton'
@@ -43,7 +43,7 @@ import { useT } from '@/i18n'
  * de fichier, pas des champs). Elles ne passent pas par le brouillon et
  * n'allument donc pas le pied.
  */
-type Tab = 'general' | 'installation' | 'java' | 'game'
+type Tab = 'general' | 'installation' | 'java' | 'game' | 'repair'
 
 export function InstanceSettingsModal({
   instance,
@@ -117,6 +117,7 @@ export function InstanceSettingsModal({
       { id: 'installation' as const, label: t('instancesPage.tabInstallation'), icon: <IconBox /> },
       { id: 'java' as const, label: t('instancesPage.tabJava'), icon: <IconChip /> },
       { id: 'game' as const, label: t('instancesPage.tabGame'), icon: <IconSliders /> },
+      { id: 'repair' as const, label: t('instancesPage.tabRepair'), icon: <IconWrench /> },
     ],
     [t],
   )
@@ -325,6 +326,8 @@ export function InstanceSettingsModal({
             )}
 
             {tab === 'game' && <GameSettings instanceId={instance.id} />}
+
+            {tab === 'repair' && <RepairTab instance={instance} />}
           </div>
         </div>
 
@@ -497,6 +500,139 @@ function ActionButton({
     >
       {busy ? t('common.loading') : done ? t('instancesPage.done') : children}
     </button>
+  )
+}
+
+/**
+ * L'état de l'installation, fichier par fichier.
+ *
+ * Ce que le lancement vérifie déjà, et ce qu'il laisse passer : au lancement,
+ * un fichier est retéléchargé s'il manque ou n'a pas la bonne taille. Un
+ * fichier de la bonne taille et du mauvais contenu passe, et le jeu démarre
+ * sur une erreur Java incompréhensible. Cet écran vérifie donc les empreintes,
+ * ce que le lancement ne fait pas — d'où un examen qui prend quelques secondes
+ * et qui n'est **pas** lancé tout seul à l'ouverture de l'onglet : c'est un
+ * geste, pas une page d'accueil.
+ */
+function RepairTab({ instance }: { instance: Instance }) {
+  const t = useT()
+  const [checks, setChecks] = useState<HealthCheck[] | null>(null)
+  const [busy, setBusy] = useState<'scan' | 'repair' | null>(null)
+  const [repaired, setRepaired] = useState<number | null>(null)
+
+  const scan = async () => {
+    setBusy('scan')
+    setRepaired(null)
+    try {
+      setChecks(await api.instances.diagnose(instance.id))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const repair = async () => {
+    setBusy('repair')
+    try {
+      const count = await api.instances.repair(instance.id)
+      setRepaired(count)
+      // Rediagnostiquer tout de suite : annoncer « réparé » sans le
+      // revérifier serait une promesse, pas un constat.
+      setChecks(await api.instances.diagnose(instance.id))
+    } catch (e) {
+      showError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const problems = checks?.filter((c) => c.status === 'broken' || c.status === 'missing') ?? []
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface-2 p-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-muted">
+          {t('instancesPage.repairTitle')}
+        </p>
+        <p className="text-[12.5px] leading-relaxed text-txt-secondary">{t('instancesPage.repairDesc')}</p>
+        <p className="mt-1 text-[11.5px] text-txt-muted">{t('instancesPage.repairSafe')}</p>
+      </div>
+
+      {checks === null ? (
+        <button
+          onClick={scan}
+          disabled={busy !== null}
+          className="w-fit rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+        >
+          {busy === 'scan' ? t('instancesPage.scanning') : t('instancesPage.scan')}
+        </button>
+      ) : (
+        <>
+          <div className="flex flex-col gap-2">
+            {checks.map((check) => (
+              <CheckRow key={check.id} check={check} />
+            ))}
+          </div>
+
+          {repaired !== null && (
+            <p className="text-[12px] text-[rgba(134,239,172,0.85)]">
+              {repaired === 0 ? t('instancesPage.repairNothing') : t('instancesPage.repairDone', { count: repaired })}
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={repair}
+              disabled={busy !== null || problems.length === 0}
+              className="rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy === 'repair' ? t('instancesPage.repairing') : t('instancesPage.repair')}
+            </button>
+            <button
+              onClick={scan}
+              disabled={busy !== null}
+              className="rounded-xl border border-line bg-surface-2 px-4 py-2 text-[12.5px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary disabled:opacity-50"
+            >
+              {busy === 'scan' ? t('instancesPage.scanning') : t('instancesPage.scanAgain')}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** Une ligne de diagnostic : ce qui a été examiné, et ce qu'on y a trouvé. */
+function CheckRow({ check }: { check: HealthCheck }) {
+  const t = useT()
+  const tone = {
+    ok: { dot: 'bg-[rgb(134,239,172)]', text: 'text-[rgba(134,239,172,0.9)]' },
+    broken: { dot: 'bg-danger', text: 'text-danger' },
+    missing: { dot: 'bg-warning', text: 'text-warning' },
+    unknown: { dot: 'bg-txt-muted', text: 'text-txt-muted' },
+  }[check.status]
+
+  const summary =
+    check.status === 'ok'
+      ? check.total > 1
+        ? t('instancesPage.checkOkCount', { count: check.total })
+        : t('instancesPage.checkOk')
+      : check.status === 'broken'
+        ? t('instancesPage.checkBroken', { count: check.broken })
+        : check.status === 'missing'
+          ? t('instancesPage.checkMissing')
+          : t('instancesPage.checkUnknown')
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${tone.dot}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] font-semibold text-txt-primary">{t(`instancesPage.check_${check.id}`)}</p>
+        {check.detail && <p className="truncate text-[11px] text-txt-muted">{check.detail}</p>}
+      </div>
+      <span className={`shrink-0 text-[11.5px] font-semibold ${tone.text}`}>{summary}</span>
+    </div>
   )
 }
 
@@ -1082,6 +1218,11 @@ const IconChip = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
     <rect x="7" y="7" width="10" height="10" rx="1.5" />
     <path d="M10 3v2M14 3v2M10 19v2M14 19v2M3 10h2M3 14h2M19 10h2M19 14h2" />
+  </svg>
+)
+const IconWrench = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
+    <path d="M14.7 6.3a4 4 0 01-5 5L4 17v3h3l5.7-5.7a4 4 0 015-5l-2.3-2.3 2.1-2.1a4 4 0 00-2.8 1.4z" />
   </svg>
 )
 const IconSliders = () => (

@@ -451,6 +451,8 @@ pub fn run() {
             commands::instance::options::set_sync_game_settings,
             commands::instance::crud::instance_open_folder,
             commands::instance::icon::instance_set_icon,
+            commands::instance::repair::instance_diagnose,
+            commands::instance::repair::instance_repair,
             commands::sync::push_pull::sync_list_instances,
             commands::sync::push_pull::sync_list_saves,
             commands::sync::push_pull::sync_push_instance,

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JvmProfile, LoaderVersion, McOption, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, ScanResult, SharedOptionsStatus, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -338,6 +338,13 @@ export const api = {
      *  pas à l'appel (voir `commands/instance/icon.rs`). */
     setIcon: (instanceId: string, path: string | null) =>
       invoke<Instance>('instance_set_icon', { instanceId, path }),
+    /** Examine l'installation (jeu, bibliothèques, ressources, loader) par le
+     *  SHA1 — ce que le lancement ne vérifie pas, lui qui se contente de la
+     *  taille. Voir `commands/instance/repair.rs`. */
+    diagnose: (instanceId: string) => invoke<HealthCheck[]>('instance_diagnose', { instanceId }),
+    /** Remet en état ce que le diagnostic a trouvé abîmé, et rend le nombre de
+     *  fichiers retéléchargés. Ne touche jamais au dossier de l'instance. */
+    repair: (instanceId: string) => invoke<number>('instance_repair', { instanceId }),
     // P1-6 (audit launcher, Phase 6) — aperçu de la ligne de commande réelle,
     // recalculée côté Rust par les mêmes fonctions qu'un vrai lancement.
     previewJvmConfig: (instanceId: string, mcVersion: string, ramMb: number, jvm: JvmFormValues) =>

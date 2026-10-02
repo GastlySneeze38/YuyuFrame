@@ -51,14 +51,14 @@ fn artifact_key(path: &str) -> String {
     normalized
 }
 
-pub(super) fn should_download_library(lib: &Library) -> bool {
+pub fn should_download_library(lib: &Library) -> bool {
     match &lib.rules {
         Some(rules) => rules_allow(rules),
         None => true,
     }
 }
 
-pub(super) fn artifact_path(base: &Path, artifact: &Artifact, name: &str) -> PathBuf {
+pub fn artifact_path(base: &Path, artifact: &Artifact, name: &str) -> PathBuf {
     if let Some(ref p) = artifact.path { return base.join(p); }
     library_jar_path(base, name)
 }
@@ -202,7 +202,7 @@ async fn try_download_once(
 /// - 3 tentatives avec backoff exponentiel sur erreur réseau/5xx — pas sur
 ///   4xx (la ressource n'existe pas ou l'accès est refusé, insister ne sert
 ///   à rien).
-pub(super) async fn download_verified(
+pub async fn download_verified(
     client: &reqwest::Client,
     url: &str,
     path: &Path,

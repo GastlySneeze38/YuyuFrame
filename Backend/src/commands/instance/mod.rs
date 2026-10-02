@@ -6,3 +6,4 @@ pub mod modpack;
 pub mod mods;
 pub mod options;
 pub mod packs;
+pub mod repair;

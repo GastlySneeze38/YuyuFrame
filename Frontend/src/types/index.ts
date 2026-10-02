@@ -143,6 +143,22 @@ export interface Instance {
 }
 
 /**
+ * Un point de contrôle de l'installation — voir `commands/instance/repair.rs`.
+ *
+ * `status` vaut `ok`, `broken` (présent mais altéré), `missing`, ou `unknown`
+ * quand la vérification elle-même n'a pas pu se faire (hors ligne, version de
+ * loader résolue seulement au lancement). `unknown` n'est pas une erreur : il
+ * dit qu'on ne sait pas, ce qui n'est pas la même chose que « tout va bien ».
+ */
+export interface HealthCheck {
+  id: 'game' | 'libraries' | 'assets' | 'loader'
+  status: 'ok' | 'broken' | 'missing' | 'unknown'
+  broken: number
+  total: number
+  detail: string | null
+}
+
+/**
  * Une version de loader proposée au choix.
  *
  * `recommended` est la seule réponse utile à « laquelle prendre » : c'est
