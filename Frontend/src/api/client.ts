@@ -286,6 +286,10 @@ function jvmInvokeArgs(jvm?: JvmFormValues) {
 export const api = {
   versions: {
     list: () => invoke<Version[]>('list_versions'),
+    /** Les versions de loader disponibles pour ce couple, la plus récente
+     *  d'abord. Vide pour `vanilla`, qui n'a pas de loader à versionner. */
+    loader: (loader: string, mcVersion: string) =>
+      invoke<string[]>('loader_versions', { loader, mcVersion }),
   },
 
   instances: {
@@ -300,8 +304,11 @@ export const api = {
     create: (name: string, mc_version: string, loader: string, ram_mb: number, description?: string, jvm?: JvmFormValues) =>
       invoke<Instance>('instance_create', { name, mcVersion: mc_version, loader, ramMb: ram_mb, description, ...jvmInvokeArgs(jvm) }),
     delete: (id: string) => invoke<void>('instance_delete', { id }),
-    update: (id: string, name: string, mc_version: string, loader: string, ram_mb: number, description?: string, jvm?: JvmFormValues) =>
-      invoke<Instance>('instance_update', { id, name, mcVersion: mc_version, loader, ramMb: ram_mb, description, ...jvmInvokeArgs(jvm) }),
+    // `loaderVersion` absent ou vide = la plus récente compatible, exactement
+    // ce que le launcher fait depuis toujours : les appelants qui ne gèrent
+    // pas ce réglage n'ont rien à passer.
+    update: (id: string, name: string, mc_version: string, loader: string, ram_mb: number, description?: string, jvm?: JvmFormValues, loader_version?: string) =>
+      invoke<Instance>('instance_update', { id, name, mcVersion: mc_version, loader, ramMb: ram_mb, description, loaderVersion: loader_version, ...jvmInvokeArgs(jvm) }),
     duplicate: (sourceId: string, name: string, mc_version: string, ram_mb: number) =>
       invoke<Instance>('instance_duplicate', { sourceId, name, mcVersion: mc_version, ramMb: ram_mb }),
     toggleFavorite: (id: string) => invoke<Instance>('instance_toggle_favorite', { id }),

@@ -137,6 +137,9 @@ export interface Instance {
   /** Icône choisie par l'utilisateur, en data URI. Vide = icône par défaut
    *  (voir `components/instances/InstanceIcon.tsx`). */
   icon: string
+  /** Version du loader épinglée. Vide = la plus récente compatible, le
+   *  comportement par défaut du launcher. */
+  loader_version: string
 }
 
 /** Les trois sujets indépendants d'une config JVM. Ils sont édités séparément

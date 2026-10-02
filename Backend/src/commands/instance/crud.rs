@@ -41,6 +41,14 @@ pub struct Instance {
     /// jamais avec une icône cassée.
     #[serde(default)]
     pub icon: String,
+    /// Version du loader épinglée ; vide = la plus récente compatible.
+    ///
+    /// Absente de `meta.json`, comme `jvm_profile_id` et pour la même raison :
+    /// une instance réimportée depuis son dossier repart sur « la plus
+    /// récente », qui est le défaut sûr du launcher — jamais sur un loader
+    /// inattendu qu'elle croirait installé.
+    #[serde(default)]
+    pub loader_version: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -154,7 +162,7 @@ pub(super) fn row_to_instance(r: db::InstanceRow) -> Instance {
         favorite: r.favorite, description: r.description,
         jvm_vendor: r.jvm_vendor, jvm_custom_path: r.jvm_custom_path, gc_policy: r.gc_policy,
         jvm_extra_args: r.jvm_extra_args, jvm_args_mode: r.jvm_args_mode,
-        jvm_profile_id: r.jvm_profile_id, icon: r.icon,
+        jvm_profile_id: r.jvm_profile_id, icon: r.icon, loader_version: r.loader_version,
     }
 }
 
@@ -227,7 +235,7 @@ pub async fn instance_create(
         "mc_version": &mc_version,
         "loader": &loader,
     }));
-    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon: String::new() })
+    Ok(Instance { id, name, mc_version, loader, ram_mb, favorite: false, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon: String::new(), loader_version: String::new() })
 }
 
 #[tauri::command]
@@ -281,6 +289,13 @@ pub async fn instance_update(
     gc_policy: Option<String>,
     jvm_extra_args: Option<String>,
     jvm_args_mode: Option<String>,
+    // `loader_version` ABSENTE = ne pas y toucher ; chaîne vide = retour à
+    // « la plus récente compatible ». La distinction compte : sans elle, tout
+    // appelant qui ignore ce réglage — et ils l'ignorent presque tous —
+    // dépinglerait le loader en renommant l'instance.
+    // (Commentaire ici et non sur le paramètre : `///` sur un paramètre de
+    // fonction ne compile pas.)
+    loader_version: Option<String>,
 ) -> Result<Instance, String> {
     let name = name.trim().to_string();
     let description = description.unwrap_or_default().trim().to_string();
@@ -291,7 +306,14 @@ pub async fn instance_update(
     let s = state.read().await;
     let uid = user_id(&s);
     let db = s.db.lock().await;
-    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode)
+    let loader_version = match loader_version {
+        Some(v) => v.trim().to_string(),
+        None => db::instance_get(&db, &id, uid)
+            .map_err(|e| e.to_string())?
+            .map(|row| row.loader_version)
+            .unwrap_or_default(),
+    };
+    db::instance_update(&db, &id, uid, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode, &loader_version)
         .map_err(|e| e.to_string())?;
     write_meta(&id, &name, &mc_version, &loader, ram_mb, &description, &jvm_vendor, jvm_custom_path.as_deref(), &gc_policy, &jvm_extra_args, &jvm_args_mode);
     let row = db::instance_get(&db, &id, uid)
@@ -313,14 +335,14 @@ pub async fn instance_duplicate(
     }
     let name = name.trim().to_string();
 
-    let (loader, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, icon) = {
+    let (loader, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, icon, loader_version, source_mc_version) = {
         let s = state.read().await;
         let uid = user_id(&s);
         let db = s.db.lock().await;
         let src = db::instance_get(&db, &source_id, uid)
             .map_err(|e| e.to_string())?
             .ok_or("Instance source introuvable")?;
-        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy, src.jvm_extra_args, src.jvm_args_mode, src.icon)
+        (src.loader, src.jvm_vendor, src.jvm_custom_path, src.gc_policy, src.jvm_extra_args, src.jvm_args_mode, src.icon, src.loader_version, src.mc_version)
     };
 
     let new_id = gen_id(&name);
@@ -372,10 +394,21 @@ pub async fn instance_duplicate(
         db::instance_set_icon(&db, &new_id, uid, &icon).map_err(|e| e.to_string())?;
     }
 
+    // La version de loader épinglée suit aussi — mais seulement si la copie
+    // reste sur la même version de Minecraft. Un build de loader n'existe que
+    // pour un MC donné : le reporter sur une autre version ferait échouer le
+    // lancement de la copie avec un message incompréhensible, alors que le
+    // vide signifie « la plus récente compatible », ce qui est exactement ce
+    // qu'on veut quand on change de version.
+    let loader_version = if mc_version == source_mc_version { loader_version } else { String::new() };
+    if !loader_version.is_empty() {
+        db::instance_set_loader_version(&db, &new_id, uid, &loader_version).map_err(|e| e.to_string())?;
+    }
+
     // La config JVM reliée n'est PAS dupliquée : une config est justement
     // faite pour être partagée entre instances, la copie repart donc déliée
     // plutôt que d'hériter d'un lien que l'utilisateur n'a pas demandé.
-    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon })
+    Ok(Instance { id: new_id, name, mc_version, loader, ram_mb, favorite: false, description: String::new(), jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id: None, icon, loader_version })
 }
 
 // Le modèle `shared_options.txt` (export, application, état) vit désormais

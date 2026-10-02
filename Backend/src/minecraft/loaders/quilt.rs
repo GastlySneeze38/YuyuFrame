@@ -26,6 +26,33 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
     super::fabric::profile_with_cache_for("quilt", mc_version, || fetch_profile_online(mc_version)).await
 }
 
+/// Les versions de loader disponibles pour ce MC, la plus récente d'abord.
+///
+/// Contrairement à Fabric, l'API v3 de Quilt ne garantit pas l'ordre : on
+/// trie, avec les mêmes helpers que la sélection automatique juste en dessous.
+pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let entries: Vec<LoaderEntry> = client
+        .get(format!("{QUILT_META}/versions/loader/{mc_version}"))
+        .send()
+        .await?
+        .json()
+        .await
+        .map_err(|_| anyhow!("Quilt non disponible pour Minecraft {}", mc_version))?;
+    let mut versions: Vec<String> = entries.into_iter().map(|e| e.loader.version).collect();
+    versions.sort_by(|a, b| cmp_core(&version_core(b), &version_core(a)));
+    Ok(versions)
+}
+
+/// Le profil d'une version de loader précise — voir `fabric::get_profile`.
+pub async fn get_profile(mc_version: &str, loader_version: &str) -> Result<FabricProfile> {
+    let key = format!("quilt-{loader_version}");
+    super::fabric::profile_with_cache_for(&key, mc_version, || {
+        super::fabric::fetch_pinned_profile(QUILT_META, "Quilt", mc_version, loader_version)
+    })
+    .await
+}
+
 async fn fetch_profile_online(mc_version: &str) -> Result<String> {
     let client = crate::minecraft::http::short_lived_client();
 

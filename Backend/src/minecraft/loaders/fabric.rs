@@ -113,6 +113,57 @@ pub async fn get_latest_profile(mc_version: &str) -> Result<FabricProfile> {
     profile_with_cache("fabric", mc_version, || fetch_profile_online(mc_version)).await
 }
 
+/// Les versions de loader disponibles pour ce MC, la plus récente d'abord.
+///
+/// Fabric Meta rend déjà la liste triée du plus récent au plus ancien : on la
+/// garde telle quelle plutôt que de retrier, le tri d'origine étant le leur.
+pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let entries: Vec<LoaderEntry> = client
+        .get(format!("{FABRIC_META}/versions/loader/{mc_version}"))
+        .send()
+        .await?
+        .json()
+        .await
+        .map_err(|_| anyhow!("Fabric non disponible pour Minecraft {}", mc_version))?;
+    Ok(entries.into_iter().map(|e| e.loader.version).collect())
+}
+
+/// Le profil d'une version de loader **précise**, choisie par l'utilisateur.
+///
+/// Clé de cache distincte par version épinglée (`fabric-0.16.5`), sinon le
+/// profil d'une version remplacerait celui d'une autre et le repli hors ligne
+/// servirait le mauvais loader.
+pub async fn get_profile(mc_version: &str, loader_version: &str) -> Result<FabricProfile> {
+    let key = format!("fabric-{loader_version}");
+    profile_with_cache(&key, mc_version, || {
+        fetch_pinned_profile(FABRIC_META, "Fabric", mc_version, loader_version)
+    })
+    .await
+}
+
+/// Le JSON de profil pour un couple (MC, version de loader) — Fabric et Quilt
+/// exposent exactement la même route, d'où le paramètre `meta`.
+pub(super) async fn fetch_pinned_profile(
+    meta: &str,
+    loader: &str,
+    mc_version: &str,
+    loader_version: &str,
+) -> Result<String> {
+    let client = crate::minecraft::http::short_lived_client();
+    let url = format!("{meta}/versions/loader/{mc_version}/{loader_version}/profile/json");
+    let resp = client.get(&url).send().await?;
+    if !resp.status().is_success() {
+        return Err(anyhow!(
+            "{} {} n'existe pas pour Minecraft {}",
+            loader,
+            loader_version,
+            mc_version
+        ));
+    }
+    Ok(resp.text().await?)
+}
+
 async fn fetch_profile_online(mc_version: &str) -> Result<String> {
     let client = crate::minecraft::http::short_lived_client();
 

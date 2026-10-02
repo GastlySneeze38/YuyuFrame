@@ -33,10 +33,13 @@ pub struct InstanceRow {
     /// qui évite une lecture de fichier par carte à chaque affichage de la
     /// liste.
     pub icon: String,
+    /// Version du loader épinglée. Vide = la plus récente compatible, le
+    /// comportement historique et toujours celui par défaut.
+    pub loader_version: String,
 }
 
 const INSTANCE_COLUMNS: &str =
-    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id, icon";
+    "id, name, mc_version, loader, ram_mb, favorite, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, jvm_profile_id, icon, loader_version";
 
 fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
     Ok(InstanceRow {
@@ -54,6 +57,7 @@ fn row_to_instance(r: &rusqlite::Row) -> rusqlite::Result<InstanceRow> {
         jvm_args_mode: r.get(11)?,
         jvm_profile_id: r.get(12)?,
         icon: r.get(13)?,
+        loader_version: r.get(14)?,
     })
 }
 
@@ -92,6 +96,15 @@ pub fn instance_set_icon(conn: &Connection, id: &str, user_id: i64, icon: &str) 
     if n == 0 {
         return Err(anyhow::anyhow!("Instance introuvable"));
     }
+    Ok(())
+}
+
+/// Épingle une version de loader (chaîne vide = la plus récente compatible).
+pub fn instance_set_loader_version(conn: &Connection, id: &str, user_id: i64, version: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE instances SET loader_version = ?1 WHERE id = ?2 AND yuyu_user_id = ?3",
+        params![version, id, user_id],
+    )?;
     Ok(())
 }
 
@@ -143,11 +156,12 @@ pub fn instance_update(
     gc_policy: &str,
     jvm_extra_args: &str,
     jvm_args_mode: &str,
+    loader_version: &str,
 ) -> Result<()> {
     let n = conn.execute(
-        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5, jvm_vendor=?6, jvm_custom_path=?7, gc_policy=?8, jvm_extra_args=?9, jvm_args_mode=?10
-         WHERE id=?11 AND yuyu_user_id=?12",
-        params![name, mc_version, loader, ram_mb, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, id, user_id],
+        "UPDATE instances SET name=?1, mc_version=?2, loader=?3, ram_mb=?4, description=?5, jvm_vendor=?6, jvm_custom_path=?7, gc_policy=?8, jvm_extra_args=?9, jvm_args_mode=?10, loader_version=?11
+         WHERE id=?12 AND yuyu_user_id=?13",
+        params![name, mc_version, loader, ram_mb, description, jvm_vendor, jvm_custom_path, gc_policy, jvm_extra_args, jvm_args_mode, loader_version, id, user_id],
     )?;
     if n == 0 {
         return Err(anyhow::anyhow!("Instance introuvable"));

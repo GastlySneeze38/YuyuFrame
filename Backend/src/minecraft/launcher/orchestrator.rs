@@ -82,6 +82,10 @@ pub async fn download_and_launch(
     gc_policy: &str,
     jvm_extra_args: &str,
     jvm_args_mode: &str,
+    // Version de loader épinglée sur l'instance. Vide = la plus récente
+    // compatible, qui est ce que le launcher a toujours fait — le paramètre
+    // n'ajoute un comportement que lorsqu'il porte quelque chose.
+    loader_version: &str,
 ) -> Result<Vec<String>> {
     // P1-6 : "auto" couvre toute la config (vendeur ET GC), résolu une seule
     // fois ici avant toute utilisation — voir doc de `resolve_auto_vendor`.
@@ -456,11 +460,14 @@ pub async fn download_and_launch(
     let console_label = console_label.to_string();
     log_to_console(&app, &console_label, &format!("MC {} requiert Java {} — utilise : {}", version_id, required_java, java), "out");
 
+    // `None` plutôt qu'une chaîne vide à partir d'ici : « pas de version
+    // épinglée » est un cas, pas une valeur de version.
+    let pinned = (!loader_version.is_empty()).then_some(loader_version);
     let loader_setup = match loader.unwrap_or("vanilla") {
-        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor, &client).await?,
-        "quilt" => setup_quilt(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor, &client).await?,
-        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor, &client).await?,
-        "neoforge" => setup_neoforge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor, &client).await?,
+        "fabric" => setup_fabric(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor, &client, pinned).await?,
+        "quilt" => setup_quilt(version_id, &libraries_dir, &game_dir.join("mods"), &app, avoid_beta, &progress_floor, &client, pinned).await?,
+        "forge" => setup_forge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor, &client, pinned).await?,
+        "neoforge" => setup_neoforge(version_id, &mc_dir, &libraries_dir, &java, &app, &progress_floor, &client, pinned).await?,
         _ => LoaderSetup { main_class: details.main_class.clone(), ..Default::default() },
     };
     let (main_class, extra_classpath, extra_game_args, extra_jvm_args) = (

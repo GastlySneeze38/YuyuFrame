@@ -78,6 +78,46 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Aucune version Forge pour Minecraft {}", mc_version))
 }
 
+/// Les builds Forge disponibles pour ce MC, le plus récent d'abord.
+///
+/// `promotions_slim.json` ne connaît que « recommended » et « latest » : pour
+/// proposer un choix, il faut la liste complète, qui n'existe que dans le
+/// `maven-metadata.xml` du dépôt. Pas de dépendance XML pour autant — on ne
+/// cherche qu'une suite de `<version>…</version>`, et un analyseur complet
+/// pour ça serait disproportionné (voir `extract_maven_versions`, testé).
+pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let xml = client
+        .get(format!("{FORGE_MAVEN}maven-metadata.xml"))
+        .send()
+        .await?
+        .text()
+        .await
+        .map_err(|_| anyhow!("Impossible de contacter le serveur Forge"))?;
+
+    // Les versions y sont écrites `1.21.4-54.0.1` : on garde celles de ce MC
+    // et on ne rend que le build, seule partie que l'utilisateur choisit.
+    let prefix = format!("{mc_version}-");
+    let mut builds: Vec<String> = extract_maven_versions(&xml)
+        .into_iter()
+        .filter_map(|v| v.strip_prefix(&prefix).map(|b| b.to_string()))
+        .collect();
+    // Le maven les range du plus ancien au plus récent.
+    builds.reverse();
+    Ok(builds)
+}
+
+/// Le contenu des balises `<version>` d'un `maven-metadata.xml`, dans l'ordre
+/// du document.
+fn extract_maven_versions(xml: &str) -> Vec<String> {
+    xml.split("<version>")
+        .skip(1)
+        .filter_map(|rest| rest.split_once("</version>"))
+        .map(|(v, _)| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .collect()
+}
+
 /// Trouve un dossier de version déjà installé correspondant à ce MC+build Forge.
 /// On ne déduit pas l'id depuis un format fixe : les vieux Forge pré-1.13
 /// (1.7.x à ~1.12) utilisent des ids irréguliers selon la version (casse,
@@ -369,4 +409,38 @@ pub async fn download_library(lib: &ForgeLibrary, libraries_dir: &Path, client: 
     }
 
     if local_path.exists() { Some(local_path) } else { None }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_maven_versions;
+
+    /// Le maven de Forge, en plus petit — balises sur plusieurs lignes et
+    /// indentées, comme dans le vrai fichier.
+    const XML: &str = r#"<metadata>
+      <versioning>
+        <versions>
+          <version>1.21.4-54.0.1</version>
+          <version>1.21.4-54.1.0</version>
+          <version>1.20.1-47.2.0</version>
+        </versions>
+      </versioning>
+    </metadata>"#;
+
+    #[test]
+    fn lit_les_versions_dans_l_ordre_du_document() {
+        assert_eq!(
+            extract_maven_versions(XML),
+            vec!["1.21.4-54.0.1", "1.21.4-54.1.0", "1.20.1-47.2.0"]
+        );
+    }
+
+    /// Un document sans version ne doit pas rendre une entrée vide : la liste
+    /// alimente un menu, et un choix vide serait sélectionnable.
+    #[test]
+    fn ne_rend_rien_quand_il_n_y_a_rien() {
+        assert!(extract_maven_versions("<metadata></metadata>").is_empty());
+        assert!(extract_maven_versions("<version></version>").is_empty());
+        assert!(extract_maven_versions("").is_empty());
+    }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -73,8 +73,6 @@ export function InstanceSettingsModal({
 
   const [name, setName] = useState(instance.name)
   const [description, setDescription] = useState(instance.description)
-  const [mcVersion, setMcVersion] = useState(instance.mc_version)
-  const [loader, setLoader] = useState<Loader>(instance.loader)
   const [ram, setRam] = useState(instance.ram_mb)
 
   const [saving, setSaving] = useState(false)
@@ -104,11 +102,12 @@ export function InstanceSettingsModal({
       .catch(() => {})
   }, [instance.jvm_profile_id])
 
+  // La version du jeu et le loader n'en font pas partie : ils ont leur propre
+  // enregistrement dans l'onglet Installation, parce qu'ils réinstallent des
+  // fichiers au lieu de corriger un libellé.
   const dirty =
     name !== instance.name ||
     description !== instance.description ||
-    mcVersion !== instance.mc_version ||
-    loader !== instance.loader ||
     ram !== instance.ram_mb
 
   const tabs = useMemo(
@@ -128,17 +127,17 @@ export function InstanceSettingsModal({
     try {
       // Le bloc JVM est renvoyé tel quel : il a son propre écran, et ne pas
       // le repasser le réinitialiserait au moindre renommage.
-      const updated = await api.instances.update(instance.id, name.trim(), mcVersion, loader, ram, description.trim(), {
+      // La version, le loader et la version de loader sont repassés tels
+      // quels : ils ne se modifient que depuis l'onglet Installation, et
+      // omettre `loader_version` le laisserait intact de toute façon (voir
+      // `instance_update` côté Rust).
+      const updated = await api.instances.update(instance.id, name.trim(), instance.mc_version, instance.loader, ram, description.trim(), {
         vendor: instance.jvm_vendor,
         customPath: instance.jvm_custom_path ?? undefined,
         gcPolicy: instance.gc_policy,
         extraArgs: instance.jvm_extra_args,
         argsMode: instance.jvm_args_mode,
       })
-      if (mcVersion !== instance.mc_version) {
-        setSavingLabel(t('instancesPage.updatingMods'))
-        await updateModsForNewVersion(instance.id, mcVersion, loader)
-      }
       onUpdate(updated)
     } catch (e) {
       showError(e)
@@ -290,74 +289,13 @@ export function InstanceSettingsModal({
             )}
 
             {tab === 'installation' && (
-              <div className="flex flex-col gap-5">
-                {/* Ce qui est installé, avant ce qu'on peut changer : on vient
-                    souvent ici pour lire, pas pour modifier. */}
-                <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-2 p-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-muted">
-                    {t('instancesPage.installationInfo')}
-                  </p>
-                  <Line label={t('instancesPage.platform')}>
-                    <span className="font-semibold" style={{ color: loaderColor(instance.loader) }}>
-                      {label(instance.loader)}
-                    </span>
-                  </Line>
-                  <Line label={t('instancesPage.gameVersion')}>
-                    <span className="font-semibold text-txt-primary">{instance.mc_version}</span>
-                  </Line>
-                  <Line label={t('instancesPage.modsInstalled')}>
-                    <span className="font-semibold tabular-nums text-txt-primary">{modCount}</span>
-                  </Line>
-                </div>
-
-                <Field label={t('instancesPage.versionMc')}>
-                  <div className="relative">
-                    <select
-                      value={mcVersion}
-                      onChange={(e) => setMcVersion(e.target.value)}
-                      className="h-10 w-full appearance-none rounded-xl border border-line bg-black/40 px-3 pr-8 text-[13px] font-medium text-txt-primary outline-none"
-                    >
-                      {versions.map((v) => (
-                        <option key={v} value={v} className="bg-[#111118]">{v}</option>
-                      ))}
-                    </select>
-                    <svg viewBox="0 0 10 6" fill="currentColor" width={10} height={6} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted">
-                      <path d="M0 0l5 6 5-6z" />
-                    </svg>
-                  </div>
-                </Field>
-
-                <Field label="Loader">
-                  <div className="flex flex-wrap gap-1.5">
-                    {LOADERS.map((l) => (
-                      <button
-                        key={l}
-                        onClick={() => setLoader(l)}
-                        className={`h-10 rounded-xl border px-3.5 text-[12.5px] font-semibold transition-colors ${
-                          loader === l
-                            ? 'border-accent/70 bg-accent/30 text-txt-primary'
-                            : 'border-line bg-surface-2 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
-                        }`}
-                      >
-                        {label(l)}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-
-                {mcVersion !== instance.mc_version && (
-                  <Notice>
-                    {t('instancesPage.modsWillUpdatePrefix')}{' '}
-                    <span className="font-semibold text-accent-hover">{mcVersion}</span>.
-                  </Notice>
-                )}
-              </div>
+              <InstallationTab instance={instance} versions={versions} onUpdate={onUpdate} />
             )}
 
             {tab === 'java' && (
               <div className="flex flex-col gap-5">
                 <Field label={t('instancesPage.ramTitle')} hint={formatRam(ram)}>
-                  <RamPicker value={ram} onChange={setRam} loader={loader} modCount={modCount} onStatusChange={setRamStatus} />
+                  <RamPicker value={ram} onChange={setRam} loader={instance.loader} modCount={modCount} onStatusChange={setRamStatus} />
                 </Field>
 
                 {ramStatus.isKnownTier && !ramStatus.isRecommended && (
@@ -424,8 +362,6 @@ export function InstanceSettingsModal({
                     onClick={() => {
                       setName(instance.name)
                       setDescription(instance.description)
-                      setMcVersion(instance.mc_version)
-                      setLoader(instance.loader)
                       setRam(instance.ram_mb)
                     }}
                     disabled={saving}
@@ -560,6 +496,289 @@ function ActionButton({
     >
       {busy ? t('common.loading') : done ? t('instancesPage.done') : children}
     </button>
+  )
+}
+
+/**
+ * L'installation : ce qui est installé, et comment en changer.
+ *
+ * Elle a son propre enregistrement, séparé du brouillon des autres onglets,
+ * parce que ce n'est pas la même nature de geste. Renommer une instance se
+ * défait ; changer sa version de jeu, son loader ou sa version de loader
+ * réinstalle des fichiers et peut rendre injouable ce qui marchait — d'où la
+ * lecture d'abord, un bouton « Modifier » pour entrer dans le formulaire, et
+ * un avertissement qui s'affiche à ce moment-là plutôt que d'être un décor
+ * permanent qu'on ne lit plus.
+ *
+ * La mise à jour des mods est **un choix**, pas une conséquence : changer de
+ * version relançait la recherche d'une version compatible de chaque mod, sans
+ * rien demander. C'est ce qu'on veut la plupart du temps, pas toujours.
+ */
+function InstallationTab({
+  instance,
+  versions,
+  onUpdate,
+}: {
+  instance: Instance
+  versions: string[]
+  onUpdate: (instance: Instance) => void
+}) {
+  const t = useT()
+  const [editing, setEditing] = useState(false)
+  const [mcVersion, setMcVersion] = useState(instance.mc_version)
+  const [loader, setLoader] = useState<Loader>(instance.loader)
+  const [loaderVersion, setLoaderVersion] = useState(instance.loader_version)
+  const [updateMods, setUpdateMods] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [savingLabel, setSavingLabel] = useState('')
+
+  /** Versions du loader proposées — `null` tant qu'on ne les a pas. */
+  const [loaderVersions, setLoaderVersions] = useState<string[] | null>(null)
+
+  // Rechargées à chaque changement de loader ou de version de jeu : une liste
+  // de builds n'a de sens que pour un couple précis. Le compteur de génération
+  // écarte la réponse d'un couple qu'on vient de quitter — sans lui, une
+  // réponse lente écraserait la liste du couple courant.
+  const generation = useRef(0)
+  useEffect(() => {
+    if (!editing) return
+    const mine = ++generation.current
+    setLoaderVersions(null)
+    if (loader === 'vanilla') { setLoaderVersions([]); return }
+    api.versions.loader(loader, mcVersion)
+      .then((list) => { if (generation.current === mine) setLoaderVersions(list) })
+      .catch(() => { if (generation.current === mine) setLoaderVersions([]) })
+  }, [editing, loader, mcVersion])
+
+  // Une version épinglée pour un autre couple n'existerait pas ici : on la
+  // relâche plutôt que de proposer un choix qui ferait échouer le lancement.
+  useEffect(() => {
+    if (!editing) return
+    if (loader !== instance.loader || mcVersion !== instance.mc_version) setLoaderVersion('')
+  }, [editing, loader, mcVersion, instance.loader, instance.mc_version])
+
+  const cancel = () => {
+    setMcVersion(instance.mc_version)
+    setLoader(instance.loader)
+    setLoaderVersion(instance.loader_version)
+    setUpdateMods(true)
+    setEditing(false)
+  }
+
+  const versionChanged = mcVersion !== instance.mc_version || loader !== instance.loader
+
+  const save = async () => {
+    setSaving(true)
+    setSavingLabel(t('instancesPage.saving'))
+    try {
+      const updated = await api.instances.update(
+        instance.id,
+        instance.name,
+        mcVersion,
+        loader,
+        instance.ram_mb,
+        instance.description,
+        {
+          vendor: instance.jvm_vendor,
+          customPath: instance.jvm_custom_path ?? undefined,
+          gcPolicy: instance.gc_policy,
+          extraArgs: instance.jvm_extra_args,
+          argsMode: instance.jvm_args_mode,
+        },
+        loaderVersion,
+      )
+      if (versionChanged && updateMods) {
+        setSavingLabel(t('instancesPage.updatingMods'))
+        await updateModsForNewVersion(instance.id, mcVersion, loader)
+      }
+      onUpdate(updated)
+      setEditing(false)
+    } catch (e) {
+      showError(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {!editing ? (
+        <>
+          <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface-2 p-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-txt-muted">
+              {t('instancesPage.installationInfo')}
+            </p>
+            <Line label={t('instancesPage.platform')}>
+              <span className="font-semibold" style={{ color: loaderColor(instance.loader) }}>
+                {label(instance.loader)}
+              </span>
+            </Line>
+            <Line label={t('instancesPage.gameVersion')}>
+              <span className="font-semibold text-txt-primary">{instance.mc_version}</span>
+            </Line>
+            {instance.loader !== 'vanilla' && (
+              <Line label={t('instancesPage.loaderVersion', { loader: label(instance.loader) })}>
+                <span className="font-semibold text-txt-primary">
+                  {instance.loader_version || t('instancesPage.loaderLatest')}
+                </span>
+              </Line>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <button
+              onClick={() => setEditing(true)}
+              className="flex w-fit items-center gap-2 rounded-xl border border-warning/40 bg-warning/15 px-3.5 py-2 text-[12.5px] font-semibold text-warning transition-colors hover:bg-warning/25"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width={12} height={12}>
+                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+              </svg>
+              {t('instancesPage.editInstallation')}
+            </button>
+            <p className="text-[11.5px] leading-relaxed text-txt-muted">
+              {t('instancesPage.editInstallationHint')}
+            </p>
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface-2 p-4">
+          <p className="text-[13px] font-semibold text-txt-primary">{t('instancesPage.editInstallation')}</p>
+
+          {/* L'avertissement est ici, à l'ouverture du formulaire, et pas à
+              côté du bouton : c'est le moment où il se lit, parce que c'est le
+              moment où on s'apprête à agir. */}
+          <div className="flex gap-2.5 rounded-xl border border-warning/35 bg-warning/10 p-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width={15} height={15} className="mt-px shrink-0 text-warning">
+              <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
+            </svg>
+            <p className="text-[11.5px] leading-relaxed text-txt-secondary">
+              {t('instancesPage.installationWarning')}
+            </p>
+          </div>
+
+          <Field label={t('instancesPage.platform')}>
+            <div className="flex flex-wrap gap-1.5">
+              {LOADERS.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLoader(l)}
+                  className={`h-9 rounded-xl border px-3.5 text-[12.5px] font-semibold transition-colors ${
+                    loader === l
+                      ? 'border-accent/70 bg-accent/30 text-txt-primary'
+                      : 'border-line bg-surface-1 text-txt-secondary hover:border-line-strong hover:text-txt-primary'
+                  }`}
+                >
+                  {label(l)}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={t('instancesPage.gameVersion')}>
+            <Select value={mcVersion} onChange={setMcVersion} options={versions} />
+          </Field>
+
+          {loader !== 'vanilla' && (
+            <Field label={t('instancesPage.loaderVersion', { loader: label(loader) })}>
+              {loaderVersions === null ? (
+                <p className="text-[11.5px] text-txt-muted">{t('common.loading')}</p>
+              ) : (
+                <Select
+                  value={loaderVersion}
+                  onChange={setLoaderVersion}
+                  options={loaderVersions}
+                  // La première entrée n'est pas une version : c'est le
+                  // comportement par défaut du launcher, et il doit rester
+                  // atteignable pour revenir en arrière.
+                  placeholder={{ value: '', label: t('instancesPage.loaderLatest') }}
+                />
+              )}
+            </Field>
+          )}
+
+          {versionChanged && (
+            <button
+              onClick={() => setUpdateMods(!updateMods)}
+              className="flex items-center gap-3 rounded-xl border border-line bg-surface-1 px-3 py-2.5 text-left transition-colors hover:border-line-strong"
+            >
+              <Check on={updateMods} />
+              <span className="min-w-0">
+                <span className="block text-[12px] font-semibold text-txt-secondary">
+                  {t('instancesPage.updateModsLabel')}
+                </span>
+                <span className="block text-[11px] leading-snug text-txt-muted">
+                  {t('instancesPage.updateModsHint')}
+                </span>
+              </span>
+            </button>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-xl bg-accent px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+            >
+              {saving ? savingLabel : t('common.save')}
+            </button>
+            <button
+              onClick={cancel}
+              disabled={saving}
+              className="rounded-xl border border-line bg-surface-1 px-4 py-2 text-[12.5px] font-semibold text-txt-secondary transition-colors hover:text-txt-primary disabled:opacity-50"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Un menu déroulant aux couleurs du launcher — celui du système ne les prend pas. */
+function Select({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: string[]
+  placeholder?: { value: string; label: string }
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-full appearance-none rounded-xl border border-line bg-black/40 px-3 pr-8 text-[13px] font-medium text-txt-primary outline-none"
+      >
+        {placeholder && (
+          <option value={placeholder.value} className="bg-[#111118]">{placeholder.label}</option>
+        )}
+        {options.map((o) => (
+          <option key={o} value={o} className="bg-[#111118]">{o}</option>
+        ))}
+      </select>
+      <svg viewBox="0 0 10 6" fill="currentColor" width={10} height={6} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-txt-muted">
+        <path d="M0 0l5 6 5-6z" />
+      </svg>
+    </div>
+  )
+}
+
+function Check({ on }: { on: boolean }) {
+  return (
+    <span
+      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-colors ${
+        on ? 'border-accent bg-accent text-white' : 'border-line-strong bg-transparent text-transparent'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" width={11} height={11}>
+        <path d="M5 13l4 4L19 7" />
+      </svg>
+    </span>
   )
 }
 

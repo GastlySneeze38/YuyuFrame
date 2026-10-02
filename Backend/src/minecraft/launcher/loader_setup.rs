@@ -52,10 +52,16 @@ pub(super) async fn setup_fabric(
     avoid_beta: bool,
     progress_floor: &ProgressFloor,
     client: &reqwest::Client,
+    // Version de loader épinglée sur l'instance, `None` = la plus récente
+    // compatible (le comportement historique).
+    pinned: Option<&str>,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Fabric Loader...");
 
-    let profile = fabric::get_latest_profile(mc_version).await?;
+    let profile = match pinned {
+        Some(version) => fabric::get_profile(mc_version, version).await?,
+        None => fabric::get_latest_profile(mc_version).await?,
+    };
     let mut warnings = Vec::new();
 
     if let Err(e) = fabric::ensure_fabric_api(mc_version, mods_dir).await {
@@ -144,10 +150,16 @@ pub(super) async fn setup_quilt(
     avoid_beta: bool,
     progress_floor: &ProgressFloor,
     client: &reqwest::Client,
+    // Version de loader épinglée sur l'instance, `None` = la plus récente
+    // compatible (le comportement historique).
+    pinned: Option<&str>,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 72, 100, "Téléchargement Quilt Loader...");
 
-    let profile = quilt::get_latest_profile(mc_version).await?;
+    let profile = match pinned {
+        Some(version) => quilt::get_profile(mc_version, version).await?,
+        None => quilt::get_latest_profile(mc_version).await?,
+    };
     let mut warnings = Vec::new();
 
     set_progress_monotonic(app, progress_floor, 74, 100, "Résolution des dépendances des mods...");
@@ -222,6 +234,9 @@ pub(super) async fn setup_forge(
     app: &tauri::AppHandle,
     progress_floor: &ProgressFloor,
     client: &reqwest::Client,
+    // Version de loader épinglée sur l'instance, `None` = la plus récente
+    // compatible (le comportement historique).
+    pinned: Option<&str>,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version Forge...");
 
@@ -232,7 +247,14 @@ pub(super) async fn setup_forge(
     // lancer. Avant, cet échec était fatal AVANT même de regarder ce qui est
     // sur le disque — une instance parfaitement jouable refusait de démarrer
     // sans connexion.
-    let version_id = match forge::fetch_latest_version(mc_version).await {
+    // Une version épinglée court-circuite la résolution : il n'y a plus rien
+    // à choisir, donc rien à demander au serveur Forge. Le repli hors ligne
+    // ci-dessous reste utile tel quel, pour le cas non épinglé.
+    let resolved = match pinned {
+        Some(version) => Ok(version.to_string()),
+        None => forge::fetch_latest_version(mc_version).await,
+    };
+    let version_id = match resolved {
         Ok(forge_ver) => {
             tracing::info!("Forge {} pour MC {}", forge_ver, mc_version);
             match forge::find_installed(mc_version, &forge_ver, mc_dir) {
@@ -348,13 +370,21 @@ pub(super) async fn setup_neoforge(
     app: &tauri::AppHandle,
     progress_floor: &ProgressFloor,
     client: &reqwest::Client,
+    // Version de loader épinglée sur l'instance, `None` = la plus récente
+    // compatible (le comportement historique).
+    pinned: Option<&str>,
 ) -> Result<LoaderSetup> {
     set_progress_monotonic(app, progress_floor, 70, 100, "Recherche de la version NeoForge...");
 
     let mut warnings = Vec::new();
 
     // Repli HORS LIGNE — même raisonnement que `setup_forge` ci-dessus.
-    let version_id = match neoforge::fetch_latest_version(mc_version).await {
+    // Même raisonnement que pour Forge juste au-dessus.
+    let resolved = match pinned {
+        Some(version) => Ok(version.to_string()),
+        None => neoforge::fetch_latest_version(mc_version).await,
+    };
+    let version_id = match resolved {
         Ok(neoforge_ver) => {
             tracing::info!("NeoForge {} pour MC {}", neoforge_ver, mc_version);
             match neoforge::find_installed(&neoforge_ver, mc_dir) {

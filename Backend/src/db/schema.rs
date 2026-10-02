@@ -51,7 +51,8 @@ pub fn init_db(path: &Path) -> Result<Connection> {
              gc_policy       TEXT    NOT NULL DEFAULT 'auto',
              jvm_extra_args  TEXT    NOT NULL DEFAULT '',
              jvm_args_mode   TEXT    NOT NULL DEFAULT 'append',
-             icon            TEXT    NOT NULL DEFAULT ''
+             icon            TEXT    NOT NULL DEFAULT '',
+             loader_version  TEXT    NOT NULL DEFAULT ''
          );
 
          -- Configurations JVM réutilisables : une même config peut être reliée
@@ -149,6 +150,11 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // réparer dès que l'image d'origine est déplacée. La contrepartie est une
     // taille bornée à l'import (voir `commands::instance::icon`).
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN icon TEXT NOT NULL DEFAULT ''", []);
+    // Version du loader épinglée par l'utilisateur. Vide = « la plus récente
+    // compatible », c'est-à-dire exactement ce que le launcher a toujours fait
+    // et ce qu'il continue de faire par défaut : la colonne n'ajoute un
+    // comportement que lorsqu'elle est renseignée.
+    let _ = conn.execute("ALTER TABLE instances ADD COLUMN loader_version TEXT NOT NULL DEFAULT ''", []);
     // Jeu de drapeaux dont chaque catégorie est issue, en JSON
     // (`{"gc":"gc-brucethemoose"}`) : purement informatif côté launcher, c'est
     // l'interface qui s'en sert pour montrer les écarts introduits depuis.

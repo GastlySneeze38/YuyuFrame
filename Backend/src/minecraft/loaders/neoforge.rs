@@ -50,6 +50,26 @@ pub async fn fetch_latest_version(mc_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Aucune version NeoForge pour Minecraft {}", mc_version))
 }
 
+/// Les versions NeoForge disponibles pour ce MC, la plus récente d'abord.
+///
+/// Même filtre par préfixe que `fetch_latest_version` ci-dessus, et même tri
+/// numérique — un tri lexicographique mettrait `20.2.9` après `20.2.10`.
+pub async fn list_versions(mc_version: &str) -> Result<Vec<String>> {
+    let client = crate::minecraft::http::short_lived_client();
+    let resp: NeoForgeVersionList = client
+        .get(NEOFORGE_VERSIONS_API)
+        .send()
+        .await?
+        .json()
+        .await
+        .map_err(|_| anyhow!("Impossible de contacter le serveur NeoForge"))?;
+
+    let prefix = format!("{}.", mc_version.strip_prefix("1.").unwrap_or(mc_version));
+    let mut matching: Vec<String> = resp.versions.into_iter().filter(|v| v.starts_with(&prefix)).collect();
+    matching.sort_by(|a, b| cmp_core(&version_core(b), &version_core(a)));
+    Ok(matching)
+}
+
 /// L'id de version installée est toujours exactement `neoforge-{version}`
 /// (vérifié sur un installeur réel) — pas besoin du scan flou de
 /// `forge::find_installed` (qui existe pour absorber les ids irréguliers du
