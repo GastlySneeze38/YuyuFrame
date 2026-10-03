@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { press } from '@/lib/motion'
 import { motion } from 'framer-motion'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Pagination } from '@/components/ui/Pagination'
 import { SearchIcon } from '@/components/ui/icons/SearchIcon'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { useT } from '@/i18n'
@@ -39,6 +40,7 @@ export type MergedHit =
 
 export function BrowseTab({
   query, results, searching, isPlugin, filters, onQueryChange, onFiltersChange,
+  page, pageCount, onPageChange,
   installingModrinth, installProgressModrinth, isInstalledModrinth, onInstallModrinth, onOpenDetailModrinth,
   installingCurseforge, installProgressCurseforge, isInstalledCurseforge, onInstallCurseforge, onOpenDetailCurseforge,
 }: {
@@ -49,6 +51,9 @@ export function BrowseTab({
   filters: ModrinthSearchFilters
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onFiltersChange: (f: ModrinthSearchFilters) => void
+  page: number
+  pageCount: number
+  onPageChange: (page: number) => void
   installingModrinth: string | null
   installProgressModrinth?: { percent: number; label: string } | null
   isInstalledModrinth: (hit: ModrinthHit) => boolean
@@ -62,6 +67,14 @@ export function BrowseTab({
 }) {
   const t = useT()
   const [showFilters, setShowFilters] = useState(false)
+  const topRef = useRef<HTMLDivElement>(null)
+
+  // La pagination est en bas de la liste : sans remonter, la page suivante
+  // s'ouvrirait sur ses derniers résultats.
+  const changePage = (p: number) => {
+    onPageChange(p)
+    topRef.current?.scrollIntoView({ block: 'start' })
+  }
 
   const toggleCategory = (c: string) => {
     const current = filters.categories ?? []
@@ -77,7 +90,7 @@ export function BrowseTab({
     }`
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={topRef} className="flex flex-col gap-3">
       <div className="flex gap-2">
         <div className="relative flex-1">
           <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}
@@ -227,6 +240,8 @@ export function BrowseTab({
           />
         ))}
       </div>
+
+      <Pagination page={page} pageCount={pageCount} onChange={changePage} disabled={searching} />
     </div>
   )
 }

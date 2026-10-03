@@ -1,5 +1,6 @@
 import { api } from '@/api/client'
-import { MOD_LOADER_TYPE } from '@/components/mods/curseforgeUtils'
+import { CURSEFORGE_MAX_PAGE, MOD_LOADER_TYPE, curseforgeTotal, type CurseforgePagination } from '@/components/mods/curseforgeUtils'
+import { SEARCH_PAGE_SIZE, type SearchPage } from '@/components/mods/modUtils'
 
 // Miroir de modrinthModpacks.ts côté CurseForge — fichier séparé car les deux
 // API n'ont pas le même schéma (id numérique vs project_id string, pas de
@@ -51,12 +52,13 @@ function toModpackHit(m: CfApiModpack): CurseforgeModpackHit {
   }
 }
 
-export async function searchCurseforgeModpacks(query: string, gameVersion?: string, loader?: string): Promise<CurseforgeModpackHit[]> {
-  if (!query.trim()) return []
+export async function searchCurseforgeModpacks(query: string, gameVersion?: string, loader?: string, page = 1): Promise<SearchPage<CurseforgeModpackHit>> {
+  if (!query.trim() || page > CURSEFORGE_MAX_PAGE) return { hits: [], total: 0 }
   const data = (await api.curseforge.search(query, {
     gameVersion: gameVersion || undefined,
     classId: CLASS_ID_MODPACKS,
-    pageSize: 20,
+    pageSize: SEARCH_PAGE_SIZE,
+    index: (page - 1) * SEARCH_PAGE_SIZE,
     // Pas de tri "pertinence" côté CurseForge (voir curseforgeUtils.ts) — la
     // popularité reste le proxy le plus proche, même raisonnement que la
     // recherche de mods.
@@ -65,8 +67,8 @@ export async function searchCurseforgeModpacks(query: string, gameVersion?: stri
     // Sans ça, un modpack Forge/NeoForge apparaît aussi bien pour une instance
     // Fabric que Forge — même filtre que fetchCurseforgeSearch (mods).
     modLoaderType: loader && loader !== 'vanilla' ? MOD_LOADER_TYPE[loader] : undefined,
-  })) as { data?: CfApiModpack[] }
-  return (data?.data ?? []).map(toModpackHit)
+  })) as { data?: CfApiModpack[]; pagination?: CurseforgePagination }
+  return { hits: (data?.data ?? []).map(toModpackHit), total: curseforgeTotal(data?.pagination) }
 }
 
 /// Résout le fichier du modpack lui-même (le zip manifest.json+overrides) —

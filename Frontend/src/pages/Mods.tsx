@@ -29,12 +29,13 @@ import { ModDetailModal } from '@/components/mods/ModDetailModal'
 import { CurseforgeDetailModal } from '@/components/mods/CurseforgeDetailModal'
 import { ModpackDetailModal } from '@/components/mods/ModpackDetailModal'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { pageCountFor } from '@/components/ui/Pagination'
 import { showError, showApiError } from '@/stores/useErrorToast'
 import { useT } from '@/i18n'
 import {
   displayName, baseFilename, fetchVersionsByHash, checkForUpdates, fetchModrinthSearch, fetchLatestVersion,
-  fetchProjectDetail, _modrinthCache, _iconCache,
-  type ModrinthInfo, type ModUpdate, type ModrinthHit, type ModrinthSearchFilters, type Tab,
+  fetchProjectDetail, _modrinthCache, _iconCache, SEARCH_PAGE_SIZE,
+  type ModrinthInfo, type ModUpdate, type ModrinthHit, type ModrinthSearchFilters, type SearchPage, type Tab,
 } from '@/components/mods/modUtils'
 
 import { useSearchRunner } from '@/hooks/useSearchRunner'
@@ -62,12 +63,14 @@ interface SearchParams {
   filters: ModrinthSearchFilters
   mcVersion: string
   loader: string
+  /** Page demandée, à partir de 1. */
+  page: number
 }
 
 /// Deux recherches de même clé renvoient les mêmes résultats : texte sans espaces
 /// autour ni casse, catégories triées.
-function searchKey({ q, filters, mcVersion, loader }: SearchParams, withFilters: boolean): string {
-  const base = [q.trim().toLowerCase(), mcVersion, loader]
+function searchKey({ q, filters, mcVersion, loader, page }: SearchParams, withFilters: boolean): string {
+  const base = [q.trim().toLowerCase(), mcVersion, loader, page]
   if (!withFilters) return JSON.stringify(base)
   return JSON.stringify([
     ...base,
@@ -156,6 +159,12 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ModrinthHit[]>([])
   const [searching, setSearching] = useState(false)
+  // Page affichée, et nombre de résultats que chaque source annonce pour la
+  // recherche en cours — le nombre de pages est celui de la source qui en a
+  // le plus (voir `modPageCount`).
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [cfTotal, setCfTotal] = useState(0)
   const [installing, setInstalling] = useState<string | null>(null)
   const [installProgress, setInstallProgress] = useState<{ percent: number; label: string } | null>(null)
   const [searchFilters, setSearchFilters] = useState<ModrinthSearchFilters>({})
@@ -184,11 +193,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
     return map
   }, [cfMatchByModName])
 
-  const modrinthSearch = useSearchRunner<SearchParams, ModrinthHit[]>({
+  const modrinthSearch = useSearchRunner<SearchParams, SearchPage<ModrinthHit>>({
     name: 'modrinth-mods',
     keyOf: (p) => searchKey(p, true),
-    fetch: (p) => fetchModrinthSearch(p.q.trim(), p.mcVersion, p.loader, p.filters),
-    onResult: setResults,
+    fetch: (p) => fetchModrinthSearch(p.q.trim(), p.mcVersion, p.loader, p.filters, p.page),
+    onResult: (r) => { setResults(r.hits); setTotal(r.total) },
     onError: (e) => {
       console.error('[Mods] recherche Modrinth :', e)
       showError(t('mods.cannotReachModrinth'))
@@ -198,19 +207,23 @@ export function ModsContent({ instance }: { instance: Instance }) {
 
   // CurseForge ne reçoit pas les filtres Modrinth : sa clé les ignore, un
   // changement de filtre ne le relance donc pas.
-  const curseforgeSearch = useSearchRunner<SearchParams, CurseforgeHit[]>({
+  const curseforgeSearch = useSearchRunner<SearchParams, SearchPage<CurseforgeHit>>({
     name: 'curseforge-mods',
     keyOf: (p) => searchKey(p, false),
-    fetch: (p) => fetchCurseforgeSearch(p.q.trim(), p.mcVersion, p.loader),
-    onResult: setCfResults,
+    fetch: (p) => fetchCurseforgeSearch(p.q.trim(), p.mcVersion, p.loader, {}, p.page),
+    onResult: (r) => { setCfResults(r.hits); setCfTotal(r.total) },
     onError: (e) => showApiError(e, t('common.serverUnreachable')),
     onBusyChange: setCfSearching,
   })
 
   /// Une seule barre de recherche interroge les deux sources — voir mergedResults
   /// pour la fusion. Un seul événement analytics, et seulement si une requête part.
-  const commitModSearch = (q: string, filters: ModrinthSearchFilters) => {
-    const params: SearchParams = { q, filters, mcVersion, loader }
+  /// Sans `page`, la recherche repart de la première : c'est le cas de tout
+  /// changement de texte ou de filtre, dont les résultats n'ont plus rien à voir
+  /// avec la page où l'on se trouvait.
+  const commitModSearch = (q: string, filters: ModrinthSearchFilters, nextPage = 1) => {
+    setPage(nextPage)
+    const params: SearchParams = { q, filters, mcVersion, loader, page: nextPage }
     const modrinthLaunched = modrinthSearch.request(params)
     const curseforgeLaunched = curseforgeSearch.request(params)
     if ((modrinthLaunched || curseforgeLaunched) && q.trim()) {
@@ -318,6 +331,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [packFilters, setPackFilters] = useState<ModrinthSearchFilters>({})
   const [packResults, setPackResults] = useState<ModpackHit[]>([])
   const [packSearching, setPackSearching] = useState(false)
+  const [packPage, setPackPage] = useState(1)
+  const [packTotal, setPackTotal] = useState(0)
+  const [cfPackTotal, setCfPackTotal] = useState(0)
   const [packInstalling, setPackInstalling] = useState<string | null>(null)
   const [packInstallProgress, setPackInstallProgress] = useState<{ percent: number; label: string } | null>(null)
   const [packImportingFile, setPackImportingFile] = useState(false)
@@ -330,6 +346,13 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const [cfPackSearching, setCfPackSearching] = useState(false)
   const [cfPackInstalling, setCfPackInstalling] = useState<number | null>(null)
   const [cfPackInstallProgress, setCfPackInstallProgress] = useState<{ percent: number; label: string } | null>(null)
+
+  // Chaque source est paginée de son côté, par pages de même taille : la
+  // page N de l'écran est la page N de Modrinth et la page N de CurseForge.
+  // Il y a donc autant de pages que la source qui en a le plus — l'autre,
+  // épuisée, ne rend plus rien et la page se remplit de la seule première.
+  const modPageCount = Math.max(pageCountFor(total, SEARCH_PAGE_SIZE), pageCountFor(cfTotal, SEARCH_PAGE_SIZE))
+  const packPageCount = Math.max(pageCountFor(packTotal, SEARCH_PAGE_SIZE), pageCountFor(cfPackTotal, SEARCH_PAGE_SIZE))
 
   const mergedPackResults = useMemo<MergedModpackHit[]>(() => [
     ...packResults.map((hit): MergedModpackHit => ({ source: 'modrinth', hit })),
@@ -362,11 +385,11 @@ export function ModsContent({ instance }: { instance: Instance }) {
   const packFileSet = new Set((modpackMeta?.mod_files ?? []).map((f) => f.toLowerCase()))
   const isPackMod = (name: string) => packFileSet.has(baseFilename(name).toLowerCase())
 
-  const modrinthPackSearch = useSearchRunner<SearchParams, ModpackHit[]>({
+  const modrinthPackSearch = useSearchRunner<SearchParams, SearchPage<ModpackHit>>({
     name: 'modrinth-modpacks',
     keyOf: (p) => searchKey(p, true),
-    fetch: (p) => searchModrinthModpacks(p.q.trim(), p.mcVersion, p.loader, p.filters),
-    onResult: setPackResults,
+    fetch: (p) => searchModrinthModpacks(p.q.trim(), p.mcVersion, p.loader, p.filters, p.page),
+    onResult: (r) => { setPackResults(r.hits); setPackTotal(r.total) },
     onError: (e) => {
       console.error('[Mods] recherche de modpacks Modrinth :', e)
       showError(t('mods.cannotReachModrinth'))
@@ -374,17 +397,18 @@ export function ModsContent({ instance }: { instance: Instance }) {
     onBusyChange: setPackSearching,
   })
 
-  const curseforgePackSearch = useSearchRunner<SearchParams, CurseforgeModpackHit[]>({
+  const curseforgePackSearch = useSearchRunner<SearchParams, SearchPage<CurseforgeModpackHit>>({
     name: 'curseforge-modpacks',
     keyOf: (p) => searchKey(p, false),
-    fetch: (p) => searchCurseforgeModpacks(p.q.trim(), p.mcVersion, p.loader),
-    onResult: setCfPackResults,
+    fetch: (p) => searchCurseforgeModpacks(p.q.trim(), p.mcVersion, p.loader, p.page),
+    onResult: (r) => { setCfPackResults(r.hits); setCfPackTotal(r.total) },
     onError: (e) => showApiError(e, t('common.serverUnreachable')),
     onBusyChange: setCfPackSearching,
   })
 
-  const commitPackSearch = (q: string, filters: ModrinthSearchFilters) => {
-    const params: SearchParams = { q, filters, mcVersion, loader }
+  const commitPackSearch = (q: string, filters: ModrinthSearchFilters, nextPage = 1) => {
+    setPackPage(nextPage)
+    const params: SearchParams = { q, filters, mcVersion, loader, page: nextPage }
     modrinthPackSearch.request(params)
     curseforgePackSearch.request(params)
   }
@@ -673,8 +697,10 @@ export function ModsContent({ instance }: { instance: Instance }) {
   // Ouvrir un onglet affiche la recherche en cours — un aller-retour d'onglet
   // redemande la même clé, que les runners ignorent (y compris sur résultat vide).
   useEffect(() => {
-    if (tab === 'browse') commitModSearch(query, searchFilters)
-    if (tab === 'modpack') commitPackSearch(packQuery, packFilters)
+    // La page est repassée telle quelle : revenir sur l'onglet ne doit pas
+    // ramener à la première.
+    if (tab === 'browse') commitModSearch(query, searchFilters, page)
+    if (tab === 'modpack') commitPackSearch(packQuery, packFilters, packPage)
   }, [tab])
 
   const handleToggle = useCallback(async (mod: Mod) => {
@@ -1308,6 +1334,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
             filters={searchFilters}
             onQueryChange={handleQueryChange}
             onFiltersChange={handleFiltersChange}
+            page={page}
+            pageCount={modPageCount}
+            onPageChange={(p) => commitModSearch(query, searchFilters, p)}
             installingModrinth={installing}
             installProgressModrinth={installProgress}
             isInstalledModrinth={(hit) => !!installedByProject[hit.project_id]}
@@ -1356,6 +1385,9 @@ export function ModsContent({ instance }: { instance: Instance }) {
               cfInstallProgress={cfPackInstallProgress}
               filters={packFilters}
               onQueryChange={handlePackQueryChange}
+              page={packPage}
+              pageCount={packPageCount}
+              onPageChange={(p) => commitPackSearch(packQuery, packFilters, p)}
               onInstall={handleInstallModpack}
               onInstallCurseforge={handleInstallCfModpack}
               onFiltersChange={handlePackFiltersChange}

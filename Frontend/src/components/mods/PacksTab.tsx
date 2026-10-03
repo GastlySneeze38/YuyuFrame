@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Pagination, pageCountFor } from '@/components/ui/Pagination'
 import { AnimatePresence, motion } from 'framer-motion'
 import { listen } from '@tauri-apps/api/event'
 import { press, pressIf, listVariants, listItemVariants } from '@/lib/motion'
@@ -37,6 +38,10 @@ const CATEGORIES: Record<PackKind, string[]> = {
   resourcepack: ['8x-', '16x', '32x', '48x', '64x', '128x', '256x', 'realistic', 'simplistic', 'themed', 'vanilla-like', 'combat', 'decoration'],
   shader: ['iris', 'optifine', 'vanilla', 'fantasy', 'realistic', 'semi-realistic', 'cartoon', 'potato', 'low', 'medium', 'high', 'screenshot'],
 }
+
+/** Une seule source ici (Modrinth), donc une page pleine : deux fois celle
+ *  de l'écran des mods, qui en interroge deux. */
+const PAGE_SIZE = 40
 
 const KIND_ICON: Record<PackKind, string> = {
   resourcepack: 'M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z',
@@ -85,6 +90,8 @@ export function PacksTab({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ModrinthHit[]>([])
   const [searching, setSearching] = useState(false)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [categories, setCategories] = useState<string[]>([])
   const [installing, setInstalling] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ percent: number } | null>(null)
@@ -130,23 +137,41 @@ export function PacksTab({
           loader: 'vanilla',
           projectType: browseKind,
           categories,
-          limit: 40,
+          limit: PAGE_SIZE,
+          offset: (page - 1) * PAGE_SIZE,
         })
         // Même cast que `fetchModrinthSearch` : le backend rend le JSON
         // Modrinth brut, les champs utilisés ici sont bien présents.
-        if (!cancelled) setResults(res.hits as unknown as ModrinthHit[])
+        if (!cancelled) {
+          setResults(res.hits as unknown as ModrinthHit[])
+          setTotal(res.total_hits)
+        }
       } catch (e) {
-        if (!cancelled) { setResults([]); showError(e) }
+        if (!cancelled) { setResults([]); setTotal(0); showError(e) }
       } finally {
         if (!cancelled) setSearching(false)
       }
     }, 320)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [browseKind, query, mcVersion, categories])
+  }, [browseKind, query, mcVersion, categories, page])
 
   // Le type change (shaders ↔ ressources) : les résultats de l'autre type
-  // n'ont plus rien à faire là, et ses catégories non plus.
-  useEffect(() => { setResults([]); setCategories([]) }, [browseKind])
+  // n'ont plus rien à faire là, ses catégories non plus, ni la page où l'on
+  // se trouvait.
+  useEffect(() => { setResults([]); setTotal(0); setCategories([]); setPage(1) }, [browseKind])
+
+  // Tout ce qui change la recherche ramène à la première page, dans le même
+  // geste : la remettre à 1 dans un effet lancerait d'abord une requête sur
+  // l'ancienne page, pour rien.
+  const changeQuery = (q: string) => { setQuery(q); setPage(1) }
+  const changeCategories = (next: string[]) => { setCategories(next); setPage(1) }
+
+  // La pagination est en bas de la grille : la page suivante se lit du haut.
+  const topRef = useRef<HTMLDivElement>(null)
+  const changePage = (p: number) => {
+    setPage(p)
+    topRef.current?.scrollIntoView({ block: 'start' })
+  }
 
   // Progression du téléchargement : un pack de ressources en haute
   // résolution pèse couramment plus qu'un modpack entier, le bouton ne peut
@@ -280,7 +305,7 @@ export function PacksTab({
   const kind = browseKind as PackKind
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={topRef} className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
@@ -288,7 +313,7 @@ export function PacksTab({
           </span>
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => changeQuery(e.target.value)}
             placeholder={t(kind === 'shader' ? 'packs.searchShaders' : 'packs.searchResourcepacks')}
             className="h-9 w-full rounded-xl border border-[rgba(255,255,255,0.1)] bg-[rgba(0,0,0,0.45)] pl-9 pr-3 text-[13px] text-white outline-none transition-colors duration-150 focus:border-[rgba(75,63,207,0.5)]"
           />
@@ -302,7 +327,7 @@ export function PacksTab({
           return (
             <button
               key={c}
-              onClick={() => setCategories(active ? categories.filter((x) => x !== c) : [...categories, c])}
+              onClick={() => changeCategories(active ? categories.filter((x) => x !== c) : [...categories, c])}
               className={`h-7 rounded-lg border px-2.5 text-[11px] font-semibold transition-colors duration-150 ${
                 active
                   ? 'border-[rgba(75,63,207,0.7)] bg-[rgba(75,63,207,0.35)] text-[rgba(255,255,255,0.95)]'
@@ -365,6 +390,8 @@ export function PacksTab({
           </AnimatePresence>
         </motion.div>
       )}
+
+      <Pagination page={page} pageCount={pageCountFor(total, PAGE_SIZE)} onChange={changePage} disabled={searching} />
 
       {installedNames.size > 0 && (
         <span className="text-[10.5px] text-[rgba(255,255,255,0.22)]">

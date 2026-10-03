@@ -350,12 +350,25 @@ export async function updateModsForNewVersion(
  * instances/modrinth.rs) plutôt qu'un fetch direct côté frontend — permet les
  * filtres avancés (catégories de contenu, environnement client/serveur,
  * licence, open source uniquement, tri) en plus de query/version/loader. */
+/** Résultats demandés à chaque source par page. L'écran des mods et celui des
+ *  modpacks interrogent Modrinth ET CurseForge : une page y montre donc
+ *  jusqu'à deux fois ce nombre, moins les doublons. */
+export const SEARCH_PAGE_SIZE = 20
+
+/** Une page de résultats, avec le nombre total que la source annonce pour la
+ *  recherche — c'est lui qui donne le nombre de pages. */
+export interface SearchPage<T> {
+  hits: T[]
+  total: number
+}
+
 export async function fetchModrinthSearch(
   query: string,
   gameVersion: string,
   loader: string,
   filters?: ModrinthSearchFilters,
-): Promise<ModrinthHit[]> {
+  page = 1,
+): Promise<SearchPage<ModrinthHit>> {
   const res = await api.mods.searchAdvanced({
     query,
     gameVersion: gameVersion || undefined,
@@ -365,13 +378,14 @@ export async function fetchModrinthSearch(
     license: filters?.license,
     openSourceOnly: filters?.openSourceOnly,
     sort: filters?.sort,
-    limit: 20,
+    limit: SEARCH_PAGE_SIZE,
+    offset: (page - 1) * SEARCH_PAGE_SIZE,
   })
   // Le backend renvoie du JSON brut (Record<string, unknown>) — cast via
   // `unknown` assumé : le champs qu'on utilise (project_id, slug, title...)
   // sont bien présents dans la vraie réponse Modrinth, juste non déclarés
   // dans ce Record générique côté TypeScript.
-  return res.hits as unknown as ModrinthHit[]
+  return { hits: res.hits as unknown as ModrinthHit[], total: res.total_hits }
 }
 
 export async function fetchLatestVersion(

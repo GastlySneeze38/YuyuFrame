@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Pagination } from '@/components/ui/Pagination'
 import { press, pressIf } from '@/lib/motion'
 import { motion } from 'framer-motion'
 import type { ModpackHit, ModrinthSearchFilters } from '@/lib/modrinthModpacks'
@@ -34,7 +35,11 @@ function isFiltersActive(f: ModrinthSearchFilters): boolean {
 export function ModpackBrowseTab({
   query, results, searching, installing, installProgress, cfInstalling, cfInstallProgress,
   filters, onQueryChange, onInstall, onInstallCurseforge, onFiltersChange, onOpenDetail,
+  page, pageCount, onPageChange,
 }: {
+  page: number
+  pageCount: number
+  onPageChange: (page: number) => void
   query: string
   results: MergedModpackHit[]
   searching: boolean
@@ -51,6 +56,14 @@ export function ModpackBrowseTab({
 }) {
   const t = useT()
   const [showFilters, setShowFilters] = useState(false)
+  const topRef = useRef<HTMLDivElement>(null)
+
+  // Même geste que dans BrowseTab : la pagination est en bas, la page
+  // suivante se lit depuis le haut.
+  const changePage = (p: number) => {
+    onPageChange(p)
+    topRef.current?.scrollIntoView({ block: 'start' })
+  }
 
   const toggleCategory = (c: string) => {
     const current = filters.categories ?? []
@@ -66,7 +79,7 @@ export function ModpackBrowseTab({
     }`
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={topRef} className="flex flex-col gap-3">
       <div className="flex gap-2">
         <div className="relative flex-1">
           <svg viewBox="0 0 24 24" fill="currentColor" width={15} height={15}
@@ -258,6 +271,8 @@ export function ModpackBrowseTab({
           )
         })}
       </div>
+
+      <Pagination page={page} pageCount={pageCount} onChange={changePage} disabled={searching} />
     </div>
   )
 }

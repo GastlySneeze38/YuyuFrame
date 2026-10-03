@@ -1,5 +1,5 @@
 import { api } from '@/api/client'
-import type { ModrinthSearchFilters } from '@/components/mods/modUtils'
+import { SEARCH_PAGE_SIZE, type ModrinthSearchFilters, type SearchPage } from '@/components/mods/modUtils'
 
 export type { ModrinthSearchFilters }
 
@@ -35,7 +35,8 @@ export async function searchModrinthModpacks(
   gameVersion?: string,
   loader?: string,
   filters?: ModrinthSearchFilters,
-): Promise<ModpackHit[]> {
+  page = 1,
+): Promise<SearchPage<ModpackHit>> {
   const res = await api.mods.searchAdvanced({
     query,
     projectType: 'modpack',
@@ -46,10 +47,11 @@ export async function searchModrinthModpacks(
     license: filters?.license,
     openSourceOnly: filters?.openSourceOnly,
     sort: filters?.sort,
-    limit: 20,
+    limit: SEARCH_PAGE_SIZE,
+    offset: (page - 1) * SEARCH_PAGE_SIZE,
   })
   // Voir modUtils.ts::fetchModrinthSearch pour la même remarque sur ce cast.
-  return res.hits as unknown as ModpackHit[]
+  return { hits: res.hits as unknown as ModpackHit[], total: res.total_hits }
 }
 
 /// Résout la dernière version .mrpack disponible pour un modpack donné, compatible

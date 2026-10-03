@@ -1,6 +1,6 @@
 import { api } from '@/api/client'
 import type { Mod } from '@/types'
-import type { ModUpdate } from './modUtils'
+import { SEARCH_PAGE_SIZE, type ModUpdate, type SearchPage } from './modUtils'
 
 // Fichier séparé de modUtils.ts (Modrinth) volontairement — les deux sources
 // ne sont pas encore fusionnées dans une UI unique (prévu une fois le flux
@@ -102,21 +102,38 @@ export async function fetchCurseforgeSearch(
   gameVersion: string,
   loader: string,
   filters: CurseforgeSearchFilters = {},
-): Promise<CurseforgeHit[]> {
-  if (!query.trim()) return []
+  page = 1,
+): Promise<SearchPage<CurseforgeHit>> {
+  if (!query.trim() || page > CURSEFORGE_MAX_PAGE) return { hits: [], total: 0 }
   const data = (await api.curseforge.search(query, {
     gameVersion: gameVersion || undefined,
     classId: CLASS_ID_MODS,
-    pageSize: 20,
+    pageSize: SEARCH_PAGE_SIZE,
+    index: (page - 1) * SEARCH_PAGE_SIZE,
     categoryId: filters.categoryId ? String(filters.categoryId) : undefined,
     sortField: SORT_FIELD[filters.sort ?? 'relevance'],
     sortOrder: 'desc',
     // "vanilla" n'a pas d'équivalent modLoaderType côté CurseForge (classId=6
     // = mods, jamais des plugins) — pas de filtre à poser dans ce cas.
     modLoaderType: loader !== 'vanilla' ? MOD_LOADER_TYPE[loader] : undefined,
-  })) as { data?: CurseforgeApiMod[] }
+  })) as { data?: CurseforgeApiMod[]; pagination?: CurseforgePagination }
 
-  return (data?.data ?? []).map(toCurseforgeHit)
+  return { hits: (data?.data ?? []).map(toCurseforgeHit), total: curseforgeTotal(data?.pagination) }
+}
+
+export interface CurseforgePagination {
+  totalCount?: number
+}
+
+/// CurseForge refuse toute recherche dont `index + pageSize` dépasse 10 000 :
+/// au-delà de cette page, on ne lui demande plus rien.
+export const CURSEFORGE_MAX_PAGE = Math.floor(10_000 / SEARCH_PAGE_SIZE)
+
+/// Nombre de résultats que CurseForge peut réellement servir : son total
+/// annoncé, borné à ce que sa limite de 10 000 laisse atteindre — sans quoi la
+/// pagination proposerait des pages qui répondent une erreur.
+export function curseforgeTotal(pagination?: CurseforgePagination): number {
+  return Math.min(pagination?.totalCount ?? 0, CURSEFORGE_MAX_PAGE * SEARCH_PAGE_SIZE)
 }
 
 function toCurseforgeHit(m: CurseforgeApiMod): CurseforgeHit {
