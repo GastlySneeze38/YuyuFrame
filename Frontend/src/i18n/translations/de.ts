@@ -454,7 +454,7 @@ export const de: TranslationSchema = {
     tabShare: 'Teilen',
     compatTitle: 'Startversuch',
     compatDesc: 'Das Spiel wird wirklich gestartet und geschlossen, sobald es das Hauptmenü erreicht. Nur so lässt sich feststellen, ob Mods, Loader und Spielversion zusammenpassen: das entscheidet sich erst in der Java-Maschine.',
-    compatWindowNotice: 'Das Spielfenster erscheint kurz. Der Versuch kann mehrere Minuten dauern, und ein Fehlschlag wird hier nicht als Absturz gespeichert.',
+    compatWindowNotice: 'Das Spielfenster bleibt von Anfang bis Ende verborgen. Der Versuch kann mehrere Minuten dauern, und ein Fehlschlag wird hier nicht als Absturz gespeichert.',
     compatRun: 'Versuch starten',
     compatRunAgain: 'Erneut versuchen',
     compatRunning: 'Versuch läuft...',

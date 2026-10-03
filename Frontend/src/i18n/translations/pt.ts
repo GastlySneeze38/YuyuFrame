@@ -455,7 +455,7 @@ export const pt: TranslationSchema = {
     tabShare: 'Compartilhar',
     compatTitle: 'Teste de arranque',
     compatDesc: 'O jogo é mesmo iniciado e fechado assim que chega ao menu principal. É a única maneira de saber se os mods, o loader e a versão se entendem: isso só se decide dentro da máquina Java.',
-    compatWindowNotice: 'A janela do jogo vai aparecer por um instante. O teste pode demorar vários minutos, e uma falha aqui não é registada como um crash.',
+    compatWindowNotice: 'A janela do jogo fica oculta do início ao fim. O teste pode demorar vários minutos, e uma falha aqui não é registada como um crash.',
     compatRun: 'Iniciar o teste',
     compatRunAgain: 'Testar de novo',
     compatRunning: 'Teste em curso...',

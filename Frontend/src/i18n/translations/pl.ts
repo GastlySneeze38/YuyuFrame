@@ -454,7 +454,7 @@ export const pl: TranslationSchema = {
     tabShare: 'Udostępnij',
     compatTitle: 'Próba uruchomienia',
     compatDesc: 'Gra jest naprawdę uruchamiana, a potem zamykana, gdy tylko dotrze do menu głównego. Tylko tak można sprawdzić, czy mody, loader i wersja gry się dogadują: rozstrzyga się to dopiero w maszynie Javy.',
-    compatWindowNotice: 'Okno gry pojawi się na chwilę. Próba może potrwać kilka minut, a niepowodzenie nie zostanie zapisane jako awaria.',
+    compatWindowNotice: 'Okno gry pozostaje ukryte od początku do końca. Próba może potrwać kilka minut, a niepowodzenie nie zostanie zapisane jako awaria.',
     compatRun: 'Rozpocznij próbę',
     compatRunAgain: 'Spróbuj ponownie',
     compatRunning: 'Próba w toku...',

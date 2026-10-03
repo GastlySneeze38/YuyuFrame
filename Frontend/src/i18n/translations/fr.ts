@@ -452,7 +452,7 @@ export const fr = {
     tabShare: 'Partager',
     compatTitle: 'Essai de démarrage',
     compatDesc: "Le jeu est vraiment lancé, puis refermé dès qu'il atteint le menu principal. C'est la seule façon de savoir si les mods, le loader et la version s'entendent : leur résolution ne se joue que dans la machine Java.",
-    compatWindowNotice: "La fenêtre du jeu apparaîtra un instant. L'essai peut prendre plusieurs minutes, et un échec ici n'est pas enregistré comme un plantage.",
+    compatWindowNotice: "La fenêtre du jeu reste masquée du début à la fin. L'essai peut prendre plusieurs minutes, et un échec ici n'est pas enregistré comme un plantage.",
     compatRun: "Lancer l'essai",
     compatRunAgain: 'Refaire un essai',
     compatRunning: 'Essai en cours...',

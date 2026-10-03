@@ -89,6 +89,9 @@ export interface StatsData {
 }
 
 export interface StatsQuery {
+  /** Tout l'historique, à partir de la première partie connue — que seul le
+   *  Rust sait dater. Prime sur `from`. */
+  all?: boolean
   from?: number
   to?: number
   instanceId?: string

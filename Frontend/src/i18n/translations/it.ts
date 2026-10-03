@@ -454,7 +454,7 @@ export const it: TranslationSchema = {
     tabShare: 'Condividi',
     compatTitle: 'Prova di avvio',
     compatDesc: 'Il gioco viene avviato davvero, poi chiuso appena raggiunge il menu principale. È l’unico modo per sapere se mod, loader e versione vanno d’accordo: tutto si decide dentro la macchina Java.',
-    compatWindowNotice: 'La finestra del gioco comparirà per un istante. La prova può durare diversi minuti, e un fallimento qui non viene registrato come un crash.',
+    compatWindowNotice: 'La finestra del gioco resta nascosta dall’inizio alla fine. La prova può durare diversi minuti, e un fallimento qui non viene registrato come un crash.',
     compatRun: 'Avvia la prova',
     compatRunAgain: 'Riprova',
     compatRunning: 'Prova in corso...',

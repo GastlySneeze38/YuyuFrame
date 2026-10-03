@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
 import { PageGlow } from '@/components/PageGlow'
@@ -53,16 +53,13 @@ export default function Stats() {
   const [filters, setFilters] = useState<StatsFilters>(EMPTY_FILTERS)
   const [customizing, setCustomizing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
-  // Première session connue : mémorisée pour que « Tout » ne reparte pas de
-  // l'époque Unix à chaque changement de filtre.
-  const firstSeen = useRef<number | null>(null)
-
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true)
       try {
-        const next = await api.stats.get(toQuery(rangeDays, filters, firstSeen.current))
-        firstSeen.current = next.first_session_at
+        // « Tout » est demandé tel quel : c'est le Rust qui sait depuis quand
+        // il y a quelque chose à montrer (voir `toQuery`).
+        const next = await api.stats.get(toQuery(rangeDays, filters))
         setData(next)
       } catch (e) {
         showError(errorMessage(e))
@@ -97,7 +94,6 @@ export default function Stats() {
   async function clearHistory() {
     try {
       await api.stats.clear()
-      firstSeen.current = null
       setConfirmClear(false)
       await load()
     } catch (e) {

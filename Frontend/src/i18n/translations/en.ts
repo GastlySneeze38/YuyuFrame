@@ -454,7 +454,7 @@ export const en: TranslationSchema = {
     tabShare: 'Share',
     compatTitle: 'Start-up test',
     compatDesc: 'The game is actually launched, then closed as soon as it reaches the main menu. That is the only way to know whether the mods, the loader and the game version agree: it is all decided inside the Java machine.',
-    compatWindowNotice: 'The game window will briefly appear. The test can take several minutes, and a failure here is not recorded as a crash.',
+    compatWindowNotice: 'The game window stays hidden from start to finish. The test can take several minutes, and a failure here is not recorded as a crash.',
     compatRun: 'Run the test',
     compatRunAgain: 'Run it again',
     compatRunning: 'Test running...',

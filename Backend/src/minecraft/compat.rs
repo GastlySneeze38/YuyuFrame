@@ -226,6 +226,78 @@ pub fn is_ready_marker(line: &str) -> bool {
     READY_MARKERS.iter().any(|m| line.contains(m))
 }
 
+// ── Garder la fenêtre du jeu hors de vue ─────────────────────────────────────
+
+/// Masque les fenêtres du processus de jeu, tant qu'il tourne.
+///
+/// Minecraft n'a pas de mode sans affichage : pour aller jusqu'au menu
+/// principal — donc jusqu'après l'application des Mixins — il faut bien que
+/// GLFW crée sa fenêtre. On ne l'empêche pas, on la **cache**, par son
+/// propriétaire : seules les fenêtres de haut niveau appartenant à ce PID sont
+/// touchées, jamais celles du launcher ni d'une autre partie en cours.
+///
+/// Masquée n'est pas réduite : le jeu continue de dessiner et de charger
+/// exactement comme s'il était visible, et c'est ce qui permet à l'essai de
+/// rester un vrai démarrage plutôt qu'une simulation.
+///
+/// La surveillance est répétée et ne s'arrête qu'avec le processus : la
+/// fenêtre est créée longtemps après le lancement de la JVM (chargement des
+/// mods d'abord), et le jeu la réaffiche de lui-même en sortant de son écran
+/// de chargement. Un seul passage au bon moment serait un pari.
+pub async fn keep_hidden(pid: u32, stop: std::sync::Arc<AtomicBool>) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Ailleurs, l'essai reste correct — la fenêtre se voit, c'est tout.
+        let _ = (pid, &stop);
+    }
+    #[cfg(target_os = "windows")]
+    while !stop.load(Ordering::Relaxed) {
+        windows_hide::hide_once(pid);
+        // Assez court pour que la fenêtre n'ait pas le temps d'être vue,
+        // assez espacé pour que le parcours des fenêtres du bureau ne coûte
+        // rien : il se compte en microsecondes.
+        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows_hide {
+    use std::ffi::c_void;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn EnumWindows(cb: extern "system" fn(*mut c_void, isize) -> i32, lparam: isize) -> i32;
+        fn GetWindowThreadProcessId(hwnd: *mut c_void, pid: *mut u32) -> u32;
+        fn ShowWindow(hwnd: *mut c_void, cmd: i32) -> i32;
+        fn IsWindowVisible(hwnd: *mut c_void) -> i32;
+    }
+
+    const SW_HIDE: i32 = 0;
+
+    /// Rappelée pour chaque fenêtre de haut niveau du bureau. Le PID visé
+    /// voyage dans `lparam`, faute de pouvoir capturer quoi que ce soit : la
+    /// signature est imposée par Win32.
+    extern "system" fn visit(hwnd: *mut c_void, lparam: isize) -> i32 {
+        let target = lparam as u32;
+        let mut owner: u32 = 0;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut owner);
+            // Le test de visibilité évite d'appeler ShowWindow quarante fois
+            // par seconde sur une fenêtre déjà masquée.
+            if owner == target && IsWindowVisible(hwnd) != 0 {
+                ShowWindow(hwnd, SW_HIDE);
+            }
+        }
+        1 // continuer l'énumération
+    }
+
+    pub fn hide_once(pid: u32) {
+        unsafe {
+            EnumWindows(visit, pid as isize);
+        }
+    }
+}
+
 // ── Lecture du journal ───────────────────────────────────────────────────────
 
 /// Ce que le loader propose lui-même, quand il le propose.

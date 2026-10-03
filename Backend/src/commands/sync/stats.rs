@@ -19,6 +19,15 @@ use crate::{
 #[derive(serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsQuery {
+    /// « Tout l'historique », qui commence à la première partie connue.
+    ///
+    /// C'est une **demande** et non une date : seul le launcher sait quand a
+    /// eu lieu la première partie, et obliger l'interface à la deviner est
+    /// exactement ce qui la faisait mentir — elle affichait « Tout » et
+    /// demandait trente jours tant qu'elle n'avait pas encore reçu une
+    /// première réponse. Prime sur `from`.
+    #[serde(default)]
+    pub all: bool,
     #[serde(default)]
     pub from: Option<i64>,
     #[serde(default)]
@@ -39,19 +48,26 @@ pub async fn stats_get(query: Option<StatsQuery>, state: tauri::State<'_, Shared
     let query = query.unwrap_or_default();
     let now = chrono::Utc::now().timestamp();
     let to = query.to.unwrap_or(now);
-    let from = query.from.unwrap_or(to - DEFAULT_DAYS * 86_400).min(to);
 
     let db = state.read().await.db.clone();
     // `spawn_blocking` : SQLite est synchrone, et une lecture de plusieurs
     // milliers de lignes n'a rien à faire sur le fil du runtime async.
     let conn = db.lock().await;
+    // Lue avant tout le reste : c'est elle qui date le début de « Tout ».
+    let first_session_at = db::first_session_at(&conn).map_err(|e| e.to_string())?;
+    let from = if query.all {
+        // Aucune partie enregistrée : la période est vide plutôt qu'infinie,
+        // ce qui donne un calendrier vide et non cinquante ans de cases.
+        first_session_at.unwrap_or(to).min(to)
+    } else {
+        query.from.unwrap_or(to - DEFAULT_DAYS * 86_400).min(to)
+    };
     let sessions = db::sessions_in_range(&conn, from, to).map_err(|e| e.to_string())?;
     // Les listes de filtres doivent couvrir tout l'historique, pas la seule
     // période affichée : sinon choisir « 7 jours » ferait disparaître les
     // instances auxquelles on n'a pas touché cette semaine, et donc
     // l'impossibilité de les sélectionner.
     let all_known = db::sessions_in_range(&conn, 0, now).map_err(|e| e.to_string())?;
-    let first_session_at = db::first_session_at(&conn).map_err(|e| e.to_string())?;
     drop(conn);
 
     let filters = Filters {

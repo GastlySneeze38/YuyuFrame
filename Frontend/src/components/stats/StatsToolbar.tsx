@@ -24,12 +24,17 @@ export interface StatsFilters {
 export const EMPTY_FILTERS: StatsFilters = { instanceId: '', loader: '', mcVersion: '' }
 
 /** Traduit période + filtres en ce que la commande Tauri attend. */
-export function toQuery(rangeDays: number, filters: StatsFilters, firstSessionAt: number | null): StatsQuery {
+export function toQuery(rangeDays: number, filters: StatsFilters): StatsQuery {
     const now = Math.floor(Date.now() / 1000)
     return {
-      // « Tout » part de la première session connue, pas de l'époque Unix :
-      // sinon le calendrier proposerait cinquante ans de cases vides.
-      from: rangeDays === 0 ? (firstSessionAt ?? now - 30 * 86400) : now - rangeDays * 86400,
+      // « Tout » se demande, il ne se date pas : le début de l'historique est
+      // la première partie connue, et seul le Rust la connaît. L'interface a
+      // longtemps posé elle-même une date, avec un repli à trente jours tant
+      // qu'elle n'avait pas encore vu une réponse — c'est-à-dire exactement à
+      // la première ouverture de l'écran, où elle affichait donc « Tout » en
+      // montrant un mois.
+      all: rangeDays === 0 || undefined,
+      from: rangeDays === 0 ? undefined : now - rangeDays * 86400,
       to: now,
       instanceId: filters.instanceId || undefined,
       loader: filters.loader || undefined,

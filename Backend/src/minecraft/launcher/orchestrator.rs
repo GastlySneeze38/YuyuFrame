@@ -707,6 +707,17 @@ pub async fn download_and_launch(
     tracing::info!("[MC launch] {} {}", java, redact_secrets(&args.join(" ")));
     let mut child = java_cmd.spawn()?;
 
+    // Essai de compatibilité : la fenêtre du jeu ne doit jamais se montrer.
+    // Posté dès le spawn, donc bien avant que GLFW ne la crée — voir
+    // `compat::keep_hidden` pour ce que « masquer » veut dire ici (le jeu
+    // charge et dessine comme d'habitude). S'arrête avec `stop_flag`, comme
+    // les autres surveillances du lancement.
+    if probe.is_some() {
+        if let Some(pid) = child.id() {
+            tokio::spawn(crate::minecraft::compat::keep_hidden(pid, stop_flag.clone()));
+        }
+    }
+
     // La session de jeu reçoit de quoi survivre à ce processus : le PID à
     // surveiller si le launcher disparaît, et la configuration JVM appliquée,
     // qui n'existe nulle part ailleurs une fois la commande partie.
