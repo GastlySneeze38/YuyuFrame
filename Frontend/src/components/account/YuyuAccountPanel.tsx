@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
-import type { YuyuDevice } from '@/api/client'
+import type { YuyuDevice, YuyuMfaResp } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
 import { EmailVerifyModal } from '@/components/account/EmailVerifyModal'
+import { TotpModal } from '@/components/account/TotpModal'
+import { StepUpField } from '@/components/account/StepUpField'
 import { showApiError, showNotice } from '@/stores/useErrorToast'
 import { errorMessage } from '@/lib/apiError'
 import { fadeVariants, listItemVariants, listVariants, transition } from '@/lib/motion'
@@ -38,6 +40,18 @@ export function YuyuAccountPanel() {
   const [showPassword, setShowPassword] = useState(false)
   const [showVerify, setShowVerify] = useState(false)
   const verificationRequired = useStore((s) => s.yuyuEmailVerificationRequired)
+  const [mfa, setMfa] = useState<YuyuMfaResp | null>(null)
+  const [totpMode, setTotpMode] = useState<'setup' | 'regen' | null>(null)
+
+  // Silencieux : sans réponse, la ligne ne s'affiche pas, c'est tout.
+  const loadMfa = () => {
+    api.yuyu.mfaStatus().then(setMfa).catch(() => setMfa(null))
+  }
+  // Relu quand l'e-mail vient d'être confirmé : le second facteur en dépend.
+  useEffect(() => {
+    if (yuyuSignedIn && !verificationRequired) loadMfa()
+    else setMfa(null)
+  }, [yuyuSignedIn, verificationRequired])
 
   if (!yuyuSignedIn) return <SignedOutCard onSignIn={() => navigate('/yuyu')} />
 
@@ -142,6 +156,23 @@ export function YuyuAccountPanel() {
           />
         </motion.div>
 
+        {/* Double authentification : obligatoire, donc rien à désactiver —
+            seulement passer du code par e-mail à une application, ou refaire
+            ses codes de secours. */}
+        {mfa && mfa.second_factor !== 'none' && (
+          <motion.div variants={listItemVariants}>
+            <Row
+              label={t('mfa.row')}
+              value={mfa.second_factor === 'totp' ? t('mfa.rowTotp', { count: mfa.backup_codes_left }) : t('mfa.rowEmail')}
+              action={
+                <Button size="sm" onClick={() => setTotpMode(mfa.second_factor === 'totp' ? 'regen' : 'setup')}>
+                  {mfa.second_factor === 'totp' ? t('mfa.newBackupCodes') : t('mfa.enableApp')}
+                </Button>
+              }
+            />
+          </motion.div>
+        )}
+
         {/* Appareils connectés */}
         <motion.div variants={listItemVariants}>
           <Row
@@ -164,6 +195,15 @@ export function YuyuAccountPanel() {
         {/* Changement d'adresse en cours. Si le compte n'avait pas d'adresse
             confirmée, c'est App.tsx qui impose déjà la même fenêtre. */}
         {showVerify && !verificationRequired && <EmailVerifyModal onClose={() => setShowVerify(false)} />}
+        {totpMode && (
+          <TotpModal
+            mode={totpMode}
+            onClose={() => {
+              setTotpMode(null)
+              loadMfa()
+            }}
+          />
+        )}
       </AnimatePresence>
     </>
   )
@@ -206,6 +246,8 @@ function EmailForm({ onDone, onPending }: { onDone: () => void; onPending: () =>
   const current = useStore((s) => s.yuyuEmail)
   const [value, setValue] = useState(current ?? '')
   const [password, setPassword] = useState('')
+  const [mfaCode, setMfaCode] = useState('')
+  const [needsCode, setNeedsCode] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -216,7 +258,7 @@ function EmailForm({ onDone, onPending }: { onDone: () => void; onPending: () =>
       // L'adresse du compte ne change pas encore : un code part à la
       // nouvelle, et c'est sa saisie qui la pose (fenêtre ouverte par
       // `onPending`).
-      const resp = await api.yuyu.setEmail(value.trim(), password)
+      const resp = await api.yuyu.setEmail(value.trim(), password, mfaCode.trim())
       useStore.setState({ yuyuEmail: resp.email })
       useStore.getState().setYuyuEmailVerification(resp.verification_required, resp.pending_email)
       if (resp.pending_email) onPending()
@@ -245,11 +287,12 @@ function EmailForm({ onDone, onPending }: { onDone: () => void; onPending: () =>
         placeholder={t('emailVerify.passwordField')}
         error={error}
       />
+      <StepUpField value={mfaCode} onChange={setMfaCode} onFactor={(f) => setNeedsCode(f !== 'none')} />
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onDone}>
           {t('common.cancel')}
         </Button>
-        <Button size="sm" variant="primary" loading={busy} disabled={!value.trim() || !password} onClick={save}>
+        <Button size="sm" variant="primary" loading={busy} disabled={!value.trim() || !password || (needsCode && !mfaCode.trim())} onClick={save}>
           {t('common.save')}
         </Button>
       </div>

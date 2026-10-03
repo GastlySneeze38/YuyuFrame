@@ -34,6 +34,22 @@ export interface YuyuEmailResp {
   pending_email: string | null
 }
 
+/** Second facteur du compte : application (ou code de secours), code par
+ *  e-mail, ou aucun moyen disponible. */
+export type YuyuSecondFactor = 'totp' | 'email' | 'none'
+
+export interface YuyuMfaResp {
+  second_factor: YuyuSecondFactor
+  backup_codes_left: number
+}
+
+export interface YuyuTotpSetupResp {
+  /** À afficher en QR code. */
+  otpauth_url: string
+  /** Le même secret, pour une saisie à la main. */
+  secret: string
+}
+
 // ── Pilotage depuis le back-office (GET /v1/config) ──────────────────────────
 
 export interface FleetFlag {
@@ -498,11 +514,24 @@ export const api = {
     createCheckout: (plan: string) =>
       invoke<YuyuCheckoutResp>('yuyu_create_checkout', { plan }),
     /** Lève aussi le mot de passe provisoire et ferme les autres appareils. */
-    changePassword: (current: string, newPassword: string) =>
-      invoke<void>('yuyu_change_password', { current, newPassword }),
+    changePassword: (current: string, newPassword: string, mfaCode?: string) =>
+      invoke<void>('yuyu_change_password', { current, newPassword, mfaCode: mfaCode || null }),
     /** Envoie un code à la nouvelle adresse ; elle ne remplace l'ancienne
      *  qu'après `verifyEmail`. */
-    setEmail: (email: string, password: string) => invoke<YuyuEmailResp>('yuyu_set_email', { email, password }),
+    setEmail: (email: string, password: string, mfaCode?: string) =>
+      invoke<YuyuEmailResp>('yuyu_set_email', { email, password, mfaCode: mfaCode || null }),
+    /** Seconde étape de la connexion (`mfaToken` vient de l'erreur
+     *  `mfa_required` de `login`). */
+    mfaVerify: (mfaToken: string, code: string) => invoke<YuyuSessionResp>('yuyu_mfa_verify', { mfaToken, code }),
+    mfaResend: (mfaToken: string) => invoke<void>('yuyu_mfa_resend', { mfaToken }),
+    mfaStatus: () => invoke<YuyuMfaResp>('yuyu_mfa_status'),
+    /** Code de reconfirmation par e-mail, pour un compte sans application. */
+    mfaStepUp: () => invoke<void>('yuyu_mfa_step_up'),
+    totpSetup: (password: string, mfaCode?: string) =>
+      invoke<YuyuTotpSetupResp>('yuyu_totp_setup', { password, mfaCode: mfaCode || null }),
+    /** Rend les codes de secours, affichés cette seule fois. */
+    totpEnable: (code: string) => invoke<string[]>('yuyu_totp_enable', { code }),
+    backupCodes: (code: string) => invoke<string[]>('yuyu_backup_codes', { code }),
     verifyEmail: (code: string) => invoke<YuyuEmailResp>('yuyu_verify_email', { code }),
     resendEmailCode: () => invoke<void>('yuyu_resend_email_code'),
     emailStatus: () => invoke<YuyuEmailResp>('yuyu_email_status'),

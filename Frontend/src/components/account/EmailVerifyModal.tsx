@@ -154,9 +154,14 @@ export function EmailVerifyModal({ forced, onClose }: { forced?: boolean; onClos
               <button onClick={resend} disabled={busy} className={link}>
                 {t('emailVerify.resend')}
               </button>
-              <button onClick={() => { setEditing(true); setError(null) }} disabled={busy} className={link}>
-                {t('emailVerify.changeAddress')}
-              </button>
+              {/* Hors mode imposé, l'adresse se change depuis le compte : le
+                  serveur y redemande le second facteur, que cette fenêtre ne
+                  sait pas saisir. */}
+              {forced && (
+                <button onClick={() => { setEditing(true); setError(null) }} disabled={busy} className={link}>
+                  {t('emailVerify.changeAddress')}
+                </button>
+              )}
               {forced ? (
                 <button onClick={logout} disabled={busy} className={link}>
                   {t('emailVerify.logout')}

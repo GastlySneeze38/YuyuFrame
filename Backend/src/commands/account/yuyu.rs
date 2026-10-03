@@ -166,15 +166,100 @@ pub async fn yuyu_create_checkout(
     Ok(CheckoutResp { checkout_url })
 }
 
+/// Seconde étape de la connexion : le second facteur (code de l'application,
+/// code de secours ou code reçu par e-mail) contre une vraie session.
+/// `mfa_token` vient de l'erreur `mfa_required` rendue par `yuyu_login`.
+#[tauri::command]
+pub async fn yuyu_mfa_verify(state: tauri::State<'_, SharedState>, mfa_token: String, code: String) -> Result<SessionResp, String> {
+    let body = json!({ "mfa_token": mfa_token, "code": code, "device": api::device_info() });
+    let value = api::post_public(&state, "/auth/mfa/verify", body).await?;
+    finish_sign_in(&state, &value).await
+}
+
+/// Renvoie le code de connexion par e-mail.
+#[tauri::command]
+pub async fn yuyu_mfa_resend(state: tauri::State<'_, SharedState>, mfa_token: String) -> Result<(), String> {
+    api::post_public(&state, "/auth/mfa/resend", json!({ "mfa_token": mfa_token })).await?;
+    Ok(())
+}
+
+/// Second facteur du compte, relu sur le serveur.
+#[derive(Serialize)]
+pub struct MfaResp {
+    /// totp | email | none
+    pub second_factor: String,
+    pub backup_codes_left: i64,
+}
+
+#[tauri::command]
+pub async fn yuyu_mfa_status(state: tauri::State<'_, SharedState>) -> Result<MfaResp, String> {
+    let profile = api::get(&state, "/me", &[]).await?;
+    Ok(MfaResp {
+        second_factor: text(&profile, "second_factor").unwrap_or_else(|| "none".into()),
+        backup_codes_left: profile.get("backup_codes_left").and_then(|v| v.as_i64()).unwrap_or(0),
+    })
+}
+
+/// Demande par e-mail le code de reconfirmation (changement d'e-mail, de mot
+/// de passe, activation de l'application) d'un compte sans application.
+#[tauri::command]
+pub async fn yuyu_mfa_step_up(state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    api::post(&state, "/me/mfa/step-up", json!({})).await?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct TotpSetupResp {
+    pub otpauth_url: String,
+    pub secret: String,
+}
+
+/// Commence l'activation de l'application d'authentification : de quoi
+/// afficher le QR code. Rien ne change tant que `yuyu_totp_enable` n'a pas
+/// reçu un premier code.
+#[tauri::command]
+pub async fn yuyu_totp_setup(state: tauri::State<'_, SharedState>, password: String, mfa_code: Option<String>) -> Result<TotpSetupResp, String> {
+    let value = api::post(&state, "/me/mfa/totp/setup", json!({ "password": password, "mfa_code": mfa_code })).await?;
+    Ok(TotpSetupResp {
+        otpauth_url: text(&value, "otpauth_url").unwrap_or_default(),
+        secret: text(&value, "secret").unwrap_or_default(),
+    })
+}
+
+fn backup_codes(value: &serde_json::Value) -> Vec<String> {
+    value
+        .get("backup_codes")
+        .and_then(|v| v.as_array())
+        .map(|codes| codes.iter().filter_map(|c| c.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
+/// Termine l'activation. Rend les codes de secours, que le serveur ne
+/// remontrera jamais.
+#[tauri::command]
+pub async fn yuyu_totp_enable(state: tauri::State<'_, SharedState>, code: String) -> Result<Vec<String>, String> {
+    let value = api::post(&state, "/me/mfa/totp/enable", json!({ "code": code })).await?;
+    Ok(backup_codes(&value))
+}
+
+/// Nouveaux codes de secours contre un code de l'application.
+#[tauri::command]
+pub async fn yuyu_backup_codes(state: tauri::State<'_, SharedState>, code: String) -> Result<Vec<String>, String> {
+    let value = api::post(&state, "/me/mfa/backup-codes", json!({ "code": code })).await?;
+    Ok(backup_codes(&value))
+}
+
 /// Change le mot de passe. Lève aussi le mot de passe provisoire donné par le
-/// support, et ferme les autres appareils.
+/// support, et ferme les autres appareils. `mfa_code` : le second facteur,
+/// que le serveur redemande (sauf pour un mot de passe provisoire).
 #[tauri::command]
 pub async fn yuyu_change_password(
     state: tauri::State<'_, SharedState>,
     current: String,
     new_password: String,
+    mfa_code: Option<String>,
 ) -> Result<(), String> {
-    api::post(&state, "/me/password", json!({ "current": current, "new": new_password })).await?;
+    api::post(&state, "/me/password", json!({ "current": current, "new": new_password, "mfa_code": mfa_code })).await?;
     // Le serveur renvoie une nouvelle session : on relit le profil pour
     // retomber sur nos pieds (drapeau de mot de passe provisoire levé).
     if let Ok(profile) = api::get(&state, "/me", &[]).await {
@@ -203,8 +288,13 @@ fn email_resp(profile: &serde_json::Value) -> EmailResp {
 /// envoie un code à la nouvelle adresse. L'adresse du compte ne change
 /// qu'après `yuyu_verify_email`.
 #[tauri::command]
-pub async fn yuyu_set_email(state: tauri::State<'_, SharedState>, email: String, password: String) -> Result<EmailResp, String> {
-    let profile = api::patch(&state, "/me", json!({ "email": email, "password": password })).await?;
+pub async fn yuyu_set_email(
+    state: tauri::State<'_, SharedState>,
+    email: String,
+    password: String,
+    mfa_code: Option<String>,
+) -> Result<EmailResp, String> {
+    let profile = api::patch(&state, "/me", json!({ "email": email, "password": password, "mfa_code": mfa_code })).await?;
     api::store_profile(&state, &profile).await;
     Ok(email_resp(&profile))
 }

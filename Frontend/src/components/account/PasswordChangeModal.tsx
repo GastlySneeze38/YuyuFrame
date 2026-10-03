@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '@/api/client'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
+import { StepUpField } from '@/components/account/StepUpField'
 import { errorMessage } from '@/lib/apiError'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
@@ -20,6 +21,10 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
+  // Second facteur redemandé par le serveur — sauf pour un mot de passe
+  // provisoire : le joueur vient de le passer à la connexion.
+  const [mfaCode, setMfaCode] = useState('')
+  const [needsCode, setNeedsCode] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,7 +40,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
     setBusy(true)
     setError(null)
     try {
-      await api.yuyu.changePassword(current, next)
+      await api.yuyu.changePassword(current, next, mfaCode.trim())
       setPasswordResetRequired(false)
       onClose()
     } catch (e) {
@@ -66,6 +71,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
         {field(current, setCurrent, t('password.current'))}
         {field(next, setNext, t('password.new'))}
         {field(confirm, setConfirm, t('password.confirm'))}
+        {!forced && <StepUpField value={mfaCode} onChange={setMfaCode} onFactor={(f) => setNeedsCode(f !== 'none')} />}
       </div>
       <p className="text-[11px] text-txt-secondary opacity-70">{t('password.otherDevicesNotice')}</p>
       {error && <p className="text-[12px] text-red-300">{error}</p>}
@@ -80,7 +86,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
         )}
         <button
           onClick={submit}
-          disabled={busy || !current || !next}
+          disabled={busy || !current || !next || (needsCode && !mfaCode.trim())}
           className="flex items-center gap-2 rounded-xl border border-[rgba(75,63,207,0.35)] bg-[rgba(75,63,207,0.18)] px-5 py-2 text-[13px] font-semibold text-[rgba(180,170,255,0.9)] transition-all duration-150 hover:bg-[rgba(75,63,207,0.3)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy && <ButtonSpinner />}

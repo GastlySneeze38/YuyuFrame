@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, type YuyuSessionResp } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { showError, showApiError, showNotice } from '@/stores/useErrorToast'
+import { parseApiError } from '@/lib/apiError'
 import { useT } from '@/i18n'
 import type { Account } from '@/types'
 
 // forgot : demander un code de réinitialisation ; reset : le saisir avec le
-// nouveau mot de passe.
-type Mode = 'checking' | 'login' | 'register' | 'forgot' | 'reset' | 'error'
+// nouveau mot de passe ; mfa : second facteur, après un mot de passe correct.
+type Mode = 'checking' | 'login' | 'register' | 'forgot' | 'reset' | 'mfa' | 'error'
 
 export default function YuyuLogin() {
   const t = useT()
@@ -21,6 +22,9 @@ export default function YuyuLogin() {
   const [confirm, setConfirm] = useState('')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
+  // Entre le mot de passe et le second facteur : le jeton rendu par le
+  // serveur, et le moyen attendu.
+  const [mfa, setMfa] = useState<{ token: string; byEmail: boolean; emailHint: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -31,6 +35,26 @@ export default function YuyuLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (mode === 'mfa') {
+      if (!mfa) return
+      setLoading(true)
+      try {
+        finish(await api.yuyu.mfaVerify(mfa.token, code.trim()))
+      } catch (err) {
+        // Jeton « MFA en attente » périmé (10 minutes) : on repart du mot de
+        // passe plutôt que de laisser saisir des codes qui ne passeront plus.
+        if (parseApiError(err).code === 'unauthorized') {
+          setMfa(null)
+          setCode('')
+          setMode('login')
+        }
+        showApiError(err, t('common.serverUnreachable'))
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
 
     if (mode === 'forgot') {
       setLoading(true)
@@ -81,40 +105,70 @@ export default function YuyuLogin() {
 
     setLoading(true)
     try {
-      const resp = mode === 'register'
-        ? await api.yuyu.register(username, password, email.trim())
-        : await api.yuyu.login(username, password)
-
-      // Les jetons restent côté Rust : ici, seulement de quoi afficher.
-      setYuyuSession({
-        username: resp.username,
-        email: resp.email,
-        plan: (resp.plan ?? 'free') as import('@/stores/useStore').YuyuPlan,
-        planExpiresAt: resp.plan_expires_at ?? null,
-        licenseState: resp.license_state,
-        passwordResetRequired: resp.password_reset_required,
-        // App.tsx ouvre la fenêtre du code tant que l'e-mail n'est pas confirmé.
-        emailVerificationRequired: resp.email_verification_required,
-        pendingEmail: resp.pending_email,
-      })
-
-      // Populate MC accounts from backend response
-      const accs: Account[] = resp.accounts.map((a) => ({
-        username: a.mc_username,
-        uuid: a.mc_uuid,
-        is_offline: a.is_offline,
-      }))
-      setAccounts(accs)
-
-      // Set active account if one exists
-      const active = resp.accounts.find((a) => a.is_active)
-      if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
-
-      navigate('/home', { replace: true })
+      finish(
+        mode === 'register'
+          ? await api.yuyu.register(username, password, email.trim())
+          : await api.yuyu.login(username, password),
+      )
     } catch (err) {
-      showApiError(err, t('common.serverUnreachable'))
+      // Mot de passe correct : le serveur attend le second facteur. Ce n'est
+      // pas une erreur à afficher, c'est la suite de la connexion.
+      const parsed = parseApiError(err)
+      if (parsed.code === 'mfa_required' && typeof parsed.extra.mfa_token === 'string') {
+        const methods = Array.isArray(parsed.extra.methods) ? parsed.extra.methods : []
+        setMfa({
+          token: parsed.extra.mfa_token,
+          byEmail: methods.includes('email'),
+          emailHint: typeof parsed.extra.email_hint === 'string' ? parsed.extra.email_hint : null,
+        })
+        setCode('')
+        setPassword('')
+        setMode('mfa')
+      } else {
+        showApiError(err, t('common.serverUnreachable'))
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  /** Session ouverte (inscription, ou connexion une fois le second facteur passé). */
+  const finish = (resp: YuyuSessionResp) => {
+    // Les jetons restent côté Rust : ici, seulement de quoi afficher.
+    setYuyuSession({
+      username: resp.username,
+      email: resp.email,
+      plan: (resp.plan ?? 'free') as import('@/stores/useStore').YuyuPlan,
+      planExpiresAt: resp.plan_expires_at ?? null,
+      licenseState: resp.license_state,
+      passwordResetRequired: resp.password_reset_required,
+      // App.tsx ouvre la fenêtre du code tant que l'e-mail n'est pas confirmé.
+      emailVerificationRequired: resp.email_verification_required,
+      pendingEmail: resp.pending_email,
+    })
+
+    // Populate MC accounts from backend response
+    const accs: Account[] = resp.accounts.map((a) => ({
+      username: a.mc_username,
+      uuid: a.mc_uuid,
+      is_offline: a.is_offline,
+    }))
+    setAccounts(accs)
+
+    // Set active account if one exists
+    const active = resp.accounts.find((a) => a.is_active)
+    if (active) setUser(active.mc_username, active.mc_uuid, active.is_offline)
+
+    navigate('/home', { replace: true })
+  }
+
+  const resendMfa = async () => {
+    if (!mfa) return
+    try {
+      await api.yuyu.mfaResend(mfa.token)
+      showNotice(t('mfa.resent'))
+    } catch (err) {
+      showApiError(err, t('common.serverUnreachable'))
     }
   }
 
@@ -151,30 +205,41 @@ export default function YuyuLogin() {
   const isRegister = mode === 'register'
   const isForgot = mode === 'forgot'
   const isReset = mode === 'reset'
-  const isRecovery = isForgot || isReset
+  const isMfa = mode === 'mfa'
+  // Les écrans qui ne sont ni la connexion ni l'inscription : un seul lien
+  // en bas, « retour à la connexion ».
+  const isRecovery = isForgot || isReset || isMfa
 
-  const title = isForgot || isReset ? t('yuyuLogin.forgotTitle') : isRegister ? t('yuyuLogin.createAccount') : t('yuyuLogin.login')
-  const subtitle = isForgot
-    ? t('yuyuLogin.forgotDescription')
-    : isReset
-      ? t('yuyuLogin.resetDescription')
-      : isRegister
-        ? t('yuyuLogin.registerEncrypted')
-        : t('yuyuLogin.loginEncrypted')
-  const submitLabel = isForgot
-    ? t('yuyuLogin.forgotSend')
-    : isReset
-      ? t('yuyuLogin.resetSubmit')
-      : isRegister
-        ? t('yuyuLogin.createAccountButton')
-        : t('yuyuLogin.signIn')
-  const canSubmit = isForgot
-    ? !!username.trim()
-    : isReset
-      ? code.length === 6 && !!password
-      : isRegister
-        ? !!username && !!password && !!email.trim()
-        : !!username && !!password
+  const title = isMfa ? t('mfa.loginTitle') : isForgot || isReset ? t('yuyuLogin.forgotTitle') : isRegister ? t('yuyuLogin.createAccount') : t('yuyuLogin.login')
+  const subtitle = isMfa
+    ? mfa?.byEmail
+      ? t('mfa.loginEmail', { email: mfa.emailHint ?? '' })
+      : t('mfa.loginTotp')
+    : isForgot
+      ? t('yuyuLogin.forgotDescription')
+      : isReset
+        ? t('yuyuLogin.resetDescription')
+        : isRegister
+          ? t('yuyuLogin.registerEncrypted')
+          : t('yuyuLogin.loginEncrypted')
+  const submitLabel = isMfa
+    ? t('mfa.verify')
+    : isForgot
+      ? t('yuyuLogin.forgotSend')
+      : isReset
+        ? t('yuyuLogin.resetSubmit')
+        : isRegister
+          ? t('yuyuLogin.createAccountButton')
+          : t('yuyuLogin.signIn')
+  const canSubmit = isMfa
+    ? !!code.trim()
+    : isForgot
+      ? !!username.trim()
+      : isReset
+        ? code.length === 6 && !!password
+        : isRegister
+          ? !!username && !!password && !!email.trim()
+          : !!username && !!password
 
   return (
     <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-[#09090D]">
@@ -215,7 +280,23 @@ export default function YuyuLogin() {
             {/* En réinitialisation, le compte visé est déjà saisi : le
                 redemander ouvrirait la porte à une faute de frappe entre la
                 demande du code et son usage. */}
-            {!isReset && (
+            {isMfa && (
+              <>
+                {/* Pas de filtre sur les chiffres : un code de secours
+                    contient des lettres. */}
+                <YuyuInput label={t('mfa.code')} type="text" value={code} onChange={setCode} placeholder="000000" autoFocus />
+                {mfa?.byEmail && (
+                  <button
+                    type="button"
+                    onClick={resendMfa}
+                    className="self-end text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
+                  >
+                    {t('mfa.resend')}
+                  </button>
+                )}
+              </>
+            )}
+            {!isReset && !isMfa && (
               <YuyuInput
                 label={isRegister ? t('yuyuLogin.username') : t('yuyuLogin.loginField')}
                 type="text"
@@ -244,7 +325,7 @@ export default function YuyuLogin() {
                 autoFocus
               />
             )}
-            {!isForgot && (
+            {!isForgot && !isMfa && (
               <YuyuInput
                 label={isReset ? t('yuyuLogin.newPassword') : t('yuyuLogin.password')}
                 type="password"
@@ -300,7 +381,7 @@ export default function YuyuLogin() {
           )}
           <button
             type="button"
-            onClick={() => { setMode(isRegister || isRecovery ? 'login' : 'register'); setConfirm(''); setPassword(''); setCode('') }}
+            onClick={() => { setMode(isRegister || isRecovery ? 'login' : 'register'); setConfirm(''); setPassword(''); setCode(''); setMfa(null) }}
             className="text-[11px] text-[#7B6EE8] bg-transparent border-0 cursor-pointer p-0"
           >
             {isRecovery ? t('yuyuLogin.backToLogin') : isRegister ? t('yuyuLogin.signIn') : t('yuyuLogin.createAccount')}
