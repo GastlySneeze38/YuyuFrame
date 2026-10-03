@@ -77,6 +77,13 @@ export default function YuyuLogin() {
       return
     }
 
+    // Seulement quand un mot de passe est CHOISI : à la connexion, un mot de
+    // passe plus court datant d'avant la règle doit encore passer.
+    if ((mode === 'register' || mode === 'reset') && password.length < 10) {
+      showError(t('yuyuLogin.passwordTooShort'))
+      return
+    }
+
     if (mode === 'reset') {
       setLoading(true)
       try {
@@ -91,15 +98,6 @@ export default function YuyuLogin() {
       } finally {
         setLoading(false)
       }
-      return
-    }
-
-    if (mode === 'register' && password !== confirm) {
-      showError(t('yuyuLogin.passwordsDontMatch'))
-      return
-    }
-    if (password.length < 4) {
-      showError(t('yuyuLogin.passwordTooShort'))
       return
     }
 

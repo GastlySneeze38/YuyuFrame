@@ -33,7 +33,7 @@ export function PasswordChangeModal({ forced, onClose }: { forced?: boolean; onC
       setError(t('password.mismatch'))
       return
     }
-    if (next.length < 8) {
+    if (next.length < 10) {
       setError(t('password.tooShort'))
       return
     }
