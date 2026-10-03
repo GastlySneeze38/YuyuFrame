@@ -54,6 +54,16 @@ export function useDraftState<T>(key: string, field: string, initial: T): [T, (v
   return [value, update]
 }
 
+/**
+ * Pose plusieurs champs d'un brouillon d'un coup, depuis un autre écran : le
+ * formulaire s'ouvrira déjà rempli. À appeler **avant** que la modale ne soit
+ * montée — `useDraftState` ne lit le brouillon qu'à son ouverture.
+ */
+export function setDraft(key: string, fields: Record<string, unknown>) {
+  const { set } = useDraftStore.getState()
+  for (const [field, value] of Object.entries(fields)) set(key, field, value)
+}
+
 /** À appeler une fois la saisie validée : le formulaire repartira vierge. */
 export function clearDraft(key: string) {
   useDraftStore.getState().clear(key)

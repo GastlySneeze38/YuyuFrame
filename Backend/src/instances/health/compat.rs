@@ -19,7 +19,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tokio::sync::watch;
 
-use crate::minecraft::compat::{diagnose, loader_suggestions, Fix, Probe, Problem, MAX_RUN_SECS};
+use crate::minecraft::compat::{diagnose, loader_suggestions, Fix, Probe, Problem, BLOCKING_FAILURE_GRACE, MAX_RUN_SECS};
 use crate::minecraft::launcher::{self, LAUNCH_CANCELLED_MSG};
 use crate::minecraft::mod_files::is_enabled_jar;
 use crate::minecraft::versions::predicate::read_mod_meta;
@@ -151,8 +151,15 @@ pub async fn instance_compat_test(
     let outcome = loop {
         tokio::select! {
             res = &mut launch => break res,
-            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-                if probe.running_for().is_some_and(|d| d.as_secs() > MAX_RUN_SECS) {
+            // Un battement court : c'est lui qui remarque un refus du loader,
+            // et un essai qui a échoué n'a aucune raison de faire attendre.
+            _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
+                // Le loader a refusé de démarrer et attend derrière une
+                // fenêtre d'erreur que l'essai garde masquée : elle ne sera
+                // jamais fermée, c'est à nous de couper.
+                if probe.blocked_for().is_some_and(|d| d >= BLOCKING_FAILURE_GRACE) {
+                    probe.conclude_failed();
+                } else if probe.running_for().is_some_and(|d| d.as_secs() > MAX_RUN_SECS) {
                     probe.give_up();
                 }
             }
@@ -169,11 +176,14 @@ pub async fn instance_compat_test(
     let duration_ms = started.elapsed().as_millis() as u64;
 
     let (status, message) = match outcome {
-        // Arrêt demandé : par la sonde quand le jeu est debout, par le temps
-        // imparti, ou par la personne. Les trois arrivent par le même canal,
-        // c'est la sonde qui sait lequel.
+        // Arrêt demandé : par la sonde quand le jeu est debout ou que le
+        // loader a refusé de démarrer, par le temps imparti, ou par la
+        // personne. Tous arrivent par le même canal, c'est la sonde qui sait
+        // lequel.
         Err(e) if e.to_string() == LAUNCH_CANCELLED_MSG => {
-            if probe.reached() {
+            if probe.failed() {
+                ("failed", None)
+            } else if probe.reached() {
                 ("ok", None)
             } else if probe.timed_out() {
                 ("timeout", None)

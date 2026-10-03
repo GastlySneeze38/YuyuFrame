@@ -63,6 +63,41 @@ const READY_MARKERS: [&str; 3] = [
     "Narrator library for x64 successfully loaded",
 ];
 
+/// Marqueurs d'échec **bloquant** : le loader a refusé de démarrer, mais la
+/// JVM ne s'arrêtera pas d'elle-même.
+///
+/// Un refus de Fabric ou de Quilt ouvre une fenêtre d'erreur et attend qu'on
+/// la ferme ; celui de Forge et de NeoForge s'affiche dans la fenêtre du jeu,
+/// qui reste ouverte. Dans une vraie partie, c'est ce qu'il faut. Dans un
+/// essai, ces fenêtres sont masquées (`keep_hidden`) : personne ne peut les
+/// fermer, la JVM attend indéfiniment, et l'essai tournait jusqu'au délai de
+/// sept minutes pour conclure « on ne sait pas » alors que le loader avait
+/// tout dit dès la première seconde (constaté le 2026-10-04 sur un
+/// `Incompatible mods found!`).
+///
+/// Ces lignes ne sont écrites que pour un refus définitif : jamais pour un
+/// avertissement, jamais dans un démarrage qui aboutit.
+const BLOCKING_FAILURE_MARKERS: [&str; 4] = [
+    // Fabric — titre du refus, puis l'exception qui le porte (elle couvre
+    // aussi les refus qui ne sont pas des incompatibilités, et Quilt, dont la
+    // classe porte le même nom).
+    "Incompatible mods found!",
+    "Incompatible mod set!",
+    "loader.impl.FormattedException",
+    // Forge et NeoForge.
+    "Missing or unsupported mandatory dependencies",
+];
+
+/// Temps laissé au loader pour finir d'écrire son diagnostic après la
+/// première ligne du refus : la liste des dépendances et la solution
+/// proposée arrivent dans les lignes qui suivent, et couper trop tôt
+/// rendrait un échec sans explication.
+pub const BLOCKING_FAILURE_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
+pub fn is_blocking_failure(line: &str) -> bool {
+    BLOCKING_FAILURE_MARKERS.iter().any(|m| line.contains(m))
+}
+
 /// Un geste que le launcher sait proposer pour régler le problème.
 ///
 /// Il ne porte pas de texte : l'interface le rédige dans la langue de
@@ -154,6 +189,11 @@ pub struct Probe {
     /// manger le temps laissé au jeu.
     start: Mutex<Option<std::time::Instant>>,
     timed_out: AtomicBool,
+    /// Instant de la première ligne d'un refus bloquant (voir
+    /// `BLOCKING_FAILURE_MARKERS`). La JVM n'en sortira pas seule.
+    blocked_at: Mutex<Option<std::time::Instant>>,
+    /// L'essai a été coupé parce que le loader a refusé de démarrer.
+    failed: AtomicBool,
     stop: watch::Sender<bool>,
 }
 
@@ -167,6 +207,8 @@ impl Probe {
             started: AtomicBool::new(false),
             start: Mutex::new(None),
             timed_out: AtomicBool::new(false),
+            blocked_at: Mutex::new(None),
+            failed: AtomicBool::new(false),
             stop,
         }
     }
@@ -188,7 +230,23 @@ impl Probe {
             "compat_log",
             serde_json::json!({ "instance_id": &self.instance_id, "line": line }),
         );
-        if is_ready_marker(line) && !self.reached.swap(true, Ordering::Relaxed) {
+        if is_blocking_failure(line) {
+            // Seulement noté : c'est l'essai qui coupera, une fois le
+            // diagnostic entièrement écrit (voir `blocked_for`).
+            let mut blocked = self.blocked_at.lock().unwrap();
+            if blocked.is_none() {
+                tracing::info!("[Compat] le loader refuse de démarrer — la JVM sera coupée");
+                *blocked = Some(std::time::Instant::now());
+            }
+            return;
+        }
+        // Un refus déjà vu l'emporte : Forge affiche son écran d'erreur dans
+        // la fenêtre du jeu, et le moteur sonore peut très bien démarrer
+        // derrière — ce qui ne veut pas dire que le jeu est debout.
+        if is_ready_marker(line)
+            && self.blocked_at.lock().unwrap().is_none()
+            && !self.reached.swap(true, Ordering::Relaxed)
+        {
             tracing::info!("[Compat] jeu debout — arrêt de la JVM");
             let _ = self.stop.send(true);
         }
@@ -196,6 +254,24 @@ impl Probe {
 
     pub fn reached(&self) -> bool {
         self.reached.load(Ordering::Relaxed)
+    }
+
+    /// Le temps écoulé depuis que le loader a refusé de démarrer, `None`
+    /// s'il n'a rien refusé.
+    pub fn blocked_for(&self) -> Option<std::time::Duration> {
+        self.blocked_at.lock().unwrap().map(|t| t.elapsed())
+    }
+
+    /// Coupe la JVM restée en attente derrière sa fenêtre d'erreur. Le
+    /// verdict est le même que si elle s'était arrêtée seule : « échec ».
+    pub fn conclude_failed(&self) {
+        if !self.failed.swap(true, Ordering::Relaxed) {
+            let _ = self.stop.send(true);
+        }
+    }
+
+    pub fn failed(&self) -> bool {
+        self.failed.load(Ordering::Relaxed)
     }
 
     pub fn timed_out(&self) -> bool {
@@ -645,6 +721,24 @@ mod tests {
         // s'appliquent après.
         assert!(!is_ready_marker("[main/INFO]: Loading 142 mods"));
         assert!(!is_ready_marker("[main/INFO]: Setting user: Ghasty"));
+    }
+
+    /// Le refus du loader, que la JVM ne quittera pas seule : sa fenêtre
+    /// d'erreur est masquée pendant un essai, personne ne peut la fermer.
+    #[test]
+    fn refus_du_loader_reconnu_comme_bloquant() {
+        // Le journal d'un essai resté bloqué (2026-10-04).
+        assert!(is_blocking_failure("[17:19:01] [main/ERROR]: Incompatible mods found!"));
+        assert!(is_blocking_failure(
+            "net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!"
+        ));
+        assert!(is_blocking_failure("[main/ERROR]: Missing or unsupported mandatory dependencies:"));
+        // Ni les lignes du diagnostic lui-même — c'est le titre qui déclenche,
+        // elles doivent avoir le temps d'être écrites — ni un démarrage normal.
+        assert!(!is_blocking_failure("- Replace mod 'MaLiLib' (malilib) 0.28.12 with any version between 0.28.8- (inclusive)"));
+        assert!(!is_blocking_failure("[main/INFO]: Loading 142 mods"));
+        assert!(!is_blocking_failure("[main/WARN]: Mod 'a' uses the version 1.0 which isn't compatible with Loader's extended semantic version format"));
+        assert!(!is_blocking_failure("[Render thread/INFO]: Sound engine started"));
     }
 
     #[test]

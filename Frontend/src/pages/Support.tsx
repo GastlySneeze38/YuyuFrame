@@ -13,6 +13,7 @@ import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { useSupportWatch } from '@/stores/useSupportWatch'
 import { useDraftState, clearDraft } from '@/stores/useDrafts'
+import { SUPPORT_DRAFT_KEY } from '@/lib/supportDraft'
 import { CrashPanel } from '@/components/support/CrashPanel'
 import { PatchNotesPanel } from '@/components/support/PatchNotesPanel'
 import { SNAP, listItemVariants, listVariants } from '@/lib/motion'
@@ -34,7 +35,7 @@ import type { SupportCategory, TicketDetail, TicketStatus, TicketSummary } from 
  * écrit à chaque endroit où l'envie d'en joindre une peut venir.
  */
 
-const DRAFT_KEY = 'support-ticket'
+const DRAFT_KEY = SUPPORT_DRAFT_KEY
 
 type Tab = 'requests' | 'crashes' | 'patchNotes'
 type Kind = 'question' | 'refund' | 'plan' | 'deletion'
@@ -72,12 +73,19 @@ export default function Support() {
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null)
   const [openTicket, setOpenTicket] = useState<TicketDetail | null>(null)
   const [categories, setCategories] = useState<SupportCategory[]>([])
-  const [composing, setComposing] = useState<Kind | null>(null)
+  // `?new=question` : un autre écran envoie ici avec une question déjà
+  // préparée (l'essai de compatibilité, voir `lib/supportDraft.ts`). Le
+  // formulaire s'ouvre tout de suite, sans faire chercher la bonne entrée.
+  // Seulement connecté : sans compte, c'est l'invitation à se connecter qui
+  // s'affiche, et le brouillon attend.
+  const [params] = useSearchParams()
+  const [composing, setComposing] = useState<Kind | null>(() =>
+    signedIn && params.get('new') === 'question' ? 'question' : null,
+  )
   const [loadingDetail, setLoadingDetail] = useState(false)
   // `?tab=crashes` : la modale de plantage y renvoie directement, sinon on
   // arrive sur « Mes demandes » et il faut deviner que le rapport est dans
   // l'onglet d'à côté.
-  const [params] = useSearchParams()
   const [tab, setTab] = useState<Tab>(() => {
     const asked = params.get('tab')
     return asked === 'crashes' || asked === 'patchNotes' ? asked : 'requests'

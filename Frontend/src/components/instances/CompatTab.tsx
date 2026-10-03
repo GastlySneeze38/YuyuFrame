@@ -6,6 +6,7 @@ import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { showError } from '@/stores/useErrorToast'
 import { useStore } from '@/stores/useStore'
 import { useT } from '@/i18n'
+import { SUPPORT_NEW_QUESTION, prefillSupportQuestion } from '@/lib/supportDraft'
 
 /**
  * Onglet « Compatibilité » : la seule question à laquelle les autres écrans ne
@@ -139,6 +140,36 @@ export function CompatTab({
     }
   }
 
+  // Le loader ne dit pas toujours quoi faire, et ce qu'il propose n'est pas
+  // toujours la bonne piste : quand l'essai n'aboutit pas, on peut passer la
+  // main à l'équipe. La demande est préparée, jamais envoyée — la personne
+  // relit, ajoute ce qu'elle a déjà tenté, et envoie elle-même.
+  const askSupport = (res: CompatResult) => {
+    // Les lignes du loader, telles quelles : c'est la preuve, et c'est ce
+    // que l'équipe lira en premier. Sans rien de reconnu, la fin du journal.
+    const said = [
+      ...res.problems.map((p) => p.detail).filter(Boolean),
+      ...res.suggestions.map((s) => `- ${s}`),
+    ]
+    const lines = said.length > 0 ? said : res.log.split('\n').slice(-25)
+    const loader = instance.loader_version ? `${instance.loader} ${instance.loader_version}` : instance.loader
+    prefillSupportQuestion({
+      subject: t('instancesPage.compatSupportSubject', { name: instance.name }),
+      message: [
+        t('instancesPage.compatSupportIntro', { name: instance.name, version: instance.mc_version, loader }),
+        '',
+        ...lines,
+        '',
+        '',
+      ].join('\n'),
+    })
+    // Le rapport technique joint à la demande décrit l'instance
+    // sélectionnée : c'est celle-ci qui doit l'être.
+    useStore.getState().setSelectedInstanceId(instance.id)
+    onClose()
+    navigate(SUPPORT_NEW_QUESTION)
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-surface-2 p-3.5">
@@ -206,6 +237,21 @@ export function CompatTab({
                   {s}
                 </p>
               ))}
+            </div>
+          )}
+
+          {(result.status === 'failed' || result.status === 'timeout') && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface-2 p-3.5">
+              <div className="flex min-w-[220px] flex-1 flex-col gap-0.5">
+                <p className="text-[12.5px] font-bold text-txt-primary">{t('instancesPage.compatSupportTitle')}</p>
+                <p className="text-[11.5px] leading-relaxed text-txt-muted">{t('instancesPage.compatSupportHint')}</p>
+              </div>
+              <button
+                onClick={() => askSupport(result)}
+                className="rounded-xl border border-accent/40 bg-accent/15 px-3.5 py-2 text-[12px] font-semibold text-txt-primary transition-colors hover:bg-accent/25"
+              >
+                {t('instancesPage.compatSupportButton')}
+              </button>
             </div>
           )}
 
