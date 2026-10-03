@@ -11,6 +11,7 @@ mod share_link;
 mod state;
 mod stats;
 mod sync;
+mod vault;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};

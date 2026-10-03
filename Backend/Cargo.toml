@@ -69,3 +69,9 @@ sysinfo = "0.31"
 discord-rich-presence = "1"
 fastnbt = "2"
 md-5 = "0.10"
+
+# Coffre du système pour le refresh token (src/vault.rs) : Windows Credential
+# Manager, trousseau macOS. Pas de dépendance ailleurs : sans coffre natif, la
+# crate retomberait sur un coffre en mémoire, vide à chaque démarrage.
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
