@@ -1226,7 +1226,7 @@ export const pl: TranslationSchema = {
     baseFileHint: 'Plik PNG skórki, 64×64 lub 64×32.',
     baseChooseFile: 'Wybierz PNG',
     baseFromLink: 'Z linku',
-    baseLinkHint: 'Wklej link skórki YuyuFrame.',
+    baseLinkHint: 'Wklej link skórki YuyuFrame albo adres pliku PNG hostowanego gdzie indziej.',
     baseLinkBroken: 'Ten link nie zawiera czytelnej skórki.',
     baseUseLink: 'Użyj tej skórki',
     shareTitle: 'Udostępnij tę skórkę',

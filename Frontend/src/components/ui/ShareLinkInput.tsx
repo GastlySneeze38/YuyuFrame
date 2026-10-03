@@ -20,11 +20,15 @@ export function ShareLinkInput({
   kind,
   value,
   onReady,
+  onUrl,
   placeholder,
 }: {
   kind: ShareLinkKind
   value?: string
   onReady: (text: string) => void
+  /** Si fourni, une adresse `http(s)://` collée ici est acceptée et remise
+   *  telle quelle (base de skin : un PNG hébergé ailleurs). */
+  onUrl?: (url: string) => void
   placeholder: string
 }) {
   const t = useT()
@@ -44,6 +48,19 @@ export function ShareLinkInput({
       setStatus(null)
       setError(null)
       return
+    }
+    // Une adresse web n'est pas un lien de partage : l'écran qui en accepte
+    // (`onUrl`) la reçoit telle quelle. Un court délai, parce qu'une adresse
+    // se tape aussi à la main et qu'on ne va pas la chercher à chaque lettre.
+    if (onUrl && /^https?:\/\/\S+$/i.test(trimmed)) {
+      setStatus(null)
+      setError(null)
+      const timer = window.setTimeout(() => {
+        if (sent.current === trimmed) return
+        sent.current = trimmed
+        onUrl(trimmed)
+      }, 400)
+      return () => window.clearTimeout(timer)
     }
     let alive = true
     api.shareLink

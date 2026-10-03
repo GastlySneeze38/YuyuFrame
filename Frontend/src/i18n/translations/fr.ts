@@ -1228,7 +1228,7 @@ export const fr = {
     baseFileHint: 'Un PNG de skin, 64×64 ou 64×32.',
     baseChooseFile: 'Choisir un PNG',
     baseFromLink: 'Depuis un lien',
-    baseLinkHint: 'Colle un lien de skin YuyuFrame.',
+    baseLinkHint: 'Colle un lien de skin YuyuFrame, ou l’adresse d’un PNG hébergé ailleurs.',
     baseLinkBroken: 'Ce lien ne contient pas un skin lisible.',
     baseUseLink: 'Utiliser ce skin',
     shareTitle: 'Partager ce skin',

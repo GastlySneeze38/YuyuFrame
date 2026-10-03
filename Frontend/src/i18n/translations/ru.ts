@@ -1226,7 +1226,7 @@ export const ru: TranslationSchema = {
     baseFileHint: 'PNG скина, 64×64 или 64×32.',
     baseChooseFile: 'Выбрать PNG',
     baseFromLink: 'По ссылке',
-    baseLinkHint: 'Вставь ссылку на скин YuyuFrame.',
+    baseLinkHint: 'Вставь ссылку на скин YuyuFrame или адрес PNG, размещённого на другом сервере.',
     baseLinkBroken: 'В этой ссылке нет читаемого скина.',
     baseUseLink: 'Использовать этот скин',
     shareTitle: 'Поделиться этим скином',

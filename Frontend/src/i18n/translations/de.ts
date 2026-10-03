@@ -1226,7 +1226,7 @@ export const de: TranslationSchema = {
     baseFileHint: 'Ein Skin-PNG, 64×64 oder 64×32.',
     baseChooseFile: 'PNG auswählen',
     baseFromLink: 'Über einen Link',
-    baseLinkHint: 'Füge einen YuyuFrame-Skin-Link ein.',
+    baseLinkHint: 'Füge einen YuyuFrame-Skin-Link ein oder die Adresse eines anderswo gehosteten PNG.',
     baseLinkBroken: 'Dieser Link enthält keinen lesbaren Skin.',
     baseUseLink: 'Diesen Skin verwenden',
     shareTitle: 'Diesen Skin teilen',

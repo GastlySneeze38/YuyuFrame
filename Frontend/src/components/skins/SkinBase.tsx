@@ -14,7 +14,9 @@ import { useT } from '@/i18n'
  * Les deux fenêtres de l'éditeur de skin qui font entrer ou sortir un skin
  * entier (boutons posés sur la vue 3D) :
  * - `SkinBaseModal` : partir d'une base — le skin d'un joueur par son pseudo,
- *   un PNG du disque, ou un lien `yuyuframe://skin/…` (`lib/skinLink.ts`) ;
+ *   un PNG du disque, ou un lien — le champ reconnaît de lui-même un lien
+ *   `yuyuframe://skin/…` (`lib/skinLink.ts`) et l'adresse d'un PNG hébergé
+ *   ailleurs (`skin_check_url`) ;
  * - `SkinShareModal` : le dessin en cours, en lien.
  *
  * Aucune des trois sources ne range quoi que ce soit : une base n'est qu'un
@@ -39,7 +41,7 @@ export function SkinBaseModal({
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   /** Skin lu dans un lien, montré avant d'être pris. */
-  const [linked, setLinked] = useState<{ dataUri: string; variant: SkinVariant } | null>(null)
+  const [linked, setLinked] = useState<{ dataUri: string; variant: SkinVariant | null } | null>(null)
 
   /** Une seule importation à la fois ; la fenêtre se ferme quand c'est fait. */
   const run = async (source: () => Promise<{ dataUri: string; variant: SkinVariant | null } | null>) => {
@@ -82,6 +84,18 @@ export function SkinBaseModal({
     }
   }
 
+  /** Une adresse web : un PNG hébergé ailleurs. Le Rust le télécharge et le
+   *  valide ; une adresse ne dit rien du modèle, il est déduit de l'image. */
+  const readUrl = async (url: string) => {
+    setLinked(null)
+    try {
+      const checked = await api.skin.checkUrl(url)
+      setLinked({ dataUri: checked.data_uri, variant: null })
+    } catch (e) {
+      showError(e)
+    }
+  }
+
   return (
     <ModalShell title={t('skinEditor.baseTitle')} onClose={onClose}>
       <div className="flex flex-col gap-4">
@@ -116,7 +130,7 @@ export function SkinBaseModal({
         </Section>
 
         <Section title={t('skinEditor.baseFromLink')} hint={t('skinEditor.baseLinkHint')}>
-          <ShareLinkInput kind="skin" value={initialLink} placeholder="yuyuframe://skin/…" onReady={readLink} />
+          <ShareLinkInput kind="skin" value={initialLink} placeholder="yuyuframe://skin/…  ·  https://…/skin.png" onReady={readLink} onUrl={readUrl} />
           {linked && (
             <div className="flex items-center gap-3">
               <SkinFace dataUri={linked.dataUri} size={48} className="rounded-lg" />
