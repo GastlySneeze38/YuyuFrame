@@ -197,7 +197,12 @@ fn is_loader_failure(log: &str) -> bool {
 /// sa bibliothèque de machine virtuelle — installation incomplète ou
 /// déplacée. Le dernier est l'inverse : la JVM a bien démarré, mais elle est
 /// trop ancienne pour les classes du jeu. Deux causes, un même remède.
-fn is_java_failure(log: &str) -> bool {
+///
+/// Partagée avec l'essai de compatibilité (`minecraft::compat`), qui lit le
+/// même journal avec les mêmes yeux : une JVM qui ne démarre pas n'est pas un
+/// problème de mods, et il n'y a aucune raison que les deux écrans tombent
+/// d'accord sur le reste mais pas sur ce cas-là.
+pub(crate) fn is_java_failure(log: &str) -> bool {
     const MARKERS: [&str; 5] = [
         "could not find java.dll",
         "Could not find Java SE Runtime Environment",

@@ -91,6 +91,13 @@ pub async fn download_and_launch(
     // fait. Le plein écran, lui, ne passe pas par ici : il n'a pas d'argument
     // de ligne de commande et vit dans `options.txt` (voir `force_fullscreen`).
     window_size: Option<(u32, u32)>,
+    // Essai de compatibilité (voir `minecraft::compat`) : la sonde reçoit
+    // chaque ligne de la JVM et coupe le lancement dès que le jeu est debout,
+    // par le canal d'annulation ordinaire. `None` pour un vrai lancement,
+    // c'est-à-dire presque partout — ce paramètre ne change rien à la façon
+    // dont le jeu est préparé ni démarré, et c'est tout l'intérêt : ce qui est
+    // testé est exactement ce qui sera joué.
+    probe: Option<Arc<crate::minecraft::compat::Probe>>,
 ) -> Result<Vec<String>> {
     // P1-6 : "auto" couvre toute la config (vendeur ET GC), résolu une seule
     // fois ici avant toute utilisation — voir doc de `resolve_auto_vendor`.
@@ -682,6 +689,8 @@ pub async fn download_and_launch(
     ));
     let watch_out = watch.clone();
     let watch_err = watch.clone();
+    let probe_out = probe.clone();
+    let probe_err = probe.clone();
 
     let mut java_cmd = crate::process::hidden_command(&java);
     java_cmd
@@ -742,6 +751,11 @@ pub async fn download_and_launch(
             },
             move |line| {
                 watch_out.record(&line);
+                // Avant l'affichage : c'est elle qui décide de couper la JVM,
+                // et une file d'affichage encombrée retarderait l'arrêt.
+                if let Some(p) = &probe_out {
+                    p.feed(&line);
+                }
                 log_to_console(&app_out, &label_out, &line, "out");
                 // Persisté aussi dans yuyuframe.log (voir tracing_appender dans
                 // lib.rs) — la fenêtre console (webview) ne garde rien après
@@ -758,6 +772,12 @@ pub async fn download_and_launch(
             |_| {},
             move |line| {
                 watch_err.record(&line);
+                // Le diagnostic d'un loader part souvent sur stderr : la
+                // sonde doit le voir, sinon l'essai conclurait « échec sans
+                // explication » en ayant l'explication sous les yeux.
+                if let Some(p) = &probe_err {
+                    p.feed(&line);
+                }
                 log_to_console(&app_err, &label_err, &line, "err");
                 tracing::error!("[MC stderr] {}", redact_secrets(&line));
             },
@@ -820,7 +840,16 @@ pub async fn download_and_launch(
     // Une fermeture demandée n'est pas un plantage : c'est la seule sortie
     // dont on soit certain qu'elle est voulue. Tout le reste passe par
     // `crash::build`, qui décide.
-    let report = report_crash_if_any(&watch, exit_code, &app).await;
+    //
+    // Un essai de compatibilité, lui, n'écrit jamais de rapport : il est fait
+    // pour échouer, c'est même sa raison d'être. Un rapport par essai raté
+    // remplirait le dossier des plantages de choses que personne n'a vécues,
+    // et ferait surgir la modale de plantage par-dessus l'écran qui vient
+    // précisément d'expliquer l'échec.
+    let report = match probe {
+        Some(_) => None,
+        None => report_crash_if_any(&watch, exit_code, &app).await,
+    };
 
     // La session est close ICI et pas dans `launch_game` : c'est le seul
     // endroit qui sait si la partie s'est terminée par un plantage, et cette

@@ -83,6 +83,14 @@ pub struct AppState {
     pub yuyu_refresh: Arc<Mutex<()>>,
     pub session: Option<MinecraftSession>,
     pub running_instances: std::collections::HashSet<String>,
+    /// Les instances dont un essai de compatibilité tient la JVM (voir
+    /// `commands::instance::compat`). Volontairement séparé de
+    /// `running_instances` : une partie se voit dans l'interface (bouton « EN
+    /// JEU », présence Discord, ligne de statistiques), un essai n'est rien de
+    /// tout cela. Les deux se bloquent mutuellement, et c'est le seul point
+    /// commun qu'on leur veut — deux JVM sur le même dossier d'instance se
+    /// marcheraient dessus.
+    pub compat_running: std::collections::HashSet<String>,
     /// Un `watch::Sender` par instance en cours de lancement — `cancel_launch`
     /// y envoie `true` pour demander l'arrêt (téléchargement en cours ou JVM déjà lancée).
     pub launch_cancel: std::collections::HashMap<String, tokio::sync::watch::Sender<bool>>,

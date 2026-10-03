@@ -1,4 +1,5 @@
 pub mod agent_options;
+pub mod compat;
 pub mod crud;
 pub mod icon;
 pub mod java;

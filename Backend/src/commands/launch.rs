@@ -5,30 +5,27 @@ use crate::db;
 use crate::minecraft::{launcher, server_ping};
 use crate::state::SharedState;
 
-#[tauri::command]
-pub async fn launch_game(
-    state: tauri::State<'_, SharedState>,
-    app: tauri::AppHandle,
-    instance_id: String,
-    p2p: Option<bool>,
-    // Jouer avec le client intégré (LauncherAgent) ou sans lui. Absent =
-    // avec : c'est le comportement de toujours, et l'agent se désactive de
-    // lui-même là où il ne peut pas se charger (voir `agent_compat`).
-    use_agent: Option<bool>,
-    avoid_beta: Option<bool>,
-    show_console: Option<bool>,
-    connect_server: Option<String>,
-) -> Result<(), String> {
-    // Token rafraîchi s'il expire bientôt — voir account::fresh_session pour
-    // ce qui bloque (session révoquée) ou non (Microsoft injoignable).
-    let session = crate::commands::account::refresh_active(&state)
-        .await?
-        .ok_or("Aucun compte Minecraft actif — ajoute ou sélectionne un compte")?;
+/// Tout ce qu'il faut savoir d'une instance pour la démarrer, une fois la
+/// configuration JVM reliée prise en compte.
+///
+/// Extrait de `launch_game` le jour où l'essai de compatibilité
+/// (`commands::instance::compat`) a eu besoin des mêmes valeurs : deux
+/// lectures séparées de la même chose auraient fini par diverger, et l'essai
+/// aurait alors testé une configuration que personne ne joue.
+pub(crate) struct LaunchConfig {
+    pub instance: crate::commands::instance::crud::Instance,
+    pub jvm_vendor: String,
+    pub jvm_custom_path: Option<String>,
+    pub gc_policy: String,
+    pub jvm_extra_args: String,
+    pub jvm_args_mode: String,
+    pub ram_mb: u32,
+}
 
-    if state.read().await.is_instance_running(&instance_id) {
-        return Err(format!("L'instance {} est déjà en cours", instance_id));
-    }
-
+pub(crate) async fn resolve_launch_config(
+    state: &SharedState,
+    instance_id: &str,
+) -> Result<LaunchConfig, String> {
     let yuyu_user_id = {
         let s = state.read().await;
         s.current_yuyu_user_id().unwrap_or(0)
@@ -37,7 +34,7 @@ pub async fn launch_game(
     let (instance, jvm_profile) = {
         let s = state.read().await;
         let db = s.db.lock().await;
-        let row = db::instance_get(&db, &instance_id, yuyu_user_id)
+        let row = db::instance_get(&db, instance_id, yuyu_user_id)
             .map_err(|e| e.to_string())?
             .ok_or("Instance introuvable")?;
         // Une config supprimée entre-temps laisse un id orphelin : on retombe
@@ -95,6 +92,62 @@ pub async fn launch_game(
             instance.ram_mb,
         ),
     };
+
+    Ok(LaunchConfig {
+        instance,
+        jvm_vendor,
+        jvm_custom_path,
+        gc_policy,
+        jvm_extra_args,
+        jvm_args_mode,
+        ram_mb,
+    })
+}
+
+#[tauri::command]
+pub async fn launch_game(
+    state: tauri::State<'_, SharedState>,
+    app: tauri::AppHandle,
+    instance_id: String,
+    p2p: Option<bool>,
+    // Jouer avec le client intégré (LauncherAgent) ou sans lui. Absent =
+    // avec : c'est le comportement de toujours, et l'agent se désactive de
+    // lui-même là où il ne peut pas se charger (voir `agent_compat`).
+    use_agent: Option<bool>,
+    avoid_beta: Option<bool>,
+    show_console: Option<bool>,
+    connect_server: Option<String>,
+) -> Result<(), String> {
+    // Token rafraîchi s'il expire bientôt — voir account::fresh_session pour
+    // ce qui bloque (session révoquée) ou non (Microsoft injoignable).
+    let session = crate::commands::account::refresh_active(&state)
+        .await?
+        .ok_or("Aucun compte Minecraft actif — ajoute ou sélectionne un compte")?;
+
+    if state.read().await.is_instance_running(&instance_id) {
+        return Err(format!("L'instance {} est déjà en cours", instance_id));
+    }
+
+    if state.read().await.compat_running.contains(&instance_id) {
+        return Err("Un essai de compatibilité tourne déjà sur cette instance".to_string());
+    }
+
+    // Propriétaire de la ligne de session de jeu ouverte plus bas — les
+    // statistiques sont par compte YuyuFrame, 0 quand personne n'est connecté.
+    let yuyu_user_id = {
+        let s = state.read().await;
+        s.current_yuyu_user_id().unwrap_or(0)
+    };
+
+    let LaunchConfig {
+        instance,
+        jvm_vendor,
+        jvm_custom_path,
+        gc_policy,
+        jvm_extra_args,
+        jvm_args_mode,
+        ram_mb,
+    } = resolve_launch_config(&state, &instance_id).await?;
 
     let game_dir = instance_dir(&instance_id);
     tokio::fs::create_dir_all(&game_dir).await.map_err(|e| e.to_string())?;
@@ -257,6 +310,8 @@ pub async fn launch_game(
             instance
                 .window_custom
                 .then_some((instance.window_width, instance.window_height)),
+            // Pas de sonde : ceci est une vraie partie.
+            None,
         )
         .await
         {
