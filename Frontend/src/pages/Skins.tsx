@@ -14,6 +14,7 @@ import { ModalShell } from '@/components/ui/ModalShell'
 import { SkinFace } from '@/components/ui/SkinFace'
 import { showError } from '@/stores/useErrorToast'
 import { forgetSkinPreview, rememberSkinPreview, skinPreview } from '@/lib/skinCache'
+import { loadLatestSkin } from '@/lib/skinLoad'
 import { takeSkinDraft } from '@/lib/skinDraft'
 import { POSES, applyPose } from '@/lib/skinPoses'
 import type { PoseId } from '@/lib/skinPoses'
@@ -108,6 +109,8 @@ export default function Skins() {
 
   const [current, setCurrent] = useState<SkinRef | null>(null)
   const [currentUri, setCurrentUri] = useState<string | null>(null)
+  /** Vrai une fois qu'on sait si le compte a un skin enregistré. */
+  const [currentKnown, setCurrentKnown] = useState(false)
   const [candidate, setCandidate] = useState<Candidate | null>(null)
   const [history, setHistory] = useState<SkinHistoryEntry[]>([])
 
@@ -196,6 +199,10 @@ export default function Skins() {
     setCandidate(null)
     setHistory([])
     setJustApplied(false)
+    // L'apparence par défaut n'est demandée qu'une fois la réponse connue :
+    // lancée avant, elle arrivait parfois après le skin enregistré et le
+    // recouvrait (`lib/skinLoad.ts`).
+    setCurrentKnown(false)
 
     const uuid = account.mc_uuid
     api.skin.current(uuid)
@@ -217,6 +224,7 @@ export default function Skins() {
         if (!cancelled) loadHistory(uuid)
       })
       .catch(() => {})
+      .finally(() => { if (!cancelled) setCurrentKnown(true) })
 
     return () => { cancelled = true }
   }, [account?.mc_uuid, account?.is_offline, loadHistory])
@@ -582,7 +590,7 @@ export default function Skins() {
 
               <SkinPreview
                 dataUri={shown?.dataUri ?? null}
-                fallbackUrl={account ? defaultSkinUrl(account.mc_uuid) : null}
+                fallbackUrl={account && currentKnown ? defaultSkinUrl(account.mc_uuid) : null}
                 variant={shown?.variant ?? 'classic'}
                 pose={pose}
                 spin={spin}
@@ -1782,11 +1790,13 @@ function SkinPreview({
     if (!viewer) return
     const src = uri ?? fallback
     if (!src) {
-      viewer.loadSkin(null)
+      void loadLatestSkin(viewer, null)
       return
     }
     const options = uri ? { model: model === 'slim' ? ('slim' as const) : ('default' as const) } : { model: 'auto-detect' as const }
-    ;(viewer.loadSkin(src, options) as Promise<void> | void)?.catch?.(() => {})
+    // Le dernier demandé l'emporte : l'apparence par défaut vient du réseau et
+    // finissait parfois après le skin enregistré (`lib/skinLoad.ts`).
+    loadLatestSkin(viewer, src, options).catch(() => {})
   }, [])
 
   useEffect(() => {

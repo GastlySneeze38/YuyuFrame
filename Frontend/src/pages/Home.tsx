@@ -187,6 +187,7 @@ export default function Home() {
   const [pendingServer, setPendingServer] = useState<SavedServer | null>(null)
   /** Texture complète du skin d'un compte hors ligne, pour le rendu 3D. */
   const [customSkinUri, setCustomSkinUri] = useState<string | null>(null)
+  const [skinKnown, setSkinKnown] = useState(false)
   const [showAgentModal, setShowAgentModal] = useState(false)
   /** `true` quand le client intégré ne peut pas se charger sur l'instance
    *  choisie — pastille d'attention sur son bouton. */
@@ -245,11 +246,18 @@ export default function Home() {
   // ce découpage n'a plus d'objet depuis que l'accueil montre le skin entier,
   // et un rendu 3D veut de toute façon la texture complète.
   useEffect(() => {
+    //
+    // `skinKnown` retient le buste tant que la réponse n'est pas là : le
+    // montrer avant, c'était demander l'apparence par défaut au service — par
+    // le réseau, donc lentement — puis le skin enregistré, et le premier
+    // finissait parfois après le second : un compte hors ligne repassait en
+    // Steve (voir aussi `lib/skinLoad.ts`, le filet).
+    setSkinKnown(false)
     if (!uuid) { setCustomSkinUri(null); return }
     let cancelled = false
     skinPreview(uuid)
-      .then((dataUri) => { if (!cancelled) setCustomSkinUri(dataUri ?? null) })
-      .catch(() => { if (!cancelled) setCustomSkinUri(null) })
+      .then((dataUri) => { if (!cancelled) { setCustomSkinUri(dataUri ?? null); setSkinKnown(true) } })
+      .catch(() => { if (!cancelled) { setCustomSkinUri(null); setSkinKnown(true) } })
     return () => { cancelled = true }
   }, [uuid])
 
@@ -651,7 +659,7 @@ export default function Home() {
             // L'UUID sert à demander le rendu de la tête ; le skin local
             // prend le relais pour un compte hors ligne, dont l'UUID est
             // inventé et ne correspond à rien côté service.
-            uuid={username ? uuid : null}
+            uuid={username && skinKnown ? uuid : null}
             localSkin={customSkinUri}
             greeting={username && welcome.phrase ? welcome.phrase : t('home.welcomeNew')}
             playIntro={welcome.playIntro}

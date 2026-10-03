@@ -5,6 +5,7 @@ import { getCurrentWindow, currentMonitor, PhysicalPosition, PhysicalSize } from
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { api } from '@/api/client'
 import { skinPreview } from '@/lib/skinCache'
+import { loadLatestSkin } from '@/lib/skinLoad'
 import { useStore } from '@/stores/useStore'
 import type { Account } from '@/types'
 import { PageHeader, PageHeaderSeparator } from '@/components/ui/PageHeader'
@@ -177,7 +178,7 @@ export default function Login() {
     if (!viewer) return
     const displayUuid = previewUuid ?? uuid
     if (!displayUuid) {
-      viewer.loadSkin(null)
+      void loadLatestSkin(viewer, null)
       return
     }
     // Le skin enregistré d'abord, quel que soit le type de compte : c'est la
@@ -185,7 +186,9 @@ export default function Login() {
     // d'avatars — qui rend l'apparence par défaut pour un UUID inventé, donc
     // un personnage plutôt qu'un vide pour un compte hors ligne sans skin.
     const source = skins[displayUuid] ?? `https://mc-heads.net/skin/${displayUuid}`
-    ;(viewer.loadSkin(source, { model: 'auto-detect' }) as Promise<void> | void)?.catch?.(() => {})
+    // Le dernier demandé l'emporte : le repli vient du réseau et finissait
+    // parfois après le skin enregistré (`lib/skinLoad.ts`).
+    loadLatestSkin(viewer, source, { model: 'auto-detect' }).catch(() => {})
   }, [uuid, previewUuid, skins])
 
   const stopPolling = () => {

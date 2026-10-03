@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { SkinViewer } from 'skinview3d'
+import { loadLatestSkin } from '@/lib/skinLoad'
 
 /**
  * Le buste du joueur en 3D, au cœur de la bannière d'accueil.
@@ -385,17 +386,17 @@ export function SkinBust({ uuid, localSkin, className = '', onClick, title }: {
     const viewer = viewerRef.current
     if (!viewer) return
     if (!source) {
-      viewer.loadSkin(null)
+      void loadLatestSkin(viewer, null)
       return
     }
     // `auto-detect` distingue les modèles fins (Alex) des classiques d'après
     // la texture. Un skin injoignable laisse le modèle précédent plutôt que
     // de vider la bannière. On recadre après coup : un modèle fin n'a pas
     // tout à fait les mêmes dimensions.
+    // `loadLatestSkin` : le repli vient du réseau et peut finir après le skin
+    // enregistré, qu'il recouvrait alors (voir `lib/skinLoad.ts`).
     const after = () => { light(viewer); reframe() }
-    const done = viewer.loadSkin(source, { model: 'auto-detect' }) as Promise<void> | void
-    if (done && typeof done.then === 'function') done.then(after).catch(() => {})
-    else after()
+    loadLatestSkin(viewer, source, { model: 'auto-detect' }).then(after).catch(() => {})
   }, [source, reframe])
 
   // Centré en bas plutôt qu'en flux normal : le canevas porte sa propre
