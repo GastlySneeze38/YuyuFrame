@@ -19,6 +19,7 @@ import { formatRam } from '@/lib/format'
 import { press } from '@/lib/motion'
 import { InstanceIcon } from './InstanceIcon'
 import { ShareTab } from './ShareTab'
+import { CompatTab } from './CompatTab'
 import { ClientOptionsTransfer, OptionsLinkApply, OptionsLinkCreate } from './OptionsShare'
 import { useT } from '@/i18n'
 
@@ -48,7 +49,7 @@ import { useT } from '@/i18n'
  * de fichier, pas des champs). Elles ne passent pas par le brouillon et
  * n'allument donc pas le pied.
  */
-const TABS = ['general', 'installation', 'window', 'java', 'game', 'repair', 'share'] as const
+const TABS = ['general', 'installation', 'window', 'java', 'game', 'compat', 'repair', 'share'] as const
 type Tab = (typeof TABS)[number]
 
 export function InstanceSettingsModal({
@@ -87,6 +88,12 @@ export function InstanceSettingsModal({
   const [tab, setTab] = useState<Tab>(
     TABS.includes(initialTab as Tab) ? (initialTab as Tab) : 'general',
   )
+
+  /** Version du jeu que l'essai de compatibilité désigne comme attendue.
+   *  Portée jusqu'à l'onglet Installation, qui ouvre alors son formulaire
+   *  dessus : un bouton « Passer en 1.20.1 » qui se contenterait d'ouvrir un
+   *  onglet laisserait le travail à moitié fait. */
+  const [suggestedVersion, setSuggestedVersion] = useState<string | null>(null)
 
   const [name, setName] = useState(instance.name)
   const [description, setDescription] = useState(instance.description)
@@ -134,6 +141,7 @@ export function InstanceSettingsModal({
       { id: 'window' as const, label: t('instancesPage.tabWindow'), icon: <IconWindow /> },
       { id: 'java' as const, label: t('instancesPage.tabJava'), icon: <IconChip /> },
       { id: 'game' as const, label: t('instancesPage.tabGame'), icon: <IconSliders /> },
+      { id: 'compat' as const, label: t('instancesPage.tabCompat'), icon: <IconPlayCheck /> },
       { id: 'repair' as const, label: t('instancesPage.tabRepair'), icon: <IconWrench /> },
       { id: 'share' as const, label: t('instancesPage.tabShare'), icon: <IconShare /> },
     ],
@@ -309,7 +317,23 @@ export function InstanceSettingsModal({
             )}
 
             {tab === 'installation' && (
-              <InstallationTab instance={instance} versions={versions} onUpdate={onUpdate} />
+              <InstallationTab
+                instance={instance}
+                versions={versions}
+                onUpdate={onUpdate}
+                suggestedVersion={suggestedVersion}
+              />
+            )}
+
+            {tab === 'compat' && (
+              <CompatTab
+                instance={instance}
+                onGoTo={(next, version) => {
+                  setSuggestedVersion(version ?? null)
+                  setTab(next as Tab)
+                }}
+                onClose={onClose}
+              />
             )}
 
             {tab === 'java' && (
@@ -1342,10 +1366,15 @@ function InstallationTab({
   instance,
   versions,
   onUpdate,
+  suggestedVersion,
 }: {
   instance: Instance
   versions: string[]
   onUpdate: (instance: Instance) => void
+  /** Version désignée par l'essai de compatibilité : l'onglet s'ouvre alors
+   *  directement en édition, dessus. Rien n'est enregistré pour autant —
+   *  réinstaller reste un geste qu'on confirme. */
+  suggestedVersion?: string | null
 }) {
   const t = useT()
   const [editing, setEditing] = useState(false)
@@ -1398,6 +1427,16 @@ function InstallationTab({
     if (!editing) return
     if (loader !== instance.loader || mcVersion !== instance.mc_version) setLoaderVersion('')
   }, [editing, loader, mcVersion, instance.loader, instance.mc_version])
+
+  // La version suggérée n'est posée que si elle existe vraiment dans la
+  // liste : le loader peut en nommer une que Mojang ne publie pas (un alias,
+  // une version de travail), et la poser quand même afficherait un menu
+  // déroulant vide de sens.
+  useEffect(() => {
+    if (!suggestedVersion) return
+    setEditing(true)
+    if (versions.includes(suggestedVersion)) setMcVersion(suggestedVersion)
+  }, [suggestedVersion, versions])
 
   const cancel = () => {
     setMcVersion(instance.mc_version)
@@ -1916,6 +1955,15 @@ const IconShare = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
     <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
     <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+  </svg>
+)
+/** Un démarrage qui aboutit : la lecture et la coche ensemble, puisque
+ *  l'onglet lance vraiment le jeu pour répondre. */
+const IconPlayCheck = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={14} height={14}>
+    <path d="M12.5 20.9A9 9 0 1121 12.4" />
+    <path d="M10 8.5l5 3.5-5 3.5z" />
+    <path d="M15.5 18.5l2 2 4-4.5" />
   </svg>
 )
 const IconWrench = () => (

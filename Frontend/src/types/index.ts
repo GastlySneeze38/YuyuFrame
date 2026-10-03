@@ -216,6 +216,58 @@ export interface HealthCheck {
 }
 
 /**
+ * Un geste proposé pour régler un problème de compatibilité — voir
+ * `minecraft::compat`. Il ne porte pas de texte : le Rust ne décide que de ce
+ * qui est possible, l'interface le rédige.
+ *
+ * `value` est la version visée (`mc_version`), le **fichier** du mod à
+ * désactiver (`disable_mod`, déjà résolu côté Rust) ou l'identifiant du mod à
+ * installer (`install_mod`). Vide quand l'action n'en demande pas.
+ */
+export interface CompatFix {
+  action: 'mc_version' | 'loader_version' | 'disable_mod' | 'install_mod' | 'ram' | 'java'
+  value: string
+}
+
+/** Un problème lu dans le journal du loader. `detail` est sa ligne, intacte :
+ *  jamais traduite, c'est la preuve. */
+export interface CompatProblem {
+  kind:
+    | 'mc_mismatch'
+    | 'missing_dep'
+    | 'dep_version'
+    | 'loader_too_old'
+    | 'mod_conflict'
+    | 'mixin'
+    | 'java'
+    | 'oom'
+    | 'unknown'
+  subject: string
+  target: string
+  expected: string
+  detail: string
+  fixes: CompatFix[]
+}
+
+/**
+ * Le verdict d'un essai de compatibilité.
+ *
+ * `timeout` n'est pas un échec : le jeu était encore en train de démarrer au
+ * bout du temps imparti, ce qui ne dit rien de sa compatibilité. `error` non
+ * plus : le launcher n'a pas pu préparer le lancement (réseau, Java, loader),
+ * et `message` dit quoi.
+ */
+export interface CompatResult {
+  status: 'ok' | 'failed' | 'timeout' | 'cancelled' | 'error'
+  message: string | null
+  problems: CompatProblem[]
+  /** Ce que le loader propose lui-même, recopié tel quel. */
+  suggestions: string[]
+  log: string
+  duration_ms: number
+}
+
+/**
  * Une version de loader proposée au choix.
  *
  * `recommended` est la seule réponse utile à « laquelle prendre » : c'est

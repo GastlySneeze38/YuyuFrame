@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type { SupportCategory, TicketDetail, TicketSummary } from '@/types/support'
 import type { LocalCrashReport, LocalCrashSummary, RemoteCrashSummary } from '@/types/crash'
 import type { BackupDetail, BackupOverview, BackupSettings, BackupSummary, InstanceBackupSettings } from '@/types/backup'
-import type { AuthStatus, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
+import type { AuthStatus, CompatResult, DetectedLauncher, DeviceAuthResponse, ImportResult, Instance, JvmConfigPreview, JvmFormValues, HealthCheck, JavaReport, JavaStatus, JvmProfile, LoaderVersion, McOption, OptionsSummary, Mod, ModpackImportResult, ModpackIndexInfo, ModpackMeta, PackInfo, PackKind, PollResponse, SaveInfo, OptionsLinkInfo, ScanResult, SharedOptionsStatus, ShareExport, ShareLinkStatus, ShareImport, SharePreview, ShareScan, ShareSource, StatsData, StatsQuery, ReferencedMod, SyncDiff, SyncInstance, SyncManifest, SystemMemoryInfo, Version } from '@/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -365,6 +365,17 @@ export const api = {
     /** Remet en état ce que le diagnostic a trouvé abîmé, et rend le nombre de
      *  fichiers retéléchargés. Ne touche jamais au dossier de l'instance. */
     repair: (instanceId: string) => invoke<number>('instance_repair', { instanceId }),
+
+    // ── Essai de compatibilité (onglet « Compatibilité ») ─────────────────
+    // Ce n'est pas un diagnostic de fichiers mais un vrai lancement : la
+    // promesse n'est pas « rien n'est abîmé » mais « ça démarre ». Long par
+    // nature (il faut atteindre le menu principal), et suivi en direct par
+    // l'événement `compat_log`.
+    /** Démarre le jeu et le coupe dès qu'il est debout. Rend le verdict et,
+     *  en cas d'échec, ce que le loader a reproché. */
+    compatTest: (instanceId: string) => invoke<CompatResult>('instance_compat_test', { instanceId }),
+    /** Coupe l'essai en cours. Le verdict rendu sera alors `cancelled`. */
+    compatCancel: (instanceId: string) => invoke<void>('instance_compat_cancel', { instanceId }),
 
     // ── Java de l'instance (onglet « Java et mémoire ») ──────────────────
     // La version requise vient de la version du jeu, jamais d'un réglage :
