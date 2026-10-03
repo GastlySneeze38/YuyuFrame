@@ -54,7 +54,7 @@ toml = "0.8"
 rand = "0.8"
 base64 = "0.22"
 sha1 = "0.10"
-# Licence hors ligne (api/license.rs) : vérification seule, jamais de signature
+# Licence hors ligne (security/license.rs) : vérification seule, jamais de signature
 # ici — la clé privée ne quitte pas le serveur.
 ed25519-dalek = "2"
 sha2 = "0.10"
@@ -70,7 +70,7 @@ discord-rich-presence = "1"
 fastnbt = "2"
 md-5 = "0.10"
 
-# Coffre du système pour le refresh token (src/vault.rs) : Windows Credential
+# Coffre du système pour le refresh token (src/security/vault.rs) : Windows Credential
 # Manager, trousseau macOS. Pas de dépendance ailleurs : sans coffre natif, la
 # crate retomberait sur un coffre en mémoire, vide à chaque démarrage.
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]

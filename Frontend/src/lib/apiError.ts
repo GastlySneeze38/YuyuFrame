@@ -3,7 +3,7 @@
  *
  * Le backend Rust renvoie ses erreurs en JSON à travers la convention
  * `Result<T, String>` des commandes Tauri : `{ code, message, ...extra }`
- * (voir `Backend/src/api/error.rs`, qui doit rester d'accord avec ce fichier).
+ * (voir `Backend/src/server/error.rs`, qui doit rester d'accord avec ce fichier).
  * Le `code` est la seule chose stable — le texte, lui, peut changer.
  *
  * Une erreur qui ne vient pas de l'API (message brut d'une commande locale)

@@ -1,124 +1,24 @@
-mod api;
+mod account;
+mod app;
 mod backup;
 mod commands;
 mod db;
+mod instances;
 mod integrations;
 mod minecraft;
 mod paths;
-mod process;
-mod recovery;
+mod play;
+mod security;
+mod server;
 mod share_link;
 mod state;
-mod stats;
 mod sync;
-mod vault;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::{Mutex, RwLock};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-
-/// Renomme une seule fois les instances créées avant l'introduction du nouvel
-/// id lisible (`<nom-slugifié>-<code>`, voir `commands::instance::crud::gen_id`)
-/// — l'id sert à la fois de clé primaire DB et de nom de dossier disque
-/// (`instance_dir()`), donc renommer l'un sans l'autre laisserait l'instance
-/// introuvable. Best-effort et sûr : un dossier verrouillé/permissions
-/// refusées laisse l'instance sur son ancien id, retentée au prochain
-/// démarrage plutôt que de risquer une instance perdue. Retourne les paires
-/// (ancien id, nouvel id) — le frontend les récupère via la commande
-/// `instance_id_migrations` pour remapper ses propres clés persistées
-/// (serveurs favoris, mods épinglés...) qui référencent encore l'ancien id.
-fn migrate_legacy_instance_ids(conn: &rusqlite::Connection) -> Vec<(String, String)> {
-    let legacy = match db::instance_legacy_ids(conn) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!("Migration ids instances : lecture échouée : {}", e);
-            return Vec::new();
-        }
-    };
-    if legacy.is_empty() {
-        return Vec::new();
-    }
-
-    let instances_root = paths::root().join(".minecraft").join("instances");
-    let mut migrated = Vec::new();
-
-    for (old_id, name) in legacy {
-        let new_id = commands::instance::crud::gen_id(&name);
-        let old_dir = instances_root.join(&old_id);
-        let new_dir = instances_root.join(&new_id);
-
-        if !old_dir.is_dir() || new_dir.exists() {
-            continue;
-        }
-        if let Err(e) = std::fs::rename(&old_dir, &new_dir) {
-            tracing::warn!("Migration instance {} → {} : renommage du dossier échoué : {}", old_id, new_id, e);
-            continue;
-        }
-        if let Err(e) = db::instance_rename_id(conn, &old_id, &new_id) {
-            tracing::warn!("Migration instance {} → {} : mise à jour DB échouée, restauration du dossier : {}", old_id, new_id, e);
-            let _ = std::fs::rename(&new_dir, &old_dir);
-            continue;
-        }
-
-        // meta.json embarque aussi l'id (repli "disk_wins" de instance_startup_sync)
-        // — best-effort, une erreur ici ne remet pas en cause le renommage déjà validé en DB.
-        let meta_path = new_dir.join("meta.json");
-        if let Ok(json) = std::fs::read_to_string(&meta_path) {
-            if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&json) {
-                v["id"] = serde_json::Value::String(new_id.clone());
-                if let Ok(pretty) = serde_json::to_string_pretty(&v) {
-                    let _ = std::fs::write(&meta_path, pretty);
-                }
-            }
-        }
-
-        tracing::info!("Instance renommée : {} → {}", old_id, new_id);
-        migrated.push((old_id, new_id));
-    }
-
-    migrated
-}
-
-/// Récupère la base restée à côté de l'exécutable par les versions ≤ 0.1.0-27.
-///
-/// Copie plutôt que déplace : si quelque chose se passe mal pendant la
-/// migration, l'original est toujours là. L'ancienne base n'est pas effacée —
-/// elle sera emportée par la prochaine réinstallation, ce qui est justement
-/// la raison de ce déménagement.
-///
-/// Ne fait rien si la nouvelle existe déjà : elle fait autorité, et écraser
-/// une base en service par une vieille copie serait pire que le bug d'origine.
-fn migrate_db_from_exe_dir(target: &std::path::Path) {
-    if target.exists() {
-        return;
-    }
-    let Some(old) = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("yuyu.db")))
-    else {
-        return;
-    };
-    if !old.is_file() {
-        return;
-    }
-    if let Some(parent) = target.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    match std::fs::copy(&old, target) {
-        Ok(_) => tracing::info!(
-            "Base de données récupérée depuis {} vers {}",
-            old.display(),
-            target.display()
-        ),
-        Err(e) => tracing::error!(
-            "Récupération de la base {} impossible : {} — le launcher démarre sur une base neuve",
-            old.display(),
-            e
-        ),
-    }
-}
 
 pub fn run() {
     // Le build release tourne en `windows_subsystem = "windows"` (cf.
@@ -162,7 +62,7 @@ pub fn run() {
             } else {
                 // Fenêtre fermée pendant une partie : le launcher vit encore
                 // sans elle (voir `install_tray`), on la reconstruit.
-                reopen_main_window(app);
+                app::tray::reopen_main_window(app);
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -172,10 +72,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Premier lancement (app pas encore ouverte) : l'OS a passé l'URL
-            // en argument de commande — voir commands::deep_link pour pourquoi
+            // en argument de commande — voir app::deep_link pour pourquoi
             // ça ne peut pas être émis directement ici (frontend pas encore monté).
             if let Some(url) = std::env::args().find(|a| a.starts_with("yuyuframe://")) {
-                commands::deep_link::set_pending(url);
+                app::deep_link::set_pending(url);
             }
 
             // Enregistrement du scheme yuyuframe:// — en prod l'installeur
@@ -209,7 +109,7 @@ pub fn run() {
                 // Le dossier de données, lui, survit aux mises à jour et suit
                 // un éventuel déplacement (Réglages → Stockage).
                 let target = paths::root().join("yuyu.db");
-                migrate_db_from_exe_dir(&target);
+                app::startup::migrate_db_from_exe_dir(&target);
                 target
             };
 
@@ -223,10 +123,10 @@ pub fn run() {
             });
 
             // Comptes Minecraft propres au PC, restaurés avec ou sans session
-            // YuyuFrame (voir db::mc_account).
-            let mc_session = commands::account::startup_session(&conn);
+            // YuyuFrame (voir `account::minecraft::store`).
+            let mc_session = account::minecraft::startup_session(&conn);
 
-            let instance_id_migrations = migrate_legacy_instance_ids(&conn);
+            let instance_id_migrations = app::startup::migrate_legacy_instance_ids(&conn);
 
             // Timeout par défaut généreux mais fini : les appels LauncherAPI
             // classiques (auth, métadonnées sync) répondent en dessous de la
@@ -261,7 +161,7 @@ pub fn run() {
             // vu la fin de la partie : reprises en charge si le jeu tourne
             // encore, closes à leur dernière trace de vie sinon, et un rapport
             // de plantage reconstruit s'il y en avait un (voir recovery.rs).
-            recovery::run(shared_db, app.handle().clone());
+            play::recovery::run(shared_db, app.handle().clone());
 
             // Arrière-plan refusé : on attendait que le jeu soit réellement
             // là pour s'effacer. Écouté ici plutôt que sur les trois canaux
@@ -273,7 +173,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 app.listen("game_ready", move |_| {
                     if state::exit_when_ready() {
-                        quit_now(&handle);
+                        app::tray::quit_now(&handle);
                     }
                 });
             }
@@ -282,12 +182,12 @@ pub fn run() {
             // revue une fois au démarrage. Pas de minuterie qui tourne toute
             // la journée — le launcher n'est pas ouvert en permanence, et une
             // échéance de 20 h suffit à ne jamais sauter un jour.
-            commands::backup::spawn_daily(app_state.clone());
+            backup::commands::spawn_daily(app_state.clone());
 
             // Pilotage par le back-office (version minimale, interrupteurs,
             // bannières) : première lecture tout de suite, puis toutes les
             // 15 minutes. Jamais bloquant — sans réponse, rien n'est coupé.
-            api::fleet::spawn_refresh(app_state, app.handle().clone());
+            server::fleet::spawn_refresh(app_state, app.handle().clone());
 
             // Manifeste Mojang réchauffé en tâche de fond : l'écran des
             // instances le demandait à chaque ouverture et attendait le
@@ -323,210 +223,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::account::yuyu::yuyu_status,
-            commands::account::yuyu::yuyu_ping,
-            commands::account::yuyu::yuyu_register,
-            commands::account::yuyu::yuyu_login,
-            commands::account::yuyu::yuyu_logout,
-            commands::account::yuyu::yuyu_refresh_plan,
-            commands::account::yuyu::yuyu_create_checkout,
-            commands::account::yuyu::yuyu_change_password,
-            commands::account::yuyu::yuyu_set_email,
-            commands::account::yuyu::yuyu_verify_email,
-            commands::account::yuyu::yuyu_resend_email_code,
-            commands::account::yuyu::yuyu_email_status,
-            commands::account::yuyu::yuyu_forgot_password,
-            commands::account::yuyu::yuyu_reset_password,
-            commands::account::yuyu::yuyu_mfa_verify,
-            commands::account::yuyu::yuyu_mfa_resend,
-            commands::account::yuyu::yuyu_mfa_status,
-            commands::account::yuyu::yuyu_mfa_step_up,
-            commands::account::yuyu::yuyu_totp_setup,
-            commands::account::yuyu::yuyu_totp_enable,
-            commands::account::yuyu::yuyu_backup_codes,
-            commands::account::yuyu::yuyu_list_devices,
-            commands::account::yuyu::yuyu_revoke_device,
-            commands::account::yuyu::yuyu_sync_minecraft_accounts,
-            commands::fleet::fleet_config,
-            commands::fleet::fleet_refresh,
-            commands::fleet::fleet_flag,
-            commands::plan::plan_guard,
-            commands::reviews::review_mine,
-            commands::reviews::review_submit,
-            commands::reviews::review_delete,
-            commands::support::support_categories,
-            commands::support::support_list,
-            commands::support::support_get,
-            commands::support::support_create,
-            commands::support::support_reply,
-            commands::support::support_hide,
-            commands::support::support_diagnostic,
-            commands::crash::crash_list,
-            commands::crash::crash_get,
-            commands::crash::crash_delete,
-            commands::crash::crash_send,
-            commands::crash::crash_remote_list,
-            commands::crash::crash_remote_get,
-            commands::crash::crash_remote_hide,
-            commands::crash::crash_as_text,
-            commands::account::microsoft::auth_start_device,
-            commands::account::microsoft::auth_poll,
-            commands::account::microsoft::auth_status,
-            commands::account::microsoft::auth_logout,
-            commands::account::minecraft::mc_list_accounts,
-            commands::account::minecraft::mc_switch,
-            commands::account::minecraft::mc_delete,
-            commands::account::offline::mc_add_offline,
-            commands::account::skin::skin_resolve_player,
-            commands::account::skin::skin_of_account,
-            commands::account::skin::skin_check_url,
-            commands::account::skin::skin_import_file,
-            commands::account::skin::skin_read_file,
-            commands::account::skin::skin_import_bytes,
-            commands::account::skin::skin_export_png,
-            commands::account::skin::skin_history,
-            commands::account::skin::skin_history_forget,
-            commands::account::skin::skin_apply,
-            commands::account::skin::skin_remove,
-            commands::account::skin::skin_current,
-            commands::account::skin::skin_preview_for_account,
-            commands::account::catalog::skin_catalog_browse,
-            commands::account::catalog::skin_catalog_previews,
-            commands::system::versions::list_versions,
-            commands::system::versions::loader_versions,
-            commands::system::versions::loader_availability,
-            commands::system::versions::loader_game_versions,
-            commands::launch::launch_game,
-            commands::launch::cancel_launch,
-            commands::launch::reload_agent,
-            commands::launch::console_ready,
-            commands::analytics::track_event,
-            commands::analytics::analytics_get_disabled,
-            commands::analytics::analytics_set_disabled,
-            commands::deep_link::take_pending_deep_link,
-            commands::pending::take_pending_events,
-            commands::launch::running_instances,
-            commands::launch::launcher_agent_status,
-            commands::launch::list_saved_servers,
-            commands::launch::ping_server,
-            commands::launch::preview_jvm_config,
-            commands::jvm_profile::jvm_profile_list,
-            commands::jvm_profile::jvm_profile_create,
-            commands::jvm_profile::jvm_profile_save,
-            commands::jvm_profile::jvm_profile_delete,
-            commands::jvm_profile::instance_set_jvm_profile,
-            commands::instance::mods::mods_list,
-            commands::instance::mods::mods_toggle,
-            commands::instance::mods::mods_delete,
-            commands::instance::mods::mods_install,
-            commands::instance::mods::mods_upload,
-            commands::instance::mods::mod_icon,
-            commands::instance::mods::mods_check_update_safety,
-            commands::instance::mods::mods_check_conflicts,
-            commands::instance::packs::packs_list,
-            commands::instance::packs::packs_install,
-            commands::instance::packs::packs_delete,
-            commands::instance::packs::packs_import_paths,
-            commands::instance::options::mc_options_read,
-            commands::instance::options::mc_options_write,
-            commands::instance::agent_options::agent_options_read,
-            commands::instance::agent_options::agent_options_write,
-            commands::modrinth::mods_search_advanced,
-            commands::curseforge::curseforge_search,
-            commands::curseforge::curseforge_mod_details,
-            commands::curseforge::curseforge_mod_files,
-            commands::curseforge::curseforge_mod_install,
-            commands::curseforge::curseforge_categories,
-            commands::curseforge::curseforge_fingerprint_matches,
-            commands::curseforge::curseforge_local_fingerprints,
-            commands::instance::import::import_detect_launchers,
-            commands::instance::import::import_scan_folder,
-            commands::instance::import::import_check_duplicates,
-            commands::instance::import::import_apply,
-            commands::instance::import::mods_import_paths,
-            commands::instance::modpack::modpack_fetch_index,
-            commands::instance::modpack::modpack_fetch_curseforge_index,
-            commands::instance::modpack::modpack_install,
-            commands::instance::modpack::modpack_install_curseforge,
-            commands::instance::modpack::modpack_install_from_path,
-            commands::instance::modpack::modpack_remove,
-            commands::instance::modpack::modpack_rename_file,
-            commands::instance::modpack::modpack_get_meta,
-            commands::instance::crud::instance_id_migrations,
-            commands::instance::crud::instance_list,
-            commands::instance::crud::instance_create,
-            commands::instance::crud::instance_delete,
-            commands::instance::crud::instance_update,
-            commands::instance::crud::instance_toggle_favorite,
-            commands::instance::crud::instance_duplicate,
-            commands::instance::crud::instance_startup_sync,
-            commands::instance::options::instance_export_settings,
-            commands::instance::options::instance_apply_settings,
-            commands::instance::options::shared_options_status,
-            commands::instance::options_archive::instance_options_summary,
-            commands::instance::options_archive::instance_export_options,
-            commands::instance::options_archive::instance_import_options,
-            commands::instance::options_share::instance_client_options_export,
-            commands::instance::options_share::instance_client_options_import,
-            commands::instance::options_share::instance_options_link,
-            commands::instance::options_share::options_link_preview,
-            commands::instance::options_share::instance_options_from_link,
-            commands::instance::options::set_sync_game_settings,
-            commands::instance::crud::instance_open_folder,
-            commands::instance::crud::instance_set_window,
-            commands::instance::icon::instance_set_icon,
-            commands::instance::java::instance_java_status,
-            commands::instance::java::instance_java_detect,
-            commands::instance::java::instance_set_java_path,
-            commands::instance::java::instance_install_java,
-            commands::instance::java::java_probe,
-            commands::instance::java::instance_java_inspect,
-            commands::instance::java::instance_install_custom_java,
-            commands::instance::repair::instance_diagnose,
-            commands::instance::repair::instance_repair,
-            commands::instance::compat::instance_compat_test,
-            commands::instance::compat::instance_compat_cancel,
-            share_link::share_link_status,
-            share_link::share_link_build,
-            share_link::share_link_read,
-            share_link::share_link_build_bytes,
-            share_link::share_link_read_bytes,
-            commands::instance::share::instance_share_scan,
-            commands::instance::share::instance_share_export,
-            commands::instance::share::instance_share_link,
-            commands::instance::share::instance_share_preview,
-            commands::instance::share::instance_share_import,
-            commands::sync::push_pull::sync_list_instances,
-            commands::sync::push_pull::sync_list_saves,
-            commands::sync::push_pull::sync_push_instance,
-            commands::sync::push_pull::sync_pull_instance,
-            commands::sync::push_pull::sync_delete_instance,
-            commands::sync::push_pull::sync_manifest,
-            commands::sync::push_pull::sync_diff,
-            commands::sync::push_pull::sync_referenced_mods,
-            commands::sync::stats::stats_get,
-            commands::sync::stats::stats_clear,
-            commands::backup::backup_list,
-            commands::backup::backup_get,
-            commands::backup::backup_create,
-            commands::backup::backup_restore,
-            commands::backup::backup_delete,
-            commands::backup::backup_collect_garbage,
-            commands::backup::backup_settings_get,
-            commands::backup::backup_settings_save,
-            commands::backup::backup_settings_reset,
-            commands::locale::detect_country,
-            commands::patch_notes::patch_notes_latest,
-            commands::patch_notes::patch_notes_list,
-            commands::system::info::system_memory_info,
-            commands::system::storage::data_root_get,
-            commands::system::storage::data_root_set,
-            commands::system::storage::open_folder,
-            commands::window::window_hide_for_launch,
-            commands::window::window_set_background_allowed,
-            commands::window::window_background_status,
-        ])
+        .invoke_handler(commands::handler())
         // Fermer la fenêtre pendant une partie ne doit pas emporter le
         // launcher avec elle : c'est lui qui lit la sortie du jeu, qui tient
         // le compteur de la session et qui construira le rapport si ça plante.
@@ -544,7 +241,7 @@ pub fn run() {
                     // du jeu, configuration de flotte).
                     state::set_window_open(false);
                     if state::any_game_running() && state::background_allowed() {
-                        install_tray(window.app_handle());
+                        app::tray::install_tray(window.app_handle());
                     }
                 }
                 // Une fenêtre reconstruite (icône de notification, second
@@ -568,135 +265,4 @@ pub fn run() {
                 }
             }
         });
-}
-
-/// Éteint le launcher s'il ne lui reste plus rien à faire : aucune fenêtre
-/// ouverte et aucune partie en cours. Appelée à la fin de chaque partie —
-/// c'est le moment où un launcher resté en vie uniquement pour la surveiller
-/// n'a plus de raison d'être.
-pub fn restore_after_game(app: &tauri::AppHandle) {
-    // Une autre partie tourne encore : le veilleur a toujours une raison
-    // d'être, et personne n'a demandé à revoir le launcher.
-    if state::any_game_running() {
-        return;
-    }
-    // L'arrière-plan est refusé et le lancement s'est terminé sans que le jeu
-    // démarre (échec, annulation) : on s'efface comme promis plutôt que de
-    // rouvrir une fenêtre que personne n'attend.
-    if state::exit_when_ready() {
-        quit_now(app);
-        return;
-    }
-    // Fenêtre seulement réduite (arrière-plan refusé, ou fermeture jamais
-    // demandée) : on la remonte sans la reconstruire.
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        state::set_window_open(true);
-        return;
-    }
-    tracing::info!("Partie terminée — le launcher revient au premier plan");
-    // L'icône de notification n'avait de sens que pendant la partie :
-    // `reopen_main_window` la retire en même temps qu'elle rend la fenêtre.
-    reopen_main_window(app);
-}
-
-/// Éteint le launcher pour de bon.
-///
-/// Le drapeau est levé AVANT `exit` : il fait justement refuser les demandes
-/// de sortie, et le garder ici empêcherait celle-ci d'aboutir.
-pub fn quit_now(app: &tauri::AppHandle) {
-    state::set_exit_when_ready(false);
-    if let Some(tray) = TRAY.get() {
-        let _ = tray.set_visible(false);
-    }
-    tracing::info!("Arrière-plan refusé — le launcher s'efface");
-    app.exit(0);
-}
-
-/// L'icône reste en mémoire après sa création : la recréer à chaque fermeture
-/// en empilerait plusieurs dans la zone de notification.
-static TRAY: std::sync::OnceLock<tauri::tray::TrayIcon> = std::sync::OnceLock::new();
-
-/// Pose l'icône dans la zone de notification. C'est le seul moyen de revenir
-/// dans le launcher une fois sa fenêtre fermée — sans elle, un processus
-/// tournerait sans que personne puisse ni le voir ni l'arrêter.
-fn install_tray(app: &tauri::AppHandle) {
-    use tauri::menu::{Menu, MenuItem};
-    use tauri::tray::TrayIconBuilder;
-
-    if let Some(tray) = TRAY.get() {
-        let _ = tray.set_visible(true);
-        return;
-    }
-
-    let build = || -> tauri::Result<tauri::tray::TrayIcon> {
-        let open = MenuItem::with_id(app, "open", "Ouvrir YuyuFrame", true, None::<&str>)?;
-        let quit = MenuItem::with_id(app, "quit", "Quitter", true, None::<&str>)?;
-        let menu = Menu::with_items(app, &[&open, &quit])?;
-        let mut builder = TrayIconBuilder::with_id("yuyuframe")
-            .tooltip("YuyuFrame — partie en cours")
-            .menu(&menu)
-            // Un clic gauche rouvre : c'est le geste attendu, le menu n'est
-            // qu'un recours.
-            .show_menu_on_left_click(false)
-            .on_menu_event(|app, event| match event.id().as_ref() {
-                "open" => reopen_main_window(app),
-                "quit" => app.exit(0),
-                _ => {}
-            })
-            .on_tray_icon_event(|tray, event| {
-                if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } = event {
-                    reopen_main_window(tray.app_handle());
-                }
-            });
-        if let Some(icon) = app.default_window_icon() {
-            builder = builder.icon(icon.clone());
-        }
-        builder.build(app)
-    };
-
-    match build() {
-        Ok(tray) => {
-            let _ = TRAY.set(tray);
-        }
-        // Sans icône, on ne peut plus rouvrir : mieux vaut alors s'éteindre
-        // normalement que laisser un processus invisible derrière soi.
-        Err(e) => tracing::warn!("Icône de notification impossible à créer, le launcher s'arrêtera normalement : {e}"),
-    }
-}
-
-/// Reconstruit la fenêtre principale à l'identique de `tauri.conf.json`.
-fn reopen_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-        return;
-    }
-    let built = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
-        .title("YuyuFrame")
-        .inner_size(1280.0, 760.0)
-        .min_inner_size(900.0, 560.0)
-        .decorations(false)
-        .background_color(tauri::window::Color(9, 9, 13, 255))
-        .build();
-    match built {
-        Ok(window) => {
-            state::set_window_open(true);
-            let _ = window.set_focus();
-            if let Some(tray) = TRAY.get() {
-                let _ = tray.set_visible(false);
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Réouverture de la fenêtre impossible : {e}");
-            // Sans fenêtre ni partie à surveiller, le processus n'aurait plus
-            // aucun moyen d'être vu ni arrêté : mieux vaut s'éteindre que de
-            // laisser un fantôme dans le gestionnaire des tâches.
-            if !state::any_game_running() {
-                app.exit(0);
-            }
-        }
-    }
 }

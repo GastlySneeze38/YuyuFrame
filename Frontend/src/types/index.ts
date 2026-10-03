@@ -39,7 +39,7 @@ export interface Mod {
 
 /** Les deux familles de packs d'une instance.
  *  Mêmes chaînes que les `project_type` de Modrinth : la valeur sert autant à
- *  chercher qu'à ranger le fichier (voir `commands/instance/packs.rs`). */
+ *  chercher qu'à ranger le fichier (voir `instances/packs.rs`). */
 export type PackKind = 'resourcepack' | 'shader'
 
 export interface PackInfo {
@@ -149,7 +149,7 @@ export interface Instance {
 }
 
 /**
- * L'état du Java d'une instance — voir `commands/instance/java.rs`.
+ * L'état du Java d'une instance — voir `instances/settings/java.rs`.
  *
  * `required_major` est imposé par la version du jeu, jamais choisi.
  * `source` vaut `custom` (chemin désigné à la main), `resolved` (trouvé par le
@@ -166,7 +166,7 @@ export interface JavaStatus {
 
 /**
  * Ce qu'emporterait une exportation des options — voir
- * `commands/instance/options_archive.rs`.
+ * `instances/settings/options_archive.rs`.
  *
  * `has_options` à faux veut dire que le jeu n'a jamais été lancé dans cette
  * instance : c'est la seule raison pour laquelle `options.txt` manque, et
@@ -181,7 +181,7 @@ export interface OptionsSummary {
 
 /**
  * Le rapport d'intégrité d'une installation Java — voir
- * `commands/instance/java.rs`.
+ * `instances/settings/java.rs`.
  *
  * Trois contrôles distincts, parce qu'ils n'échouent pas pour les mêmes
  * raisons : le fichier est-il là, le dossier qui l'entoure est-il complet (une
@@ -200,7 +200,7 @@ export interface JavaReport {
 }
 
 /**
- * Un point de contrôle de l'installation — voir `commands/instance/repair.rs`.
+ * Un point de contrôle de l'installation — voir `instances/health/repair.rs`.
  *
  * `status` vaut `ok`, `broken` (présent mais altéré), `missing`, ou `unknown`
  * quand la vérification elle-même n'a pas pu se faire (hors ligne, version de
@@ -345,7 +345,7 @@ export type ModpackImportResult =
   | { kind: 'structured'; meta: ModpackMeta }
   | { kind: 'generic'; imported: number; failed: number }
 
-// ── Partage d'instance (`commands/instance/share.rs`) ─────────────────────
+// ── Partage d'instance (`instances/share/`) ─────────────────────
 // Rien n'est hébergé : un `.mrpack` qui référence ce qui est sur Modrinth ou
 // CurseForge et embarque le reste, ou un lien `yuyuframe://instance/…` quand
 // tout est sur Modrinth.

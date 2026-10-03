@@ -456,7 +456,7 @@ extern "system" {
 pub(super) async fn ensure_gpu_preference(java_exe: &str) {
     const KEY: &str = r"HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
 
-    let already_set = crate::process::hidden_command("reg")
+    let already_set = crate::app::process::hidden_command("reg")
         .args(["query", KEY, "/v", java_exe])
         .output()
         .await
@@ -466,7 +466,7 @@ pub(super) async fn ensure_gpu_preference(java_exe: &str) {
         return;
     }
 
-    let _ = crate::process::hidden_command("reg")
+    let _ = crate::app::process::hidden_command("reg")
         .args(["add", KEY, "/v", java_exe, "/t", "REG_SZ", "/d", "GpuPreference=2;", "/f"])
         .output()
         .await;

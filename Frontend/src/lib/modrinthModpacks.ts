@@ -24,7 +24,7 @@ export interface ResolvedModpackFile {
 }
 
 /** Recherche de modpacks via le backend (`mods_search_advanced`, voir
- * commands/modrinth.rs) — même chemin que la recherche de mods/plugins, avec
+ * instances/modrinth.rs) — même chemin que la recherche de mods/plugins, avec
  * `projectType: 'modpack'` et les mêmes filtres avancés (catégories propres
  * aux modpacks, environnement, licence, open source, tri). `gameVersion`/
  * `loader` manquaient jusqu'ici : un modpack Forge/Fabric/NeoForge apparaissait

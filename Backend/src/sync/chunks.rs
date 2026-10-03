@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::api;
-use crate::api::error::{ApiError, ApiResult};
+use crate::server as api;
+use crate::server::error::{ApiError, ApiResult};
 use crate::state::SharedState;
 
 /// Même valeur que `CHUNK_MAX` côté serveur. Un morceau plus gros serait

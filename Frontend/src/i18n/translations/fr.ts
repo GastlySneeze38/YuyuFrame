@@ -1116,7 +1116,7 @@ export const fr = {
   },
 
   // Skins (écran /skins). Un skin est une URL déjà hébergée, jamais un fichier
-  // que nous garderions : voir commands/account/skin.rs pour le pourquoi.
+  // que nous garderions : voir account/skins/skin.rs pour le pourquoi.
   skins: {
     title: 'Skins',
     subtitle: 'Le skin de tes comptes Minecraft',

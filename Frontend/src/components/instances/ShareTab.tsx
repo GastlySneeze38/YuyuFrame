@@ -18,7 +18,7 @@ import { useT } from '@/i18n'
  *   découpe en parties ; au-delà de `MAX_PARTS`, le Rust nomme les éléments
  *   les plus lourds à décocher.
  *
- * L'inventaire vient du dossier lui-même (`commands/instance/share.rs`) : ce
+ * L'inventaire vient du dossier lui-même (`instances/share/`) : ce
  * qu'un mod range dans un dossier à son nom apparaît sous « Autres », décoché.
  */
 

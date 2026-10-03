@@ -490,7 +490,7 @@ pub async fn download_and_launch(
     );
     // Avertissements non-bloquants (lib Fabric/Forge ou dépendance de mod
     // manquante) — remontés à l'appelant même en cas de lancement réussi,
-    // au lieu de rester silencieux dans les logs (voir commands/launch.rs,
+    // au lieu de rester silencieux dans les logs (voir play/launch.rs,
     // événement `launch_warning`).
     let launch_warnings = loader_setup.warnings;
 
@@ -649,7 +649,7 @@ pub async fn download_and_launch(
     }
     // NB : pas de sleep ici avant de spawner Java. La synchro avec la fenêtre
     // console (attendre que Console.tsx ait attaché son listener game_log)
-    // est déjà faite bien plus tôt, dans commands/launch.rs, via
+    // est déjà faite bien plus tôt, dans play/launch.rs, via
     // `console_ready.notified()` (voir register_console_waiter) — AVANT même
     // l'appel à download_and_launch. Un ancien sleep fixe de 1500ms vivait
     // ici en plus de ce mécanisme (vestige d'avant son introduction) et
@@ -692,7 +692,7 @@ pub async fn download_and_launch(
     let probe_out = probe.clone();
     let probe_err = probe.clone();
 
-    let mut java_cmd = crate::process::hidden_command(&java);
+    let mut java_cmd = crate::app::process::hidden_command(&java);
     java_cmd
         .args(&args)
         .current_dir(&mc_game_dir)
@@ -905,7 +905,7 @@ fn attach_and_beat(
             }
         }
         while !stop.load(Ordering::Relaxed) {
-            tokio::time::sleep(std::time::Duration::from_secs(crate::recovery::HEARTBEAT_SECS)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(crate::play::recovery::HEARTBEAT_SECS)).await;
             if stop.load(Ordering::Relaxed) {
                 return;
             }
@@ -948,8 +948,8 @@ async fn report_crash_if_any(watch: &Arc<crash::LaunchWatch>, exit_code: Option<
     //
     // Déposée si la fenêtre a été fermée au lancement — sans quoi le seul
     // moment où un plantage est certain d'arriver, la fenêtre fermée, est
-    // aussi le seul où personne ne peut l'entendre (voir commands::pending).
-    crate::commands::pending::emit_or_stash(&app, "game_crashed", serde_json::json!({
+    // aussi le seul où personne ne peut l'entendre (voir app::pending).
+    crate::app::pending::emit_or_stash(&app, "game_crashed", serde_json::json!({
         "instance_id": &report.instance_id,
         "report_id": &report.id,
         "title": &report.title,

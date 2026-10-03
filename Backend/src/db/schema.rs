@@ -125,7 +125,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN plan_expires_at INTEGER", []);
     // Refonte LauncherAPI /v1 : jeton d'accès de 15 min + refresh token à
     // rotation, e-mail du compte, licence signée vérifiable hors ligne et
-    // mot de passe provisoire (voir crate::api). Les sessions d'avant n'ont
+    // mot de passe provisoire (voir crate::server). Les sessions d'avant n'ont
     // pas de refresh token : `load_yuyu_session` les ignore.
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN refresh_token TEXT NOT NULL DEFAULT ''", []);
     let _ = conn.execute("ALTER TABLE yuyu_session ADD COLUMN access_token TEXT NOT NULL DEFAULT ''", []);
@@ -152,7 +152,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     // pour que la liste des instances les ait déjà : un fichier par instance
     // voudrait dire une lecture par carte à chaque affichage, et un chemin à
     // réparer dès que l'image d'origine est déplacée. La contrepartie est une
-    // taille bornée à l'import (voir `commands::instance::icon`).
+    // taille bornée à l'import (voir `instances::icon`).
     let _ = conn.execute("ALTER TABLE instances ADD COLUMN icon TEXT NOT NULL DEFAULT ''", []);
     // Version du loader épinglée par l'utilisateur. Vide = « la plus récente
     // compatible », c'est-à-dire exactement ce que le launcher a toujours fait
@@ -211,7 +211,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     let _ = conn.execute("ALTER TABLE mc_sessions ADD COLUMN skin_kind TEXT", []);
 
     // Comptes Minecraft rattachés au PC plutôt qu'au compte YuyuFrame.
-    super::mc_account::migrate_to_pc_scope(&conn)?;
+    crate::account::minecraft::store::migrate_to_pc_scope(&conn)?;
 
     // Préférences dont le backend a besoin pour décider seul (voir prefs.rs).
     super::prefs::init(&conn)?;

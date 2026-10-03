@@ -179,7 +179,7 @@ export interface SkinRef {
   origin: string
 }
 
-/** Skin déjà porté par un compte. Voir `db/skin_history.rs`. */
+/** Skin déjà porté par un compte. Voir `account/skins/history.rs`. */
 export interface SkinHistoryEntry {
   id: number
   kind: SkinKind
@@ -193,7 +193,7 @@ export interface SkinHistoryEntry {
 }
 
 /**
- * Entrée du catalogue Ely.by — voir `commands/account/catalog.rs`.
+ * Entrée du catalogue Ely.by — voir `account/skins/catalog.rs`.
  *
  * `url` est une adresse publique et `variant` notre modèle : une entrée du
  * catalogue est donc déjà une référence applicable, sans conversion. L'aperçu
@@ -382,12 +382,12 @@ export const api = {
       invoke<Instance>('instance_set_window', { instanceId, custom, fullscreen, width, height }),
     /** Pose l'icône depuis un fichier image, ou la retire avec `null`. Les
      *  octets sont relus et rangés en base par le Rust — le chemin ne survit
-     *  pas à l'appel (voir `commands/instance/icon.rs`). */
+     *  pas à l'appel (voir `instances/icon.rs`). */
     setIcon: (instanceId: string, path: string | null) =>
       invoke<Instance>('instance_set_icon', { instanceId, path }),
     /** Examine l'installation (jeu, bibliothèques, ressources, loader) par le
      *  SHA1 — ce que le lancement ne vérifie pas, lui qui se contente de la
-     *  taille. Voir `commands/instance/repair.rs`. */
+     *  taille. Voir `instances/health/repair.rs`. */
     diagnose: (instanceId: string) => invoke<HealthCheck[]>('instance_diagnose', { instanceId }),
     /** Remet en état ce que le diagnostic a trouvé abîmé, et rend le nombre de
      *  fichiers retéléchargés. Ne touche jamais au dossier de l'instance. */
@@ -436,7 +436,7 @@ export const api = {
       invoke<void>('instance_set_jvm_profile', { instanceId, profileId }),
   },
 
-  // Partage d'instance sans hébergement (`commands/instance/share.rs`).
+  // Partage d'instance sans hébergement (`instances/share/`).
   share: {
     /** Tout ce qui peut se partager, et d'où chaque fichier se télécharge. */
     scan: (instanceId: string) => invoke<ShareScan>('instance_share_scan', { instanceId }),
@@ -454,7 +454,7 @@ export const api = {
       invoke<ShareImport>('instance_share_import', { source, name, ramMb, applyJvm }),
   },
 
-  // Liens de partage, toutes sortes confondues (`Backend/src/share_link.rs`).
+  // Liens de partage, toutes sortes confondues (`Backend/src/share_link/mod.rs`).
   shareLink: {
     /** Ce qu'on a collé : sorte, parties reçues, parties manquantes. */
     status: (text: string) => invoke<ShareLinkStatus>('share_link_status', { text }),
@@ -471,7 +471,7 @@ export const api = {
       Uint8Array.from(await invoke<number[]>('share_link_read_bytes', { kind, text })),
   },
 
-  // Options du jeu et du client intégré (`commands/instance/options_share.rs`) :
+  // Options du jeu et du client intégré (`instances/settings/options_share.rs`) :
   // le `.properties` du client en fichier, et les deux dans un lien
   // `yuyuframe://options/…`. Mots de passe des macros jamais inclus.
   optionsShare: {
@@ -608,7 +608,7 @@ export const api = {
   },
 
   /**
-   * Skins — voir `commands/account/skin.rs` : un skin est une URL déjà
+   * Skins — voir `account/skins/skin.rs` : un skin est une URL déjà
    * hébergée (celle d'un compte premium chez Mojang, ou celle que
    * l'utilisateur fournit) plus le modèle à employer. Le launcher n'héberge
    * rien, donc il n'y a pas de skin « à envoyer » : seulement à désigner.
@@ -902,7 +902,7 @@ export const api = {
 
   // Réglages du client intégré : mêmes paires clé/valeur, mais dans le
   // `.properties` que l'agent relit à chaque démarrage (voir
-  // `commands/instance/agent_options.rs`). Liste vide tant que l'agent n'a
+  // `instances/settings/agent_options.rs`). Liste vide tant que l'agent n'a
   // jamais tourné sur cette instance — l'interface affiche alors les valeurs
   // par défaut des modules.
   agentOptions: {

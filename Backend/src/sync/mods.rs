@@ -21,7 +21,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::api::error::{ApiError, ApiResult};
+use crate::server::error::{ApiError, ApiResult};
 
 /// Nom du document dans l'instance. Dans un dossier à part : il est
 /// synchronisé comme les autres fichiers, mais n'a rien à faire au milieu des
@@ -129,7 +129,7 @@ pub fn list_local(game_dir: &Path) -> Vec<LocalMod> {
                 return None;
             }
             let size = std::fs::metadata(&path).ok()?.len() as i64;
-            let sha1 = crate::commands::instance::mods::sha1_cached(&path);
+            let sha1 = crate::instances::mods::sha1_cached(&path);
             (!sha1.is_empty()).then_some(LocalMod { file, sha1, size })
         })
         .collect();
@@ -194,7 +194,7 @@ fn already_present(game_dir: &Path, reference: &ModRef) -> bool {
     // La taille d'abord : elle écarte la quasi-totalité des cas sans toucher
     // au contenu du fichier.
     let Ok(meta) = std::fs::metadata(&path) else { return false };
-    meta.len() as i64 == reference.size && crate::commands::instance::mods::sha1_cached(&path) == reference.sha1
+    meta.len() as i64 == reference.size && crate::instances::mods::sha1_cached(&path) == reference.sha1
 }
 
 /// Télécharge les mods manquants du document. `report` reçoit (fait, total).

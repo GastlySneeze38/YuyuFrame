@@ -27,7 +27,7 @@ import { useT } from '@/i18n'
  *
  * ── Trois sources, et ce qu'elles deviennent ──────────────────────────────
  * Un skin doit être hébergé quelque part pour que les autres joueurs le
- * voient ; nous n'hébergeons rien (voir `commands/account/skin.rs`). D'où :
+ * voient ; nous n'hébergeons rien (voir `account/skins/skin.rs`). D'où :
  *
  *   joueur   le skin de n'importe quel compte premium — Mojang l'héberge déjà
  *   URL      n'importe quel PNG public — son hébergeur s'en charge
@@ -39,7 +39,7 @@ import { useT } from '@/i18n'
  * ── L'historique est le nôtre ─────────────────────────────────────────────
  * Mojang ne sert que le skin *courant* d'un profil, jamais les précédents.
  * Impossible donc de reconstituer un passé : on enregistre ce qui est appliqué
- * (`db/skin_history.rs`), pour les deux sortes de compte, et on amorce la liste
+ * (`account/skins/history.rs`), pour les deux sortes de compte, et on amorce la liste
  * d'un compte Microsoft avec le skin qu'il porte quand on le découvre.
  *
  * ── Mise en page : trois colonnes, aucun défilement ───────────────────────

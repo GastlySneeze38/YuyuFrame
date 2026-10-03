@@ -13,7 +13,7 @@ pub(crate) mod progress;
 mod ready_event;
 mod servers;
 
-// Le diagnostic d'installation (`commands::instance::repair`) réutilise la
+// Le diagnostic d'installation (`instances::health::repair`) réutilise la
 // descente de fichiers du lancement plutôt que d'en écrire une seconde : même
 // chemins d'artefacts, même règles d'inclusion, même téléchargement vérifié.
 pub use classpath::{artifact_path, download_verified, should_download_library};
@@ -24,7 +24,7 @@ pub use java::{
     install_java_runtime, java_requirement, resolve_existing_java,
 };
 pub use agent_compat::{blocked_by as agent_blocked_by, AgentBlock, MIN_JAVA as AGENT_MIN_JAVA};
-// Le partage d'instance (`commands::instance::share`) lit les arguments JVM
+// Le partage d'instance (`instances::share`) lit les arguments JVM
 // exactement comme le lancement les découpera.
 pub(crate) use jvm_args::parse_user_jvm_args;
 pub use agent_deploy::deploy_bundled_agent;

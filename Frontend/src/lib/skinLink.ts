@@ -1,5 +1,5 @@
 /**
- * Un skin dans un lien (`yuyuframe://skin/…`, `Backend/src/share_link.rs`).
+ * Un skin dans un lien (`yuyuframe://skin/…`, `Backend/src/share_link/mod.rs`).
  *
  * Rien n'est hébergé : ce sont les **pixels** qui voyagent. Le Rust ne fait
  * que compresser et découper (`share_link_build_bytes`) ; la mise en forme

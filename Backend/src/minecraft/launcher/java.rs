@@ -5,7 +5,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::minecraft::versions::JavaVersionInfo;
-use crate::process::hidden_command;
+use crate::app::process::hidden_command;
 use super::classpath::download_verified;
 use super::jvm_args::JvmVendor;
 use super::progress::{set_progress_monotonic, ProgressFloor};

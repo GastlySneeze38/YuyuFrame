@@ -12,5 +12,7 @@
 //! — alors qu'une sauvegarde est datée, empilée, et ne prétend jamais
 //! fusionner quoi que ce soit.
 
+pub mod archive;
 pub mod chunks;
 pub mod mods;
+pub mod push_pull;

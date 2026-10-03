@@ -1,6 +1,6 @@
 /**
  * Liens de partage `yuyuframe://<sorte>/<données>` — pendant côté interface
- * de `Backend/src/share_link.rs`, qui les fabrique et les lit (zstd avec
+ * de `Backend/src/share_link/mod.rs`, qui les fabrique et les lit (zstd avec
  * dictionnaire figé, puis base 32 768 en idéogrammes : les données
  * ressemblent à du chinois, c'est normal).
  *

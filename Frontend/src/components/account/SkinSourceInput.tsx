@@ -9,7 +9,7 @@ import { useT } from '@/i18n'
 
 /**
  * Skin choisi mais pas encore appliqué : une URL déjà hébergée et le modèle à
- * employer. Voir `commands/account/skin.rs` — le launcher n'héberge aucun
+ * employer. Voir `account/skins/skin.rs` — le launcher n'héberge aucun
  * skin, il ne fait que désigner ceux qui le sont déjà.
  */
 export interface SkinChoice {

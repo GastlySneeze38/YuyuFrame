@@ -132,7 +132,7 @@ export default function App() {
   const addInstance = useStore((s) => s.addInstance)
   const setSelectedInstanceId = useStore((s) => s.setSelectedInstanceId)
   // Le même protocole porte rejoindre un ami (`join`) et tous les liens de
-  // partage (`Backend/src/share_link.rs`). Une sorte de lien nouvelle = une
+  // partage (`Backend/src/share_link/mod.rs`). Une sorte de lien nouvelle = une
   // branche dans le rendu plus bas.
   // Un lien long arrive en parties : une partie cliquée pendant que la
   // fenêtre de la même sorte est ouverte s'ajoute aux précédentes (le champ

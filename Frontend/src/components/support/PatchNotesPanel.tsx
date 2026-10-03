@@ -17,7 +17,7 @@ import { useT } from '@/i18n'
  * presque tout le monde se pose en arrivant.
  *
  * Le contenu vient du même endroit (`/api/patch-notes`, voir
- * `commands/patch_notes.rs`) et passe par le même composant Markdown que le
+ * `server/patch_notes.rs`) et passe par le même composant Markdown que le
  * site et l'aperçu du back-office : une note relue ici doit être
  * reconnaissable, pas seulement ressemblante.
  */

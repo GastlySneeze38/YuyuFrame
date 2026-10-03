@@ -17,7 +17,7 @@ pub struct MinecraftSession {
 
 /// Session YuyuFrame (LauncherAPI /v1). Le jeton d'accès ne vit que 15
 /// minutes : c'est `refresh_token` qui porte la session, et il est remplacé à
-/// chaque rafraîchissement. Voir `crate::api`.
+/// chaque rafraîchissement. Voir `crate::server`.
 #[derive(Debug, Clone)]
 pub struct YuyuSession {
     pub user_id: i64,
@@ -28,7 +28,7 @@ pub struct YuyuSession {
     /// Mot de passe provisoire donné par le support : à changer avant tout le
     /// reste (le serveur refuse les autres routes).
     pub password_reset_required: bool,
-    /// Licence signée, vérifiable sans réseau (`crate::api::license`).
+    /// Licence signée, vérifiable sans réseau (`crate::security::license`).
     pub license: Option<String>,
     pub access_token: String,
     /// Date (secondes Unix) au-delà de laquelle `access_token` est périmé.
@@ -84,7 +84,7 @@ pub struct AppState {
     pub session: Option<MinecraftSession>,
     pub running_instances: std::collections::HashSet<String>,
     /// Les instances dont un essai de compatibilité tient la JVM (voir
-    /// `commands::instance::compat`). Volontairement séparé de
+    /// `instances::health::compat`). Volontairement séparé de
     /// `running_instances` : une partie se voit dans l'interface (bouton « EN
     /// JEU », présence Discord, ligne de statistiques), un essai n'est rien de
     /// tout cela. Les deux se bloquent mutuellement, et c'est le seul point
@@ -109,7 +109,7 @@ pub struct AppState {
 /// (fermeture de fenêtre, demande de sortie) est synchrone : elle ne peut pas
 /// prendre le `RwLock` du state, et c'est pourtant là qu'il faut savoir si le
 /// launcher a le droit de s'éteindre. Toujours mis à jour au même endroit que
-/// le `HashSet` (voir `commands::launch`).
+/// le `HashSet` (voir `play::launch`).
 pub static RUNNING_GAMES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Une partie tourne-t-elle ? Utilisable depuis n'importe où, y compris hors
@@ -180,10 +180,10 @@ impl AppState {
     }
 
     /// Contrôle de plan unique du launcher : les commandes payantes et la
-    /// garde d'écran (`commands::plan`) passent toutes par là, donc elles ne
+    /// garde d'écran (`security::plan_guard`) passent toutes par là, donc elles ne
     /// peuvent pas diverger. Pas de session = pas d'abonnement.
-    pub fn require_plan(&self, plan: &str) -> Result<(), crate::api::error::ApiError> {
-        use crate::api::error::ApiError;
+    pub fn require_plan(&self, plan: &str) -> Result<(), crate::server::error::ApiError> {
+        use crate::server::error::ApiError;
         let session = self.yuyu_session.as_ref().ok_or_else(ApiError::not_signed_in)?;
         let granted = match plan {
             "ultimate" => session.is_ultimate(),

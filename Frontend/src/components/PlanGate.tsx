@@ -12,7 +12,7 @@ import { useT } from '@/i18n'
 /**
  * Garde de plan d'un écran payant.
  *
- * Le verdict vient du backend (`plan_guard`, Backend/src/commands/plan.rs) et
+ * Le verdict vient du backend (`plan_guard`, Backend/src/security/plan_guard.rs) et
  * non du plan affiché dans le store : celui-ci n'est qu'un état de rendu, que
  * les outils de développement suffisent à modifier. Tant que la réponse n'est
  * pas là, la page n'est pas montée — on ne montre pas un écran payant le temps

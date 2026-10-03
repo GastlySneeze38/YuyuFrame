@@ -24,7 +24,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::commands::support::redact;
+use crate::server::support::redact;
 
 /// Lignes de journal gardées. Large : une trace Mixin ou un échec de
 /// résolution Forge tient rarement en vingt lignes, et c'est précisément ce
@@ -402,7 +402,7 @@ fn gpu_from_system() -> Option<String> {
 /// c'est presque toujours elle la coupable, et savoir qu'un mod est désactivé
 /// change la lecture de la trace.
 fn mods_of(instance_id: &str) -> Vec<ModEntry> {
-    let dir = crate::commands::instance::crud::instance_mods_dir(instance_id);
+    let dir = crate::instances::crud::instance_mods_dir(instance_id);
     let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut mods: Vec<ModEntry> = entries
         .flatten()
@@ -520,7 +520,7 @@ pub struct Recovered {
 /// Rend `None` quand le jeu n'a laissé aucune trace : une session orpheline
 /// n'est pas un plantage, c'est le plus souvent quelqu'un qui a fermé son PC.
 pub fn build_recovered(info: Recovered, launcher_version: &str) -> Option<CrashReport> {
-    let game_dir = crate::commands::instance::crud::instance_dir(&info.instance_id);
+    let game_dir = crate::instances::crud::instance_dir(&info.instance_id);
     let trace = game_crash_report(&game_dir, info.started_at)?;
 
     let kind = if is_oom(&trace) {

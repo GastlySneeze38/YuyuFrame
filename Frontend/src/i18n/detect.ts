@@ -9,7 +9,7 @@ import { api } from '@/api/client'
  * 1. **La langue du système** (`navigator.language`, que la webview reprend du
  *    compte Windows). Disponible immédiatement, sans réseau — c'est elle qui
  *    évite que l'interface s'affiche en français une seconde avant de basculer.
- * 2. **Le pays d'où l'on se connecte** (voir `commands/locale.rs`). Il arrive
+ * 2. **Le pays d'où l'on se connecte** (voir `app/locale.rs`). Il arrive
  *    après, et l'emporte : un Windows vendu en anglais dans un pays qui ne
  *    l'est pas est un cas courant, l'inverse beaucoup moins.
  *

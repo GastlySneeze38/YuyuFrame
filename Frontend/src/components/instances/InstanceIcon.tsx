@@ -8,7 +8,7 @@ import type { Instance } from '@/types'
  * composant — sinon le repli par défaut finirait par différer d'un écran à
  * l'autre, et c'est précisément le repli qu'on voit le plus souvent.
  *
- * `icon` est une data URI complète (voir `commands/instance/icon.rs`), donc
+ * `icon` est une data URI complète (voir `instances/icon.rs`), donc
  * rien à charger : elle arrive avec la liste des instances.
  */
 export function InstanceIcon({

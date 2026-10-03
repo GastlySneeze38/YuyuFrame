@@ -11,7 +11,7 @@ import { useT } from '@/i18n'
 
 /**
  * Options du client intégré et partage des options par lien — onglet
- * « Paramètres du jeu » (`commands/instance/options_share.rs`).
+ * « Paramètres du jeu » (`instances/settings/options_share.rs`).
  *
  * Trois blocs, du plus personnel au plus partagé :
  * - le `.properties` du client YuyuFrame en fichier (garder, redonner) ;

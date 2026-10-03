@@ -1,6 +1,6 @@
 //! Reconnaissance de fichiers de mod par extension — centralisée ici pour ne
 //! pas réimplémenter la même comparaison dans chaque fichier qui liste un
-//! dossier `mods/` (commands/instance/*, commands/sync/archive.rs,
+//! dossier `mods/` (instances/*, sync/archive.rs,
 //! minecraft/loaders/*).
 //!
 //! Insensible à la casse : les outils de build produisent presque toujours

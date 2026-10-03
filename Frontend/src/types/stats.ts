@@ -1,5 +1,5 @@
 /**
- * Statistiques de jeu — forme de référence : `Backend/src/stats.rs`.
+ * Statistiques de jeu — forme de référence : `Backend/src/play/stats/mod.rs`.
  *
  * Tout est **local** : ces données n'ont jamais quitté le PC et ne sont plus
  * rattachées au compte YuyuFrame. Se déconnecter ne fait plus disparaître

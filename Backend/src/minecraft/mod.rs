@@ -1,4 +1,3 @@
-pub mod auth;
 pub mod compat;
 pub mod crash;
 pub mod http;

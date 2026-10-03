@@ -18,6 +18,7 @@
 //! sync (`crate::sync::chunks`), ce qui permet d'envoyer une sauvegarde au
 //! serveur sans la reconstruire.
 
+pub mod commands;
 pub mod settings;
 
 use std::collections::HashSet;

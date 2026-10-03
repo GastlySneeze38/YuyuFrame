@@ -347,7 +347,7 @@ export async function updateModsForNewVersion(
 }
 
 /** Recherche Modrinth via le backend (`mods_search_advanced`, voir
- * commands/modrinth.rs) plutôt qu'un fetch direct côté frontend — permet les
+ * instances/modrinth.rs) plutôt qu'un fetch direct côté frontend — permet les
  * filtres avancés (catégories de contenu, environnement client/serveur,
  * licence, open source uniquement, tri) en plus de query/version/loader. */
 export async function fetchModrinthSearch(

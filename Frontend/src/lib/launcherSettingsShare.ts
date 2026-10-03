@@ -1,6 +1,6 @@
 /**
  * Partager les paramètres du launcher par lien (`yuyuframe://settings/…`,
- * `Backend/src/share_link.rs`). Page Paramètres, en-tête : « Partager » et
+ * `Backend/src/share_link/mod.rs`). Page Paramètres, en-tête : « Partager » et
  * « Paramètres optimisés » (le lien du créateur, `CREATOR_SETTINGS_LINK`).
  *
  * **Tout sauf la langue et le stockage** : la langue est celle de chacun, et

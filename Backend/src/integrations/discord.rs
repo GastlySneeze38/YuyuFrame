@@ -121,7 +121,7 @@ fn apply_state(client: &mut DiscordIpcClient, state: &PresenceState) {
             .buttons(vec![download_button(), activity::Button::new("Lancer YuyuFrame", OPEN_URL)]),
         PresenceState::Playing { instance_name, details, started_at, join_url } => {
             // "Rejoindre" seulement si le lancement s'est fait avec une IP de
-            // serveur connue (voir set_playing / commands::launch) — sinon
+            // serveur connue (voir set_playing / play::launch) — sinon
             // (singleplayer, IP inconnue) rien à proposer à un ami qui
             // cliquerait dessus, donc repli sur le même bouton "Lancer" que
             // l'état idle plutôt que de n'afficher qu'un seul bouton.
@@ -222,7 +222,7 @@ fn set_state(state: PresenceState) {
 }
 
 /// Bascule la présence sur "en train de jouer" — appelée au lancement
-/// effectif d'une instance (voir `commands/launch.rs`, juste après le
+/// effectif d'une instance (voir `play/launch.rs`, juste après le
 /// passage de `running_instances` à non-vide). No-op silencieux côté IPC si
 /// la connexion n'est pas encore établie ou si Discord n'est pas lancé —
 /// jamais fatal pour le lancement du jeu lui-même ; l'état est cependant
@@ -232,7 +232,7 @@ fn set_state(state: PresenceState) {
 /// déjà dans une closure `'static`.
 pub fn set_playing(instance_name: String, mc_version: String, server_ip: Option<String>, loader: String) {
     // Bouton "Rejoindre" seulement si on connaît l'IP du serveur rejoint au
-    // lancement (voir `connect_server` dans commands::launch) — sans IP, rien
+    // lancement (voir `connect_server` dans play::launch) — sans IP, rien
     // à proposer à un ami qui cliquerait dessus.
     let join_url = server_ip.and_then(|ip| build_join_url(&ip, &mc_version, &loader));
     set_state(PresenceState::Playing {
@@ -249,7 +249,7 @@ pub fn set_playing(instance_name: String, mc_version: String, server_ip: Option<
 }
 
 /// Revient à l'état "dans le launcher" — appelée quand PLUS AUCUNE instance
-/// ne tourne (voir `commands/launch.rs`, gardé par `AppState::any_running`
+/// ne tourne (voir `play/launch.rs`, gardé par `AppState::any_running`
 /// pour ne pas repasser en idle si une AUTRE instance est encore en cours).
 pub fn set_idle() {
     set_state(PresenceState::Idle);

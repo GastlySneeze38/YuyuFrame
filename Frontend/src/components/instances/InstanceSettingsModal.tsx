@@ -1766,7 +1766,7 @@ function Check({ on, danger }: { on: boolean; danger?: boolean }) {
  * L'icône de l'instance, et de quoi la changer.
  *
  * Le chemin choisi ne sert qu'à l'appel : c'est le Rust qui lit le fichier et
- * range les octets (voir `commands/instance/icon.rs`), donc déplacer ou
+ * range les octets (voir `instances/icon.rs`), donc déplacer ou
  * supprimer l'image d'origine ensuite ne casse rien.
  */
 function IconField({ instance, onUpdate }: { instance: Instance; onUpdate: (i: Instance) => void }) {

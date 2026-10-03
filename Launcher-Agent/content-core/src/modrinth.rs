@@ -170,7 +170,7 @@ pub fn fetch_image_rgba(url: &str) -> Result<(u32, u32, Vec<u8>), String> {
 /// Télécharge un fichier vers destPath.
 ///
 /// Whitelist stricte sur cdn.modrinth.com — même garde que
-/// Backend/src/commands/mods.rs:141 côté Tauri, appliquée ici côté Rust JNI
+/// Backend/src/instances/mods.rs côté Tauri, appliquée ici côté Rust JNI
 /// puisque le téléchargement ne passe plus par le launcher mais par cet agent.
 /// Ce garde-fou-ci reste voulu : CECI écrit un vrai fichier sur le disque du
 /// joueur (resource pack/shader pack potentiellement exécuté par le jeu),
