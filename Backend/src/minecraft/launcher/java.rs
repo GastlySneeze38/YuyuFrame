@@ -79,6 +79,37 @@ pub(super) async fn is_openj9(java: &str) -> bool {
     lower.contains("openj9") || lower.contains("j9 vm")
 }
 
+/// `true` si cette JVM a le ramasse-miettes Shenandoah.
+///
+/// Toutes les distributions ne le compilent pas : les runtimes Mojang 17, 21
+/// et 25 l'ont, Oracle JDK jamais, les Java 8 de Mojang et de Temurin non
+/// plus. Le demander à une JVM qui ne l'a pas l'empêche de démarrer — d'où la
+/// question posée à la JVM elle-même plutôt qu'une liste de vendeurs à tenir.
+///
+/// La réponse est gardée par chemin pour la durée du processus : la sonde ne
+/// coûte donc qu'un `java -version` par JVM, au premier lancement. Un Java
+/// qui ne répond pas vaut « non » — G1 démarre partout.
+///
+/// Ne vaut que pour HotSpot : OpenJ9 accepte en silence n'importe quel
+/// `-XX`, connu ou non.
+pub(super) async fn supports_shenandoah(java: &str) -> bool {
+    static KNOWN: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, bool>>> =
+        std::sync::LazyLock::new(Default::default);
+    if let Some(known) = KNOWN.lock().unwrap().get(java) {
+        return *known;
+    }
+    let supported = matches!(
+        tokio::time::timeout(
+            JAVA_VERSION_TIMEOUT,
+            hidden_command(java).args(["-XX:+UseShenandoahGC", "-version"]).output(),
+        )
+        .await,
+        Ok(Ok(out)) if out.status.success()
+    );
+    KNOWN.lock().unwrap().insert(java.to_string(), supported);
+    supported
+}
+
 pub async fn detect_java_major_version(java: &str) -> Option<u32> {
     let out = tokio::time::timeout(
         JAVA_VERSION_TIMEOUT,

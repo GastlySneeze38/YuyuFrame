@@ -16,9 +16,16 @@ const VENDORS: { id: JvmVendor; label: string }[] = [
 
 const HOTSPOT_GC = [
   { id: 'auto', label: 'Auto' },
+  { id: 'shenandoah', label: 'Shenandoah' },
   { id: 'g1', label: 'G1GC' },
   { id: 'zgc', label: 'ZGC' },
 ]
+
+/** Ce que fait « Auto » côté HotSpot — la règle est dans `pick_gc`
+ * (`Backend/src/minecraft/launcher/jvm_args.rs`), seule à connaître le nombre
+ * de cœurs et la JVM réellement obtenue. Ici on ne fait que l'annoncer. */
+const AUTO_GC_HINT =
+  'Auto prend Shenandoah (générationnel à partir de Java 25), et G1GC sur une machine à 4 cœurs logiques ou moins, en Java 8, ou quand la JVM n\'a pas Shenandoah.'
 
 // `metronome` volontairement absent : la JVM OpenJ9 de Windows le refuse au
 // démarrage (JVMJ9VM007E), il n'existe que sur les builds temps réel.
@@ -112,10 +119,16 @@ export function GridModal({ draft, onChange, instanceRam, linked, onManageLinks,
           )}
         </Field>
 
-        <Field label="Ramasse-miettes">
+        <Field
+          label="Ramasse-miettes"
+          hint={family !== 'openj9' && draft.gc_policy === 'auto' ? AUTO_GC_HINT : undefined}
+        >
           <Segmented options={gcOptions} value={draft.gc_policy} onChange={(v) => onChange('gc_policy', v)} />
           {draft.gc_policy === 'zgc' && ram < 6144 && (
             <Warn>ZGC exige 6 Go et Java 21+ — remplacé automatiquement par G1GC en dessous.</Warn>
+          )}
+          {draft.gc_policy === 'shenandoah' && family !== 'openj9' && (
+            <Warn>Shenandoah exige Java 17+ et une JVM qui l'embarque — remplacé automatiquement par G1GC sinon.</Warn>
           )}
         </Field>
 
@@ -203,7 +216,8 @@ export function GridSummary({ draft, instanceRam, onOpen }: {
   // minuscules, seuls les sigles HotSpot se mettent en capitales.
   const gc = draft.gc_policy === 'auto' ? 'GC auto'
     : draft.gc_policy === 'g1' ? 'G1GC'
-      : draft.gc_policy === 'zgc' ? 'ZGC' : draft.gc_policy
+      : draft.gc_policy === 'zgc' ? 'ZGC'
+        : draft.gc_policy === 'shenandoah' ? 'Shenandoah' : draft.gc_policy
 
   return (
     <button

@@ -689,10 +689,13 @@ export function effectiveGc(gcPolicy: string, family: JvmFamily, ...raws: string
   // Les policies OpenJ9 (`gencon`, `optthruput`...) sont des noms propres en
   // minuscules, seuls les sigles HotSpot se mettent en capitales.
   if (gcPolicy !== 'auto') {
-    const label = gcPolicy === 'g1' ? 'G1GC' : gcPolicy === 'zgc' ? 'ZGC' : gcPolicy
+    const label = gcPolicy === 'g1' ? 'G1GC' : gcPolicy === 'zgc' ? 'ZGC' : gcPolicy === 'shenandoah' ? 'Shenandoah' : gcPolicy
     return { label, fromFlags: false }
   }
-  return { label: family === 'openj9' ? 'gencon' : 'G1GC ou ZGC', fromFlags: false }
+  // Côté HotSpot, « Auto » dépend aussi du nombre de cœurs et de la JVM
+  // obtenue (`pick_gc` côté Rust) : l'interface ne peut annoncer que les deux
+  // issues possibles.
+  return { label: family === 'openj9' ? 'gencon' : 'Shenandoah ou G1GC', fromFlags: false }
 }
 
 export const ARGS_MODES: { id: JvmArgsMode; label: string; sub: string }[] = [

@@ -16,9 +16,9 @@ use super::agent_deploy::launcher_agent_dir;
 use super::agents::{setup_launcher_agent, setup_p2p, AgentSetup};
 use super::appcds::appcds_jvm_args;
 use super::classpath::{artifact_path, dedup_classpath, download_file, download_verified, extract_natives, file_matches, should_download_library};
-use super::java::{ensure_java, is_openj9, java_requirement};
+use super::java::{ensure_java, is_openj9, java_requirement, supports_shenandoah};
 use super::legacy_lwjgl3::{compat_jar as legacy_compat_jar, natives_dir_name, swap_libraries, uses_legacy_lwjgl3};
-use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, parse_user_jvm_args, resolve_auto_vendor, JvmVendor};
+use super::jvm_args::{build_game_args, build_jvm_args, ensure_gpu_preference, extract_mojang_jvm_args, needs_shenandoah_probe, parse_user_jvm_args, resolve_auto_vendor, GcEnv, JvmVendor};
 #[cfg(target_os = "windows")]
 use super::jvm_args::{timeBeginPeriod, timeEndPeriod};
 use super::loader_setup::{setup_fabric, setup_forge, setup_neoforge, setup_quilt, LoaderSetup};
@@ -584,8 +584,9 @@ pub async fn download_and_launch(
     // téléchargé, JAVA_HOME prioritaire…) ; générer des `-Xgcpolicy:*` pour
     // une HotSpot empêche la JVM de démarrer, tout court.
     let jvm_vendor = effective_jvm_vendor(&java, jvm_vendor).await;
+    let gc_env = gc_env(&java, java_major, jvm_vendor, gc_policy).await;
 
-    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy, jvm_extra_args, jvm_args_mode);
+    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy, jvm_extra_args, jvm_args_mode, gc_env);
     // P1-6 (Phase 6) : message de diagnostic conscient du vendeur. Lu dans
     // les drapeaux RÉELLEMENT produits plutôt que redéduit des mêmes
     // conditions que build_jvm_args — depuis l'écran "Configuration JVM",
@@ -1014,8 +1015,9 @@ pub async fn preview_jvm_config(
     // Même correction que dans le lancement réel — sans quoi l'aperçu des
     // paramètres afficherait des drapeaux que le jeu n'utilisera jamais.
     let jvm_vendor = effective_jvm_vendor(&java, jvm_vendor).await;
+    let gc_env = gc_env(&java, java_major, jvm_vendor, gc_policy).await;
 
-    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy, jvm_extra_args, jvm_args_mode);
+    let mut args = build_jvm_args(ram_mb, &natives_dir, java_major, jvm_vendor, gc_policy, jvm_extra_args, jvm_args_mode, gc_env);
     args.extend(extract_mojang_jvm_args(&details, &natives_dir));
     // Classpath encore inconnu à ce stade (dépend des libs/loader/mods
     // résolus au lancement réel, pas nécessaire pour ce qu'affiche cet
@@ -1043,6 +1045,19 @@ pub async fn preview_jvm_config(
 /// les drapeaux sont incompatibles avec les autres (Temurin, Graal CE et une
 /// JVM personnalisée partagent tous la syntaxe HotSpot `-XX:*`). Le cas
 /// courant ne paie donc aucun processus supplémentaire.
+/// Ce que la grille doit savoir de la machine et de la JVM résolue (voir
+/// `jvm_args::GcEnv`). Partagé par le lancement et son aperçu, pour que
+/// l'écran montre le collecteur que le jeu aura réellement.
+///
+/// La JVM n'est interrogée que si sa réponse peut changer le collecteur
+/// choisi : un G1 imposé, ou une machine à quatre cœurs, ne paient rien.
+async fn gc_env(java: &str, java_major: u32, vendor: JvmVendor, gc_policy: &str) -> GcEnv {
+    let logical_cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let shenandoah = needs_shenandoah_probe(java_major, vendor, gc_policy, logical_cores)
+        && supports_shenandoah(java).await;
+    GcEnv { logical_cores, shenandoah }
+}
+
 async fn effective_jvm_vendor(java: &str, requested: JvmVendor) -> JvmVendor {
     if requested != JvmVendor::OpenJ9 {
         return requested;
