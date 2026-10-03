@@ -4,7 +4,7 @@
 // publique embarquée. Serveur en panne, base indisponible ou pas d'Internet :
 // le joueur garde ce qu'il a payé jusqu'à `exp`, puis 7 jours de grâce.
 //
-// Algorithme de référence : Server/LauncherAPI/src/license.rs (`verify`).
+// Algorithme de référence : Server/LauncherAPI/src/billing/license.rs (`verify`).
 // Format : base64url(JSON) « . » base64url(signature des octets du JSON).
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Une instance synchronisée, telle que le serveur la décrit. Mêmes champs
-/// que `SyncInstance` de `LauncherAPI/src/routes/sync.rs` : ce type ne fait
+/// que `SyncInstance` de `LauncherAPI/src/launcher/sync.rs` : ce type ne fait
 /// que traverser, et en inventer une forme locale garantirait qu'elles
 /// divergent un jour.
 #[derive(Serialize, Deserialize, Clone)]

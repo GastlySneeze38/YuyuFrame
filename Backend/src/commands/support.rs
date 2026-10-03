@@ -1,6 +1,6 @@
 //! Tickets de support ouverts depuis le launcher.
 //!
-//! Tout passe par `/v1/support` (Server/LauncherAPI/src/routes/support.rs) :
+//! Tout passe par `/v1/support` (Server/LauncherAPI/src/launcher/support.rs) :
 //! les tickets vivent dans la base du back-office, qui ouvre à chacun un salon
 //! Discord privé et y recopie les messages. Les réponses de l'équipe, qu'elles
 //! viennent de Discord ou du back-office, reviennent par ces mêmes routes.
@@ -8,7 +8,7 @@
 //! Les corps de réponse traversent tels quels vers le frontend : le launcher
 //! n'interprète aucun champ, et recopier ici la forme des tickets ne ferait
 //! qu'ajouter un endroit à mettre à jour quand le serveur en gagne un. La
-//! forme de référence est celle de `routes/support.rs`, reprise dans
+//! forme de référence est celle de `launcher/support.rs`, reprise dans
 //! `Frontend/src/types/support.ts`.
 
 use serde_json::{json, Value};

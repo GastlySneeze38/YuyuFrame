@@ -6,7 +6,7 @@
 //! un deuxième poste.
 //!
 //! Le compte YuyuFrame suffit à signer : le pseudo affiché sur le site est lu
-//! côté serveur, jamais envoyé d'ici (voir `LauncherAPI/src/routes/reviews.rs`).
+//! côté serveur, jamais envoyé d'ici (voir `LauncherAPI/src/launcher/reviews.rs`).
 
 use serde_json::{json, Value};
 

@@ -7,7 +7,7 @@ use std::time::Duration;
 /// ID de l'application Discord YuyuFrame (https://discord.com/developers/applications).
 const DISCORD_APP_ID: &str = "1357094158103347301";
 
-/// Même URL que `DOWNLOAD_URL` dans `Server/LauncherAPI/src/routes/join.rs` —
+/// Même URL que `DOWNLOAD_URL` dans `Server/LauncherAPI/src/web/join.rs` —
 /// dupliquée ici plutôt que partagée (crates séparées, pas de dépendance
 /// entre le launcher et le serveur), à garder synchronisée manuellement si
 /// jamais elle change. Le site plutôt qu'un lien GitHub direct : meilleure
@@ -16,7 +16,7 @@ const DOWNLOAD_URL: &str = "https://yuyuframe.eu";
 
 /// Page-pont LauncherAPI qui tente `yuyuframe://` nu (ramène juste le
 /// launcher au premier plan) et bascule sur `DOWNLOAD_URL` si rien ne s'est
-/// ouvert — voir `Server/LauncherAPI/src/routes/open.rs`.
+/// ouvert — voir `Server/LauncherAPI/src/web/open.rs`.
 const OPEN_URL: &str = "https://api.yuyuframe.eu/open";
 
 /// Coupe tout le pipeline Discord (Rich Presence + funnel "Rejoindre") sans retirer le code —
@@ -65,7 +65,7 @@ enum PresenceState {
 }
 
 /// Base du site de redirection "Rejoindre" (LauncherAPI, route `/join/{payload}`
-/// — voir `LauncherAPI/src/routes/join.rs`) : Discord n'accepte que des URLs
+/// — voir `LauncherAPI/src/web/join.rs`) : Discord n'accepte que des URLs
 /// `https://` sur les boutons d'activité, jamais un schéma custom directement
 /// (voir `yuyuframe://`, enregistré côté OS pour le launcher lui-même) — cette
 /// page fait le pont entre les deux.

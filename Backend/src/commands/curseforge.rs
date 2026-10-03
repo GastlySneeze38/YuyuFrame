@@ -1,4 +1,4 @@
-// Passe par le proxy LauncherAPI (`Server/LauncherAPI/src/routes/curseforge.rs`)
+// Passe par le proxy LauncherAPI (`Server/LauncherAPI/src/launcher/curseforge.rs`)
 // — la clé CurseForge n'existe que côté serveur, jamais ici. Seules les
 // métadonnées (recherche, détails, liste des fichiers) transitent par ce
 // proxy ; le téléchargement du fichier lui-même se fait ensuite en direct
