@@ -425,6 +425,12 @@ export const api = {
      *  (`lib/launcherSettingsShare.ts`). */
     build: (kind: 'settings', text: string) => invoke<string[]>('share_link_build', { kind, text }),
     read: (kind: 'settings', text: string) => invoke<string>('share_link_read', { kind, text }),
+    /** Les mêmes pour un contenu qui n'est pas du texte (`skin` : des pixels,
+     *  `lib/skinLink.ts`). */
+    buildBytes: (kind: 'skin', data: Uint8Array) =>
+      invoke<string[]>('share_link_build_bytes', { kind, data: Array.from(data) }),
+    readBytes: async (kind: 'skin', text: string) =>
+      Uint8Array.from(await invoke<number[]>('share_link_read_bytes', { kind, text })),
   },
 
   // Options du jeu et du client intégré (`commands/instance/options_share.rs`) :
@@ -556,6 +562,9 @@ export const api = {
     checkUrl: (url: string) => invoke<CheckedSkin>('skin_check_url', { url }),
     /** Range un PNG du disque. Ce qu'il devient dépend du compte — voir `apply`. */
     importFile: (sourcePath: string) => invoke<CheckedSkin>('skin_import_file', { sourcePath }),
+    /** Lit un PNG du disque comme base de dessin, sans le ranger : rend son
+     *  data URI validé. */
+    readFile: (sourcePath: string) => invoke<string>('skin_read_file', { sourcePath }),
     /**
      * Range un PNG produit par l'éditeur. Il devient un skin importé comme un
      * autre ; le modèle vient de l'éditeur, seul à le connaître.

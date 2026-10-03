@@ -191,8 +191,9 @@ pub fn share_link_status(text: String) -> Result<LinkStatus, String> {
 /// réglages du launcher vivent dans son magasin persisté, pas en Rust. Les
 /// autres sortes (`instance`, `options`) ont leurs propres commandes, qui
 /// valident côté Rust — elles ne passent jamais par ces deux-là.
-const UI_KINDS: &[&str] = &["settings"];
-/// Un texte de réglages fait quelques centaines d'octets.
+const UI_KINDS: &[&str] = &["settings", "skin"];
+/// Un texte de réglages fait quelques centaines d'octets, un skin 64×64 en
+/// pixels bruts 16 Ko.
 const UI_MAX_TEXT: usize = 64 * 1024;
 
 fn check_ui_kind(kind: &str) -> Result<(), String> {
@@ -217,6 +218,27 @@ pub fn share_link_build(kind: String, text: String) -> Result<Vec<String>, Strin
 pub fn share_link_read(kind: String, text: String) -> Result<String, String> {
     check_ui_kind(&kind)?;
     let content = read_text(&text, &kind)?;
+    if content.len() > UI_MAX_TEXT {
+        return Err("Lien de partage trop volumineux".into());
+    }
+    Ok(content)
+}
+
+/// Les mêmes, pour une sorte dont le contenu n'est pas du texte (`skin` : des
+/// pixels, `Frontend/src/lib/skinLink.ts`).
+#[tauri::command]
+pub fn share_link_build_bytes(kind: String, data: Vec<u8>) -> Result<Vec<String>, String> {
+    check_ui_kind(&kind)?;
+    if data.len() > UI_MAX_TEXT {
+        return Err("Trop volumineux pour un lien".into());
+    }
+    Ok(build(&kind, &data)?)
+}
+
+#[tauri::command]
+pub fn share_link_read_bytes(kind: String, text: String) -> Result<Vec<u8>, String> {
+    check_ui_kind(&kind)?;
+    let content = read(&text, &kind)?;
     if content.len() > UI_MAX_TEXT {
         return Err("Lien de partage trop volumineux".into());
     }
@@ -543,6 +565,11 @@ mod tests {
         assert_eq!(share_link_read("settings".into(), links.join("\n")).unwrap(), "closeOnLaunch=true");
         assert!(share_link_build("instance".into(), "x".into()).is_err());
         assert!(share_link_read("options".into(), links.join("\n")).is_err());
+
+        let pixels = incompressible(5_000);
+        let links = share_link_build_bytes("skin".into(), pixels.clone()).unwrap();
+        assert_eq!(share_link_read_bytes("skin".into(), links.join("\n")).unwrap(), pixels);
+        assert!(share_link_build_bytes("instance".into(), pixels).is_err());
     }
 
     /// Décode un lien (ou ses parties) pour voir ce qu'il contient :

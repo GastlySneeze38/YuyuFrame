@@ -13,9 +13,9 @@
 
 export const SHARE_LINK_SCHEME = 'yuyuframe://'
 
-export type ShareLinkKind = 'instance' | 'options' | 'settings'
+export type ShareLinkKind = 'instance' | 'options' | 'settings' | 'skin'
 
-const KINDS: ShareLinkKind[] = ['instance', 'options', 'settings']
+const KINDS: ShareLinkKind[] = ['instance', 'options', 'settings', 'skin']
 
 /** Au-delà, un message Discord standard refuse le lien. */
 export const DISCORD_MESSAGE_LIMIT = 2000

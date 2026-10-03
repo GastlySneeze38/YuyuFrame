@@ -13,7 +13,10 @@ import { Button } from '@/components/ui/Button'
 import { ButtonSpinner } from '@/components/ui/ButtonSpinner'
 import { ModalShell } from '@/components/ui/ModalShell'
 import { SkinFace } from '@/components/ui/SkinFace'
+import { SkinBaseModal, SkinShareModal } from '@/components/skins/SkinBase'
+import type { LoadSkinBase } from '@/components/skins/SkinBase'
 import { bakeSkin } from '@/lib/skinBake'
+import { clearPendingSkinLink, encodeSkin, looksSlim, onPendingSkinLink, pendingSkinLink } from '@/lib/skinLink'
 import { showError } from '@/stores/useErrorToast'
 import { skinPreview } from '@/lib/skinCache'
 import { putSkinDraft } from '@/lib/skinDraft'
@@ -89,7 +92,7 @@ interface Spot {
 }
 
 /** Ce qui a produit une étape — affiché tel quel dans l'historique. */
-type StepLabel = 'start' | 'pencil' | 'eraser' | 'bucket' | 'blank' | 'account'
+type StepLabel = 'start' | 'pencil' | 'eraser' | 'bucket' | 'blank' | 'account' | 'import'
 
 interface HistoryEntry {
   /** Identifiant stable, qui ne bouge pas quand l'historique est tronqué —
@@ -195,6 +198,16 @@ export default function SkinEditor() {
   const [hover, setHover] = useState<{ part: PartId | null; pixel: Pixel } | null>(null)
   const [showSteps, setShowSteps] = useState(false)
   const [showPoses, setShowPoses] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  /** Fenêtre « Partir d'une base » : `null` fermée, sinon le lien à y
+   *  déposer (vide quand on l'ouvre par son bouton). Un lien de skin cliqué
+   *  attend dans `lib/skinLink.ts` — l'éditeur n'était peut-être pas monté. */
+  const [baseLink, setBaseLink] = useState<string | null>(() => pendingSkinLink() || null)
+  useEffect(() => onPendingSkinLink(setBaseLink), [])
+  const closeBase = useCallback(() => {
+    clearPendingSkinLink()
+    setBaseLink(null)
+  }, [])
   /** Debout par défaut : c'est la pose sur laquelle on dessine le plus
    *  naturellement, membres dégagés et face visible. */
   const [pose, setPose] = useState<PoseId>('standing')
@@ -1185,7 +1198,7 @@ export default function SkinEditor() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
-      if (target?.tagName === 'INPUT') return
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return
       // La modale des étapes a ses propres touches : lui laisser la main
       // évite qu'une flèche change d'étape ET de taille de pinceau.
       if (showSteps) return
@@ -1245,6 +1258,44 @@ export default function SkinEditor() {
     },
     [account, clearPreview, commit, persist, pushState],
   )
+
+  /**
+   * Partir d'une base venue d'ailleurs : pseudo, fichier ou lien
+   * (`components/skins/SkinBase.tsx`). Elle remplace le dessin et devient une
+   * étape de l'historique, donc on peut revenir à ce qu'il y avait avant.
+   *
+   * Le modèle est posé tout de suite sur le personnage, sans attendre l'effet
+   * qui suit `variant` : `loadSkin` devine le sien en chargeant, et l'effet ne
+   * repasse pas si la valeur n'a pas changé.
+   */
+  const loadBase = useCallback<LoadSkinBase>(
+    async (dataUri, model) => {
+      const viewer = viewerRef.current
+      if (!viewer || !skinCtxRef.current) return
+      clearPreview()
+      await viewer.loadSkin(dataUri)
+      const ctx = viewer.skinCanvas.getContext('2d', { willReadFrequently: true })
+      skinCtxRef.current = ctx
+      textureRef.current = viewer.playerObject.skin.map
+      const next: SkinVariant =
+        model ?? (ctx && looksSlim(ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE)) ? 'slim' : 'classic')
+      viewer.playerObject.skin.modelType = next === 'slim' ? 'slim' : 'default'
+      setVariant(next)
+      commit()
+      persist()
+      setDirty(true)
+      pushState('import')
+    },
+    [clearPreview, commit, persist, pushState],
+  )
+
+  /** Le dessin en cours, en lien : les pixels, pas le PNG (`lib/skinLink.ts`). */
+  const makeLink = useCallback(async () => {
+    const ctx = skinCtxRef.current
+    if (!ctx) return []
+    const image = cleanRef.current ?? ctx.getImageData(0, 0, SKIN_SIZE, SKIN_SIZE)
+    return api.shareLink.buildBytes('skin', encodeSkin(image, variant === 'slim'))
+  }, [variant])
 
   /** Le PNG sur le disque, à l'emplacement que l'utilisateur choisit. */
   const download = useCallback(async () => {
@@ -1601,7 +1652,7 @@ export default function SkinEditor() {
           />
           {mode === '3d' && <HoverChip hover={hover} />}
 
-          {/* Trois actions qui concernent le skin entier, pas le pinceau :
+          {/* Les actions qui concernent le skin entier, pas le pinceau :
               leur place est sur la vue, pas dans les cartes d'outils. Elles
               sont hors du canevas, donc un clic ne part jamais faire tourner
               la caméra. */}
@@ -1610,6 +1661,14 @@ export default function SkinEditor() {
               <ViewAction label={t('skinEditor.download')} onClick={() => void download()}>
                 <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
                 <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </ViewAction>
+              <ViewAction label={t('skinEditor.shareLink')} onClick={() => setShowShare(true)}>
+                <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+                <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+              </ViewAction>
+              <ViewAction label={t('skinEditor.fromBase')} onClick={() => setBaseLink('')}>
+                <path d="M12 21V9m0 0 4 4m-4-4-4 4" />
+                <path d="M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2" />
               </ViewAction>
               <ViewAction label={t('skinEditor.fromCatalog')} onClick={openCatalog}>
                 <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -1640,6 +1699,16 @@ export default function SkinEditor() {
             onClose={() => setShowSteps(false)}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {baseLink !== null && ready && (
+          <SkinBaseModal initialLink={baseLink || undefined} onLoad={loadBase} onClose={closeBase} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showShare && <SkinShareModal make={makeLink} onClose={() => setShowShare(false)} />}
       </AnimatePresence>
 
       <AnimatePresence>

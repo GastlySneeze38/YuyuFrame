@@ -420,6 +420,23 @@ pub async fn skin_import_file(source_path: String) -> Result<CheckedSkin, String
     })
 }
 
+/// Lit un PNG du disque comme **base de dessin** pour l'éditeur, sans le
+/// ranger : contrairement à `skin_import_file`, rien n'entre dans
+/// `skins/local/` — ce fichier n'est pas un skin qu'on s'apprête à porter,
+/// seulement un point de départ. Il n'y sera rangé que si le dessin est
+/// enregistré (`skin_import_bytes`).
+#[tauri::command]
+pub async fn skin_read_file(source_path: String) -> Result<String, String> {
+    let bytes = tokio::fs::read(&source_path)
+        .await
+        .map_err(|e| format!("Lecture du fichier : {}", e))?;
+    if bytes.len() > MAX_SKIN_BYTES {
+        return Err("Fichier trop volumineux pour un skin (max 1 Mo)".to_string());
+    }
+    validate_skin_png(&bytes)?;
+    Ok(to_data_uri(&bytes))
+}
+
 /// Skin sorti de l'éditeur : des octets, pas un chemin sur le disque.
 ///
 /// Il devient un skin importé comme un autre — même dossier, même

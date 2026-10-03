@@ -15,6 +15,7 @@ import { ShareImportModal } from '@/components/instances/ShareImportModal'
 import { OptionsLinkModal } from '@/components/instances/OptionsShare'
 import { SettingsLinkModal } from '@/components/settings/SettingsShare'
 import { shareLinkKind, type ShareLinkKind } from '@/lib/shareLink'
+import { pushPendingSkinLink } from '@/lib/skinLink'
 import { useStore, type Lang } from '@/stores/useStore'
 import { ipLanguage, systemLanguage } from '@/i18n/detect'
 import { useModalQueue } from '@/stores/useModalQueue'
@@ -136,7 +137,13 @@ export default function App() {
   // `ShareLinkInput` compte ce qu'il a et ce qui manque).
   const handleDeepLink = (url: string) => {
     const kind = shareLinkKind(url)
-    if (kind) setShareLink((prev) => (prev?.kind === kind ? { kind, link: `${prev.link}\n${url}` } : { kind, link: url }))
+    // Un skin ne s'ouvre pas dans une fenêtre d'ici : il part dans l'éditeur,
+    // qui le propose comme base de dessin (`lib/skinLink.ts`). Si l'éditeur
+    // est déjà ouvert, on n'y renavigue pas — ça changerait de compte.
+    if (kind === 'skin') {
+      pushPendingSkinLink(url)
+      if (!window.location.href.includes('/skins/editor')) navigate('/skins/editor')
+    } else if (kind) setShareLink((prev) => (prev?.kind === kind ? { kind, link: `${prev.link}\n${url}` } : { kind, link: url }))
     else setJoinRequest(parseJoinUrl(url))
   }
   // Calculé une seule fois au montage (avant tout re-render) — comparé puis
