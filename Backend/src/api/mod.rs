@@ -12,6 +12,7 @@
 
 pub mod error;
 pub mod fleet;
+pub mod hardware;
 pub mod license;
 
 use error::{ApiError, ApiResult};
@@ -36,13 +37,16 @@ const REFRESH_MARGIN_SECS: i64 = 60;
 
 /// Identifie cette installation auprès du serveur : la liste « Appareils
 /// connectés » du compte, et le pilotage de flotte (version, OS), s'en
-/// servent. `device_id` est le même identifiant anonyme que les statistiques.
+/// servent. `device_id` est le même identifiant anonyme que les statistiques ;
+/// `hardware_id` est l'empreinte du poste pour l'anti-alt (`hardware.rs`),
+/// absente quand le système n'en donne pas.
 pub fn device_info() -> Value {
     serde_json::json!({
         "device_id": crate::integrations::analytics::install_id(),
         "device_name": hostname(),
         "os": std::env::consts::OS,
         "launcher_version": env!("CARGO_PKG_VERSION"),
+        "hardware_id": hardware::hardware_id(),
     })
 }
 
