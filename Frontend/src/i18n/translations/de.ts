@@ -336,6 +336,19 @@ export const de: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'E-Mail-Adresse',
+    emailPlaceholder: 'du@beispiel.de',
+    loginField: 'Benutzername oder E-Mail',
+    forgot: 'Passwort vergessen?',
+    forgotTitle: 'Passwort vergessen',
+    forgotDescription: 'Gib deinen Benutzernamen oder deine E-Mail an: Hat das Konto eine bestätigte Adresse, wird ein Code dorthin gesendet.',
+    forgotSend: 'Code anfordern',
+    resetDescription: 'Gib den per E-Mail erhaltenen Code ein und wähle ein neues Passwort.',
+    resetCode: '6-stelliger Code',
+    newPassword: 'Neues Passwort',
+    resetSubmit: 'Passwort ändern',
+    resetDone: 'Passwort geändert. Melde dich mit dem neuen an.',
+    backToLogin: 'Zurück zur Anmeldung',
     passwordsDontMatch: 'Die Passwörter stimmen nicht überein.',
     passwordTooShort: 'Das Passwort muss mindestens 4 Zeichen lang sein.',
     cannotContactBackend: 'Das Backend ist nicht erreichbar.',
@@ -1719,8 +1732,25 @@ export const de: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Bestätige deine E-Mail-Adresse',
+    description: 'Ein 6-stelliger Code wurde an {email} gesendet. Gib ihn ein, um fortzufahren.',
+    needAddress: 'Dein Konto braucht eine bestätigte E-Mail-Adresse. Gib sie an: Ein Code wird dorthin gesendet.',
+    changeDescription: 'Gib die richtige Adresse an: Ein neuer Code wird dorthin gesendet.',
+    code: '6-stelliger Code',
+    submit: 'Bestätigen',
+    resend: 'Code erneut senden',
+    resent: 'Code erneut gesendet',
+    changeAddress: 'Adresse ändern',
+    newAddress: 'E-Mail-Adresse',
+    passwordField: 'Passwort des Kontos',
+    sendCode: 'Code senden',
+    logout: 'Abmelden',
+    verified: 'Adresse bestätigt',
+  },
+
   password: {
-    title: 'Passwort ändern',
+    title:'Passwort ändern',
     forcedTitle: 'Wähle ein neues Passwort',
     forcedDescription:
       'Der Support hat dir ein vorläufiges Passwort gegeben. Wähle ein neues, um wieder Zugriff auf dein Konto zu bekommen.',

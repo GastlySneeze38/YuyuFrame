@@ -337,6 +337,19 @@ export const pt: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'Endereço de e-mail',
+    emailPlaceholder: 'voce@exemplo.com',
+    loginField: 'Nome de usuário ou e-mail',
+    forgot: 'Esqueceu a senha?',
+    forgotTitle: 'Senha esquecida',
+    forgotDescription: 'Informe seu nome de usuário ou e-mail: se a conta tiver um endereço confirmado, um código será enviado para ele.',
+    forgotSend: 'Receber um código',
+    resetDescription: 'Digite o código recebido por e-mail e escolha uma nova senha.',
+    resetCode: 'Código de 6 dígitos',
+    newPassword: 'Nova senha',
+    resetSubmit: 'Alterar a senha',
+    resetDone: 'Senha alterada. Entre com a nova.',
+    backToLogin: 'Voltar ao login',
     passwordsDontMatch: 'As senhas não coincidem.',
     passwordTooShort: 'A senha precisa ter pelo menos 4 caracteres.',
     cannotContactBackend: 'Não foi possível acessar o backend.',
@@ -1720,8 +1733,25 @@ export const pt: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Confirme seu endereço de e-mail',
+    description: 'Um código de 6 dígitos foi enviado para {email}. Digite-o para continuar.',
+    needAddress: 'Sua conta precisa de um endereço de e-mail confirmado. Informe-o: um código será enviado para ele.',
+    changeDescription: 'Informe o endereço correto: um novo código será enviado para ele.',
+    code: 'Código de 6 dígitos',
+    submit: 'Confirmar',
+    resend: 'Reenviar o código',
+    resent: 'Código reenviado',
+    changeAddress: 'Alterar endereço',
+    newAddress: 'Endereço de e-mail',
+    passwordField: 'Senha da conta',
+    sendCode: 'Enviar o código',
+    logout: 'Sair',
+    verified: 'Endereço confirmado',
+  },
+
   password: {
-    title: 'Alterar a senha',
+    title:'Alterar a senha',
     forcedTitle: 'Escolha uma nova senha',
     forcedDescription:
       'O suporte lhe deu uma senha provisória. Escolha uma nova para retomar sua conta.',

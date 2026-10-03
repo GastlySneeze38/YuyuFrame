@@ -6,6 +6,7 @@ import { UpdateChecker } from '@/components/UpdateChecker'
 import { ErrorToast } from '@/components/ui/ErrorToast'
 import { FleetNotices } from '@/components/FleetNotices'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
+import { EmailVerifyModal } from '@/components/account/EmailVerifyModal'
 import { PageTransition } from '@/components/PageTransition'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { PlanGate } from '@/components/PlanGate'
@@ -114,6 +115,7 @@ export default function App() {
   // qu'il n'est pas changé (le serveur refuse tout le reste).
   const applyDetectedLanguage = useStore((s) => s.applyDetectedLanguage)
   const passwordResetRequired = useStore((s) => s.yuyuPasswordResetRequired)
+  const emailVerificationRequired = useStore((s) => s.yuyuSignedIn && s.yuyuEmailVerificationRequired)
   // Les trois modales de démarrage ne sont plus des drapeaux locaux : elles
   // sont déposées dans la file, qui décide de l'ordre et n'en montre qu'une
   // à la fois (voir stores/useModalQueue.ts).
@@ -545,6 +547,9 @@ export default function App() {
       )}
       <FleetNotices />
       {passwordResetRequired && <PasswordChangeModal forced onClose={() => {}} />}
+      {/* Après le mot de passe provisoire, jamais en même temps : le serveur
+          les réclame dans cet ordre. */}
+      {emailVerificationRequired && !passwordResetRequired && <EmailVerifyModal forced onClose={() => {}} />}
       <div className="flex-1 overflow-hidden" style={{ filter: `brightness(${brightness / 100})` }}>
         {/* Suspense À L'INTÉRIEUR de la transition, jamais au-dessus : une
             page chargée à la demande suspend le rendu, et un Suspense placé

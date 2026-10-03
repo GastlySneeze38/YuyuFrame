@@ -336,6 +336,19 @@ export const it: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'Indirizzo e-mail',
+    emailPlaceholder: 'tu@esempio.it',
+    loginField: 'Nome utente o e-mail',
+    forgot: 'Password dimenticata?',
+    forgotTitle: 'Password dimenticata',
+    forgotDescription: 'Indica il tuo nome utente o la tua e-mail: se l’account ha un indirizzo confermato, vi viene inviato un codice.',
+    forgotSend: 'Ricevi un codice',
+    resetDescription: 'Inserisci il codice ricevuto via e-mail e scegli una nuova password.',
+    resetCode: 'Codice di 6 cifre',
+    newPassword: 'Nuova password',
+    resetSubmit: 'Cambia la password',
+    resetDone: 'Password cambiata. Accedi con quella nuova.',
+    backToLogin: 'Torna all’accesso',
     passwordsDontMatch: 'Le password non coincidono.',
     passwordTooShort: 'La password deve avere almeno 4 caratteri.',
     cannotContactBackend: 'Impossibile raggiungere il backend.',
@@ -1719,8 +1732,25 @@ export const it: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Conferma il tuo indirizzo e-mail',
+    description: 'Un codice di 6 cifre è stato inviato a {email}. Inseriscilo per continuare.',
+    needAddress: 'Il tuo account ha bisogno di un indirizzo e-mail confermato. Indicalo: vi sarà inviato un codice.',
+    changeDescription: 'Indica l’indirizzo corretto: vi sarà inviato un nuovo codice.',
+    code: 'Codice di 6 cifre',
+    submit: 'Conferma',
+    resend: 'Invia di nuovo il codice',
+    resent: 'Codice inviato di nuovo',
+    changeAddress: 'Cambia indirizzo',
+    newAddress: 'Indirizzo e-mail',
+    passwordField: 'Password dell’account',
+    sendCode: 'Invia il codice',
+    logout: 'Disconnetti',
+    verified: 'Indirizzo confermato',
+  },
+
   password: {
-    title: 'Cambia la password',
+    title:'Cambia la password',
     forcedTitle: 'Scegli una nuova password',
     forcedDescription:
       'Il supporto ti ha dato una password provvisoria. Scegline una nuova per riprendere il tuo account.',

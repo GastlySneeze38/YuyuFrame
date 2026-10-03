@@ -69,6 +69,11 @@ export function showApiError(e: unknown, unreachableMessage: string): void {
     useStore.getState().setYuyuPasswordResetRequired(true)
     return
   }
+  // Même principe pour l'e-mail à confirmer : App.tsx ouvre la fenêtre du code.
+  if (errorCode(e) === 'email_verification_required') {
+    useStore.getState().setYuyuEmailVerification(true)
+    return
+  }
   if (isSessionExpiredError(e)) {
     useStore.getState().clearYuyuSession()
     useErrorToast.getState().show(t('common.sessionExpired'), 'notice')

@@ -45,6 +45,12 @@ interface Store {
    * toute autre action (le serveur refuse le reste). */
   yuyuPasswordResetRequired: boolean
   setYuyuPasswordResetRequired: (required: boolean) => void
+  /** E-mail absent ou non confirmé : saisie du code imposée avant toute
+   * autre action (le serveur refuse le reste). */
+  yuyuEmailVerificationRequired: boolean
+  /** Adresse à laquelle le code de confirmation a été envoyé. */
+  yuyuPendingEmail: string | null
+  setYuyuEmailVerification: (required: boolean, pendingEmail?: string | null) => void
   setYuyuSession: (session: {
     username: string
     email?: string | null
@@ -52,6 +58,8 @@ interface Store {
     planExpiresAt: number | null
     licenseState?: 'valid' | 'grace' | 'expired'
     passwordResetRequired?: boolean
+    emailVerificationRequired?: boolean
+    pendingEmail?: string | null
   }) => void
   setYuyuPlan: (plan: YuyuPlan, planExpiresAt: number | null) => void
   clearYuyuSession: () => void
@@ -256,6 +264,14 @@ export const useStore = create<Store>()(
       yuyuLicenseState: 'valid',
       yuyuPasswordResetRequired: false,
       setYuyuPasswordResetRequired: (required) => set({ yuyuPasswordResetRequired: required }),
+      yuyuEmailVerificationRequired: false,
+      yuyuPendingEmail: null,
+      // `pendingEmail` absent = on ne sait pas : l'adresse déjà connue reste.
+      setYuyuEmailVerification: (required, pendingEmail) =>
+        set((s) => ({
+          yuyuEmailVerificationRequired: required,
+          yuyuPendingEmail: pendingEmail === undefined ? s.yuyuPendingEmail : pendingEmail,
+        })),
       setYuyuSession: (session) =>
         set({
           yuyuSignedIn: true,
@@ -265,6 +281,8 @@ export const useStore = create<Store>()(
           yuyuPlanExpiresAt: session.planExpiresAt,
           yuyuLicenseState: session.licenseState ?? 'valid',
           yuyuPasswordResetRequired: session.passwordResetRequired ?? false,
+          yuyuEmailVerificationRequired: session.emailVerificationRequired ?? false,
+          yuyuPendingEmail: session.pendingEmail ?? null,
         }),
       setYuyuPlan: (plan, planExpiresAt) =>
         set({ yuyuPlan: plan, yuyuPlanExpiresAt: planExpiresAt }),
@@ -279,6 +297,8 @@ export const useStore = create<Store>()(
           yuyuPlanExpiresAt: null,
           yuyuLicenseState: 'valid',
           yuyuPasswordResetRequired: false,
+          yuyuEmailVerificationRequired: false,
+          yuyuPendingEmail: null,
         }),
       isPremium: () => {
         const { yuyuPlan, yuyuPlanExpiresAt } = get()

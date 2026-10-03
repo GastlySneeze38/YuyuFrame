@@ -336,6 +336,19 @@ export const es: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'Correo electrónico',
+    emailPlaceholder: 'tu@ejemplo.com',
+    loginField: 'Nombre de usuario o correo',
+    forgot: '¿Has olvidado la contraseña?',
+    forgotTitle: 'Contraseña olvidada',
+    forgotDescription: 'Indica tu nombre de usuario o tu correo: si la cuenta tiene una dirección confirmada, se le envía un código.',
+    forgotSend: 'Recibir un código',
+    resetDescription: 'Introduce el código recibido por correo y elige una nueva contraseña.',
+    resetCode: 'Código de 6 dígitos',
+    newPassword: 'Nueva contraseña',
+    resetSubmit: 'Cambiar la contraseña',
+    resetDone: 'Contraseña cambiada. Inicia sesión con la nueva.',
+    backToLogin: 'Volver al inicio de sesión',
     passwordsDontMatch: 'Las contraseñas no coinciden.',
     passwordTooShort: 'La contraseña debe tener al menos 4 caracteres.',
     cannotContactBackend: 'No se puede contactar con el backend.',
@@ -1719,8 +1732,25 @@ export const es: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Confirma tu correo electrónico',
+    description: 'Se ha enviado un código de 6 dígitos a {email}. Introdúcelo para continuar.',
+    needAddress: 'Tu cuenta necesita un correo electrónico confirmado. Indícalo: se enviará un código allí.',
+    changeDescription: 'Indica la dirección correcta: se enviará un nuevo código allí.',
+    code: 'Código de 6 dígitos',
+    submit: 'Confirmar',
+    resend: 'Reenviar el código',
+    resent: 'Código reenviado',
+    changeAddress: 'Cambiar de dirección',
+    newAddress: 'Correo electrónico',
+    passwordField: 'Contraseña de la cuenta',
+    sendCode: 'Enviar el código',
+    logout: 'Cerrar sesión',
+    verified: 'Dirección confirmada',
+  },
+
   password: {
-    title: 'Cambiar de contraseña',
+    title:'Cambiar de contraseña',
     forcedTitle: 'Elige una contraseña nueva',
     forcedDescription:
       'El soporte te dio una contraseña provisional. Elige una nueva para recuperar el acceso a tu cuenta.',

@@ -65,6 +65,7 @@ export const BLOCKING_CODES = [
   'account_suspended',
   'account_banned',
   'password_change_required',
+  'email_verification_required',
 ] as const
 
 export type BlockingCode = (typeof BLOCKING_CODES)[number]

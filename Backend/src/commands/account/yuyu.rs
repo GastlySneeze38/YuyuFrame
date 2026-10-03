@@ -27,6 +27,11 @@ pub struct SessionResp {
     pub plan_expires_at: Option<i64>,
     /// Mot de passe provisoire : le frontend doit imposer le changement.
     pub password_reset_required: bool,
+    /// E-mail à confirmer avant tout le reste : le frontend impose la saisie
+    /// du code reçu.
+    pub email_verification_required: bool,
+    /// Adresse à laquelle le code a été envoyé.
+    pub pending_email: Option<String>,
     /// « valid », « grace » ou « expired » — sert au bandeau d'information
     /// quand le launcher tourne sur une licence périmée (serveur injoignable).
     pub license_state: String,
@@ -83,7 +88,7 @@ pub async fn yuyu_register(
     state: tauri::State<'_, SharedState>,
     username: String,
     password: String,
-    email: Option<String>,
+    email: String,
 ) -> Result<SessionResp, String> {
     let body = json!({
         "username": username,
@@ -178,11 +183,74 @@ pub async fn yuyu_change_password(
     Ok(())
 }
 
-/// E-mail du compte (facturation, support). Chaîne vide = retirer.
+/// État de l'e-mail du compte, tel que le serveur vient de le dire.
+#[derive(Serialize)]
+pub struct EmailResp {
+    pub email: Option<String>,
+    pub verification_required: bool,
+    pub pending_email: Option<String>,
+}
+
+fn email_resp(profile: &serde_json::Value) -> EmailResp {
+    EmailResp {
+        email: text(profile, "email"),
+        verification_required: flag(profile, "email_verification_required"),
+        pending_email: text(profile, "pending_email"),
+    }
+}
+
+/// Demande un changement d'e-mail : le serveur exige le mot de passe et
+/// envoie un code à la nouvelle adresse. L'adresse du compte ne change
+/// qu'après `yuyu_verify_email`.
 #[tauri::command]
-pub async fn yuyu_set_email(state: tauri::State<'_, SharedState>, email: String) -> Result<(), String> {
-    let profile = api::patch(&state, "/me", json!({ "email": email })).await?;
+pub async fn yuyu_set_email(state: tauri::State<'_, SharedState>, email: String, password: String) -> Result<EmailResp, String> {
+    let profile = api::patch(&state, "/me", json!({ "email": email, "password": password })).await?;
     api::store_profile(&state, &profile).await;
+    Ok(email_resp(&profile))
+}
+
+/// Confirme l'e-mail avec le code reçu.
+#[tauri::command]
+pub async fn yuyu_verify_email(state: tauri::State<'_, SharedState>, code: String) -> Result<EmailResp, String> {
+    let profile = api::post(&state, "/me/email/verify", json!({ "code": code })).await?;
+    api::store_profile(&state, &profile).await;
+    Ok(email_resp(&profile))
+}
+
+/// Renvoie le code de confirmation (une fois par minute au plus).
+#[tauri::command]
+pub async fn yuyu_resend_email_code(state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    api::post(&state, "/me/email/resend", json!({})).await?;
+    Ok(())
+}
+
+/// État de l'e-mail relu sur le serveur — sert à la fenêtre de confirmation
+/// quand elle s'ouvre sur une session déjà là (redémarrage du launcher).
+#[tauri::command]
+pub async fn yuyu_email_status(state: tauri::State<'_, SharedState>) -> Result<EmailResp, String> {
+    let profile = api::get(&state, "/me", &[]).await?;
+    api::store_profile(&state, &profile).await;
+    Ok(email_resp(&profile))
+}
+
+/// Mot de passe oublié : demande un code. Le serveur répond la même chose
+/// que le compte existe ou non.
+#[tauri::command]
+pub async fn yuyu_forgot_password(state: tauri::State<'_, SharedState>, login: String) -> Result<(), String> {
+    api::post_public(&state, "/auth/password/forgot", json!({ "login": login })).await?;
+    Ok(())
+}
+
+/// Pose un nouveau mot de passe contre le code reçu. Toutes les sessions du
+/// compte sont fermées : il reste à se connecter.
+#[tauri::command]
+pub async fn yuyu_reset_password(
+    state: tauri::State<'_, SharedState>,
+    login: String,
+    code: String,
+    new_password: String,
+) -> Result<(), String> {
+    api::post_public(&state, "/auth/password/reset", json!({ "login": login, "code": code, "new_password": new_password })).await?;
     Ok(())
 }
 
@@ -216,6 +284,10 @@ fn text(value: &serde_json::Value, key: &str) -> Option<String> {
     value.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(str::to_string)
 }
 
+fn flag(value: &serde_json::Value, key: &str) -> bool {
+    value.get(key).and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
 async fn current_plan(state: &tauri::State<'_, SharedState>) -> Option<String> {
     state.read().await.yuyu_session.as_ref().map(|s| s.plan.clone())
 }
@@ -228,7 +300,14 @@ async fn finish_sign_in(
 ) -> Result<SessionResp, String> {
     let session = api::store_token_response(state, value).await?;
     let accounts = super::list_accounts(state).await?;
-    push_minecraft_accounts(state, &accounts).await;
+    // Ni la confirmation d'e-mail ni l'adresse en attente ne sont gardées
+    // dans la session locale : c'est le serveur qui sait, à chaque fois.
+    let profile = value.get("profile").unwrap_or(&serde_json::Value::Null);
+    let email_verification_required = flag(profile, "email_verification_required");
+    // Tant que l'e-mail n'est pas confirmé, le serveur refuserait la liste.
+    if !email_verification_required {
+        push_minecraft_accounts(state, &accounts).await;
+    }
 
     Ok(SessionResp {
         username: session.username,
@@ -236,6 +315,8 @@ async fn finish_sign_in(
         plan: session.plan,
         plan_expires_at: session.plan_expires_at,
         password_reset_required: session.password_reset_required,
+        email_verification_required,
+        pending_email: text(profile, "pending_email"),
         license_state: license_state(state).await,
         accounts,
     })

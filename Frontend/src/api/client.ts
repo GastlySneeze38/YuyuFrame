@@ -18,9 +18,20 @@ export interface YuyuSessionResp {
   plan_expires_at: number | null
   /** Mot de passe provisoire du support : changement imposé. */
   password_reset_required: boolean
+  /** E-mail à confirmer avant tout le reste : saisie du code imposée. */
+  email_verification_required: boolean
+  /** Adresse à laquelle le code a été envoyé. */
+  pending_email: string | null
   /** valid | grace | expired — bandeau quand la licence hors ligne s'épuise. */
   license_state: 'valid' | 'grace' | 'expired'
   accounts: McAccountInfo[]
+}
+
+/** État de l'e-mail du compte, tel que le serveur vient de le dire. */
+export interface YuyuEmailResp {
+  email: string | null
+  verification_required: boolean
+  pending_email: string | null
 }
 
 // ── Pilotage depuis le back-office (GET /v1/config) ──────────────────────────
@@ -477,8 +488,8 @@ export const api = {
   yuyu: {
     status: () => invoke<YuyuStatusResp>('yuyu_status'),
     ping: () => invoke<boolean>('yuyu_ping'),
-    register: (username: string, password: string, email?: string) =>
-      invoke<YuyuSessionResp>('yuyu_register', { username, password, email: email || null }),
+    register: (username: string, password: string, email: string) =>
+      invoke<YuyuSessionResp>('yuyu_register', { username, password, email }),
     /** `login` accepte le pseudo ou l'e-mail. */
     login: (login: string, password: string) =>
       invoke<YuyuSessionResp>('yuyu_login', { login, password }),
@@ -489,7 +500,16 @@ export const api = {
     /** Lève aussi le mot de passe provisoire et ferme les autres appareils. */
     changePassword: (current: string, newPassword: string) =>
       invoke<void>('yuyu_change_password', { current, newPassword }),
-    setEmail: (email: string) => invoke<void>('yuyu_set_email', { email }),
+    /** Envoie un code à la nouvelle adresse ; elle ne remplace l'ancienne
+     *  qu'après `verifyEmail`. */
+    setEmail: (email: string, password: string) => invoke<YuyuEmailResp>('yuyu_set_email', { email, password }),
+    verifyEmail: (code: string) => invoke<YuyuEmailResp>('yuyu_verify_email', { code }),
+    resendEmailCode: () => invoke<void>('yuyu_resend_email_code'),
+    emailStatus: () => invoke<YuyuEmailResp>('yuyu_email_status'),
+    /** Même réponse que le compte existe ou non. */
+    forgotPassword: (login: string) => invoke<void>('yuyu_forgot_password', { login }),
+    resetPassword: (login: string, code: string, newPassword: string) =>
+      invoke<void>('yuyu_reset_password', { login, code, newPassword }),
     listDevices: () => invoke<YuyuDevice[]>('yuyu_list_devices'),
     revokeDevice: (id: string) => invoke<void>('yuyu_revoke_device', { id }),
     /** Après ajout/retrait d'un compte Minecraft (sert au support). */

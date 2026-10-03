@@ -336,6 +336,19 @@ export const en: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'Email address',
+    emailPlaceholder: 'you@example.com',
+    loginField: 'Username or email',
+    forgot: 'Forgot your password?',
+    forgotTitle: 'Forgot password',
+    forgotDescription: 'Enter your username or email: if the account has a confirmed address, a code is sent to it.',
+    forgotSend: 'Get a code',
+    resetDescription: 'Enter the code you received by email and choose a new password.',
+    resetCode: '6-digit code',
+    newPassword: 'New password',
+    resetSubmit: 'Change password',
+    resetDone: 'Password changed. Sign in with the new one.',
+    backToLogin: 'Back to sign in',
     passwordsDontMatch: 'Passwords do not match.',
     passwordTooShort: 'Password must be at least 4 characters.',
     cannotContactBackend: 'Could not reach the backend.',
@@ -1719,8 +1732,25 @@ export const en: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Confirm your email address',
+    description: 'A 6-digit code was sent to {email}. Enter it to continue.',
+    needAddress: 'Your account needs a confirmed email address. Enter it: a code will be sent there.',
+    changeDescription: 'Enter the right address: a new code will be sent there.',
+    code: '6-digit code',
+    submit: 'Confirm',
+    resend: 'Resend the code',
+    resent: 'Code sent again',
+    changeAddress: 'Change address',
+    newAddress: 'Email address',
+    passwordField: 'Account password',
+    sendCode: 'Send the code',
+    logout: 'Sign out',
+    verified: 'Address confirmed',
+  },
+
   password: {
-    title: 'Change password',
+    title:'Change password',
     forcedTitle: 'Choose a new password',
     forcedDescription:
       'Support gave you a temporary password. Choose a new one to get your account back.',

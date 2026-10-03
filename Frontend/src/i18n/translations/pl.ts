@@ -336,6 +336,19 @@ export const pl: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'Adres e-mail',
+    emailPlaceholder: 'ty@przyklad.pl',
+    loginField: 'Nazwa użytkownika lub e-mail',
+    forgot: 'Nie pamiętasz hasła?',
+    forgotTitle: 'Zapomniane hasło',
+    forgotDescription: 'Podaj nazwę użytkownika lub e-mail: jeśli konto ma potwierdzony adres, zostanie na niego wysłany kod.',
+    forgotSend: 'Wyślij kod',
+    resetDescription: 'Wpisz kod otrzymany e-mailem i wybierz nowe hasło.',
+    resetCode: '6-cyfrowy kod',
+    newPassword: 'Nowe hasło',
+    resetSubmit: 'Zmień hasło',
+    resetDone: 'Hasło zmienione. Zaloguj się nowym.',
+    backToLogin: 'Wróć do logowania',
     passwordsDontMatch: 'Hasła nie są takie same.',
     passwordTooShort: 'Hasło musi mieć co najmniej 4 znaki.',
     cannotContactBackend: 'Nie udało się połączyć z backendem.',
@@ -1719,8 +1732,25 @@ export const pl: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Potwierdź swój adres e-mail',
+    description: '6-cyfrowy kod został wysłany na adres {email}. Wpisz go, aby kontynuować.',
+    needAddress: 'Twoje konto potrzebuje potwierdzonego adresu e-mail. Podaj go: zostanie na niego wysłany kod.',
+    changeDescription: 'Podaj właściwy adres: zostanie na niego wysłany nowy kod.',
+    code: '6-cyfrowy kod',
+    submit: 'Potwierdź',
+    resend: 'Wyślij kod ponownie',
+    resent: 'Kod wysłany ponownie',
+    changeAddress: 'Zmień adres',
+    newAddress: 'Adres e-mail',
+    passwordField: 'Hasło do konta',
+    sendCode: 'Wyślij kod',
+    logout: 'Wyloguj się',
+    verified: 'Adres potwierdzony',
+  },
+
   password: {
-    title: 'Zmień hasło',
+    title:'Zmień hasło',
     forcedTitle: 'Wybierz nowe hasło',
     forcedDescription:
       'Wsparcie nadało ci tymczasowe hasło. Wybierz nowe, aby odzyskać konto.',

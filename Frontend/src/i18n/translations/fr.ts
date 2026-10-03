@@ -334,6 +334,19 @@ export const fr = {
   },
 
   yuyuLogin: {
+    email: 'Adresse e-mail',
+    emailPlaceholder: 'toi@exemple.fr',
+    loginField: "Nom d'utilisateur ou e-mail",
+    forgot: 'Mot de passe oublié ?',
+    forgotTitle: 'Mot de passe oublié',
+    forgotDescription: 'Indique ton pseudo ou ton e-mail : si le compte a une adresse confirmée, un code y est envoyé.',
+    forgotSend: 'Recevoir un code',
+    resetDescription: 'Saisis le code reçu par e-mail et choisis un nouveau mot de passe.',
+    resetCode: 'Code à 6 chiffres',
+    newPassword: 'Nouveau mot de passe',
+    resetSubmit: 'Changer le mot de passe',
+    resetDone: 'Mot de passe changé. Connecte-toi avec le nouveau.',
+    backToLogin: 'Retour à la connexion',
     passwordsDontMatch: 'Les mots de passe ne correspondent pas.',
     passwordTooShort: 'Le mot de passe doit faire au moins 4 caractères.',
     cannotContactBackend: 'Impossible de contacter le backend.',
@@ -1731,8 +1744,25 @@ export const fr = {
     },
   },
 
+  emailVerify: {
+    title: 'Confirme ton adresse e-mail',
+    description: 'Un code à 6 chiffres a été envoyé à {email}. Saisis-le pour continuer.',
+    needAddress: 'Ton compte a besoin d’une adresse e-mail confirmée. Indique-la : un code y sera envoyé.',
+    changeDescription: 'Indique la bonne adresse : un nouveau code y sera envoyé.',
+    code: 'Code à 6 chiffres',
+    submit: 'Confirmer',
+    resend: 'Renvoyer le code',
+    resent: 'Code renvoyé',
+    changeAddress: 'Changer d’adresse',
+    newAddress: 'Adresse e-mail',
+    passwordField: 'Mot de passe du compte',
+    sendCode: 'Envoyer le code',
+    logout: 'Se déconnecter',
+    verified: 'Adresse confirmée',
+  },
+
   password: {
-    title: 'Changer de mot de passe',
+    title:'Changer de mot de passe',
     forcedTitle: 'Choisis un nouveau mot de passe',
     forcedDescription:
       'Le support t’a donné un mot de passe provisoire. Choisis-en un nouveau pour retrouver l’accès à ton compte.',

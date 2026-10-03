@@ -336,6 +336,19 @@ export const ru: TranslationSchema = {
   },
 
   yuyuLogin: {
+    email: 'Адрес электронной почты',
+    emailPlaceholder: 'you@example.com',
+    loginField: 'Имя пользователя или e-mail',
+    forgot: 'Забыли пароль?',
+    forgotTitle: 'Восстановление пароля',
+    forgotDescription: 'Укажите имя пользователя или e-mail: если у аккаунта есть подтверждённый адрес, на него будет отправлен код.',
+    forgotSend: 'Получить код',
+    resetDescription: 'Введите код из письма и выберите новый пароль.',
+    resetCode: 'Код из 6 цифр',
+    newPassword: 'Новый пароль',
+    resetSubmit: 'Сменить пароль',
+    resetDone: 'Пароль изменён. Войдите с новым.',
+    backToLogin: 'Вернуться ко входу',
     passwordsDontMatch: 'Пароли не совпадают.',
     passwordTooShort: 'Пароль должен быть не короче 4 символов.',
     cannotContactBackend: 'Не удалось связаться с сервером.',
@@ -1719,8 +1732,25 @@ export const ru: TranslationSchema = {
     },
   },
 
+  emailVerify: {
+    title: 'Подтвердите адрес электронной почты',
+    description: 'Код из 6 цифр отправлен на {email}. Введите его, чтобы продолжить.',
+    needAddress: 'Аккаунту нужен подтверждённый адрес электронной почты. Укажите его: на него будет отправлен код.',
+    changeDescription: 'Укажите правильный адрес: на него будет отправлен новый код.',
+    code: 'Код из 6 цифр',
+    submit: 'Подтвердить',
+    resend: 'Отправить код ещё раз',
+    resent: 'Код отправлен повторно',
+    changeAddress: 'Изменить адрес',
+    newAddress: 'Адрес электронной почты',
+    passwordField: 'Пароль аккаунта',
+    sendCode: 'Отправить код',
+    logout: 'Выйти',
+    verified: 'Адрес подтверждён',
+  },
+
   password: {
-    title: 'Смена пароля',
+    title:'Смена пароля',
     forcedTitle: 'Выберите новый пароль',
     forcedDescription:
       'Поддержка выдала вам временный пароль. Выберите новый, чтобы вернуть себе аккаунт.',

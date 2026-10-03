@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { PlanBadge } from '@/components/plans/PlanBadge'
 import { PasswordChangeModal } from '@/components/account/PasswordChangeModal'
+import { EmailVerifyModal } from '@/components/account/EmailVerifyModal'
 import { showApiError, showNotice } from '@/stores/useErrorToast'
 import { errorMessage } from '@/lib/apiError'
 import { fadeVariants, listItemVariants, listVariants, transition } from '@/lib/motion'
@@ -35,6 +36,8 @@ export function YuyuAccountPanel() {
   } = useStore()
   const [section, setSection] = useState<'email' | 'devices' | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [showVerify, setShowVerify] = useState(false)
+  const verificationRequired = useStore((s) => s.yuyuEmailVerificationRequired)
 
   if (!yuyuSignedIn) return <SignedOutCard onSignIn={() => navigate('/yuyu')} />
 
@@ -122,7 +125,7 @@ export function YuyuAccountPanel() {
             }
           />
           <Expand open={section === 'email'}>
-            <EmailForm onDone={() => setSection(null)} />
+            <EmailForm onDone={() => setSection(null)} onPending={() => setShowVerify(true)} />
           </Expand>
         </motion.div>
 
@@ -158,6 +161,9 @@ export function YuyuAccountPanel() {
 
       <AnimatePresence>
         {showPassword && <PasswordChangeModal onClose={() => setShowPassword(false)} />}
+        {/* Changement d'adresse en cours. Si le compte n'avait pas d'adresse
+            confirmée, c'est App.tsx qui impose déjà la même fenêtre. */}
+        {showVerify && !verificationRequired && <EmailVerifyModal onClose={() => setShowVerify(false)} />}
       </AnimatePresence>
     </>
   )
@@ -195,10 +201,11 @@ function Expand({ open, children }: { open: boolean; children: React.ReactNode }
   )
 }
 
-function EmailForm({ onDone }: { onDone: () => void }) {
+function EmailForm({ onDone, onPending }: { onDone: () => void; onPending: () => void }) {
   const t = useT()
   const current = useStore((s) => s.yuyuEmail)
   const [value, setValue] = useState(current ?? '')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -206,12 +213,14 @@ function EmailForm({ onDone }: { onDone: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await api.yuyu.setEmail(value.trim())
-      // Le backend range le profil à jour ; on rafraîchit l'affichage.
-      const plan = await api.yuyu.refreshPlan()
-      useStore.getState().setYuyuPlan(plan.plan as never, plan.plan_expires_at)
-      useStore.setState({ yuyuEmail: value.trim() || null })
-      showNotice(t('account.emailSaved'))
+      // L'adresse du compte ne change pas encore : un code part à la
+      // nouvelle, et c'est sa saisie qui la pose (fenêtre ouverte par
+      // `onPending`).
+      const resp = await api.yuyu.setEmail(value.trim(), password)
+      useStore.setState({ yuyuEmail: resp.email })
+      useStore.getState().setYuyuEmailVerification(resp.verification_required, resp.pending_email)
+      if (resp.pending_email) onPending()
+      else showNotice(t('account.emailSaved'))
       onDone()
     } catch (e) {
       setError(errorMessage(e))
@@ -228,13 +237,19 @@ function EmailForm({ onDone }: { onDone: () => void }) {
         onChange={(e) => setValue(e.target.value)}
         placeholder="toi@exemple.fr"
         hint={t('account.emailHint')}
+      />
+      <Field
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder={t('emailVerify.passwordField')}
         error={error}
       />
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onDone}>
           {t('common.cancel')}
         </Button>
-        <Button size="sm" variant="primary" loading={busy} onClick={save}>
+        <Button size="sm" variant="primary" loading={busy} disabled={!value.trim() || !password} onClick={save}>
           {t('common.save')}
         </Button>
       </div>
