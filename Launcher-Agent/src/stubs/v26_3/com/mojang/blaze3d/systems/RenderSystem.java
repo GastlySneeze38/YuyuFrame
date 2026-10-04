@@ -69,7 +69,25 @@ public class RenderSystem {
         private AutoStorageIndexBuffer() {
         }
 
+        /**
+         * AGRANDIT le tampon sur-le-champ s'il est trop petit (ferme l'ancien,
+         * en crée un nouveau avec ses données) — donc à n'appeler que HORS
+         * d'une passe de rendu : sous Vulkan, cet envoi en pleine passe fait
+         * planter le pilote. Vanilla agrandit avant sa passe
+         * ({@code resizeAllAutoStorageIndexBuffers}) puis ne lit plus que
+         * {@link #getBuffer()}. Relevé par javap.
+         */
         public GpuBuffer getBuffer(int indexCount) {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        /** Tampon courant, sans agrandissement — la seule lecture permise dans une passe. */
+        public GpuBuffer getBuffer() {
+            throw new UnsupportedOperationException("stub compile-only");
+        }
+
+        /** Le tampon courant contient-il au moins {@code indexCount} indices ? */
+        public boolean hasStorage(int indexCount) {
             throw new UnsupportedOperationException("stub compile-only");
         }
 

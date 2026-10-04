@@ -323,7 +323,20 @@ public final class UiRenderer {
 
     // ── Scissor (clipping rectangulaire — utilisé par UiScrollContainer) ─────
 
+    /**
+     * Le scissor GL brut n'existe que sur les ères GL. Sur Blaze3D il n'a
+     * jamais rien coupé (chaque passe du jeu repose son propre état, voir
+     * UiScrollContainer), et quand le jeu tourne sur son backend Vulkan
+     * (26.2+) il n'y a AUCUN contexte OpenGL : LWJGL abat alors la JVM
+     * (« No context is current »), ce qu'aucun catch ne rattrape.
+     */
+    private static boolean rawGlScissor() {
+        return com.yuyuframe.launcheragent.apigraphic.backend.RenderEra.active()
+            != com.yuyuframe.launcheragent.apigraphic.backend.RenderEra.BLAZE3D;
+    }
+
     public void beginScissor(int x, int y, int w, int h) {
+        if (!rawGlScissor()) return;
         try {
             glBridge.glEnable(0x0C11); // GL_SCISSOR_TEST
             glBridge.glScissor(x, y, w, h);
@@ -333,6 +346,7 @@ public final class UiRenderer {
     }
 
     public void endScissor() {
+        if (!rawGlScissor()) return;
         try { glBridge.glDisable(0x0C11); } catch (Throwable ignored) {}
     }
 

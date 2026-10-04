@@ -26,6 +26,7 @@ import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import com.yuyuframe.launcheragent.apigraphic.era.blaze3d.gpu.Blaze3DGpu;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.apimixin.v26_3.core.GlobalUiRenderBridge263;
 import com.yuyuframe.launcheragent.apimixin.v26_3.render.DefaultVertexFormatAccessor263;
 import com.yuyuframe.launcheragent.apimixin.v26_3.render.RenderSystemAccessor263;
@@ -236,8 +237,36 @@ final class Blaze3DGpu263 implements Blaze3DGpu {
 
     @Override
     public Object openPass(Object encoder, String label, Object colorView) {
+        // Tampon d'indices agrandi AVANT la passe — voir ensureQuadIndexStorage.
+        ensureQuadIndexStorage();
         // 26.2 : pas d'effacement = Optional.empty() (ex-OptionalInt.empty()).
         return ((CommandEncoder) encoder).createRenderPass(() -> label, (GpuTextureView) colorView, Optional.empty());
+    }
+
+    /** Quads garantis d'avance dans le tampon d'indices partagé — couvre largement un écran de l'agent. */
+    private static final int MIN_QUADS = 16384;
+    /** Plus gros lot demandé jusqu'ici (avec marge) : la capacité à garantir avant chaque passe. */
+    private static int quadCapacity = MIN_QUADS;
+    private static boolean skippedDrawReported;
+
+    /**
+     * Garantit la capacité du tampon d'indices séquentiel HORS de toute passe.
+     *
+     * <p>Correctif du 2026-10-04 (crash natif à l'ouverture du menu avec le
+     * backend Vulkan, HUD intact). {@code AutoStorageIndexBuffer.getBuffer(n)}
+     * agrandit le tampon sur-le-champ : il ferme l'ancien et en crée un
+     * nouveau rempli de ses indices. On l'appelait dans {@link #drawQuads},
+     * donc en pleine passe de rendu — OpenGL s'en moque, Vulkan interdit tout
+     * envoi de données dans une passe. Le HUD dessine trop peu de quads pour
+     * déclencher un agrandissement ; le menu (texte, icônes, panneaux) si.
+     *
+     * <p>C'est la règle que vanilla suit depuis la 26.3 (javap sur
+     * {@code GuiRenderer.render}) : {@code requestIndexCount} pendant la
+     * préparation, {@code resizeAllAutoStorageIndexBuffers()} avant d'ouvrir
+     * la passe, puis seulement {@code getBuffer()} sans argument dedans.
+     */
+    private static void ensureQuadIndexStorage() {
+        RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS).getBuffer(quadCapacity * 6);
     }
 
     @Override
@@ -289,7 +318,21 @@ final class Blaze3DGpu263 implements Blaze3DGpu {
             RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
         int indexCount = quadCount * 6;
         RenderPass p = (RenderPass) pass;
-        p.setIndexBuffer(indices.getBuffer(indexCount), indices.type());
+        // 26.3 : JAMAIS getBuffer(indexCount) ici — il agrandirait le tampon
+        // en pleine passe (crash natif sous Vulkan, voir
+        // ensureQuadIndexStorage). Un lot plus gros que la capacité garantie
+        // est sauté pour cette image ; la capacité est relevée, et la passe
+        // suivante l'agrandit avant de s'ouvrir.
+        if (!indices.hasStorage(indexCount)) {
+            quadCapacity = Math.max(quadCapacity, quadCount * 2);
+            if (!skippedDrawReported) {
+                skippedDrawReported = true;
+                LauncherLog.warn("[Blaze3DGpu263] lot de " + quadCount + " quads au-delà du tampon d'indices —"
+                    + " sauté pour cette image, capacité portée à " + quadCapacity + " quads");
+            }
+            return;
+        }
+        p.setIndexBuffer(indices.getBuffer(), indices.type());
         // 26.2 : drawIndexed(indexCount, instanceCount, firstIndex, baseVertex,
         // firstInstance) — ordre Vulkan, relevé sur l'appel de GuiRenderer
         // (count, 1, firstIndex, baseVertex, 0). En 26.1.2 c'était
