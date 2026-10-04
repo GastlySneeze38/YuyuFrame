@@ -60,6 +60,14 @@ public final class ContentBridge {
     public static native String searchModrinth(String query, String projectType, String categoriesCsv, String version, String sort);
 
     /**
+     * Même recherche, paginée : {@code offset} = rang du premier résultat,
+     * {@code limit} = taille de page (1 à 100). La réponse porte
+     * {@code total_hits}. Entrée native séparée de {@link #searchModrinth}
+     * pour qu'une DLL plus ancienne garde l'ancienne intacte.
+     */
+    public static native String searchModrinthPage(String query, String projectType, String categoriesCsv, String version, String sort, int offset, int limit);
+
+    /**
      * Résout le fichier de la dernière version d'un projet Modrinth.
      * Retourne {@code {"url":"...","filename":"..."}} ou {@code {"error":"..."}}.
      */

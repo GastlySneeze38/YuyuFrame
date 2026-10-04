@@ -20,7 +20,6 @@ import com.yuyuframe.launcheragent.apigraphic.anim.UiTransition;
 import com.yuyuframe.launcheragent.apigraphic.widget.UiWidget;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.UiScreenBase;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiButton;
-import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiScrollContainer;
 import com.yuyuframe.launcheragent.runtime.ui.ingameui.component.UiTextField;
 import com.yuyuframe.launcheragent.apigraphic.value.UiTheme;
 
@@ -63,7 +62,19 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ModrinthContentScreen extends UiScreenBase {
 
-    private static final int MAX_RESULTS = 24;
+    /** Garde-fou : au-delà, on ne propose plus de pages (personne n'ira, et l'offset resterait raisonnable). */
+    private static final int MAX_PAGES = 500;
+
+    /** Une page de résultats telle que rendue par le thread de recherche — résultats et total voyagent ensemble. */
+    private static final class SearchResult {
+        final List<ModrinthJson.Hit> hits;
+        final long total;
+
+        SearchResult(List<ModrinthJson.Hit> hits, long total) {
+            this.hits = hits;
+            this.total = total;
+        }
+    }
 
     /**
      * Un onglet = un {@code project_type} Modrinth + son dossier d'install +
@@ -132,12 +143,34 @@ public final class ModrinthContentScreen extends UiScreenBase {
     private final Set<String> selectedCategories = new HashSet<>();
 
     private UiTextField searchField;
-    private UiScrollContainer results;
     private boolean layoutBuilt;
+
+    // ── Grille paginée (rework 2026-10-04) ──────────────────────────────────
+    //
+    // Plus de liste défilante : la grille MESURE la place dont elle dispose
+    // (voir buildLayout) et en déduit colonnes × rangées = taille de page ; le
+    // reste se parcourt par la pagination du bas, servie par Modrinth
+    // (offset/limit). Raison : sur Blaze3D il n'y a pas de vrai clip, une carte
+    // qui sortait du viewport ne faisait que s'estomper — elle devenait
+    // invisible bien avant d'en être sortie, tout en restant cliquable. Sans
+    // défilement, il n'y a plus rien à couper.
+    private float gridX, gridY, gridW, gridH; // zone de la grille, (gridX, gridY) = coin bas-gauche
+    private int gridCols = 3, gridRows = 1;
+    private int page;                         // 0 = première page
+    private volatile long totalHits;
+    /** Cartes + boutons de page : reconstruits à chaque résultat, retirés de {@code widgets} avant. */
+    private final List<UiWidget> resultWidgets = new ArrayList<>();
+
+    private int pageSize() { return Math.max(1, gridCols * gridRows); }
+
+    private int pageCount() {
+        long pages = (totalHits + pageSize() - 1) / pageSize();
+        return (int) Math.max(1L, Math.min(MAX_PAGES, pages));
+    }
 
     private volatile boolean busy;
     private volatile String statusText = "";
-    private volatile List<ModrinthJson.Hit> pendingResults;
+    private volatile SearchResult pendingResults;
     // Recherche live débouncée — barre de recherche moderne : recherche
     // automatique après une pause de frappe, pas besoin d'un clic explicite
     // sur "Chercher" (qui reste utilisable pour forcer une relance immédiate,
@@ -176,9 +209,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
         kind = newKind;
         installingProjectId = null;
         shownResults = Collections.emptyList();
+        totalHits = 0L;
         selectedCategories.clear(); // catégories propres au type précédent, sans rapport ici
         if (searchField != null) searchField.setPlaceholder(kind.searchPlaceholder);
-        if (results != null) results.clear();
         buildLayout();
         if (filtersOpen) buildDrawer(); // les chips de catégories dépendent du type actif
         triggerSearch();
@@ -203,14 +236,21 @@ public final class ModrinthContentScreen extends UiScreenBase {
     @Override
     public void uiPollInput(UiInputPoller input) {
         updateDrawerLayout();
+        // Les cartes et la pagination vivent dans la liste widgets de l'écran :
+        // modalWidgets() les rend inertes sous le tiroir sans garde de plus.
         super.uiPollInput(input);
-        // Écran DERRIÈRE le tiroir totalement inerte pendant qu'il est ouvert
-        // (voir modalWidgets()) — la liste de résultats a son PROPRE dispatch
-        // de clic indépendant (UiScrollContainer.pollInput lit input.leftClicked
-        // directement, pas via UiScreenBase.dispatchClick), donc pas couverte
-        // par modalWidgets() : sans cette garde, une "Installer" sous le
-        // voile resterait cliquable à travers le tiroir.
-        if (!filtersOpen && results != null) results.pollInput(input);
+    }
+
+    /**
+     * Voile léger au lieu du fond quasi opaque par défaut — même règle que
+     * l'écran principal : un fond opaque rend le décor flouté invisible, donc
+     * les cartes de verre n'ont plus rien à flouter. Repli opaque sans verre.
+     */
+    @Override
+    protected UiColor overlayColor() {
+        return UiRenderer.get(getClass().getClassLoader()).isGlassAvailable()
+            ? UiTheme.GLASS_SCRIM
+            : UiTheme.OVERLAY_BG;
     }
 
     @Override
@@ -222,15 +262,18 @@ public final class ModrinthContentScreen extends UiScreenBase {
         }
         // Consommé UNE SEULE FOIS par le thread de rendu — jamais muté
         // directement depuis le thread de recherche (voir javadoc de la classe).
-        List<ModrinthJson.Hit> results0 = pendingResults;
+        SearchResult results0 = pendingResults;
         if (results0 != null) {
             pendingResults = null;
-            showResults(results0);
+            totalHits = results0.total;
+            showResults(results0.hits);
         }
         // Débounce de la recherche live — voir onSearchTextChanged/SEARCH_DEBOUNCE_MS.
+        // runSearch et non triggerSearch : la page demandée est gardée (c'est
+        // aussi par ici que repasse une recherche demandée pendant qu'une
+        // autre tournait, voir runSearch).
         if (searchPending && System.currentTimeMillis() - lastEditAtMs >= SEARCH_DEBOUNCE_MS) {
-            searchPending = false;
-            triggerSearch();
+            runSearch();
         }
 
         updateDrawerLayout();
@@ -246,15 +289,11 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 UiTheme.TEXT_PRIMARY, UiTheme.TEXT_SHADOW, 1f, -1f, 0.8f, screenWidth, screenHeight);
             String status = statusText;
             if (!status.isEmpty()) {
-                // 40px sous la barre de recherche, encore 40px au-dessus du
-                // haut de la liste — marge généreuse des deux côtés (voir
-                // STATUS_Y_GAP/HEADER_H, revu suite au chevauchement statut/
-                // 1re carte confirmé en jeu). Le tiroir de filtres FLOTTE
-                // par-dessus (voir drawDrawer ci-dessous) — ne pousse plus ce
-                // gabarit vers le bas comme l'ancien panneau inline.
-                renderer.drawText(status, MARGIN, screenHeight - STATUS_Y_GAP, UiTheme.TEXT_SECONDARY, 0.42f, screenWidth, screenHeight);
+                // Sur la rangée de la pagination, à gauche : le haut de l'écran
+                // est gardé pour la grille. Posé sur le décor, donc ombré.
+                renderer.drawTextShadowed(UiFont.REGULAR, status, MARGIN, MARGIN + PAGER_H / 2f - 5f,
+                    UiTheme.TEXT_SECONDARY, UiTheme.TEXT_SHADOW, 1f, -1f, 0.42f, screenWidth, screenHeight);
             }
-            if (results != null) results.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
             // Tiroir de filtres DESSINÉ EN DERNIER (par-dessus la liste) — voir
             // modalWidgets() pour pourquoi le dessin ne peut pas passer par la
             // liste widgets générique de UiScreenBase (ordre de dessin vs.
@@ -280,17 +319,24 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // Distances depuis le HAUT de l'écran (screenHeight - X) — décalées de
     // +52px (hauteur d'onglet + marge) par rapport à l'ancien agencement sans
     // onglets, pour faire de la place à la ligne Resource Packs/Shaders.
-    private static final float TAB_TOP_GAP = 96f;
-    private static final float SEARCH_TOP_GAP = 172f;
+    // Resserrées le 2026-10-04 (onglets 72, recherche 120, chips 174, grille
+    // 220) : le statut est descendu sur la rangée de la pagination, et tout ce
+    // qui est rendu en haut va à la grille.
+    private static final float TAB_TOP_GAP = 72f;
+    private static final float SEARCH_TOP_GAP = 120f;
     private static final float SEARCH_H = 40f;
     private static final float SEARCH_BTN_W = 130f;
     private static final float FILTER_BTN_W = 100f;
-    private static final float STATUS_Y_GAP = 242f;
-    private static final float HEADER_H = 282f;
+    /** Rangée de catégories au-dessus de la grille — raccourci des mêmes filtres que le tiroir. */
+    private static final float INLINE_CHIPS_TOP_GAP = 174f;
+    private static final float INLINE_CHIP_H = 30f, INLINE_CHIP_GAP = 8f;
+    private static final float HEADER_H = 220f;
     private static final float CHIP_H = 40f, CHIP_GAP = 14f;
-    // Largeur de la scrollbar (6) + sa marge (4, voir UiScrollContainer) +
-    // marge supplémentaire pour ne pas la coller au bord de la carte.
-    private static final float SCROLLBAR_CLEARANCE = 24f;
+    // Grille : au plus 3 colonnes, moins si une carte passerait sous CARD_MIN_W.
+    private static final float CARD_H = 96f, CARD_GAP = 14f, CARD_MIN_W = 380f;
+    private static final int MAX_COLS = 3;
+    /** Rangée du bas : statut à gauche, pagination au centre. */
+    private static final float PAGER_H = 36f, PAGER_GAP = 14f;
 
     private void buildLayout() {
         widgets.clear();
@@ -345,8 +391,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
         TaffyStyle resultsStyle = new TaffyStyle();
         resultsStyle.flexGrow = 1f;
+        // Marge basse = la rangée de pagination (voir showResults).
         resultsStyle.margin = new String[]{
-            TaffyStyle.px(HEADER_H - SEARCH_TOP_GAP - SEARCH_H), "0", "0", "0" };
+            TaffyStyle.px(HEADER_H - SEARCH_TOP_GAP - SEARCH_H), "0", TaffyStyle.px(PAGER_H + PAGER_GAP), "0" };
         screen.child(new TaffyNode("results", resultsStyle));
 
         // "Retour" en HAUT-DROITE — l'ancien placement (haut-gauche, sous le
@@ -407,14 +454,85 @@ public final class ModrinthContentScreen extends UiScreenBase {
         if (layout != null) layout.apply("btn:filters", filterButton);
         widgets.add(filterButton);
 
+        // Catégories du type actif, en une rangée au-dessus de la grille. Même
+        // état que les chips du tiroir (selectedCategories) : ce n'est qu'un
+        // raccourci. Celles qui ne tiennent pas sur la rangée restent
+        // accessibles par « Filtres » — pas de retour à la ligne, qui
+        // prendrait une rangée de cartes.
+        UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
+        float chipY = screenHeight - INLINE_CHIPS_TOP_GAP - INLINE_CHIP_H;
+        float chipX = MARGIN;
+        for (String cat : kind.categories) {
+            float cw = renderer.textWidth(cat, InlineChip.SCALE) + 26f;
+            if (chipX + cw > screenWidth - MARGIN) break;
+            widgets.add(new InlineChip(chipX, chipY, cw, INLINE_CHIP_H, cat));
+            chipX += cw + INLINE_CHIP_GAP;
+        }
+
         TaffyLayoutResult.Rect res = layout == null ? null : layout.get("results");
-        results = res != null
-            ? new UiScrollContainer(res.x, res.y, res.w, Math.max(1f, res.h))
-            : new UiScrollContainer(MARGIN, MARGIN, screenWidth - MARGIN * 2, screenHeight - MARGIN - HEADER_H);
+        if (res != null) {
+            gridX = res.x; gridY = res.y; gridW = res.w; gridH = Math.max(1f, res.h);
+        } else {
+            gridX = MARGIN;
+            gridY = MARGIN + PAGER_H + PAGER_GAP;
+            gridW = screenWidth - MARGIN * 2;
+            gridH = Math.max(1f, screenHeight - HEADER_H - gridY);
+        }
+        // La grille mesure sa place : autant de colonnes que possible sans
+        // passer sous CARD_MIN_W, autant de rangées ENTIÈRES que la hauteur en
+        // offre. Leur produit est la taille de page demandée à Modrinth.
+        gridCols = Math.max(1, Math.min(MAX_COLS, (int) ((gridW + CARD_GAP) / (CARD_MIN_W + CARD_GAP))));
+        gridRows = Math.max(1, (int) ((gridH + CARD_GAP) / (CARD_H + CARD_GAP)));
+
         // Ré-affiche les résultats DÉJÀ reçus à la nouvelle géométrie — PAS un
         // nouvel appel réseau, showResults() est purement local. Vide au tout
         // premier appel (avant la toute première recherche) : rien à réafficher.
+        resultWidgets.clear(); // widgets.clear() ci-dessus les a déjà retirés de l'écran
         if (!shownResults.isEmpty()) showResults(shownResults);
+    }
+
+    /**
+     * Pastille de catégorie de la rangée du haut — pleine ACCENT si la
+     * catégorie filtre, verre léger sinon. Sans animation d'entrée,
+     * contrairement à {@link FilterChip} : buildLayout la recrée à chaque
+     * ouverture du tiroir, elle clignoterait.
+     */
+    private final class InlineChip extends UiWidget {
+        static final float SCALE = 0.4f;
+        private final String category;
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+
+        InlineChip(float x, float y, float w, float h, String category) {
+            super(x, y, w, h);
+            this.category = category;
+        }
+
+        @Override
+        public void onClick() {
+            if (!selectedCategories.remove(category)) selectedCategories.add(category);
+            triggerSearch();
+        }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            boolean active = selectedCategories.contains(category);
+            hoverAnim.setTarget(!active && contains(mouseX, mouseY) ? 1f : 0f);
+            float hover = hoverAnim.get();
+            float radius = h / 2f;
+            if (active) {
+                renderer.drawRoundedRect(x, y, x + w, y + h, radius, UiTheme.ACCENT, vpWidth, vpHeight);
+            } else {
+                UiColor border = renderer.isGlassAvailable()
+                    ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover) : null;
+                renderer.drawGlassPanel(x, y, x + w, y + h, radius,
+                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD - hover * 0.1f,
+                    UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hover),
+                    border, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
+            }
+            float tw = renderer.textWidth(category, SCALE);
+            renderer.drawText(category, x + (w - tw) / 2f, y + h / 2f - 4.5f,
+                active ? UiTheme.TEXT_PRIMARY : UiTheme.TEXT_SECONDARY, SCALE, vpWidth, vpHeight);
+        }
     }
 
     // ── Tiroir de filtres (modal) ────────────────────────────────────────────
@@ -736,11 +854,34 @@ public final class ModrinthContentScreen extends UiScreenBase {
     private void onSearchTextChanged(String newText) {
         lastEditAtMs = System.currentTimeMillis();
         searchPending = true;
+        page = 0; // un autre texte = une autre liste, on repart du début
     }
 
+    /** Nouvelle recherche (texte, filtre, tri, onglet) : repart de la première page. */
     private void triggerSearch() {
+        page = 0;
+        runSearch();
+    }
+
+    /** Autre page de la MÊME recherche. */
+    private void goToPage(int newPage) {
+        int clamped = Math.max(0, Math.min(pageCount() - 1, newPage));
+        if (clamped == page) return;
+        page = clamped;
+        runSearch();
+    }
+
+    /** Lance la recherche de la page courante. */
+    private void runSearch() {
+        // Occupé (recherche ou installation en cours) : la demande n'est pas
+        // perdue, le débounce de uiDraw la relance dès que c'est libre. Avant,
+        // un filtre cliqué pendant une recherche changeait d'état sans que la
+        // liste suive.
+        if (busy) {
+            searchPending = true;
+            return;
+        }
         searchPending = false; // une recherche manuelle (Entrée/bouton) rend le débounce en cours obsolète
-        if (busy) return;
         String query = searchField != null ? searchField.text().trim() : "";
         // Capturés ICI, sur le thread de rendu, AVANT de démarrer le thread de
         // recherche — selectedCategories/sort/currentVersionOnly ne sont PAS
@@ -756,28 +897,36 @@ public final class ModrinthContentScreen extends UiScreenBase {
         String version = currentVersionOnly ? System.getProperty("launcheragent.mcVersion", "") : "";
         String searchType = kind.searchType;
         String sortValue = sort.apiValue;
+        int limit = pageSize();
+        int offset = page * limit;
         busy = true;
         statusText = query.isEmpty() ? "Recommandations en cours..." : "Recherche en cours...";
 
-        Thread t = new Thread(() -> doSearch(query, searchType, categoriesCsv, version, sortValue), "LauncherAgent-ModrinthSearch");
+        Thread t = new Thread(() -> doSearch(query, searchType, categoriesCsv, version, sortValue, offset, limit), "LauncherAgent-ModrinthSearch");
         t.setDaemon(true);
         t.start();
     }
 
-    private void doSearch(String query, String searchType, String categoriesCsv, String version, String sortValue) {
+    private void doSearch(String query, String searchType, String categoriesCsv, String version, String sortValue,
+                          int offset, int limit) {
         try {
             if (!ContentBridge.ensureLoaded()) {
                 statusText = "content_core.dll indisponible";
                 return;
             }
-            String json = ContentBridge.searchModrinth(query, searchType, categoriesCsv, version, sortValue);
+            String json = ContentBridge.searchModrinthPage(query, searchType, categoriesCsv, version, sortValue, offset, limit);
             String error = ModrinthJson.jsonString(json, "error");
             if (error != null) {
                 statusText = "Erreur Modrinth : " + error;
                 return;
             }
-            List<ModrinthJson.Hit> hits = ModrinthJson.parseHits(json, MAX_RESULTS);
-            pendingResults = hits;
+            List<ModrinthJson.Hit> hits = ModrinthJson.parseHits(json, limit);
+            // total_hits suit le tableau « hits » dans la réponse : cherché
+            // APRÈS lui, sinon un projet dont la description contiendrait ce
+            // mot-clé fausserait le compte.
+            int tail = json.lastIndexOf("\"total_hits\"");
+            long total = tail >= 0 ? ModrinthJson.jsonLong(json.substring(tail), "total_hits") : hits.size();
+            pendingResults = new SearchResult(hits, Math.max(total, offset + hits.size()));
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthContentScreen] doSearch: " + t);
             statusText = "Erreur recherche : " + t;
@@ -789,29 +938,136 @@ public final class ModrinthContentScreen extends UiScreenBase {
     /** Reconstruit la liste de widgets résultat — appelé UNIQUEMENT depuis le thread de rendu (voir uiDraw). */
     private void showResults(List<ModrinthJson.Hit> hits) {
         shownResults = hits;
-        statusText = hits.isEmpty() ? "Aucun résultat" : hits.size() + " résultat(s)";
-
-        results.clear();
-        Set<String> installed = scanInstalledNormalizedNames();
-        // rowH/rowGap augmentés — la description (près du bas de la carte)
-        // débordait dans l'écart entre cartes avec les anciennes valeurs plus
-        // serrées (chevauchement confirmé en jeu).
-        float rowH = 128f;
-        float rowGap = 26f;
-        // La carte occupait TOUTE la largeur du viewport, jusque dans la zone
-        // où UiScrollContainer dessine sa scrollbar (tx = vx+vw-10) — les deux
-        // se chevauchaient forcément (confirmé en jeu). SCROLLBAR_CLEARANCE
-        // réserve la place, que la scrollbar soit visible ou non (peu de
-        // résultats = pas de scrollbar, mais la carte doit rester à la même
-        // largeur pour ne pas "sauter" visuellement selon le nombre de résultats).
-        float rowW = screenWidth - MARGIN * 2 - SCROLLBAR_CLEARANCE;
-        float top = -8f;
-        for (int i = 0; i < hits.size(); i++) {
-            ModrinthJson.Hit hit = hits.get(i);
-            float rowY = top - i * (rowH + rowGap) - rowH;
-            boolean already = isInstalled(hit, installed);
-            results.add(new ResultCard(MARGIN, rowY, rowW, rowH, hit, already));
+        int pages = pageCount();
+        // Une page au-delà de la dernière (le total a baissé entre deux
+        // requêtes) : on revient sur la dernière au lieu d'afficher du vide.
+        if (hits.isEmpty() && page > 0 && totalHits > 0) {
+            page = pages - 1;
+            runSearch();
+            return;
         }
+        statusText = hits.isEmpty() ? "Aucun résultat"
+            : totalHits + " résultat(s)" + (pages > 1 ? "  ·  page " + (page + 1) + " / " + pages : "");
+
+        widgets.removeAll(resultWidgets);
+        resultWidgets.clear();
+        Set<String> installed = scanInstalledNormalizedNames();
+        float cardW = (gridW - (gridCols - 1) * CARD_GAP) / gridCols;
+        float top = gridY + gridH;
+        int count = Math.min(hits.size(), pageSize());
+        for (int i = 0; i < count; i++) {
+            ModrinthJson.Hit hit = hits.get(i);
+            int col = i % gridCols, row = i / gridCols;
+            float cardX = gridX + col * (cardW + CARD_GAP);
+            float cardY = top - row * (CARD_H + CARD_GAP) - CARD_H;
+            resultWidgets.add(new ResultCard(cardX, cardY, cardW, CARD_H, hit, isInstalled(hit, installed)));
+        }
+        buildPager(pages);
+        widgets.addAll(resultWidgets);
+    }
+
+    // ── Pagination ───────────────────────────────────────────────────────────
+
+    private static final float PAGE_BTN_W = 36f, PAGE_BTN_GAP = 6f;
+    private static final int PAGE_PREV = -2, PAGE_NEXT = -3, PAGE_ELLIPSIS = -1;
+
+    /**
+     * Rangée « &lt; 1 … 4 5 6 … 20 &gt; » centrée en bas : première, dernière et
+     * la page courante entourée de ses voisines — même fenêtre que la
+     * pagination du launcher. Rien s'il n'y a qu'une page.
+     */
+    private void buildPager(int pages) {
+        if (pages <= 1) return;
+        List<Integer> items = new ArrayList<>();
+        items.add(PAGE_PREV);
+        int last = -1;
+        for (int p = 0; p < pages; p++) {
+            if (p != 0 && p != pages - 1 && Math.abs(p - page) > 1) continue;
+            if (last >= 0 && p - last > 1) items.add(PAGE_ELLIPSIS);
+            items.add(p);
+            last = p;
+        }
+        items.add(PAGE_NEXT);
+
+        float total = items.size() * PAGE_BTN_W + (items.size() - 1) * PAGE_BTN_GAP;
+        float px = Math.max(MARGIN, (screenWidth - total) / 2f);
+        for (int item : items) {
+            resultWidgets.add(new PageButton(px, MARGIN, PAGE_BTN_W, PAGER_H, item, pages));
+            px += PAGE_BTN_W + PAGE_BTN_GAP;
+        }
+    }
+
+    /** Un élément de la pagination : numéro, flèche, ou points de suspension (inertes). */
+    private final class PageButton extends UiWidget {
+        private final int item, pages;
+        private final UiAnimatedFloat hoverAnim = new UiAnimatedFloat(0f, 16f);
+
+        PageButton(float x, float y, float w, float h, int item, int pages) {
+            super(x, y, w, h);
+            this.item = item;
+            this.pages = pages;
+        }
+
+        private int target() {
+            return item == PAGE_PREV ? page - 1 : item == PAGE_NEXT ? page + 1 : item;
+        }
+
+        private boolean enabled() {
+            if (item == PAGE_ELLIPSIS) return false;
+            int t = target();
+            return t >= 0 && t < pages && t != page;
+        }
+
+        @Override
+        public boolean contains(double mx, double my) {
+            return enabled() && super.contains(mx, my);
+        }
+
+        @Override
+        public void onClick() {
+            if (enabled()) goToPage(target());
+        }
+
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+            boolean current = item == page;
+            hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float hover = hoverAnim.get();
+            String label = item == PAGE_PREV ? "<" : item == PAGE_NEXT ? ">"
+                : item == PAGE_ELLIPSIS ? "..." : String.valueOf(item + 1);
+            if (current) {
+                renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, UiTheme.ACCENT, vpWidth, vpHeight);
+            } else if (item != PAGE_ELLIPSIS) {
+                UiColor border = renderer.isGlassAvailable()
+                    ? UiColor.lerp(UiTheme.GLASS_BORDER, UiTheme.GLASS_BORDER_HOVER, hover) : null;
+                renderer.drawGlassPanel(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                    UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_FIELD - hover * 0.1f,
+                    UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hover),
+                    border, Math.max(1f, UiTheme.scaled(1f)), vpWidth, vpHeight);
+            }
+            float scale = 0.44f;
+            float tw = renderer.textWidth(label, scale);
+            UiColor color = current ? UiTheme.TEXT_PRIMARY
+                : enabled() ? UiTheme.TEXT_SECONDARY : UiTheme.TEXT_MUTED;
+            renderer.drawText(label, x + (w - tw) / 2f, y + h / 2f - 5f, color, scale, vpWidth, vpHeight);
+        }
+    }
+
+    /**
+     * Coupe {@code text} en au plus deux lignes tenant dans {@code maxW} — la
+     * seconde est tronquée par {@link UiRenderer#truncate}. Découpe aux
+     * espaces ; un mot plus long que la ligne est laissé à la troncature.
+     */
+    private static String[] wrapTwoLines(UiRenderer renderer, String text, float scale, float maxW) {
+        String flat = text.replace('\n', ' ').trim();
+        if (renderer.textWidth(flat, scale) <= maxW) return new String[]{ flat, null };
+        int cut = -1;
+        for (int i = flat.indexOf(' '); i >= 0; i = flat.indexOf(' ', i + 1)) {
+            if (renderer.textWidth(flat.substring(0, i), scale) > maxW) break;
+            cut = i;
+        }
+        if (cut <= 0) return new String[]{ renderer.truncate(flat, scale, maxW), null };
+        return new String[]{ flat.substring(0, cut), renderer.truncate(flat.substring(cut + 1), scale, maxW) };
     }
 
     // ── Icônes — voir UiRemoteImage (fetch HTTPS direct en mémoire, décodage
@@ -889,7 +1145,10 @@ public final class ModrinthContentScreen extends UiScreenBase {
      * avec ModCard (UiMainMenuScreen).
      */
     private final class ResultCard extends UiWidget {
-        private static final float BTN_W = 130f, BTN_H = 34f;
+        private static final float BTN_W = 96f, BTN_H = 30f, PAD = 14f, ICON = 64f;
+        private static final float TITLE_SCALE = 0.48f, DESC_SCALE = 0.36f;
+        /** Description coupée en deux lignes — calculée une fois, pas à chaque image. */
+        private String[] descLines;
         private final ModrinthJson.Hit hit;
         private final boolean alreadyInstalled;
         private boolean prevLeftDown;
@@ -903,7 +1162,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
         // (voir dy dans draw()) — sinon la zone cliquable "courrait après"
         // la carte pendant l'animation, avec un risque de clic manqué juste
         // après le début du survol.
-        private static final float HOVER_LIFT_PX = 4f;
+        private static final float HOVER_LIFT_PX = 3f;
         private final UiAnimatedFloat hoverLift = new UiAnimatedFloat(0f, 18f);
 
         ResultCard(float x, float y, float w, float h, ModrinthJson.Hit hit, boolean alreadyInstalled) {
@@ -912,8 +1171,11 @@ public final class ModrinthContentScreen extends UiScreenBase {
             this.alreadyInstalled = alreadyInstalled;
         }
 
-        private float btnX() { return x + w - BTN_W - 12f; }
-        private float btnY() { return y + (h - BTN_H) / 2f; }
+        // Bouton en haut à droite, sur la ligne du titre (structure de la
+        // grille du launcher) — plus centré verticalement comme sur l'ancienne
+        // carte pleine largeur.
+        private float btnX() { return x + w - BTN_W - PAD; }
+        private float btnY() { return y + h - PAD - BTN_H; }
         private boolean installing() { return hit.projectId.equals(installingProjectId); }
 
         /** Zone géométrique du bouton, INDÉPENDANTE de l'état (contrairement à contains()) — sert à EXCLURE cette zone du clic "ouvrir la page de détail" sur le reste de la carte, voir pollContinuous(). */
@@ -956,14 +1218,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            // clipFade (voir UiScrollContainer/UiWidget) : 1 = carte
-            // pleinement dans le viewport, dégressif vers 0 en chevauchant le
-            // bord haut/bas — remplace le "pop" opaque d'avant (toute la carte
-            // devait sortir du viewport pour disparaître, chevauchant le
-            // titre/statut au-dessus) par une disparition progressive. PAS de
-            // vrai clip pixel ici (Blaze3D era E n'a pas de scissor fiable
-            // pour ce pipeline de dessin différé, voir UiScrollContainer) —
-            // juste l'opacité de chaque élément de la carte.
+            // Toujours 1 depuis que la grille est paginée (plus de conteneur
+            // défilant pour le faire varier) — gardé : c'est aussi par lui
+            // que passerait un fondu d'entrée.
             float fade = clipFade;
 
             boolean hoveredCard = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
@@ -1003,7 +1260,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
             // Icône plafonnée (pas juste h-24) — sinon elle grossit à l'infini
             // avec la hauteur de carte et écrase visuellement le texte.
-            float iconSize = Math.min(h - 32f, 84f);
+            float iconSize = Math.min(h - 32f, ICON);
             float iconY = dy + (h - iconSize) / 2f;
             // Vraie icône du pack (voir resizedIcon/UiRemoteImage) une
             // fois disponible ; pastille-lettre en attendant (état "en cours
@@ -1028,25 +1285,24 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 }
             }
 
-            float textX = x + 14 + iconSize + 18;
-            float textMaxW = btnX() - 16f - textX;
+            float textX = x + 14 + iconSize + 14;
+            float textMaxW = btnX() - 12f - textX;
 
-            // Titre/meta/description nettement plus espacés (chevauchement
-            // confirmé en jeu avec les anciens écarts, trop serrés une fois
-            // les échelles de texte agrandies) — répartis sur toute la
-            // hauteur désormais disponible (rowH=128) plutôt que tassés en
-            // haut/bas de la carte.
-            renderer.drawText(renderer.truncate(hit.title, 0.56f, textMaxW), textX, dy + h - 34,
-                UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.56f, vpWidth, vpHeight);
-
-            String meta = (hit.author != null && !hit.author.isEmpty() ? hit.author + "  ·  " : "")
-                + formatDownloads(hit.downloads) + " téléchargements";
-            renderer.drawText(renderer.truncate(meta, 0.42f, textMaxW), textX, dy + h - 62,
-                UiTheme.TEXT_SECONDARY.multiplyAlpha(fade), 0.42f, vpWidth, vpHeight);
+            // Carte compacte : titre en gras sur la ligne du bouton, puis la
+            // description sur deux lignes. Auteur et téléchargements ne sont
+            // plus ici — ils sont sur la page de détail, qu'un clic sur la
+            // carte ouvre. Le gras est un peu plus large que la mesure
+            // (truncate mesure en maigre), d'où la marge de 6 %.
+            renderer.drawText(UiFont.BOLD, renderer.truncate(hit.title, TITLE_SCALE, textMaxW * 0.94f),
+                textX, dy + h - PAD - 19f, UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), TITLE_SCALE, vpWidth, vpHeight);
 
             if (hit.description != null && !hit.description.isEmpty()) {
-                renderer.drawText(renderer.truncate(hit.description, 0.4f, textMaxW), textX, dy + 22,
-                    UiTheme.TEXT_MUTED.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
+                if (descLines == null) descLines = wrapTwoLines(renderer, hit.description, DESC_SCALE, textMaxW);
+                UiColor descColor = UiTheme.TEXT_SECONDARY.multiplyAlpha(fade);
+                renderer.drawText(descLines[0], textX, dy + h - PAD - 42f, descColor, DESC_SCALE, vpWidth, vpHeight);
+                if (descLines[1] != null) {
+                    renderer.drawText(descLines[1], textX, dy + h - PAD - 60f, descColor, DESC_SCALE, vpWidth, vpHeight);
+                }
             }
 
             boolean installing = installing();
@@ -1062,9 +1318,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
             renderer.drawRoundedRect(btnX(), liftedBtnY, btnX() + BTN_W, liftedBtnY + BTN_H,
                 UiTheme.RADIUS_SM, btnColor.multiplyAlpha(fade), vpWidth, vpHeight);
             String label = installing ? spinnerFrame() + " Installation" : (alreadyInstalled ? "Installé" : "Installer");
-            float lw = renderer.textWidth(label, 0.48f);
-            renderer.drawText(label, btnX() + (BTN_W - lw) / 2f, liftedBtnY + BTN_H / 2f - 6f,
-                (alreadyInstalled && !installing) ? UiTheme.TEXT_SECONDARY.multiplyAlpha(fade) : UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.48f, vpWidth, vpHeight);
+            float lw = renderer.textWidth(label, 0.4f);
+            renderer.drawText(label, btnX() + (BTN_W - lw) / 2f, liftedBtnY + BTN_H / 2f - 5f,
+                (alreadyInstalled && !installing) ? UiTheme.TEXT_SECONDARY.multiplyAlpha(fade) : UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
         }
     }
 
@@ -1111,7 +1367,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 : "Échec du téléchargement de " + hit.title;
             // Réaffiche les mêmes résultats pour rafraîchir le badge Installé/Installer,
             // sans relancer une recherche réseau (showResults() ne fait que du local).
-            if (ok) pendingResults = shownResults;
+            if (ok) pendingResults = new SearchResult(shownResults, totalHits);
         } catch (Throwable t) {
             LauncherLog.err("[ModrinthContentScreen] doInstall: " + t);
             statusText = "Erreur installation : " + t;

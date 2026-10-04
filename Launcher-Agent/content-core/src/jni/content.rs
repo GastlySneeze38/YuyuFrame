@@ -1,5 +1,5 @@
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jboolean, JNI_FALSE, JNI_TRUE};
+use jni::sys::{jboolean, jint, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
 use crate::{download_file, fetch_image_rgba, get_latest_file, get_project, search_modrinth};
@@ -33,9 +33,56 @@ pub extern "system" fn Java_com_yuyuframe_launcheragent_runtime_content_ContentB
         .filter(|s| !s.is_empty())
         .collect();
 
-    let result = search_modrinth(&query, &project_type, &categories, &version, &sort).unwrap_or_else(|e| {
+    let result = search_modrinth(&query, &project_type, &categories, &version, &sort, 0, 24).unwrap_or_else(|e| {
         format!("{{\"error\":\"{}\"}}", e.replace('"', "'"))
     });
+
+    env.new_string(result).unwrap_or_else(|_| {
+        env.new_string("{\"error\":\"encodage résultat échoué\"}").unwrap()
+    })
+}
+
+/// Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_searchModrinthPage
+///
+/// Même recherche, paginée (`offset`/`limit`). Fonction À PART et non deux
+/// paramètres de plus sur `searchModrinth` : un jar récent face à une DLL
+/// ancienne (ou l'inverse) garde ainsi l'ancienne entrée intacte au lieu
+/// d'appeler une fonction native dont la signature ne correspond plus.
+#[no_mangle]
+pub extern "system" fn Java_com_yuyuframe_launcheragent_runtime_content_ContentBridge_searchModrinthPage<
+    'local,
+>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    query: JString<'local>,
+    project_type: JString<'local>,
+    categories_csv: JString<'local>,
+    version: JString<'local>,
+    sort: JString<'local>,
+    offset: jint,
+    limit: jint,
+) -> JString<'local> {
+    let query: String = env.get_string(&query).unwrap().into();
+    let project_type: String = env.get_string(&project_type).unwrap().into();
+    let categories_csv: String = env.get_string(&categories_csv).unwrap().into();
+    let version: String = env.get_string(&version).unwrap().into();
+    let sort: String = env.get_string(&sort).unwrap().into();
+    let categories: Vec<String> = categories_csv
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let result = search_modrinth(
+        &query,
+        &project_type,
+        &categories,
+        &version,
+        &sort,
+        offset.max(0) as u32,
+        limit.max(1) as u32,
+    )
+    .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e.replace('"', "'")));
 
     env.new_string(result).unwrap_or_else(|_| {
         env.new_string("{\"error\":\"encodage résultat échoué\"}").unwrap()

@@ -368,7 +368,15 @@ public class UiScrollContainer {
             // ordre d'insertion gagne", dont dépendait fragilement l'ordre
             // d'ajout cœur/bande dans UiMainMenuScreen (toujours correct
             // avec la nouvelle règle, sans dépendre de cet ordre).
-            UiWidget clicked = UiHitTest.find(visibleNow, input.mouseX, input.mouseY);
+            //
+            // BUG TROUVÉ (retour utilisateur 2026-10-04 : « la hit box de la
+            // card passe en haut, on peut cliquer sur la card sans la voir ») :
+            // visibleNow déborde du viewport de EDGE_FADE_ZONE (les widgets y
+            // finissent leur fondu), donc un widget déjà estompé au-dessus ou
+            // en dessous du cadre recevait encore les clics. Un clic HORS du
+            // viewport ne touche plus aucun widget du contenu — il sert
+            // seulement, ci-dessous, à retirer le focus des champs.
+            UiWidget clicked = overViewport ? UiHitTest.find(visibleNow, input.mouseX, input.mouseY) : null;
 
             // PERTE DE FOCUS au clic extérieur — même règle que
             // UiScreenBase.dispatchClick, qui ne pouvait pas l'appliquer ici :

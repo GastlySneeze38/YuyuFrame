@@ -9,12 +9,18 @@ use std::io::Read;
 ///
 /// `categories`/`version`/`sort_index` vides = aucun filtre / tri par défaut
 /// (comportement inchangé par rapport à l'ancienne signature 2 paramètres).
+///
+/// `offset`/`limit` : pagination côté Modrinth (la réponse porte `total_hits`,
+/// dont l'écran déduit le nombre de pages). `limit` est borné à 1..=100, le
+/// maximum accepté par l'API.
 pub fn search_modrinth(
     query: &str,
     project_type: &str,
     categories: &[String],
     version: &str,
     sort_index: &str,
+    offset: u32,
+    limit: u32,
 ) -> Result<String, String> {
     let mut facet_groups: Vec<String> = vec![format!("[\"project_type:{}\"]", project_type)];
     if !version.trim().is_empty() {
@@ -40,10 +46,12 @@ pub fn search_modrinth(
         "relevance"
     };
     let url = format!(
-        "https://api.modrinth.com/v2/search?query={}&facets={}&index={}&limit=24",
+        "https://api.modrinth.com/v2/search?query={}&facets={}&index={}&limit={}&offset={}",
         urlencoding(query),
         urlencoding(&facets),
-        index
+        index,
+        limit.clamp(1, 100),
+        offset
     );
 
     let response = ureq::get(&url)
