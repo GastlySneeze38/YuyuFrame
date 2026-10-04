@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, type YuyuSessionResp } from '@/api/client'
 import { useStore } from '@/stores/useStore'
 import { showError, showApiError, showNotice } from '@/stores/useErrorToast'
@@ -27,10 +27,17 @@ export default function YuyuLogin() {
   const [mfa, setMfa] = useState<{ token: string; byEmail: boolean; emailHint: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // `?mode=login|register` : la fenêtre de reconnexion (YuyuReconnectModal)
+  // mène ici en ayant déjà demandé lequel des deux. Sans elle, on devine
+  // d'après ce que ce PC connaît.
+  const [params] = useSearchParams()
+  const asked = params.get('mode')
+
   useEffect(() => {
     api.yuyu.status()
-      .then((s) => setMode(s.has_account ? 'login' : 'register'))
+      .then((s) => setMode(asked === 'login' || asked === 'register' ? asked : s.has_account ? 'login' : 'register'))
       .catch(() => setMode('error'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {

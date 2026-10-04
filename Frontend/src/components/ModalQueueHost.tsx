@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useModalQueue, type ModalKind } from '@/stores/useModalQueue'
 import { PatchNotesModal } from '@/components/PatchNotesModal'
 import { ReconnectModal } from '@/components/account/ReconnectModal'
+import { YuyuReconnectModal } from '@/components/account/YuyuReconnectModal'
 import { OfflinePurchaseReminderModal } from '@/components/account/OfflinePurchaseReminderModal'
 import { CrashReportModal } from '@/components/modals/CrashReportModal'
 import { CrashStatusModal } from '@/components/modals/CrashStatusModal'
@@ -27,6 +28,7 @@ import { ReviewPromptModal } from '@/components/modals/ReviewPromptModal'
  *  retirer une demande orpheline au lieu de geler la file. */
 const HANDLED: ModalKind[] = [
   'patchNotes',
+  'yuyuReconnect',
   'reconnect',
   'crash',
   'crashStatus',
@@ -68,6 +70,9 @@ export function ModalQueueHost() {
           counter={counter}
           onClose={close}
         />
+      )}
+      {current?.kind === 'yuyuReconnect' && (
+        <YuyuReconnectModal key={current.key} counter={counter} onClose={close} />
       )}
       {current?.kind === 'reconnect' && (
         <ReconnectModal key={current.key} counter={counter} onClose={close} />

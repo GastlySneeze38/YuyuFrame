@@ -1012,6 +1012,13 @@ export const fr = {
     reconnecting: 'Reconnexion...',
     later: 'Plus tard',
   },
+  yuyuReconnect: {
+    title: 'Reconnecte-toi à YuyuFrame',
+    description: 'Cette mise à jour renforce la sécurité des comptes : adresse e-mail confirmée et code de vérification à la connexion. Tout le monde a été déconnecté une fois pour repartir sur ces bases. Ton abonnement et tes instances n’ont pas bougé.',
+    signIn: 'Se connecter',
+    register: 'Créer un compte',
+    later: 'Plus tard',
+  },
   servers: {
     offline: 'Serveur hors ligne',
     pingInProgress: 'Ping en cours...',

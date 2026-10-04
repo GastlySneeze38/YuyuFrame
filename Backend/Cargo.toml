@@ -11,7 +11,7 @@ name = "yuyuframe-backend"
 #
 # `tauri.conf.json` n'a plus de champ `version` : Tauri reprend celle-ci.
 # C'est donc ICI qu'on incrémente avant de publier.
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 
 [lib]

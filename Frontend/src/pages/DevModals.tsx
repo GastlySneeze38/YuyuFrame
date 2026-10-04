@@ -58,6 +58,11 @@ const SAMPLES: { label: string; hint: string; item: QueuedModal }[] = [
     },
   },
   {
+    label: 'Reconnexion YuyuFrame',
+    hint: 'Toutes les sessions ont été fermées par la mise à jour',
+    item: { kind: 'yuyuReconnect', key: 'dev-yuyu-reconnect', data: null },
+  },
+  {
     label: 'Reconnexion',
     hint: 'Le système d’authentification a changé',
     item: { kind: 'reconnect', key: 'dev-reconnect', data: null },

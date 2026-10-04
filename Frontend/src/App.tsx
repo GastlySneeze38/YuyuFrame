@@ -24,7 +24,7 @@ import { useSupportWatch, POLL_MS as SUPPORT_POLL_MS } from '@/stores/useSupport
 import { useCrashWatch } from '@/stores/useCrashWatch'
 import { api } from '@/api/client'
 import { showError } from '@/stores/useErrorToast'
-import { AUTH_SYSTEM_VERSION } from '@/config/authVersion'
+import { AUTH_SYSTEM_VERSION, YUYU_AUTH_VERSION } from '@/config/authVersion'
 import { useTauriEvent } from '@/hooks/useTauriEvent'
 import { parseJoinUrl } from '@/lib/joinLink'
 
@@ -371,6 +371,21 @@ export default function App() {
     // bas ne redéclenchera pas ReconnectModal au prochain lancement, mais
     // évite surtout de la répéter à chaque démarrage une fois vue une fois.
     if (needsReconnectRef.current) setAuthSystemVersion(AUTH_SYSTEM_VERSION)
+    // Première ouverture d'une version qui monte YUYU_AUTH_VERSION : le
+    // serveur a fermé toutes les sessions YuyuFrame. On oublie la nôtre tout
+    // de suite plutôt que d'attendre le premier appel refusé — sinon l'écran
+    // se croit connecté le temps de s'en apercevoir, et la déconnexion
+    // arriverait par un message d'erreur au lieu d'une explication. Marqué
+    // avant le reste, pour la même raison que la ligne du dessus.
+    const { yuyuAuthVersion, setYuyuAuthVersion, clearYuyuSession } = useStore.getState()
+    if (yuyuAuthVersion < YUYU_AUTH_VERSION) {
+      setYuyuAuthVersion(YUYU_AUTH_VERSION)
+      clearYuyuSession()
+      // Côté Rust : oublie le jeton (coffre du système compris). L'appel de
+      // fermeture au serveur échouera sur une session déjà fermée, c'est prévu.
+      api.yuyu.logout().catch(() => {})
+      pushModal({ kind: 'yuyuReconnect', key: `yuyu-reconnect-${YUYU_AUTH_VERSION}`, data: null })
+    }
     api.mc.accounts()
       .then((accs) => {
         const active = accs.find((a) => a.is_active)

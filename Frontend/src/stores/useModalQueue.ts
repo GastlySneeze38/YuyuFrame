@@ -26,6 +26,7 @@ import { persist } from 'zustand/middleware'
 
 export type ModalKind =
   | 'patchNotes'
+  | 'yuyuReconnect'
   | 'reconnect'
   | 'crash'
   | 'crashStatus'
@@ -38,7 +39,9 @@ export type ModalKind =
  *
  * Les notes de patch passent avant tout : elles expliquent ce qui vient de
  * changer, donc elles éclairent tout ce qui suit. La reconnexion vient
- * ensuite parce que sans compte valide, rien d'autre ne se joue. Le plantage
+ * ensuite parce que sans compte valide, rien d'autre ne se joue — le compte
+ * YuyuFrame d'abord (c'est lui que la mise à jour vient de déconnecter), le
+ * compte Microsoft après. Le plantage
  * précède le support — on rend compte de ce qui vient de casser avant de
  * parler de ce qu'on a déjà signalé. Les nouvelles d'un rapport déjà envoyé
  * viennent juste après, pour la même raison : ce qui vient d'arriver passe
@@ -48,6 +51,7 @@ export type ModalKind =
  */
 const PRIORITY: ModalKind[] = [
   'patchNotes',
+  'yuyuReconnect',
   'reconnect',
   'crash',
   'crashStatus',
@@ -59,6 +63,7 @@ const PRIORITY: ModalKind[] = [
 /** Les données dont chaque modale a besoin pour se rendre. */
 type ModalPayload =
   | { kind: 'patchNotes'; data: { title: string; version: string; body: string; publishedAt: string | null } }
+  | { kind: 'yuyuReconnect'; data: null }
   | { kind: 'reconnect'; data: null }
   | { kind: 'crash'; data: { reportId: string; instanceId: string; title: string; cause: string } }
   | { kind: 'crashStatus'; data: { reportId: string; publicId: string; title: string; status: string; note: string | null } }

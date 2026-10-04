@@ -1014,6 +1014,13 @@ export const de: TranslationSchema = {
     reconnecting: 'Verbindung wird erneuert...',
     later: 'Später',
   },
+  yuyuReconnect: {
+    title: 'Melde dich wieder bei YuyuFrame an',
+    description: 'Dieses Update erhöht die Sicherheit der Konten: bestätigte E-Mail-Adresse und Bestätigungscode bei der Anmeldung. Alle wurden einmal abgemeldet, um auf dieser Grundlage neu zu starten. Dein Abo und deine Instanzen sind unverändert.',
+    signIn: 'Anmelden',
+    register: 'Konto erstellen',
+    later: 'Später',
+  },
   servers: {
     offline: 'Server offline',
     pingInProgress: 'Ping läuft...',

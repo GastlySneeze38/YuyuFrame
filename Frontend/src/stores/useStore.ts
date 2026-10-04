@@ -243,6 +243,9 @@ interface Store {
   // a été introduit) ; seule une future hausse de la constante déclenche.
   authSystemVersion: number
   setAuthSystemVersion: (v: number) => void
+  /** Idem pour le compte YuyuFrame (YUYU_AUTH_VERSION). Part de 0. */
+  yuyuAuthVersion: number
+  setYuyuAuthVersion: (v: number) => void
 
   // ── Migration one-shot des ids d'instance (voir instance_id_migrations côté
   // backend, lib.rs) — remappe les clés persistées ci-dessus qui référencent
@@ -498,6 +501,8 @@ export const useStore = create<Store>()(
       // Version du système de connexion
       authSystemVersion: AUTH_SYSTEM_VERSION,
       setAuthSystemVersion: (authSystemVersion) => set({ authSystemVersion }),
+      yuyuAuthVersion: 0,
+      setYuyuAuthVersion: (yuyuAuthVersion) => set({ yuyuAuthVersion }),
 
       // Migration ids d'instance
       applyInstanceIdMigrations: (migrations) => {
@@ -575,6 +580,7 @@ export const useStore = create<Store>()(
         favoriteServers: s.favoriteServers,
         agentOptOut: s.agentOptOut,
         authSystemVersion: s.authSystemVersion,
+        yuyuAuthVersion: s.yuyuAuthVersion,
       }),
     }
   )
