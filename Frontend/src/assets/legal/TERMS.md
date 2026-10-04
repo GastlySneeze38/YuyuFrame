@@ -57,4 +57,4 @@ Les présentes CGU sont soumises au droit français. Tout litige relève des tri
 
 ## 12. Contact
 
-Pour toute question relative aux présentes CGU, merci d'ouvrir une issue sur le dépôt GitHub : https://github.com/GastlySneeze38/YuyuFrame-v2/issues
+Pour toute question relative aux présentes CGU, merci d'ouvrir une issue sur le dépôt GitHub : https://github.com/GastlySneeze38/YuyuFrame/issues/issues

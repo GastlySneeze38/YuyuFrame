@@ -3,7 +3,7 @@
 Open source Minecraft PvP client for Windows. A launcher with an in-game agent: 25 built-in modules (HUD, keystrokes, zoom, freelook, 1.7 animations…) with no mods to install, and a modernized 1.8.9 running on Java 25 and LWJGL 3.
 
 - Website: https://yuyuframe.eu
-- Download: [latest release](https://github.com/GastlySneeze38/YuyuFrame-v2/releases/latest)
+- Download: [latest release](https://github.com/GastlySneeze38/YuyuFrame/releases/latest)
 - Support: [Discord](https://discord.gg/mX8A6mnssy)
 
 > Unofficial launcher, not affiliated with Mojang or Microsoft.

@@ -4,7 +4,7 @@
 
 ## 1. Who we are
 
-YuyuFrame is a Minecraft launcher developed by Ghasty. The source code of the launcher is public: https://github.com/GastlySneeze38/YuyuFrame-v2. This policy describes what the launcher and the YuyuFrame servers do with your data. You are asked to accept it when you create a YuyuFrame account.
+YuyuFrame is a Minecraft launcher developed by Ghasty. The source code of the launcher is public: https://github.com/GastlySneeze38/YuyuFrame. This policy describes what the launcher and the YuyuFrame servers do with your data. You are asked to accept it when you create a YuyuFrame account.
 
 A YuyuFrame account is optional: the launcher installs and starts Minecraft without one. An account is needed for a subscription, cloud sync, support tickets, crash reports and reviews.
 

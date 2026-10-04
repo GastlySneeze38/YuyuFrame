@@ -10,7 +10,7 @@ import { useT } from '@/i18n'
 type TabId = 'conditions' | 'confidentialite' | 'licence'
 
 // Contenu chargé DEPUIS les fichiers du dépôt public (src/assets/legal/,
-// copiés de TERMS.md/PRIVACY.md/LICENSE à la racine de YuyuFrame-v2) — cette
+// copiés de TERMS.md/PRIVACY.md/LICENSE à la racine du dépôt public YuyuFrame) — cette
 // page ne fait qu'afficher, jamais de texte légal réécrit ici. Resynchroniser
 // ces 3 fichiers manuellement si les originaux changent sur le dépôt public
 // (pas de fetch réseau au runtime — un texte légal doit rester lisible hors
