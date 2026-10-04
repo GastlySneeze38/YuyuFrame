@@ -62,11 +62,14 @@ pub async fn yuyu_register(
     username: String,
     password: String,
     email: String,
+    accept_privacy: bool,
 ) -> Result<SessionResp, String> {
     let body = json!({
         "username": username,
         "password": password,
         "email": email,
+        // La case du formulaire : le serveur refuse l'inscription sans elle.
+        "accept_privacy": accept_privacy,
         "device": api::device_info(),
     });
     let value = api::post_public(&state, "/auth/register", body).await?;

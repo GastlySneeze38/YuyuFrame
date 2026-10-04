@@ -504,8 +504,9 @@ export const api = {
   yuyu: {
     status: () => invoke<YuyuStatusResp>('yuyu_status'),
     ping: () => invoke<boolean>('yuyu_ping'),
-    register: (username: string, password: string, email: string) =>
-      invoke<YuyuSessionResp>('yuyu_register', { username, password, email }),
+    /** `acceptPrivacy` : la case du formulaire, exigée par le serveur. */
+    register: (username: string, password: string, email: string, acceptPrivacy: boolean) =>
+      invoke<YuyuSessionResp>('yuyu_register', { username, password, email, acceptPrivacy }),
     /** `login` accepte le pseudo ou l'e-mail. */
     login: (login: string, password: string) =>
       invoke<YuyuSessionResp>('yuyu_login', { login, password }),

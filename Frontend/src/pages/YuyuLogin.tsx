@@ -5,6 +5,7 @@ import { useStore } from '@/stores/useStore'
 import { showError, showApiError, showNotice } from '@/stores/useErrorToast'
 import { parseApiError } from '@/lib/apiError'
 import { useT } from '@/i18n'
+import { PrivacyModal } from '@/components/legal/PrivacyModal'
 import type { Account } from '@/types'
 
 // forgot : demander un code de réinitialisation ; reset : le saisir avec le
@@ -26,6 +27,11 @@ export default function YuyuLogin() {
   // serveur, et le moyen attendu.
   const [mfa, setMfa] = useState<{ token: string; byEmail: boolean; emailHint: string | null } | null>(null)
   const [loading, setLoading] = useState(false)
+  // Inscription : pas de compte sans avoir accepté la politique de
+  // confidentialité (le serveur le refuse aussi). Décochée par défaut — un
+  // accord ne se présente pas déjà donné.
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
 
   // `?mode=login|register` : la fenêtre de reconnexion (YuyuReconnectModal)
   // mène ici en ayant déjà demandé lequel des deux. Sans elle, on devine
@@ -112,7 +118,7 @@ export default function YuyuLogin() {
     try {
       finish(
         mode === 'register'
-          ? await api.yuyu.register(username, password, email.trim())
+          ? await api.yuyu.register(username, password, email.trim(), acceptPrivacy)
           : await api.yuyu.login(username, password),
       )
     } catch (err) {
@@ -243,7 +249,7 @@ export default function YuyuLogin() {
       : isReset
         ? code.length === 6 && !!password
         : isRegister
-          ? !!username && !!password && !!email.trim()
+          ? !!username && !!password && !!email.trim() && acceptPrivacy
           : !!username && !!password
 
   return (
@@ -348,6 +354,29 @@ export default function YuyuLogin() {
                 placeholder="••••••••"
               />
             )}
+            {isRegister && (
+              <label className="flex cursor-pointer items-start gap-2.5 text-[11.5px] leading-relaxed text-[rgba(255,255,255,0.55)]">
+                <input
+                  type="checkbox"
+                  checked={acceptPrivacy}
+                  onChange={(e) => setAcceptPrivacy(e.target.checked)}
+                  className="mt-[3px] h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#4B3FCF]"
+                />
+                <span>
+                  {t('yuyuLogin.privacyAccept')}{' '}
+                  {/* Un bouton et non un lien vers la page : y naviguer
+                      viderait le formulaire. `preventDefault` : sans lui, le
+                      clic remonterait au label et cocherait la case. */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setShowPrivacy(true) }}
+                    className="cursor-pointer border-0 bg-transparent p-0 text-[#7B6EE8] underline underline-offset-2"
+                  >
+                    {t('yuyuLogin.privacyLink')}
+                  </button>
+                </span>
+              </label>
+            )}
             {mode === 'login' && (
               <button
                 type="button"
@@ -392,6 +421,12 @@ export default function YuyuLogin() {
             {isRecovery ? t('yuyuLogin.backToLogin') : isRegister ? t('yuyuLogin.signIn') : t('yuyuLogin.createAccount')}
           </button>
         </div>
+
+        <PrivacyModal
+          open={showPrivacy}
+          onClose={() => setShowPrivacy(false)}
+          onAccept={() => { setAcceptPrivacy(true); setShowPrivacy(false) }}
+        />
 
         {/* Lock icon + security note */}
         <div className="flex items-center justify-center gap-2">
