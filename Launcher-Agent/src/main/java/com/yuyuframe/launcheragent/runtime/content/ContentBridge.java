@@ -82,6 +82,15 @@ public final class ContentBridge {
      */
     public static native String getProject(String projectId);
 
+    /**
+     * Versions publiées d'un projet, de la plus récente à la plus ancienne :
+     * {@code {"versions":[{version_number, version_type, game_versions,
+     * loaders, date_published, downloads, url, filename}]}} — listes jointes
+     * par des virgules, fichier principal déjà choisi côté Rust. Ou
+     * {@code {"error":"..."}}. Voir {@code ModrinthJson.parseVersions}.
+     */
+    public static native String getVersions(String projectId);
+
     /** Télécharge un fichier vers destPath. */
     public static native boolean downloadFile(String url, String destPath);
 

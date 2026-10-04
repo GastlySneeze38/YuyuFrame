@@ -96,8 +96,26 @@ public final class Blaze3DRect {
             shelfRowH = 0;
         }
         if (shelfY + h + ATLAS_PADDING > ATLAS_SIZE) {
-            LauncherLog.err("[UiRenderer] UiTextBlaze3D: atlas d'icônes plein (" + ATLAS_SIZE + "x" + ATLAS_SIZE + "), '" + cacheKey + "' ignorée");
-            return null;
+            // Une image plus grande que l'atlas ne tiendra jamais.
+            if (w + ATLAS_PADDING * 2 > ATLAS_SIZE || h + ATLAS_PADDING * 2 > ATLAS_SIZE) {
+                LauncherLog.err("[UiRenderer] UiTextBlaze3D: '" + cacheKey + "' (" + w + "x" + h
+                    + ") dépasse l'atlas d'icônes (" + ATLAS_SIZE + "x" + ATLAS_SIZE + "), ignorée");
+                return null;
+            }
+            // Atlas plein : on le VIDE et on repart du début (2026-10-04).
+            // Avant, il ne se vidait jamais — une fois plein (quelques
+            // captures de galerie y suffisaient), plus AUCUNE nouvelle image
+            // ne s'affichait jusqu'à la fin de la session, sans rien à
+            // l'écran pour le dire. Chaque appelant repasse son image à
+            // chaque dessin, donc celles encore affichées se repackent
+            // d'elles-mêmes à leur prochain dessin. Contrepartie : une icône
+            // de l'état de GUI vanilla extraite plus tôt dans CETTE image
+            // peut montrer un mauvais morceau d'atlas pendant une image.
+            LauncherLog.ui(2, "[UiRenderer] UiTextBlaze3D: atlas d'icônes plein — vidé (" + ICON_UV.size() + " entrées)");
+            ICON_UV.clear();
+            shelfX = ATLAS_PADDING;
+            shelfY = ATLAS_PADDING;
+            shelfRowH = 0;
         }
         int px = shelfX, py = shelfY;
         shelfX += w + ATLAS_PADDING;

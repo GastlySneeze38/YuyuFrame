@@ -1124,7 +1124,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
     private static final int ICON_SIZE = 84; // doit correspondre à iconSize plafonné dans ResultCard.draw()
 
     /** Version 84px de l'icône d'un projet, ou {@code null} si pas encore chargée (voir UiRemoteImage.get, non-bloquant) — redimensionne UNE SEULE FOIS (pas à chaque frame) dès que la source devient disponible. */
-    private static BufferedImage resizedIcon(String projectId, String iconUrl) {
+    static BufferedImage resizedIcon(String projectId, String iconUrl) {
         BufferedImage cached = RESIZED_ICON_CACHE.get(projectId);
         if (cached != null) return cached;
         BufferedImage raw = UiRemoteImage.get(iconUrl);
@@ -1155,6 +1155,77 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
     boolean isInstalling(String projectId) {
         return projectId.equals(installingProjectId);
+    }
+
+    /** Installe le fichier d'UNE version (ligne de l'onglet « Versions ») au lieu de la dernière publiée. */
+    void installFileFromDetail(ModrinthJson.Hit hit, String fileUrl, String filename) {
+        triggerInstall(hit, fileUrl, filename);
+    }
+
+    /** Vrai si c'est CE fichier qui est en cours d'installation. */
+    boolean isInstallingFile(String filename) {
+        return filename != null && filename.equals(installingFilename);
+    }
+
+    /** Ce fichier précis est-il dans le dossier d'installation de l'onglet actif ? */
+    boolean isFileInstalled(String filename) {
+        try {
+            return Files.isRegularFile(installDir().resolve(Paths.get(filename).getFileName()));
+        } catch (RuntimeException e) {
+            return false; // nom de fichier impossible sur ce système
+        }
+    }
+
+    /** Même suppression que le bouton « Supprimer » d'une carte (voir doRemove). */
+    void removeFromDetail(ModrinthJson.Hit hit) {
+        triggerRemove(hit);
+    }
+
+    boolean isRemoving(String projectId) {
+        return projectId.equals(removingProjectId);
+    }
+
+    /**
+     * Bouton d'état partagé par les cartes et la page de détail — une seule
+     * définition, pour que les deux écrans ne divergent pas. « Installer » :
+     * aplat violet sombre cerné d'ACCENT, qui monte vers l'ACCENT plein au
+     * survol. « Installé » : un état, pas une action — contour seul.
+     *
+     * @param installed le contenu est déjà là (contour seul, texte ACCENT)
+     * @param working   installation en cours (aplat éteint, pas de survol)
+     */
+    static void drawStateButton(UiRenderer renderer, float x, float y, float w, float h, String label,
+                                boolean installed, boolean working, float hover, float fade, float scale,
+                                int vpWidth, int vpHeight) {
+        float line = Math.max(1f, UiTheme.scaled(1f));
+        float inner = Math.max(0f, UiTheme.RADIUS_SM - line);
+        if (installed && !working) {
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                UiTheme.ACCENT.multiplyAlpha(0.55f * fade), vpWidth, vpHeight);
+            renderer.drawRoundedRect(x + line, y + line, x + w - line, y + h - line, inner,
+                UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
+        } else {
+            renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM,
+                UiTheme.ACCENT.multiplyAlpha((0.55f + 0.45f * hover) * fade), vpWidth, vpHeight);
+            UiColor fill = working ? UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT, 0.3f)
+                : UiColor.lerp(UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT, 0.38f), UiTheme.ACCENT, hover);
+            renderer.drawRoundedRect(x + line, y + line, x + w - line, y + h - line, inner,
+                fill.multiplyAlpha(fade), vpWidth, vpHeight);
+        }
+        float lw = renderer.textWidth(label, scale);
+        UiColor color = (installed && !working) ? UiTheme.ACCENT : UiTheme.TEXT_PRIMARY;
+        renderer.drawText(UiFont.BOLD, label, x + (w - lw) / 2f - 1f, y + h / 2f - scale * 12.5f,
+            color.multiplyAlpha(fade), scale, vpWidth, vpHeight);
+    }
+
+    /** Bouton « Supprimer » / « Confirmer ? » partagé — voir {@link #drawStateButton}. */
+    static void drawDeleteButton(UiRenderer renderer, float x, float y, float w, float h, String label,
+                                 boolean armed, float hover, float fade, float scale, int vpWidth, int vpHeight) {
+        UiColor bg = armed ? UiTheme.DANGER : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.DANGER, hover * 0.45f);
+        renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg.multiplyAlpha(fade), vpWidth, vpHeight);
+        float lw = renderer.textWidth(label, scale);
+        UiColor text = armed ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.DANGER, UiTheme.TEXT_PRIMARY, hover * 0.6f);
+        renderer.drawText(label, x + (w - lw) / 2f, y + h / 2f - scale * 12.5f, text.multiplyAlpha(fade), scale, vpWidth, vpHeight);
     }
 
     boolean isBusy() {
@@ -1393,29 +1464,9 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // volontairement à la position non-soulevée, voir javadoc de hoverLift.
             float bx = btnX();
             float liftedBtnY = btnY() + liftT * HOVER_LIFT_PX;
-            float line = Math.max(1f, UiTheme.scaled(1f));
-            if (alreadyInstalled && !installing) {
-                // « Installé » : un état, pas une action — contour seul, sans
-                // remplissage, pour ne pas ressembler au bouton d'à côté.
-                renderer.drawRoundedRect(bx, liftedBtnY, bx + BTN_W, liftedBtnY + BTN_H, UiTheme.RADIUS_SM,
-                    UiTheme.ACCENT.multiplyAlpha(0.55f * fade), vpWidth, vpHeight);
-                renderer.drawRoundedRect(bx + line, liftedBtnY + line, bx + BTN_W - line, liftedBtnY + BTN_H - line,
-                    Math.max(0f, UiTheme.RADIUS_SM - line), UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
-            } else {
-                // « Installer » : aplat violet sombre cerné d'ACCENT (le bouton
-                // du launcher), qui monte vers l'ACCENT plein au survol.
-                renderer.drawRoundedRect(bx, liftedBtnY, bx + BTN_W, liftedBtnY + BTN_H, UiTheme.RADIUS_SM,
-                    UiTheme.ACCENT.multiplyAlpha((0.55f + 0.45f * bh) * fade), vpWidth, vpHeight);
-                UiColor fill = installing ? UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT, 0.3f)
-                    : UiColor.lerp(UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT, 0.38f), UiTheme.ACCENT, bh);
-                renderer.drawRoundedRect(bx + line, liftedBtnY + line, bx + BTN_W - line, liftedBtnY + BTN_H - line,
-                    Math.max(0f, UiTheme.RADIUS_SM - line), fill.multiplyAlpha(fade), vpWidth, vpHeight);
-            }
             String label = installing ? spinnerFrame() + " Installation" : (alreadyInstalled ? "Installé" : "Installer");
-            float lw = renderer.textWidth(label, 0.4f);
-            UiColor labelColor = (alreadyInstalled && !installing) ? UiTheme.ACCENT : UiTheme.TEXT_PRIMARY;
-            renderer.drawText(UiFont.BOLD, label, bx + (BTN_W - lw) / 2f - 1f, liftedBtnY + BTN_H / 2f - 5f,
-                labelColor.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
+            drawStateButton(renderer, bx, liftedBtnY, BTN_W, BTN_H, label, alreadyInstalled, installing,
+                bh, fade, 0.4f, vpWidth, vpHeight);
 
             // « Supprimer », sous « Installé ». Deux clics : le premier arme
             // (« Confirmer ? », rouge plein, DELETE_CONFIRM_MS), le second
@@ -1425,15 +1476,8 @@ public final class ModrinthContentScreen extends UiScreenBase {
                 delHover.setTarget(overDeleteRect(mouseX, mouseY) ? 1f : 0f);
                 float dh = delHover.get();
                 float delY = delY() + liftT * HOVER_LIFT_PX;
-                UiColor delBg = armed ? UiTheme.DANGER
-                    : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.DANGER, dh * 0.45f);
-                renderer.drawRoundedRect(bx, delY, bx + BTN_W, delY + DEL_H, UiTheme.RADIUS_SM,
-                    delBg.multiplyAlpha(fade), vpWidth, vpHeight);
                 String delLabel = removing ? spinnerFrame() + " Suppression" : armed ? "Confirmer ?" : "Supprimer";
-                float dw = renderer.textWidth(delLabel, 0.36f);
-                UiColor delText = armed ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.DANGER, UiTheme.TEXT_PRIMARY, dh * 0.6f);
-                renderer.drawText(delLabel, bx + (BTN_W - dw) / 2f, delY + DEL_H / 2f - 4.5f,
-                    delText.multiplyAlpha(fade), 0.36f, vpWidth, vpHeight);
+                drawDeleteButton(renderer, bx, delY, BTN_W, DEL_H, delLabel, armed, dh, fade, 0.36f, vpWidth, vpHeight);
             }
         }
     }
@@ -1447,30 +1491,48 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // ── Installation ───────────────────────────────────────────────────────────
 
     private void triggerInstall(ModrinthJson.Hit hit) {
+        triggerInstall(hit, null, null);
+    }
+
+    /**
+     * @param fileUrl  fichier d'une version précise (onglet « Versions » de la
+     *                 page de détail), ou {@code null} = la dernière version publiée.
+     * @param filename nom de ce fichier ; ignoré si {@code fileUrl} est {@code null}.
+     */
+    private void triggerInstall(ModrinthJson.Hit hit, String fileUrl, String filename) {
         if (busy) return;
         busy = true;
         installingProjectId = hit.projectId;
+        installingFilename = fileUrl == null ? null : filename;
         statusText = "Téléchargement de " + hit.title + "...";
 
-        Thread t = new Thread(() -> doInstall(hit), "LauncherAgent-ModrinthInstall");
+        Thread t = new Thread(() -> doInstall(hit, fileUrl, filename), "LauncherAgent-ModrinthInstall");
         t.setDaemon(true);
         t.start();
     }
 
-    private void doInstall(ModrinthJson.Hit hit) {
+    /** Fichier précis en cours d'installation (page de détail), ou {@code null} quand c'est « la dernière version ». */
+    private volatile String installingFilename;
+
+    private void doInstall(ModrinthJson.Hit hit, String fileUrl, String fileName) {
         try {
-            String fileJson = ContentBridge.getLatestFile(hit.projectId);
-            String error = ModrinthJson.jsonString(fileJson, "error");
-            if (error != null) {
-                statusText = "Erreur Modrinth : " + error;
-                return;
+            String url = fileUrl, filename = fileName;
+            if (url == null) {
+                String fileJson = ContentBridge.getLatestFile(hit.projectId);
+                String error = ModrinthJson.jsonString(fileJson, "error");
+                if (error != null) {
+                    statusText = "Erreur Modrinth : " + error;
+                    return;
+                }
+                url = ModrinthJson.jsonString(fileJson, "url");
+                filename = ModrinthJson.jsonString(fileJson, "filename");
             }
-            String url = ModrinthJson.jsonString(fileJson, "url");
-            String filename = ModrinthJson.jsonString(fileJson, "filename");
             if (url == null || filename == null) {
                 statusText = "Aucun fichier disponible pour " + hit.title;
                 return;
             }
+            // Un nom venu du réseau ne doit jamais faire sortir du dossier.
+            filename = Paths.get(filename).getFileName().toString();
 
             Path installDir = installDir();
             Path dest = installDir.resolve(filename);
@@ -1488,6 +1550,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
         } finally {
             busy = false;
             installingProjectId = null;
+            installingFilename = null;
         }
     }
 

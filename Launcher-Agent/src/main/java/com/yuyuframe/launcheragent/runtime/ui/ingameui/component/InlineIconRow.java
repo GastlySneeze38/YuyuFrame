@@ -49,19 +49,39 @@ public final class InlineIconRow extends UiWidget {
         this.imgs = imgs;
     }
 
+    private boolean centered;
+
+    /** Centre la rangée dans sa largeur au lieu de la caler à gauche. */
+    public InlineIconRow centered() {
+        this.centered = true;
+        return this;
+    }
+
+    private float widthOf(ImgRef ref, BufferedImage img, float targetH) {
+        if (img != null && img.getHeight() > 0) return targetH * ((float) img.getWidth() / img.getHeight());
+        return ref.declaredW != null ? Math.min(ref.declaredW, 120) : targetH;
+    }
+
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
         float targetH = h - 8f;
         float cx = x;
+        if (centered) {
+            // Largeur totale d'abord (elle change tant que les badges
+            // arrivent : un badge pas encore chargé a une largeur d'attente).
+            float total = 0f;
+            for (ImgRef ref : imgs) {
+                float iw = widthOf(ref, UiRemoteImage.get(ref.url), targetH);
+                if (total + iw > w) break;
+                total += iw + 10f;
+            }
+            cx = x + Math.max(0f, (w - (total - 10f)) / 2f);
+        }
+        float right = x + w;
         for (ImgRef ref : imgs) {
             BufferedImage img = UiRemoteImage.get(ref.url);
-            float iw;
-            if (img != null && img.getHeight() > 0) {
-                iw = targetH * ((float) img.getWidth() / img.getHeight());
-            } else {
-                iw = ref.declaredW != null ? Math.min(ref.declaredW, 120) : targetH;
-            }
-            if (cx + iw > x + w) break; // pas de retour à la ligne — troncature défensive, rare en pratique
+            float iw = widthOf(ref, img, targetH);
+            if (cx + iw > right) break; // pas de retour à la ligne — troncature défensive, rare en pratique
             if (img != null) {
                 renderer.drawIcon(ref.cacheKey, img, cx, y + 4f, iw, targetH, vpWidth, vpHeight);
             } else {

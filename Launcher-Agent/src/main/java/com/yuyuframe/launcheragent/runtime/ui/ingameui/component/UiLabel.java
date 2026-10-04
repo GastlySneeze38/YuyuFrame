@@ -37,10 +37,17 @@ public class UiLabel extends UiWidget {
 
     @Override
     public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
+        // clipFade (1 hors d'un conteneur défilant) : sans lui, un libellé
+        // restait pleinement opaque en sortant du viewport, là où le reste du
+        // contenu s'estompe — du texte net débordait du cadre sur Blaze3D,
+        // qui n'a pas de vrai clip (voir UiScrollContainer).
+        if (clipFade <= 0.01f) return;
+        UiColor c = clipFade >= 0.999f ? color : color.multiplyAlpha(clipFade);
         if (shadow) {
-            renderer.drawTextShadowed(font, text, x, y, color, new UiColor(0, 0, 0, 150), scale, scale, scale, vpWidth, vpHeight);
+            renderer.drawTextShadowed(font, text, x, y, c, new UiColor(0, 0, 0, 150).multiplyAlpha(clipFade),
+                scale, scale, scale, vpWidth, vpHeight);
         } else {
-            renderer.drawText(font, text, x, y, color, scale, vpWidth, vpHeight);
+            renderer.drawText(font, text, x, y, c, scale, vpWidth, vpHeight);
         }
     }
 }

@@ -95,8 +95,94 @@ public final class UiRemoteImage {
         if (url == null || url.isEmpty()) return null;
         BufferedImage cached = CACHE.get(url);
         if (cached != null) return cached;
+        // Une URL qui a échoué n'est PAS redemandée : get() est appelé à chaque
+        // image par tout widget qui attend son image, donc une image
+        // introuvable (404, format illisible) relançait une requête réseau en
+        // boucle, 60 fois par seconde, tant que l'écran restait ouvert.
+        if (FAILED.contains(url)) return null;
         if (FETCHING.add(url)) {
             FETCH_POOL.submit(() -> fetchAndDecode(url));
+        }
+        return null;
+    }
+
+    /** URL dont le chargement a échoué pour cette session — voir {@link #get}. */
+    private static final Set<String> FAILED = ConcurrentHashMap.newKeySet();
+
+    /** Vrai si cette image ne viendra pas (échec réseau ou de décodage) : l'appelant peut cesser de lui garder une place. */
+    public static boolean failed(String url) {
+        return url != null && FAILED.contains(url);
+    }
+
+    // ── Versions réduites ────────────────────────────────────────────────────
+    //
+    // Une image s'affiche presque toujours plus petite que sa source (vignette
+    // de galerie, bannière de description). La dessiner telle quelle envoie
+    // la SOURCE au GPU — sur Blaze3D, dans l'atlas partagé de 2048² (voir
+    // Blaze3DRect) : trois captures 1920×1080 le remplissent, et tout ce qui
+    // suit ne s'affiche plus. scaled() rend une copie ramenée à la taille
+    // d'affichage, réduite hors du thread de rendu.
+    private static final Map<String, BufferedImage> SCALED = new ConcurrentHashMap<>();
+    private static final Set<String> SCALING = ConcurrentHashMap.newKeySet();
+    /** Au-delà, le cache des copies réduites est vidé d'un bloc (elles se recalculent depuis la source). */
+    private static final int MAX_SCALED_ENTRIES = 96;
+
+    /**
+     * Copie de l'image tenant dans {@code maxW × maxH} (proportions gardées,
+     * jamais agrandie), ou {@code null} tant qu'elle n'est pas prête. Même
+     * contrat que {@link #get} : non bloquant, à rappeler à chaque image.
+     * Passer la même clé de texture pour une même taille demandée.
+     */
+    public static BufferedImage scaled(String url, int maxW, int maxH) {
+        if (url == null || url.isEmpty() || maxW <= 0 || maxH <= 0) return null;
+        String key = url + "|" + maxW + "x" + maxH;
+        BufferedImage ready = SCALED.get(key);
+        if (ready != null) return ready;
+        BufferedImage source = get(url);
+        if (source == null) return null;
+        float ratio = Math.min(1f, Math.min(maxW / (float) source.getWidth(), maxH / (float) source.getHeight()));
+        if (ratio >= 1f) return source; // déjà assez petite : rien à copier
+        if (SCALING.add(key)) {
+            FETCH_POOL.submit(() -> {
+                try {
+                    int w = Math.max(1, Math.round(source.getWidth() * ratio));
+                    int h = Math.max(1, Math.round(source.getHeight() * ratio));
+                    BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+                    java.awt.Graphics2D g = out.createGraphics();
+                    try {
+                        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                            java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                            java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                        // Réduction en UNE passe bilinéaire : au-delà d'un
+                        // facteur 2 elle saute des pixels, d'où un passage
+                        // intermédiaire à mi-chemin pour les grandes réductions.
+                        BufferedImage from = source;
+                        if (ratio < 0.5f) {
+                            int mw = Math.max(w, source.getWidth() / 2), mh = Math.max(h, source.getHeight() / 2);
+                            BufferedImage mid = new BufferedImage(mw, mh, BufferedImage.TYPE_INT_ARGB);
+                            java.awt.Graphics2D gm = mid.createGraphics();
+                            try {
+                                gm.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                                    java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                                gm.drawImage(source, 0, 0, mw, mh, null);
+                            } finally {
+                                gm.dispose();
+                            }
+                            from = mid;
+                        }
+                        g.drawImage(from, 0, 0, w, h, null);
+                    } finally {
+                        g.dispose();
+                    }
+                    if (SCALED.size() >= MAX_SCALED_ENTRIES) SCALED.clear();
+                    SCALED.put(key, out);
+                } catch (Throwable t) {
+                    LauncherLog.warn("[UiRemoteImage] scaled(" + url + "): " + t);
+                } finally {
+                    SCALING.remove(key);
+                }
+            });
         }
         return null;
     }
@@ -110,8 +196,11 @@ public final class UiRemoteImage {
                 CACHE.put(url, img);
                 INSERTION_ORDER.add(url);
                 evictIfNeeded(cacheBytes.addAndGet(4L * img.getWidth() * img.getHeight()));
+            } else {
+                FAILED.add(url);
             }
         } catch (Throwable t) {
+            FAILED.add(url);
             LauncherLog.warn("[UiRemoteImage] fetch(" + url + "): " + t);
         } finally {
             FETCHING.remove(url);

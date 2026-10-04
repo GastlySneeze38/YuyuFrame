@@ -62,6 +62,8 @@ public final class GalleryCarousel extends UiWidget {
     private static final float ARROW_MARGIN = 14f;
     private static final float DOT_D = 7f;
     private static final float DOT_GAP = 10f;
+    /** Taille maximale de l'image envoyée au GPU — voir draw(). */
+    private static final int MAX_W = 1600, MAX_H = 900;
     private static final int MAX_DOTS = 10; // au-delà, un pastille "n / total" remplace les points (illisible sinon)
 
     private final List<String> urls;
@@ -88,6 +90,11 @@ public final class GalleryCarousel extends UiWidget {
         List<String> keys = new ArrayList<>(urls.size());
         for (String u : urls) keys.add("gallery-full:" + u);
         this.cacheKeys = keys;
+    }
+
+    /** Image affichée — pour ouvrir le carrousel sur celle qu'on vient de cliquer dans une grille. */
+    public void setIndex(int newIndex) {
+        if (!urls.isEmpty()) index = Math.max(0, Math.min(urls.size() - 1, newIndex));
     }
 
     private float leftCx() { return x + ARROW_MARGIN + ARROW_D / 2f; }
@@ -123,11 +130,14 @@ public final class GalleryCarousel extends UiWidget {
             UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_PANEL, UiTheme.PANEL_BG_ALT.multiplyAlpha(fade),
             panelBorder, 1.4f, vpWidth, vpHeight);
 
+        // Copie ramenée à MAX_W × MAX_H et non la source : une capture pleine
+        // résolution remplirait à elle seule une bonne part de l'atlas
+        // d'icônes partagé (voir UiRemoteImage#scaled).
         String url = urls.get(index);
-        BufferedImage img = UiRemoteImage.get(url);
+        BufferedImage img = UiRemoteImage.scaled(url, MAX_W, MAX_H);
         if (urls.size() > 1) {
-            UiRemoteImage.get(urls.get((index + 1) % urls.size()));
-            UiRemoteImage.get(urls.get((index - 1 + urls.size()) % urls.size()));
+            UiRemoteImage.scaled(urls.get((index + 1) % urls.size()), MAX_W, MAX_H);
+            UiRemoteImage.scaled(urls.get((index - 1 + urls.size()) % urls.size()), MAX_W, MAX_H);
         }
 
         if (img != null && img.getWidth() > 0 && img.getHeight() > 0) {
@@ -139,7 +149,7 @@ public final class GalleryCarousel extends UiWidget {
             renderer.drawIcon(cacheKeys.get(index), img, x + (w - dw) / 2f, y + (h - dh) / 2f, dw, dh,
                 imgFade.alpha() * fade, vpWidth, vpHeight);
         } else {
-            String label = "Chargement...";
+            String label = UiRemoteImage.failed(url) ? "Image indisponible" : "Chargement...";
             float lw = renderer.textWidth(label, 0.42f);
             renderer.drawText(label, x + (w - lw) / 2f, y + h / 2f - 6f, UiTheme.TEXT_MUTED, 0.42f, vpWidth, vpHeight);
         }
