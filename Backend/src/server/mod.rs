@@ -324,6 +324,11 @@ pub async fn clear_session(state: &SharedState) {
         let s = state.read().await;
         let conn = s.db.lock().await;
         crate::db::delete_yuyu_session(&conn).ok();
+        // Plus personne de connecté : les instances de ce PC restent
+        // visibles (voir `instance_release_all`).
+        if let Err(e) = crate::db::instance_release_all(&conn) {
+            tracing::warn!("instances non rendues au PC à la déconnexion : {e}");
+        }
     }
     state.write().await.yuyu_session = None;
 }

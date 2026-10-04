@@ -121,6 +121,13 @@ pub fn run() {
                 // Adopte les instances orphelines (yuyu_user_id = 0) au redémarrage
                 db::instance_claim_unclaimed(&conn, session.user_id).ok();
             });
+            // Démarrage sans session : les instances restent visibles. Rattrape
+            // aussi une déconnexion faite par une version qui les masquait.
+            if yuyu_session.is_none() {
+                if let Err(e) = db::instance_release_all(&conn) {
+                    tracing::warn!("instances non rendues au PC au démarrage : {e}");
+                }
+            }
 
             // Comptes Minecraft propres au PC, restaurés avec ou sans session
             // YuyuFrame (voir `account::minecraft::store`).

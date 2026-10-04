@@ -246,12 +246,37 @@ pub fn instance_all_ids(conn: &Connection) -> Result<Vec<String>> {
     Ok(rows)
 }
 
-/// Reassigne les instances orphelines (yuyu_user_id = 0) à l'utilisateur qui vient de se connecter.
+/// Reassigne les instances et les configurations JVM sans compte
+/// (yuyu_user_id = 0) à l'utilisateur qui vient de se connecter.
 pub fn instance_claim_unclaimed(conn: &Connection, user_id: i64) -> Result<()> {
     conn.execute(
         "UPDATE instances SET yuyu_user_id = ?1 WHERE yuyu_user_id = 0",
         params![user_id],
     )?;
+    conn.execute(
+        "UPDATE jvm_profiles SET yuyu_user_id = ?1 WHERE yuyu_user_id = 0",
+        params![user_id],
+    )?;
+    Ok(())
+}
+
+/// Le pendant : quand plus personne n'est connecté, tout ce qui est sur ce PC
+/// redevient visible (yuyu_user_id = 0).
+///
+/// Les instances sont des dossiers de ce PC ; le compte YuyuFrame ne sert
+/// qu'à l'abonnement et à la synchronisation. Sans ça, une déconnexion — et à
+/// plus forte raison la déconnexion générale de la 0.1.4 — présentait une
+/// liste vide à quelqu'un dont les mondes étaient intacts, ce qui se lit
+/// exactement comme une perte de données. Rien n'est effacé ni déplacé : seul
+/// change le compte auquel les lignes sont rattachées, et la prochaine
+/// connexion les reprend (`instance_claim_unclaimed`).
+///
+/// TOUTES les lignes, pas seulement celles du compte qui part : appelée aussi
+/// au démarrage sans session, elle rattrape les installations déjà
+/// déconnectées, dont les lignes portent encore un ancien numéro de compte.
+pub fn instance_release_all(conn: &Connection) -> Result<()> {
+    conn.execute("UPDATE instances SET yuyu_user_id = 0 WHERE yuyu_user_id <> 0", [])?;
+    conn.execute("UPDATE jvm_profiles SET yuyu_user_id = 0 WHERE yuyu_user_id <> 0", [])?;
     Ok(())
 }
 
@@ -284,4 +309,40 @@ pub fn instance_rename_id(conn: &Connection, old_id: &str, new_id: &str) -> Resu
     conn.execute("UPDATE instances SET id = ?1 WHERE id = ?2", params![new_id, old_id])?;
     conn.execute("UPDATE play_sessions SET instance_id = ?1 WHERE instance_id = ?2", params![new_id, old_id])?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn db(name: &str) -> (Connection, std::path::PathBuf) {
+        let path = std::env::temp_dir().join(format!("yuyu-instances-{name}-{}.db", uuid::Uuid::new_v4()));
+        (crate::db::init_db(&path).unwrap(), path)
+    }
+
+    fn add(conn: &Connection, id: &str, user_id: i64) {
+        instance_insert(conn, id, user_id, id, "1.21.4", "fabric", 4096, "", "auto", None, "auto", "", "append").unwrap();
+    }
+
+    /// La déconnexion ne doit jamais présenter une liste vide à quelqu'un
+    /// dont les instances sont sur le disque.
+    #[test]
+    fn les_instances_restent_visibles_deconnecte_et_reviennent_a_la_connexion() {
+        let (conn, path) = db("release");
+        add(&conn, "survie", 7);
+        add(&conn, "autre-compte", 9);
+        add(&conn, "sans-compte", 0);
+        assert!(instance_list(&conn, 0).unwrap().len() == 1, "avant : déconnecté, on ne voyait que l'instance sans compte");
+
+        instance_release_all(&conn).unwrap();
+        assert_eq!(instance_list(&conn, 0).unwrap().len(), 3, "déconnecté : tout ce qui est sur le PC");
+        assert_eq!(instance_all_ids(&conn).unwrap().len(), 3, "rien n'est effacé");
+
+        instance_claim_unclaimed(&conn, 7).unwrap();
+        assert_eq!(instance_list(&conn, 7).unwrap().len(), 3, "reconnecté : tout revient au compte");
+        assert!(instance_list(&conn, 0).unwrap().is_empty());
+
+        drop(conn);
+        let _ = std::fs::remove_file(path);
+    }
 }
