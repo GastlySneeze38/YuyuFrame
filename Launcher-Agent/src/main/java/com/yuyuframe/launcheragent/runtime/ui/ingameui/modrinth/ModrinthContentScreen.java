@@ -237,9 +237,19 @@ public final class ModrinthContentScreen extends UiScreenBase {
     public void uiPollInput(UiInputPoller input) {
         updateDrawerLayout();
         // Les cartes et la pagination vivent dans la liste widgets de l'écran :
-        // modalWidgets() les rend inertes sous le tiroir sans garde de plus.
+        // modalWidgets() les rend inertes tant que la fenêtre de filtres est
+        // ouverte. Reste l'instant de la FERMETURE : le clic qui ferme (bouton,
+        // croix, fond) a encore le bouton enfoncé à l'image suivante, où les
+        // cartes sont de nouveau sondées et le prendraient pour un clic neuf
+        // (elles n'ont pas vu l'appui, n'étant pas sondées sous la fenêtre).
+        // Les cartes restent donc sourdes jusqu'au relâchement du bouton.
+        if (filtersOpen) cardsMuted = true;
+        else if (!input.leftDown) cardsMuted = false;
         super.uiPollInput(input);
     }
+
+    /** Vrai tant que les cartes ne doivent réagir ni au clic ni au survol — voir {@link #uiPollInput}. */
+    private boolean cardsMuted;
 
     /**
      * Voile léger au lieu du fond quasi opaque par défaut — même règle que
@@ -550,10 +560,30 @@ public final class ModrinthContentScreen extends UiScreenBase {
     // UiScrollContainer.baseY/applyOffsets) : les recréer à chaque frame
     // remettrait leur UiAnimatedFloat de survol à zéro en permanence, cassant
     // l'animation de survol.
-    private static final float DRAWER_W = 460f;
-    private static final float DRAWER_MARGIN = 30f;
+    //
+    // REFAIT le 2026-10-04 : fenêtre CENTRÉE au lieu d'un tiroir pleine
+    // hauteur à droite. Les noms « drawer* » restent (mêmes rôles). L'ancien
+    // tiroir se dessinait par drawBlurredPanel, qui recalcule sa PROPRE chaîne
+    // de flou au milieu du frame, à partir d'une image contenant déjà
+    // l'interface : l'écran scintillait tant qu'il était ouvert. La fenêtre
+    // passe par drawGlassPanel, donc par la chaîne partagée du frame, comme
+    // toutes les cartes — elle est opaque dans ses bornes, ce qui est dessous
+    // ne transparaît pas.
+    private static final float DRAWER_W = 560f;
+    private static final float DRAWER_MARGIN = 28f;
+    private static final float MODAL_CHIP_H = 34f, MODAL_CHIP_GAP = 10f;
     private final UiAnimatedFloat drawerAnim = new UiAnimatedFloat(0f, 12f);
+    /** Avancement de l'ouverture, lu UNE fois par image (drawDrawer) et partagé par tout ce qui s'estompe avec la fenêtre. */
+    private float modalT;
+    private float modalTop, modalH; // bord haut (Y-up) et hauteur, posés par buildDrawer
     private final UiWidget drawerBackdrop = new DrawerBackdrop();
+    /** Corps de la fenêtre : avale le clic sur une zone vide, qui sinon tomberait sur le fond et fermerait. */
+    private final UiWidget drawerBody = new UiWidget(0, 0, 0, 0) {
+        @Override
+        public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {}
+    };
+
+    private float modalX() { return (screenWidth - DRAWER_W) / 2f; }
     private final List<UiWidget> drawerContent = new ArrayList<>();
     private final List<Float> drawerContentBaseX = new ArrayList<>(); // offset LOCAL (0 = bord gauche du tiroir)
     private final List<UiWidget> drawerAllWidgets = new ArrayList<>(); // backdrop + drawerContent, recombiné à chaque buildDrawer()
@@ -563,56 +593,49 @@ public final class ModrinthContentScreen extends UiScreenBase {
     /** Repositionne le tiroir/son fond à l'état d'animation COURANT — appelé chaque frame (poll ET dessin), indépendamment de buildDrawer() (qui, lui, ne (re)construit les widgets qu'à l'ouverture/au changement de type). */
     private void updateDrawerLayout() {
         drawerAnim.setTarget(filtersOpen ? 1f : 0f);
-        float t = drawerAnim.get();
-        float drawerX = screenWidth - DRAWER_W * t;
+        float panelX = modalX();
         drawerBackdrop.x = 0;
         drawerBackdrop.y = 0;
-        drawerBackdrop.w = Math.max(0f, drawerX);
+        drawerBackdrop.w = screenWidth;
         drawerBackdrop.h = screenHeight;
+        drawerBody.x = panelX;
+        drawerBody.y = modalTop - modalH;
+        drawerBody.w = DRAWER_W;
+        drawerBody.h = modalH;
         for (int i = 0; i < drawerContent.size(); i++) {
-            drawerContent.get(i).x = drawerX + drawerContentBaseX.get(i);
+            drawerContent.get(i).x = panelX + drawerContentBaseX.get(i);
         }
     }
 
     private void drawDrawer(UiRenderer renderer, double mouseX, double mouseY) {
-        float t = drawerAnim.get();
+        modalT = drawerAnim.get();
+        float t = modalT;
         if (t <= 0.001f) return;
         drawerBackdrop.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
-        float drawerX = screenWidth - DRAWER_W * t;
-        if (renderer.isGlassAvailable()) {
-            // drawBlurredPanel et NON drawGlassPanel : ce tiroir est une MODALE,
-            // il doit flouter TOUT ce qu'il recouvre — y compris l'interface
-            // déjà dessinée dessous. La chaîne PARTAGÉE du frame
-            // (beginGlassFrame) ne contient que le monde du jeu, capturé avant
-            // le moindre pixel d'UI (voir Blaze3DBlur#queueFrameChain) : s'en
-            // servir ici laisserait la liste de résultats parfaitement nette
-            // sous le tiroir. Celui-ci recalcule donc sa propre chaîne à son
-            // tour dans la file — 9 passes en plus, mais seulement tant que le
-            // tiroir est ouvert, et pour un seul panneau.
-            renderer.drawBlurredPanel(drawerX, 0, screenWidth, screenHeight, 0f, 0f, 0f, 0f,
-                GLASS_PASSES, UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, screenWidth, screenHeight);
-        } else {
-            renderer.drawRoundedRect(drawerX, 0, screenWidth, screenHeight, 0, UiTheme.PANEL_BG, screenWidth, screenHeight);
-        }
-        // Liseré ACCENT au bord gauche — sépare visuellement le tiroir du
-        // reste (drawShadow existe mais compose TOUJOURS après Blaze3D sur
-        // era E, voir sa javadoc — un vrai risque de retomber sur le même bug
-        // de z-order déjà rencontré plusieurs fois cette session ; un simple
-        // liseré plein via drawRoundedRect, lui, passe par le même chemin
-        // Blaze3D que le reste, aucun risque de composition).
-        renderer.drawRoundedRect(drawerX, 0, drawerX + 3f, screenHeight, 0, UiTheme.ACCENT, screenWidth, screenHeight);
+        float panelX = modalX();
+        float bottom = modalTop - modalH;
+        // Fondu d'ouverture par l'alpha du repli, qui pilote aussi celui du
+        // verre (voir UiRenderer#drawGlassPanel).
+        UiColor border = renderer.isGlassAvailable() ? UiTheme.GLASS_BORDER_HOVER.multiplyAlpha(t) : null;
+        renderer.drawGlassPanel(panelX, bottom, panelX + DRAWER_W, modalTop, UiTheme.RADIUS_MD,
+            UiTheme.GLASS_TINT, UiTheme.GLASS_STRENGTH_MODAL, UiTheme.PANEL_BG.multiplyAlpha(t),
+            border, Math.max(1f, UiTheme.scaled(1f)), screenWidth, screenHeight);
 
-        // Libellés fondus en synchro avec le glissement du tiroir (même valeur
-        // "t" que le fond/le liseré ci-dessus) — pas de UiTransition dédiée
-        // pour un simple texte statique, cette synchronisation suffit.
         UiColor labelColor = UiTheme.TEXT_MUTED.multiplyAlpha(t);
-        renderer.drawText(UiFont.BOLD, "Filtres", drawerX + DRAWER_MARGIN, screenHeight - 52f,
-            UiTheme.TEXT_PRIMARY.multiplyAlpha(t), 0.72f, screenWidth, screenHeight);
-        renderer.drawText("Trier par", drawerX + DRAWER_MARGIN, drawerSortLabelY, labelColor, 0.46f, screenWidth, screenHeight);
+        float textX = panelX + DRAWER_MARGIN;
+        renderer.drawText(UiFont.BOLD, "Filtres", textX, modalTop - 46f,
+            UiTheme.TEXT_PRIMARY.multiplyAlpha(t), 0.62f, screenWidth, screenHeight);
+        // Trait sous l'en-tête et au-dessus du pied : trois zones lisibles.
+        UiColor rule = UiTheme.GLASS_HAIRLINE.multiplyAlpha(t);
+        renderer.drawRoundedRect(textX, modalTop - 66f, panelX + DRAWER_W - DRAWER_MARGIN, modalTop - 65f, 0f,
+            rule, screenWidth, screenHeight);
+        renderer.drawRoundedRect(textX, bottom + DRAWER_MARGIN + 54f, panelX + DRAWER_W - DRAWER_MARGIN,
+            bottom + DRAWER_MARGIN + 55f, 0f, rule, screenWidth, screenHeight);
+        renderer.drawText("Trier par", textX, drawerSortLabelY, labelColor, 0.4f, screenWidth, screenHeight);
         if (drawerHasVersionChip) {
-            renderer.drawText("Version", drawerX + DRAWER_MARGIN, drawerVersionLabelY, labelColor, 0.46f, screenWidth, screenHeight);
+            renderer.drawText("Version", textX, drawerVersionLabelY, labelColor, 0.4f, screenWidth, screenHeight);
         }
-        renderer.drawText("Catégories", drawerX + DRAWER_MARGIN, drawerCatLabelY, labelColor, 0.46f, screenWidth, screenHeight);
+        renderer.drawText("Catégories", textX, drawerCatLabelY, labelColor, 0.4f, screenWidth, screenHeight);
 
         for (UiWidget w : drawerContent) w.draw(renderer, mouseX, mouseY, screenWidth, screenHeight);
     }
@@ -627,7 +650,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
             renderer.drawRoundedRect(x, y, x + w, y + h, 0,
-                new UiColor(8, 8, 12, 255).multiplyAlpha(0.55f * drawerAnim.get()), vpWidth, vpHeight);
+                new UiColor(8, 8, 12, 255).multiplyAlpha(0.6f * modalT), vpWidth, vpHeight);
         }
     }
 
@@ -647,7 +670,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            float e = entrance.eased();
+            float e = entrance.eased() * modalT; // modalT : s'estompe aussi à la fermeture de la fenêtre
             hoverAnim.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
             UiColor bg = UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.CARD_HOVER, hoverAnim.get()).multiplyAlpha(e);
             renderer.drawRoundedRect(x, y, x + w, y + h, UiTheme.RADIUS_SM, bg, vpWidth, vpHeight);
@@ -693,67 +716,86 @@ public final class ModrinthContentScreen extends UiScreenBase {
         drawerContentBaseX.clear();
         UiRenderer renderer = UiRenderer.get(getClass().getClassLoader());
         float chipScale = 0.46f;
+        float chipPad = 28f;
         float maxLocalX = DRAWER_W - DRAWER_MARGIN;
         int[] entranceIndex = {0}; // tableau 1-case = compteur mutable capturable par les lambdas ci-dessous
 
-        float closeSize = 34f;
+        // Mise en page en DEUX temps : la hauteur de la fenêtre dépend du
+        // nombre de rangées de chips, donc tout est d'abord posé par rapport à
+        // un bord haut à y = 0 (y négatifs, vers le bas), puis décalé d'un bloc
+        // une fois la hauteur connue et la fenêtre centrée.
+        float closeSize = 32f;
         addDrawerWidget(new DrawerCloseButton(closeSize, closeSize, nextEntranceDelay(entranceIndex)),
-            DRAWER_W - DRAWER_MARGIN - closeSize, screenHeight - 62f);
+            DRAWER_W - DRAWER_MARGIN - closeSize, -18f - closeSize);
 
-        float y = screenHeight - 128f;
+        // Chaque section : libellé (ligne de base), puis ses chips 14 px dessous.
+        float y = -96f;
         drawerSortLabelY = y;
-        y -= LABEL_TO_CHIP_GAP;
+        y -= 14f + MODAL_CHIP_H;
         float x = DRAWER_MARGIN;
         for (SortOrder s : SortOrder.values()) {
-            float w = renderer.textWidth(s.label, chipScale) + 34f;
+            float w = renderer.textWidth(s.label, chipScale) + chipPad;
             if (x + w > maxLocalX) {
                 x = DRAWER_MARGIN;
-                y -= CHIP_H + CHIP_GAP;
+                y -= MODAL_CHIP_H + MODAL_CHIP_GAP;
             }
-            addDrawerWidget(new FilterChip(0, 0, w, CHIP_H, s.label, () -> sort == s, () -> {
+            addDrawerWidget(new FilterChip(0, 0, w, MODAL_CHIP_H, s.label, () -> sort == s, () -> {
                 sort = s;
                 triggerSearch();
             }, nextEntranceDelay(entranceIndex)), x, y);
-            x += w + CHIP_GAP;
+            x += w + MODAL_CHIP_GAP;
         }
-        y -= CHIP_H + CHIP_GAP + 32f;
+        y -= 36f;
 
         String mcVersion = System.getProperty("launcheragent.mcVersion", "");
         drawerHasVersionChip = !mcVersion.isEmpty() && !"unknown".equals(mcVersion);
         if (drawerHasVersionChip) {
             drawerVersionLabelY = y;
-            y -= LABEL_TO_CHIP_GAP;
+            y -= 14f + MODAL_CHIP_H;
             String versionLabel = "Version " + mcVersion + " uniquement";
-            float vw = renderer.textWidth(versionLabel, chipScale) + 34f;
-            addDrawerWidget(new FilterChip(0, 0, vw, CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
+            float vw = renderer.textWidth(versionLabel, chipScale) + chipPad;
+            addDrawerWidget(new FilterChip(0, 0, vw, MODAL_CHIP_H, versionLabel, () -> currentVersionOnly, () -> {
                 currentVersionOnly = !currentVersionOnly;
                 triggerSearch();
             }, nextEntranceDelay(entranceIndex)), DRAWER_MARGIN, y);
-            y -= CHIP_H + CHIP_GAP + 32f;
+            y -= 36f;
         }
 
         drawerCatLabelY = y;
-        y -= LABEL_TO_CHIP_GAP;
+        y -= 14f + MODAL_CHIP_H;
         x = DRAWER_MARGIN;
         for (String cat : kind.categories) {
-            float w = renderer.textWidth(cat, chipScale) + 34f;
+            float w = renderer.textWidth(cat, chipScale) + chipPad;
             if (x + w > maxLocalX) {
                 x = DRAWER_MARGIN;
-                y -= CHIP_H + CHIP_GAP;
+                y -= MODAL_CHIP_H + MODAL_CHIP_GAP;
             }
-            addDrawerWidget(new FilterChip(0, 0, w, CHIP_H, cat, () -> selectedCategories.contains(cat), () -> {
+            addDrawerWidget(new FilterChip(0, 0, w, MODAL_CHIP_H, cat, () -> selectedCategories.contains(cat), () -> {
                 if (!selectedCategories.remove(cat)) selectedCategories.add(cat);
                 triggerSearch();
             }, nextEntranceDelay(entranceIndex)), x, y);
-            x += w + CHIP_GAP;
+            x += w + MODAL_CHIP_GAP;
         }
-        y -= CHIP_H + CHIP_GAP + 44f;
 
-        addDrawerWidget(new UiButton(0, 0, DRAWER_W - DRAWER_MARGIN * 2, 46f, "Réinitialiser les filtres", this::resetFilters),
-            DRAWER_MARGIN, y - 46f);
+        // Pied : réinitialiser à gauche, fermer à droite, sous un trait (voir
+        // drawDrawer, qui le place 54 px au-dessus du bas de la fenêtre).
+        float footH = 40f;
+        float footW = (DRAWER_W - DRAWER_MARGIN * 2 - 12f) / 2f;
+        y -= 30f + footH;
+        addDrawerWidget(new UiButton(0, 0, footW, footH, "Réinitialiser", this::resetFilters), DRAWER_MARGIN, y);
+        addDrawerWidget(new UiButton(0, 0, footW, footH, "Fermer", this::toggleFilters), DRAWER_MARGIN + footW + 12f, y);
+
+        // Second temps : y vaut maintenant le bas du pied, relatif au bord haut.
+        modalH = -y + DRAWER_MARGIN;
+        modalTop = Math.round((screenHeight + modalH) / 2f);
+        for (UiWidget w : drawerContent) w.y += modalTop;
+        drawerSortLabelY += modalTop;
+        drawerVersionLabelY += modalTop;
+        drawerCatLabelY += modalTop;
 
         drawerAllWidgets.clear();
         drawerAllWidgets.add(drawerBackdrop);
+        drawerAllWidgets.add(drawerBody);
         drawerAllWidgets.addAll(drawerContent);
     }
 
@@ -802,7 +844,7 @@ public final class ModrinthContentScreen extends UiScreenBase {
 
         @Override
         public void draw(UiRenderer renderer, double mouseX, double mouseY, int vpWidth, int vpHeight) {
-            float e = entrance.eased();
+            float e = entrance.eased() * modalT; // modalT : s'estompe aussi à la fermeture de la fenêtre
             // Glisse légèrement vers le HAUT en apparaissant (Y-up : "monte
             // vers sa position finale" = y DÉCROÎT depuis un point de départ
             // plus bas) — décalage purement visuel, contains() (hit-test)
@@ -1178,6 +1220,24 @@ public final class ModrinthContentScreen extends UiScreenBase {
         private float btnY() { return y + h - PAD - BTN_H; }
         private boolean installing() { return hit.projectId.equals(installingProjectId); }
 
+        // Bouton « Supprimer » : même largeur, juste sous le bouton d'état.
+        private static final float DEL_H = 26f, DEL_GAP = 6f;
+        private static final long DELETE_CONFIRM_MS = 3000L;
+        private long deleteArmedAtMs;
+        private final UiAnimatedFloat btnHover = new UiAnimatedFloat(0f, 16f);
+        private final UiAnimatedFloat delHover = new UiAnimatedFloat(0f, 16f);
+
+        private float delY() { return btnY() - DEL_GAP - DEL_H; }
+
+        private boolean deleteArmed() {
+            return deleteArmedAtMs != 0L && System.currentTimeMillis() - deleteArmedAtMs < DELETE_CONFIRM_MS;
+        }
+
+        private boolean overDeleteRect(double mx, double my) {
+            float bx = btnX(), by = delY();
+            return mx >= bx && mx <= bx + BTN_W && my >= by && my <= by + DEL_H;
+        }
+
         /** Zone géométrique du bouton, INDÉPENDANTE de l'état (contrairement à contains()) — sert à EXCLURE cette zone du clic "ouvrir la page de détail" sur le reste de la carte, voir pollContinuous(). */
         private boolean overButtonRect(double mx, double my) {
             float bx = btnX(), by = btnY();
@@ -1209,7 +1269,17 @@ public final class ModrinthContentScreen extends UiScreenBase {
         public void pollContinuous(UiInputPoller input) {
             boolean justPressed = input.leftDown && !prevLeftDown;
             prevLeftDown = input.leftDown;
-            if (!justPressed) return;
+            if (!justPressed || cardsMuted) return;
+            if (alreadyInstalled && overDeleteRect(input.mouseX, input.mouseY)) {
+                if (deleteArmed()) {
+                    deleteArmedAtMs = 0L;
+                    triggerRemove(hit);
+                } else {
+                    deleteArmedAtMs = System.currentTimeMillis();
+                }
+                return;
+            }
+            deleteArmedAtMs = 0L; // un clic ailleurs désarme
             boolean overCard = input.mouseX >= x && input.mouseX <= x + w && input.mouseY >= y && input.mouseY <= y + h;
             if (overCard && !overButtonRect(input.mouseX, input.mouseY)) {
                 closeTo(new ModrinthProjectDetailScreen(ModrinthContentScreen.this, hit, alreadyInstalled));
@@ -1222,6 +1292,14 @@ public final class ModrinthContentScreen extends UiScreenBase {
             // défilant pour le faire varier) — gardé : c'est aussi par lui
             // que passerait un fondu d'entrée.
             float fade = clipFade;
+
+            // Sous la fenêtre de filtres, la carte ne doit pas non plus RÉAGIR
+            // au survol (soulèvement, bouton qui s'allume) : la souris est
+            // envoyée hors écran pour tout le dessin de la carte.
+            if (cardsMuted) {
+                mouseX = -1e6;
+                mouseY = -1e6;
+            }
 
             boolean hoveredCard = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
             hoverLift.setTarget(hoveredCard ? 1f : 0f);
@@ -1306,21 +1384,57 @@ public final class ModrinthContentScreen extends UiScreenBase {
             }
 
             boolean installing = installing();
-            boolean hoverBtn = contains(mouseX, mouseY);
-            UiColor btnColor = installing ? UiTheme.ACCENT_DIM
-                : alreadyInstalled ? UiTheme.PANEL_BG_ALT
-                : (hoverBtn ? UiTheme.ACCENT : UiTheme.CARD_HOVER);
+            boolean removing = hit.projectId.equals(removingProjectId);
+            btnHover.setTarget(contains(mouseX, mouseY) ? 1f : 0f);
+            float bh = btnHover.get();
             // btnY() + lift (PAS btnY() seul) : le bouton suit visuellement le
             // soulèvement de la carte — sa vraie zone cliquable (btnY(), lue
             // par contains()/overButtonRect() ci-dessus, jamais modifiée) reste
             // volontairement à la position non-soulevée, voir javadoc de hoverLift.
+            float bx = btnX();
             float liftedBtnY = btnY() + liftT * HOVER_LIFT_PX;
-            renderer.drawRoundedRect(btnX(), liftedBtnY, btnX() + BTN_W, liftedBtnY + BTN_H,
-                UiTheme.RADIUS_SM, btnColor.multiplyAlpha(fade), vpWidth, vpHeight);
+            float line = Math.max(1f, UiTheme.scaled(1f));
+            if (alreadyInstalled && !installing) {
+                // « Installé » : un état, pas une action — contour seul, sans
+                // remplissage, pour ne pas ressembler au bouton d'à côté.
+                renderer.drawRoundedRect(bx, liftedBtnY, bx + BTN_W, liftedBtnY + BTN_H, UiTheme.RADIUS_SM,
+                    UiTheme.ACCENT.multiplyAlpha(0.55f * fade), vpWidth, vpHeight);
+                renderer.drawRoundedRect(bx + line, liftedBtnY + line, bx + BTN_W - line, liftedBtnY + BTN_H - line,
+                    Math.max(0f, UiTheme.RADIUS_SM - line), UiTheme.CARD_BG.multiplyAlpha(fade), vpWidth, vpHeight);
+            } else {
+                // « Installer » : aplat violet sombre cerné d'ACCENT (le bouton
+                // du launcher), qui monte vers l'ACCENT plein au survol.
+                renderer.drawRoundedRect(bx, liftedBtnY, bx + BTN_W, liftedBtnY + BTN_H, UiTheme.RADIUS_SM,
+                    UiTheme.ACCENT.multiplyAlpha((0.55f + 0.45f * bh) * fade), vpWidth, vpHeight);
+                UiColor fill = installing ? UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT, 0.3f)
+                    : UiColor.lerp(UiColor.lerp(UiTheme.CARD_BG, UiTheme.ACCENT, 0.38f), UiTheme.ACCENT, bh);
+                renderer.drawRoundedRect(bx + line, liftedBtnY + line, bx + BTN_W - line, liftedBtnY + BTN_H - line,
+                    Math.max(0f, UiTheme.RADIUS_SM - line), fill.multiplyAlpha(fade), vpWidth, vpHeight);
+            }
             String label = installing ? spinnerFrame() + " Installation" : (alreadyInstalled ? "Installé" : "Installer");
             float lw = renderer.textWidth(label, 0.4f);
-            renderer.drawText(label, btnX() + (BTN_W - lw) / 2f, liftedBtnY + BTN_H / 2f - 5f,
-                (alreadyInstalled && !installing) ? UiTheme.TEXT_SECONDARY.multiplyAlpha(fade) : UiTheme.TEXT_PRIMARY.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
+            UiColor labelColor = (alreadyInstalled && !installing) ? UiTheme.ACCENT : UiTheme.TEXT_PRIMARY;
+            renderer.drawText(UiFont.BOLD, label, bx + (BTN_W - lw) / 2f - 1f, liftedBtnY + BTN_H / 2f - 5f,
+                labelColor.multiplyAlpha(fade), 0.4f, vpWidth, vpHeight);
+
+            // « Supprimer », sous « Installé ». Deux clics : le premier arme
+            // (« Confirmer ? », rouge plein, DELETE_CONFIRM_MS), le second
+            // supprime — une suppression ne part pas sur un clic égaré.
+            if (alreadyInstalled && !installing) {
+                boolean armed = deleteArmed();
+                delHover.setTarget(overDeleteRect(mouseX, mouseY) ? 1f : 0f);
+                float dh = delHover.get();
+                float delY = delY() + liftT * HOVER_LIFT_PX;
+                UiColor delBg = armed ? UiTheme.DANGER
+                    : UiColor.lerp(UiTheme.PANEL_BG_ALT, UiTheme.DANGER, dh * 0.45f);
+                renderer.drawRoundedRect(bx, delY, bx + BTN_W, delY + DEL_H, UiTheme.RADIUS_SM,
+                    delBg.multiplyAlpha(fade), vpWidth, vpHeight);
+                String delLabel = removing ? spinnerFrame() + " Suppression" : armed ? "Confirmer ?" : "Supprimer";
+                float dw = renderer.textWidth(delLabel, 0.36f);
+                UiColor delText = armed ? UiTheme.TEXT_PRIMARY : UiColor.lerp(UiTheme.DANGER, UiTheme.TEXT_PRIMARY, dh * 0.6f);
+                renderer.drawText(delLabel, bx + (BTN_W - dw) / 2f, delY + DEL_H / 2f - 4.5f,
+                    delText.multiplyAlpha(fade), 0.36f, vpWidth, vpHeight);
+            }
         }
     }
 
@@ -1374,6 +1488,81 @@ public final class ModrinthContentScreen extends UiScreenBase {
         } finally {
             busy = false;
             installingProjectId = null;
+        }
+    }
+
+    // ── Suppression ────────────────────────────────────────────────────────────
+
+    /** projectId en cours de suppression — même rôle qu'{@link #installingProjectId}. */
+    private volatile String removingProjectId;
+
+    private void triggerRemove(ModrinthJson.Hit hit) {
+        if (busy) return;
+        busy = true;
+        removingProjectId = hit.projectId;
+        statusText = "Suppression de " + hit.title + "...";
+
+        Thread t = new Thread(() -> doRemove(hit), "LauncherAgent-ModrinthRemove");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Supprime LE fichier du pack, et rien d'autre. « Installé » se déduit
+     * d'un rapprochement large (le nom de fichier contient le titre), assez
+     * bon pour un badge, trop large pour effacer : « Fresh » désignerait
+     * aussi « Fresh Animations ». On efface donc, dans l'ordre :
+     * le fichier que Modrinth publie pour ce projet s'il est là (nom exact) ;
+     * sinon l'unique fichier rapproché ; et s'il y en a plusieurs, rien — on
+     * le dit, et l'utilisateur tranche dans son dossier.
+     */
+    private void doRemove(ModrinthJson.Hit hit) {
+        try {
+            Path dir = installDir();
+            Path target = null;
+            try {
+                String filename = ModrinthJson.jsonString(ContentBridge.getLatestFile(hit.projectId), "filename");
+                // getFileName() : un nom venu du réseau ne doit jamais faire sortir du dossier.
+                if (filename != null && !filename.isEmpty()) {
+                    Path exact = dir.resolve(Paths.get(filename).getFileName());
+                    if (Files.isRegularFile(exact)) target = exact;
+                }
+            } catch (Throwable t) {
+                LauncherLog.warn("[ModrinthContentScreen] doRemove: nom exact indisponible (" + t + ") — rapprochement par titre");
+            }
+            if (target == null) {
+                String needle = normalize(hit.title);
+                List<Path> matches = new ArrayList<>();
+                if (!needle.isEmpty() && Files.isDirectory(dir)) {
+                    try (java.util.stream.Stream<Path> stream = Files.list(dir)) {
+                        stream.filter(p -> normalize(p.getFileName().toString()).contains(needle)).forEach(matches::add);
+                    }
+                }
+                if (matches.size() > 1) {
+                    statusText = "Plusieurs fichiers correspondent à " + hit.title + " — à supprimer dans le dossier " + kind.installDirName;
+                    return;
+                }
+                if (matches.size() == 1 && Files.isRegularFile(matches.get(0))) target = matches.get(0);
+            }
+            if (target == null) {
+                statusText = "Fichier de " + hit.title + " introuvable";
+                return;
+            }
+            try {
+                Files.delete(target);
+                statusText = hit.title + " supprimé";
+                pendingResults = new SearchResult(shownResults, totalHits); // rafraîchit le badge, sans réseau
+            } catch (java.io.IOException e) {
+                // Cas courant : pack activé, le jeu garde le fichier ouvert.
+                LauncherLog.warn("[ModrinthContentScreen] doRemove: " + e);
+                statusText = "Impossible de supprimer " + hit.title + " — désactive-le d'abord dans le jeu";
+            }
+        } catch (Throwable t) {
+            LauncherLog.err("[ModrinthContentScreen] doRemove: " + t);
+            statusText = "Erreur suppression : " + t;
+        } finally {
+            busy = false;
+            removingProjectId = null;
         }
     }
 
