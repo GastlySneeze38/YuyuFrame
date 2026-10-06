@@ -559,8 +559,11 @@ if not "!JAVAC_RC!"=="0" (
 echo [Stubs 1.8.9] OK
 
 echo [Build 1.8.9] Compilation du code type 1.8.9...
+:: launcheragent\celeritas\v1_8_9 (adaptateur 1.8.9 de Celeritas, 2026-10-06)
+:: est ecarte tant qu'il n'est pas reecrit : il est encore en noms Feather,
+:: avec ses directives Stonecutter. Voir celeritas\PROVENANCE.md.
 set "SRCLIST_189=%TEMP%\launcheragent_sources_189.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v1_8_9\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_189%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -match '\\v1_8_9\\' -and $_ -notmatch '\\launcheragent\\celeritas\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST_189%', $files)"
 
 :: Meme garde-fou — voir plus haut.
 for %%A in ("%SRCLIST_189%") do if %%~zA==0 (
