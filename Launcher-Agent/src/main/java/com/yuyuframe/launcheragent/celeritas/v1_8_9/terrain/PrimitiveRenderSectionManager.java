@@ -54,7 +54,7 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
     public PrimitiveRenderSectionManager(RenderPassConfiguration<?> configuration, World world, int renderDistance, CommandList commandList, int minSection, int maxSection, int requestedThreads) {
         super(configuration, new ContextFactory(world, configuration), ChunkRenderer::new, renderDistance, commandList, minSection, maxSection, requestedThreads);
         this.world = world;
-        this.snapshots = new SnapshotCache(world);
+        this.snapshots = new SnapshotCache(world, renderDistance);
     }
 
     /** Une section a changé : sa copie figée ne vaut plus rien. */
@@ -65,6 +65,11 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
     /** Un chunk entier est arrivé ou parti. */
     public void invalidateSnapshotColumn(int chunkX, int chunkZ) {
         this.snapshots.invalidateColumn(chunkX, chunkZ);
+    }
+
+    /** Rend les copies figées qui ne servent plus. Une fois par image, sur le fil du jeu. */
+    public void trimSnapshots() {
+        this.snapshots.trim();
     }
 
     /** Un contexte de construction par thread de travail. Classe nommée : elle tient un type du jeu. */

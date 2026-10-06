@@ -187,6 +187,8 @@ public final class RendererHooks189 {
         GLStateManagerFogService.invalidate();
         PrimitiveChunkMatrixGetter.invalidate();
 
+        CeleritasWorldRenderer.INSTANCE.trimSnapshots();
+
         logMetrics();
     }
 
@@ -220,6 +222,10 @@ public final class RendererHooks189 {
             com.yuyuframe.launcheragent.celeritas.v1_8_9.nativecore.NativeMesh.quadsAvailable());
         if (mesh != null) {
             LauncherLog.renderer(1, mesh);
+        }
+        String copies = com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats.drainMainThread();
+        if (copies != null) {
+            LauncherLog.renderer(1, copies);
         }
     }
 
@@ -339,6 +345,7 @@ public final class RendererHooks189 {
     }
 
     // ── Suivi des chunks chargés ─────────────────────────────────────────────
+
 
     /** Un chunk du client vient d'être chargé ({@code true}) ou déchargé. */
     public static void onClientChunk(int x, int z, boolean loaded) {

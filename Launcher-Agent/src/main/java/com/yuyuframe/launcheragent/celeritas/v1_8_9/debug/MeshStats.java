@@ -30,6 +30,54 @@ public final class MeshStats {
         QUAD_NANOS.add(quadNanos);
     }
 
+    // Ce qui se passe sur le fil du jeu : lu et écrit par lui seul, pas besoin d'additionneurs.
+    private static long snapshotsCaptured;
+    private static long snapshotsReused;
+    private static long lastGcMillis = -1;
+
+    /** Une section a été demandée au cache de copies : copiée pour de bon, ou reprise. */
+    public static void snapshot(boolean captured) {
+        if (captured) {
+            snapshotsCaptured++;
+        } else {
+            snapshotsReused++;
+        }
+    }
+
+    /**
+     * Provisoire, pour vérifier le cache de copies (2026-10-06) : combien de
+     * sections sont copiées pour de bon ou reprises du cache, et ce que ça
+     * coûte en mémoire Java. À retirer une fois le correctif mesuré en jeu.
+     * Rend {@code null} s'il ne s'est rien passé.
+     */
+    public static String drainMainThread() {
+        if (snapshotsCaptured + snapshotsReused == 0) {
+            return null;
+        }
+        Runtime runtime = Runtime.getRuntime();
+        long used = (runtime.totalMemory() - runtime.freeMemory()) >> 20;
+        long max = runtime.maxMemory() >> 20;
+
+        long gcMillis = 0;
+        try {
+            for (java.lang.management.GarbageCollectorMXBean bean : java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()) {
+                gcMillis += Math.max(0, bean.getCollectionTime());
+            }
+        } catch (Throwable unavailable) {
+            gcMillis = -1;
+        }
+        long gcDelta = gcMillis < 0 || lastGcMillis < 0 ? 0 : gcMillis - lastGcMillis;
+        lastGcMillis = gcMillis;
+
+        String line = String.format(Locale.ROOT,
+            "Copies de sections: %d faites, %d reprises (%d %% reprises) | mémoire: %d/%d Mo, ramasse-miettes %d ms",
+            snapshotsCaptured, snapshotsReused, 100 * snapshotsReused / (snapshotsCaptured + snapshotsReused),
+            used, max, gcDelta);
+        snapshotsCaptured = 0;
+        snapshotsReused = 0;
+        return line;
+    }
+
     /** Pour la ligne de métriques : les sections maillées depuis l'appel précédent, ou {@code null} s'il n'y en a pas. */
     public static String drain(boolean nativeShape, boolean nativeQuads) {
         long sections = SECTIONS.sumThenReset();

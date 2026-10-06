@@ -79,6 +79,13 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
         }
     }
 
+    /** Rend les copies figées qui ne servent plus. Une fois par image, sur le fil du jeu. */
+    public void trimSnapshots() {
+        if (this.renderSectionManager != null) {
+            this.renderSectionManager.trimSnapshots();
+        }
+    }
+
     @Override
     public int getEffectiveRenderDistance() {
         return MinecraftClient.getInstance().options.viewDistance;

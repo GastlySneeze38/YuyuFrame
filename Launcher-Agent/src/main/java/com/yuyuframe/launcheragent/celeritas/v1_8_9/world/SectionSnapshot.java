@@ -2,7 +2,6 @@ package com.yuyuframe.launcheragent.celeritas.v1_8_9.world;
 
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
 import net.minecraft.util.math.Vec3i;
-import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.ChunkSection;
@@ -34,6 +33,9 @@ import java.util.Map;
  *   <li>{@link #heights} — pour une section vide, la hauteur du plus haut bloc
  *       de chaque colonne : c'est elle qui dit si le ciel éclaire ;</li>
  *   <li>{@link #biomes} — un identifiant de biome par colonne, {@code z << 4 | x}.</li>
+ *   <li>Hauteurs et biomes sont ceux de la colonne de chunk entière : ces deux
+ *       tableaux sont partagés avec les autres sections de la colonne
+ *       ({@link ColumnSnapshot}), pas recopiés.</li>
  * </ul>
  */
 @YarnNamed
@@ -52,7 +54,7 @@ public final class SectionSnapshot {
     private final HashMap<Integer, Object> blockEntities;
 
     private SectionSnapshot(int x, int y, int z, char[] blocks, byte[] blockLight, byte[] skyLight, int[] heights,
-                            byte[] biomes, HashMap<Integer, Object> blockEntities) {
+                            MemorySegment heightsSegment, byte[] biomes, HashMap<Integer, Object> blockEntities) {
         this.x = x;
         this.y = y;
         this.z = z;
@@ -66,7 +68,7 @@ public final class SectionSnapshot {
         this.blocksSegment = blocks == null ? MemorySegment.NULL : MemorySegment.ofArray(blocks);
         this.blockLightSegment = blockLight == null ? MemorySegment.NULL : MemorySegment.ofArray(blockLight);
         this.skyLightSegment = skyLight == null ? MemorySegment.NULL : MemorySegment.ofArray(skyLight);
-        this.heightsSegment = heights == null ? MemorySegment.NULL : MemorySegment.ofArray(heights);
+        this.heightsSegment = heights == null ? MemorySegment.NULL : heightsSegment;
     }
 
     // Les mêmes tableaux, sous la forme que prend un appel au noyau natif
@@ -76,9 +78,12 @@ public final class SectionSnapshot {
     public final MemorySegment skyLightSegment;
     public final MemorySegment heightsSegment;
 
-    /** À appeler sur le fil du jeu. Un chunk non chargé donne une section vide. */
-    public static SectionSnapshot capture(World world, int sectionX, int sectionY, int sectionZ) {
-        Chunk chunk = world.getChunk(sectionX, sectionZ);
+    /**
+     * À appeler sur le fil du jeu. Un chunk non chargé donne une section vide.
+     *
+     * @param column ce que la colonne a de commun à toutes ses sections (biomes, hauteurs), partagé et non recopié
+     */
+    public static SectionSnapshot capture(Chunk chunk, ColumnSnapshot column, int sectionX, int sectionY, int sectionZ) {
 
         ChunkSection section = null;
         ChunkSection[] storage = chunk.getBlockStorage();
@@ -99,15 +104,10 @@ public final class SectionSnapshot {
                 skyLight = sky.getValue().clone();
             }
         } else {
-            heights = new int[256];
-            for (int localZ = 0; localZ < 16; localZ++) {
-                for (int localX = 0; localX < 16; localX++) {
-                    heights[localZ << 4 | localX] = chunk.getHighestBlockY(localX, localZ);
-                }
-            }
+            heights = column.heights(chunk);
         }
 
-        byte[] biomes = chunk.getBiomeArray().clone();
+        byte[] biomes = column.biomes;
 
         HashMap<Integer, Object> blockEntities = null;
         Map<?, ?> all = chunk.getBlockEntities();
@@ -125,7 +125,8 @@ public final class SectionSnapshot {
             }
         }
 
-        return new SectionSnapshot(sectionX, sectionY, sectionZ, blocks, blockLight, skyLight, heights, biomes, blockEntities);
+        return new SectionSnapshot(sectionX, sectionY, sectionZ, blocks, blockLight, skyLight, heights,
+            heights == null ? null : column.heightsSegment(), biomes, blockEntities);
     }
 
     /** Coordonnées locales, 0 à 15. */
