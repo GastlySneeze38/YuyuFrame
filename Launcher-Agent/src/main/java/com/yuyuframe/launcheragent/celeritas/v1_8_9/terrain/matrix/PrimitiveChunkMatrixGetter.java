@@ -32,6 +32,11 @@ public class PrimitiveChunkMatrixGetter {
         cached = null;
     }
 
+    /** Les matrices déjà lues pour cette image, ou {@code null} — ne relit jamais OpenGL. */
+    public static ChunkRenderMatrices peek() {
+        return cached;
+    }
+
     public static ChunkRenderMatrices getMatrices() {
         ChunkRenderMatrices matrices = cached;
         if (matrices == null) {

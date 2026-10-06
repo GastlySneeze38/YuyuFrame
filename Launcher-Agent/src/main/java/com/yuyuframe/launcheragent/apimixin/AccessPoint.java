@@ -296,6 +296,12 @@ public enum AccessPoint {
      */
     CLIENT_RELOAD_TERRAIN,
     /**
+     * Active ou coupe le regroupement du texte vanilla — argument
+     * {@code Boolean}. 1.8.9 seulement ({@code v1_8_9.text.TextBatch189}) :
+     * son {@code TextRenderer} dessine caractère par caractère en mode immédiat.
+     */
+    CLIENT_TEXT_BATCHING,
+    /**
      * Utilisation d'objet en cours, rendue en
      * {@code int[]{ ticks restants, durée totale }} — {@code null} si le
      * joueur n'utilise rien.

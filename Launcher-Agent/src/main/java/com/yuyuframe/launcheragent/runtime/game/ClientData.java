@@ -168,6 +168,11 @@ public final class ClientData {
         AccessorRegistry.get(AccessPoint.CLIENT_RELOAD_TERRAIN);
     }
 
+    /** Regroupe le dessin du texte vanilla — voir {@link AccessPoint#CLIENT_TEXT_BATCHING}. 1.8.9 seulement. */
+    public static void setTextBatching(boolean wanted) {
+        AccessorRegistry.invoke(AccessPoint.CLIENT_TEXT_BATCHING, null, Boolean.valueOf(wanted));
+    }
+
     /** Plein écran sans bordure (vrai) ou exclusif (faux) — voir {@link AccessPoint#CLIENT_BORDERLESS_FULLSCREEN}. 1.8.9 seulement. */
     public static void setBorderlessFullscreen(boolean wanted) {
         AccessorRegistry.invoke(AccessPoint.CLIENT_BORDERLESS_FULLSCREEN, null, Boolean.valueOf(wanted));

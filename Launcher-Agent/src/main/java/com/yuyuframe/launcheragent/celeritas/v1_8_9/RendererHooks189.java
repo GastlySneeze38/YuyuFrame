@@ -28,6 +28,8 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.fog.GLStateManagerFo
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.matrix.PrimitiveChunkMatrixGetter;
 import com.yuyuframe.launcheragent.celeritas.viewport.Viewport;
 import com.yuyuframe.launcheragent.celeritas.viewport.ViewportProvider;
+import com.yuyuframe.launcheragent.celeritas.chunk.ChunkRenderMatrices;
+import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
@@ -223,6 +225,10 @@ public final class RendererHooks189 {
         double y = viewEntity.prevTickY + (viewEntity.y - viewEntity.prevTickY) * tickDelta;
         double z = viewEntity.prevTickZ + (viewEntity.z - viewEntity.prevTickZ) * tickDelta;
 
+        originX = x;
+        originY = y;
+        originZ = z;
+
         GameRenderer gameRenderer = MinecraftClient.getInstance().gameRenderer;
         gameRenderer.enableLightmap();
 
@@ -233,6 +239,53 @@ public final class RendererHooks189 {
         }
 
         gameRenderer.disableLightmap();
+    }
+
+    // ── Particules ───────────────────────────────────────────────────────────
+
+    /** L'origine du rendu de l'image : la position interpolée de l'entité de vue, sans la hauteur des yeux. */
+    private static double originX, originY, originZ;
+
+    /**
+     * À part, pour que JOML ne soit touché qu'au premier test : cette classe-ci
+     * se charge même quand le moteur est indisponible (suivi des chunks).
+     * Aucun type du jeu, donc pas de marqueur {@link YarnNamed}.
+     */
+    private static final class ParticleFrustum {
+        static final FrustumIntersection PLANES = new FrustumIntersection();
+        static final Matrix4f CLIP = new Matrix4f();
+        static ChunkRenderMatrices source;
+
+        static boolean testSphere(ChunkRenderMatrices matrices, float x, float y, float z, float radius) {
+            if (matrices != source) {
+                source = matrices;
+                // true : plans normalisés, nécessaires au test de sphère.
+                PLANES.set(matrices.projection().mul(matrices.modelView(), CLIP), true);
+            }
+            return PLANES.testSphere(x, y, z, radius);
+        }
+    }
+
+    /**
+     * Marge autour du centre d'une particule, en blocs. Large exprès : une
+     * explosion dessine un quad de plusieurs blocs, et une particule écartée à
+     * tort se verrait, alors qu'une particule gardée à tort ne coûte presque rien.
+     */
+    private static final float PARTICLE_RADIUS = 4.0F;
+
+    /**
+     * Vrai si la particule est entièrement hors du champ de la caméra. Les
+     * plans viennent des matrices que le terrain a déjà lues pour cette image ;
+     * tant qu'il n'a rien dessiné, rien n'est écarté.
+     */
+    public static boolean isParticleCulled(Object particleObject) {
+        ChunkRenderMatrices matrices = PrimitiveChunkMatrixGetter.peek();
+        if (matrices == null) {
+            return false;
+        }
+        Entity particle = (Entity) particleObject;
+        return !ParticleFrustum.testSphere(matrices, (float) (particle.x - originX), (float) (particle.y - originY),
+            (float) (particle.z - originZ), PARTICLE_RADIUS);
     }
 
     /** À la place de {@code WorldRenderer.updateBlock} : des blocs ont changé. */

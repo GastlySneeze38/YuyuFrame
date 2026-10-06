@@ -452,6 +452,11 @@ public final class AccessorBindings189 {
             com.yuyuframe.launcheragent.celeritas.v1_8_9.RendererHooks189.requestReload();
             return null;
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_TEXT_BATCHING, (r, a) -> {
+            com.yuyuframe.launcheragent.apimixin.v1_8_9.text.TextBatch189.setEnabled(
+                a.length > 0 && Boolean.TRUE.equals(a[0]));
+            return null;
+        });
         AccessorRegistry.bind(AccessPoint.CLIENT_BORDERLESS_FULLSCREEN, (r, a) -> {
             com.yuyuframe.launcheragent.lwjgl2compat.LegacyLwjgl3.setBorderlessFullscreen(
                 a.length > 0 && Boolean.TRUE.equals(a[0]));

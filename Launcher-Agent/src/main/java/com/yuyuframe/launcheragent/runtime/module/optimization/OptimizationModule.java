@@ -60,8 +60,7 @@ public final class OptimizationModule extends LauncherModule {
         list.info("mouse-info", MOUSE_TITLE, MOUSE_TEXT, "Souris");
         list.toggle("borderless-fullscreen", "Plein écran sans bordure",
             "Le plein écran devient une fenêtre sans cadre qui couvre l'écran : alt-tab immédiat, sans écran noir.",
-            "Affichage", null, () -> borderlessFullscreen, v -> borderlessFullscreen = v);
-    }
+            "Affichage", null, () -> borderlessFullscreen, v -> borderlessFullscreen = v);    }
 
     // Les deux : onEnabledChanged ne part que sur un CHANGEMENT, et
     // onConfigChanged est appelé une fois à l'enregistrement du module, quand
@@ -81,6 +80,8 @@ public final class OptimizationModule extends LauncherModule {
         boolean on = isEnabled();
         ClientData.setNativeMouse(on);
         ClientData.setBorderlessFullscreen(on && borderlessFullscreen);
+        // Sans réglage : le texte regroupé vient avec le module, comme la souris brute.
+        ClientData.setTextBatching(on);
 
         // Le renderer ne change d'état qu'au rechargement des chunks : on ne le
         // demande que si la consigne a réellement changé.
