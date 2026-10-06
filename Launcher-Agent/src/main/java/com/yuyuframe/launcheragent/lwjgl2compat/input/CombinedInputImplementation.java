@@ -58,6 +58,11 @@ public class CombinedInputImplementation implements InputImplementation {
 	}
 
 	@Override
+	public boolean pollLateMotion(DoubleBuffer coord_buffer) {
+		return mouseImpl.pollLateMotion(coord_buffer);
+	}
+
+	@Override
 	public void readMouse(ByteBuffer readBuffer) {
 		mouseImpl.readMouse(readBuffer);
 	}

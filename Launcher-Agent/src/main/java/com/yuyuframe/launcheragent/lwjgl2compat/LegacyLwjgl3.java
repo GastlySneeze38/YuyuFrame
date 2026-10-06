@@ -54,6 +54,10 @@ public final class LegacyLwjgl3 {
 		warn(message, null);
 	}
 
+	public static void info(String message) {
+		System.out.println("[LegacyLWJGL3] " + message);
+	}
+
 	/** Presse-papier via GLFW — remplace l'AWT de {@code Screen.getClipboard}. */
 	public static String getClipboard() {
 		String text = GLFW.glfwGetClipboardString(Display.getHandle());

@@ -667,10 +667,29 @@ public class Mouse {
 	}
 
 	/**
+	 * YuyuFrame : ajoute ce que la souris a fait depuis le poll() du début
+	 * d'image, quand la source sait le dire (souris brute native). Le jeu lit
+	 * getDX()/getDY() juste avant de calculer la caméra : c'est le dernier
+	 * moment utile.
+	 */
+	private static void pollLateMotion() {
+		if (!created || !isGrabbed || !implementation.pollLateMotion(coord_buffer)) return;
+		double late_dx = coord_buffer.get(0);
+		double late_dy = coord_buffer.get(1);
+		dx += late_dx;
+		dy += late_dy;
+		x += late_dx;
+		y += late_dy;
+		absolute_x += late_dx;
+		absolute_y += late_dy;
+	}
+
+	/**
 	 * @return Movement on the x axis since last time getDX() was called.
 	 */
 	public static int getDX() {
 //        synchronized (OpenGLPackageAccess.global_lock) {
+		pollLateMotion();
 		int result = (int) dx;
 		dx = 0;
 		return result;
@@ -682,6 +701,7 @@ public class Mouse {
 	 */
 	public static int getDY() {
 //        synchronized (OpenGLPackageAccess.global_lock) {
+		pollLateMotion();
 		int result = (int) dy;
 		dy = 0;
 		return result;

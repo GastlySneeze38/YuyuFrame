@@ -17,6 +17,16 @@ public interface MouseImplementation {
 
 	void pollMouse(DoubleBuffer coord_buffer, ByteBuffer buttons_buffer);
 
+	/**
+	 * Relève de dernière minute (YuyuFrame) : appelée par {@code Mouse.getDX()}
+	 * et {@code getDY()} juste avant le calcul de la caméra, pour ne pas
+	 * s'arrêter au mouvement relevé en début d'image. Écrit dx et dy dans
+	 * {@code coord_buffer} et rend vrai si la source sait le faire.
+	 */
+	default boolean pollLateMotion(DoubleBuffer coord_buffer) {
+		return false;
+	}
+
 	void readMouse(ByteBuffer readBuffer);
 
 	void setCursorPosition(double x, double y);

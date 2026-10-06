@@ -1,9 +1,11 @@
 package com.yuyuframe.launcheragent.lwjgl2compat.glfw;
 
 // Repris tel quel de legacy-lwjgl3 (moehreag, LGPL-2.1 — voir
-// LICENSE-legacy-lwjgl3.txt) ; seul le paquet change.
+// LICENSE-legacy-lwjgl3.txt) ; le paquet change, et la souris brute native
+// (NativeMouse) y est branchée.
 
 import com.yuyuframe.launcheragent.lwjgl2compat.input.MouseImplementation;
+import com.yuyuframe.launcheragent.lwjgl2compat.rawinput.NativeMouse;
 import org.lwjgl.glfw.*;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
@@ -20,6 +22,8 @@ public class GLFWMouseImplementation implements MouseImplementation {
     private long windowHandle;
     private boolean grabbed;
     private boolean isInsideWindow;
+    /** Souris brute lue par content_core.dll — null = souris de GLFW (YuyuFrame). */
+    private NativeMouse nativeMouse;
 
     private final EventQueue event_queue = new EventQueue(Mouse.EVENT_SIZE);
 
@@ -36,7 +40,15 @@ public class GLFWMouseImplementation implements MouseImplementation {
     public void createMouse() {
         this.windowHandle = Display.getHandle();
 
-        if (GLFW.glfwRawMouseMotionSupported() && !Mouse.getPrivilegedBoolean("org.lwjgl.input.Mouse.disableRawInput"))
+        // Souris brute : la nôtre (content_core.dll) si elle démarre, sinon
+        // celle de GLFW. Jamais les deux : Windows n'accepte qu'une inscription
+        // Raw Input par type de périphérique pour tout le processus, et GLFW
+        // retire la sienne — donc la nôtre — chaque fois que le curseur est
+        // libéré. Tant que son option reste éteinte, GLFW n'y touche pas.
+        boolean rawDisabled = Mouse.getPrivilegedBoolean("org.lwjgl.input.Mouse.disableRawInput");
+        if (!rawDisabled)
+            this.nativeMouse = NativeMouse.tryStart();
+        if (this.nativeMouse == null && !rawDisabled && GLFW.glfwRawMouseMotionSupported())
             GLFW.glfwSetInputMode(this.windowHandle, GLFW.GLFW_RAW_MOUSE_MOTION, GLFW.GLFW_TRUE);
 
         this.buttonCallback = GLFWMouseButtonCallback.create((window, button, action, mods) -> {
@@ -54,10 +66,14 @@ public class GLFWMouseImplementation implements MouseImplementation {
             double dx = x - last_x;
             double dy = y - last_y;
             if (dx != 0 || dy != 0) {
-                accum_dx += dx;
-                accum_dy += dy;
                 last_x = x;
                 last_y = y;
+                // Souris capturée et lue par la source native : le mouvement
+                // de GLFW ne sert à rien (le jeu ne lit que getDX/getDY).
+                if (grabbed && nativeMouse != null)
+                    return;
+                accum_dx += dx;
+                accum_dy += dy;
                 long nanos = System.nanoTime();
                 if (grabbed) {
                     putMouseMotionEvent(dx, dy, nanos);
@@ -123,6 +139,30 @@ public class GLFWMouseImplementation implements MouseImplementation {
         this.posCallback.free();
         this.scrollCallback.free();
         this.cursorEnterCallback.free();
+        if (this.nativeMouse != null) {
+            this.nativeMouse.stop();
+            this.nativeMouse = null;
+        }
+    }
+
+    /**
+     * Déplacement de la source native depuis la relève précédente, au format
+     * de LWJGL 2 (Y vers le haut). Jeté quand la fenêtre n'a pas le focus :
+     * la caméra ne doit pas tourner en arrière-plan.
+     */
+    private void putNativeMotion(DoubleBuffer coord_buffer) {
+        nativeMouse.poll();
+        boolean active = Display.isActive();
+        coord_buffer.put(0, active ? nativeMouse.dx() : 0);
+        coord_buffer.put(1, active ? -nativeMouse.dy() : 0);
+    }
+
+    @Override
+    public boolean pollLateMotion(DoubleBuffer coord_buffer) {
+        if (!grabbed || nativeMouse == null)
+            return false;
+        putNativeMotion(coord_buffer);
+        return true;
     }
 
     private void reset() {
@@ -131,7 +171,9 @@ public class GLFWMouseImplementation implements MouseImplementation {
     }
     @Override
     public void pollMouse(DoubleBuffer coord_buffer, ByteBuffer buttons_buffer) {
-        if (grabbed) {
+        if (grabbed && nativeMouse != null) {
+            putNativeMotion(coord_buffer);
+        } else if (grabbed) {
             coord_buffer.put(0, accum_dx);
             coord_buffer.put(1, accum_dy);
         } else {
@@ -165,6 +207,8 @@ public class GLFWMouseImplementation implements MouseImplementation {
         }
         this.grabbed = grab;
         this.reset();
+        if (this.nativeMouse != null)
+            this.nativeMouse.setActive(grab);
     }
 
     @Override
