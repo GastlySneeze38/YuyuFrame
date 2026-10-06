@@ -282,8 +282,14 @@ echo [Build] Compilation principale...
 :: de nom de fichier. Idem pour tout dossier "v1_8_9" (unite 1.8.9), tout
 :: dossier "v26_2" (unite 26.2), "v26_3" (unite 26.3), et pour la couche LWJGL 2 -> 3 (dossier
 :: lwjgl2compat + arborescence org\lwjgl), compilee dans son propre jar.
+::
+:: Le dossier "celeritas" (launcheragent\celeritas, 2026-10-06) est EXCLU de
+:: TOUTES les passes : c'est le projet Celeritas tel qu'en amont (base du
+:: renderer 1.8.9, voir son PROVENANCE.md), pose la sans etre branche. Il ne
+:: compile pas ici : ses dependances (JOML, fastutil, Minecraft via Ornithe)
+:: ne sont pas sur ce classpath.
 set "SRCLIST=%TEMP%\launcheragent_sources.txt"
-powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\v26_2\\' -and $_ -notmatch '\\v26_3\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
+powershell -NoProfile -Command "$q=[char]34; $files=Get-ChildItem -Recurse -Filter '*.java' '%SRC_MAIN%' | Select-Object -ExpandProperty FullName | Where-Object { $_ -notmatch '\\v1_21_11\\' -and $_ -notmatch '\\v1_8_9\\' -and $_ -notmatch '\\v26_2\\' -and $_ -notmatch '\\v26_3\\' -and $_ -notmatch '\\lwjgl2compat\\' -and $_ -notmatch '\\src\\main\\java\\org\\lwjgl\\' -and $_ -notmatch '\\launcheragent\\celeritas\\' } | ForEach-Object { $q+$_.Replace('\','/')+$q }; [IO.File]::WriteAllLines('%SRCLIST%', $files)"
 
 :: Meme garde-fou que pour STUBLIST — voir plus haut.
 for %%A in ("%SRCLIST%") do if %%~zA==0 (

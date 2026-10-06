@@ -1,0 +1,269 @@
+import org.embeddedt.embeddium.gradle.task.GenerateLWJGLAbstraction
+
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'xyz.wagyourtail.jvmdowngrader' version '2.0.1'
+}
+
+group = "org.embeddedt.celeritas"
+// Pinned GTNH release; rootProject.version is upstream's tau-derived version.
+version = "2.5.12-GTNH"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+def generatedSourcesDir = layout.buildDirectory.dir("generated/sources/lwjgl-abstraction/java")
+
+sourceSets {
+    lwjglCommon {
+        java.srcDir(generatedSourcesDir.map { it.dir("main") })
+    }
+    lwjgl2 {
+        java.srcDir(generatedSourcesDir.map { it.dir("lwjgl2") })
+        compileClasspath += main.compileClasspath
+        compileClasspath += lwjglCommon.output
+    }
+    lwjgl3 {
+        java.srcDir(generatedSourcesDir.map { it.dir("lwjgl3") })
+        compileClasspath += main.compileClasspath
+        compileClasspath += lwjglCommon.output
+    }
+    main {
+        compileClasspath += lwjglCommon.output
+    }
+    jmh {
+        compileClasspath += main.output
+        compileClasspath += main.compileClasspath
+        runtimeClasspath += main.output
+        runtimeClasspath += main.runtimeClasspath
+        runtimeClasspath += lwjglCommon.output
+        runtimeClasspath += lwjgl3.output
+    }
+}
+
+// The benchmarks run against main's code, so the jmh source set needs main's dependencies too.
+configurations {
+    jmhImplementation.extendsFrom(implementation)
+    jmhRuntimeOnly.extendsFrom(runtimeOnly)
+}
+
+def generateAbstractionLayer = tasks.register("generateLWJGLAbstraction", GenerateLWJGLAbstraction) {
+    lwjgl2Classpath.from(configurations.named("lwjgl2CompileClasspath"))
+    lwjgl3Classpath.from(configurations.named("lwjgl3CompileClasspath"))
+    outputDirectory.set(generatedSourcesDir)
+}
+
+tasks.named("compileLwjglCommonJava") {
+    dependsOn(generateAbstractionLayer)
+}
+
+// Natives classifier for the current machine; the benchmarks need real LWJGL natives to open a GL context.
+def lwjglNatives = {
+    def os = System.getProperty("os.name").toLowerCase()
+    def arch = System.getProperty("os.arch").toLowerCase()
+
+    if (os.contains("linux")) {
+        return arch.startsWith("aarch64") ? "natives-linux-arm64" : "natives-linux"
+    } else if (os.contains("mac") || os.contains("darwin")) {
+        return arch.startsWith("aarch64") ? "natives-macos-arm64" : "natives-macos"
+    } else if (os.contains("windows")) {
+        return "natives-windows"
+    }
+
+    throw new GradleException("Unsupported platform for the benchmark GL context: $os $arch")
+}()
+
+dependencies {
+    def lwjglVersion = "3.3.1"
+    def lwjgl2Version = "2.9.3"
+
+    lwjgl3CompileOnly(platform("org.lwjgl:lwjgl-bom:$lwjglVersion"))
+    lwjgl3CompileOnly "org.lwjgl:lwjgl"
+    lwjgl3CompileOnly "org.lwjgl:lwjgl-opengl"
+
+    lwjgl2CompileOnly("org.lwjgl.lwjgl:lwjgl:$lwjgl2Version")
+
+    implementation "org.joml:joml:1.10.5"
+    implementation "it.unimi.dsi:fastutil:7.1.0"
+    implementation "org.apache.logging.log4j:log4j-api:2.0-beta9"
+    compileOnly "org.jetbrains:annotations:24.1.0"
+    compileOnly("org.projectlombok:lombok:1.18.30")
+    annotationProcessor("org.projectlombok:lombok:1.18.30")
+    implementation("org.ow2.asm:asm:9.6")
+    implementation("org.ow2.asm:asm-tree:9.6")
+    implementation("org.ow2.asm:asm-util:9.6")
+
+    implementation "com.google.code.gson:gson:2.10.1"
+
+    def benchLwjglVersion = "3.3.6"
+
+    jmhImplementation(platform("org.lwjgl:lwjgl-bom:$benchLwjglVersion"))
+    jmhImplementation "org.lwjgl:lwjgl"
+    jmhImplementation "org.lwjgl:lwjgl-opengl"
+    jmhImplementation "org.lwjgl:lwjgl-egl"
+    jmhRuntimeOnly "org.lwjgl:lwjgl:$benchLwjglVersion:$lwjglNatives"
+    jmhRuntimeOnly "org.lwjgl:lwjgl-opengl:$benchLwjglVersion:$lwjglNatives"
+
+    jmhImplementation "org.openjdk.jmh:jmh-core:${jmh_version}"
+    jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:${jmh_version}"
+    jmhCompileOnly "org.jetbrains:annotations:24.1.0"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.13.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+
+    maxHeapSize = '1G'
+
+    testLogging {
+        events "passed"
+    }
+}
+
+// Run the benchmarks through Gradle. Any JMH argument can be passed through, e.g.
+//   ./gradlew :common:jmh -Pjmhargs="-f 1 -p renderDistance=64 OcclusionCullerBench.rotatingCamera"
+tasks.register('jmh', JavaExec) {
+    group = 'verification'
+    description = 'Runs the JMH benchmarks.'
+
+    classpath = sourceSets.jmh.runtimeClasspath
+    mainClass = 'org.openjdk.jmh.Main'
+
+    // Measured live set is ~128 MB at renderDistance=64 (424 536 sections); this is headroom for the
+    // collector's per-frame allocation, not a requirement.
+    maxHeapSize = '1g'
+
+    // Read at configuration time: the configuration cache forbids touching the project from doFirst.
+    if (project.hasProperty('jmhargs')) {
+        args(project.property('jmhargs').toString().split('\\s+').findAll { !it.isEmpty() })
+    }
+}
+
+tasks.register('rasterCullReport', JavaExec) {
+    group = 'verification'
+    description = 'Reports visible section counts per world and camera placement.'
+
+    classpath = sourceSets.jmh.runtimeClasspath
+    mainClass = 'org.embeddedt.embeddium.impl.render.chunk.occlusion.bench.RasterCullReport'
+
+    maxHeapSize = '1g'
+    // e.g. ./gradlew :common:rasterCullReport -Dreport.renderDistance=64
+    // Read through a provider so the configuration cache tracks them: taken from System.getProperties() at
+    // configuration time they are invisible to it, and a cached configuration is reused whatever -D flags are passed.
+    forwardReportProperties(it)
+}
+
+/** Forwards every -Dreport.* on the Gradle command line to the task's JVM, in a configuration-cache-safe way. */
+def forwardReportProperties(JavaExec task) {
+    def reportProperties = providers.systemPropertiesPrefixedBy('report.')
+    task.jvmArgumentProviders.add({ reportProperties.get().collect { k, v -> "-D$k=$v".toString() } } as CommandLineArgumentProvider)
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = 'celeritas-common'
+            from components.java
+
+            artifact(shadeDowngradedApi) {
+                classifier = 'downgraded-8'
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "taumcRepository"
+            url = uri("https://maven.taumc.org/releases")
+            credentials {
+                username = System.getenv("MAVEN_USERNAME")
+                password = System.getenv("MAVEN_SECRET")
+            }
+            authentication {
+                basic(BasicAuthentication)
+            }
+        }
+        maven {
+            name = "gtnh"
+            url = uri("https://nexus.gtnewhorizons.com/repository/releases/")
+            credentials {
+                username = System.getenv("MAVEN_USER")
+                password = System.getenv("MAVEN_PASSWORD")
+            }
+        }
+    }
+}
+
+jar {
+    from(rootProject.file("COPYING"))
+    from(rootProject.file("COPYING.LESSER"))
+    from(sourceSets.lwjglCommon.output)
+    from(sourceSets.lwjgl2.output)
+    from(sourceSets.lwjgl3.output)
+    manifest {
+        attributes([
+                "Lwjgl3ify-Aware": "true"
+        ])
+    }
+}
+
+def extraSourceSets = [sourceSets.lwjglCommon, sourceSets.lwjgl2]
+
+configurations {
+    apiElements
+    runtimeElements
+}
+
+extraSourceSets.each { srcSet ->
+    ["apiElements", "runtimeElements"].each { conf ->
+        configurations.getByName(conf).outgoing.variants.named("classes") {
+            artifact(srcSet.java.destinationDirectory) {
+                builtBy tasks.named(srcSet.compileJavaTaskName)
+            }
+        }
+    }
+}
+
+configurations {
+    downgraded {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+}
+
+artifacts {
+    downgraded(tasks.named("shadeDowngradedApi"))
+}
+
+// make RFG stop complaining
+def obfAttr = Attribute.of("com.gtnewhorizons.retrofuturagradle.obfuscation", String)
+def transformedAttr = Attribute.of("rfgDeobfuscatorTransformed", Boolean)
+
+["runtimeElements", "downgraded"].forEach { name ->
+    configurations.getByName(name).attributes {
+        attribute(obfAttr, "mcp")
+        attribute(transformedAttr, true)
+    }
+}
+
+tasks.register('rasterStats', JavaExec) {
+    group = 'verification'
+    classpath = sourceSets.jmh.runtimeClasspath
+    mainClass = 'org.embeddedt.embeddium.impl.render.chunk.occlusion.bench.RasterStatsReport'
+    maxHeapSize = '1g'
+    jvmArgs '-Dbitraster.stats=true'
+    forwardReportProperties(it)
+    if (project.hasProperty('statargs')) args(project.property('statargs').toString().split('\\s+').findAll { !it.isEmpty() })
+}
