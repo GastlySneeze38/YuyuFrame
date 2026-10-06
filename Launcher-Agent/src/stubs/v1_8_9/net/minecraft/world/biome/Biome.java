@@ -12,4 +12,9 @@ public abstract class Biome {
 
     private Biome() {
     }
+
+    /** {@code ady.e(I)} — le biome d'un identifiant, ou {@code null} s'il n'existe pas. */
+    public static Biome byId(int id) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
 }

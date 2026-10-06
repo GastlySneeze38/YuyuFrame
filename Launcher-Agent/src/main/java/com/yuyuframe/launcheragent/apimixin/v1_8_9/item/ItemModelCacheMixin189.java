@@ -40,5 +40,9 @@ public abstract class ItemModelCacheMixin189 {
     @Inject(method = "reload(Lnet/minecraft/resource/ResourceManager;)V", at = @At("HEAD"), require = 0)
     private void la$clearOnReload(@Coerce Object resourceManager, CallbackInfo ci) {
         ItemModelCache189.clear();
+        // Les modèles de blocs décodés par le renderer de terrain datent eux aussi d'avant.
+        if (com.yuyuframe.launcheragent.celeritas.RendererSwitch.available()) {
+            com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.BlockQuadCache189.clear();
+        }
     }
 }

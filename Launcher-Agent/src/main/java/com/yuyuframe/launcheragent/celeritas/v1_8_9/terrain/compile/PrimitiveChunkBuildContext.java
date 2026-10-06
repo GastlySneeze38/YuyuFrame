@@ -10,6 +10,9 @@ import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkBuildContext;
 import com.yuyuframe.launcheragent.celeritas.chunk.terrain.material.Material;
 import com.yuyuframe.launcheragent.celeritas.chunk.vertex.format.ChunkVertexEncoder;
 import com.yuyuframe.launcheragent.celeritas.util.QuadUtil;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.light.LightCache189;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.pipeline.BlockRenderer189;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.WorldSlice189;
 
 import java.nio.IntBuffer;
 
@@ -25,10 +28,20 @@ public class PrimitiveChunkBuildContext extends ChunkBuildContext {
     /** Tampon dans lequel le rendu de blocs vanilla écrit, relu ensuite par {@link #copyRawBuffer}. */
     public final BufferBuilder tesselator;
 
+    /** Le monde vu par ce fil : les copies figées de la section en cours et de ses voisines. */
+    public final WorldSlice189 slice;
+    /** La lumière et l'opacité des blocs, gardées le temps d'une section. */
+    public final LightCache189 lightCache;
+    /** Notre rendu de blocs, pour tout ce qui a un modèle. */
+    public final BlockRenderer189 blockRenderer;
+
     public PrimitiveChunkBuildContext(World world, RenderPassConfiguration renderPassConfiguration) {
         super(renderPassConfiguration);
         this.world = world;
         this.tesselator = new BufferBuilder(8192);
+        this.slice = new WorldSlice189(world);
+        this.lightCache = new LightCache189(this.slice);
+        this.blockRenderer = new BlockRenderer189(this.slice, this.lightCache);
     }
 
     private final ChunkVertexEncoder.Vertex[] vertices = ChunkVertexEncoder.Vertex.uninitializedQuad();

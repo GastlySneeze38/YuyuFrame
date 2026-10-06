@@ -63,6 +63,22 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
         return new CameraState(x, y, z, pitch, yaw, fogDistance);
     }
 
+    /** Une section change : sa copie figée est jetée avant qu'on ne la remaille. */
+    @Override
+    public void scheduleRebuildForChunk(int x, int y, int z, boolean important) {
+        if (this.renderSectionManager != null) {
+            this.renderSectionManager.invalidateSnapshot(x, y, z);
+        }
+        super.scheduleRebuildForChunk(x, y, z, important);
+    }
+
+    /** Un chunk entier est arrivé ou parti : les copies figées de sa colonne sont jetées. */
+    public void invalidateColumn(int chunkX, int chunkZ) {
+        if (this.renderSectionManager != null) {
+            this.renderSectionManager.invalidateSnapshotColumn(chunkX, chunkZ);
+        }
+    }
+
     @Override
     public int getEffectiveRenderDistance() {
         return MinecraftClient.getInstance().options.viewDistance;

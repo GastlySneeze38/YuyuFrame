@@ -344,6 +344,8 @@ public final class RendererHooks189 {
         if (world == null) {
             return;
         }
+        // Les copies figées de cette colonne datent d'avant : elles sont jetées.
+        CeleritasWorldRenderer.INSTANCE.invalidateColumn(x, z);
         if (loaded) {
             ChunkTrackerHolder.get(world).onChunkStatusAdded(x, z, ChunkStatus.FLAG_ALL);
         } else {

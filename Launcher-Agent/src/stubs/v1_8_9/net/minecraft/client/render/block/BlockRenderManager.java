@@ -8,6 +8,17 @@ public class BlockRenderManager {
     protected BlockRenderManager() {
     }
 
+    /**
+     * {@code bgd.a(alz, adq, cj)} — le modèle d'un bloc à sa place dans le
+     * monde : état réel (barrière reliée, escalier d'angle) et variante
+     * aléatoire selon la position.
+     */
+    public net.minecraft.client.render.model.BakedModel getModel(net.minecraft.block.BlockState state,
+                                                                  net.minecraft.world.BlockView world,
+                                                                  net.minecraft.util.math.BlockPos pos) {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code bgd.a(BlockState,BlockPos,BlockView,BufferBuilder)} — {@code tessellate} chez Feather. */
     public boolean renderBlock(net.minecraft.block.BlockState state, net.minecraft.util.math.BlockPos pos,
                                net.minecraft.world.BlockView world, net.minecraft.client.render.BufferBuilder buffer) {

@@ -31,6 +31,7 @@ import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.PrimitiveBui
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.PrimitiveChunkBuildContext;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.compile.task.ChunkBuilderMeshingTask;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.ChunkRenderContext;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.world.SnapshotCache;
 
 import java.util.Collection;
 import java.util.function.Supplier;
@@ -47,9 +48,23 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
 
     private final ReferenceOpenHashSet<RenderSection> sectionsWithSkyLight = new ReferenceOpenHashSet<>();
 
+    /** Les copies figées récentes des sections, partagées entre les constructions voisines. Fil du jeu seulement. */
+    private final SnapshotCache snapshots;
+
     public PrimitiveRenderSectionManager(RenderPassConfiguration<?> configuration, World world, int renderDistance, CommandList commandList, int minSection, int maxSection, int requestedThreads) {
         super(configuration, new ContextFactory(world, configuration), ChunkRenderer::new, renderDistance, commandList, minSection, maxSection, requestedThreads);
         this.world = world;
+        this.snapshots = new SnapshotCache(world);
+    }
+
+    /** Une section a changé : sa copie figée ne vaut plus rien. */
+    public void invalidateSnapshot(int sectionX, int sectionY, int sectionZ) {
+        this.snapshots.invalidate(sectionX, sectionY, sectionZ);
+    }
+
+    /** Un chunk entier est arrivé ou parti. */
+    public void invalidateSnapshotColumn(int chunkX, int chunkZ) {
+        this.snapshots.invalidateColumn(chunkX, chunkZ);
     }
 
     /** Un contexte de construction par thread de travail. Classe nommée : elle tient un type du jeu. */
@@ -166,11 +181,14 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
             return null;
         }
 
-        ChunkRenderContext context = new ChunkRenderContext(new SectionPos(render.getChunkX(), render.getChunkY(), render.getChunkZ()));
-
-        // Sur le thread du jeu : crée les block entities manquants avant que la
-        // construction, sur un autre thread, ne lise le chunk.
+        // Sur le thread du jeu : crée les block entities manquants, puis copie la
+        // section et ses voisines. La construction, sur un autre thread, ne lira
+        // que cette copie.
         populateTileEntities(this.world.getChunk(render.getChunkX(), render.getChunkZ()), render.getChunkY());
+
+        ChunkRenderContext context = new ChunkRenderContext(
+            new SectionPos(render.getChunkX(), render.getChunkY(), render.getChunkZ()),
+            this.snapshots.around(render.getChunkX(), render.getChunkY(), render.getChunkZ()));
 
         return new ChunkBuilderMeshingTask(render, context, frame, this.cameraPosition);
     }

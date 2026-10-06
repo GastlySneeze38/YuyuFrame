@@ -142,6 +142,23 @@ suivre au branchement.
   boîte ne touche aucune section visible n'est pas dessinée — comme vanilla,
   qui ne parcourt que ses chunks visibles. Exceptions : l'entité de vue, celles
   marquées `ignoreCameraFrustum`, et la monture du joueur.
+- **Maillage des blocs refait** (2026-10-06, v1254) : l'adaptateur `ornithe`
+  laisse vanilla dessiner chaque bloc dans un tampon, puis le recopie. Ici,
+  pour tout bloc à modèle :
+  - `v1_8_9/world/` — copie figée du monde (`SectionSnapshot`, `SnapshotCache`,
+    `WorldSlice189`), prise sur le fil du jeu. Notre code ; la logique de
+    lumière suit le `WorldSlice` de l'adaptateur 1.12.2 de Celeritas, mais
+    celui-ci garde une référence vers la section vivante, pas une copie ;
+  - `v1_8_9/terrain/compile/light/LightCache189` et
+    `pipeline/BlockRenderer189` — portés de l'adaptateur 1.12.2
+    (`LightDataCache`, `VintageBlockRenderer`) vers les noms Yarn de la 1.8.9 ;
+  - `pipeline/CachedQuad`, `BlockQuadCache189` — notre code : les quads des
+    modèles décodés une fois, au lieu d'une interface greffée sur la classe du jeu.
+
+  L'éclairage est celui du moteur (Sodium), pas celui de vanilla : l'image
+  diffère légèrement dans les coins. Les fluides, et tout bloc que notre rendu
+  ne sait pas traiter, repartent sur le chemin d'origine (avec un avertissement
+  dans le journal pour les seconds).
 - **Culling par rastérisation allumé** (2026-10-06), éteint chez l'amont sur
   cette version : le maillage fournit les boîtes opaques de chaque section
   (`SectionVisibilityBuilder`, mêmes blocs opaques que le graphe de

@@ -11,6 +11,11 @@ public abstract class Dimension {
     protected Dimension() {
     }
 
+    /** {@code anm.o()} — Nether, End : pas de lumière du ciel. */
+    public boolean hasNoSkylight() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code anm.f()} */
     public float getCloudHeight() {
         throw new UnsupportedOperationException("stub compile-only");

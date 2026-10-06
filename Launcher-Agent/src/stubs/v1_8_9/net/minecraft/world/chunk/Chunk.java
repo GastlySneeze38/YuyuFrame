@@ -71,6 +71,16 @@ public class Chunk {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code amy.k()} — un identifiant de biome par colonne, à l'indice {@code z << 4 | x}. Le tableau lui-même. */
+    public byte[] getBiomeArray() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
+    /** {@code amy.r()} — les block entities du chunk, par position. */
+    public java.util.Map getBlockEntities() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code amy.s} — {@code getEntities} chez Feather. */
     public net.minecraft.util.TypeFilterableList[] getEntities() {
         throw new UnsupportedOperationException("stub compile-only");

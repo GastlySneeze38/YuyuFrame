@@ -107,6 +107,11 @@ public class MinecraftClient {
         throw new UnsupportedOperationException("stub compile-only");
     }
 
+    /** {@code ave.x()} — réglage « éclairage adouci » activé. */
+    public static boolean isAmbientOcclusionEnabled() {
+        throw new UnsupportedOperationException("stub compile-only");
+    }
+
     /** {@code ave.ae} — {@code getBlockRenderDispatcher} chez Feather. */
     public net.minecraft.client.render.block.BlockRenderManager getBlockRenderManager() {
         throw new UnsupportedOperationException("stub compile-only");
