@@ -440,7 +440,6 @@ public final class LabelBatch189 {
         if (backgroundVertices == 0) {
             return;
         }
-        long started = System.nanoTime();
 
         GlStateManager.disableLighting();
         // Vanilla le pose avant chaque nom d'entité vivante ; le chemin court des hologrammes ne passe pas par là.
@@ -451,13 +450,12 @@ public final class LabelBatch189 {
         GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
 
         GL11.glEnableClientState(GL11.GL_VERTEX_ARRAY);
-        long afterStates = System.nanoTime();
-        statStates += afterStates - started;
 
         // Les fonds : noirs, transparents aux trois quarts, visibles à travers les murs.
         // Envoyés à la carte graphique comme le texte, et non dessinés depuis la
-        // mémoire : la mesure du 2026-10-06 montrait ici une attente de 0 à 345 µs
-        // sans rapport avec le nombre d'étiquettes.
+        // mémoire : mesuré le 2026-10-06, le dessin depuis la mémoire faisait
+        // attendre ici 0 à 345 µs sans rapport avec le nombre d'étiquettes, et
+        // l'envoi a fait disparaître cette attente.
         GlStateManager.disableTexture();
         GlStateManager.color(0.0F, 0.0F, 0.0F, 0.25F);
         if (backgroundBuffer == 0) {
@@ -471,13 +469,9 @@ public final class LabelBatch189 {
         GL11.glDrawArrays(GL11.GL_QUADS, 0, backgroundVertices);
         GlStateManager.enableTexture();
 
-        long afterBackgrounds = System.nanoTime();
-
         // Les sommets du texte servent aux deux passes : on les envoie une seule
-        // fois à la carte graphique. Dessinés depuis la mémoire, le pilote les
-        // recopiait en entier à chaque passe.
+        // fois à la carte graphique.
         upload();
-        long afterUpload = System.nanoTime();
 
         GL11.glEnableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
         GL11.glEnableClientState(GL11.GL_COLOR_ARRAY);
@@ -487,14 +481,12 @@ public final class LabelBatch189 {
 
         // Le texte à travers les murs, presque transparent.
         drawText(false);
-        long afterDim = System.nanoTime();
 
         GlStateManager.enableDepthTest();
         GlStateManager.depthMask(true);
 
         // Le texte normal, caché par ce qui est devant lui.
         drawText(true);
-        long afterFull = System.nanoTime();
 
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
         GL13.glClientActiveTexture(GL13.GL_TEXTURE1);
@@ -511,18 +503,6 @@ public final class LabelBatch189 {
         // pouvant croire qu'elle est déjà blanche et sauter l'appel.
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
-
-        long finished = System.nanoTime();
-        statFrames++;
-        statLabels += backgroundVertices / 4;
-        for (int i = 0; i < TEXTURES.size(); i++) {
-            statVertices += TEXTURES.get(i).count;
-        }
-        statBackgrounds += afterBackgrounds - afterStates;
-        statUpload += afterUpload - afterBackgrounds;
-        statDim += afterDim - afterUpload;
-        statFull += afterFull - afterDim;
-        statRestore += finished - afterFull;
 
         backgroundVertices = 0;
     }
@@ -575,33 +555,5 @@ public final class LabelBatch189 {
 
             GL11.glDrawArrays(GL11.GL_QUADS, 0, batch.count);
         }
-    }
-
-    // ── Mesure ───────────────────────────────────────────────────────────────
-
-    private static long statStates, statBackgrounds, statUpload, statDim, statFull, statRestore;
-    private static long statLabels, statVertices;
-    private static int statFrames;
-
-    /**
-     * Où part le temps du dessin groupé, en moyenne par image depuis le
-     * dernier appel — ou {@code null} si rien n'a été dessiné. Mesure
-     * provisoire (2026-10-06), le temps de trouver ce qui coûte.
-     */
-    public static String drainStats() {
-        if (statFrames == 0) {
-            return null;
-        }
-        int frames = statFrames;
-        String line = "étiquettes groupées, par image : " + statLabels / frames + " étiquettes, "
-            + statVertices / frames + " sommets ; états " + statStates / frames / 1000L
-            + " µs, fonds " + statBackgrounds / frames / 1000L
-            + " µs, envoi " + statUpload / frames / 1000L + " µs, passe à travers les murs "
-            + statDim / frames / 1000L + " µs, passe normale " + statFull / frames / 1000L
-            + " µs, remise en état " + statRestore / frames / 1000L + " µs";
-        statStates = statBackgrounds = statUpload = statDim = statFull = statRestore = 0L;
-        statLabels = statVertices = 0L;
-        statFrames = 0;
-        return line;
     }
 }

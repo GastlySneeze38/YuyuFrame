@@ -665,16 +665,6 @@ public class LauncherMixinService implements IMixinService, IClassProvider, ICla
             "net/minecraft/client/render/WorldRenderer", "renderFancyClouds", "(FI)V", null),
         new RefmapEntry(M189 + "renderer/WorldRendererSkyMixin189",
             "net/minecraft/client/render/WorldRenderer", "renderSky", "(FI)V", null),
-        // Sonde temporaire (2026-10-06) — à retirer avec EntityCostProbeMixin189.
-        new RefmapEntry(M189 + "renderer/EntityCostProbeMixin189",
-            "net/minecraft/client/render/entity/LivingEntityRenderer", "renderModel",
-            "(Lnet/minecraft/entity/LivingEntity;FFFFFF)V", null),
-        new RefmapEntry(M189 + "renderer/EntityCostProbeMixin189",
-            "net/minecraft/client/render/entity/LivingEntityRenderer", "method_10256",
-            "(Lnet/minecraft/entity/LivingEntity;DDD)V", null),
-        new RefmapEntry(M189 + "renderer/EntityCostProbeMixin189",
-            "net/minecraft/client/render/entity/LivingEntityRenderer", "renderFeatures",
-            "(Lnet/minecraft/entity/LivingEntity;FFFFFFF)V", null),
         new RefmapEntry(M189 + "renderer/ParticleCullMixin189",
             "net/minecraft/client/particle/ParticleManager", "renderParticles", "(Lnet/minecraft/entity/Entity;F)V", null),
         // ── apimixin 1.8.9 : modèles d'objets gardés sur la carte graphique ──
