@@ -19,12 +19,30 @@ public class PrimitiveChunkMatrixGetter {
     private static final FloatBuffer PROJECTION = BufferUtils.createFloatBuffer(16);
     private static final FloatBuffer MODELVIEW = BufferUtils.createFloatBuffer(16);
 
+    /**
+     * Les matrices de l'image en cours. Relues une fois par image et non à
+     * chaque passe (2026-10-06) : vanilla ne touche pas à la caméra entre ses
+     * couches de blocs, et chaque {@code glGet} oblige le pilote à rattraper
+     * ce qu'il a en attente.
+     */
+    private static ChunkRenderMatrices cached;
+
+    /** La prochaine lecture reviendra à OpenGL. */
+    public static void invalidate() {
+        cached = null;
+    }
+
     public static ChunkRenderMatrices getMatrices() {
-        GL11.glGetFloatv(GL11.GL_PROJECTION_MATRIX, PROJECTION);
-        GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, MODELVIEW);
-        return new ChunkRenderMatrices(
-                new Matrix4f(PROJECTION),
-                new Matrix4f(MODELVIEW)
-        );
+        ChunkRenderMatrices matrices = cached;
+        if (matrices == null) {
+            GL11.glGetFloatv(GL11.GL_PROJECTION_MATRIX, PROJECTION);
+            GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, MODELVIEW);
+            matrices = new ChunkRenderMatrices(
+                    new Matrix4f(PROJECTION),
+                    new Matrix4f(MODELVIEW)
+            );
+            cached = matrices;
+        }
+        return matrices;
     }
 }

@@ -24,6 +24,8 @@ import com.yuyuframe.launcheragent.celeritas.chunk.map.ChunkTrackerHolder;
 import com.yuyuframe.launcheragent.celeritas.gl.device.RenderDevice;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.entity.EntityGatherer;
 import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.CeleritasWorldRenderer;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.fog.GLStateManagerFogService;
+import com.yuyuframe.launcheragent.celeritas.v1_8_9.terrain.matrix.PrimitiveChunkMatrixGetter;
 import com.yuyuframe.launcheragent.celeritas.viewport.Viewport;
 import com.yuyuframe.launcheragent.celeritas.viewport.ViewportProvider;
 import org.joml.Matrix4f;
@@ -172,6 +174,40 @@ public final class RendererHooks189 {
         } finally {
             RenderDevice.exitManagedCode();
         }
+
+        // Brouillard et matrices : relus une seule fois par image, à la première
+        // couche de blocs — vanilla ne les a pas encore posés à ce stade.
+        GLStateManagerFogService.invalidate();
+        PrimitiveChunkMatrixGetter.invalidate();
+
+        logMetrics();
+    }
+
+    private static long lastMetricsNanos;
+    private static int lastMetricsFrame;
+
+    /**
+     * Toutes les cinq secondes, l'état du renderer dans le journal (niveau 1 :
+     * fichier seulement, sauf {@code log.renderer=1}). Sert à suivre dans le
+     * temps la vitesse de construction des chunks, que l'écran F3 ne montre
+     * qu'à l'instant.
+     */
+    private static void logMetrics() {
+        long now = System.nanoTime();
+        if (now - lastMetricsNanos < 5_000_000_000L) {
+            return;
+        }
+        int frames = frame - lastMetricsFrame;
+        double seconds = (now - lastMetricsNanos) / 1.0e9;
+        boolean first = lastMetricsNanos == 0L;
+        lastMetricsNanos = now;
+        lastMetricsFrame = frame;
+        if (first) {
+            return;
+        }
+        CeleritasWorldRenderer renderer = CeleritasWorldRenderer.INSTANCE;
+        LauncherLog.renderer(1, "métriques : " + Math.round(frames / seconds) + " fps | "
+            + renderer.getChunksDebugString() + " | " + String.join(" | ", renderer.getDebugStrings()));
     }
 
     /** À la place de {@code WorldRenderer.renderLayer} : dessine une couche de blocs. */
