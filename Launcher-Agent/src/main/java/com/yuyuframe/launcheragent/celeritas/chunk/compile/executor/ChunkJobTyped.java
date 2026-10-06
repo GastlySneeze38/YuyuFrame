@@ -2,6 +2,7 @@ package com.yuyuframe.launcheragent.celeritas.chunk.compile.executor;
 
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkBuildContext;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.tasks.ChunkBuilderTask;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.Consumer;
@@ -52,7 +53,7 @@ public class ChunkJobTyped<TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT>
                 }
             } catch (Throwable throwable) {
                 result = new ChunkJobResult.Failure<>(throwable);
-                ChunkBuilder.LOGGER.error("Chunk build failed", throwable);
+                LauncherLog.err("[RENDERER] Chunk build failed", throwable);
             }
         }
 

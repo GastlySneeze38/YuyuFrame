@@ -223,21 +223,19 @@ if not exist "%LIB%\jna-platform.jar" (
 )
 
 :: Dependances du moteur de rendu repris de Celeritas (launcheragent\celeritas,
-:: voir son PROVENANCE.md) : JOML (matrices), fastutil (collections), log4j-api
-:: et les annotations JetBrains. COMPILATION SEULEMENT pour les deux dernieres :
-:: log4j est deja dans le jeu, les annotations ne servent qu'a javac. JOML et
-:: fastutil, eux, manquent a la 1.8.9 : c'est le launcher qui les met sur son
-:: classpath (legacy_lwjgl3.rs), jamais ce jar. Memes versions que l'amont.
+:: voir son PROVENANCE.md) : JOML (matrices), fastutil (collections) et les
+:: annotations JetBrains. COMPILATION SEULEMENT pour ces dernieres, qui ne
+:: servent qu'a javac. JOML et fastutil, eux, manquent a la 1.8.9 : c'est le
+:: launcher qui les met sur son classpath (legacy_lwjgl3.rs), jamais ce jar.
+:: Memes versions que l'amont. Le moteur journalise par LauncherLog, pas log4j.
 :: Copie depuis les bibliotheques du launcher si elles y sont, sinon Maven Central.
 call :fetchLib "joml.jar"        "org\joml\joml\1.10.5\joml-1.10.5.jar"                                   "org/joml/joml/1.10.5/joml-1.10.5.jar"
 if errorlevel 1 goto :error
 call :fetchLib "fastutil.jar"    "it\unimi\dsi\fastutil\7.1.0\fastutil-7.1.0.jar"                         "it/unimi/dsi/fastutil/7.1.0/fastutil-7.1.0.jar"
 if errorlevel 1 goto :error
-call :fetchLib "log4j-api.jar"   "org\apache\logging\log4j\log4j-api\2.0-beta9\log4j-api-2.0-beta9.jar"   "org/apache/logging/log4j/log4j-api/2.0-beta9/log4j-api-2.0-beta9.jar"
-if errorlevel 1 goto :error
 call :fetchLib "annotations.jar" "org\jetbrains\annotations\24.1.0\annotations-24.1.0.jar"                "org/jetbrains/annotations/24.1.0/annotations-24.1.0.jar"
 if errorlevel 1 goto :error
-set "CP_RENDERER=%LIB%\joml.jar;%LIB%\fastutil.jar;%LIB%\log4j-api.jar;%LIB%\annotations.jar"
+set "CP_RENDERER=%LIB%\joml.jar;%LIB%\fastutil.jar;%LIB%\annotations.jar"
 
 :: --- Compiler les stubs MC (compile-only, non inclus dans le JAR final) ------
 

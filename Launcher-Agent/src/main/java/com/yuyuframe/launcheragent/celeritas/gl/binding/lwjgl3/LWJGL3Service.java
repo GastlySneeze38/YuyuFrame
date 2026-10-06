@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.celeritas.gl.binding.lwjgl3;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.lwjgl.opengl.*;
 import org.lwjgl.system.APIUtil;
 import org.lwjgl.system.MemoryUtil;
@@ -26,7 +25,6 @@ public record LWJGL3Service(
         DebugMode debugMode,
         VertexAttribIMode vertexAttribIMode,
         VertexAttribDivisorMode vertexAttribDivisorMode) implements LWJGLService {
-    private static final Logger LOGGER = LogManager.getLogger("Celeritas/LWJGL3Service");
     private static final LWJGL3DebugSupport debugSupport = new LWJGL3DebugSupport();
 
     // ===================== CAPABILITIES =====================
@@ -232,7 +230,7 @@ public record LWJGL3Service(
             timerQueryMode = TimerQueryMode.EXT;
         } else {
             timerQueryMode = TimerQueryMode.NONE;
-            LOGGER.warn("Timer query support not available - GPU profiling will be disabled");
+            LauncherLog.renderer(2, "Timer query support not available - GPU profiling will be disabled");
         }
 
         DebugMode debugMode;

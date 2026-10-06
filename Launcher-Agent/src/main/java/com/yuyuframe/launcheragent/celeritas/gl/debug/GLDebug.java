@@ -5,8 +5,6 @@
 
 package com.yuyuframe.launcheragent.celeritas.gl.debug;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import static com.yuyuframe.launcheragent.celeritas.gl.binding.LWJGLServiceProvider.LWJGL;
 
@@ -17,8 +15,6 @@ import java.io.PrintStream;
 import java.util.function.Consumer;
 
 public final class GLDebug {
-    static final Logger LOGGER = LogManager.getLogger("Celeritas/GLDebug");
-
 	private static DebugState debugState = new UnsupportedDebugState();
 
 	/**

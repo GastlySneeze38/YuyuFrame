@@ -57,6 +57,8 @@ public final class LauncherLog {
     public static volatile int AGENT = 3;
     /** Recherche/téléchargement Modrinth. */
     public static volatile int CONTENT = 3;
+    /** Renderer de terrain 1.8.9 (moteur repris de Celeritas). */
+    public static volatile int RENDERER = 3;
 
     public static volatile boolean SHOW_CATEGORY = true;
 
@@ -65,6 +67,7 @@ public final class LauncherLog {
         ASM     = intProp(p, "log.asm",     ASM);
         AGENT   = intProp(p, "log.agent",   AGENT);
         CONTENT = intProp(p, "log.content", CONTENT);
+        RENDERER = intProp(p, "log.renderer", RENDERER);
         SHOW_CATEGORY = boolProp(p, "log.show_category", SHOW_CATEGORY);
     }
 
@@ -133,6 +136,7 @@ public final class LauncherLog {
     public static void asm(int lvl, String msg)     { log("ASM",     ASM,     lvl, msg); }
     public static void agent(int lvl, String msg)   { log("AGENT",   AGENT,   lvl, msg); }
     public static void content(int lvl, String msg) { log("CONTENT", CONTENT, lvl, msg); }
+    public static void renderer(int lvl, String msg) { log("RENDERER", RENDERER, lvl, msg); }
 
     /**
      * Roadmap Phase 6 ("LauncherLog construit la string avant de vérifier si

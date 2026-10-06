@@ -11,8 +11,7 @@ import com.yuyuframe.launcheragent.celeritas.gl.attribute.GlVertexFormat;
 import com.yuyuframe.launcheragent.celeritas.gl.debug.GLDebug;
 import com.yuyuframe.launcheragent.celeritas.gl.shader.uniform.GlUniform;
 import com.yuyuframe.launcheragent.celeritas.gl.shader.uniform.GlUniformBlock;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.Function;
@@ -22,7 +21,6 @@ import java.util.function.IntFunction;
  * An OpenGL shader program.
  */
 public class GlProgram<T> extends GlObject implements ShaderBindingContext {
-    private static final Logger LOGGER = LogManager.getLogger(GlProgram.class);
 
     private final T shaderInterface;
 
@@ -106,7 +104,7 @@ public class GlProgram<T> extends GlObject implements ShaderBindingContext {
             String log = LWJGL.glGetProgramInfoLog(this.program, 4096);
 
             if (!log.isEmpty()) {
-                LOGGER.warn("Program link log for " + this.name + ": " + log);
+                LauncherLog.warn("[RENDERER] Program link log for " + this.name + ": " + log);
             }
 
             int result = LWJGL.glGetProgrami(this.program, GL20.GL_LINK_STATUS);

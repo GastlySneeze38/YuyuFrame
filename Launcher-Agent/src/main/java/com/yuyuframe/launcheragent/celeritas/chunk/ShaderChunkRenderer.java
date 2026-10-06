@@ -1,8 +1,7 @@
 package com.yuyuframe.launcheragent.celeritas.chunk;
 
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.celeritas.gl.attribute.GlVertexFormat;
 import com.yuyuframe.launcheragent.celeritas.gl.device.CommandList;
 import com.yuyuframe.launcheragent.celeritas.gl.device.RenderDevice;
@@ -20,7 +19,6 @@ import java.util.Map;
 import java.util.Objects;
 
 public abstract class ShaderChunkRenderer implements ChunkRenderer {
-    private static final Logger LOGGER = LogManager.getLogger(ShaderChunkRenderer.class);
 
     private final Map<ChunkShaderOptions, @Nullable GlProgram<ChunkShaderInterface>> programs = new Object2ObjectOpenHashMap<>();
 
@@ -40,7 +38,7 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         this.renderPassConfiguration = renderPassConfiguration;
         this.enableLegacyGLPatches = ShaderLoader.useLegacyGlsl();
         if (this.enableLegacyGLPatches) {
-            LOGGER.warn("System does not support modern GLSL, will attempt to patch terrain shaders");
+            LauncherLog.warn("[RENDERER] System does not support modern GLSL, will attempt to patch terrain shaders");
         }
     }
 
@@ -51,7 +49,7 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
             try {
                 program = this.createShader("blocks/block_layer_opaque", options);
             } catch(Exception e) {
-                LOGGER.error("There was an error creating a chunk program. Terrain will not render until this is fixed.", e);
+                LauncherLog.err("[RENDERER] There was an error creating a chunk program. Terrain will not render until this is fixed.", e);
             }
             this.programs.put(options, program);
         }

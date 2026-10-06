@@ -5,15 +5,13 @@ import com.yuyuframe.launcheragent.celeritas.gl.binding.GL43;
 import static com.yuyuframe.launcheragent.celeritas.gl.binding.LWJGLServiceProvider.LWJGL;
 
 import com.yuyuframe.launcheragent.celeritas.gl.GlObject;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.celeritas.gl.debug.GLDebug;
 
 /**
  * A compiled OpenGL shader object.
  */
 public class GlShader extends GlObject {
-    private static final Logger LOGGER = LogManager.getLogger(GlShader.class);
 
     private final String name;
 
@@ -27,7 +25,7 @@ public class GlShader extends GlObject {
         String log = LWJGL.glGetShaderInfoLog(handle, 4096);
 
         if (!log.isEmpty()) {
-            LOGGER.warn("Shader compilation log for " + this.name + ": " + log);
+            LauncherLog.warn("[RENDERER] Shader compilation log for " + this.name + ": " + log);
         }
 
         int result = LWJGL.glGetShaderi(handle, GL20.GL_COMPILE_STATUS);

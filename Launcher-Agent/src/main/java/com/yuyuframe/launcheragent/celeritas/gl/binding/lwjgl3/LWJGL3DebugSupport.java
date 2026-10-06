@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.celeritas.gl.binding.lwjgl3;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import org.lwjgl.opengl.*;
 import com.yuyuframe.launcheragent.celeritas.gl.binding.DebugExtension;
 import com.yuyuframe.launcheragent.celeritas.gl.binding.DebugMessageHandler;
@@ -10,7 +9,6 @@ import com.yuyuframe.launcheragent.celeritas.gl.binding.DebugMessageHandler;
  * LWJGL3 debug callback setup helper.
  */
 final class LWJGL3DebugSupport {
-    private static final Logger LOGGER = LogManager.getLogger("Celeritas/LWJGL3Debug");
 
     private GLDebugMessageCallback debugCallback;
     private GLDebugMessageARBCallback debugCallbackARB;
@@ -20,7 +18,7 @@ final class LWJGL3DebugSupport {
         GLCapabilities caps = GL.getCapabilities();
 
         if (caps.OpenGL43) {
-            LOGGER.info("Using OpenGL 4.3 for debug output");
+            LauncherLog.renderer(2,"Using OpenGL 4.3 for debug output");
             debugCallback = GLDebugMessageCallback.create((source, type, id, severity, length, message, userParam) -> {
                 handler.handle(source, type, id, severity, GLDebugMessageCallback.getMessage(length, message), DebugExtension.GL43);
             });
@@ -31,14 +29,14 @@ final class LWJGL3DebugSupport {
             GL43C.glDebugMessageCallback(debugCallback, 0L);
 
             if ((GL43C.glGetInteger(GL30C.GL_CONTEXT_FLAGS) & GL43C.GL_CONTEXT_FLAG_DEBUG_BIT) == 0) {
-                LOGGER.warn("Non-debug context may not produce debug output");
+                LauncherLog.warn("[RENDERER] Non-debug context may not produce debug output");
                 GL43C.glEnable(GL43C.GL_DEBUG_OUTPUT);
                 return 2;
             }
             return 1;
 
         } else if (caps.GL_KHR_debug) {
-            LOGGER.info("Using KHR_debug for debug output");
+            LauncherLog.renderer(2,"Using KHR_debug for debug output");
             debugCallback = GLDebugMessageCallback.create((source, type, id, severity, length, message, userParam) -> {
                 handler.handle(source, type, id, severity, GLDebugMessageCallback.getMessage(length, message), DebugExtension.KHR_DEBUG);
             });
@@ -49,14 +47,14 @@ final class LWJGL3DebugSupport {
             KHRDebug.glDebugMessageCallback(debugCallback, 0L);
 
             if (caps.OpenGL30 && (GL43C.glGetInteger(GL30C.GL_CONTEXT_FLAGS) & GL43C.GL_CONTEXT_FLAG_DEBUG_BIT) == 0) {
-                LOGGER.warn("Non-debug context may not produce debug output");
+                LauncherLog.warn("[RENDERER] Non-debug context may not produce debug output");
                 GL43C.glEnable(GL43C.GL_DEBUG_OUTPUT);
                 return 2;
             }
             return 1;
 
         } else if (caps.GL_ARB_debug_output) {
-            LOGGER.info("Using ARB_debug_output for debug output");
+            LauncherLog.renderer(2,"Using ARB_debug_output for debug output");
             debugCallbackARB = GLDebugMessageARBCallback.create((source, type, id, severity, length, message, userParam) -> {
                 handler.handle(source, type, id, severity, GLDebugMessageARBCallback.getMessage(length, message), DebugExtension.ARB_DEBUG_OUTPUT);
             });
@@ -68,7 +66,7 @@ final class LWJGL3DebugSupport {
             return 1;
 
         } else if (caps.GL_AMD_debug_output) {
-            LOGGER.info("Using AMD_debug_output for debug output");
+            LauncherLog.renderer(2,"Using AMD_debug_output for debug output");
             debugCallbackAMD = GLDebugMessageAMDCallback.create((id, category, severity, length, message, userParam) -> {
                 // AMD callback has different signature - category instead of source/type
                 handler.handle(category, 0, id, severity, GLDebugMessageAMDCallback.getMessage(length, message), DebugExtension.AMD_DEBUG_OUTPUT);
@@ -81,7 +79,7 @@ final class LWJGL3DebugSupport {
             return 1;
 
         } else {
-            LOGGER.info("No debug output implementation available");
+            LauncherLog.renderer(2,"No debug output implementation available");
             return 0;
         }
     }

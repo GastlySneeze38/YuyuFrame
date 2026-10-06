@@ -3,8 +3,7 @@ package com.yuyuframe.launcheragent.celeritas.util;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceMap;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceMaps;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.celeritas.gl.binding.LWJGLServiceProvider;
 
 import java.lang.ref.PhantomReference;
@@ -17,8 +16,6 @@ import java.util.stream.Collectors;
 import static com.yuyuframe.launcheragent.celeritas.gl.binding.LWJGLServiceProvider.LWJGL;
 
 public class NativeBuffer {
-    private static final Logger LOGGER = LogManager.getLogger(NativeBuffer.class);
-
     private static final ReferenceQueue<NativeBuffer> RECLAIM_QUEUE = new ReferenceQueue<>();
     private static final Reference2ReferenceMap<Reference<NativeBuffer>, BufferReference> ACTIVE_BUFFERS =
             Reference2ReferenceMaps.synchronize(new Reference2ReferenceOpenHashMap<>());
@@ -72,14 +69,14 @@ public class NativeBuffer {
             deallocate(buf);
 
             if (buf.allocationSite != null) {
-                LOGGER.warn("Reclaimed {} bytes at address {} that were leaked from allocation site:\n{}",
-                        buf.length, buf.address,
-                        Arrays.stream(buf.allocationSite)
+                LauncherLog.warn("[RENDERER] Reclaimed " + buf.length + " bytes at address " + buf.address
+                        + " that were leaked from allocation site:\n"
+                        + Arrays.stream(buf.allocationSite)
                                 .map(StackTraceElement::toString)
                                 .collect(Collectors.joining("\n")));
             } else {
-                LOGGER.warn("Reclaimed {} bytes at address {} that were leaked from an unknown location (logging is disabled)",
-                        buf.length, buf.address);
+                LauncherLog.warn("[RENDERER] Reclaimed " + buf.length + " bytes at address " + buf.address
+                        + " that were leaked from an unknown location (logging is disabled)");
             }
         }
     }
@@ -105,8 +102,8 @@ public class NativeBuffer {
                 break;
             }
 
-            LOGGER.error("EMERGENCY: Tried to allocate {} bytes but the allocator reports failure", bytes);
-            LOGGER.error("EMERGENCY: ... Attempting to force a garbage collection cycle (attempt {}/{})", attempts, MAX_ALLOCATION_ATTEMPTS);
+            LauncherLog.err("[RENDERER] EMERGENCY: Tried to allocate " + bytes + " bytes but the allocator reports failure");
+            LauncherLog.err("[RENDERER] EMERGENCY: ... Attempting to force a garbage collection cycle (attempt " + attempts + "/" + MAX_ALLOCATION_ATTEMPTS + ")");
 
             // If memory allocation fails, force a garbage collection
             reclaim(true);

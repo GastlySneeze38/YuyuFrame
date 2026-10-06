@@ -4,8 +4,7 @@ import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkBuildContext;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkBuildOutput;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.ChunkSortOutput;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.tasks.ChunkBuilderTask;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.yuyuframe.launcheragent.base.log.LauncherLog;
 import com.yuyuframe.launcheragent.celeritas.chunk.compile.GlobalChunkBuildContext;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,7 +18,6 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class ChunkBuilder {
-    static final Logger LOGGER = LogManager.getLogger("ChunkBuilder");
     /**
      * Megabytes of heap required per chunk builder thread. This is used to cap the number of worker
      * threads when the game is given a small heap.
@@ -157,7 +155,7 @@ public class ChunkBuilder {
             }
         }
 
-        LOGGER.info("Started {} worker threads", this.threads.size());
+        LauncherLog.renderer(2, "Started " + this.threads.size() + " worker threads");
 
         this.localContext = contextSupplier.get();
 
@@ -215,9 +213,9 @@ public class ChunkBuilder {
                 metrics.getAverageExecutionNanos(ChunkSortOutput.class, DEFAULT_SORT_TASK_NANOS));
 
         if (DEBUG_ADAPTIVE_SCHEDULING && this.targetInFlight != previousTarget) {
-            LOGGER.info("Scheduling target {} -> {} (frame={}us, queued={}, sortsPerMesh={})",
-                    previousTarget, this.targetInFlight, (long) (this.frameTimeEma / 1000), this.queue.size(),
-                    String.format("%.1f", this.sortsPerMesh));
+            LauncherLog.renderer(1, "Scheduling target " + previousTarget + " -> " + this.targetInFlight
+                    + " (frame=" + (long) (this.frameTimeEma / 1000) + "us, queued=" + this.queue.size()
+                    + ", sortsPerMesh=" + String.format("%.1f", this.sortsPerMesh) + ")");
         }
     }
 
@@ -294,7 +292,7 @@ public class ChunkBuilder {
     }
 
     private void shutdownThreads() {
-        LOGGER.info("Stopping worker threads");
+        LauncherLog.renderer(2, "Stopping worker threads");
 
         // Wait for every remaining thread to terminate
         for (WorkerThread thread : this.threads) {

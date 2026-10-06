@@ -21,7 +21,7 @@ encore vu en jeu.** Il s'allume par le réglage « Renderer de terrain
 
 ## Ce qui a été modifié par rapport à l'amont (2026-10-06)
 
-La LGPL demande de signaler les modifications. Trois, toutes mécaniques — le
+La LGPL demande de signaler les modifications. Quatre, toutes mécaniques — le
 comportement du code n'a pas changé :
 
 1. **Paquets renommés** pour suivre les dossiers (table ci-dessous), dans
@@ -35,6 +35,11 @@ comportement du code n'a pas changé :
    `buildSrc/`) ; ici elles sont produites une fois, depuis
    `org.lwjgl.opengl.GL*` de LWJGL 3.4.1, et rangées comme des fichiers
    ordinaires. Ce ne sont que des constantes.
+4. **Journalisation par `LauncherLog`** au lieu de log4j, dans neuf fichiers
+   (catégorie `RENDERER`, seuil `log.renderer`). Mêmes messages ; les
+   avertissements et erreurs passent par `LauncherLog.warn` / `err`, donc
+   toujours affichés. `shader/CeleritasShaders`, qui ne portait qu'un
+   journal inutilisé, est supprimée.
 
 ### Table des paquets
 
@@ -86,9 +91,9 @@ suivre au branchement.
 
 - **Compilation** — le moteur part avec la passe principale de `build.bat`,
   l'adaptateur `v1_8_9/` avec l'unité 1.8.9 (contre les stubs Yarn legacy).
-  Bibliothèques : **JOML 1.10.5**, **fastutil 7.1.0**, **log4j-api** et les
-  **annotations JetBrains** (ces deux dernières à la compilation seulement),
-  déposées dans `lib/` par `build.bat`.
+  Bibliothèques : **JOML 1.10.5**, **fastutil 7.1.0** et les **annotations
+  JetBrains** (ces dernières à la compilation seulement), déposées dans
+  `lib/` par `build.bat`.
 - **Lancement** — JOML et fastutil manquent à la 1.8.9 : le launcher les
   ajoute à ses bibliothèques (`Backend/…/legacy_lwjgl3_libraries.json`).
   Sans elles (launcher plus ancien que l'agent), `RendererSwitch.available()`
