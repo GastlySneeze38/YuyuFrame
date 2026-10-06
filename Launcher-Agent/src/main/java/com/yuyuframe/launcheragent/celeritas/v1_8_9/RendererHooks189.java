@@ -223,10 +223,6 @@ public final class RendererHooks189 {
         if (mesh != null) {
             LauncherLog.renderer(1, mesh);
         }
-        String copies = com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats.drainMainThread();
-        if (copies != null) {
-            LauncherLog.renderer(1, copies);
-        }
     }
 
     /** À la place de {@code WorldRenderer.renderLayer} : dessine une couche de blocs. */

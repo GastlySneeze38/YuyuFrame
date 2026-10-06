@@ -139,6 +139,14 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         // Pour le repli : vanilla écrit ses sommets relativement à l'origine de la section.
         tesselator.offset(-minX, -minY, -minZ);
 
+        // Mesures (MeshStats) : ce que contient la section, et sur une section
+        // sur seize le détail du temps passé à interroger le jeu.
+        int solidBlocks = 0;
+        int modelBlocks = 0;
+        int fluidBlocks = 0;
+        blockRenderer.startProfile(MeshStats.takeSample());
+        long loopStart = System.nanoTime();
+
         try {
             for (int y = minY; y < maxY; y++) {
                 if (cancellationToken.isCancelled()) {
@@ -152,6 +160,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             continue;
                         }
                         blockPos.setPosition(x, y, z);
+                        solidBlocks++;
 
                         if (block.hasBlockEntity()) {
                             BlockEntity blockEntity = slice.blockEntityAt(x, y, z);
@@ -170,6 +179,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
                         int type = block.getBlockType();
                         if (type == TYPE_MODEL) {
+                            modelBlocks++;
                             int mark = commands.count();
                             try {
                                 if (!nativeQuads) {
@@ -185,6 +195,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                             }
                         } else if (type == TYPE_FLUID) {
                             // L'eau et la lave : le noyau les dessine de bout en bout, comme vanilla.
+                            fluidBlocks++;
                             int mark = commands.count();
                             boolean emitted = false;
                             if (nativeQuads && NATIVE_FLUIDS) {
@@ -218,6 +229,8 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             tesselator.offset(0, 0, 0);
             slice.release();
         }
+        long loopNanos = System.nanoTime() - loopStart;
+        int commandCount = commands.count();
 
         if (nativeQuads && commands.count() > 0 && !this.writeNativeQuadsTimed(buildContext, commands)) {
             // Le noyau a échoué : il est mis hors service, et la section est refaite par le Java.
@@ -226,7 +239,9 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             return this.execute(context, cancellationToken);
         }
 
+        long assembleStart = System.nanoTime();
         Reference2ReferenceMap<TerrainRenderPass, BuiltSectionMeshParts> meshes = BuiltSectionMeshParts.groupFromBuildBuffers(buffers, (float) (camera.x - minX), (float) (camera.y - minY), (float) (camera.z - minZ));
+        long assembleNanos = System.nanoTime() - assembleStart;
 
         if (!meshes.isEmpty()) {
             renderData.hasBlockGeometry = true;
@@ -243,7 +258,9 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             renderData.occluderBoxes = rasterShape.computeOccluderBoxes();
             shapeNanos = System.nanoTime() - shapeStart;
         }
-        MeshStats.section(System.nanoTime() - taskStart, shapeNanos, nativeNanos + this.writeNanos);
+        MeshStats.section(System.nanoTime() - taskStart, loopNanos, nativeNanos, this.writeNanos, assembleNanos, shapeNanos,
+            solidBlocks, modelBlocks, fluidBlocks, commandCount);
+        blockRenderer.finishProfile(modelBlocks);
 
         return new ChunkBuildOutput(this.render, renderData, meshes, this.buildTime);
     }

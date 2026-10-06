@@ -1,7 +1,6 @@
 package com.yuyuframe.launcheragent.celeritas.v1_8_9.world;
 
 import com.yuyuframe.launcheragent.apimixin.mapping.YarnNamed;
-import com.yuyuframe.launcheragent.celeritas.v1_8_9.debug.MeshStats;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
@@ -59,10 +58,8 @@ public final class SnapshotCache {
         long now = System.nanoTime();
         SectionSnapshot snapshot = this.entries.getAndMoveToLast(key);
         if (snapshot != null && now - snapshot.capturedNanos <= MAX_AGE_NANOS) {
-            MeshStats.snapshot(false);
             return snapshot;
         }
-        MeshStats.snapshot(true);
 
         Chunk chunk = this.world.getChunk(x, z);
         snapshot = SectionSnapshot.capture(chunk, this.column(chunk, x, z, now), x, y, z);
