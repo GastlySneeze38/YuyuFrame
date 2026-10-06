@@ -138,6 +138,8 @@
   "Opacité max (%)": "Макс. непрозрачность (%)",
   "Optimisations": "Оптимизации",
   "Optimisation": "Оптимизация",
+  "Plein écran sans bordure": "Полный экран без рамки",
+  "Le plein écran devient une fenêtre sans cadre qui couvre l'écran : alt-tab immédiat, sans écran noir.": "Полноэкранный режим становится окном без рамки на весь экран: мгновенный alt-tab, без чёрного экрана.",
   "Souris": "Мышь",
   "Souris brute": "Прямой ввод мыши",
   "Souris brute, sans perte de FPS": "Прямой ввод мыши без потери FPS",

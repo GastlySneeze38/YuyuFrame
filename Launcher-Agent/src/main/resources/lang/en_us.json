@@ -138,6 +138,8 @@
   "Opacité max (%)": "Max opacity (%)",
   "Optimisations": "Optimizations",
   "Optimisation": "Optimization",
+  "Plein écran sans bordure": "Borderless fullscreen",
+  "Le plein écran devient une fenêtre sans cadre qui couvre l'écran : alt-tab immédiat, sans écran noir.": "Fullscreen becomes a frameless window covering the screen: instant alt-tab, with no black screen.",
   "Souris": "Mouse",
   "Souris brute": "Raw mouse input",
   "Souris brute, sans perte de FPS": "Raw mouse input, with no FPS loss",

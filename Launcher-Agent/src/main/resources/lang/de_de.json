@@ -138,6 +138,8 @@
   "Opacité max (%)": "Maximale Deckkraft (%)",
   "Optimisations": "Optimierungen",
   "Optimisation": "Optimierung",
+  "Plein écran sans bordure": "Randloser Vollbildmodus",
+  "Le plein écran devient une fenêtre sans cadre qui couvre l'écran : alt-tab immédiat, sans écran noir.": "Der Vollbildmodus wird zu einem rahmenlosen Fenster, das den Bildschirm ausfüllt: sofortiges Alt-Tab, ohne schwarzen Bildschirm.",
   "Souris": "Maus",
   "Souris brute": "Rohe Mauseingabe",
   "Souris brute, sans perte de FPS": "Rohe Mauseingabe ohne FPS-Verlust",

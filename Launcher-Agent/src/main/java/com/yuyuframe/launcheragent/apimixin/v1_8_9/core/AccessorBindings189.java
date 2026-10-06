@@ -448,6 +448,11 @@ public final class AccessorBindings189 {
                 a.length > 0 && Boolean.TRUE.equals(a[0]));
             return null;
         });
+        AccessorRegistry.bind(AccessPoint.CLIENT_BORDERLESS_FULLSCREEN, (r, a) -> {
+            com.yuyuframe.launcheragent.lwjgl2compat.LegacyLwjgl3.setBorderlessFullscreen(
+                a.length > 0 && Boolean.TRUE.equals(a[0]));
+            return null;
+        });
         AccessorRegistry.bind(AccessPoint.PLAYER_ITEM_USE, (r, a) -> {
             PlayerEntity p = player(r);
             if (p == null) return null;

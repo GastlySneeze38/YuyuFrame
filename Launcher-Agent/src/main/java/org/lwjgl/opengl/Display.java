@@ -102,6 +102,13 @@ public class Display {
 		impl.setFullscreen(fullscreen);
 	}
 
+	/** YuyuFrame — hors API LWJGL 2 : voir {@link GLFWDisplay#reapplyFullscreen()}. */
+	public static void reapplyFullscreen() {
+		if (impl instanceof GLFWDisplay glfw) {
+			glfw.reapplyFullscreen();
+		}
+	}
+
 	public static DisplayMode[] getAvailableDisplayModes() {
 		return impl.getAvailableDisplayModes();
 	}

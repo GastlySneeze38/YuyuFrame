@@ -62,6 +62,26 @@ public final class LegacyLwjgl3 {
 		}
 	}
 
+	// Faux par défaut : le plein écran exclusif est celui que le jeu a
+	// toujours eu, et celui que préfèrent les joueurs qui cherchent la latence
+	// la plus basse.
+	private static volatile boolean borderlessFullscreen = false;
+
+	public static boolean borderlessFullscreen() {
+		return borderlessFullscreen;
+	}
+
+	/**
+	 * Choisit le plein écran sans bordure (vrai) ou exclusif (faux). Si le jeu
+	 * est déjà en plein écran, il change de mode tout de suite. Appelé par le
+	 * module « Optimisation » du client intégré, depuis le thread du jeu.
+	 */
+	public static void setBorderlessFullscreen(boolean wanted) {
+		if (borderlessFullscreen == wanted) return;
+		borderlessFullscreen = wanted;
+		Display.reapplyFullscreen();
+	}
+
 	/**
 	 * Journal minimal : la 1.8.9 vanilla n'embarque pas slf4j, et ce jar ne
 	 * dépend pas de l'agent. La sortie standard du jeu est déjà recueillie par

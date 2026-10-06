@@ -10,8 +10,8 @@ import com.yuyuframe.launcheragent.runtime.ui.config.SettingList;
  * et son écran n'a rien à régler — il explique ce qui tourne, une section
  * par optimisation.
  *
- * <p>Aujourd'hui : la souris brute (§ 9 bis). Le renderer s'y ajoutera, avec
- * sa propre section dans {@link #settings}.
+ * <p>Aujourd'hui : la souris brute (§ 9 bis) et le plein écran sans bordure.
+ * Le renderer s'y ajoutera, avec sa propre section dans {@link #settings}.
  */
 public final class OptimizationModule extends LauncherModule {
 
@@ -31,9 +31,18 @@ public final class OptimizationModule extends LauncherModule {
             + "Le jeu lui demande le total une fois par image, juste avant de tourner la caméra : "
             + "aucun mouvement perdu, et aucun travail en plus pour le jeu.";
 
+    /**
+     * Plein écran sans bordure au lieu du plein écran exclusif. Éteint par
+     * défaut : l'exclusif est le comportement d'origine du jeu.
+     */
+    private boolean borderlessFullscreen = false;
+
     @Override
     protected void settings(SettingList list) {
         list.info("mouse-info", MOUSE_TITLE, MOUSE_TEXT, "Souris");
+        list.toggle("borderless-fullscreen", "Plein écran sans bordure",
+            "Le plein écran devient une fenêtre sans cadre qui couvre l'écran : alt-tab immédiat, sans écran noir.",
+            "Affichage", null, () -> borderlessFullscreen, v -> borderlessFullscreen = v);
     }
 
     // Les deux : onEnabledChanged ne part que sur un CHANGEMENT, et
@@ -41,11 +50,18 @@ public final class OptimizationModule extends LauncherModule {
     // l'état relu du disque est le même que le défaut.
     @Override
     protected void onEnabledChanged(boolean enabled) {
-        ClientData.setNativeMouse(enabled);
+        apply();
     }
 
     @Override
     public void onConfigChanged() {
-        ClientData.setNativeMouse(isEnabled());
+        apply();
+    }
+
+    /** Module coupé = tout revient au comportement d'origine, réglages compris. */
+    private void apply() {
+        boolean on = isEnabled();
+        ClientData.setNativeMouse(on);
+        ClientData.setBorderlessFullscreen(on && borderlessFullscreen);
     }
 }

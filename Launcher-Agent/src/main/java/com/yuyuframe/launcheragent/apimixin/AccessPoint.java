@@ -283,6 +283,13 @@ public enum AccessPoint {
      */
     CLIENT_NATIVE_MOUSE,
     /**
+     * Choisit le plein écran sans bordure ou exclusif — argument
+     * {@code Boolean}, vrai = sans bordure. Lié sur la 1.8.9 seulement, pour
+     * la même raison que {@link #CLIENT_NATIVE_MOUSE} : c'est notre couche
+     * d'affichage qui crée la fenêtre.
+     */
+    CLIENT_BORDERLESS_FULLSCREEN,
+    /**
      * Utilisation d'objet en cours, rendue en
      * {@code int[]{ ticks restants, durée totale }} — {@code null} si le
      * joueur n'utilise rien.

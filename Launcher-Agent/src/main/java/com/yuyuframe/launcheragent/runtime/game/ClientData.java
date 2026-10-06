@@ -163,6 +163,11 @@ public final class ClientData {
         AccessorRegistry.invoke(AccessPoint.CLIENT_NATIVE_MOUSE, null, Boolean.valueOf(wanted));
     }
 
+    /** Plein écran sans bordure (vrai) ou exclusif (faux) — voir {@link AccessPoint#CLIENT_BORDERLESS_FULLSCREEN}. 1.8.9 seulement. */
+    public static void setBorderlessFullscreen(boolean wanted) {
+        AccessorRegistry.invoke(AccessPoint.CLIENT_BORDERLESS_FULLSCREEN, null, Boolean.valueOf(wanted));
+    }
+
     /** Particules de coup sur le bloc visé, côté client seulement — voir {@link AccessPoint#CLIENT_BLOCK_HIT_PARTICLES}. */
     public static void spawnBlockHitParticles() {
         AccessorRegistry.get(AccessPoint.CLIENT_BLOCK_HIT_PARTICLES, null);

@@ -41,6 +41,8 @@ public final class GLFWDisplay implements Display.Impl {
 	private boolean focused;
 	private final Drawable drawable = new NoOpImpl();
 	private boolean useFullscreenDeferred;
+	/** Vrai tant que la fenêtre est en plein écran SANS BORDURE (YuyuFrame). */
+	private boolean borderless;
 
 	GLFWDisplay() {
 		GLFWErrorCallback.createPrint(System.err).set();
@@ -190,6 +192,13 @@ public final class GLFWDisplay implements Display.Impl {
 	}
 
 	public void update() {
+		// YuyuFrame (2026-10-06) : l'image part D'ABORD, les entrées sont
+		// relevées ENSUITE — l'ordre de LWJGL 2. legacy-lwjgl3 faisait
+		// l'inverse : un clic ou une touche arrivé pendant l'attente de
+		// l'affichage (VSync, limite de FPS du pilote) n'était vu qu'une image
+		// plus tard. Relevés après, ils sont lus par le tick qui suit aussitôt.
+		GLFW.glfwSwapBuffers(handle);
+
 		GLFW.glfwPollEvents();
 		if (Mouse.isCreated()) {
 			Mouse.poll();
@@ -198,8 +207,6 @@ public final class GLFWDisplay implements Display.Impl {
 		if (Keyboard.isCreated()) {
 			Keyboard.poll();
 		}
-
-		GLFW.glfwSwapBuffers(handle);
 	}
 
 	public void create(PixelFormat pixelFormat) throws LWJGLException {
@@ -292,6 +299,21 @@ public final class GLFWDisplay implements Display.Impl {
 		}
 	}
 
+	/** Plein écran, exclusif (la fenêtre tient un écran) ou sans bordure. */
+	private boolean isFullscreen() {
+		return borderless || GLFW.glfwGetWindowMonitor(handle) != 0;
+	}
+
+	/**
+	 * Repasse le plein écran en cours dans le mode voulu (exclusif ou sans
+	 * bordure) quand le réglage change en jeu. Sans effet en fenêtré.
+	 */
+	public void reapplyFullscreen() {
+		if (isCreated() && isFullscreen() && borderless != LegacyLwjgl3.borderlessFullscreen()) {
+			setFullscreen(true);
+		}
+	}
+
 	public void setFullscreen(boolean fullscreen) {
 		if (!isCreated()) {
 			useFullscreenDeferred = fullscreen;
@@ -299,7 +321,7 @@ public final class GLFWDisplay implements Display.Impl {
 		}
 
 		try {
-			boolean isFullscreen = GLFW.glfwGetWindowMonitor(handle) != 0;
+			boolean isFullscreen = isFullscreen();
 
 			if (fullscreen) {
 				var monitor = getPrimaryMonitor();
@@ -313,23 +335,41 @@ public final class GLFWDisplay implements Display.Impl {
 					windowedWidth = width;
 					windowedHeight = height;
 				}
-				x = 0;
-				y = 0;
 				var mode = GLFW.glfwGetVideoMode(monitor);
 				width = mode.width();
 				height = mode.height();
-				GLFW.glfwSetWindowMonitor(getHandle(),
+				if (LegacyLwjgl3.borderlessFullscreen()) {
+					// YuyuFrame (2026-10-06) : plein écran SANS BORDURE — une
+					// fenêtre ordinaire, sans cadre, posée sur tout l'écran.
+					// Le mode d'affichage ne change pas, donc alt-tab est
+					// immédiat et l'écran ne clignote pas.
+					var xBox = new int[1];
+					var yBox = new int[1];
+					GLFW.glfwGetMonitorPos(monitor, xBox, yBox);
+					x = xBox[0];
+					y = yBox[0];
+					GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_DECORATED, GLFW.GLFW_FALSE);
+					GLFW.glfwSetWindowMonitor(getHandle(), 0L, x, y, width, height, GLFW.GLFW_DONT_CARE);
+					borderless = true;
+				} else {
+					x = 0;
+					y = 0;
+					borderless = false;
+					GLFW.glfwSetWindowMonitor(getHandle(),
 						monitor,
 						x,
 						y,
 						width,
 						height,
 						mode.refreshRate());
+				}
 			} else {
 				x = windowedX;
 				y = windowedY;
 				width = windowedWidth;
 				height = windowedHeight;
+				borderless = false;
+				GLFW.glfwSetWindowAttrib(handle, GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
 				GLFW.glfwSetWindowMonitor(getHandle(),
 						0L,
 						x,
